@@ -64,10 +64,24 @@ export function PageIntro({
     <header data-testid={testid} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          {eyebrow && (
+          {/*
+            The row is reserved from the first paint, not grown when the name arrives.
+
+            A project-scoped page learns its project's NAME from a query, so `eyebrow` was
+            `undefined` for the first few hundred milliseconds and this line did not exist. When the
+            name landed the header grew 23px and every control under it dropped a line — which on
+            `/agency/content` is measured: the view toggle moved 22px after the options loaded, and a
+            reader aiming at «قائمة» on a page that has just settled hits whatever took its place.
+
+            So the test is `!== undefined` rather than truthy, and the line carries a `min-h`: a page
+            that HAS an eyebrow passes `''` while it is still finding out, keeps its height, and fills
+            the same line in place. A page with no eyebrow at all passes nothing and loses the row,
+            exactly as before.
+          */}
+          {eyebrow !== undefined && (
             <p
               data-testid={testid ? `${testid}-eyebrow` : undefined}
-              className="mb-1 truncate text-xs font-semibold uppercase tracking-wide text-text-muted"
+              className="mb-1 min-h-[1.25rem] truncate text-xs font-semibold uppercase leading-5 tracking-wide text-text-muted"
             >
               {eyebrow}
             </p>

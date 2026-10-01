@@ -79,7 +79,8 @@ import { DistributionBars } from './DistributionBars'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
-import { PageIntro } from '@/components/ui/PageIntro'
+import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import {
@@ -422,6 +423,29 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    */
   const provenanceSummary = useSummary(currentProjectId, range, filters)
 
+  /*
+   * PRODUCT-VISUAL-001 §4 §14 — WHICH project, WHAT period, HOW fresh — in the head.
+   *
+   * The page's whole content is figures from one project over one window, and the head named
+   * neither. The project was only in the rail's switcher, the window only in the range control, and
+   * freshness only inside the data-quality tab — three clicks from the figures it qualifies.
+   *
+   * Both reads are free: React Query dedupes on the key, so `useFreshness` here resolves to the
+   * same cached entry the data-quality panel already asks for with the same project, range and
+   * filters, exactly as `provenanceSummary` above does for the badge.
+   */
+  const projectName = projectsQuery.data?.find((p) => p.id === currentProjectId)?.name ?? null
+
+  const headFreshness = useFreshness(currentProjectId, range, filters)
+  const freshestAt = useMemo(
+    () => (headFreshness.data?.rows ?? [])
+      .map((row) => row.data_freshness_at)
+      .filter((at): at is string => at !== null)
+      .sort()
+      .at(-1) ?? null,
+    [headFreshness.data],
+  )
+
   return (
     <div className="space-y-5">
       {/*
@@ -448,6 +472,18 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
             : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
+        eyebrow={projectName ?? ''}
+        meta={
+          <>
+            <PeriodLabel from={range.from} to={range.to} testId={`${surface}-head-period`} />
+            <DataFreshness
+              lastSyncAt={freshestAt}
+              ar={ar}
+              staleAfterHours={STALE_AFTER_HOURS}
+              testid={`${surface}-freshness`}
+            />
+          </>
+        }
       />
 
       {/*

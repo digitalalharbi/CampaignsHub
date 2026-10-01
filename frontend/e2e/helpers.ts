@@ -248,10 +248,30 @@ export async function createCampaign(page: Page, name: string) {
 
   const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
   await save.click()
-  // Wait for the modal to actually close before touching the page behind it — clicking the view
-  // switcher while the overlay is still up lands on the overlay and silently does nothing (this was
-  // an intermittent failure under parallel load on WebKit and Firefox).
-  await expect(save).toBeHidden({ timeout: 15000 })
+  /*
+   * Wait for the modal to actually close before touching the page behind it — clicking the view
+   * switcher while the overlay is still up lands on the overlay and silently does nothing (this was
+   * an intermittent failure under parallel load on WebKit and Firefox).
+   *
+   * And when it does NOT close, say what the dialog is showing.
+   *
+   * This failed on chromium as «Expected: hidden / Received: visible» and nothing else — which names
+   * the symptom and hides the cause, so four separate reproductions were spent asking the dialog a
+   * question the assertion could have answered. It is a dialog with words in it: a validation error,
+   * a refused request and a save that never fired look completely different, and the next occurrence
+   * should not need a bisect to tell them apart.
+   */
+  try {
+    await expect(save).toBeHidden({ timeout: 20_000 })
+  } catch (failure) {
+    const said = await page.locator('[role="dialog"]').first().innerText().catch(() => '')
+
+    throw new Error(
+      `the new-campaign dialog never closed after Save. It was showing:\n  ${
+        said.replace(/\s+/g, ' ').slice(0, 500)
+      }\n\n${failure instanceof Error ? failure.message : String(failure)}`,
+    )
+  }
 
   // CAMPAIGN-010: the page opens on the overview, so the new campaign is only visible once the card
   // list is shown. Switching here keeps every caller of this helper working.
@@ -309,13 +329,32 @@ export async function submitVerifiedRequest(
  */
 export async function untranslatedChrome(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const CHROME = 'h1, h2, h3, h4, label, button, th, [role="tab"], [data-testid$="-empty"]'
+    /*
+     * A chart's LEGEND is chrome too — and it was the one kind this list did not look at.
+     *
+     * `SpendRevenueAreaChart` named its two series with Arabic string literals, so an English reader
+     * met «الإنفاق · الإيرادات» under an English title on the campaigns overview. The legend is a
+     * chart's only key: printed in another language it makes the chart unreadable, not merely
+     * untidy. It survived every run of this guard because `recharts` renders legend text in a
+     * `<span>`, which matched nothing below.
+     */
+    const CHROME = 'h1, h2, h3, h4, label, button, th, [role="tab"], [data-testid$="-empty"], .recharts-legend-item-text'
     const out: string[] = []
 
     for (const el of Array.from(document.querySelectorAll(`main ${CHROME}`))) {
       // The language toggle says «ع» precisely BECAUSE the interface is in English — it is the way
       // back to Arabic, and translating it would leave no way to find it.
       if (el.getAttribute('aria-label') === 'Toggle language') continue
+
+      /*
+       * A tenant's own value is not chrome, whatever element it is drawn in.
+       *
+       * The portfolio's platform matrix puts each project's NAME in a `<th scope="row">` — the
+       * correct element for a row header — and a project called «متجر تجريبي» is then reported as
+       * untranslated English chrome. It is data: nothing in this product may translate it, and the
+       * surface says so by marking the element rather than by avoiding the right tag.
+       */
+      if (el.closest('[data-untranslatable]') !== null) continue
 
       // Own text only: a heading that merely CONTAINS a data-bearing child is not itself untranslated.
       const own = Array.from(el.childNodes)

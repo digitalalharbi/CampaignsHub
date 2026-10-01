@@ -1,3 +1,4 @@
+import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -88,26 +89,26 @@ export function ThreadsPage() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-          <p className="text-sm text-text-secondary">{c.subtitle}</p>
-        </div>
-        {canManage ? (
+      {/* UX-PAGE-HERO-001 — the shared head, and the inbox at a glance inside it (§44). */}
+      <PageIntro
+        testid="messages-intro"
+        title={c.title}
+        purpose={c.subtitle}
+        actions={canManage ? (
           <button onClick={() => setComposing(true)}
             className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">
             <Plus size={15} /> {c.new_thread}
           </button>
-        ) : null}
-      </header>
-
-      {/* Summary — the inbox at a glance. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ThreadSummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
-        <ThreadSummaryCard label={c.sum_open} value={summary.open} tone="warning" unknown={q.isError} />
-        <ThreadSummaryCard label={c.sum_closed} value={summary.closed} tone="success" unknown={q.isError} />
-        <ThreadSummaryCard label={c.sum_recent} value={summary.recent} tone="muted" unknown={q.isError} />
-      </div>
+        ) : undefined}
+        kpis={
+          <>
+            <ThreadSummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
+            <ThreadSummaryCard label={c.sum_open} value={summary.open} tone="warning" unknown={q.isError} />
+            <ThreadSummaryCard label={c.sum_closed} value={summary.closed} tone="success" unknown={q.isError} />
+            <ThreadSummaryCard label={c.sum_recent} value={summary.recent} tone="muted" unknown={q.isError} />
+          </>
+        }
+      />
 
       {/* Search + status filters. */}
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">

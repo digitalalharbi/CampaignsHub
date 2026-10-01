@@ -6,6 +6,7 @@ import {
   type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionHub } from './ConnectionHub'
+import { SectionHeader } from '@/components/patterns/Status'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { AccountsPanel } from './AccountsPanel'
@@ -125,17 +126,41 @@ export function IntegrationsPage() {
         authorisation's accounts are ours».
       */}
       <section className="flex flex-col gap-3">
-        <button
-          type="button"
-          data-testid="toggle-account-inventory"
-          aria-expanded={inventoryOpen}
-          onClick={() => setInventoryOpen((open) => !open)}
-          className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-        >
-          {inventoryOpen
-            ? (ar ? 'إخفاء جميع الحسابات' : 'Hide all accounts')
-            : (ar ? 'عرض جميع الحسابات المكتشفة' : 'Show every discovered account')}
-        </button>
+        {/*
+          A labelled section, not a button floating in the margin.
+
+          The Arabic dark review of `/app/integrations` on a workspace with nothing connected showed
+          this control alone in the middle of the page: a bordered button, no heading above it and no
+          content under it, reading as something half-rendered. It is not gated on the hub having
+          rows, because the inventory is tenant-wide — the sandbox and anything else non-advertising
+          is discovered without ever appearing as a hub authorisation — so what it needed was a name.
+        */}
+        <SectionHeader
+          title={ar ? 'جميع الحسابات المكتشفة' : 'Every discovered account'}
+          question={ar
+            ? 'ما الذي نراه في هذه المساحة، سواء اخترته أم لا؟'
+            : 'What can this workspace see, whether or not it was selected?'}
+          action={
+            /*
+             * «عرض القائمة», not «عرض جميع الحسابات المكتشفة».
+             *
+             * The heading beside it now says which accounts, so a button repeating the heading word
+             * for word reads as the same sentence printed twice. The control says only what pressing
+             * it does.
+             */
+            <button
+              type="button"
+              data-testid="toggle-account-inventory"
+              aria-expanded={inventoryOpen}
+              onClick={() => setInventoryOpen((open) => !open)}
+              className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+            >
+              {inventoryOpen
+                ? (ar ? 'إخفاء القائمة' : 'Hide the list')
+                : (ar ? 'عرض القائمة' : 'Show the list')}
+            </button>
+          }
+        />
 
         {inventoryOpen && <AccountsPanel />}
       </section>

@@ -20,7 +20,20 @@ export function Card({
   return (
     <div
       {...rest}
-      className={`rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${
+      /*
+       * `min-w-0`, so a card can never widen the column it was given.
+       *
+       * A grid or flex item's `min-width` is `auto`, which resolves to its content's minimum — so a
+       * card holding something with an intrinsic width pushes its track wider than the viewport and
+       * the whole PAGE scrolls sideways, not the card. On `/agency/portfolio` at 390px the platform
+       * matrix (`min-w-[22rem]` inside its own `overflow-x-auto`) did exactly that, and because a
+       * one-column grid sizes every item to the widest track, the health card beside it was dragged
+       * out by 20px too — two cards reported, one cause.
+       *
+       * Fixed here rather than at that call site: no card anywhere should be able to do this, and
+       * the content that genuinely needs width already carries its own scroll container.
+       */
+      className={`min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${
         interactive ? 'transition-all duration-150 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[var(--shadow-medium)]' : ''
       } ${className}`}
     >

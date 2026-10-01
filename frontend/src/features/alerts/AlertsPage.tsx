@@ -10,6 +10,7 @@ import {
   resolveAlert, snoozeAlert, type AlertEvent, type AlertRule, type AlertType, type NewAlertRule,
 } from './api'
 import { listDeliveries, type NotificationDeliveryRow } from '@/features/notifications/api'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { listProjects } from '@/features/projects/api'
 import { getData, putData } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
@@ -117,10 +118,18 @@ export function AlertsPage() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-        <p className="text-sm text-text-secondary">{c.subtitle}</p>
-      </header>
+      {/*
+        UX-PAGE-HERO-001 — the product's own header, not a fourth spelling of one.
+
+        This drew its own `<h1>` at `text-3xl` while every other surface uses `PAGE_TITLE`, so Alerts
+        was a different size from Reports, Analytics and Content for no reason anybody chose.
+
+        The ledger's counts deliberately stay inside the Alerts TAB rather than moving up here:
+        «open» and «critical» are facts about the triggered events, and this header also sits above
+        Rules, Preferences and Deliveries, where those numbers would be answering a question nobody
+        on that tab asked.
+      */}
+      <PageIntro testid="alerts-intro" title={c.title} purpose={c.subtitle} />
 
       <div className="flex flex-wrap gap-1 border-b border-border">
         {tabs.map((tb) => (

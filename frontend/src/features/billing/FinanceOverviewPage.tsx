@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowLeftRight, CircleDollarSign, FileText, ReceiptText, Wallet } from 'lucide-react'
 import { BillingTabs } from './BillingTabs'
 import { getFinanceOverview, listReceivables, type FinanceOverview } from './api'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -62,14 +63,22 @@ export function FinanceOverviewPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'المالية' : 'Finance'}</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {ar
-            ? 'صورة موحّدة لعروض الأسعار والفواتير والتحصيل — المبالغ المستحقة محسوبة من الفواتير نفسها، ولا يُحتسب أي مبلغ محصَّلًا قبل تأكيد الدفع.'
-            : 'One view of quotes, invoices and collection — what is outstanding is computed from the invoices themselves, and nothing counts as collected until the payment is confirmed.'}
-        </p>
-      </div>
+      {/*
+        UX-PAGE-HERO-001 — the shared head (§44).
+
+        The four figures stay where they are rather than moving into the hero slot: they are behind
+        this page's loading and error branches, which draw a skeleton row and a failure panel in
+        their place. Lifting them into the header would mean the header itself changing shape while
+        the request is in flight, and a page whose title block jumps is worse than one whose figures
+        arrive a moment after it.
+      */}
+      <PageIntro
+        testid="finance-intro"
+        title={ar ? 'المالية' : 'Finance'}
+        purpose={ar
+          ? 'صورة موحّدة لعروض الأسعار والفواتير والتحصيل — المبالغ المستحقة محسوبة من الفواتير نفسها، ولا يُحتسب أي مبلغ محصَّلًا قبل تأكيد الدفع.'
+          : 'One view of quotes, invoices and collection — what is outstanding is computed from the invoices themselves, and nothing counts as collected until the payment is confirmed.'}
+      />
 
       <BillingTabs />
 

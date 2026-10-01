@@ -187,8 +187,8 @@ describe('the campaigns workspace, opened cold', () => {
 
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
     await openList()
-    /* «2 in total» comes from the campaigns response: the rows are in, only the figures are not. */
-    await screen.findByText(/2 in total/)
+    /* «2 campaigns in total» comes from the campaigns response: the rows are in, only the figures are not. */
+    await screen.findByText(/2 campaigns in total/)
 
     expect(screen.queryByText('Last year')).toBeNull()
     expect(screen.queryByText('Still running')).toBeNull()
@@ -202,7 +202,7 @@ describe('the campaigns workspace, opened cold', () => {
     metrics.value = { data: undefined, isPending: true, isLoading: true, isError: false }
     const { rerender } = renderWithProviders(<CampaignsPage />, { locale: 'en' })
     await openList()
-    await screen.findByText(/2 in total/)
+    await screen.findByText(/2 campaigns in total/)
 
     metrics.value = {
       data: [

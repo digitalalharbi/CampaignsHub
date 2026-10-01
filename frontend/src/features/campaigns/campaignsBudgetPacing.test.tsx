@@ -26,9 +26,15 @@ describe('the portfolio budget row', () => {
   it('shows what is left and where the period ends', () => {
     render(<BudgetPacingRow ar={false} rows={[row({}), row({ campaign_id: 'c2', budget: 3000, spent: 1500, projected_spend: 3600 })]} />)
 
+    /*
+     * The card is the PACING, and the four figures live once — in the secondary strip above it,
+     * which is also where the budget's refusals are worded. Asserted as an absence as well as a
+     * presence, because the duplicate this replaced was four labels a reader met twice on one
+     * screen and had to reconcile.
+     */
     const pacing = screen.getByTestId('budget-pacing')
-    expect(pacing).toHaveTextContent('Remaining')
-    expect(pacing).toHaveTextContent('Forecast')
+    expect(pacing).not.toHaveTextContent('Remaining')
+    expect(pacing).not.toHaveTextContent('Spent')
     /* 4,400 forecast against 4,000 budget — named in money, not as a ratio. */
     expect(screen.getByTestId('budget-pacing-reading')).toHaveTextContent(/exceed the budget by/i)
     expect(screen.getByTestId('budget-pacing-reading')).toHaveTextContent(/400/)

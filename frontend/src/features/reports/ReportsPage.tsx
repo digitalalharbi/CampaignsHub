@@ -163,7 +163,20 @@ export function ReportsPage() {
   const presentTypes = [...new Set(allRows.map((r) => r.type))]
   const rows = typeFilter ? allRows.filter((r) => r.type === typeFilter) : allRows
 
+  /*
+   * PRODUCT-VISUAL-001 §16 — the library's own state, which the server already answered.
+   *
+   * `summary` has been on this payload all along — total, completed, processing, failed — and was
+   * read into a variable the page never rendered. So a reader could not tell, without counting rows
+   * by eye, how many documents this project has, whether anything is still generating, or whether
+   * anything failed. «Generation health» is exactly those last two.
+   *
+   * Sharing is the fourth, and it is derived here rather than asked for: a report that has been sent
+   * carries `last_sent_at`. Counted over ALL rows, not the filtered view, so narrowing by type
+   * cannot change what the library is said to hold — the same rule the provenance badge below uses.
+   */
   const s = list.data?.summary
+  const sentCount = allRows.filter((r) => r.last_sent_at !== null).length
 
   /*
    * ANALYTICS-PROVENANCE-001 — this page used to print «Demo» beside its title unconditionally, even
@@ -205,6 +218,73 @@ export function ReportsPage() {
         }
         badges={<ProvenanceBadge provenance={provenance} />}
         purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}
+        /*
+         * ONE summary row, not two — §34.
+         *
+         * Adding these four to the head left the page drawing eight cards over the same four facts
+         * in two vocabularies: «فشل» above «فاشلة», «قيد المعالجة» twice. Seen in Arabic dark at
+         * 1440. The body row is gone and «مكتملة» rides along with the total, where it qualifies
+         * rather than competes — «is anything stuck or broken, and has it gone out» is the question
+         * this library is opened with.
+         */
+        /*
+         * The row is drawn from the first paint, with «—» where the figures will be.
+         *
+         * `undefined` until the summary arrived meant the header GREW by a whole KPI grid the moment
+         * it did, and everything under it dropped with it — far enough that a click aimed at the
+         * filter bar's «reset» landed on what took its place, which is how the firefox gate failed
+         * `reports: narrowing names itself as a chip that can be undone`.
+         *
+         * Four real `StatCard`s rather than four skeletons, because the LABELS are known from the
+         * first frame and only the numbers are not: the reader is told what this page will tell them
+         * and that it does not know yet, which is also the honest reading of «—».
+         */
+        kpis={s === undefined ? (
+          <>
+            <StatCard label={ar ? 'التقارير' : 'Reports'} value="—" tone="brand" dot testid="reports-kpi-total" />
+            <StatCard label={ar ? 'قيد المعالجة' : 'Processing'} value="—" tone="neutral" dot testid="reports-kpi-processing" />
+            <StatCard label={ar ? 'فشل' : 'Failed'} value="—" tone="neutral" dot testid="reports-kpi-failed" />
+            <StatCard label={ar ? 'أُرسلت' : 'Sent'} value="—" tone="neutral" dot testid="reports-kpi-sent" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label={ar ? 'التقارير' : 'Reports'}
+              value={s.total.toLocaleString('en-US')}
+              hint={ar ? `${s.completed} مكتملة` : `${s.completed} completed`}
+              tone="brand"
+              dot
+              testid="reports-kpi-total"
+            />
+            {/*
+              Processing and failed are kept apart because they need different people: one resolves
+              itself and the other is somebody's to look at. A single «not completed» would merge
+              the two states this page exists to tell apart.
+            */}
+            <StatCard
+              label={ar ? 'قيد المعالجة' : 'Processing'}
+              value={s.processing.toLocaleString('en-US')}
+              tone={s.processing > 0 ? 'info' : 'neutral'}
+              dot
+              testid="reports-kpi-processing"
+            />
+            <StatCard
+              label={ar ? 'فشل' : 'Failed'}
+              value={s.failed.toLocaleString('en-US')}
+              tone={s.failed > 0 ? 'warning' : 'success'}
+              dot
+              testid="reports-kpi-failed"
+            />
+            <StatCard
+              label={ar ? 'أُرسلت' : 'Sent'}
+              value={sentCount.toLocaleString('en-US')}
+              hint={ar ? `من ${allRows.length}` : `of ${allRows.length}`}
+              tone="neutral"
+              dot
+              testid="reports-kpi-sent"
+            />
+          </>
+        )}
         actions={
         <>
         {/*
@@ -252,18 +332,6 @@ export function ReportsPage() {
           {ar ? 'اختر مشروعًا من الأعلى لعرض تقاريره وإنشاء رابط لحظي للعميل.' : 'Choose a project above to see its reports and create a live client link.'}
         </p>
       )}
-
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          [ar ? 'الإجمالي' : 'Total', s?.total],
-          [ar ? 'مكتملة' : 'Completed', s?.completed],
-          [ar ? 'قيد المعالجة' : 'Processing', s?.processing],
-          [ar ? 'فاشلة' : 'Failed', s?.failed],
-        ].map(([label, v]) => (
-          <StatCard key={label as string} label={label as string} value={v ?? '—'} />
-        ))}
-      </div>
 
       {/* Section switcher — the documents themselves vs the schedules that produce them. */}
       <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-1">
@@ -553,7 +621,16 @@ function ReportRowView({
         <div className="text-xs text-text-muted">{typeLabel}</div>
       </td>
       <td className="p-3 text-text-secondary">
-        <span className="tnum">{report.period.from} → {report.period.to}</span>
+        {/*
+          `dir="ltr"`, and the row below it already knew that.
+
+          In the Arabic dark review of `/app/reports` this cell printed «2026- → 2026-09-02 10-01»:
+          a date range is an LTR run, and left in an RTL cell the bidi algorithm reorders it around
+          the arrow and the wrap lands mid-date. The card rendering of the same range sets `dir`
+          and was correct; this one did not. `whitespace-nowrap` keeps the two dates on one line so
+          there is no wrap to land badly in the first place.
+        */}
+        <span className="tnum whitespace-nowrap" dir="ltr">{report.period.from} → {report.period.to}</span>
       </td>
       <td className="p-3">
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[report.status]}`}>

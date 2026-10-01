@@ -29,7 +29,10 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
-import { PageIntro } from '@/components/ui/PageIntro'
+import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { PeriodLabel } from '@/components/patterns/Status'
+import { useFreshness } from '@/features/analytics/api'
+import { listProjects } from '@/features/projects/api'
 import { ContentSummary } from './ContentSummary'
 import { metricsForKeys } from '@/features/analytics/metricCatalog'
 import type { Summary } from '@/features/analytics/api'
@@ -449,6 +452,20 @@ export function CreativesPage() {
   const canLink = useAuth((s) => s.hasPermission('campaigns.link'))
   const queryClient = useQueryClient()
 
+  /* The project this library belongs to, and how current its figures are — see the head below. */
+  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false })
+  const projectName = projectsQuery.data?.find((p) => p.id === currentProjectId)?.name ?? null
+
+  const freshness = useFreshness(currentProjectId, { from, to })
+  const freshestAt = useMemo(
+    () => (freshness.data?.rows ?? [])
+      .map((row) => row.data_freshness_at)
+      .filter((at): at is string => at !== null)
+      .sort()
+      .at(-1) ?? null,
+    [freshness.data],
+  )
+
   const merge = useMutation({
     mutationFn: (ids: string[]) => groupCreatives(ids),
     onSuccess: (group) => {
@@ -717,10 +734,33 @@ export function CreativesPage() {
 
   return (
     <div className="space-y-5">
+      {/*
+        PRODUCT-VISUAL-001 §4 §15 — WHICH project, WHAT window, HOW fresh.
+
+        The library's cards are figures from one project over one window, and the head named
+        neither: the project lived in the rail's switcher and the dates in two inputs below the
+        fold. The same three answers every other surface now gives, in the same place.
+
+        Freshness is the project's own, from the canonical endpoint the analytics surfaces read —
+        and it is the one a media-first page most needs, because a creative card with yesterday's
+        cost per result looks exactly like one with last week's.
+      */}
       <PageIntro
         testid="content-intro"
+        eyebrow={projectName ?? ''}
         title={t.title}
         purpose={t.subtitle}
+        meta={
+          <>
+            <PeriodLabel from={from} to={to} testId="content-period" />
+            <DataFreshness
+              lastSyncAt={freshestAt}
+              ar={ar}
+              staleAfterHours={STALE_AFTER_HOURS}
+              testid="content-freshness"
+            />
+          </>
+        }
         actions={
           <>
             <Button

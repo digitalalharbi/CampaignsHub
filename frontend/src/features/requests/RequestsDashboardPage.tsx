@@ -5,6 +5,7 @@ import { Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-
 import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestBreakdown, type RequestFilters, type RequestRow } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
 import { ChartCard } from '@/features/analytics/charts'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { SearchableSelect } from '@/components/forms'
@@ -64,41 +65,45 @@ export function RequestsDashboardPage() {
 
   return (
     <div className="w-full">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">{t('requests_inbox')}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{t('requests_inbox_subtitle')}</p>
-        </div>
-        <div className="flex rounded-lg border border-border bg-surface p-0.5">
-          {([['table', TableIcon], ['kanban', Columns3], ['cards', LayoutGrid]] as const).map(([v, Icon]) => (
-            <button key={v} onClick={() => setViewPref(v)} aria-label={v} className={`flex h-8 w-9 items-center justify-center rounded-md ${view === v ? 'bg-brand-primary-soft text-brand-700' : 'text-text-muted hover:text-text-primary'}`}><Icon size={16} /></button>
-          ))}
-        </div>
-      </header>
-
-      {/* Summary — inbox at a glance. */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ReqSummaryCard label={ar ? 'إجمالي الطلبات' : 'Total requests'} value={summary.total} tone="brand" />
-        <ReqSummaryCard label={ar ? 'جديدة' : 'New'} value={summary.new} tone="info" />
-        <ReqSummaryCard label={ar ? 'قيد المراجعة' : 'Under review'} value={summary.review} tone="warning" />
-        {/*
-          The fourth card answers «what needs me?», not «what exists?».
-          A breached SLA or an unassigned request is something an operator can act on this minute;
-          another status count is one more thing to read past. Clicking it filters the list to exactly
-          those requests, so the card is a way in rather than a number to admire.
-        */}
-        <button
-          type="button"
-          data-testid="requests-needs-attention"
-          onClick={() => set({ unassigned: filters.unassigned ? undefined : true })}
-          className="text-start"
-        >
-          <ReqSummaryCard
-            label={ar ? 'يحتاج انتباهك' : 'Needs your attention'}
-            value={summary.needs_attention}
-            tone={summary.needs_attention > 0 ? 'warning' : 'muted'}
-          />
-        </button>
+      {/* UX-PAGE-HERO-001 — the shared head, and the inbox's four counts inside it (§44). */}
+      <div className="mb-5">
+        <PageIntro
+          testid="requests-intro"
+          title={t('requests_inbox')}
+          purpose={t('requests_inbox_subtitle')}
+          actions={
+            <div className="flex rounded-lg border border-border bg-surface p-0.5">
+              {([['table', TableIcon], ['kanban', Columns3], ['cards', LayoutGrid]] as const).map(([v, Icon]) => (
+                <button key={v} onClick={() => setViewPref(v)} aria-label={v} className={`flex h-8 w-9 items-center justify-center rounded-md ${view === v ? 'bg-brand-primary-soft text-brand-700' : 'text-text-muted hover:text-text-primary'}`}><Icon size={16} /></button>
+              ))}
+            </div>
+          }
+          kpis={
+            <>
+              <ReqSummaryCard label={ar ? 'إجمالي الطلبات' : 'Total requests'} value={summary.total} tone="brand" />
+              <ReqSummaryCard label={ar ? 'جديدة' : 'New'} value={summary.new} tone="info" />
+              <ReqSummaryCard label={ar ? 'قيد المراجعة' : 'Under review'} value={summary.review} tone="warning" />
+              {/*
+                The fourth card answers «what needs me?», not «what exists?».
+                A breached SLA or an unassigned request is something an operator can act on this minute;
+                another status count is one more thing to read past. Clicking it filters the list to exactly
+                those requests, so the card is a way in rather than a number to admire.
+              */}
+              <button
+                type="button"
+                data-testid="requests-needs-attention"
+                onClick={() => set({ unassigned: filters.unassigned ? undefined : true })}
+                className="text-start"
+              >
+                <ReqSummaryCard
+                  label={ar ? 'يحتاج انتباهك' : 'Needs your attention'}
+                  value={summary.needs_attention}
+                  tone={summary.needs_attention > 0 ? 'warning' : 'muted'}
+                />
+              </button>
+            </>
+          }
+        />
       </div>
 
       {/* Filters */}

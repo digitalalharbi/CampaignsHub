@@ -431,7 +431,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             element: <SettingsLayout />,
             children: [
               { index: true, element: <Navigate to="/app/settings/workspace" replace /> },
-              { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
+              { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} navigation={false} /> },
               { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
               // PLATFORM-level, moved to /admin/settings (ADMIN-001): the public marketing site is
               // the platform's, not one tenant's, and a tenant administrator could edit it here.
@@ -609,7 +609,7 @@ export const router = createBrowserRouter(withErrorBoundary([
               element: <SettingsLayout />,
               children: [
                 { index: true, element: <Navigate to="/agency/settings/workspace" replace /> },
-                { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
+                { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} navigation={false} /> },
                 { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء الوكالة وأدوارهم وصلاحياتهم" /> },
                 { path: 'branding', element: <BrandingCenterPage /> },
               ],

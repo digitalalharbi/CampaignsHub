@@ -199,9 +199,18 @@ test('the campaigns overview paces the portfolio budget', async ({ page }) => {
   await expect(pacing.or(refusal).first(), 'the overview says nothing at all about the budget').toBeVisible({ timeout: 20_000 })
 
   if (await pacing.isVisible()) {
-    // The three figures the page could not answer before, and the sentence that reads them.
-    await expect(pacing).toContainText(/Remaining|المتبقي/)
-    await expect(pacing).toContainText(/Forecast|المتوقع/)
+    /*
+     * The figures, and the sentence — read from the two places that now hold ONE copy each.
+     *
+     * Remaining and Forecast were asserted inside `budget-pacing`, which printed them under the
+     * secondary strip that already carried the same four numbers in the same order and currency.
+     * The duplicate is gone and the strip keeps the figures, because the strip is also where the
+     * budget's refusals are worded. The claim this test makes is unchanged: the overview answers
+     * «what is left» and «where is this heading», and says so in words.
+     */
+    const strip = page.getByTestId('campaigns-secondary-strip')
+    await expect(strip).toContainText(/Remaining|المتبقي/)
+    await expect(strip).toContainText(/Forecast|المتوقع/)
     await expect(page.getByTestId('budget-pacing-reading')).toContainText(/budget|الميزانية/)
   } else {
     /*

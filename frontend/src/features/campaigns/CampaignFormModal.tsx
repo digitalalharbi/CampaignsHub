@@ -21,6 +21,7 @@ import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
+import { refreshCampaignList } from './refreshCampaignList'
 
 const CURRENCIES = ['SAR', 'USD', 'AED', 'EGP', 'KWD', 'BHD', 'QAR']
 
@@ -215,7 +216,11 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
       return isEdit ? updateCampaign(projectId, campaign!.id, payload) : createCampaign(projectId, payload)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaigns'] })
+      /*
+        CAMPAIGN-LIST-REFRESH-001 — see that module for why the list is invalidated twice.
+        Not awaited: the dialog closes on the reader's click, not on a round trip.
+      */
+      void refreshCampaignList(queryClient, projectId)
       if (!isEdit) draft.clear()
       reset(defaults)
       onClose()

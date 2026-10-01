@@ -16,6 +16,7 @@ import type { ApiEnvelope } from '@/lib/api/types'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { refreshCampaignList } from './refreshCampaignList'
 
 interface Props {
   open: boolean
@@ -64,7 +65,9 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
     // ['projects', projectId, 'campaigns', campaignId, …]; invalidate it so a link/move/unlink
     // refetches the linked list. Also refetch the list (singular key) it uses.
     queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaignId] })
-    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaigns'] })
+    // CAMPAIGN-LIST-REFRESH-001 — the same refresh the form modal uses, for the reason that module
+    // gives: a link made here is lost behind a read that predates it otherwise.
+    void refreshCampaignList(queryClient, projectId)
   }
 
   const linkMutation = useMutation({

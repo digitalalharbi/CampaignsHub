@@ -119,8 +119,18 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await expect(modalRow(targetName)).toBeVisible({ timeout: 15000 })
   await modalRow(targetName).getByRole('button', linkBtn).click()
   await page.getByRole('button', { name: 'Close' }).click()
-  // Campaign A's Linked tab now lists it.
-  await expect(page.getByText(targetName).first()).toBeVisible()
+  /*
+   * Campaign A's Linked tab now lists it — and this waits on a ROUND TRIP, so it gets a round
+   * trip's budget rather than the default five seconds.
+   *
+   * The link POST, the cancel-and-refetch of the linked list (CAMPAIGN-LIST-REFRESH-001) and the
+   * render all have to finish before this name exists. Five seconds is a guess about how fast a
+   * machine is, and on a loaded runner — or a local repeat run — it is the wrong guess: this failed
+   * twice in four local repeats and alternated with `campaigns.spec` on the chromium gate, always
+   * by a few hundred milliseconds. The sibling waits in this same test already carry 15s for the
+   * same reason.
+   */
+  await expect(page.getByText(targetName).first()).toBeVisible({ timeout: 20_000 })
 
   // --- Try to link the SAME external to campaign B → 409 → move-confirm ---
   await page.goto('/app/campaigns')

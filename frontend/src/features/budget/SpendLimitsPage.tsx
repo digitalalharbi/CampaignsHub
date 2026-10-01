@@ -4,6 +4,7 @@ import { days as countedDays } from '@/lib/counted'
 import { Panel } from '@/features/analytics/components'
 import { EmptyState } from '@/components/ui/States'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { money, moneyExact, num, percent } from '@/features/analytics/format'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useRemoveSpendLimit, useSpendLimits, type SpendLimitReading } from './spendLimitsApi'
@@ -92,16 +93,61 @@ export function SpendLimitsPage() {
    */
   const suggestedCurrency = limits[0]?.currency ?? 'SAR'
 
+  /*
+   * PRODUCT-VISUAL-001 §4 §19 — how many limits, and how many of them are a problem.
+   *
+   * The page listed every limit as a card and answered «how is this workspace doing» only by making
+   * the reader count coloured cards. These four are the same readings the cards carry, counted —
+   * and `unknown` is one of them rather than folded into «ok», because a limit whose spend could not
+   * be compared is not a limit anybody has been told they are within.
+   */
+  const counts = {
+    total: limits.length,
+    approaching: limits.filter((l) => l.state === 'approaching').length,
+    over: limits.filter((l) => l.state === 'over').length,
+    unknown: limits.filter((l) => l.state === 'unknown').length,
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <PageIntro
+        testid="spend-limits-intro"
+        title={ar ? 'حدود الإنفاق' : 'Spend limits'}
+        purpose={ar
+          ? 'حدود تضعها مساحة العمل لنفسها عبر المنصات — للمراقبة والتنبيه، لا للإيقاف.'
+          : 'Limits this workspace sets for itself across platforms — for watching and warning, never for stopping.'}
+        /* The page's one action, in the head — where every other surface puts its primary action. */
+        actions={<NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} />}
+        kpis={limits.length === 0 ? undefined : (
+          <>
+            <StatCard label={ar ? 'حدود مفعّلة' : 'Active limits'} value={counts.total.toLocaleString('en-US')} tone="brand" dot testid="spend-limits-kpi-total" />
+            <StatCard label={ar ? 'تقترب من الحد' : 'Near the limit'} value={counts.approaching.toLocaleString('en-US')} tone={counts.approaching > 0 ? 'warning' : 'neutral'} dot testid="spend-limits-kpi-approaching" />
+            <StatCard label={ar ? 'تجاوزت الحد' : 'Over the limit'} value={counts.over.toLocaleString('en-US')} tone={counts.over > 0 ? 'danger' : 'success'} dot testid="spend-limits-kpi-over" />
+            {/*
+              «Unknown» is a state and gets a card, not a silence: a limit whose spend could not be
+              compared has told nobody they are within it.
+            */}
+            <StatCard label={ar ? 'غير معروفة' : 'Not comparable'} value={counts.unknown.toLocaleString('en-US')} tone="neutral" dot testid="spend-limits-kpi-unknown" />
+          </>
+        )}
+      />
+
+      {/*
+        The same sentence was on screen three times.
+
+        The Arabic dark review of `/app/spend-limits` showed «حدود تضعها مساحة العمل لنفسها عبر
+        المنصات — للمراقبة والتنبيه» under the page title, again as this card's description, and the
+        enforcement note below it said the same thing a third way. The page holds ONE section, so a
+        card header restating the page header is not a heading — it is the page title printed twice.
+
+        What survives is the narrow title, which says what the list IS rather than what the page is
+        for, and the enforcement note, which is the API's own wording and the one statement with an
+        operational consequence in it.
+      */}
       <Panel
-        title={ar ? 'حدود الإنفاق الداخلية' : 'Internal spend limits'}
-        description={ar
-          ? 'حدود تضعها مساحة العمل لنفسها عبر المنصات — للمراقبة والتنبيه.'
-          : 'Limits this workspace sets for itself across platforms — for watching and warning.'}
+        title={ar ? 'الحدود المضبوطة' : 'Limits in place'}
         loading={q.isLoading}
         error={q.isError}
-        action={<NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} />}
       >
         {/*
           The sentence, first and unmissable, from the API rather than from here.

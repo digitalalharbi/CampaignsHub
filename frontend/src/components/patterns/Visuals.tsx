@@ -162,7 +162,19 @@ export function CoverageMatrix({ rows, columns, has, columnLabel, empty, testId 
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} data-testid={`${testId ?? 'matrix'}-row-${row.id}`}>
-              <th scope="row" className="max-w-0 truncate p-0 pe-2 text-start font-semibold text-text-primary">
+              {/*
+                `data-untranslatable` — this cell holds a tenant's OWN name, not product copy.
+
+                `<th scope="row">` is the right element for a row header, and the Arabic-leak guard
+                reads every `th` as chrome: a project called «متجر تجريبي» was reported as English
+                chrome left in Arabic. Marking it says which it is, instead of reaching for a weaker
+                tag to dodge a test.
+              */}
+              <th
+                scope="row"
+                data-untranslatable
+                className="max-w-0 truncate p-0 pe-2 text-start font-semibold text-text-primary"
+              >
                 {row.label}
               </th>
               {columns.map((column) => {

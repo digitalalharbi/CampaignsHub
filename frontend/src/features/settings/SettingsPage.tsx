@@ -11,9 +11,21 @@ import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
 import { ProjectsTab } from './tabs/ProjectsTab'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 
-const TABS = [
+/**
+ * The workspace's settings sections, in one list — SETTINGS-ONE-NAV-001.
+ *
+ * Exported because the settings SHELL draws them now. They were a private list here and the shell
+ * had its own, so `/settings/workspace` arrived carrying five tabs and rendered a second navigation
+ * directly beside the shell's: «الإعدادات العامة» in one column and «عام» in the other, both leading
+ * to the same screen. Two lists of destinations, in the same place, for the same settings.
+ *
+ * One list, read twice, cannot drift: the shell renders it as links and this page still decides
+ * which of them it is showing.
+ */
+export const SETTINGS_TABS = [
   { id: 'general', ar: 'عام', en: 'General', icon: Building2 },
   { id: 'clients', ar: 'العملاء', en: 'Clients', icon: Briefcase },
   { id: 'projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
@@ -24,7 +36,10 @@ const TABS = [
   { id: 'disclaimer', ar: 'الملاحظات والمنهجية', en: 'Notes & methodology', icon: FileText },
 ] as const
 
-type TabId = (typeof TABS)[number]['id']
+const TABS = SETTINGS_TABS
+
+export type SettingsTabId = (typeof SETTINGS_TABS)[number]['id']
+type TabId = SettingsTabId
 
 interface Props {
   /** Restrict to a subset of tabs. A single tab renders without the inner nav (the settings shell already
@@ -32,9 +47,17 @@ interface Props {
   only?: readonly TabId[]
   title?: string
   subtitle?: string
+  /**
+   * `false` where the SHELL is already listing these sections — SETTINGS-ONE-NAV-001.
+   *
+   * The rule above has always been «one navigation», and a single-tab page got it for free. A page
+   * given several tabs could not say the same thing, so it drew its own beside the shell's. This is
+   * how it says it.
+   */
+  navigation?: boolean
 }
 
-export function SettingsPage({ only, title, subtitle }: Props = {}) {
+export function SettingsPage({ only, title, subtitle, navigation = true }: Props = {}) {
   const ar = useUi((u) => u.locale) === 'ar'
   const shown = only ? TABS.filter((t) => only.includes(t.id)) : TABS
 
@@ -63,16 +86,25 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
     /* Replace, so a tab walk does not bury the page the reader came from under ten history entries. */
     setParams(out, { replace: true })
   }
-  const single = shown.length === 1
+  /* No inner nav, and no column reserved for one, whenever something else is listing the sections. */
+  const single = shown.length === 1 || !navigation
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{title ?? (ar ? 'الإعدادات' : 'Settings')}</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {subtitle ?? (ar ? 'إعدادات مساحة العمل — المؤسسة والعملاء والمشاريع والإشعارات والأمان' : 'Workspace settings — the organisation, clients, projects, notifications and security')}
-        </p>
-      </div>
+      {/*
+        UX-PAGE-HERO-001 — the last hand-drawn `<h1>` on the authenticated rail.
+
+        The structure below is already what §32 asks for — named subsections behind a side nav
+        rather than one endless form — so what was missing here was only the header everything else
+        now uses.
+      */}
+      <PageIntro
+        testid="settings-intro"
+        title={title ?? (ar ? 'الإعدادات' : 'Settings')}
+        purpose={subtitle ?? (ar
+          ? 'إعدادات مساحة العمل — المؤسسة والعملاء والمشاريع والإشعارات والأمان'
+          : 'Workspace settings — the organisation, clients, projects, notifications and security')}
+      />
 
       <div className={single ? '' : 'grid gap-6 lg:grid-cols-[220px_1fr]'}>
         {!single && (
