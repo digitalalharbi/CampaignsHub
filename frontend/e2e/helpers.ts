@@ -309,13 +309,32 @@ export async function submitVerifiedRequest(
  */
 export async function untranslatedChrome(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const CHROME = 'h1, h2, h3, h4, label, button, th, [role="tab"], [data-testid$="-empty"]'
+    /*
+     * A chart's LEGEND is chrome too — and it was the one kind this list did not look at.
+     *
+     * `SpendRevenueAreaChart` named its two series with Arabic string literals, so an English reader
+     * met «الإنفاق · الإيرادات» under an English title on the campaigns overview. The legend is a
+     * chart's only key: printed in another language it makes the chart unreadable, not merely
+     * untidy. It survived every run of this guard because `recharts` renders legend text in a
+     * `<span>`, which matched nothing below.
+     */
+    const CHROME = 'h1, h2, h3, h4, label, button, th, [role="tab"], [data-testid$="-empty"], .recharts-legend-item-text'
     const out: string[] = []
 
     for (const el of Array.from(document.querySelectorAll(`main ${CHROME}`))) {
       // The language toggle says «ع» precisely BECAUSE the interface is in English — it is the way
       // back to Arabic, and translating it would leave no way to find it.
       if (el.getAttribute('aria-label') === 'Toggle language') continue
+
+      /*
+       * A tenant's own value is not chrome, whatever element it is drawn in.
+       *
+       * The portfolio's platform matrix puts each project's NAME in a `<th scope="row">` — the
+       * correct element for a row header — and a project called «متجر تجريبي» is then reported as
+       * untranslated English chrome. It is data: nothing in this product may translate it, and the
+       * surface says so by marking the element rather than by avoiding the right tag.
+       */
+      if (el.closest('[data-untranslatable]') !== null) continue
 
       // Own text only: a heading that merely CONTAINS a data-bearing child is not itself untranslated.
       const own = Array.from(el.childNodes)

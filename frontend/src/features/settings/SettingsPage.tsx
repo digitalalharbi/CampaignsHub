@@ -11,6 +11,7 @@ import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
 import { ProjectsTab } from './tabs/ProjectsTab'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 
 const TABS = [
@@ -67,12 +68,20 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{title ?? (ar ? 'الإعدادات' : 'Settings')}</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {subtitle ?? (ar ? 'إعدادات مساحة العمل — المؤسسة والعملاء والمشاريع والإشعارات والأمان' : 'Workspace settings — the organisation, clients, projects, notifications and security')}
-        </p>
-      </div>
+      {/*
+        UX-PAGE-HERO-001 — the last hand-drawn `<h1>` on the authenticated rail.
+
+        The structure below is already what §32 asks for — named subsections behind a side nav
+        rather than one endless form — so what was missing here was only the header everything else
+        now uses.
+      */}
+      <PageIntro
+        testid="settings-intro"
+        title={title ?? (ar ? 'الإعدادات' : 'Settings')}
+        purpose={subtitle ?? (ar
+          ? 'إعدادات مساحة العمل — المؤسسة والعملاء والمشاريع والإشعارات والأمان'
+          : 'Workspace settings — the organisation, clients, projects, notifications and security')}
+      />
 
       <div className={single ? '' : 'grid gap-6 lg:grid-cols-[220px_1fr]'}>
         {!single && (

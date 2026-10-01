@@ -120,8 +120,24 @@ export function MetricLineChart({
  * touched — and `SpendEfficiencyScatter` in this same file already takes `ar` as a prop, which is
  * what made this one's absence easy to miss.
  */
+/**
+ * The two series names, as a function of the locale.
+ *
+ * Exported so the decision can be asserted without rendering a chart: `ResponsiveContainer`
+ * measures its parent, jsdom reports every element as 0×0, and recharts then draws nothing — so a
+ * legend assertion in a unit test passes or fails for reasons that have nothing to do with the
+ * names. The component below is the only caller; a regression to a string literal would have to go
+ * around this function, which the E2E chrome guard also watches for.
+ */
+export function spendRevenueSeriesNames(ar: boolean): { spend: string; revenue: string } {
+  return ar
+    ? { spend: 'الإنفاق', revenue: 'الإيرادات' }
+    : { spend: 'Spend', revenue: 'Revenue' }
+}
+
 export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: { data: Array<Record<string, unknown>>; height?: number; currency?: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
+  const series = spendRevenueSeriesNames(ar)
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -135,8 +151,8 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: 
         <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
         <Tooltip {...tooltipProps} formatter={(v: number) => money(v, currency)} />
         <Legend wrapperStyle={{ fontSize: 13 }} />
-        <Area name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke="var(--brand-600)" strokeWidth={2} fill="url(#aSpend)" isAnimationActive={false} />
-        <Area name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke="var(--info)" strokeWidth={2} fill="url(#aRev)" isAnimationActive={false} />
+        <Area name={series.spend} type="monotone" dataKey="spend" stroke="var(--brand-600)" strokeWidth={2} fill="url(#aSpend)" isAnimationActive={false} />
+        <Area name={series.revenue} type="monotone" dataKey="revenue" stroke="var(--info)" strokeWidth={2} fill="url(#aRev)" isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   )

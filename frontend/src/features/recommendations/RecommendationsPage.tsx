@@ -16,6 +16,7 @@ import { getCreativePulse } from '@/features/content/pulse'
 import { EmptyState } from '@/components/ui/States'
 import { FilterBar, FilterSelect } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 
@@ -156,6 +157,10 @@ export function RecommendationsPage() {
     return PRIORITY_ORDER.map((p) => ({ priority: p, count: open.filter((r) => r.priority === p).length }))
   }, [rows])
 
+  /* The project these opportunities belong to — named in the head, read from the switcher's list. */
+  const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
+  const projectName = projectsQuery.data?.find((p) => p.id === currentProjectId)?.name ?? null
+
   if (!currentProjectId) {
     return (
       <div className="space-y-6">
@@ -167,19 +172,34 @@ export function RecommendationsPage() {
 
   return (
     <div className="space-y-4">
-      <PageIntro title={t.title} purpose={t.purpose} />
+      {/*
+        PRODUCT-VISUAL-001 §4 §17 — the scope and the severity mix, in the head.
 
-      {counts.some((c) => c.count > 0) && (
-        <div className="flex flex-wrap gap-2" data-testid="recommendations-counts">
-          {counts
-            .filter((c) => c.count > 0)
-            .map((c) => (
-              <Badge key={c.priority} tone={PRIORITY_TONE[c.priority]}>
-                {t.priorities[c.priority]}: {c.count}
-              </Badge>
-            ))}
-        </div>
-      )}
+        The priority chips were a row of their own below the title, which is where a reader looks
+        last. They are the page's headline — «how many open, and how bad» is the question somebody
+        opens an action centre with — so they sit beside the title as badges, and the project they
+        belong to is named above it. The chips keep their own testid, so what already asserted them
+        still does.
+      */}
+      <PageIntro
+        testid="recommendations-intro"
+        eyebrow={projectName ?? undefined}
+        title={t.title}
+        purpose={t.purpose}
+        badges={counts.some((c) => c.count > 0)
+          ? (
+            <span className="flex flex-wrap gap-2" data-testid="recommendations-counts">
+              {counts
+                .filter((c) => c.count > 0)
+                .map((c) => (
+                  <Badge key={c.priority} tone={PRIORITY_TONE[c.priority]}>
+                    {t.priorities[c.priority]}: {c.count}
+                  </Badge>
+                ))}
+            </span>
+          )
+          : undefined}
+      />
 
       {/*
         RECOMMENDATIONS-ACTION-CENTER-002 — what the PRODUCT noticed, above what people wrote.

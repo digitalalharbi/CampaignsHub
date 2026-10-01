@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { toApiError } from '@/lib/api/client'
@@ -232,10 +233,21 @@ export function SubscriptionsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="flex items-center gap-2 text-3xl font-extrabold tracking-tight text-text-primary"><CreditCard size={26} /> {c.title}</h1>
-        <p className="text-sm text-text-secondary">{c.subtitle}</p>
-      </header>
+      {/*
+        UX-PAGE-HERO-001 — the product's header, not an eighth spelling of one.
+
+        The plan, its status, the renewal and the usage all have their own cards below and are NOT
+        lifted into this head: each is a card because each carries a qualification — a scheduled
+        change that is agreed but not in force, a renewal that may not exist, a limit that may be
+        unmetered — and a KPI card has no room for the qualification. A number here without it would
+        be the one thing §31 forbids: a plan state that reads more certain than it is.
+      */}
+      <PageIntro
+        testid="subscription-intro"
+        title={c.title}
+        purpose={c.subtitle}
+        badges={<CreditCard size={18} aria-hidden className="text-text-muted" />}
+      />
 
       {/* POLICY-PLACEMENT-001 — «what am I paying for, and how do I stop», beside the subscription. */}
       <PolicyNote context="billing" />

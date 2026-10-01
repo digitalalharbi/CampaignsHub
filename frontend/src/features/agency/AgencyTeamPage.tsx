@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { SearchableSelect } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { StatCard } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -62,22 +64,77 @@ export function AgencyTeamPage() {
 
   const error = grant.isError ? toApiError(grant.error) : withdraw.isError ? toApiError(withdraw.error) : null
 
+  /*
+   * The head survives loading and failure — it is the answer to «where am I».
+   *
+   * Both states used to return INSTEAD of the header, so a reader waiting on a slow request, or
+   * looking at a failed one, had no title, no purpose and no way to tell which page they were on.
+   * That is precisely the moment the question is being asked. Caught by the cross-product walk,
+   * which found `/agency/team` drawing no head at all on a run where the request had not settled.
+   */
+  const head = (
+    <PageIntro
+      testid="team-intro"
+      title={ar ? 'الفريق والنطاقات' : 'Team & scopes'}
+      purpose={ar
+        ? 'كل عضو يصل إلى العملاء المذكورين باسمهم هنا — لا أكثر.'
+        : 'Each member reaches the clients named here — and no others.'}
+      kpis={team.data === undefined || team.data.members.length === 0 ? undefined : (
+        <>
+          <StatCard
+            label={ar ? 'الأعضاء' : 'Members'}
+            value={team.data.members.length.toLocaleString('en-US')}
+            tone="brand"
+            dot
+            testid="team-kpi-members"
+          />
+          <StatCard
+            label={ar ? 'مقيَّدون بعملاء' : 'Scoped to clients'}
+            value={team.data.members.filter((m) => m.is_client_scoped).length.toLocaleString('en-US')}
+            tone="info"
+            dot
+            testid="team-kpi-scoped"
+          />
+          {/*
+            Unrestricted is counted from `has_unrestricted_permission` and never inferred from an
+            empty scope list. That inference is the exact mistake the banner below warns about, and
+            a card making it would state the opposite of the warning beside it.
+          */}
+          <StatCard
+            label={ar ? 'وصول غير مقيّد' : 'Unrestricted'}
+            value={team.data.members.filter((m) => m.has_unrestricted_permission).length.toLocaleString('en-US')}
+            tone="neutral"
+            dot
+            testid="team-kpi-unrestricted"
+          />
+        </>
+      )}
+    />
+  )
+
   if (team.isLoading) {
     return (
-      <div className="grid gap-3">
-        <Skeleton className="h-10 w-72" />
-        {[0, 1, 2].map((i) => <Skeleton key={i} className="h-28" />)}
+      <div className="w-full">
+        {head}
+        <div className="mt-4 grid gap-3">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-28" />)}
+        </div>
       </div>
     )
   }
 
   if (team.isError || !team.data) {
     return (
-      <ErrorState
-        error={team.error}
-        title={ar ? 'تعذّر تحميل فريق الوكالة.' : 'The agency team could not be loaded.'}
-        onRetry={() => void team.refetch()}
-      />
+      <div className="w-full">
+        {head}
+        <div className="mt-4">
+          <ErrorState
+            error={team.error}
+            title={ar ? 'تعذّر تحميل فريق الوكالة.' : 'The agency team could not be loaded.'}
+            onRetry={() => void team.refetch()}
+          />
+        </div>
+      </div>
     )
   }
 
@@ -85,16 +142,7 @@ export function AgencyTeamPage() {
 
   return (
     <div className="w-full">
-      <header className="mb-5">
-        <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">
-          {ar ? 'الفريق والنطاقات' : 'Team & scopes'}
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {ar
-            ? 'كل عضو يصل إلى العملاء المذكورين باسمهم هنا — لا أكثر.'
-            : 'Each member reaches the clients named here — and no others.'}
-        </p>
-      </header>
+      {head}
 
       <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
         <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />

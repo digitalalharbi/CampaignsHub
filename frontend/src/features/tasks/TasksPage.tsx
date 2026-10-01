@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } f
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from './labels'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { DateField } from '@/components/ui/DateField'
@@ -116,38 +117,46 @@ export function TasksPage() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-          <p className="text-sm text-text-secondary">{c.subtitle}</p>
-        </div>
-        {canCreate ? (
+      {/*
+        UX-PAGE-HERO-001 · PRODUCT-VISUAL-001 §20 — the product's header, and the queue's state in it.
+
+        The page drew its own `<h1>` at `text-3xl` — a fifth spelling of a header — above four
+        summary cards that answered «what needs doing today» a scroll below the title. The counts
+        are the headline of a work queue, so they sit in the head; the cards keep their own component
+        and their own «unknown» handling, which is what makes a failed request read as «we do not
+        know» instead of as four zeros.
+      */}
+      <PageIntro
+        testid="tasks-intro"
+        title={c.title}
+        purpose={c.subtitle}
+        actions={canCreate ? (
           <button onClick={() => setCreating(true)}
             className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">
             <Plus size={15} /> {c.new_task}
           </button>
-        ) : null}
-      </header>
+        ) : undefined}
+        kpis={
+          <>
+            <SummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
+            <SummaryCard label={c.sum_open} value={summary.open} tone="info" unknown={q.isError} />
+            {/*
+              ALERTS-COPY-001, on the tasks board — nothing overdue is good news, painted red.
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
-        <SummaryCard label={c.sum_open} value={summary.open} tone="info" unknown={q.isError} />
-        {/*
-          ALERTS-COPY-001, on the tasks board — nothing overdue is good news, painted red.
-
-          `tone="danger"` was unconditional, so a team that is fully on schedule met a red card
-          announcing it. Colour is a judgement, and a red zero spends the reader's attention on the
-          one number that did not need it — which is how people learn to stop looking at red.
-        */}
-        <SummaryCard
-          label={c.sum_overdue}
-          value={summary.overdue}
-          tone={summary.overdue > 0 ? 'danger' : 'success'}
-          unknown={q.isError}
-        />
-        <SummaryCard label={c.sum_done} value={summary.done} tone="success" unknown={q.isError} />
-      </div>
+              `tone="danger"` was unconditional, so a team that is fully on schedule met a red card
+              announcing it. Colour is a judgement, and a red zero spends the reader's attention on
+              the one number that did not need it — which is how people learn to stop looking at red.
+            */}
+            <SummaryCard
+              label={c.sum_overdue}
+              value={summary.overdue}
+              tone={summary.overdue > 0 ? 'danger' : 'success'}
+              unknown={q.isError}
+            />
+            <SummaryCard label={c.sum_done} value={summary.done} tone="success" unknown={q.isError} />
+          </>
+        }
+      />
 
       {/*
         The filters, on the page — UX-SWEEP-001.

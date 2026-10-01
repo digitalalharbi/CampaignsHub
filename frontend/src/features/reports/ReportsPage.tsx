@@ -163,7 +163,20 @@ export function ReportsPage() {
   const presentTypes = [...new Set(allRows.map((r) => r.type))]
   const rows = typeFilter ? allRows.filter((r) => r.type === typeFilter) : allRows
 
+  /*
+   * PRODUCT-VISUAL-001 §16 — the library's own state, which the server already answered.
+   *
+   * `summary` has been on this payload all along — total, completed, processing, failed — and was
+   * read into a variable the page never rendered. So a reader could not tell, without counting rows
+   * by eye, how many documents this project has, whether anything is still generating, or whether
+   * anything failed. «Generation health» is exactly those last two.
+   *
+   * Sharing is the fourth, and it is derived here rather than asked for: a report that has been sent
+   * carries `last_sent_at`. Counted over ALL rows, not the filtered view, so narrowing by type
+   * cannot change what the library is said to hold — the same rule the provenance badge below uses.
+   */
   const s = list.data?.summary
+  const sentCount = allRows.filter((r) => r.last_sent_at !== null).length
 
   /*
    * ANALYTICS-PROVENANCE-001 — this page used to print «Demo» beside its title unconditionally, even
@@ -205,6 +218,44 @@ export function ReportsPage() {
         }
         badges={<ProvenanceBadge provenance={provenance} />}
         purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}
+        kpis={s === undefined ? undefined : (
+          <>
+            <StatCard
+              label={ar ? 'التقارير' : 'Reports'}
+              value={s.total.toLocaleString('en-US')}
+              tone="brand"
+              dot
+              testid="reports-kpi-total"
+            />
+            {/*
+              Processing and failed are kept apart because they need different people: one resolves
+              itself and the other is somebody's to look at. A single «not completed» would merge
+              the two states this page exists to tell apart.
+            */}
+            <StatCard
+              label={ar ? 'قيد المعالجة' : 'Processing'}
+              value={s.processing.toLocaleString('en-US')}
+              tone={s.processing > 0 ? 'info' : 'neutral'}
+              dot
+              testid="reports-kpi-processing"
+            />
+            <StatCard
+              label={ar ? 'فشل' : 'Failed'}
+              value={s.failed.toLocaleString('en-US')}
+              tone={s.failed > 0 ? 'warning' : 'success'}
+              dot
+              testid="reports-kpi-failed"
+            />
+            <StatCard
+              label={ar ? 'أُرسلت' : 'Sent'}
+              value={sentCount.toLocaleString('en-US')}
+              hint={ar ? `من ${allRows.length}` : `of ${allRows.length}`}
+              tone="neutral"
+              dot
+              testid="reports-kpi-sent"
+            />
+          </>
+        )}
         actions={
         <>
         {/*

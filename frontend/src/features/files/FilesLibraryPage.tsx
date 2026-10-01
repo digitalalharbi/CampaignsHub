@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Download, FileSpreadsheet, FileText, FileType, FolderGit2, LayoutGrid, Link2, Rows3 } from 'lucide-react'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { fmtDateTime } from '@/lib/datetime'
 import { getFilesLibrary } from './api'
@@ -82,24 +83,31 @@ export function FilesLibraryPage() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-          <p className="text-sm text-text-secondary">{c.subtitle}</p>
-        </div>
-        <Link to={portalTo('/files/drive')}
-          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:border-brand-500 hover:text-brand-600">
-          <FolderGit2 size={15} /> {c.drive_cta}
-        </Link>
-      </header>
+      {/*
+        UX-PAGE-HERO-001 · PRODUCT-VISUAL-001 §21 — the product's header, with the library's counts in it.
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <FileSummaryCard label={c.sum_total} value={summary.total} tone="brand" />
-        <FileSummaryCard label={c.sum_requests} value={summary.requests} tone="info" />
-        <FileSummaryCard label={c.sum_reports} value={summary.reports} tone="success" />
-        <FileSummaryCard label={c.sum_drive} value={driveLinks} tone="muted" />
-      </div>
+        A sixth hand-drawn `<h1>` at `text-3xl`, and four cards below it answering «what is in here»
+        a scroll under the title. Same header as every other surface, and the counts move into it.
+      */}
+      <PageIntro
+        testid="files-intro"
+        title={c.title}
+        purpose={c.subtitle}
+        actions={
+          <Link to={portalTo('/files/drive')}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:border-brand-500 hover:text-brand-600">
+            <FolderGit2 size={15} /> {c.drive_cta}
+          </Link>
+        }
+        kpis={
+          <>
+            <FileSummaryCard label={c.sum_total} value={summary.total} tone="brand" />
+            <FileSummaryCard label={c.sum_requests} value={summary.requests} tone="info" />
+            <FileSummaryCard label={c.sum_reports} value={summary.reports} tone="success" />
+            <FileSummaryCard label={c.sum_drive} value={driveLinks} tone="muted" />
+          </>
+        }
+      />
 
       {/*
         No silent caps. The endpoint returns at most five hundred files, and a page that shows five

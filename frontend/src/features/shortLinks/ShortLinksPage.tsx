@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/States'
 import { Field } from '@/components/ui/Field'
 import { Badge } from '@/components/ui/Badge'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { StatCard } from '@/components/ui/StatCard'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
 import { createShortLink, deleteShortLink, disableShortLink, listShortLinks, type ShortLink, type ShortLinkKind } from './api'
@@ -180,7 +181,40 @@ export function ShortLinksPage() {
 
   return (
     <div className="space-y-4">
-      <PageIntro title={t.title} purpose={t.subtitle} />
+      {/*
+        PRODUCT-VISUAL-001 §29 — active links, and the clicks that were ACTUALLY measured.
+
+        «Real collected click metrics only»: the total below is the sum of the per-link counters the
+        server already keeps, so it is the same number the rows show, added up. Nothing about reach,
+        conversion or engagement is invented to fill a card — this product counts redirects, and
+        that is what it says it counts.
+
+        The KPIs render only when a link exists. Two zeros over an empty library say nothing an
+        empty state does not already say better.
+      */}
+      <PageIntro
+        testid="short-links-intro"
+        title={t.title}
+        purpose={t.subtitle}
+        kpis={rows.length === 0 ? undefined : (
+          <>
+            <StatCard
+              label={t.title}
+              value={rows.length.toLocaleString('en-US')}
+              tone="brand"
+              dot
+              testid="short-links-kpi-total"
+            />
+            <StatCard
+              label={t.clicks}
+              value={rows.reduce((sum, l) => sum + (l.clicks ?? 0), 0).toLocaleString('en-US')}
+              tone="neutral"
+              dot
+              testid="short-links-kpi-clicks"
+            />
+          </>
+        )}
+      />
 
       {created !== null ? (
         <Card>
