@@ -102,7 +102,7 @@ install that still names it as `SUBSCRIPTION_PROVIDER`.
 
 ## 2. Advertising platforms
 
-All six are **`BLOCKED_EXTERNAL_CREDENTIALS`**. Each adapter is complete and read-only: semantic
+All of them are **`BLOCKED_EXTERNAL_CREDENTIALS`**. Each adapter is complete and read-only: semantic
 metric mapping, pagination, absent-is-never-zero, idempotent sync, fixtures. **No OAuth round trip
 has ever been made for any of them.**
 
@@ -115,8 +115,32 @@ has ever been made for any of them.**
 | Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
 | X Ads | `X_ADS_CLIENT_ID` · `X_ADS_CLIENT_SECRET` |
 | LinkedIn Ads | `LINKEDIN_ADS_CLIENT_ID` · `LINKEDIN_ADS_CLIENT_SECRET` · `LINKEDIN_ADS_VERSION` |
+| ChatGPT Ads (OpenAI Advertiser API) | **Nothing.** Optional `OPENAI_ADS_API_BASE` only, which overrides the documented host — see below |
 
-**Redirect URL to register with each platform:**
+### ChatGPT Ads has no install-level credential, and that is not an omission
+
+Every other row above is an app we register once: a client id and secret identifying CampaignsHub to
+the platform, shared by every tenant, with each customer's own access arriving afterwards through
+consent. OpenAI publishes no such app for advertising. The only credential is the advertiser's own
+bearer key, created in their OpenAI Ads console and **scoped to one ad account**.
+
+So there is nothing for a platform operator to enter, the admin console shows no fields for it, and
+`isConfigured()` is true with nothing set. A field here would be a platform-wide store for a
+per-tenant secret: an operator who filled it would hand every tenant on the install the same key —
+one customer's ad account reported inside every other customer's workspace.
+
+The tenant enters the key at connect (`POST /api/v1/integrations/openai_ads/api-key/connect`). It is
+encrypted at rest on `integration_credentials` with `credential_type = 'api_key'` and no expiry,
+never returned after save, never logged, and shown back only as its last four characters. Rotation
+is the same endpoint: it re-credentials the existing connection in place.
+
+**Status: `AWAITING_CREDENTIALS`.** The adapter, the connect flow, the storage and the guards exist.
+No real key has been through the chain, so nothing here may be called VERIFIED, and availability of
+ChatGPT Ads itself is limited by OpenAI — not something this product can state for a market or an
+advertiser.
+
+**Redirect URL to register with each platform (OAuth providers only — ChatGPT Ads never redirects a
+browser and publishes no redirect URI):**
 `GET {AD_PLATFORM_REDIRECT_BASE or APP_URL}/api/v1/oauth/ads/{provider}/callback`
 
 **Webhook URL (advertising family):**

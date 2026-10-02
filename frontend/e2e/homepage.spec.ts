@@ -10,9 +10,17 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   await page.goto('/')
   await expect(page).toHaveURL(/\/$/)
 
-  // Hero uses the v5 customer-facing headline. Default locale is Arabic.
+  /*
+    The hero names the PRODUCT. Default locale is Arabic.
+
+    «كل حملاتك الإعلانية المدفوعة في مكان واحد» described an outcome a reporting tool could also
+    promise; the headline now names the thing — «كل حملاتك. كل المنصات. مكان واحد.» The assertion
+    moved with it, and also checks the platform coverage, which is the half of the first screen that
+    answers «which platforms» and cannot be satisfied by copy alone.
+  */
   const h1 = page.getByRole('heading', { level: 1 })
-  await expect(h1).toContainText(/الإعلانية المدفوعة|paid ad/i)
+  await expect(h1).toContainText(/كل المنصات|Every platform/i)
+  await expect(page.getByTestId('hero-platform-openai_ads')).toBeVisible()
 
   // Header actions route to the real external entry points (v5).
   const header = page.getByRole('banner')
@@ -21,9 +29,9 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   await expect(header.getByRole('link', { name: /اطلب خدمة|Request a service/ })).toHaveAttribute('href', '/requests/new')
   await expect(header.getByRole('link', { name: /متابعة طلباتي|Track my requests/ })).toHaveAttribute('href', '/login')
 
-  // Language toggle switches copy (ar → en).
+  // Language toggle switches copy (ar → en) — the same headline, in the other language.
   await page.getByRole('button', { name: 'Toggle language' }).click()
-  await expect(h1).toContainText(/paid ad/i)
+  await expect(h1).toContainText(/Every platform/i)
 
   // Theme toggle works (no crash, still on the page).
   await page.getByRole('button', { name: 'Toggle theme' }).click()

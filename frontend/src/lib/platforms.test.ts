@@ -11,7 +11,7 @@ import { PLATFORM_ORDER, canonicalPlatform, platformRank, sortByPlatform, sortPl
  */
 describe('the product platform order', () => {
   it('is the order the product presents', () => {
-    expect(PLATFORM_ORDER).toEqual(['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'])
+    expect(PLATFORM_ORDER).toEqual(['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads'])
   })
 
   it.each([
@@ -21,6 +21,8 @@ describe('the product platform order', () => {
     ['google', ['google_ads', 'googleads']],
     ['x', ['x_ads', 'twitter']],
     ['linkedin', ['linkedin_ads']],
+    // Both names arrive in the wild: the provider is OpenAI and the product is ChatGPT Ads.
+    ['openai_ads', ['openai', 'chatgpt', 'chatgpt_ads', 'openai_advertising']],
   ])('reads every spelling of %s as the same platform', (canonical, spellings) => {
     for (const spelling of spellings) {
       expect(canonicalPlatform(spelling)).toBe(canonical)

@@ -1,3 +1,4 @@
+import { PLATFORM_ORDER } from '@/lib/platforms'
 import { useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -44,7 +45,13 @@ const SCOPES: { value: SpendLimitScope; ar: string; en: string; needsId: boolean
   { value: 'campaign', ar: 'حملة واحدة', en: 'One campaign', needsId: true },
 ]
 
-const PROVIDERS = ['meta', 'google', 'tiktok', 'snapchat', 'x', 'linkedin']
+/*
+ * Which platforms a spend limit can be scoped to — the canonical list, not a copy.
+ *
+ * A limit that cannot name a platform is a platform whose spend nobody can cap, and the six written
+ * here were a silent exclusion the moment a seventh existed.
+ */
+const PROVIDERS: readonly string[] = PLATFORM_ORDER
 
 /** The thresholds an operator can ask to hear about. 100 is always included by the server. */
 const THRESHOLDS = [50, 75, 90]

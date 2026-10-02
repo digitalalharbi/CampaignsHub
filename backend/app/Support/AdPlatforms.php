@@ -5,11 +5,19 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * PLATFORM-ORDER-001 — the six platforms, in one order, for the whole product.
+ * PLATFORM-ORDER-001 — the paid-media platforms, in one order, for the whole product.
  *
  * The order is a product decision, not a preference of whichever screen is being written:
  *
- *   1. سناب شات   2. تيك توك   3. ميتا   4. جوجل أدز   5. إكس   6. لينكدإن
+ *   1. سناب شات   2. تيك توك   3. ميتا   4. جوجل أدز   5. إكس   6. لينكدإن   7. إعلانات ChatGPT
+ *
+ * ## The count is not part of the contract
+ *
+ * This file used to say «the six platforms», and so did forty comments and a handful of assertions
+ * around it. That is a number nobody chose: it was true on the day it was written and became an
+ * architectural assumption by repetition, so adding a seventh meant finding every place that had
+ * quietly learned to expect six. The list below is the only thing that decides how many there are,
+ * and `CanonicalPlatformOrderTest` proves the frontend's copy says the same.
  *
  * Before this class every surface picked its own. The integrations page led with Meta, the dashboard
  * led with Meta, the connection centre led with Meta, the report engine led with Snapchat, and the
@@ -37,7 +45,7 @@ final class AdPlatforms
      *
      * @var list<string>
      */
-    public const ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'];
+    public const ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads'];
 
     /**
      * How a platform is NAMED in a sentence — MAIL-007.
@@ -62,6 +70,14 @@ final class AdPlatforms
         'google' => ['ar' => 'جوجل', 'en' => 'Google'],
         'x' => ['ar' => 'إكس', 'en' => 'X'],
         'linkedin' => ['ar' => 'لينكدإن', 'en' => 'LinkedIn'],
+        /*
+         * «إعلانات ChatGPT», with the product name left in Latin script.
+         *
+         * It is how the product is known and how an advertiser searches for it; translating it would
+         * produce a name nobody uses. The surrounding word is Arabic so the phrase still reads as
+         * Arabic inside a sentence, which is what this map is for.
+         */
+        'openai_ads' => ['ar' => 'إعلانات ChatGPT', 'en' => 'ChatGPT Ads'],
     ];
 
     /** The prose name of a platform, in the reader's language. */
@@ -95,6 +111,15 @@ final class AdPlatforms
         'x_ads' => 'x',
         'twitter_ads' => 'x',
         'linkedin_ads' => 'linkedin',
+        /*
+         * The provider is OpenAI and the product is ChatGPT Ads, so both names arrive in the wild —
+         * from a payload, a filter chip somebody typed, or an older row. All of them canonicalise to
+         * the registry's own key.
+         */
+        'openai' => 'openai_ads',
+        'chatgpt' => 'openai_ads',
+        'chatgpt_ads' => 'openai_ads',
+        'openai_advertising' => 'openai_ads',
     ];
 
     /** The canonical key for any spelling of a platform. */

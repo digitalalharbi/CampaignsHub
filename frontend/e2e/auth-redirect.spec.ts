@@ -34,8 +34,15 @@ test('guest hitting a protected route is redirected to /login with the intended 
 test('the homepage at / is public (no auth redirect)', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/\/$/)
-  // The v5 marketing hero renders; we are NOT bounced to login.
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/الإعلانية المدفوعة|paid ad/i)
+  /*
+    The marketing hero renders; we are NOT bounced to login.
+
+    Matched on the product's own name rather than on the headline. The headline is copy and has
+    changed once already — «كل حملاتك. كل المنصات. مكان واحد.» — and this test is about an auth
+    redirect that did not happen, not about what the hero says.
+  */
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByTestId('hero-platform-coverage')).toBeVisible()
 })
 
 test('a guest hitting /dashboard is redirected to login with that intended path', async ({ page }) => {

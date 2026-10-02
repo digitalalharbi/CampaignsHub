@@ -80,9 +80,10 @@ import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { DashboardContextStrip } from './DashboardContextStrip'
 import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
-import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
 import {
   CANONICAL_OBJECTIVE_KEYS,
   canonicalObjectiveLabel,
@@ -103,7 +104,7 @@ import { providerLabel } from '@/features/campaigns/labels'
  * filter folds by default (SIMPLIFY-001), so a check that reads the page finds no platform names at
  * all and passes for the wrong reason.
  */
-export const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
+export const ANALYTICS_PLATFORMS: readonly string[] = PLATFORM_ORDER
 
 /**
  * CAMPAIGN-OUTCOME-DIMENSION-001 — the actions a campaign can buy, for the filter control.
@@ -388,6 +389,45 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    */
   const campaignSource = useCampaignOptionSource(currentProjectId, campaignIds)
 
+  /*
+   * The two controls that NARROW rather than frame.
+   *
+   * Written once and placed by surface: in line on the analysis bar, folded behind «المزيد من
+   * الفلاتر» on the dashboard. «Which campaign» and «which action» are how somebody investigates,
+   * and the surface for investigating is the other one.
+   */
+  const narrowingControls = (
+    <>
+      <FilterMulti
+        label={ar ? 'الحملة' : 'Campaign'}
+        ar={ar}
+        values={campaignIds}
+        testid={`${surface}-campaign`}
+        options={campaignSource.options}
+        search={campaignSource.search}
+        onChange={setCampaignIds}
+      />
+
+      {/*
+        CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
+        Single-select in the bar and a list in the URL: one action is the question people ask, and
+        the chip row is where a second one is removed.
+      */}
+      <FilterSelect
+        label={ar ? 'الإجراء' : 'Action'}
+        value={outcomes[0] ?? 'all'}
+        testid={`${surface}-outcome`}
+        options={[
+          { value: 'all', label: ar ? 'كل الإجراءات' : 'All actions' },
+          ...OUTCOME_KEYS.map((key) => ({
+            value: key,
+            label: ar ? OUTCOME_LABEL[key].ar : OUTCOME_LABEL[key].en,
+          })),
+        ]}
+        onChange={(v) => setOutcomes(v === 'all' ? [] : [v])}
+      />
+    </>
+  )
 
   const applied: AppliedFilter[] = useMemo(() => {
     const out: AppliedFilter[] = []
@@ -464,13 +504,40 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           Both purposes described the same screen, because the screen was the same. The dashboard
           promises the operational read; the analysis promises the reason behind it.
         */
+        /*
+          DASHBOARD-FIRST-VIEWPORT-001 — the dashboard says nothing about itself.
+
+          Every other surface explains what it is for, because «التقارير» could be three different
+          things. «لوحة التحكم» could not: it is the first item on the rail, it is where people
+          land, and a reader who opened it does not need a sentence telling them the account's
+          state is on it — they need the account's state.
+
+          The sentence cost a line, and the line cost the figures their place: title, purpose,
+          period, freshness and a link, each on its own band, before the first number. The owner
+          read that as «the dashboard's data ended up at the bottom», which is exactly what it was.
+
+          The analysis surface keeps its sentence. It is opened deliberately, to ask why, and what
+          it offers is genuinely not obvious from its title.
+        */
         purpose={surface === 'dashboard'
-          ? (ar
-              ? 'حالة الحساب الآن: ما يحدث، وما تغيّر، وما يحتاج انتباهك — ثم افتح التحليلات للسبب.'
-              : 'Where the account stands right now: what is happening, what changed, and what needs attention — then open Analytics for the reason.')
+          ? undefined
           : ar
             ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
             : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        /*
+          «Open Analytics for the reason» was a band of its own under the header. It is an action
+          this page offers, so it sits where this header puts actions — on the title's line.
+        */
+        actions={isAnalysis ? undefined : (
+          <Link
+            to={`/app/analytics${urlTab && urlTab !== 'performance' ? `?tab=${urlTab}` : ''}`}
+            data-testid="dashboard-to-analytics"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
+          >
+            {ar ? 'افتح التحليلات للسبب والتفصيل' : 'Open Analytics for the reason and the detail'}
+            <ArrowLeftRight size={14} aria-hidden />
+          </Link>
+        )}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
         eyebrow={projectName ?? ''}
         meta={
@@ -482,39 +549,47 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
               staleAfterHours={STALE_AFTER_HOURS}
               testid={`${surface}-freshness`}
             />
+            {/* What is feeding the figures, on the line that already says how old they are. */}
+            {!isAnalysis && <DashboardContextStrip />}
           </>
         }
       />
 
-      {/*
-        «What should I open next» is a door, not a dead end.
 
-        A stale `?tab=` is carried across rather than dropped: a bookmark for «budget» that lands on
-        the KPI strip with no explanation is worse than one that lands on the budget.
-      */}
-      {!isAnalysis && (
-        <div className="-mt-1">
-          <Link
-            to={`/app/analytics${urlTab && urlTab !== 'performance' ? `?tab=${urlTab}` : ''}`}
-            data-testid="dashboard-to-analytics"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
-          >
-            {ar ? 'افتح التحليلات للسبب والتفصيل' : 'Open Analytics for the reason and the detail'}
-            <ArrowLeftRight size={14} aria-hidden />
-          </Link>
-        </div>
-      )}
-
+      {/* Declared once and placed by surface: in line on the analysis bar, folded on the dashboard. */}
       <FilterBar
         id={surface}
         ar={ar}
         applied={applied}
         onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
-        advancedActive={savedViews.data?.some((v) => v.is_default) ?? false}
+        /*
+          The marker has to know about the folded controls, not only the saved views.
+          A narrowing somebody cannot see is the reason to mark the button at all.
+        */
+        advancedActive={(savedViews.data?.some((v) => v.is_default) ?? false)
+          || (! isAnalysis && (campaignIds.length > 0 || outcomes.length > 0))}
         advanced={
-          <div className="grid gap-2">
-            <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'العروض المحفوظة' : 'Saved views'}</span>
-            <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
+          <div className="grid gap-3">
+            <div className="grid gap-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'العروض المحفوظة' : 'Saved views'}</span>
+              <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
+            </div>
+            {/*
+              DASHBOARD-FIRST-VIEWPORT-001 — the dashboard's bar keeps the daily questions and folds
+              the narrowing ones.
+
+              Six control groups wrapped onto three rows and put 195px between the header and the
+              first figure. «Which campaign» and «which action» are how somebody INVESTIGATES, and
+              the surface for investigating is the analysis one, which still shows all six in line.
+              Period, project, platform and objective stay — they are what a reader changes while
+              reading rather than while digging.
+            */}
+            {! isAnalysis && (
+              <div className="grid gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'تضييق أدق' : 'Narrow further'}</span>
+                <div className="flex flex-wrap items-end gap-2">{narrowingControls}</div>
+              </div>
+            )}
           </div>
         }
       >
@@ -558,36 +633,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           onChange={setProviders}
         />
 
-        <FilterMulti
-          label={ar ? 'الحملة' : 'Campaign'}
-          ar={ar}
-          values={campaignIds}
-          testid={`${surface}-campaign`}
-          options={campaignSource.options}
-          search={campaignSource.search}
-          onChange={setCampaignIds}
-        />
-
-        
-
-        {/*
-          CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
-          Single-select in the bar and a list in the URL: one action is the question people ask, and
-          the chip row is where a second one is removed.
-        */}
-        <FilterSelect
-          label={ar ? 'الإجراء' : 'Action'}
-          value={outcomes[0] ?? 'all'}
-          testid={`${surface}-outcome`}
-          options={[
-            { value: 'all', label: ar ? 'كل الإجراءات' : 'All actions' },
-            ...OUTCOME_KEYS.map((key) => ({
-              value: key,
-              label: ar ? OUTCOME_LABEL[key].ar : OUTCOME_LABEL[key].en,
-            })),
-          ]}
-          onChange={(v) => setOutcomes(v === 'all' ? [] : [v])}
-        />
+        {isAnalysis && narrowingControls}
 
         <FilterSelect
           label={ar ? 'الهدف' : 'Objective'}

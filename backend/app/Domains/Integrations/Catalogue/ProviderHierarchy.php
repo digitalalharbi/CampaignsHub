@@ -18,7 +18,7 @@ namespace App\Domains\Integrations\Catalogue;
  * true. A provider whose discovery emits `parent_external_id` has a real parent level and gets the
  * step; one that does not, does not, and the wizard collapses that step for it.
  *
- * Today exactly two of the six do:
+ * Today exactly two do:
  *
  * - **Snapchat** — `me/organizations?with_ad_accounts=true` returns the organisation with each ad
  *   account, and the adapter carries both its id and its name. This is the live case: 309 accounts
@@ -30,6 +30,10 @@ namespace App\Domains\Integrations\Catalogue;
  * those is in what our discovery currently returns, and declaring a step we cannot populate would be
  * the same invention from the other direction. When an adapter starts returning one, it appears here,
  * and the wizard gains the step without any interface change.
+ *
+ * ChatGPT Ads is absent for a stronger reason than the others: OpenAI publishes no Business Centre,
+ * Portfolio or Manager Account for advertising at all, and its key is scoped to a single ad account.
+ * There is no layer that could start being returned.
  */
 final class ProviderHierarchy
 {
@@ -37,7 +41,7 @@ final class ProviderHierarchy
      * Providers whose accounts genuinely sit under a named parent, and what that parent is called.
      *
      * The label is the provider's own word. An agency choosing a Snapchat «Organization» should see
-     * «Organization», not a house term invented to cover six providers at once.
+     * «Organization», not a house term invented to cover every provider at once.
      *
      * @var array<string, array{key: string, label: string, labelAr: string}>
      */

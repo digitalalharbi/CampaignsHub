@@ -34,6 +34,12 @@ final readonly class Attribution
      * belong to. Order matters only for readability; a URL carrying two is recorded as the first
      * match and the rest survive in the order's raw payload.
      *
+     * ChatGPT Ads is deliberately absent. Unlike a `utm_source`, which a merchant writes, a click id
+     * is a parameter the PLATFORM appends, and OpenAI publishes none that this product has seen. A
+     * guessed parameter name would not fail — it would quietly attribute somebody's orders to a
+     * platform on the strength of a query string we made up. Its campaigns are attributed through
+     * the UTM map until there is a documented identifier to add here.
+     *
      * @var array<string,string>
      */
     private const CLICK_IDS = [

@@ -1,7 +1,7 @@
 /**
- * PLATFORM-ORDER-001 — the six platforms, in one order, for the whole interface.
+ * PLATFORM-ORDER-001 — the paid-media platforms, in one order, for the whole interface.
  *
- *   1. سناب شات   2. تيك توك   3. ميتا   4. جوجل أدز   5. إكس   6. لينكدإن
+ *   1. سناب شات   2. تيك توك   3. ميتا   4. جوجل أدز   5. إكس   6. لينكدإن   7. إعلانات ChatGPT
  *
  * The mirror of `App\Support\AdPlatforms` on the server. Both exist because both render lists: the
  * API sorts what it returns, and the client sorts what it composes locally — demo data, filter chips,
@@ -17,7 +17,15 @@
  * channels `google_ads` because it also carries analytics and CRM channels.
  */
 
-export const PLATFORM_ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'] as const
+/*
+ * The count is not part of the contract.
+ *
+ * This file and its backend twin both used to describe «the six platforms», and that number became
+ * an architectural assumption by repetition rather than by anybody choosing it. The list is the only
+ * thing that decides how many there are; `CanonicalPlatformOrderTest` on the server proves this copy
+ * and `AdPlatforms::ORDER` are the same list in the same order, so neither side can drift.
+ */
+export const PLATFORM_ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads'] as const
 
 export type AdPlatform = (typeof PLATFORM_ORDER)[number]
 
@@ -36,6 +44,48 @@ const ALIASES: Record<string, AdPlatform> = {
   x_ads: 'x',
   twitter_ads: 'x',
   linkedin_ads: 'linkedin',
+  /* The provider is OpenAI and the product is ChatGPT Ads, so both names arrive in the wild. */
+  openai: 'openai_ads',
+  chatgpt: 'openai_ads',
+  chatgpt_ads: 'openai_ads',
+  openai_advertising: 'openai_ads',
+}
+
+/**
+ * What each platform is CALLED, in both languages, in one place.
+ *
+ * Six files kept their own copy of this map, and each one was a separate decision about whether a
+ * platform exists: a list that had not been edited simply rendered the key — «openai_ads» where a
+ * reader expects «إعلانات ChatGPT» — and nothing failed, because printing a database value is
+ * indistinguishable from printing a label until somebody reads it.
+ *
+ * Arabic is not a transliteration of the English. «سناب شات» is what the platform is called by the
+ * people buying on it; `ChatGPT Ads` is a product name and stays Latin inside the Arabic string,
+ * which is how it is written and said here.
+ */
+export const PLATFORM_LABELS: Record<AdPlatform, { ar: string; en: string }> = {
+  snapchat: { ar: 'سناب شات', en: 'Snapchat' },
+  tiktok: { ar: 'تيك توك', en: 'TikTok' },
+  meta: { ar: 'ميتا', en: 'Meta' },
+  google: { ar: 'جوجل', en: 'Google' },
+  x: { ar: 'إكس', en: 'X' },
+  linkedin: { ar: 'لينكدإن', en: 'LinkedIn' },
+  openai_ads: { ar: 'إعلانات ChatGPT', en: 'ChatGPT Ads' },
+}
+
+/**
+ * The platform's name for a reader, from whatever spelling arrived.
+ *
+ * An unknown key comes back as itself rather than as «—» or «Unknown»: a platform this build has
+ * not heard of is a fact about this build, and showing the raw key is how somebody finds out which
+ * one it is. It is the loud failure, deliberately, and `canonicalPlatform` has already resolved
+ * every spelling the product actually uses.
+ */
+export function platformLabel(key: string | null | undefined, ar: boolean): string {
+  const canonical = canonicalPlatform(key)
+  const label = PLATFORM_LABELS[canonical as AdPlatform]
+
+  return label === undefined ? canonical : (ar ? label.ar : label.en)
 }
 
 export function canonicalPlatform(key: string | null | undefined): string {

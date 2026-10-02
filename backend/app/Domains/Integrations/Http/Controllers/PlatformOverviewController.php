@@ -54,6 +54,7 @@ final class PlatformOverviewController extends Controller
         'google' => ProviderDisplayName::NAMES['google'],
         'x' => ProviderDisplayName::NAMES['x'],
         'linkedin' => ProviderDisplayName::NAMES['linkedin'],
+        'openai_ads' => ProviderDisplayName::NAMES['openai_ads'],
     ];
 
     /** What a connected platform can do. Listed even when awaiting credentials, so the gap is explicit. */
@@ -211,7 +212,7 @@ final class PlatformOverviewController extends Controller
             /*
              * A flat list of the project's linked sources, ad accounts and stores together.
              *
-             * The per-platform grouping above is organised around the six ad platforms; a store is
+             * The per-platform grouping above is organised around the ad platforms; a store is
              * not one of them and would have nowhere to appear. A project does not care which family
              * a source belongs to — it cares what feeds it.
              */

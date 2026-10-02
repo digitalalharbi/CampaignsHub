@@ -843,7 +843,7 @@ final class ReconcileContentMetricsCommand extends Command
      * sources than they do is wrong by whatever the creatives it cannot see spent.
      *
      * The split is read from the rows rather than assumed: a creative whose figures come from the AD
-     * grain is one `creative_daily_metrics` never held, and on five of six providers that is all of
+     * grain is one `creative_daily_metrics` never held, and on most providers that is all of
      * them. Reporting the two pools separately is what makes «the strip was short» a measured
      * quantity instead of an argument about a code path.
      *

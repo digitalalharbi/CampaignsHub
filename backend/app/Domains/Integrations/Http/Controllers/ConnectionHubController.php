@@ -242,6 +242,15 @@ final class ConnectionHubController extends Controller
                 'label_ar' => $definition->labelAr,
                 'kind' => $definition->kind->value,
                 'has_parent' => ProviderHierarchy::hasParent($key),
+                /*
+                 * HOW this one is connected, because the two ways look identical from here.
+                 *
+                 * «Connect» means «leave for a consent screen» for every provider with an app we
+                 * registered, and «paste the key you hold» for one the advertiser credentials
+                 * themselves. A card that cannot tell them apart promises a redirect that never
+                 * comes.
+                 */
+                'auth' => $definition->auth->value,
             ];
         }
 

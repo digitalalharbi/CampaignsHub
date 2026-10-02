@@ -1,3 +1,4 @@
+import { platformLabel } from '@/lib/platforms'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronLeft, ImageOff, Layers, Megaphone, RefreshCw, Target } from 'lucide-react'
@@ -88,10 +89,13 @@ const REVIEW: Record<string, { ar: string; tone: 'success' | 'warning' | 'danger
   rejected: { ar: 'مرفوض', tone: 'danger' },
 }
 const FORMAT: Record<string, string> = { image: 'صورة', video: 'فيديو', carousel: 'دوّار', text: 'نص' }
-const PROVIDER: Record<string, string> = {
-  meta: 'ميتا', google: 'جوجل', google_ads: 'جوجل', tiktok: 'تيك توك',
-  snapchat: 'سناب شات', x: 'إكس', linkedin: 'لينكدإن',
-}
+/*
+ * Arabic names, from the canonical list rather than a hand-kept copy.
+ *
+ * `platformLabel` resolves the spellings too — `google_ads` and `google` were both written out here
+ * because both arrive — so a provider key this file has never seen still reads as its platform.
+ */
+const PROVIDER = (key: string): string => platformLabel(key, true)
 
 /** One ad row, with whatever the platform said about its creative and nothing more. */
 function Ad({ ad }: { ad: AdRow }) {
@@ -214,7 +218,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
     return (
       <EmptyState
         title="المنصة غير مهيّأة على هذا النظام"
-        description={`لم تُضبَط بعد إعدادات ${awaiting.map((p) => PROVIDER[p] ?? p).join(' و')} على مستوى النظام، لذلك لا يمكن قراءة المجموعات والإعلانات. يتولّى مدير المنصة ذلك من إعدادات مزوّدي التكامل.`}
+        description={`لم تُضبَط بعد إعدادات ${awaiting.map((p) => PROVIDER(p)).join(' و')} على مستوى النظام، لذلك لا يمكن قراءة المجموعات والإعلانات. يتولّى مدير المنصة ذلك من إعدادات مزوّدي التكامل.`}
       />
     )
   }
@@ -240,7 +244,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
           <span className="inline-flex items-center gap-1.5"><Layers size={14} /> <span className="tnum font-semibold text-text-primary">{adSets.length}</span> مجموعة إعلانية</span>
           <span className="inline-flex items-center gap-1.5"><Megaphone size={14} /> <span className="tnum font-semibold text-text-primary">{totalAds}</span> إعلانًا</span>
-          <span className="text-text-muted">مرتبطة بـ {linked.map((l) => PROVIDER[l.provider] ?? l.provider).join(' · ')}</span>
+          <span className="text-text-muted">مرتبطة بـ {linked.map((l) => PROVIDER(l.provider)).join(' · ')}</span>
         </div>
         {discoverButton}
       </div>

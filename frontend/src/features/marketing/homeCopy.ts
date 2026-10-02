@@ -47,6 +47,15 @@ export interface HomeCopy {
    * demo whose arithmetic does not add up teaches a visitor to distrust the real thing.
    */
   dashboard: {
+    /**
+     * PRODUCT-PREVIEW-001 — the three facts that make this a product and not an analytics page.
+     *
+     * The preview showed spend, campaigns, platforms, budgets and reports: everything a reporting
+     * tool shows. What a reader could not see is that this product organises accounts by CLIENT,
+     * knows how old its figures are, and says when something needs a person. Those three are the
+     * difference between «a dashboard» and «a place paid media is run from», and they cost one line.
+     */
+    estate: { projects: string; freshness: string; attention: string }
     dateRange: string
     /** Which objective these figures cover — comparing across objectives would be misleading. */
     objectiveLabel: string
@@ -165,10 +174,21 @@ const ar: HomeCopy = {
     features: 'المميزات', how: 'كيف يعمل', services: 'الخدمات', integrations: 'التكاملات والتقارير',
     login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'لوحة التحكم',
   },
+  /*
+   * PRODUCT-IDENTITY-001 — the first screen says what the product IS.
+   *
+   * The headline described an outcome — «كل حملاتك الإعلانية المدفوعة في مكان واحد» — which is also
+   * what a dashboard screenshot, a reporting tool and an agency's landing page all promise. Three
+   * short sentences name the thing instead: every campaign, every platform, one place.
+   *
+   * The description is the operating model in one line, in the order the work actually happens:
+   * connect, organise by client, follow campaigns and budgets, analyse, share. A visitor who reads
+   * only this should be able to say what the product does.
+   */
   hero: {
     eyebrow: 'إدارة الحملات الإعلانية المدفوعة',
-    title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    desc: 'تابع حملاتك وميزانياتك ونتائجك عبر المنصات، قارن الأداء، واكتشف فرص التحسين من لوحة واحدة واضحة.',
+    title: 'كل حملاتك. كل المنصات. مكان واحد.',
+    desc: 'اربط حساباتك الإعلانية، ونظّمها حسب العميل والمشروع، وتابع الحملات والميزانيات، وحلّل الأداء والإبداعات، وشارك التقارير — من مساحة عمل واحدة.',
     support: 'أدر حملاتك بنفسك، أو اختر الخدمة التي تحتاجها ودعنا نساعدك في تنفيذها.',
     points: ['متابعة موحدة لجميع المنصات', 'مقارنة واضحة بين الحملات', 'بيانات من الحسابات المرتبطة', 'تقارير وتنبيهات تساعدك على اتخاذ القرار'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
@@ -213,6 +233,7 @@ const ar: HomeCopy = {
     ],
   },
   dashboard: {
+    estate: { projects: '4 عملاء · 11 حسابًا إعلانيًا', freshness: 'آخر مزامنة قبل 12 دقيقة', attention: 'حساب واحد يحتاج انتباه' },
     dateRange: '1 أبريل — 25 مايو 2026',
     objectiveLabel: 'هدف: المبيعات — تُقارن الحملات ضمن الهدف نفسه فقط',
     demoBadge: 'معاينة توضيحية ببيانات تجريبية',
@@ -307,10 +328,19 @@ const ar: HomeCopy = {
       },
     ],
   },
+  /*
+   * The operating model, in the order the work actually happens.
+   *
+   * The five steps here described BENEFITS — «وحّد الحملات», «تابع الميزانيات» — which is a feature
+   * list laid out horizontally. These seven are the sequence somebody performs, and two of them are
+   * the ones nobody guesses: accounts are CHOSEN after connecting, and chosen accounts are bound to
+   * a project. That is the product's shape, and a visitor who reads only this strip should be able
+   * to predict what the first hour looks like.
+   */
   journey: {
     label: 'رحلة العمل',
     cta: 'استعرض المميزات',
-    steps: ['اربط المنصات', 'وحّد الحملات', 'تابع الميزانيات', 'قارن الأداء', 'تقارير وتنبيهات'],
+    steps: ['ربط المنصات', 'اختيار الحسابات', 'ربطها بالمشاريع', 'مزامنة الحملات', 'متابعة الأداء', 'التحليل', 'التقارير'],
   },
   options: {
     title: 'كيف تريد البدء؟',
@@ -391,7 +421,7 @@ const ar: HomeCopy = {
   platforms: {
     title: 'المنصات المدعومة',
     subtitle: 'اجمع بيانات حملاتك من المنصات الرئيسية في مكان واحد.',
-    note: 'المنصات الست مدعومة بالكامل — تربط حسابك الإعلاني بنفسك، ولا تظهر أي أرقام قبل أول مزامنة فعلية.',
+    note: 'تربط حسابك الإعلاني بنفسك، ولا تظهر أي أرقام قبل أول مزامنة فعلية.',
     items: [
       { label: 'Snapchat Ads', desc: 'حملات الوعي والتحويلات والكتالوج', status: 'متاحة للربط', tone: 'ok' },
       { label: 'TikTok Ads', desc: 'حملات الفيديو والمحتوى القصير', status: 'متاحة للربط', tone: 'ok' },
@@ -399,6 +429,31 @@ const ar: HomeCopy = {
       { label: 'Google Ads', desc: 'حملات البحث والتسوق والأداء الأقصى', status: 'متاحة للربط', tone: 'ok' },
       { label: 'X (Twitter) Ads', desc: 'حملات التفاعل والوصول', status: 'متاحة للربط', tone: 'ok' },
       { label: 'LinkedIn Ads', desc: 'حملات قطاع الأعمال والعملاء المحتملين', status: 'متاحة للربط', tone: 'ok' },
+      /*
+       * Stated as what it needs, not as what it offers.
+       *
+       * OpenAI has not said this is open in a market or to every advertiser, so «متاحة للربط» —
+       * which every row above has earned — would be this product answering a question on their
+       * behalf. What is true is the requirement: an Ads account and a key, both of which the
+       * advertiser either has or does not.
+       */
+      {
+        label: 'ChatGPT Ads',
+        /*
+          The requirement belongs in the DESCRIPTION, where sentences fit.
+          
+          It was the status, and the status is a pill: `shrink-0`, sized by its text, inside a card
+          343px wide on a phone. «يتطلب حساب إعلانات OpenAI ومفتاح واجهة» rendered 275px wide and
+          pushed the whole page sideways by 23px in English at 375 — caught by the responsive gate,
+          which measures `clientWidth` rather than `innerWidth` and so sees the scrollbar too.
+          
+          The pill says a STATE, like every other row's. The honesty is unchanged: it still states
+          what this platform needs and still claims no availability.
+        */
+        desc: 'الحملات والمجموعات والإعلانات ونتائجها اليومية — بحساب إعلانات OpenAI ومفتاح واجهة.',
+        status: 'يتطلب مفتاحك',
+        tone: 'await',
+      },
     ],
   },
   reports: {
@@ -483,8 +538,8 @@ const en: HomeCopy = {
   },
   hero: {
     eyebrow: 'Paid advertising management',
-    title: 'All your paid ad campaigns in one place',
-    desc: 'Track your campaigns, budgets and results across platforms, compare performance, and spot optimization opportunities from one clear dashboard.',
+    title: 'Every campaign. Every platform. One place.',
+    desc: 'Connect your advertising accounts, organise them by client and project, follow campaigns and budgets, analyse performance and creatives, and share reports — from one workspace.',
     support: 'Run your campaigns yourself, or pick the service you need and let us help you deliver it.',
     points: ['Unified tracking across all platforms', 'Clear comparison between campaigns', 'Data from your connected accounts', 'Reports and alerts that help you decide'],
     demoTag: 'Illustrative preview with demo data',
@@ -529,6 +584,7 @@ const en: HomeCopy = {
     ],
   },
   dashboard: {
+    estate: { projects: '4 clients · 11 ad accounts', freshness: 'Last synced 12 minutes ago', attention: '1 account needs attention' },
     dateRange: '1 April — 25 May 2026',
     objectiveLabel: 'Objective: Sales — campaigns are compared within one objective only',
     demoBadge: 'Illustrative preview with demo data',
@@ -626,7 +682,7 @@ const en: HomeCopy = {
   journey: {
     label: 'How it flows',
     cta: 'Explore the features',
-    steps: ['Connect platforms', 'Unify campaigns', 'Watch budgets', 'Compare performance', 'Reports and alerts'],
+    steps: ['Connect platforms', 'Choose accounts', 'Bind them to projects', 'Sync campaigns', 'Follow performance', 'Analyse', 'Report'],
   },
   options: {
     title: 'How do you want to start?',
@@ -707,7 +763,7 @@ const en: HomeCopy = {
   platforms: {
     title: 'Supported platforms',
     subtitle: 'Bring your campaign data from the main platforms into one place.',
-    note: 'All six platforms are supported — you connect your own ad account, and no figure appears before a real first sync.',
+    note: 'You connect your own ad account, and no figure appears before a real first sync.',
     items: [
       { label: 'Snapchat Ads', desc: 'Awareness, conversion and catalogue campaigns', status: 'Available to connect', tone: 'ok' },
       { label: 'TikTok Ads', desc: 'Video and short-form campaigns', status: 'Available to connect', tone: 'ok' },
@@ -715,6 +771,12 @@ const en: HomeCopy = {
       { label: 'Google Ads', desc: 'Search, Shopping and Performance Max', status: 'Available to connect', tone: 'ok' },
       { label: 'X (Twitter) Ads', desc: 'Engagement and reach campaigns', status: 'Available to connect', tone: 'ok' },
       { label: 'LinkedIn Ads', desc: 'B2B and lead-generation campaigns', status: 'Available to connect', tone: 'ok' },
+      {
+        label: 'ChatGPT Ads',
+        desc: 'Campaigns, ad groups, ads and their daily results — with an OpenAI Ads account and an API key.',
+        status: 'Your key required',
+        tone: 'await',
+      },
     ],
   },
   reports: {

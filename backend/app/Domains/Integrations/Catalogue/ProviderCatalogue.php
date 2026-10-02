@@ -84,6 +84,7 @@ final class ProviderCatalogue
             self::google(),
             self::x(),
             self::linkedin(),
+            self::openAiAds(),
             self::salla(),
             self::zid(),
         ];
@@ -406,6 +407,78 @@ final class ProviderCatalogue
             docsUrl: 'https://learn.microsoft.com/en-us/linkedin/marketing/',
             rateLimitNote: 'Daily application and member throttles, refused with HTTP 429.',
             paginationNote: '`start` / `count` on classic endpoints; `pageToken` on the newer ones.',
+        );
+    }
+
+    /**
+     * ChatGPT Ads — the OpenAI Advertiser API, and the first provider here that is not OAuth.
+     *
+     * ## What the API actually is
+     *
+     * One base URL, `https://api.ads.openai.com/v1`, and a bearer key the advertiser creates in
+     * their own console. The key is scoped to ONE ad account, which removes two things every other
+     * provider in this catalogue has: there is no consent screen to send a browser to, and there is
+     * no account-picker to populate afterwards — the key names the account by existing.
+     *
+     * `GET /v1/ad_account` is therefore both the validation and the discovery: it answers with the
+     * account the key belongs to, or it refuses the key.
+     *
+     * ## What is deliberately absent
+     *
+     * No scopes, no PKCE, no refresh, no webhook, and no parent level. OpenAI publishes no Business
+     * Centre, Business Portfolio or Manager Account for advertising, so `ProviderHierarchy` does not
+     * list one and the wizard will not draw an organisation step. Inventing one would be exactly the
+     * «step populated with something derived to fill the box» that class exists to refuse.
+     */
+    private static function openAiAds(): ProviderDefinition
+    {
+        return new ProviderDefinition(
+            key: 'openai_ads',
+            kind: ProviderKind::Advertising,
+            label: 'OpenAI Advertiser API',
+            labelAr: 'واجهة OpenAI الإعلانية',
+            /*
+             * Nothing for the PLATFORM OPERATOR to configure, and that is not an omission.
+             *
+             * Every other provider here has an app we register once: a client id and secret that
+             * identify CampaignsHub to the platform, shared by every tenant, with each customer's
+             * own access arriving afterwards through consent. OpenAI publishes no such app for
+             * advertising. The only credential is the advertiser's own bearer key, and it belongs to
+             * ONE ad account.
+             *
+             * A field here would be a platform-wide store for a per-tenant secret. An operator who
+             * filled it would hand every tenant on the install the same key — which is to say one
+             * customer's ad account, reported inside every other customer's workspace. The
+             * ACCOUNT-SCOPE-ISOLATION-001 guards defend the queries, and none of them can defend a
+             * credential that was shared on purpose at the top.
+             *
+             * So the key is asked for where it is used: at connect, by the tenant, stored against
+             * their connection. `isConfigured()` is therefore true for this provider with nothing
+             * entered — honest, because there is no install-level credential to be missing.
+             */
+            fields: [],
+            scopes: [],
+            usesPkce: false,
+            supportsRefresh: false,
+            tokenNote: 'A bearer key, created by the advertiser and scoped to a single ad account. It does '
+                .'not expire on a schedule and is replaced by rotating it in the OpenAI console and '
+                .'reconnecting here.',
+            tokenNoteAr: 'مفتاح Bearer ينشئه المعلن ويرتبط بحساب إعلاني واحد. لا تنتهي صلاحيته بجدول زمني، '
+                .'ويُستبدل بتدويره في لوحة OpenAI ثم إعادة الربط هنا.',
+            webhooks: WebhookSupport::PollingOnly,
+            webhookSignatureHeader: null,
+            prerequisites: [
+                'An OpenAI Ads account with advertiser access — availability is still limited by account and market.',
+                'An Ads API key created for that account. Each key is scoped to one ad account.',
+            ],
+            prerequisitesAr: [
+                'حساب إعلانات OpenAI بصلاحية معلن — الإتاحة ما تزال محدودة بحسب الحساب والسوق.',
+                'مفتاح واجهة إعلانات صادر لذلك الحساب. كل مفتاح مرتبط بحساب إعلاني واحد.',
+            ],
+            docsUrl: 'https://platform.openai.com/docs/ads',
+            rateLimitNote: 'Per-key throttles, refused with HTTP 429 and a `retry-after` header.',
+            paginationNote: 'Cursor pagination: `after` with the previous page\'s last id, and `has_more`.',
+            auth: ProviderAuth::ApiKey,
         );
     }
 

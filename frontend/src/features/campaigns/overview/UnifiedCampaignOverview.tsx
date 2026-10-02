@@ -1,3 +1,4 @@
+import { PLATFORM_LABELS } from '@/lib/platforms'
 import type { ReactNode } from 'react'
 import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { fmtDateTime } from '@/lib/datetime'
@@ -78,6 +79,7 @@ const PROVIDERS: Record<string, { name: string; color: string }> = {
   google: { name: 'Google Ads', color: '#EA4335' },
   x: { name: 'X', color: '#94A3B8' },
   linkedin: { name: 'LinkedIn', color: '#0A66C2' },
+  openai_ads: { name: PLATFORM_LABELS.openai_ads.en, color: '#10A37F' },
 }
 export function providerName(key: string): string {
   return PROVIDERS[key]?.name ?? key

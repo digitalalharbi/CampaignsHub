@@ -54,6 +54,14 @@ final class ProviderDefinition
         public readonly string $docsUrl,
         public readonly string $rateLimitNote,
         public readonly string $paginationNote,
+        /**
+         * INTEG-AUTH-KIND-001 — how this provider is authorised.
+         *
+         * Defaulted, so every existing definition keeps the shape it was written with and nothing
+         * that does not ask changes. A provider that states `ApiKey` has no consent screen, no
+         * scopes to request and no callback to register, and the flow stops pretending otherwise.
+         */
+        public readonly ProviderAuth $auth = ProviderAuth::OAuth,
     ) {}
 
     /** @return list<string> the keys of every field that must be present before a call is worth making */
@@ -103,6 +111,18 @@ final class ProviderDefinition
         return $this->callbackBase().'/api/v1/oauth/'.$this->kind->routeSegment().'/'.$this->key.'/callback';
     }
 
+    /**
+     * Whether a redirect URI is a thing this provider HAS.
+     *
+     * An API-key provider has nowhere to send a browser back from, so the console screen that shows
+     * «copy this into the provider's settings» has nothing to say about it — and showing a URI that
+     * no provider console will ever accept is an instruction that wastes somebody's afternoon.
+     */
+    public function hasRedirectUri(): bool
+    {
+        return $this->auth->redirectsToProvider();
+    }
+
     public function webhookUrl(): ?string
     {
         if (! $this->webhooks->hasEndpoint()) {
@@ -134,7 +154,18 @@ final class ProviderDefinition
             'webhooks' => $this->webhooks->value,
             'webhook_signature_header' => $this->webhookSignatureHeader,
             'webhook_url' => $this->webhookUrl(),
-            'redirect_uri' => $this->redirectUri(),
+            /*
+             * How this provider is authenticated, said out loud rather than inferred.
+             *
+             * The interface used to read «it is a provider, therefore it has a consent screen»,
+             * which held while every provider was OAuth. A reader cannot tell the two apart from any
+             * other field here — an empty scope list and a missing redirect URI are also what a
+             * half-finished OAuth definition looks like.
+             */
+            'auth' => $this->auth->value,
+            // Null rather than a derived URL for a provider that never redirects a browser: a URI no
+            // console will accept is an instruction, not a fact.
+            'redirect_uri' => $this->hasRedirectUri() ? $this->redirectUri() : null,
             'prerequisites' => $this->prerequisites,
             'prerequisites_ar' => $this->prerequisitesAr,
             'docs_url' => $this->docsUrl,

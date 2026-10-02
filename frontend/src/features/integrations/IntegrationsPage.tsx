@@ -13,7 +13,7 @@ import { AccountsPanel } from './AccountsPanel'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { Button } from '@/components/ui/Button'
 import { platformColor } from '@/features/analytics/components'
-import { sortByPlatform } from '@/lib/platforms'
+import { platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 
@@ -232,10 +232,14 @@ export function IntegrationsPage() {
 /**
  * Which provider a new authorisation is for.
  *
- * Deliberately a short list and not the six-card grid this page used to be: the grid was a
- * catalogue, and a reader who has pressed «Connect a source» has already decided to shop. Only
- * providers whose system credentials are present appear — offering one without them produces an
- * OAuth start the server is going to refuse.
+ * Deliberately a short list and not the card grid this page used to be: the grid was a catalogue,
+ * and a reader who has pressed «Connect a source» has already decided to shop. Only providers this
+ * install can actually start appear — offering one it cannot produces a request the server refuses.
+ *
+ * Each row says HOW it connects, because the two are different acts and the difference matters
+ * before the press, not after: one hands you to the platform's own sign-in, the other asks for a key
+ * you must already have. A reader who expected a consent screen and met a key box goes looking for
+ * the key with the dialog open; one told beforehand brings it.
  */
 function ProviderPicker({ providers, ar, onPick, onClose }: {
   providers: ConnectableProvider[]
@@ -272,8 +276,17 @@ function ProviderPicker({ providers, ar, onPick, onClose }: {
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-colors hover:bg-surface-hover"
                 >
                   <span className="h-7 w-1 shrink-0 rounded-full" style={{ background: platformColor(provider.key) }} aria-hidden />
-                  <span className="text-sm font-semibold text-text-primary">
-                    {ar ? provider.label_ar : provider.label}
+                  <span className="flex min-w-0 flex-col">
+                    {/* «اختر المنصة» lists platforms. The interface's own name belongs on a hub row,
+                        which describes one authorisation, not here. */}
+                    <span className="truncate text-sm font-semibold text-text-primary">
+                      {platformLabel(provider.key, ar)}
+                    </span>
+                    <span className="truncate text-xs text-text-secondary">
+                      {provider.auth === 'api_key'
+                        ? (ar ? 'بمفتاح واجهة تملكه' : 'With an API key you hold')
+                        : (ar ? 'بتسجيل الدخول لدى المنصة' : 'By signing in at the platform')}
+                    </span>
                   </span>
                 </button>
               </li>

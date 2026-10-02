@@ -24,7 +24,7 @@ use Throwable;
 /**
  * INTEG-OAUTH-001 — the real adapter every ad platform now extends.
  *
- * It replaces `AwaitingCredentialsConnector` for the six platforms, and keeps that class's promise
+ * It replaces `AwaitingCredentialsConnector` for the real platforms, and keeps that class's promise
  * exactly: **an unconfigured platform still reports `awaiting_credentials`, still refuses to call out,
  * and still fabricates nothing.** What changes is that a CONFIGURED platform now does the real thing
  * instead of throwing — the OAuth exchange, the account listing, the campaign discovery and the daily

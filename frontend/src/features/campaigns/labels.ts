@@ -1,3 +1,4 @@
+import { canonicalPlatform, PLATFORM_LABELS } from '@/lib/platforms'
 import type { Locale } from '@/stores/ui'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
@@ -51,13 +52,18 @@ const marketingPath: Record<string, { ar: string; en: string }> = {
   conversion: { ar: 'التحويل والمبيعات', en: 'Conversion & sales' },
 }
 
+/*
+ * The platforms the product INTEGRATES with come from the canonical list; the rest are local.
+ *
+ * Microsoft and Pinterest are here because a campaign can be TAGGED with a platform this product
+ * does not read — an agency runs them, and a taxonomy that could not say so would push the work
+ * into a free-text note. Sandbox is the local fake. None of the three has a connector, which is
+ * exactly why they are written out separately instead of being added to `PLATFORM_ORDER`: that list
+ * answers «what can this product connect to», and padding it would make every count derived from it
+ * wrong.
+ */
 const provider: Record<string, { ar: string; en: string }> = {
-  meta: { ar: 'ميتا', en: 'Meta' },
-  google: { ar: 'جوجل', en: 'Google Ads' },
-  tiktok: { ar: 'تيك توك', en: 'TikTok' },
-  snapchat: { ar: 'سناب شات', en: 'Snapchat' },
-  x: { ar: 'إكس', en: 'X' },
-  linkedin: { ar: 'لينكدإن', en: 'LinkedIn' },
+  ...PLATFORM_LABELS,
   microsoft: { ar: 'مايكروسوفت', en: 'Microsoft' },
   pinterest: { ar: 'بنترست', en: 'Pinterest' },
   sandbox: { ar: 'Sandbox', en: 'Sandbox' },
@@ -128,8 +134,20 @@ export function objectiveLabel(key: string, locale: Locale): string {
   return objective[key]?.[locale] ?? key
 }
 
+/**
+ * A platform's name, from whatever spelling arrived.
+ *
+ * It looked the key up verbatim, so every spelling this codebase uses other than the canonical one
+ * rendered as ITSELF: a report sending `openai` printed «openai» on a page a client pays for, and a
+ * `snapchat_ads` row printed «snapchat_ads». The map only ever held canonical keys, so the fallback
+ * was doing the work far more often than it looked.
+ *
+ * `canonicalPlatform` resolves the spelling first. The raw key is still the last resort — a platform
+ * this build has not heard of should be visible as what it is rather than as «—», which is how you
+ * find out which one it is.
+ */
 export function providerLabel(key: string, locale: Locale): string {
-  return provider[key]?.[locale] ?? key
+  return provider[canonicalPlatform(key)]?.[locale] ?? provider[key]?.[locale] ?? key
 }
 
 export function marketingPathLabel(key: string, locale: Locale): string {

@@ -173,11 +173,20 @@ describe('PublicHomePage — v5 journeys & header', () => {
     }
   })
 
+  /**
+   * PRODUCT-IDENTITY-001 — the first screen names the product, it does not promise an outcome.
+   *
+   * «All your paid ad campaigns in one place» is a sentence a dashboard screenshot, a reporting tool
+   * and an agency's landing page could all put on their homepage. What replaces it names the thing,
+   * and the description below it is the operating model in the order the work happens.
+   */
   it('shows the customer-facing hero: eyebrow, headline and description', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
-    expect(screen.getByRole('heading', { name: /All your paid ad campaigns in one place/i })).toBeInTheDocument()
-    expect(screen.getByText(/from one clear dashboard/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Every campaign\. Every platform\. One place\./i })).toBeInTheDocument()
+    // Connect, organise, follow, analyse, share — the journey, not a feature list.
+    expect(screen.getByText(/Connect your advertising accounts, organise them by client and project/i)).toBeInTheDocument()
+    expect(screen.getByText(/share reports — from one workspace/i)).toBeInTheDocument()
     expect(screen.getByText('Paid advertising management')).toBeInTheDocument()
   })
 

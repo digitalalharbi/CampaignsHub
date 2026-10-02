@@ -244,7 +244,7 @@ final class SubscriptionService
              * Counting every active binding was correct while bindings could only ever name an ad
              * account. Commerce now uses the same table, so an unqualified count would charge a
              * merchant an ADVERTISING slot for connecting their Salla store — a cap they are sold on
-             * the six ad platforms, silently consumed by a shop.
+             * the ad platforms, silently consumed by a shop.
              *
              * The join is what makes «connected ad accounts» mean what the plan says. Stores are
              * governed by the caps that actually exist — projects, client workspaces, subscription

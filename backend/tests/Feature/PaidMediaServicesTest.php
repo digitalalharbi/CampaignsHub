@@ -94,7 +94,7 @@ final class PaidMediaServicesTest extends TestCase
 
         // Expected children per category.
         $expected = [
-            'launch_manage' => 8, 'optimization' => 9, 'audit_analysis' => 9, 'measurement_tracking' => 14,
+            'launch_manage' => 9, 'optimization' => 9, 'audit_analysis' => 9, 'measurement_tracking' => 14,
             'integrations' => 12, 'strategy_planning' => 10, 'reporting_dashboards' => 8, 'creatives' => 8,
             'objective_services' => 9, 'consulting_training' => 7,
         ];
@@ -131,7 +131,7 @@ final class PaidMediaServicesTest extends TestCase
 
         $res->assertJsonPath('success', true)
             ->assertJsonCount(10, 'data.categories')
-            ->assertJsonCount(94, 'data.services')
+            ->assertJsonCount(95, 'data.services')
             ->assertJsonStructure(['data' => [
                 'version',
                 'categories' => [['key', 'label_ar', 'label_en', 'icon', 'sort_order']],
@@ -142,7 +142,7 @@ final class PaidMediaServicesTest extends TestCase
         $catOrders = array_column($res->json('data.categories'), 'sort_order');
         $this->assertSame(range(1, 10), $catOrders);
         $svcOrders = array_column($res->json('data.services'), 'sort_order');
-        $this->assertSame(range(1, 94), $svcOrders);
+        $this->assertSame(range(1, 95), $svcOrders);
 
         // A known service carries its category_key + required_field_rules.
         $new = collect($res->json('data.services'))->firstWhere('key', 'new_campaign');
