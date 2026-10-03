@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Modal } from './Modal'
 import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
@@ -72,6 +72,7 @@ export function FilterBar({
   advanced,
   advancedActive = false,
   trailing,
+  density = 'comfortable',
 }: {
   /** Distinguishes testids where a page carries more than one bar. */
   id: string
@@ -88,6 +89,14 @@ export function FilterBar({
   advancedActive?: boolean
   /** Actions that belong beside the filters rather than in the page header (view switchers, export). */
   trailing?: ReactNode
+  /**
+   * How much room this bar may take — DASHBOARD-COMMAND-BAR-001.
+   *
+   * `dense` puts each control's label on the control's own line instead of above it, which is the
+   * difference between one row and three. It is for a page somebody opens to READ; a page they open
+   * to SLICE keeps the comfortable shape, where a label above its input is easier to scan down.
+   */
+  density?: FilterDensity
 }) {
   const [open, setOpen] = useState(false)
   /*
@@ -102,10 +111,12 @@ export function FilterBar({
   const [showOnPhone, setShowOnPhone] = useState(false)
 
   return (
+    <DensityContext.Provider value={density}>
     <section
       data-testid={`${id}-filters`}
       aria-label={t('filters', ar)}
-      className="rounded-2xl border border-border bg-surface p-3"
+      data-density={density}
+      className={`rounded-2xl border border-border bg-surface ${density === 'dense' ? 'p-2' : 'p-3'}`}
     >
       <button
         type="button"
@@ -113,6 +124,15 @@ export function FilterBar({
         aria-expanded={showOnPhone}
         aria-controls={`${id}-filters-controls`}
         onClick={() => setShowOnPhone((v) => !v)}
+        /*
+          Folded on a phone, visible everywhere else — both densities.
+
+          A dense bar was briefly folded to `lg` as well, because its controls are wider and wrapped
+          into a block taller than the form it replaced between 640px and the desktop breakpoint.
+          That traded the owner's actual requirement — the filters are VISIBLE — for a number. The
+          platform control now carries logos instead of seven names, which is where the width went,
+          so the bar fits and the fold goes back to the phone where it belongs.
+        */
         className={`${CONTROL} w-full justify-between sm:hidden`}
       >
         <span className="inline-flex items-center gap-1.5">
@@ -138,7 +158,9 @@ export function FilterBar({
       <div
         id={`${id}-filters-controls`}
         data-testid={`${id}-filters-controls`}
-        className={`${showOnPhone ? 'mt-3 flex' : 'hidden'} flex-wrap items-end gap-2 sm:mt-0 sm:flex`}
+        className={`${showOnPhone ? 'mt-3 flex' : 'hidden'} flex-wrap gap-2 sm:mt-0 sm:flex ${
+          density === 'dense' ? 'items-center' : 'items-end'
+        }`}
       >
         {children}
 
@@ -147,10 +169,20 @@ export function FilterBar({
             type="button"
             data-testid={`${id}-more-filters`}
             onClick={() => setOpen(true)}
-            className={CONTROL}
+            /*
+              Icon-only when dense, and named to anybody not reading the icon.
+
+              Spelled out it is 132px — the one control that would not fit beside the other four on
+              a 1440 row, which put it on a second row on its own. It is also the only control here
+              whose meaning survives as a glyph: the sliders icon is what «more filters» looks like
+              in every product that has one.
+            */
+            aria-label={density === 'dense' ? t('more', ar) : undefined}
+            title={density === 'dense' ? t('more', ar) : undefined}
+            className={`${CONTROL} ${density === 'dense' ? 'px-2' : ''}`}
           >
             <SlidersHorizontal size={15} aria-hidden />
-            {t('more', ar)}
+            {density === 'dense' ? null : t('more', ar)}
             {advancedActive && (
               <span
                 aria-hidden
@@ -216,13 +248,59 @@ export function FilterBar({
         </Modal>
       )}
     </section>
+    </DensityContext.Provider>
   )
 }
 
-/** The label above a control, in the one style every filter in the product uses. */
-function ControlLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+/**
+ * DASHBOARD-COMMAND-BAR-001 — how much room a filter is allowed to take.
+ *
+ * `comfortable` is the bar every page has had: each control is a label on its own line above its
+ * input, which is the right shape on a page somebody goes to in order to SLICE data.
+ *
+ * `dense` is for a page somebody goes to in order to READ. The label moves onto the control's own
+ * line, so a control costs one row instead of two — six groups on the dashboard wrapped to three
+ * rows and put 195px between the header and the first figure.
+ *
+ * A context rather than a prop threaded through each control, because the controls are the page's
+ * children: `FilterBar` cannot reach into them, and giving every call site a `dense` prop would
+ * make density something each one could get wrong on its own.
+ */
+type FilterDensity = 'comfortable' | 'dense'
+
+const DensityContext = createContext<FilterDensity>('comfortable')
+
+/** The row a control lives in: stacked when comfortable, one line when dense. */
+function ControlRow({ children, width = '', boxRef }: {
+  children: ReactNode
+  width?: string
+  /** For the one control that closes itself on an outside click and so must know its own box. */
+  boxRef?: React.RefObject<HTMLDivElement | null>
+}) {
+  const dense = useContext(DensityContext) === 'dense'
+
   return (
-    <label htmlFor={htmlFor} className="text-xs font-semibold text-text-secondary">
+    <div ref={boxRef} className={dense ? `flex items-center gap-2 ${width}` : `flex flex-col gap-1 ${width}`}>
+      {children}
+    </div>
+  )
+}
+
+/** The label for a control, in the one style every filter in the product uses. */
+function ControlLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+  const dense = useContext(DensityContext) === 'dense'
+
+  return (
+    <label
+      htmlFor={htmlFor}
+      /*
+        Dense labels are not uppercased, and that is a width decision rather than a style one.
+        `uppercase tracking-wide` made the English bar 142px against Arabic's 98 — capitals are wider
+        and the tracking adds a pixel per letter, so «OBJECTIVE» wrapped a row that «الهدف» did not.
+        The bar has to be the same shape in both languages.
+      */
+      className={`font-semibold text-text-secondary ${dense ? 'shrink-0 text-[11px]' : 'text-xs'}`}
+    >
       {children}
     </label>
   )
@@ -251,17 +329,29 @@ export function FilterSelect({
   width?: string
 }) {
   const id = useId()
+  const dense = useContext(DensityContext) === 'dense'
 
   return (
-    <div className={`flex flex-col gap-1 ${width}`}>
+    <ControlRow width={width}>
       <ControlLabel htmlFor={id}>{label}</ControlLabel>
+      {/*
+        A dense select is capped, because its width is its LONGEST OPTION's.
+
+        «Awareness & engagement» and «Growth — Acquisition» stretched two controls to 299px and
+        251px, and the row they would not fit on was the whole point of the dense bar. The cap
+        truncates the closed control and nothing else: the full text is in the option list, in the
+        accessible name, and in the title.
+      */}
       <select
         id={id}
         data-testid={testid}
         aria-label={label}
+        title={options.find((o) => o.value === value)?.label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+        className={`h-9 rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+          dense ? 'max-w-40 truncate' : ''
+        }`}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -269,7 +359,7 @@ export function FilterSelect({
           </option>
         ))}
       </select>
-    </div>
+    </ControlRow>
   )
 }
 
@@ -425,7 +515,7 @@ export function FilterMulti({
     onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value])
 
   return (
-    <div className="flex min-w-36 flex-col gap-1" ref={box}>
+    <ControlRow width="min-w-36" boxRef={box}>
       <ControlLabel>{label}</ControlLabel>
       <div className="relative">
         <button
@@ -606,7 +696,7 @@ export function FilterMulti({
           </div>
         )}
       </div>
-    </div>
+    </ControlRow>
   )
 }
 
@@ -631,7 +721,7 @@ export function FilterChips({
   testid?: string
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <ControlRow>
       <ControlLabel>{label}</ControlLabel>
       <div
         role="group"
@@ -655,7 +745,7 @@ export function FilterChips({
           </button>
         ))}
       </div>
-    </div>
+    </ControlRow>
   )
 }
 
