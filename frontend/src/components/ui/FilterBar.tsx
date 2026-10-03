@@ -125,15 +125,15 @@ export function FilterBar({
         aria-controls={`${id}-filters-controls`}
         onClick={() => setShowOnPhone((v) => !v)}
         /*
-          Dense folds later — DASHBOARD-COMMAND-BAR-001.
+          Folded on a phone, visible everywhere else — both densities.
 
-          A comfortable bar is inline from `sm` up, where a stacked control costs one line and
-          hiding it would cost a click. A dense bar puts the label BESIDE the control, so each one is
-          wider; between 640px and the desktop breakpoint they wrap into a 215px block, which is the
-          form this change exists to remove. Folded to `lg`, a tablet gets the same compact summary a
-          phone gets, and the row appears where there is room for it.
+          A dense bar was briefly folded to `lg` as well, because its controls are wider and wrapped
+          into a block taller than the form it replaced between 640px and the desktop breakpoint.
+          That traded the owner's actual requirement — the filters are VISIBLE — for a number. The
+          platform control now carries logos instead of seven names, which is where the width went,
+          so the bar fits and the fold goes back to the phone where it belongs.
         */
-        className={`${CONTROL} w-full justify-between ${density === 'dense' ? 'lg:hidden' : 'sm:hidden'}`}
+        className={`${CONTROL} w-full justify-between sm:hidden`}
       >
         <span className="inline-flex items-center gap-1.5">
           <SlidersHorizontal size={15} aria-hidden />
@@ -158,10 +158,8 @@ export function FilterBar({
       <div
         id={`${id}-filters-controls`}
         data-testid={`${id}-filters-controls`}
-        className={`${showOnPhone ? 'mt-3 flex' : 'hidden'} flex-wrap gap-2 ${
-          density === 'dense'
-            ? 'items-center lg:mt-0 lg:flex'
-            : 'items-end sm:mt-0 sm:flex'
+        className={`${showOnPhone ? 'mt-3 flex' : 'hidden'} flex-wrap gap-2 sm:mt-0 sm:flex ${
+          density === 'dense' ? 'items-center' : 'items-end'
         }`}
       >
         {children}
@@ -171,10 +169,20 @@ export function FilterBar({
             type="button"
             data-testid={`${id}-more-filters`}
             onClick={() => setOpen(true)}
-            className={CONTROL}
+            /*
+              Icon-only when dense, and named to anybody not reading the icon.
+
+              Spelled out it is 132px — the one control that would not fit beside the other four on
+              a 1440 row, which put it on a second row on its own. It is also the only control here
+              whose meaning survives as a glyph: the sliders icon is what «more filters» looks like
+              in every product that has one.
+            */
+            aria-label={density === 'dense' ? t('more', ar) : undefined}
+            title={density === 'dense' ? t('more', ar) : undefined}
+            className={`${CONTROL} ${density === 'dense' ? 'px-2' : ''}`}
           >
             <SlidersHorizontal size={15} aria-hidden />
-            {t('more', ar)}
+            {density === 'dense' ? null : t('more', ar)}
             {advancedActive && (
               <span
                 aria-hidden
@@ -321,17 +329,29 @@ export function FilterSelect({
   width?: string
 }) {
   const id = useId()
+  const dense = useContext(DensityContext) === 'dense'
 
   return (
     <ControlRow width={width}>
       <ControlLabel htmlFor={id}>{label}</ControlLabel>
+      {/*
+        A dense select is capped, because its width is its LONGEST OPTION's.
+
+        «Awareness & engagement» and «Growth — Acquisition» stretched two controls to 299px and
+        251px, and the row they would not fit on was the whole point of the dense bar. The cap
+        truncates the closed control and nothing else: the full text is in the option list, in the
+        accessible name, and in the title.
+      */}
       <select
         id={id}
         data-testid={testid}
         aria-label={label}
+        title={options.find((o) => o.value === value)?.label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+        className={`h-9 rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+          dense ? 'max-w-40 truncate' : ''
+        }`}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

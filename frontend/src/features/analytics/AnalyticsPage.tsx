@@ -634,6 +634,14 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           label={ar ? 'المنصة' : 'Platform'}
           allLabel={ar ? 'الكل' : 'All'}
           values={providers}
+          /*
+            Logos on the dashboard, names on the analysis surface.
+
+            Seven names was the widest control on the dashboard's bar by a long way, and the one a
+            reader identifies fastest from its logo. The analysis surface keeps the names: it is read
+            slowly, often by somebody comparing platforms they do not buy on every day.
+          */
+          marks={! isAnalysis}
           testid={`${surface}-platform`}
           options={ANALYTICS_PLATFORMS.map((key) => ({ value: canonicalPlatform(key), label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
           onChange={setProviders}

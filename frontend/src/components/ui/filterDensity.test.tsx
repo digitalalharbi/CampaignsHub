@@ -73,15 +73,17 @@ describe('the filter bar density', () => {
   })
 
   /**
-   * A dense bar folds later than a comfortable one.
+   * **Both densities fold only on a phone.**
    *
-   * Between 640px and the desktop breakpoint a dense bar's controls are wider — the label sits
-   * beside them — and they wrapped into a block taller than the form this replaced. On a tablet it
-   * therefore shows the same compact summary a phone shows.
+   * A dense bar was briefly folded on tablets too, because its controls are wider and wrapped into
+   * a block taller than the form it replaced. That traded the actual requirement — the filters are
+   * VISIBLE — for a number, and the width went when the platform control became logos instead of
+   * seven names. This holds that it stays visible.
    */
-  it('folds on a tablet when dense, and only on a phone when comfortable', () => {
+  it('folds only on a phone, whichever density', () => {
     const { unmount } = bar('dense')
-    expect(screen.getByTestId('t-filters-toggle').className).toContain('lg:hidden')
+    expect(screen.getByTestId('t-filters-toggle').className).toContain('sm:hidden')
+    expect(screen.getByTestId('t-filters-toggle').className).not.toContain('lg:hidden')
     unmount()
 
     bar()

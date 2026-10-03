@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
 import { platformColor } from '@/features/analytics/components'
+import { PlatformMark, hasPlatformMark } from '@/components/brand/PlatformMark'
 
 /**
  * UX-FILTERS-001 — the platforms, VISIBLE, as the thing they are.
@@ -21,6 +22,17 @@ import { platformColor } from '@/features/analytics/components'
  *
  * `aria-pressed` on every chip, because these are toggles and not links. A screen reader gets the
  * same fact the colour gives everyone else.
+ *
+ * ## `marks` — the same chips, drawn as the platforms' own logos
+ *
+ * Seven names is the widest control on a dashboard bar, and the one a reader recognises fastest from
+ * its logo. With `marks` the chip carries the platform's mark instead of its name; everything else
+ * is unchanged, including the selection contract.
+ *
+ * The name does not disappear — it moves to `aria-label` and `title`, so a screen reader hears it
+ * and a pointer reveals it. A control identified only by a shape is unusable to somebody who cannot
+ * see the shape, and unreadable to anybody who does not already know the brand. A platform with no
+ * mark keeps its name on the chip rather than becoming a blank pill.
  */
 export function FilterPlatforms({
   label,
@@ -29,6 +41,7 @@ export function FilterPlatforms({
   options,
   onChange,
   testid,
+  marks = false,
 }: {
   label: string
   allLabel: string
@@ -36,6 +49,8 @@ export function FilterPlatforms({
   options: Array<{ value: string; label: string }>
   onChange: (next: string[]) => void
   testid?: string
+  /** Draw each platform as its own logo rather than its name — see the note above. */
+  marks?: boolean
 }) {
   const toggle = (value: string) =>
     onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value])
@@ -64,31 +79,49 @@ export function FilterPlatforms({
         const on = values.includes(opt.value)
         const color = platformColor(opt.value)
 
+        const asMark = marks && hasPlatformMark(opt.value)
+
         return (
           <button
             key={opt.value}
             type="button"
             aria-pressed={on}
+            /*
+             * The name, always, for anybody not reading the logo. `title` is the pointer's version of
+             * the same fact — a mark nobody recognises is a control nobody can use.
+             */
+            aria-label={asMark ? opt.label : undefined}
+            title={asMark ? opt.label : undefined}
             data-testid={testid ? `${testid}-${opt.value}` : undefined}
             onClick={() => toggle(opt.value)}
-            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold transition-colors ${
+            className={`flex items-center justify-center gap-1.5 rounded-full border text-xs font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+              asMark ? 'h-7 w-7 p-0' : 'px-2.5 py-1'
+            } ${
               on
                 ? 'border-transparent text-white'
                 : 'border-border bg-surface text-text-secondary hover:border-brand-300 hover:bg-surface-hover'
             }`}
             /*
              * The brand colour fills the chip when selected and marks it with a dot when not. An
-             * unselected chip keeps the page's own greys — six saturated pills side by side read as
-             * six alerts, and none of them is one.
+             * unselected chip keeps the page's own greys — seven saturated pills side by side read as
+             * seven alerts, and none of them is one.
+             *
+             * A mark chip is the same rule with the mark itself carrying the colour when unselected:
+             * white on the brand colour when on, the brand colour on the page's surface when off, so
+             * the state is legible without reading anything.
              */
             style={on ? { backgroundColor: color } : undefined}
           >
-            {on ? (
+            {asMark ? (
+              <span style={on ? undefined : { color }} className="flex">
+                <PlatformMark platform={opt.value} size={14} />
+              </span>
+            ) : on ? (
               <Check size={11} strokeWidth={3.5} aria-hidden />
             ) : (
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />
             )}
-            {opt.label}
+            {!asMark && opt.label}
           </button>
         )
       })}
