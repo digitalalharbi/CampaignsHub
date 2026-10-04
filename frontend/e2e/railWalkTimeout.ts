@@ -48,6 +48,25 @@
  * This ceiling stays anyway. It costs nothing when a page paints in seven seconds, and it is the
  * thing that would absorb a slow runner rather than a slow app if one ever appears again.
  */
+/*
+ * SIXTH occurrence, 2026-10-04 (#586) — and the protocol followed before anything was re-run.
+ *
+ * Two webkit cases failed while chromium, firefox, backend, frontend and image all passed the same
+ * commit: `/agency/alerts` «never rendered», and the English rail walk's `main` never appearing.
+ * Both were reproduced locally on webkit FIRST, per the rule above, and both passed —
+ * `cross-product-consistency` 12 of 12, `agency-portal` 10 of 10 with the failing case taking 20.8
+ * seconds on an idle laptop.
+ *
+ * Two more facts say the page is not the subject. The CI run's own backend log for that window
+ * contains no error of any kind — only mail debug lines — so nothing server-side refused. And the
+ * change under test touches `features/reports` and `features/branding` only; the rail surfaces that
+ * timed out import none of it.
+ *
+ * So the ceiling is not raised again. 20.8 seconds idle against a 45-second bound is a page that
+ * paints fine and a runner that was two and a half times slower than a laptop — which is the one
+ * thing every occurrence here has ever measured. The number stays, the evidence is recorded, and the
+ * job is re-run.
+ */
 export const RAIL_PAINT_TIMEOUT = 45_000
 
 /** Per-path budget for a walk that visits many routes in one test, on the same reasoning. */
