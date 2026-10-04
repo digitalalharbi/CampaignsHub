@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -81,6 +82,16 @@ final class LiveReportBuilderController extends Controller
          */
         $activity = $this->activityWithin($project, $request);
 
+        /*
+         * REPORT-SCOPE-SELECTION-001 — WHICH AD ACCOUNT each campaign came from.
+         *
+         * The platform pills narrowed the list, and they do not finish the job: the owner's objection
+         * was «تظهر جميع الحملات في الحسابات الاعلانية جميعها» — all the accounts' campaigns at once —
+         * and two Meta ad accounts under one project are still one pill. What tells those apart is the
+         * account, so the account is what the picker is given.
+         */
+        $accounts = $this->accountsByCampaign($project);
+
         $campaigns = UnifiedCampaign::query()
             ->where('project_id', $project)
             ->orderBy('name')
@@ -109,6 +120,13 @@ final class LiveReportBuilderController extends Controller
                     ),
                     static fn (string $p): bool => $p !== '',
                 )),
+                /*
+                 * The accounts this campaign's own external rows belong to — usually one, and more
+                 * than one when the same unified campaign gathers externals from several accounts.
+                 * Listed rather than reduced to a single id, because collapsing it would have to pick
+                 * a winner and every rule for picking one is a lie about where the spend came from.
+                 */
+                'accounts' => array_values($accounts['byCampaign'][(string) $c->id] ?? []),
             ])->all();
 
         /*
@@ -131,7 +149,65 @@ final class LiveReportBuilderController extends Controller
             'campaigns' => $campaigns,
             'providers' => $providers,
             'metrics' => self::METRICS,
+            /*
+             * Every ad account the project's campaigns actually came from, so the filter can offer
+             * the accounts there are campaigns for and nothing else. Built from the SAME rows as the
+             * per-campaign lists, so the filter can never name an account that narrows the list to
+             * nothing.
+             */
+            'ad_accounts' => $accounts['all'],
         ], 'Builder options.');
+    }
+
+    /**
+     * The ad accounts behind each of a project's unified campaigns.
+     *
+     * ACCOUNT-SCOPE-ISOLATION-001 is applied here like everywhere else: a deselected account's
+     * campaigns are not this project's to list, and the predicate is asked of
+     * `BoundAccountVisibility` rather than restated — a second copy of that rule is how one surface
+     * ends up disagreeing with the rest.
+     *
+     * @return array{byCampaign: array<string, list<array{id: string, name: string, provider: string}>>, all: list<array{id: string, name: string, provider: string}>}
+     */
+    private function accountsByCampaign(string $project): array
+    {
+        $rows = ExternalCampaign::query()
+            ->join('external_accounts', 'external_accounts.id', '=', 'external_campaigns.external_account_id')
+            ->where('external_campaigns.project_id', $project)
+            ->whereNotNull('external_campaigns.unified_campaign_id')
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
+            ->distinct()
+            ->orderBy('external_accounts.name')
+            ->get([
+                'external_campaigns.unified_campaign_id as campaign_id',
+                'external_accounts.id as account_id',
+                'external_accounts.name as account_name',
+                'external_accounts.provider as account_provider',
+            ]);
+
+        $byCampaign = [];
+        $all = [];
+
+        foreach ($rows as $row) {
+            $account = [
+                'id' => (string) $row->account_id,
+                /*
+                 * A name, and an id only when the provider gave no name. An account row with an empty
+                 * name is not hypothetical — some providers return one — and «» in a filter is worse
+                 * than the raw identifier, because the operator cannot tell two of them apart.
+                 */
+                'name' => trim((string) $row->account_name) !== '' ? (string) $row->account_name : (string) $row->account_id,
+                'provider' => AdPlatforms::canonical((string) $row->account_provider),
+            ];
+
+            $byCampaign[(string) $row->campaign_id][$account['id']] = $account;
+            $all[$account['id']] = $account;
+        }
+
+        return [
+            'byCampaign' => array_map(static fn (array $a): array => array_values($a), $byCampaign),
+            'all' => array_values($all),
+        ];
     }
 
     /**

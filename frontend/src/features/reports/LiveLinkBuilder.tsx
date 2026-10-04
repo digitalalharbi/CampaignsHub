@@ -4,7 +4,7 @@ import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { PlatformMark } from '@/components/brand/PlatformMark'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Link2, Upload } from 'lucide-react'
-import { createLiveLink, liveBuilderOptions, reportSectionRegistry } from './api'
+import { createLiveLink, liveBuilderOptions, reportSectionRegistry, type LiveBuilderOptions } from './api'
 import { groupByLifecycle } from './reportScopeLifecycle'
 import { toApiError } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
@@ -100,12 +100,42 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     [options.data],
   )
 
-  const visibleCampaigns = useMemo(
-    () => (options.data?.campaigns ?? []).filter(
-      (c) => campaignPlatform === null || (c.platforms ?? []).includes(campaignPlatform),
-    ),
-    [options.data, campaignPlatform],
-  )
+  /*
+   * Which AD ACCOUNT the picker is narrowed to, and which accounts there are to narrow to.
+   *
+   * The platform pills answered half of «تظهر جميع الحملات في الحسابات الاعلانية جميعها». The other
+   * half is that two ad accounts on the same platform collapse into one pill, and an agency running
+   * two Meta accounts for one client gets back exactly the flat list it started with. The account is
+   * the thing the operator actually holds in mind, so it is a filter of its own.
+   *
+   * Taken from `ad_accounts` rather than collected off the campaigns: the server builds both from the
+   * same rows, so the control can never offer an account that narrows the list to nothing.
+   */
+  const [campaignAccount, setCampaignAccount] = useState<string | null>(null)
+  const adAccounts = options.data?.ad_accounts ?? []
+
+  /*
+   * And a search, because narrowing is not finding.
+   *
+   * A project with two hundred campaigns inside one account is still a 200-line scroll after every
+   * filter has been applied, and the operator building a report usually knows the name. Matched
+   * against the campaign name AND its account name, so typing the account reaches it too.
+   */
+  const [campaignQuery, setCampaignQuery] = useState('')
+
+  const visibleCampaigns = useMemo(() => {
+    const needle = campaignQuery.trim().toLocaleLowerCase()
+
+    return (options.data?.campaigns ?? []).filter((c) => {
+      if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
+      if (campaignAccount !== null && !(c.accounts ?? []).some((a) => a.id === campaignAccount)) return false
+      if (needle === '') return true
+
+      const haystack = [c.name, ...(c.accounts ?? []).map((a) => a.name)].join(' ').toLocaleLowerCase()
+
+      return haystack.includes(needle)
+    })
+  }, [options.data, campaignPlatform, campaignAccount, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -316,8 +346,75 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               )}
             </div>
 
+            {/*
+              The account filter and the search sit on their own row, below the platform pills.
+
+              Two controls rather than one combined box: the account is a CHOICE out of a known set,
+              and the name is something typed. Folding them together would make the operator spell an
+              account name to narrow by it, which is the slow way to do the one thing they know
+              exactly.
+            */}
+            {(adAccounts.length > 1 || options.data!.campaigns.length > 8) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {adAccounts.length > 1 && (
+                  <select
+                    aria-label={ar ? 'الحساب الإعلاني' : 'Ad account'}
+                    data-testid="live-builder-campaign-account"
+                    value={campaignAccount ?? ''}
+                    onChange={(e) => setCampaignAccount(e.target.value === '' ? null : e.target.value)}
+                    className="min-w-0 max-w-[55%] flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+                  >
+                    <option value="">{ar ? 'كل الحسابات الإعلانية' : 'All ad accounts'}</option>
+                    {adAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} — {providerLabel(a.provider, ar ? 'ar' : 'en')}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {options.data!.campaigns.length > 8 && (
+                  <input
+                    type="search"
+                    aria-label={ar ? 'ابحث عن حملة' : 'Search campaigns'}
+                    data-testid="live-builder-campaign-search"
+                    value={campaignQuery}
+                    onChange={(e) => setCampaignQuery(e.target.value)}
+                    placeholder={ar ? 'ابحث باسم الحملة أو الحساب' : 'Search by campaign or account'}
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+                  />
+                )}
+              </div>
+            )}
+
             {options.data!.campaigns.length === 0 ? (
               <p className="text-xs text-text-muted">{ar ? 'لا توجد حملات في هذا المشروع بعد.' : 'No campaigns in this project yet.'}</p>
+            ) : visibleCampaigns.length === 0 ? (
+              /*
+                A filter that empties the list says so, and says how to undo it.
+
+                An empty box under three controls reads as «this project has no campaigns», which is
+                the one thing it does not mean — the campaigns are all still there and still
+                selectable the moment the filter moves.
+              */
+              <div className="grid gap-1" data-testid="live-builder-campaigns-empty">
+                <p className="text-xs text-text-muted">
+                  {ar
+                    ? 'لا حملة تطابق هذا التصفية. الحملات المحددة ما زالت محددة.'
+                    : 'No campaign matches this filter. Anything already selected stays selected.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCampaignPlatform(null)
+                    setCampaignAccount(null)
+                    setCampaignQuery('')
+                  }}
+                  className="justify-self-start rounded-lg border border-border px-2 py-1 text-[11px] font-bold text-text-secondary hover:bg-surface-hover"
+                >
+                  {ar ? 'إظهار كل الحملات' : 'Show all campaigns'}
+                </button>
+              </div>
             ) : (
               <div className="grid max-h-40 gap-1 overflow-y-auto" data-testid="live-builder-campaigns">
                 {/*
@@ -334,18 +431,13 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   </p>
                 )}
                 {lifecycle.ran.map((c) => (
-                  <label key={c.id} className="flex items-center gap-2 text-xs">
-                    <input type="checkbox" checked={campaigns.includes(c.id)} onChange={() => toggle(setCampaigns, c.id)} className="h-3.5 w-3.5 accent-brand-600" />
-                    <span className="truncate">{c.name}</span>
-                    {/* Where it ran, beside what it is called — two campaigns can share a name. */}
-                    <span className="ms-auto flex shrink-0 items-center gap-1">
-                      {(c.platforms ?? []).map((key) => (
-                        <span key={key} title={providerLabel(key, ar ? 'ar' : 'en')} className="text-text-muted">
-                          <PlatformMark platform={key} size={12} />
-                        </span>
-                      ))}
-                    </span>
-                  </label>
+                  <CampaignOption
+                    key={c.id}
+                    campaign={c}
+                    ar={ar}
+                    checked={campaigns.includes(c.id)}
+                    onToggle={() => toggle(setCampaigns, c.id)}
+                  />
                 ))}
 
                 {lifecycle.periodKnown && lifecycle.didNotRun.length > 0 && (
@@ -356,18 +448,13 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   </p>
                 )}
                 {lifecycle.didNotRun.map((c) => (
-                  <label key={c.id} className="flex items-center gap-2 text-xs">
-                    <input type="checkbox" checked={campaigns.includes(c.id)} onChange={() => toggle(setCampaigns, c.id)} className="h-3.5 w-3.5 accent-brand-600" />
-                    <span className="truncate">{c.name}</span>
-                    {/* Where it ran, beside what it is called — two campaigns can share a name. */}
-                    <span className="ms-auto flex shrink-0 items-center gap-1">
-                      {(c.platforms ?? []).map((key) => (
-                        <span key={key} title={providerLabel(key, ar ? 'ar' : 'en')} className="text-text-muted">
-                          <PlatformMark platform={key} size={12} />
-                        </span>
-                      ))}
-                    </span>
-                  </label>
+                  <CampaignOption
+                    key={c.id}
+                    campaign={c}
+                    ar={ar}
+                    checked={campaigns.includes(c.id)}
+                    onToggle={() => toggle(setCampaigns, c.id)}
+                  />
                 ))}
               </div>
             )}
@@ -543,6 +630,55 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   )
 }
 
+
+/**
+ * One campaign in the picker: what it is called, where it ran, and WHOSE ACCOUNT paid for it.
+ *
+ * One component rather than the two identical copies this list used to carry under its two lifecycle
+ * headings. They had already drifted apart once, and the account line is exactly the kind of detail
+ * that would have been added to one of them.
+ *
+ * The account is written out, not reduced to an icon. The platform already has an icon and the two
+ * are different questions — «Meta» does not tell an agency which of its two Meta accounts this is,
+ * and that was the owner's objection. When several accounts feed one unified campaign all of them
+ * are named, because naming one would misstate where the spend came from.
+ */
+function CampaignOption({ campaign, ar, checked, onToggle }: {
+  campaign: LiveBuilderOptions['campaigns'][number]
+  ar: boolean
+  checked: boolean
+  onToggle: () => void
+}) {
+  const accounts = campaign.accounts ?? []
+
+  return (
+    <label className="flex items-center gap-2 text-xs">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="h-3.5 w-3.5 shrink-0 accent-brand-600"
+      />
+      <span className="min-w-0 flex-1 truncate">
+        {campaign.name}
+        {accounts.length > 0 && (
+          <span className="text-text-muted" data-testid="live-builder-campaign-account-name">
+            {' · '}
+            {accounts.map((a) => a.name).join(' + ')}
+          </span>
+        )}
+      </span>
+      {/* Where it ran, beside what it is called — two campaigns can share a name. */}
+      <span className="flex shrink-0 items-center gap-1">
+        {(campaign.platforms ?? []).map((key) => (
+          <span key={key} title={providerLabel(key, ar ? 'ar' : 'en')} className="text-text-muted">
+            <PlatformMark platform={key} size={12} />
+          </span>
+        ))}
+      </span>
+    </label>
+  )
+}
 
 /**
  * The identity block at the top of the builder.
