@@ -153,7 +153,21 @@ export interface LiveBuilderOptions {
    * null when it reported none. Null also means «no period was asked about», and the builder makes
    * no claim in that case rather than sorting campaigns against a window nobody named.
    */
-  campaigns: Array<{ id: string; name: string; status: string | null; last_active_on: string | null }>
+  campaigns: Array<{
+    id: string
+    name: string
+    status: string | null
+    last_active_on: string | null
+    /**
+     * REPORT-SCOPE-SELECTION-001 — which platforms this campaign ran on.
+     *
+     * The picker was a flat column of names, so a project with four bound ad accounts offered four
+     * accounts' campaigns with nothing to tell them apart. Canonical keys, resolved on the server:
+     * the client cannot know a campaign's platform from its name, and a renamed campaign would make
+     * any guess wrong.
+     */
+    platforms?: string[]
+  }>
   providers: string[]
   metrics: Array<{ key: string; ar: string; en: string }>
 }
@@ -194,8 +208,21 @@ export const sharedBranding = (token: string) =>
  * Same resolver, same answer, nothing written: the server resolves it from an unsaved report
  * carrying only the project.
  */
+/**
+ * Where each mark would be stored, for an operator who has none yet — present only when the caller
+ * may manage branding. An interface that offers an upload and then answers 403 is worse than one
+ * that does not offer it.
+ */
+export interface ReportIdentityPayload extends SharedBranding {
+  upload?: {
+    company: { scope: string; scope_id: string | null }
+    client: { scope: string; scope_id: string | null } | null
+  } | null
+}
+
 export const projectReportIdentity = (projectId: string) =>
-  getData<SharedBranding>(`/projects/${encodeURIComponent(projectId)}/report-identity`)
+  getData<ReportIdentityPayload>(`/projects/${encodeURIComponent(projectId)}/report-identity`)
+
 
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`

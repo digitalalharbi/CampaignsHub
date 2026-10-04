@@ -45,21 +45,23 @@ final class ReportIdentityController extends Controller
 
         $tenantId = (string) $this->tenant->tenantId();
 
+        $identity = $branding->forReport(
+            $this->draftFor($project),
+            $tenantId,
+            /*
+             * Addressed by ROLE, like the shared route. A URL carrying an asset id is a URL
+             * somebody can edit into another tenant's asset; this one re-resolves from the
+             * project every time and can only ever answer with that project's marks.
+             */
+            fn (?string $role = null) => route('api.v1.projects.scoped.report-identity.logo', [
+                'project' => $project->getKey(),
+                'role' => $role ?? 'auto',
+            ], absolute: false),
+        );
+
         return response()->json([
             'success' => true,
-            'data' => $branding->forReport(
-                $this->draftFor($project),
-                $tenantId,
-                /*
-                 * Addressed by ROLE, like the shared route. A URL carrying an asset id is a URL
-                 * somebody can edit into another tenant's asset; this one re-resolves from the
-                 * project every time and can only ever answer with that project's marks.
-                 */
-                fn (?string $role = null) => route('api.v1.projects.scoped.report-identity.logo', [
-                    'project' => $project->getKey(),
-                    'role' => $role ?? 'auto',
-                ], absolute: false),
-            ),
+            'data' => $identity + ['upload' => $this->uploadTargets($request, $project)],
         ]);
     }
 
@@ -82,6 +84,34 @@ final class ReportIdentityController extends Controller
         abort_unless($file !== null, 404);
 
         return $file;
+    }
+
+    /**
+     * WHERE each mark would be stored, for an operator who has none yet.
+     *
+     * The builder is where somebody sets a report up, and discovering there that a client has no
+     * mark used to mean leaving for the Branding Center and coming back. These are the two slots
+     * the Branding Center itself writes — tenant for the company, this project's client for the
+     * client — so a mark uploaded here is the SAME mark, configured once and reused by every report.
+     * Nothing is stored per report.
+     *
+     * Absent entirely for somebody who may not manage branding: an interface that offers an upload
+     * and then answers 403 is worse than one that does not offer it.
+     *
+     * @return array<string, array{scope: string, scope_id: ?string}>|null
+     */
+    private function uploadTargets(Request $request, Project $project): ?array
+    {
+        if ($request->user()?->hasPermission('branding.manage') !== true) {
+            return null;
+        }
+
+        $clientId = $project->client_workspace_id;
+
+        return [
+            'company' => ['scope' => 'tenant', 'scope_id' => null],
+            'client' => $clientId === null ? null : ['scope' => 'client', 'scope_id' => (string) $clientId],
+        ];
     }
 
     /**

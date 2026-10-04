@@ -15,6 +15,7 @@ use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Http\Controllers\Controller;
+use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -83,12 +84,31 @@ final class LiveReportBuilderController extends Controller
         $campaigns = UnifiedCampaign::query()
             ->where('project_id', $project)
             ->orderBy('name')
-            ->get(['id', 'name', 'client_display_name', 'status'])
+            ->get(['id', 'name', 'client_display_name', 'status', 'platforms'])
             ->map(fn (UnifiedCampaign $c): array => [
                 'id' => (string) $c->id,
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
                 'last_active_on' => $activity[(string) $c->id] ?? null,
+                /*
+                 * REPORT-SCOPE-SELECTION-001 — which platform each campaign ran on.
+                 *
+                 * The picker listed every campaign in the project as one flat column of names. A
+                 * project with four bound ad accounts therefore offered four accounts' campaigns
+                 * with nothing to tell them apart, and the owner's reading of that is exactly right:
+                 * choosing from it is guesswork.
+                 *
+                 * Returned rather than derived on the client, because the client has no way to know:
+                 * the campaign's platforms are a stored fact about the campaign, and a picker that
+                 * guessed from a name would be wrong on every renamed campaign.
+                 */
+                'platforms' => array_values(array_filter(
+                    array_map(
+                        static fn ($p): string => AdPlatforms::canonical((string) $p),
+                        (array) ($c->platforms ?? []),
+                    ),
+                    static fn (string $p): bool => $p !== '',
+                )),
             ])->all();
 
         /*
