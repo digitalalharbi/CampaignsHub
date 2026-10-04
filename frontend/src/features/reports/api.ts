@@ -184,6 +184,19 @@ export async function fetchSharedReport(token: string, password?: string) {
 export const sharedBranding = (token: string) =>
   getData<SharedBranding>(`/reports/shared/${encodeURIComponent(token)}/branding`)
 
+/**
+ * REPORT-IDENTITY-001 — the two identities a report for this project WILL carry.
+ *
+ * The shared endpoint above is addressed by a token, which only exists once a link has been made.
+ * The builder is the screen where somebody decides what to send, and it had no way to ask — so it
+ * showed neither the company that prepares the report nor the client it is for.
+ *
+ * Same resolver, same answer, nothing written: the server resolves it from an unsaved report
+ * carrying only the project.
+ */
+export const projectReportIdentity = (projectId: string) =>
+  getData<SharedBranding>(`/projects/${encodeURIComponent(projectId)}/report-identity`)
+
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 

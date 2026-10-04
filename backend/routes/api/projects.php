@@ -21,6 +21,7 @@ use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
+use App\Domains\Reports\Http\Controllers\ReportIdentityController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
@@ -99,6 +100,22 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * no other project.
      */
     Route::get('capabilities', [ProjectCapabilityController::class, 'index'])->name('capabilities');
+
+    /*
+     * REPORT-IDENTITY-001 — the two identities a report for this project will carry.
+     *
+     * Project-scoped because that is what decides them: `ResolveProject` has already proved this
+     * project belongs to the caller's tenant, so the resolver cannot be pointed at another one. The
+     * logo is addressed by ROLE and re-resolved from the project — there is no asset id in the URL
+     * to edit, which is the rule the shared link already follows.
+     *
+     * A read, and it writes nothing: the identity is resolved from an unsaved report carrying only
+     * the project id.
+     */
+    Route::get('report-identity', [ReportIdentityController::class, 'show'])->name('report-identity.show');
+    Route::get('report-identity/logo/{role}', [ReportIdentityController::class, 'logo'])
+        ->whereIn('role', ['auto', 'agency', 'client'])
+        ->name('report-identity.logo');
 
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');

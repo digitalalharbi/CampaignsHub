@@ -169,7 +169,15 @@ export function PublicReport() {
                   that already says it. Without a mark, the name is the words.
                 */}
                 <span className="min-w-0 truncate">
-                  {identity.byLogoUrl ? (locale === 'ar' ? 'بواسطة' : 'by') : (locale === 'ar' ? `بواسطة ${identity.by}` : `by ${identity.by}`)}
+                  {/*
+                    REPORT-IDENTITY-001 — «من إعداد» rather than «بواسطة».
+
+                    «بواسطة» is a byline; this is a report somebody PREPARED for somebody else, and
+                    the two words carry different weight on a document a client receives. The
+                    subject's identity leads the header, so the pair reads «العميل … من إعداد
+                    الشركة».
+                  */}
+                  {identity.byLogoUrl ? (locale === 'ar' ? 'من إعداد' : 'Prepared by') : (locale === 'ar' ? `من إعداد ${identity.by}` : `Prepared by ${identity.by}`)}
                 </span>
                 {identity.byLogoUrl && (
                   <img src={identity.byLogoUrl} alt={identity.by} data-testid="shared-report-agency-logo" onError={hideBrokenLogo} className="h-4 w-auto max-w-[72px] shrink-0 object-contain" />

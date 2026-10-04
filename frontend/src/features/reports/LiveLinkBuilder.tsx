@@ -11,6 +11,9 @@ import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { ReportIdentity } from './ReportIdentity'
+import { headerIdentity } from './sharedBranding'
+import { projectReportIdentity } from './api'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -227,6 +230,15 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         </p>
       ) : (
         <div className="grid gap-4">
+          {/*
+            REPORT-IDENTITY-001 — who prepares this report, and who it is for, before it is sent.
+
+            Both facts were already resolved and already drawn on the report itself. The one screen
+            where somebody DECIDES to send it showed neither, so an operator could only find out
+            whose marks a client would see by making the link and opening it.
+          */}
+          <BuilderIdentity projectId={projectId} ar={ar} />
+
           <Field label={ar ? 'اسم التقرير' : 'Report name'} required>
             <input
               value={name}
@@ -447,5 +459,34 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         </div>
       )}
     </Modal>
+  )
+}
+
+
+/**
+ * The identity block at the top of the builder.
+ *
+ * Its own component because it has its own request, and the builder must not wait on it: a branding
+ * lookup that is slow, or fails, may not stop somebody creating a link. While it is loading there is
+ * a reserved line rather than a jump, and on failure there is nothing — the report still resolves
+ * its own identity when it is opened, and an error here would be a warning about a problem that is
+ * not one.
+ */
+function BuilderIdentity({ projectId, ar }: { projectId: string; ar: boolean }) {
+  const identity = useQuery({
+    queryKey: ['report-identity', projectId],
+    queryFn: () => projectReportIdentity(projectId),
+    retry: false,
+  })
+
+  if (identity.isError) return null
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface-secondary p-3" data-testid="builder-identity">
+      <h3 className="mb-2 text-xs font-bold text-text-muted">{ar ? 'هوية التقرير' : 'Report identity'}</h3>
+      {identity.data === undefined
+        ? <Skeleton className="h-10 w-full" />
+        : <ReportIdentity identity={headerIdentity(identity.data, ar ? 'ar' : 'en')} ar={ar} testid="builder-report-identity" />}
+    </section>
   )
 }

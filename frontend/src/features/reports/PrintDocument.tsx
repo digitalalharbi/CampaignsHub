@@ -450,17 +450,24 @@ export function PrintDocument({
         {/*
           The agency is named secondarily, never in place of the client — the same rule the shared
           link follows, so a reader moving between the link and its PDF meets one hierarchy.
+
+          REPORT-IDENTITY-001 — «Prepared by» rather than «by». A printed document that a client
+          files or forwards has to say which of the two names on its cover made it; «by» is a byline
+          and reads as an author credit on a page whose subject is somebody else.
         */}
         {identity?.by && (
           <div className="doc-by inline-flex items-center gap-1.5" data-testid="print-document-by">
-            by {identity.by}
+            Prepared by {identity.by}
             {identity.byLogoUrl && (
               <img src={identity.byLogoUrl} alt="" data-testid="print-document-agency-logo" className="h-5 w-auto max-w-[96px] object-contain" />
             )}
           </div>
         )}
         <h1>{reportName}</h1>
-        <div className="doc-sub">{clientName ?? 'Client Report'}</div>
+        {/* And the subject is named as the subject — the other half of the same question. */}
+        <div className="doc-sub" data-testid="print-document-for">
+          {clientName === undefined ? 'Client Report' : `Prepared for ${clientName}`}
+        </div>
         <dl className="doc-facts">
           <div><dt>Period</dt><dd>{dateFmt(data.period?.from)} → {dateFmt(data.period?.to)}</dd></div>
           <div><dt>Currency</dt><dd>{currency}</dd></div>
