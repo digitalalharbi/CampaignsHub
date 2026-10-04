@@ -167,9 +167,29 @@ export interface LiveBuilderOptions {
      * any guess wrong.
      */
     platforms?: string[]
+    /**
+     * REPORT-SCOPE-SELECTION-001 — which AD ACCOUNT this campaign's spend came from.
+     *
+     * The platform keys do not finish the job the owner asked for: two Meta ad accounts under one
+     * project are one platform pill, and «all the accounts' campaigns at once» is exactly what that
+     * leaves. Usually one entry; more when a unified campaign gathers externals from several
+     * accounts, which is listed rather than reduced because every rule for picking a winner would
+     * misstate where the spend came from.
+     */
+    accounts?: AdAccountRef[]
   }>
   providers: string[]
   metrics: Array<{ key: string; ar: string; en: string }>
+  /** Every ad account the project's campaigns came from — the accounts the filter may offer. */
+  ad_accounts?: AdAccountRef[]
+}
+
+/** An ad account as the picker needs it: something to show, something to filter by. */
+export interface AdAccountRef {
+  id: string
+  /** The provider's own name for the account, or its id when the provider gave no name. */
+  name: string
+  provider: string
 }
 
 export const liveBuilderOptions = (p: string, period?: { from: string; to: string }) =>
