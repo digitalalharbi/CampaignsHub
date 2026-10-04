@@ -111,9 +111,18 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      *
      * A read, and it writes nothing: the identity is resolved from an unsaved report carrying only
      * the project id.
+     *
+     * `project.can:reports.view` because that is the thing being previewed — who a REPORT for this
+     * project would name. `ProjectRouteCapabilityCoverageTest` refuses a project route that answers
+     * to the tenant role alone, and it was right to: the controller's `reports.view` is the
+     * TENANT's permission, which every member of the agency holds, while the project capability is
+     * what decides whether this person may see this client's reports at all.
      */
-    Route::get('report-identity', [ReportIdentityController::class, 'show'])->name('report-identity.show');
+    Route::get('report-identity', [ReportIdentityController::class, 'show'])
+        ->middleware('project.can:reports.view')
+        ->name('report-identity.show');
     Route::get('report-identity/logo/{role}', [ReportIdentityController::class, 'logo'])
+        ->middleware('project.can:reports.view')
         ->whereIn('role', ['auto', 'agency', 'client'])
         ->name('report-identity.logo');
 
