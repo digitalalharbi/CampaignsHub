@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -145,9 +145,30 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
   const creativeTypesTax = useTaxonomyOptions('campaign.creative_types')
   const tagsTax = useTaxonomyOptions('campaign.tags')
 
-  // Reset every field when the modal opens or the edited campaign changes. Only `regions` round-trips from the
-  // API (the read resource does not expose the other arrays yet), so the rest reset to empty.
-  useEffect(() => {
+  /*
+   * Reset every field when the modal opens or the edited campaign changes. Only `regions` round-trips
+   * from the API (the read resource does not expose the other arrays yet), so the rest reset to empty.
+   *
+   * BEFORE PAINT, deliberately — a passive effect is too late.
+   *
+   * `Modal` renders nothing while it is closed, so opening it commits these inputs to the document in
+   * one render and only then resets them from here. A passive `useEffect` is flushed in a separate
+   * task after that commit, and on a busy main thread — the campaigns page settling its list refetch
+   * right after a save — the gap between the two is wide enough to reach into: the field is attached,
+   * visible and editable, it accepts what is typed into it, and it is then wiped by a reset that
+   * belongs to its own opening. The value never comes back, because nothing types it a second time.
+   *
+   * Measured on chromium in CI: `createCampaign` filled the name, and `toHaveValue` re-read that same
+   * input 34 times across a full fifteen seconds and saw "" every time. That is not a render which
+   * has not happened yet — that resolves in a retry or two — it is a value that was taken away. It
+   * passed for the first campaign of the spec and failed for the second: the one opened while the
+   * list refetch caused by the first was still occupying the thread.
+   *
+   * A layout effect runs synchronously inside the commit, before the browser paints and therefore
+   * before anything outside React can observe these fields at all. The stale values are never
+   * reachable, and they never flash on screen either.
+   */
+  useLayoutEffect(() => {
     if (!open) return
     // Create mode restores any autosaved draft; edit mode always mirrors the persisted campaign.
     reset(isEdit ? defaults : { ...defaults, ...draft.value })

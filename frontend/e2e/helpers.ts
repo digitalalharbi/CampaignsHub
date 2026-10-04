@@ -241,6 +241,15 @@ export async function createCampaign(page: Page, name: string) {
    * its own budget and the guard failed as «Expected: "E2E Link B …" / Received: ""» — the guard
    * reporting the very condition it was added to wait through. Reproduced locally on chromium first,
    * where the whole spec passes in 36s, so the number was the only thing wrong.
+   *
+   * That read of it was wrong, and the budget was not the only thing. It failed again on chromium
+   * with the full fifteen seconds, re-reading the same input 34 times and seeing "" each time — and a
+   * render that has not happened yet resolves in a retry or two, so 34 of them means the value was
+   * taken away rather than late. `CampaignFormModal` restored its fields from a passive effect, which
+   * runs in a task AFTER the commit that attaches them: the field was reachable and fillable in that
+   * gap and the restore then wiped it. It is a layout effect now, so the gap does not exist. The wait
+   * stays as it is — it still absorbs a genuinely slow render, and it is the assertion that caught
+   * both the symptom and, eventually, the cause.
    */
   const nameField = page.getByLabel(/Campaign name|اسم الحملة/)
   await nameField.fill(name)
