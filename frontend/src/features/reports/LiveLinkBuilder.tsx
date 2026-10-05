@@ -400,7 +400,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               <div className="grid gap-1" data-testid="live-builder-campaigns-empty">
                 <p className="text-xs text-text-muted">
                   {ar
-                    ? 'لا حملة تطابق هذا التصفية. الحملات المحددة ما زالت محددة.'
+                    ? 'لا حملة تطابق هذه التصفية. الحملات المحددة ما زالت محددة.'
                     : 'No campaign matches this filter. Anything already selected stays selected.'}
                 </p>
                 <button
