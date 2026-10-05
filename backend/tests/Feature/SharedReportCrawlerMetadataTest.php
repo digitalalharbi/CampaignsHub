@@ -210,6 +210,7 @@ final class SharedReportCrawlerMetadataTest extends TestCase
          */
         $this->asset('client', (string) $this->client->id, $this->pngBytes().'FIRST');
         $before = $this->ogImage($this->crawl());
+        $this->requireDrawnCard($before);
 
         $this->asset('client', (string) $this->client->id, $this->pngBytes().'SECOND');
         $after = $this->ogImage($this->crawl());
@@ -229,6 +230,7 @@ final class SharedReportCrawlerMetadataTest extends TestCase
         $this->asset('client', (string) $this->client->id, $this->pngBytes());
 
         $url = $this->ogImage($this->crawl());
+        $this->requireDrawnCard($url);
 
         preg_match('/[?&]v=([0-9a-f]+)/', $url, $m);
 
@@ -244,6 +246,23 @@ final class SharedReportCrawlerMetadataTest extends TestCase
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
             true,
         );
+    }
+
+    /**
+     * A version belongs to a DRAWN card, so these two assertions need one to exist.
+     *
+     * With no renderer the tag points at the configured mark instead — the documented fallback, and a
+     * real URL rather than a promise that 404s. There is nothing to version there, and the version's
+     * own guarantee is held at the renderer in `ShareCardContentsTest`, which needs no browser.
+     *
+     * Skipped rather than branched: a test that asserts one thing on a machine with Chromium and a
+     * different thing without it is two tests sharing a name.
+     */
+    private function requireDrawnCard(string $url): void
+    {
+        if (! str_contains($url, '/preview.png')) {
+            $this->markTestSkipped('this machine cannot draw a card — no browser, or the renderer refused');
+        }
     }
 
     private function ogImage(string $html): string
