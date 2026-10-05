@@ -101,9 +101,22 @@ describe('the report identity', () => {
 
       expect(img.className).toContain('object-contain')
       expect(img.className).not.toContain('object-cover')
-      // Height fixed, width free — the shape the mark itself decides.
-      expect(img.className).toMatch(/\bh-\d/)
-      expect(img.className).toContain('w-auto')
+      // Contained within the plate on BOTH axes, so nothing can overflow it either.
+      expect(img.className).toContain('max-h-full')
+      expect(img.className).toContain('max-w-full')
+
+      /*
+       * REPORT-IDENTITY-PROPORTION-001 — the SIZE lives on the plate now, not on the image.
+       *
+       * This used to read `h-N w-auto` on the image itself: height fixed, width left to the artwork.
+       * That is what drew a 120×600 crest six pixels wide beside a wordmark seventy-two wide. The
+       * band is the plate's, and the width has a floor as well as a ceiling.
+       */
+      const plate = screen.getByTestId(`${id}-plate`)
+
+      expect(plate.className).toMatch(/\bh-\d/)
+      expect(plate.className).toMatch(/min-w-\[\d+px\]/)
+      expect(plate.className).toMatch(/max-w-\[\d+px\]/)
     }
   })
 
