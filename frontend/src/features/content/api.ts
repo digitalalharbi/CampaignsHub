@@ -399,6 +399,59 @@ export interface ContentIntelligencePayload {
 }
 
 /**
+ * CREATIVE-FORMAT-INTELLIGENCE-001 — the canonical answer, for a scope anybody can reproduce.
+ *
+ * `contentIntelligence` above answers the LIBRARY's question: whatever the operator has filtered to.
+ * That is the screen's state rather than a scope, so a dashboard, a campaign page and a client's
+ * report each reading it would get their own answer about the same advertiser. This takes the scope
+ * explicitly and every surface reads it, so only the DEPTH drawn may differ, never the figures.
+ */
+export interface FormatIntelligencePayload {
+  period: { from: string; to: string }
+  scope: { project_id: string; external_account_id: string | null; campaign_id: string | null }
+  /** The ad accounts this answer is about — the axis a project rollup is drilled into. */
+  accounts: Array<{ id: string; name: string; provider: string }>
+  /**
+   * The evidence base, per format. Stated because «90% of spend on video» reads as «video is 90%
+   * better» until the reader knows how many creatives stood behind each format.
+   */
+  coverage: Record<string, { creatives: number; with_metrics: number; without_metrics: number }>
+  /**
+   * Every format group, not only the two being ranked — a reader deciding what to commission needs
+   * to see the money already sitting somewhere else. `share` is null, never 0, where any format
+   * withheld its spend: a proportion over an incomplete denominator overstates itself.
+   */
+  spend_mix: {
+    formats: Array<{ format: string; spend: number | null; share: number | null }>
+    total: number | null
+    complete: boolean
+  }
+  /** One comparison per objective family — incompatible jobs are split, never ranked together. */
+  objectives: Array<{
+    family: string
+    label: { ar: string; en: string }
+    comparison: ContentIntelligence
+    evidence: 'high' | 'moderate' | 'insufficient'
+  }>
+}
+
+export const formatIntelligence = (
+  projectId: string,
+  query: { from?: string; to?: string; external_account_id?: string | null; campaign_id?: string | null } = {},
+) => {
+  const params = new URLSearchParams()
+  if (query.from) params.set('from', query.from)
+  if (query.to) params.set('to', query.to)
+  if (query.external_account_id) params.set('external_account_id', query.external_account_id)
+  if (query.campaign_id) params.set('campaign_id', query.campaign_id)
+  const qs = params.toString()
+
+  return getData<FormatIntelligencePayload>(
+    `/projects/${projectId}/creatives/format-intelligence${qs === '' ? '' : `?${qs}`}`,
+  )
+}
+
+/**
  * `objective` chooses which metric the comparison is DECIDED on — it does not narrow the set.
  *
  * It is singular, and deliberately not the plural `objectives` the library filters by: a verdict has
