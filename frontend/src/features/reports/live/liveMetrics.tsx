@@ -25,6 +25,30 @@ export type MetricMeta = {
   ) => MetricValue
 }
 
+/**
+ * One funnel stage's count, from the reading that belongs to no section — RESULT-STAGE-TRUTH-001.
+ *
+ * `result_stages` first, because `funnel` is emptied by the executive summary and by the funnel
+ * section switch, and a card that reads it disappears with the chart. The funnel is still the
+ * fallback: a link created before these readings existed carries one and not the other.
+ *
+ * `undefined` for a stage the platform never reported, which the count formatter renders as
+ * unavailable. Never 0 — a basket add nobody counted is not a basket add that happened zero times.
+ */
+export function stageCount(payload: LivePayload, stage: string): number | null | undefined {
+  const reading = payload.result_stages?.[stage]
+
+  if (reading !== undefined) {
+    return reading.reported ? reading.count : undefined
+  }
+
+  const row = payload.funnel?.find((f) => f.stage === stage)
+
+  if (row === undefined) return undefined
+
+  return row.reported ? row.count : undefined
+}
+
 export function useLiveMetricReader(currency: string, ar: boolean) {
   /*
    * `asMoney`, not `money`: this closure already carries the payload's currency, and a second thing
@@ -106,8 +130,21 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
     conversions: { ar: 'النتائج', en: 'Results', format: (t, _p, _m, count) => count(t.conversions) },
-    // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
-    add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
+    /*
+     * RESULT-STAGE-TRUTH-001 — read the STAGE, not the section that happens to draw it.
+     *
+     * A basket add is a funnel stage rather than a total, and it is read from the stage reading
+     * because the totals pivot coalesces every stage to zero: «never counted» and «counted none»
+     * would be the same 0 on a client's page.
+     *
+     * It used to read `payload.funnel`, which is a SECTION's data. An executive summary empties that
+     * list and so does an operator who switches the funnel off, so the card read `undefined` and the
+     * figure disappeared — «الإضافة إلى السلة لا تظهر في التقارير» — even from reports whose operator
+     * had ticked it by name. `result_stages` belongs to no section; the funnel stays as the fallback
+     * for a link created before it existed.
+     */
+    add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(stageCount(p, 'add_to_cart')) },
+    checkout: { ar: 'بدء الدفع', en: 'Checkout', format: (_t, p, _m, count) => count(stageCount(p, 'checkout')) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
