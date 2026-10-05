@@ -171,6 +171,78 @@ final class ReportBuilderAdAccountPickerTest extends TestCase
         $this->assertNotContains('Old agency — Meta', array_column($options['ad_accounts'], 'name'));
     }
 
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-001 — an account ACTIVELY bound to a DIFFERENT project is not named.
+     *
+     * This is the other half of the deselection case and the sharper one: the account is live, it is
+     * selected, and it belongs to somebody else's project. Its rows are that project's figures, and
+     * its NAME is that project's business. Naming it here would put one client's account on another
+     * client's report screen.
+     */
+    public function test_an_account_bound_to_another_project_is_never_named(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        $otherProject = Project::create([
+            'client_workspace_id' => $this->workspace->id, 'name' => 'Other', 'status' => 'active',
+        ]);
+        $elsewhere = $this->account(
+            (string) $this->brandAccount->provider_connection_id, 'Somebody else — Meta', 'meta-elsewhere',
+        );
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->workspace->id,
+            'project_id' => $otherProject->id, 'external_account_id' => $elsewhere->getKey(),
+            'provider' => 'meta', 'purpose' => 'advertising', 'is_active' => true,
+        ]);
+        app(TenantContext::class)->forget();
+
+        /*
+         * Filed under THIS project — the shape of a sync that ran before the account was re-bound.
+         * The campaign stays listed; the account it points at does not become this project's to name.
+         */
+        $stale = $this->campaignOn('Filed here, owned elsewhere', [$elsewhere]);
+
+        $options = $this->builderOptions();
+        $rows = collect($options['campaigns'])->keyBy('id');
+
+        $this->assertArrayHasKey((string) $stale->id, $rows);
+        $this->assertSame([], $rows[(string) $stale->id]['accounts']);
+        $this->assertNotContains('Somebody else — Meta', array_column($options['ad_accounts'], 'name'));
+    }
+
+    /** Another tenant's accounts are not reachable from this one, bound or not. */
+    public function test_another_tenants_account_is_never_named(): void
+    {
+        $other = Tenant::create(['name' => 'B', 'slug' => 'ap2-'.uniqid(), 'status' => 'active']);
+        app(TenantContext::class)->setTenantId($other->id);
+
+        $connection = app(TokenVault::class)->open(
+            tenantId: (string) $other->id, provider: 'meta',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)), connectionName: 'meta',
+        );
+        $theirs = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $other->id, 'provider_connection_id' => $connection->getKey(),
+            'provider' => 'meta', 'account_type' => 'ad_account',
+            'external_id' => 'meta-theirs-'.uniqid(), 'name' => 'Another tenant — Meta',
+            'currency' => 'SAR', 'status' => 'active',
+        ]);
+
+        /*
+         * A row carrying THIS project's id while belonging to another tenant — the shape a mix-up
+         * would take. The tenant scope is what refuses it, and this asserts that rather than assuming.
+         */
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $other->id, 'project_id' => $this->project->id,
+            'external_account_id' => $theirs->getKey(), 'unified_campaign_id' => null,
+            'provider' => 'meta', 'external_id' => 'e-'.uniqid(), 'name' => 'Theirs', 'status' => 'active',
+        ]);
+        app(TenantContext::class)->forget();
+
+        $offered = array_column($this->builderOptions()['ad_accounts'], 'name');
+
+        $this->assertNotContains('Another tenant — Meta', $offered);
+    }
+
     /** A campaign with no external rows at all is listed with no account, never hidden. */
     public function test_a_campaign_with_no_external_rows_is_listed_with_no_account(): void
     {
