@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Num } from '@/components/ui/Num'
 import { Skeleton } from '@/components/ui/States'
+import { DataMetricTable } from '@/components/ui/MetricTable'
 import { formatIntelligence, type FormatIntelligencePayload } from './api'
 import { formatWord, leadObjective, verdictFor, type Evidence } from './formatVerdict'
 import { metricLabel } from './metrics'
@@ -157,39 +158,44 @@ function ObjectiveBlock({ objective, coverage, depth, ar }: {
   )
 }
 
-/** Charts give understanding; the table is where a figure is verified. */
+/**
+ * Charts give understanding; the table is where a figure is verified.
+ *
+ * TABLE-PRESENTATION-CONTRACT-001 — through the product's one analytical table rather than a fourth
+ * hand-rolled one. It owns the alignment, the abbreviation, the exact figure behind it, the currency
+ * and what a missing value looks like, so this surface cannot answer any of those differently from
+ * the tables beside it. A withheld spend becomes the primitive's own «—», which is the same mark the
+ * rest of the product uses for an absence.
+ */
 function ExactTable({ objective, coverage, ar }: {
   objective: FormatIntelligencePayload['objectives'][number]
   coverage: FormatIntelligencePayload['coverage']
   ar: boolean
 }) {
   const metric = objective.comparison.metric
+  const rows = Array.isArray(objective.comparison.formats) ? objective.comparison.formats : []
 
   return (
-    <div className="overflow-x-auto" data-testid={`format-table-${objective.family}`}>
-      <table className="w-full min-w-[320px] text-[11px]">
-        <thead>
-          <tr className="text-text-muted">
-            <th className="p-1 text-start font-semibold">{ar ? 'النوع' : 'Format'}</th>
-            <th className="p-1 text-start font-semibold">{metric === null ? '—' : metricLabel(metric, ar ? 'ar' : 'en')}</th>
-            <th className="p-1 text-start font-semibold">{ar ? 'الإنفاق' : 'Spend'}</th>
-            <th className="p-1 text-start font-semibold">{ar ? 'المحتويات' : 'Creatives'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {objective.comparison.formats.map((row) => (
-            <tr key={row.format} className="border-t border-border">
-              <td className="p-1 font-semibold text-text-primary">{formatWord(row.format, ar)}</td>
-              <td className="tnum p-1"><Num>{round(row.value)}</Num></td>
-              {/* A withheld amount is «—», never a zero the account never spent. */}
-              <td className="tnum p-1">{row.spend === null ? '—' : <Num>{round(row.spend)}</Num>}</td>
-              <td className="tnum p-1">
-                <Num>{String(coverage[row.format]?.creatives ?? row.creatives)}</Num>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div data-testid={`format-table-${objective.family}`}>
+      <DataMetricTable
+        columns={[
+          { key: 'format', label: ar ? 'النوع' : 'Format', kind: 'text' },
+          {
+            key: 'value',
+            label: metric === null ? '—' : metricLabel(metric, ar ? 'ar' : 'en'),
+            kind: 'number',
+          },
+          { key: 'spend', label: ar ? 'الإنفاق' : 'Spend', kind: 'money', currency: null },
+          { key: 'creatives', label: ar ? 'المحتويات' : 'Creatives', kind: 'number' },
+        ]}
+        rows={rows.map((row) => ({
+          format: formatWord(row.format, ar),
+          value: row.value,
+          // Null, not zero — the primitive prints «—» and the account never spent a zero.
+          spend: row.spend,
+          creatives: coverage[row.format]?.creatives ?? row.creatives,
+        }))}
+      />
     </div>
   )
 }
