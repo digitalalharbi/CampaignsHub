@@ -23,6 +23,14 @@ export interface ScopeCampaign {
   status: string | null
   /** The last day inside the report's window this campaign reported anything. Null = it did not. */
   last_active_on: string | null
+  /**
+   * Which platforms this campaign ran on — REPORT-SCOPE-SELECTION-001.
+   *
+   * Carried through the grouping so a picker row can say where a campaign ran, rather than offering
+   * four ad accounts' campaigns as one column of names. Optional because the grouping itself does
+   * not read it: it decides membership from the window and nothing else.
+   */
+  platforms?: string[]
 }
 
 export interface LifecycleGroups {

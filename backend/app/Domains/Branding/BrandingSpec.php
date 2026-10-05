@@ -33,8 +33,18 @@ final class BrandingSpec
     /** Theme surfaces. `any` is the theme-agnostic single asset used when no light/dark pair is provided. */
     public const THEMES = [self::THEME_LIGHT, self::THEME_DARK, self::THEME_ANY];
 
-    /** Only vector or lossless raster is accepted — brand marks must never be re-compressed on the way in. */
-    public const ALLOWED_MIME = ['image/svg+xml', 'image/png'];
+    /**
+     * The formats a customer's logo actually arrives in — REPORT-IDENTITY-001.
+     *
+     * «Only vector or lossless raster» was a principle about QUALITY applied to a file somebody else
+     * made. A brand kit is normally delivered as four: a vector master, a PNG for the web, a JPEG
+     * where the mark is photographic, and a WebP where it is modern. Refusing half of them meant
+     * telling a customer their own logo is not a supported file, which is unanswerable.
+     *
+     * Nothing is re-compressed here either way: the bytes are stored as uploaded and drawn at
+     * 160px. The principle protected a step this product does not perform.
+     */
+    public const ALLOWED_MIME = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp'];
 
     /** Hard ceiling per file. A brand mark that needs more than this is not a logo. */
     public const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -98,7 +108,7 @@ final class BrandingSpec
         }
 
         if (! in_array($mime, self::ALLOWED_MIME, true)) {
-            return ['ok' => false, 'error' => 'Only SVG or PNG brand assets are accepted.'];
+            return ['ok' => false, 'error' => 'Brand assets must be SVG, PNG, JPG or WebP.'];
         }
 
         if ($bytes <= 0) {

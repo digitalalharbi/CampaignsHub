@@ -1,16 +1,22 @@
 import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
-import { canonicalPlatform } from '@/lib/platforms'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { Check, Copy, Link2 } from 'lucide-react'
+import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { PlatformMark } from '@/components/brand/PlatformMark'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, Copy, Link2, Upload } from 'lucide-react'
 import { createLiveLink, liveBuilderOptions, reportSectionRegistry } from './api'
 import { groupByLifecycle } from './reportScopeLifecycle'
+import { toApiError } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { ReportIdentity } from './ReportIdentity'
+import { headerIdentity } from './sharedBranding'
+import { projectReportIdentity } from './api'
+import { uploadBrandingAsset } from '@/features/branding/api'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -80,9 +86,30 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     queryFn: () => liveBuilderOptions(projectId, { from, to }),
   })
 
+  /*
+   * Which platform the picker is narrowed to, and which platforms there are to narrow to.
+   *
+   * Derived from the campaigns themselves rather than from the project's platform list: a platform
+   * with no campaign in this window is not a filter anybody can use, and offering it would be a
+   * control that always empties the list.
+   */
+  const [campaignPlatform, setCampaignPlatform] = useState<string | null>(null)
+
+  const campaignPlatforms = useMemo(
+    () => sortPlatforms([...new Set((options.data?.campaigns ?? []).flatMap((c) => c.platforms ?? []))]),
+    [options.data],
+  )
+
+  const visibleCampaigns = useMemo(
+    () => (options.data?.campaigns ?? []).filter(
+      (c) => campaignPlatform === null || (c.platforms ?? []).includes(campaignPlatform),
+    ),
+    [options.data, campaignPlatform],
+  )
+
   const lifecycle = useMemo(
-    () => groupByLifecycle(options.data?.campaigns ?? [], { periodKnown: Boolean(from && to) }),
-    [options.data, from, to],
+    () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
+    [visibleCampaigns, from, to],
   )
   /*
    * REPORT-CREATION-UX-001 — WHICH report this link is.
@@ -227,6 +254,15 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         </p>
       ) : (
         <div className="grid gap-4">
+          {/*
+            REPORT-IDENTITY-001 — who prepares this report, and who it is for, before it is sent.
+
+            Both facts were already resolved and already drawn on the report itself. The one screen
+            where somebody DECIDES to send it showed neither, so an operator could only find out
+            whose marks a client would see by making the link and opening it.
+          */}
+          <BuilderIdentity projectId={projectId} ar={ar} />
+
           <Field label={ar ? 'اسم التقرير' : 'Report name'} required>
             <input
               value={name}
@@ -238,7 +274,48 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           </Field>
 
           <div className="grid gap-2">
-            <span className="text-xs font-bold text-text-muted">{ar ? 'الحملات' : 'Campaigns'}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-bold text-text-muted">{ar ? 'الحملات' : 'Campaigns'}</span>
+
+              {/*
+                REPORT-SCOPE-SELECTION-001 — narrow the picker by platform.
+
+                The list was every campaign in the project as one flat column of names. A project
+                with four bound ad accounts therefore offered four accounts' campaigns with nothing
+                to tell them apart, which is the owner's «غير منطقي»: choosing from it is guesswork.
+
+                It NARROWS what is shown and never what is selected — a campaign already ticked stays
+                ticked when the filter moves, because a filter that silently unselected work would be
+                the worse version of the same problem.
+              */}
+              {campaignPlatforms.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1" data-testid="live-builder-campaign-platform">
+                  <button
+                    type="button"
+                    aria-pressed={campaignPlatform === null}
+                    onClick={() => setCampaignPlatform(null)}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${campaignPlatform === null ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+                  >
+                    {ar ? 'الكل' : 'All'}
+                  </button>
+                  {campaignPlatforms.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={campaignPlatform === key}
+                      aria-label={providerLabel(key, ar ? 'ar' : 'en')}
+                      title={providerLabel(key, ar ? 'ar' : 'en')}
+                      data-testid={`live-builder-campaign-platform-${key}`}
+                      onClick={() => setCampaignPlatform(campaignPlatform === key ? null : key)}
+                      className={`flex h-6 w-6 items-center justify-center rounded-full border ${campaignPlatform === key ? 'border-transparent bg-brand-600 text-white' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+                    >
+                      <PlatformMark platform={key} size={13} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {options.data!.campaigns.length === 0 ? (
               <p className="text-xs text-text-muted">{ar ? 'لا توجد حملات في هذا المشروع بعد.' : 'No campaigns in this project yet.'}</p>
             ) : (
@@ -260,6 +337,14 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <label key={c.id} className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={campaigns.includes(c.id)} onChange={() => toggle(setCampaigns, c.id)} className="h-3.5 w-3.5 accent-brand-600" />
                     <span className="truncate">{c.name}</span>
+                    {/* Where it ran, beside what it is called — two campaigns can share a name. */}
+                    <span className="ms-auto flex shrink-0 items-center gap-1">
+                      {(c.platforms ?? []).map((key) => (
+                        <span key={key} title={providerLabel(key, ar ? 'ar' : 'en')} className="text-text-muted">
+                          <PlatformMark platform={key} size={12} />
+                        </span>
+                      ))}
+                    </span>
                   </label>
                 ))}
 
@@ -274,6 +359,14 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <label key={c.id} className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={campaigns.includes(c.id)} onChange={() => toggle(setCampaigns, c.id)} className="h-3.5 w-3.5 accent-brand-600" />
                     <span className="truncate">{c.name}</span>
+                    {/* Where it ran, beside what it is called — two campaigns can share a name. */}
+                    <span className="ms-auto flex shrink-0 items-center gap-1">
+                      {(c.platforms ?? []).map((key) => (
+                        <span key={key} title={providerLabel(key, ar ? 'ar' : 'en')} className="text-text-muted">
+                          <PlatformMark platform={key} size={12} />
+                        </span>
+                      ))}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -447,5 +540,137 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         </div>
       )}
     </Modal>
+  )
+}
+
+
+/**
+ * The identity block at the top of the builder.
+ *
+ * Its own component because it has its own request, and the builder must not wait on it: a branding
+ * lookup that is slow, or fails, may not stop somebody creating a link. While it is loading there is
+ * a reserved line rather than a jump, and on failure there is nothing — the report still resolves
+ * its own identity when it is opened, and an error here would be a warning about a problem that is
+ * not one.
+ */
+function BuilderIdentity({ projectId, ar }: { projectId: string; ar: boolean }) {
+  const queryClient = useQueryClient()
+
+  const identity = useQuery({
+    queryKey: ['report-identity', projectId],
+    queryFn: () => projectReportIdentity(projectId),
+    retry: false,
+  })
+
+  if (identity.isError) return null
+
+  const upload = identity.data?.upload ?? null
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface-secondary p-3" data-testid="builder-identity">
+      <h3 className="mb-2 text-xs font-bold text-text-muted">{ar ? 'هوية التقرير' : 'Report identity'}</h3>
+      {identity.data === undefined ? (
+        <Skeleton className="h-10 w-full" />
+      ) : (
+        <>
+          <ReportIdentity identity={headerIdentity(identity.data, ar ? 'ar' : 'en')} ar={ar} testid="builder-report-identity" />
+
+          {/*
+            REPORT-IDENTITY-001 — the marks can be set HERE, and they are not set per report.
+
+            Discovering on this screen that a client has no mark used to mean leaving for the
+            Branding Center and coming back. These write the same (scope, kind, theme) slot the
+            Branding Center writes, so a mark uploaded here is configured ONCE and reused by every
+            report — not attached to the link being built.
+
+            Offered only to somebody who may manage branding: the server omits the targets otherwise,
+            and an upload control that answers 403 is worse than no control.
+          */}
+          {upload !== null && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+              <MarkUpload
+                label={ar ? 'رفع شعار الشركة' : 'Upload company logo'}
+                testid="builder-upload-company"
+                scope={upload.company.scope}
+                scopeId={upload.company.scope_id}
+                ar={ar}
+                onDone={() => queryClient.invalidateQueries({ queryKey: ['report-identity', projectId] })}
+              />
+              {upload.client !== null && (
+                <MarkUpload
+                  label={ar ? 'رفع شعار العميل' : 'Upload client logo'}
+                  testid="builder-upload-client"
+                  scope={upload.client.scope}
+                  scopeId={upload.client.scope_id}
+                  ar={ar}
+                  onDone={() => queryClient.invalidateQueries({ queryKey: ['report-identity', projectId] })}
+                />
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/**
+ * One mark, chosen from the operator's own machine.
+ *
+ * A plain `<input type="file">` behind a label rather than a button that opens a dialog: the file
+ * picker is the platform's, it is keyboard-reachable, and a label IS the control for the input it
+ * names. The accepted types are the four a brand kit ships, and the server refuses anything else by
+ * reading the file rather than its name.
+ */
+function MarkUpload({ label, testid, scope, scopeId, ar, onDone }: {
+  label: string
+  testid: string
+  scope: string
+  scopeId: string | null
+  ar: boolean
+  onDone: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+
+  const send = useMutation({
+    mutationFn: (file: File) => uploadBrandingAsset({
+      scope: scope as never,
+      scopeId,
+      kind: 'report_logo',
+      theme: 'any',
+      file,
+    }),
+    onSuccess: () => { setError(null); onDone() },
+    onError: (e) => setError(toApiError(e).message),
+  })
+
+  return (
+    <span className="flex flex-col gap-1">
+      <label
+        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-hover ${send.isPending ? 'opacity-60' : ''}`}
+        data-testid={testid}
+      >
+        <Upload size={14} aria-hidden />
+        {send.isPending ? (ar ? 'جارٍ الرفع…' : 'Uploading…') : label}
+        <input
+          type="file"
+          className="sr-only"
+          accept="image/svg+xml,image/png,image/jpeg,image/webp"
+          disabled={send.isPending}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            // Cleared so choosing the SAME file twice still fires a change — a re-upload after a
+            // refusal is the most likely second attempt.
+            e.target.value = ''
+            if (file) send.mutate(file)
+          }}
+        />
+      </label>
+      {/*
+        The server's own refusal, shown where the choice was made. «2 MB» and «SVG, PNG, JPG or
+        WebP» are its words, not a second copy of the rule that could drift from it.
+      */}
+      {error !== null && <span className="max-w-[16rem] text-[11px] text-danger" data-testid={`${testid}-error`}>{error}</span>}
+    </span>
   )
 }

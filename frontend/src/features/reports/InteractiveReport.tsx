@@ -614,7 +614,16 @@ export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
           chip is white so a dark logo stays legible on the brand gradient; a logo that fails to load
           hides itself and the name beside it stands.
         */}
+        {/*
+          REPORT-IDENTITY-001 — the mark is labelled with its ROLE.
+
+          Both marks were already here: the preparer's top-left, the subject's above the title. What
+          the cover did not say is which is which — two logos with a name under each is a layout, not
+          an answer, and «who made this» is one of the two facts a client's report establishes before
+          any figure.
+        */}
         <span data-testid="report-cover-agency" className="inline-flex items-center gap-2 rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">
+          <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{ar ? 'من إعداد' : 'Prepared by'}</span>
           {meta.agencyLogoUrl && (
             <img src={meta.agencyLogoUrl} alt="" data-testid="report-cover-agency-logo" onError={hideBrokenLogo} className="h-6 w-auto max-w-[120px] rounded bg-white object-contain p-0.5" />
           )}
@@ -624,6 +633,10 @@ export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
       </div>
       <div>
         <div data-testid="report-cover-client" className="flex items-center gap-2 text-sm opacity-90">
+          {/* Only when there IS a subject: «مقدم إلى» above an agency's own report names nobody. */}
+          {meta.clientName !== undefined && (
+            <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{ar ? 'مقدم إلى' : 'Prepared for'}</span>
+          )}
           {meta.clientLogoUrl && (
             <img src={meta.clientLogoUrl} alt="" data-testid="report-cover-client-logo" onError={hideBrokenLogo} className="h-9 w-auto max-w-[160px] rounded bg-white object-contain p-1" />
           )}

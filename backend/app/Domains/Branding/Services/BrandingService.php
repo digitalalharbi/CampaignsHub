@@ -75,7 +75,13 @@ final class BrandingService
         [$width, $height] = $this->measure($realPath, $mime);
         $contents = (string) file_get_contents($realPath);
 
-        $ext = $mime === 'image/svg+xml' ? 'svg' : 'png';
+        /* The stored file's extension follows its real type, so nothing on disk lies about itself. */
+        $ext = match ($mime) {
+            'image/svg+xml' => 'svg',
+            'image/jpeg' => 'jpg',
+            'image/webp' => 'webp',
+            default => 'png',
+        };
         $dir = $this->directory($tenantId, $scope, $scopeId, $kind);
         $base = (string) Str::uuid();
         $path = "{$dir}/{$base}.{$ext}";

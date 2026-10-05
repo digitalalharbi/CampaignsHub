@@ -128,7 +128,20 @@ final class BrandingCenterController extends Controller
             'scope_id' => ['nullable', 'uuid'],
             'kind' => ['required', 'string', 'in:'.implode(',', BrandingSpec::KINDS)],
             'theme' => ['nullable', 'string', 'in:'.implode(',', BrandingSpec::THEMES)],
-            'file' => ['required', 'file', 'max:2048', 'mimetypes:image/png,image/svg+xml'],
+            /*
+             * REPORT-IDENTITY-001 — the formats a customer's logo actually arrives in.
+             *
+             * PNG and SVG only refused two of the four a brand kit is normally delivered in. A
+             * photographic mark exports as JPEG and a modern one as WebP, and «your logo is not a
+             * supported file» is an unanswerable sentence for somebody holding their own logo.
+             *
+             * `mimetypes` rather than `mimes`: it reads the file's own type instead of trusting the
+             * name on it, so `logo.png` that is really something else is still refused.
+             *
+             * 2MB stands. A mark that needs more than two megabytes is a photograph, and it will be
+             * drawn at 160px on a report.
+             */
+            'file' => ['required', 'file', 'max:2048', 'mimetypes:image/png,image/svg+xml,image/jpeg,image/webp'],
         ]);
 
         $this->assertScopeReachable($request, $data['scope'], $data['scope_id'] ?? null);
@@ -150,7 +163,18 @@ final class BrandingCenterController extends Controller
         abort_unless($request->user()?->hasPermission('branding.view'), 403);
         abort_unless(Storage::disk($brandingAsset->disk)->exists($brandingAsset->path), 404);
 
-        $ext = $brandingAsset->mime === 'image/svg+xml' ? 'svg' : 'png';
+        /*
+         * The extension follows the stored type, which is no longer always one of two.
+         *
+         * It read «svg, else png», so a JPEG downloaded as `report_logo-any.png` — a file whose name
+         * lies about its contents, which some viewers refuse to open at all.
+         */
+        $ext = match ($brandingAsset->mime) {
+            'image/svg+xml' => 'svg',
+            'image/jpeg' => 'jpg',
+            'image/webp' => 'webp',
+            default => 'png',
+        };
 
         return Storage::disk($brandingAsset->disk)->download(
             $brandingAsset->path,
