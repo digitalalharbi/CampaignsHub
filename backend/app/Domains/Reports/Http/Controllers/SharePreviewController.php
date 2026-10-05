@@ -117,7 +117,17 @@ final class SharePreviewController extends Controller
              * there is no picture and the card below says `summary` — an ordinary card, which is
              * better than a large one pointing at a dead URL.
              */
-            'image' => $drawn !== null ? url("/r/{$token}/preview.png") : $identity['logo_url'],
+            /*
+             * SHARE-PREVIEW-VERSION-001 — the picture's address changes when the picture does.
+             *
+             * WhatsApp and the rest cache a preview by URL and hold it, so replacing or removing a
+             * client's mark left the OLD card attached to every chat the link had been pasted into.
+             * The canonical `/r/{token}` is untouched — that is the link people hold — and the
+             * version rides on the image URL, derived from the same key the card is cached under.
+             */
+            'image' => $drawn !== null
+                ? url("/r/{$token}/preview.png").'?v='.$this->cards->version($share, $report)
+                : $identity['logo_url'],
             // The LARGE layout only for a picture composed for it. A mark under
             // `summary_large_image` is the crop this card was built to stop.
             'largeImage' => $drawn !== null,

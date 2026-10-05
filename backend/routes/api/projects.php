@@ -125,6 +125,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         ->middleware('project.can:reports.view')
         ->whereIn('role', ['auto', 'agency', 'client'])
         ->name('report-identity.logo');
+    /*
+     * Removing a mark is a BRANDING act performed from the report screen, so the project capability
+     * is still `reports.view` — this is the screen a report is built on — and the controller requires
+     * `branding.manage` on top. Both, not either: seeing a client's reports is not permission to
+     * change that client's brand.
+     */
+    Route::delete('report-identity/logo/{role}', [ReportIdentityController::class, 'removeLogo'])
+        ->middleware('project.can:reports.view')
+        ->whereIn('role', ['agency', 'client'])
+        ->name('report-identity.logo.remove');
 
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');

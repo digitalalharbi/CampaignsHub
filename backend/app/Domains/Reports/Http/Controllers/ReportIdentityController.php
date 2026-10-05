@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Http\Controllers;
 
+use App\Domains\Branding\Models\BrandingAsset;
+use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -84,6 +86,74 @@ final class ReportIdentityController extends Controller
         abort_unless($file !== null, 404);
 
         return $file;
+    }
+
+    /**
+     * DELETE /projects/{project}/report-identity/logo/{role} — put a role back to its NAME.
+     *
+     * «لا يوجد إزالة واضحة للشعار.» An operator could upload a mark from the builder and could not
+     * take it off, so the only way back to «no logo» was the Branding Center and a guess about which
+     * of its rows the report was reading.
+     *
+     * ## What it is allowed to delete
+     *
+     * Exactly the marks of THIS role, in THIS role's own slot, that a report would read: the tenant's
+     * for the company, this project's client for the client, in the kinds
+     * {@see SharedLinkBranding::kinds()} names. Nothing else — and the scope is derived from the
+     * project rather than taken from the request, so there is no id in the URL that could be edited
+     * into another client's mark or the platform's.
+     *
+     * The platform layer is unreachable by construction: `scope` is only ever `tenant` or `client`
+     * here, and a `platform` row carries neither. A client's mark cannot be removed by asking for the
+     * company's, and vice versa.
+     */
+    public function removeLogo(Request $request, Project $project, string $role, BrandingService $branding): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('branding.manage'), 403);
+
+        [$scope, $scopeId] = $this->slotFor($role, $project);
+
+        abort_unless($scope !== null, 404);
+
+        $removed = 0;
+
+        foreach (BrandingAsset::query()
+            ->where('scope', $scope)
+            ->when($scopeId === null, fn ($q) => $q->whereNull('scope_id'), fn ($q) => $q->where('scope_id', $scopeId))
+            ->whereIn('kind', SharedLinkBranding::kinds())
+            ->get() as $asset) {
+            $branding->removeAsset($asset);
+            $removed++;
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => ['removed' => $removed, 'role' => $role],
+            'message' => $role === 'client' ? 'Client logo removed.' : 'Company logo removed.',
+        ]);
+    }
+
+    /**
+     * A role's own storage slot — the SAME pair `uploadTargets()` offers and the resolver reads.
+     *
+     * One mapping for reading, writing and removing: three copies of «the company is the tenant
+     * layer» is how a remove comes to clear a slot nothing was ever shown from.
+     *
+     * @return array{0: ?string, 1: ?string}
+     */
+    private function slotFor(string $role, Project $project): array
+    {
+        if ($role === 'agency' || $role === 'company') {
+            return ['tenant', null];
+        }
+
+        if ($role !== 'client') {
+            return [null, null];
+        }
+
+        $clientId = $project->client_workspace_id;
+
+        return $clientId === null ? [null, null] : ['client', (string) $clientId];
     }
 
     /**
