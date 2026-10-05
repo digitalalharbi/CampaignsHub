@@ -145,8 +145,12 @@ final class BrandingService
      *
      * @return array<string, BrandingAsset> keyed by kind
      */
-    public function resolve(string $scope, ?string $scopeId, string $theme = BrandingSpec::THEME_ANY): array
-    {
+    public function resolve(
+        string $scope,
+        ?string $scopeId,
+        string $theme = BrandingSpec::THEME_ANY,
+        bool $anyStoredTheme = false,
+    ): array {
         $layers = $this->fallbackLayers($scope, $scopeId);
 
         $tenantLayers = array_values(array_filter($layers, static fn (array $l): bool => $l[0] !== 'platform'));
@@ -187,7 +191,7 @@ final class BrandingService
 
         $resolved = [];
         foreach (BrandingSpec::KINDS as $kind) {
-            $asset = $this->pick($candidates, $layers, $kind, $theme);
+            $asset = $this->pick($candidates, $layers, $kind, $theme, $anyStoredTheme);
             if ($asset !== null) {
                 $resolved[$kind] = $asset;
             }
@@ -245,7 +249,7 @@ final class BrandingService
      * @param  Collection<int, BrandingAsset>  $candidates
      * @param  list<array{0: string, 1: ?string}>  $layers
      */
-    private function pick($candidates, array $layers, string $kind, string $theme): ?BrandingAsset
+    private function pick($candidates, array $layers, string $kind, string $theme, bool $anyStoredTheme = false): ?BrandingAsset
     {
         foreach ($layers as [$layerScope, $layerId]) {
             $inLayer = $candidates->filter(fn (BrandingAsset $a): bool => $a->scope === $layerScope
@@ -264,6 +268,35 @@ final class BrandingService
             $any = $inLayer->firstWhere('theme', BrandingSpec::THEME_ANY);
             if ($any instanceof BrandingAsset) {
                 return $any;
+            }
+
+            /*
+             * REPORT-MARK-THEME-001 — a mark the operator configured is a mark, whatever slot it sits in.
+             *
+             * A caller asking for `any` matched only an `any` row, so a company mark uploaded through
+             * the Branding Center's LIGHT slot was invisible to every report: the operator had
+             * configured a logo, could see it in the Branding Center, and the report said the company
+             * had none. «شعار الشركة لا يعمل» is that, and it is a resolution gap rather than an upload
+             * one — the asset was stored correctly all along.
+             *
+             * Opt-in, because this is a REPORT rule and not a general one. A themed surface asks for
+             * its own theme on purpose: handing a dark-on-transparent mark to a light page can render
+             * it invisible, and that is a worse answer than the product's own fallback. A report
+             * composes its own light surface and would rather show the operator's mark than nothing.
+             *
+             * It never crosses a layer or a kind: the filter above is already narrowed to THIS layer
+             * and THIS kind, so a client can still never answer for another client, nor a tenant for
+             * the platform. Light is preferred over dark when both exist, so the choice is stable
+             * rather than insertion-ordered.
+             */
+            if ($anyStoredTheme) {
+                $stored = $inLayer->firstWhere('theme', BrandingSpec::THEME_LIGHT)
+                    ?? $inLayer->firstWhere('theme', BrandingSpec::THEME_DARK)
+                    ?? $inLayer->first();
+
+                if ($stored instanceof BrandingAsset) {
+                    return $stored;
+                }
             }
         }
 
