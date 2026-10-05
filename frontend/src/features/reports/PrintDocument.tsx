@@ -459,7 +459,7 @@ export function PrintDocument({
           <div className="doc-by inline-flex items-center gap-1.5" data-testid="print-document-by">
             Prepared by {identity.by}
             {identity.byLogoUrl && (
-              <img src={identity.byLogoUrl} alt="" data-testid="print-document-agency-logo" className="h-5 w-auto max-w-[96px] object-contain" />
+              <img src={identity.byLogoUrl} alt="" data-testid="print-document-agency-logo" className="doc-by-logo" />
             )}
           </div>
         )}
@@ -719,7 +719,16 @@ const DOC_CSS = `
 .doc-cover { padding-bottom: 18pt; margin-bottom: 18pt; border-bottom: 2px solid #2563eb; }
 .doc-brand { font-weight: 700; color: #2563eb; letter-spacing: .04em; text-transform: uppercase; font-size: 10pt; }
 /* Bounded, so a tall or very wide upload cannot push the title off the cover page. */
-.doc-logo { max-height: 40px; max-width: 200px; object-fit: contain; display: block; }
+/*
+  REPORT-IDENTITY-PROPORTION-001 — a PLATE, not a ceiling.
+
+  max-height/max-width bounded the artwork without giving it a shape, so a tall crest printed as a
+  few millimetres of colour beside a wordmark that filled the line. The height is fixed now and the
+  width is bounded at both ends, so every mark prints in the same band and a narrow one keeps a
+  readable footprint instead of a hairline. Same scale as BrandMark on screen.
+*/
+.doc-logo { height: 48px; min-width: 56px; max-width: 200px; object-fit: contain; object-position: left center; display: block; }
+.doc-by-logo { height: 20px; min-width: 28px; max-width: 96px; object-fit: contain; object-position: left center; display: inline-block; }
 .doc-by { font-size: 8pt; color: #6b7280; letter-spacing: .02em; margin-top: 2px; }
 .doc-cover h1 { font-size: 22pt; font-weight: 700; margin: 6pt 0 2pt; }
 .doc-sub { color: #555; font-size: 12pt; }

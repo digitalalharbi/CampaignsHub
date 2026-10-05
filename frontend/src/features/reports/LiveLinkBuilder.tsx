@@ -17,6 +17,7 @@ import { ReportIdentity } from './ReportIdentity'
 import { headerIdentity } from './sharedBranding'
 import { projectReportIdentity } from './api'
 import { uploadBrandingAsset } from '@/features/branding/api'
+import { MARK_ACCEPT, markGuidance } from '@/features/branding/markSpec'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -744,6 +745,21 @@ function BuilderIdentity({ projectId, ar }: { projectId: string; ar: boolean }) 
               )}
             </div>
           )}
+
+          {/*
+            What to upload, said BEFORE the upload.
+
+            The control asked for a logo and said nothing about it, so what arrived was whatever was
+            to hand — and the shape of the artwork decides whether the mark reads as a brand or as a
+            coloured sliver. The frame quoted here is the frame `BrandMark` actually draws, and the
+            format and size limit are the ones the server enforces: one module holds all three
+            {@see markSpec}, so this line cannot promise something the upload then refuses.
+          */}
+          {upload !== null && (
+            <p className="mt-2 text-[11px] leading-5 text-text-muted" data-testid="builder-upload-guidance">
+              {markGuidance(ar)}
+            </p>
+          )}
         </>
       )}
     </section>
@@ -791,7 +807,7 @@ function MarkUpload({ label, testid, scope, scopeId, ar, onDone }: {
         <input
           type="file"
           className="sr-only"
-          accept="image/svg+xml,image/png,image/jpeg,image/webp"
+          accept={MARK_ACCEPT}
           disabled={send.isPending}
           onChange={(e) => {
             const file = e.target.files?.[0]
