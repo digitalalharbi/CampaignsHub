@@ -171,6 +171,15 @@ final class LiveReportBuilderController extends Controller
      */
     private function accountsByCampaign(string $project): array
     {
+        /*
+         * `toBase()` — an Eloquent query, read as ROWS.
+         *
+         * The projection is four columns off a join, not an `ExternalCampaign`, and hydrating it into
+         * one would be a model carrying four attributes its table does not have (which is what static
+         * analysis said, correctly). `toBase()` keeps the model's global scopes — the tenant scope
+         * above all — and hands back plain rows, so the tenancy is the model's and the shape is the
+         * query's.
+         */
         $rows = ExternalCampaign::query()
             ->join('external_accounts', 'external_accounts.id', '=', 'external_campaigns.external_account_id')
             ->where('external_campaigns.project_id', $project)
@@ -178,6 +187,7 @@ final class LiveReportBuilderController extends Controller
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
             ->distinct()
             ->orderBy('external_accounts.name')
+            ->toBase()
             ->get([
                 'external_campaigns.unified_campaign_id as campaign_id',
                 'external_accounts.id as account_id',
