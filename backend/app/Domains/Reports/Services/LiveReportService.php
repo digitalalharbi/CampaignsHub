@@ -464,6 +464,30 @@ final class LiveReportService
             'funnel' => ($adFunnel = $engine->funnel($from, $to))['stages'],
             'funnel_spend' => $adFunnel['spend'],
             /*
+             * RESULT-STAGE-TRUTH-001 — a stage COUNT is a figure, not a section.
+             *
+             * «الإضافة إلى السلة لا تظهر في التقارير.» It was collected, stored, totalled and chosen
+             * in the builder, and the client's page still had nowhere to read it from.
+             *
+             * The KPI card for `add_to_cart` reads the FUNNEL, on purpose: the totals pivot wraps
+             * every stage in `COALESCE(…, 0)`, so a platform that never counted basket adds and a
+             * platform that counted none of them are the same `0` there — the exact collapse
+             * FUNNEL-NULL-001 removed from the funnel. Reading the funnel keeps «never sent» null.
+             *
+             * But `funnel` is a SECTION's payload key. An executive summary drops it
+             * ({@see ReportComposition::DETAILED_ONLY}) and so does an operator who switches the
+             * funnel off ({@see applySectionFlags}), both of which empty it to `[]`. The card then
+             * reads `undefined` and the figure disappears — from a report whose operator had ticked
+             * «الإضافات للسلة» by name. A switch that shortens a document silently deleted a metric.
+             *
+             * So the stage READINGS are published beside the funnel and belong to no section. The
+             * chart still goes when the section goes, which is what the switch means; the figures
+             * stay, because the shape of the document is not a claim about what the platform
+             * reported. Each carries its own `reported`, so an absent stage renders unavailable and
+             * never zero.
+             */
+            'result_stages' => self::resultStages($adFunnel['stages']),
+            /*
              * Budget against spend, per PLATFORM — the block the composition calls «budget status».
              *
              * A client link stated what was spent and never what was PLANNED, so the one question a
@@ -852,6 +876,41 @@ final class LiveReportService
      * @param  array<string,mixed>  $payload
      * @return array<string,mixed>
      */
+    /**
+     * The stages a report may headline, as readings rather than as a chart — RESULT-STAGE-TRUTH-001.
+     *
+     * One entry per stage the funnel computed, carrying the count and whether the platform reported
+     * it at all. `reported === false` is «never sent», which the page must render as unavailable;
+     * `reported === true` with `count === 0` is a measured zero and stays a zero.
+     *
+     * Derived from the funnel the aggregator already built — not a second query, and not a second
+     * definition of what a basket add is. The funnel is the one place that keeps the null.
+     *
+     * @param  list<array<string, mixed>>  $stages
+     * @return array<string, array{count: int|null, reported: bool}>
+     */
+    private static function resultStages(array $stages): array
+    {
+        $out = [];
+
+        foreach ($stages as $stage) {
+            $key = (string) ($stage['stage'] ?? '');
+
+            if ($key === '') {
+                continue;
+            }
+
+            $reported = (bool) ($stage['reported'] ?? false);
+
+            $out[$key] = [
+                'count' => $reported && $stage['count'] !== null ? (int) $stage['count'] : null,
+                'reported' => $reported,
+            ];
+        }
+
+        return $out;
+    }
+
     private function applySectionFlags(array $payload, ReportShare $share): array
     {
         $sections = $share->visibleSections();

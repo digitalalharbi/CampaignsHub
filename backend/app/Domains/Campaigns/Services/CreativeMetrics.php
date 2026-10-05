@@ -1502,6 +1502,42 @@ final class CreativeMetrics
      * @param  array<string, mixed>|null  $figures
      * @return list<string>
      */
+    /**
+     * CONTENT-RESULT-ATTRIBUTION-001 — a verdict is an answer, and belongs on the card.
+     *
+     * «النتائج لا تظهر على المحتويات، أي الطلبات على كل محتوى.»
+     *
+     * The card drops a metric it cannot answer, and that rule is right: a cell that will never fill
+     * is a promise nothing keeps, and removing those is what stopped sales creatives showing «—» in
+     * four places. But it was asked of the VALUE alone, and the value is null in three completely
+     * different situations which this service already tells apart:
+     *
+     *   not_reported            the platform does not send this for this content. Nothing to say,
+     *                           and the cell is still rightly dropped.
+     *   measurement_unverified  nobody has verified that this account measures it. Something to say.
+     *   not_attributable        the figure EXISTS for this account in this window, over ads this
+     *                           creative's own rows do not account for. Very much something to say.
+     *
+     * The last one is the owner's defect exactly: a sales creative whose orders live only at campaign
+     * grain had `orders` struck from its headline before `availability` could speak, so the card fell
+     * back to spend, impressions and clicks — the figures of a brand creative — and the one question
+     * the content library exists to answer, «did this sell», was not asked on the screen.
+     *
+     * Allocating those orders across creatives is forbidden and is not what this does: the cell
+     * carries the verdict, which is «لا يمكن إسناد النتيجة لهذا المحتوى», not a number.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    private function speakable(array $figures, string $key): bool
+    {
+        $verdict = $figures['availability'][$key] ?? null;
+
+        return in_array($verdict, [
+            ResultAvailability::NotAttributable->value,
+            ResultAvailability::MeasurementUnverified->value,
+        ], true);
+    }
+
     private function supportable(array $metrics, ?array $figures = null): array
     {
         /*
@@ -1536,7 +1572,10 @@ final class CreativeMetrics
         $kept = array_values(array_filter($metrics, $producible));
 
         if ($figures !== null) {
-            $kept = array_values(array_filter($kept, fn (string $k): bool => $this->answerable($figures, $k)));
+            $kept = array_values(array_filter(
+                $kept,
+                fn (string $k): bool => $this->answerable($figures, $k) || $this->speakable($figures, $k),
+            ));
         }
 
         /*

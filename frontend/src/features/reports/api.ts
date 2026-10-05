@@ -335,6 +335,18 @@ export interface LivePayload {
    */
   funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>
   /**
+   * RESULT-STAGE-TRUTH-001 — the stage counts, independent of the funnel SECTION.
+   *
+   * `funnel` is a section's payload: an executive summary empties it, and so does an operator who
+   * switches the funnel off. The KPI card for «الإضافات للسلة» read it and therefore vanished from
+   * every summary report, including ones whose operator had ticked that metric by name. These
+   * readings belong to no section, so the chart can go without the figure going with it.
+   *
+   * `reported: false` is «the platform never sent this» and must render unavailable, never 0 — the
+   * distinction the totals pivot cannot carry, because it coalesces every stage to zero.
+   */
+  result_stages?: Record<string, { count: number | null; reported: boolean }> | null
+  /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *
    * Null rather than a funnel of nulls: a section of empty rows reads as one that failed to load, and
