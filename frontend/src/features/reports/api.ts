@@ -4,7 +4,7 @@ import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
-import { getData, postData, putData } from '@/lib/api/client'
+import { deleteData, getData, postData, putData } from '@/lib/api/client'
 import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import type { BusinessStreamRow } from './BusinessStreamsSection'
@@ -242,6 +242,18 @@ export interface ReportIdentityPayload extends SharedBranding {
 
 export const projectReportIdentity = (projectId: string) =>
   getData<ReportIdentityPayload>(`/projects/${encodeURIComponent(projectId)}/report-identity`)
+
+/**
+ * Put one role back to its NAME — REPORT-IDENTITY-CONTROLS-001.
+ *
+ * Addressed by ROLE, like the logo itself: there is no asset id in the URL, so there is nothing to
+ * edit into another client's mark. The server derives the slot from the project and deletes only
+ * that role's report marks.
+ */
+export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'client') =>
+  deleteData<{ removed: number; role: string }>(
+    `/projects/${encodeURIComponent(projectId)}/report-identity/logo/${role}`,
+  )
 
 
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>

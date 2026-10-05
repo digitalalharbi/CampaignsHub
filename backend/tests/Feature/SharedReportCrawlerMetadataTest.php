@@ -190,6 +190,71 @@ final class SharedReportCrawlerMetadataTest extends TestCase
         $this->assertStringContainsString('og:title', $html);
     }
 
+    /**
+     * SHARE-PREVIEW-VERSION-001 — a replaced mark reaches a chat that already has the link.
+     *
+     * WhatsApp and the rest cache a preview image by URL and keep it, so changing a client's logo
+     * left the old card attached to every conversation the link had been pasted into. The canonical
+     * `/r/{token}` must not change — that is the link people hold — so the version rides on the
+     * picture's address instead.
+     *
+     * Asserted through the METADATA rather than against the renderer, because the tag is what a
+     * crawler reads and the tag is what has to differ.
+     */
+    public function test_replacing_the_mark_changes_the_preview_image_address(): void
+    {
+        /*
+         * Real PNG bytes, not a marker string: `DrawableImage` reads the leading bytes, so a card
+         * given a text file draws no mark at all — and two cards with no mark have the same version,
+         * which would pass this test for the wrong reason.
+         */
+        $this->asset('client', (string) $this->client->id, $this->pngBytes().'FIRST');
+        $before = $this->ogImage($this->crawl());
+
+        $this->asset('client', (string) $this->client->id, $this->pngBytes().'SECOND');
+        $after = $this->ogImage($this->crawl());
+
+        $this->assertNotSame($before, $after, 'every chat holding this link would still show the old card');
+        $this->assertSame(
+            parse_url($before, PHP_URL_PATH),
+            parse_url($after, PHP_URL_PATH),
+            'the canonical picture path changed, not just its version',
+        );
+        $this->assertMatchesRegularExpression('/[?&]v=[0-9a-f]{12}$/', $after);
+    }
+
+    /** And the version is not an asset id or a storage path — a hash and nothing else. */
+    public function test_the_preview_version_leaks_no_identifier(): void
+    {
+        $this->asset('client', (string) $this->client->id, $this->pngBytes());
+
+        $url = $this->ogImage($this->crawl());
+
+        preg_match('/[?&]v=([0-9a-f]+)/', $url, $m);
+
+        $this->assertNotEmpty($m[1] ?? '');
+        $this->assertStringNotContainsString((string) $this->client->id, $url);
+        $this->assertStringNotContainsString('branding/', $url);
+    }
+
+    /** A one-pixel PNG, so `DrawableImage` sees a real image rather than a text file. */
+    private function pngBytes(): string
+    {
+        return (string) base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            true,
+        );
+    }
+
+    private function ogImage(string $html): string
+    {
+        preg_match('/<meta property="og:image" content="([^"]+)"/', $html, $m);
+
+        $this->assertNotEmpty($m[1] ?? '', 'the preview offered no image at all');
+
+        return html_entity_decode($m[1]);
+    }
+
     private function crawl(): string
     {
         return $this->get("/r/{$this->token}", ['User-Agent' => 'WhatsApp/2.23.20.0'])

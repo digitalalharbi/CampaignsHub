@@ -103,6 +103,26 @@ final class ShareCardRenderer
      * recipient who opens the message. Launching a browser per request would make a forwarded link a
      * load test.
      */
+    /**
+     * A short, stable version of what this card DRAWS — SHARE-PREVIEW-VERSION-001.
+     *
+     * Social crawlers cache a preview image by URL and keep it for a long time, so replacing or
+     * removing a client's mark left the old picture attached to the link in every chat it had already
+     * been pasted into. The canonical report URL must not change — it is the link people hold — so
+     * the picture's address carries the version instead.
+     *
+     * It is the SAME key the cache is written under, which already folds the mark's own hash, the
+     * accent, the identity, the period, the drawn size and the design version. One derivation: a
+     * version that could disagree with the cache would serve a new URL and the old bytes.
+     *
+     * Truncated, and a hash — there is no asset id in it and no storage path, and nothing about it
+     * can be read back into the tenant's private files.
+     */
+    public function version(ReportShare $share, Report $report): string
+    {
+        return substr($this->key($this->contents($share, $report)), 0, 12);
+    }
+
     public function png(ReportShare $share, Report $report): ?string
     {
         if (! $this->available()) {
@@ -192,7 +212,17 @@ final class ShareCardRenderer
     }
 
     /**
-     * The agency's mark as a data URI, or null.
+     * The mark on the card — the CLIENT's where there is one — as a data URI, or null.
+     *
+     * SHARE-PREVIEW-CLIENT-IDENTITY-001. This asked for the nearest mark, which walks client → agency
+     * → platform by KIND before layer: an agency with a `report_logo` and a client with a
+     * `client_logo` resolved to the AGENCY's, so the picture a client saw of their own report in
+     * WhatsApp carried somebody else's brand. The report page beside it had already decided the
+     * opposite — the client leads, the preparer is secondary — and the card contradicted it.
+     *
+     * So the roles are asked in the card's own order: the client's mark, then the preparer's, then
+     * nothing. Nothing is a text card, which is a professional answer; the agency's mark in the
+     * client's place is not.
      *
      * Inlined rather than linked. The card is opened from a temp file with no origin, so a linked
      * mark would be a network fetch from a document that has no business making one — and a slow or
@@ -203,7 +233,11 @@ final class ShareCardRenderer
      */
     private function logoDataUri(ReportShare $share, Report $report): ?string
     {
-        $bytes = $this->branding->logoBytes($report, (string) $share->tenant_id);
+        $tenantId = (string) $share->tenant_id;
+
+        $bytes = $this->branding->logoBytes($report, $tenantId, 'client')
+            ?? $this->branding->logoBytes($report, $tenantId, 'agency')
+            ?? $this->branding->logoBytes($report, $tenantId);
 
         if ($bytes === null) {
             return null;

@@ -341,7 +341,7 @@ final class SharedLinkBranding
             return null;
         }
 
-        $assets = $this->inTenant($tenantId, fn () => $this->branding->resolve($scope, $scopeId));
+        $assets = $this->inTenant($tenantId, fn () => $this->branding->resolve($scope, $scopeId, anyStoredTheme: true));
 
         // Each kind in preference order, but only the role's own layer: a nearer kind resolved from
         // another layer must not hide this layer's own logo of a later kind.
@@ -358,7 +358,11 @@ final class SharedLinkBranding
     /** The nearest logo for a scope, in this surface's preference order. */
     private function pickLogo(string $scope, ?string $scopeId): mixed
     {
-        $assets = $this->branding->resolve($scope, $scopeId);
+        /*
+         * REPORT-MARK-THEME-001 — a report shows the mark the operator configured, whatever slot it
+         * was uploaded into. See `BrandingService::pick()`; the layer and kind are still never crossed.
+         */
+        $assets = $this->branding->resolve($scope, $scopeId, anyStoredTheme: true);
 
         foreach (self::kinds() as $kind) {
             if (isset($assets[$kind])) {

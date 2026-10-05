@@ -150,18 +150,15 @@ final class ShareCardContentsTest extends TestCase
     }
 
     /**
-     * The card takes the NEAREST mark, and that is deliberately not what the header does.
+     * With no client mark, the agency's fills the card's one slot.
      *
-     * `headerIdentity` gives the leading slot to the client's OWN mark and puts the agency's beside
-     * «بواسطة», because on a report page there are two slots and putting an agency's mark in the
-     * client's is a claim about whose report it is.
-     *
-     * A chat card has ONE slot. The alternative to the nearest mark is no mark — a card that shows
+     * A chat card has ONE slot, and the alternative to a fallback is no picture — a card that shows
      * an agency's own clients nothing simply because those clients have not uploaded a logo, which is
      * the common case and the one this whole card exists for.
      *
-     * So they differ on purpose, and this pins it: aligning the card to the header's two-slot rule
-     * would blank the picture for exactly the links that most need one.
+     * The ORDER is the header's, though — see the test below. This used to take the «nearest» mark,
+     * which walks by KIND before layer, so an agency `report_logo` beat a client `client_logo` and
+     * the picture a client saw of their own report carried somebody else's brand.
      */
     public function test_the_card_falls_back_to_the_agency_mark_where_the_client_has_none(): void
     {
@@ -179,6 +176,73 @@ final class ShareCardContentsTest extends TestCase
 
         $this->assertIsString($card['logo'], 'the client has no mark, so the card showed nothing at all');
         $this->assertStringStartsWith('data:image/png;base64,', $card['logo']);
+    }
+
+    /**
+     * SHARE-PREVIEW-CLIENT-IDENTITY-001 — the client's own mark wins its own report's card.
+     *
+     * This is the report's subject, and the page the link opens already says so: the client leads and
+     * the preparer is secondary. The card contradicted it. `logoBytes()` with no role walks the
+     * hierarchy by KIND first, so an agency's `report_logo` outranked the client's `client_logo` and
+     * the picture that reached WhatsApp carried the agency's brand on the client's report.
+     */
+    public function test_the_clients_own_mark_leads_the_card_over_the_agencys(): void
+    {
+        app(TenantContext::class)->setTenantId($this->agency->id);
+
+        $agencyMark = $this->png().'AGENCY';
+        $clientMark = $this->png().'CLIENT';
+
+        app(BrandingService::class)->storeAsset(
+            'tenant', null, 'report_logo', 'any',
+            UploadedFile::fake()->createWithContent('agency.png', $agencyMark),
+        );
+        app(BrandingService::class)->storeAsset(
+            'client', (string) $this->client->id, 'client_logo', 'any',
+            UploadedFile::fake()->createWithContent('client.png', $clientMark),
+        );
+        app(TenantContext::class)->forget();
+
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        $this->assertIsString($card['logo']);
+        $this->assertSame(
+            'data:image/png;base64,'.base64_encode($clientMark),
+            $card['logo'],
+            "the client's report card carried the agency's mark",
+        );
+    }
+
+    /**
+     * SHARE-PREVIEW-VERSION-001 — replacing the mark changes the picture's ADDRESS.
+     *
+     * Social crawlers cache a preview by URL and hold it, so a client whose logo was replaced kept
+     * the old card in every chat the link had already been pasted into. The canonical report URL is
+     * untouched; the version rides on the image URL and is derived from the same key the card is
+     * cached under, so a new address can never serve the old bytes.
+     */
+    public function test_replacing_the_mark_produces_a_new_preview_version(): void
+    {
+        $renderer = app(ShareCardRenderer::class);
+
+        $before = $renderer->version($this->share, $this->report);
+
+        $this->storeMark();
+        $after = $renderer->version($this->share, $this->report);
+
+        $this->assertNotSame($before, $after, 'the preview URL would have kept serving the old card');
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{12}$/', $after, 'the version is a short hash and nothing else');
+    }
+
+    /** The version is stable while nothing changes — a new URL on every crawl would defeat the cache. */
+    public function test_the_preview_version_is_stable_while_the_card_is(): void
+    {
+        $renderer = app(ShareCardRenderer::class);
+
+        $this->assertSame(
+            $renderer->version($this->share, $this->report),
+            $renderer->version($this->share, $this->report),
+        );
     }
 
     /**

@@ -56,13 +56,12 @@ describe('the report link builder', () => {
   it('shows both identities', async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p1" onClose={vi.fn()} />, { locale: 'ar' })
 
-    expect(await screen.findByTestId('builder-identity')).toHaveTextContent('هوية التقرير')
-    // Awaited: the heading is drawn immediately and the blocks arrive with the query, so asserting
-    // them synchronously would assert the loading state.
-    expect(await screen.findByTestId('builder-report-identity-preparer')).toHaveTextContent('من إعداد')
-    expect(screen.getByTestId('builder-report-identity-preparer-name')).toHaveTextContent('الشركة')
-    expect(screen.getByTestId('builder-report-identity-subject')).toHaveTextContent('مقدم إلى')
-    expect(screen.getByTestId('builder-report-identity-subject-name')).toHaveTextContent('العميل')
+    // Awaited: the block arrives with the query, so asserting synchronously would assert the loader.
+    expect(await screen.findByTestId('report-identity-cards')).toHaveTextContent('هوية التقرير')
+    expect(screen.getByTestId('report-identity-company')).toHaveTextContent('من إعداد')
+    expect(screen.getByTestId('report-identity-company-name')).toHaveTextContent('الشركة')
+    expect(screen.getByTestId('report-identity-client')).toHaveTextContent('مقدم إلى')
+    expect(screen.getByTestId('report-identity-client-name')).toHaveTextContent('العميل')
   })
 
   /**
@@ -74,8 +73,8 @@ describe('the report link builder', () => {
   it('uploads each mark into the slot that is configured once', async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p1" onClose={vi.fn()} />, { locale: 'ar' })
 
-    const company = await screen.findByTestId('builder-upload-company')
-    const client = screen.getByTestId('builder-upload-client')
+    const company = await screen.findByTestId('report-identity-company-upload')
+    const client = screen.getByTestId('report-identity-client-upload')
 
     const png = new File([new Uint8Array([137, 80, 78, 71])], 'mark.png', { type: 'image/png' })
 
@@ -96,8 +95,10 @@ describe('the report link builder', () => {
 
     renderWithProviders(<LiveLinkBuilder projectId="p1" onClose={vi.fn()} />, { locale: 'ar' })
 
-    await screen.findByTestId('builder-identity')
-    expect(screen.queryByTestId('builder-upload-company')).toBeNull()
+    await screen.findByTestId('report-identity-cards')
+    expect(screen.queryByTestId('report-identity-company-upload')).toBeNull()
+    // And the identities are still SHOWN — what is withheld is the ability to change them.
+    expect(screen.getByTestId('report-identity-company-name')).toHaveTextContent('الشركة')
 
     state.identity = withUpload
   })

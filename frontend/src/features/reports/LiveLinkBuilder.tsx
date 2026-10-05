@@ -2,22 +2,17 @@ import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { PlatformMark } from '@/components/brand/PlatformMark'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Link2, Upload } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Check, Copy, Link2 } from 'lucide-react'
 import { createLiveLink, liveBuilderOptions, reportSectionRegistry, type LiveBuilderOptions } from './api'
 import { groupByLifecycle } from './reportScopeLifecycle'
-import { toApiError } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
-import { ReportIdentity } from './ReportIdentity'
-import { headerIdentity } from './sharedBranding'
-import { projectReportIdentity } from './api'
-import { uploadBrandingAsset } from '@/features/branding/api'
-import { MARK_ACCEPT, markGuidance } from '@/features/branding/markSpec'
+import { ReportIdentityCards } from './ReportIdentityCards'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -292,7 +287,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             where somebody DECIDES to send it showed neither, so an operator could only find out
             whose marks a client would see by making the link and opening it.
           */}
-          <BuilderIdentity projectId={projectId} ar={ar} />
+          <ReportIdentityCards projectId={projectId} ar={ar} />
 
           <Field label={ar ? 'اسم التقرير' : 'Report name'} required>
             <input
@@ -678,151 +673,5 @@ function CampaignOption({ campaign, ar, checked, onToggle }: {
         ))}
       </span>
     </label>
-  )
-}
-
-/**
- * The identity block at the top of the builder.
- *
- * Its own component because it has its own request, and the builder must not wait on it: a branding
- * lookup that is slow, or fails, may not stop somebody creating a link. While it is loading there is
- * a reserved line rather than a jump, and on failure there is nothing — the report still resolves
- * its own identity when it is opened, and an error here would be a warning about a problem that is
- * not one.
- */
-function BuilderIdentity({ projectId, ar }: { projectId: string; ar: boolean }) {
-  const queryClient = useQueryClient()
-
-  const identity = useQuery({
-    queryKey: ['report-identity', projectId],
-    queryFn: () => projectReportIdentity(projectId),
-    retry: false,
-  })
-
-  if (identity.isError) return null
-
-  const upload = identity.data?.upload ?? null
-
-  return (
-    <section className="rounded-2xl border border-border bg-surface-secondary p-3" data-testid="builder-identity">
-      <h3 className="mb-2 text-xs font-bold text-text-muted">{ar ? 'هوية التقرير' : 'Report identity'}</h3>
-      {identity.data === undefined ? (
-        <Skeleton className="h-10 w-full" />
-      ) : (
-        <>
-          <ReportIdentity identity={headerIdentity(identity.data, ar ? 'ar' : 'en')} ar={ar} testid="builder-report-identity" />
-
-          {/*
-            REPORT-IDENTITY-001 — the marks can be set HERE, and they are not set per report.
-
-            Discovering on this screen that a client has no mark used to mean leaving for the
-            Branding Center and coming back. These write the same (scope, kind, theme) slot the
-            Branding Center writes, so a mark uploaded here is configured ONCE and reused by every
-            report — not attached to the link being built.
-
-            Offered only to somebody who may manage branding: the server omits the targets otherwise,
-            and an upload control that answers 403 is worse than no control.
-          */}
-          {upload !== null && (
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-              <MarkUpload
-                label={ar ? 'رفع شعار الشركة' : 'Upload company logo'}
-                testid="builder-upload-company"
-                scope={upload.company.scope}
-                scopeId={upload.company.scope_id}
-                ar={ar}
-                onDone={() => queryClient.invalidateQueries({ queryKey: ['report-identity', projectId] })}
-              />
-              {upload.client !== null && (
-                <MarkUpload
-                  label={ar ? 'رفع شعار العميل' : 'Upload client logo'}
-                  testid="builder-upload-client"
-                  scope={upload.client.scope}
-                  scopeId={upload.client.scope_id}
-                  ar={ar}
-                  onDone={() => queryClient.invalidateQueries({ queryKey: ['report-identity', projectId] })}
-                />
-              )}
-            </div>
-          )}
-
-          {/*
-            What to upload, said BEFORE the upload.
-
-            The control asked for a logo and said nothing about it, so what arrived was whatever was
-            to hand — and the shape of the artwork decides whether the mark reads as a brand or as a
-            coloured sliver. The frame quoted here is the frame `BrandMark` actually draws, and the
-            format and size limit are the ones the server enforces: one module holds all three
-            {@see markSpec}, so this line cannot promise something the upload then refuses.
-          */}
-          {upload !== null && (
-            <p className="mt-2 text-[11px] leading-5 text-text-muted" data-testid="builder-upload-guidance">
-              {markGuidance(ar)}
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  )
-}
-
-/**
- * One mark, chosen from the operator's own machine.
- *
- * A plain `<input type="file">` behind a label rather than a button that opens a dialog: the file
- * picker is the platform's, it is keyboard-reachable, and a label IS the control for the input it
- * names. The accepted types are the four a brand kit ships, and the server refuses anything else by
- * reading the file rather than its name.
- */
-function MarkUpload({ label, testid, scope, scopeId, ar, onDone }: {
-  label: string
-  testid: string
-  scope: string
-  scopeId: string | null
-  ar: boolean
-  onDone: () => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-
-  const send = useMutation({
-    mutationFn: (file: File) => uploadBrandingAsset({
-      scope: scope as never,
-      scopeId,
-      kind: 'report_logo',
-      theme: 'any',
-      file,
-    }),
-    onSuccess: () => { setError(null); onDone() },
-    onError: (e) => setError(toApiError(e).message),
-  })
-
-  return (
-    <span className="flex flex-col gap-1">
-      <label
-        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-hover ${send.isPending ? 'opacity-60' : ''}`}
-        data-testid={testid}
-      >
-        <Upload size={14} aria-hidden />
-        {send.isPending ? (ar ? 'جارٍ الرفع…' : 'Uploading…') : label}
-        <input
-          type="file"
-          className="sr-only"
-          accept={MARK_ACCEPT}
-          disabled={send.isPending}
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            // Cleared so choosing the SAME file twice still fires a change — a re-upload after a
-            // refusal is the most likely second attempt.
-            e.target.value = ''
-            if (file) send.mutate(file)
-          }}
-        />
-      </label>
-      {/*
-        The server's own refusal, shown where the choice was made. «2 MB» and «SVG, PNG, JPG or
-        WebP» are its words, not a second copy of the rule that could drift from it.
-      */}
-      {error !== null && <span className="max-w-[16rem] text-[11px] text-danger" data-testid={`${testid}-error`}>{error}</span>}
-    </span>
   )
 }
