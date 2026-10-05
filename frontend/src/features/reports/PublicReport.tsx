@@ -4,7 +4,8 @@ import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
 import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
-import { coverMeta, headerIdentity, hideBrokenLogo, reportPageTitle, type SharedBranding } from './sharedBranding'
+import { BrandMark } from '@/components/brand/BrandMark'
+import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { productLabel } from './reportProduct'
@@ -155,8 +156,14 @@ export function PublicReport() {
             than a URL that 404s, because a broken image here reads as a broken report.
           */}
           <span className="flex min-w-0 items-center gap-2">
+            {/*
+              REPORT-IDENTITY-PROPORTION-001 — the subject's mark and the preparer's share one plate
+              size, so the header reads as two identities rather than as two unrelated images. They
+              were `h-7` and `h-4` with free widths, which drew them at different heights and, for a
+              tall crest, six pixels wide.
+            */}
             {identity.logoUrl && (
-              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[72px] shrink-0 object-contain sm:max-w-[160px]" />
+              <BrandMark src={identity.logoUrl} testid="shared-report-logo" size="sm" />
             )}
             <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
             <span className="truncate font-heading text-base font-extrabold tracking-tight sm:text-lg" data-testid="shared-report-name">{identity.name}</span>
@@ -180,7 +187,7 @@ export function PublicReport() {
                   {identity.byLogoUrl ? (locale === 'ar' ? 'من إعداد' : 'Prepared by') : (locale === 'ar' ? `من إعداد ${identity.by}` : `Prepared by ${identity.by}`)}
                 </span>
                 {identity.byLogoUrl && (
-                  <img src={identity.byLogoUrl} alt={identity.by} data-testid="shared-report-agency-logo" onError={hideBrokenLogo} className="h-4 w-auto max-w-[72px] shrink-0 object-contain" />
+                  <BrandMark src={identity.byLogoUrl} alt={identity.by} testid="shared-report-agency-logo" size="sm" />
                 )}
               </span>
             )}

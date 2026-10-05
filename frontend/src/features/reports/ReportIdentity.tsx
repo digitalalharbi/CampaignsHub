@@ -1,4 +1,5 @@
-import { hideBrokenLogo, type HeaderIdentity } from './sharedBranding'
+import { BrandMark } from '@/components/brand/BrandMark'
+import { type HeaderIdentity } from './sharedBranding'
 
 /**
  * REPORT-IDENTITY-001 — who prepared this report, and who it is for.
@@ -20,9 +21,11 @@ import { hideBrokenLogo, type HeaderIdentity } from './sharedBranding'
  * prepared it, and a client with no mark is still named — which is why the name is always rendered
  * and the mark only when there is one.
  *
- * `object-contain` on every mark, with the box fixed in height and free in width: a wide wordmark,
- * a square badge and a tall crest all have to arrive uncropped, and `cover` would cut whichever of
- * them did not match the box.
+ * ## Every mark gets the same plate
+ *
+ * The marks used to be sized by HEIGHT with the width left to the artwork, which drew a 120×600 crest
+ * six pixels wide beside a wordmark seventy-two wide — see `BrandMark`. They are drawn on one plate
+ * now, so the two blocks are parallel and their names begin at the same place whatever was uploaded.
  */
 export function ReportIdentity({ identity, ar, layout = 'rows', testid = 'report-identity' }: {
   identity: HeaderIdentity
@@ -83,17 +86,12 @@ function IdentityBlock({ role, name, logoUrl, size, testid }: {
       <span className="text-[11px] font-bold uppercase tracking-wide opacity-70">{role}</span>
       <span className="flex min-w-0 items-center gap-2">
         {/*
-          Height fixed, width free, `object-contain`. A wordmark three times wider than it is tall
-          and a square badge both have to arrive whole; `cover` would crop whichever did not fit.
+          One plate per mark — fixed on BOTH axes, contained and centred inside. A wordmark, a square
+          badge and a tall crest then occupy the same rectangle, so the subject block and the preparer
+          block line up instead of each following its own artwork.
         */}
         {logoUrl !== null && (
-          <img
-            src={logoUrl}
-            alt=""
-            data-testid={`${testid}-logo`}
-            onError={hideBrokenLogo}
-            className={`w-auto shrink-0 object-contain ${size === 'lg' ? 'h-9 max-w-[180px]' : 'h-6 max-w-[140px]'}`}
-          />
+          <BrandMark src={logoUrl} testid={`${testid}-logo`} size={size === 'lg' ? 'lg' : 'md'} />
         )}
         {/*
           The name is always here, mark or no mark. It is the fallback the whole rule rests on: a

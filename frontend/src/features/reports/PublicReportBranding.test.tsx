@@ -76,7 +76,16 @@ describe('a shared report header that cannot show its logo', () => {
     // The asset 404s at render time — the one case the backend cannot rule out.
     fireEvent.error(logo)
 
-    await waitFor(() => expect(logo).toHaveStyle({ display: 'none' }))
+    /*
+     * REPORT-IDENTITY-PROPORTION-001 — the mark's PLATE goes with it, not just the image.
+     *
+     * Hiding the image was the whole repair while the image was the only thing occupying space. The
+     * mark is drawn on a reserved plate now, and a hidden image inside a plate that stays would
+     * leave a hole in the header beside the name — worse than the name alone, and the opposite of
+     * what this fallback is for.
+     */
+    await waitFor(() => expect(screen.queryByTestId('shared-report-logo')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('shared-report-logo-plate')).not.toBeInTheDocument()
     // The header is still the client's, never empty and never the product's name by accident.
     expect(screen.getByTestId('shared-report-name')).toHaveTextContent('Nakheel')
   })

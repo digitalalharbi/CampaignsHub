@@ -75,8 +75,13 @@ describe('the report surfaces name both roles', () => {
     const logo = screen.getByTestId('print-document-agency-logo')
 
     expect(logo).toHaveAttribute('src', '/agency.png')
-    // Contain, never cover — a wordmark and a square badge both arrive whole.
-    expect(logo.className).toContain('object-contain')
+    /*
+     * REPORT-IDENTITY-PROPORTION-001 — the printed cover has no Tailwind, so the mark wears the
+     * plate class and the rule behind it is held by `markSpec.test.ts`, which reads the print
+     * stylesheet and requires a fixed height, a width bounded at both ends, and `object-fit:
+     * contain`. Asserted as the class here so a mark cannot quietly go back to an unbounded one.
+     */
+    expect(logo.className).toBe('doc-by-logo')
   })
 
   it('labels both roles on the interactive cover', () => {
