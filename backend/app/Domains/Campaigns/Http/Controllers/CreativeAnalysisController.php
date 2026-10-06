@@ -21,6 +21,7 @@ use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\ContentIntelligence;
+use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -257,6 +258,38 @@ final class CreativeAnalysisController extends Controller
             'currency' => $this->reachCurrency($models),
             'by_format' => app(ContentIntelligence::class)->byFormat($creatives, $figures, $objective),
         ], 'Content intelligence.');
+    }
+
+    /**
+     * CREATIVE-FORMAT-INTELLIGENCE-001 — the canonical format answer for one stated scope.
+     *
+     * `contentIntelligence()` above answers the LIBRARY's question: whatever the operator has
+     * filtered to, compared on one objective they may name. That is right for the library and wrong
+     * everywhere else, because the filters are the screen's state rather than a scope anybody can
+     * reproduce — a dashboard, a campaign page and a client's report reading it would each get their
+     * own answer about the same advertiser.
+     *
+     * This takes the scope explicitly — project, optionally ONE ad account, optionally one campaign,
+     * and a period — and returns the comparison SPLIT by objective family with its evidence base
+     * beside it. Every surface reads this, so the numbers cannot differ between them; only how much
+     * of the answer each one draws.
+     *
+     * The service owns no arithmetic: the figures are `CreativeMetrics` and the verdict is
+     * `ContentIntelligence::byFormat()`, which already holds the comparison rules.
+     */
+    public function formatIntelligence(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $account = $request->string('external_account_id')->toString() ?: null;
+        $campaign = $request->string('campaign_id')->toString() ?: null;
+
+        return ApiResponse::success(
+            app(CreativeFormatIntelligence::class)->forScope($project, $from, $to, $account, $campaign),
+            'Creative format intelligence.',
+        );
     }
 
     /**

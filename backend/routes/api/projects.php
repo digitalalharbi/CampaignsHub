@@ -227,6 +227,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // Before `creatives/{creative}` for the same reason as `pulse` — an unmatched word under
     // `creatives/` otherwise reaches Eloquent and comes back 500 «invalid uuid».
     Route::get('creatives/content-intelligence', [CreativeAnalysisController::class, 'contentIntelligence'])->middleware('project.can:campaigns.view')->name('creatives.content-intelligence');
+    /*
+     * CREATIVE-FORMAT-INTELLIGENCE-001 — «image or video, HERE?» with its scope stated.
+     *
+     * Beside `content-intelligence` rather than replacing it: that endpoint answers the library's
+     * own filtered question, and this one answers a SCOPE — project, optionally one ad account,
+     * optionally one campaign — split by objective and carrying its evidence base. Every surface
+     * reads this one, so a dashboard, a report and Content cannot disagree about one account.
+     */
+    Route::get('creatives/format-intelligence', [CreativeAnalysisController::class, 'formatIntelligence'])
+        ->middleware('project.can:campaigns.view')
+        ->name('creatives.format-intelligence');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->middleware('project.can:campaigns.view')->name('creatives.compare');
     /*
      * The group listing, which this surface was missing while the workspace surface had it.
