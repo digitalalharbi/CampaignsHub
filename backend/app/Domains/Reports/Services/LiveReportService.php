@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Commerce\Services\StoreFunnelService;
+use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
@@ -248,6 +249,18 @@ final class LiveReportService
              */
             'ads' => ClientEntityBoundary::ads($built['ads']),
             'ads_level' => $built['level'],
+            /*
+             * CREATIVE-FORMAT-INTELLIGENCE-001 in a client link — «أداء أنواع المحتوى».
+             *
+             * The same canonical answer the operator reads, for THIS link's project and window, from
+             * the same service. A report that computed its own would be a second answer to «هل الصور
+             * أم الفيديو؟» and the first time the two disagreed nobody would know which to believe.
+             *
+             * It belongs to the CONTENT section, so a link that hides the creatives hides this with
+             * them: a format comparison is a statement about those creatives, and leaving it behind
+             * would describe the ads a reader was not shown.
+             */
+            'content_formats' => $this->contentFormats($share, $scope, $from, $to),
             'ads_groups' => ClientEntityBoundary::ads($built['groups']),
             /*
              * REPORT-DETAIL-PARITY-001 — the same ads on the platform axis, past the same boundary.
@@ -818,6 +831,41 @@ final class LiveReportService
      *
      * @param  list<string>  $providers
      */
+    /**
+     * «أداء أنواع المحتوى» for this link — the operator's own answer, redacted where the link redacts.
+     *
+     * One scope: the link's project and its window. The ACCOUNT axis is deliberately not offered to a
+     * client — a client reads their own report, and which of the agency's ad accounts carried which
+     * creative is the agency's internal arrangement, the same reason the campaign picker was removed
+     * from a client link.
+     *
+     * A link that hides spend hides the spend MIX, because a mix is spend expressed as a share and a
+     * share of a hidden figure is that figure. The comparison itself survives: it is decided on a
+     * rate or a cost per outcome, which is a reading about the creative rather than the money.
+     *
+     * @param  array<string, mixed>  $scope
+     * @return array<string, mixed>|null
+     */
+    private function contentFormats(ReportShare $share, array $scope, Carbon $from, Carbon $to): ?array
+    {
+        $projectId = (string) ($scope['project_id'] ?? '');
+
+        if ($projectId === '') {
+            return null;
+        }
+
+        $answer = app(CreativeFormatIntelligence::class)->forScope($projectId, $from, $to);
+
+        // The accounts are the agency's own arrangement, never a client's business.
+        $answer['accounts'] = [];
+
+        if ($share->hide_spend) {
+            $answer['spend_mix'] = ['formats' => [], 'total' => null, 'complete' => false];
+        }
+
+        return $answer;
+    }
+
     private function scopedEngine(ReportShare $share, array $scope, array $providers): MetricsAggregator
     {
         return ReportScope::fromArray([
@@ -931,6 +979,13 @@ final class LiveReportService
             'creatives' => [
                 'ads' => [], 'ads_groups' => [], 'ads_platform_groups' => [], 'ads_roster' => [], 'ads_weakest' => [], 'top_creatives' => [],
                 'worst_creatives' => [], 'ads_reading' => null, 'ads_level' => null, 'ads_absent_reason' => null,
+                /*
+                 * The format comparison is a statement about the creatives this link is hiding, so it
+                 * goes with them. Null rather than `[]`: the page reads `payload.content_formats &&`,
+                 * and an empty array is truthy in Javascript — the shape has to be the one the reader
+                 * tests for, which is the rule this whole map exists to write down.
+                 */
+                'content_formats' => null,
             ],
             'budget' => ['budget' => []],
             'funnel_store' => ['funnel' => [], 'store_funnel' => null],
