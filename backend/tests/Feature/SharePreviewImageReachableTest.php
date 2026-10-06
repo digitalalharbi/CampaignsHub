@@ -50,7 +50,7 @@ final class SharePreviewImageReachableTest extends TestCase
         $conf = $this->conf();
 
         $this->assertMatchesRegularExpression(
-            '/location\s*~\s*\^\/r\/\[A-Za-z0-9\]\{16,64\}\/preview\\\\\.png\$\s*\{[^}]*proxy_pass\s+http:\/\/backend:8000;[^}]*\}/',
+            '/location\s*~\s*\^\/r\/\[A-Za-z0-9\]\+\/preview\\\\\.png\$\s*\{[^}]*proxy_pass\s+http:\/\/backend:8000;[^}]*\}/',
             $conf,
             'nothing routes the preview image to Laravel, so a chat client receives index.html',
         );
@@ -68,7 +68,7 @@ final class SharePreviewImageReachableTest extends TestCase
         $conf = $this->conf();
 
         preg_match(
-            '/location\s*~\s*\^\/r\/\[A-Za-z0-9\]\{16,64\}\/preview\\\\\.png\$\s*\{(.*?)\}/s',
+            '/location\s*~\s*\^\/r\/\[A-Za-z0-9\]\+\/preview\\\\\.png\$\s*\{(.*?)\}/s',
             $conf,
             $match,
         );
@@ -101,6 +101,49 @@ final class SharePreviewImageReachableTest extends TestCase
             $generic,
             $image,
             'nginx takes the FIRST matching regex location, so this one never runs',
+        );
+    }
+
+    /**
+     * NGINX-LOCATION-REGEX-001 — a brace in a location regex takes the whole site down.
+     *
+     * The first version of the block above read `[A-Za-z0-9]{16,64}`, mirroring the route's own token
+     * shape. nginx treats `{` and `}` as BLOCK DELIMITERS: a location regular expression containing
+     * them must be quoted, or the file does not parse. Unquoted, nginx refused to start, the frontend
+     * container never came up, and every address on the domain answered 502 — the homepage, the
+     * login page and the API alike. A routing nicety took the product down.
+     *
+     * The deploy reported success, because it builds and starts containers rather than asking
+     * whether nginx accepted its configuration.
+     *
+     * So: no unquoted brace in any location regex in this file. The length bound was never this
+     * file's job — `routes/web.php` constrains the token and the controller refuses one that does not
+     * resolve.
+     */
+    public function test_no_location_regex_carries_an_unquoted_brace(): void
+    {
+        $offenders = [];
+
+        foreach (explode("\n", $this->conf()) as $line) {
+            $trimmed = trim($line);
+
+            if (! str_starts_with($trimmed, 'location ~')) {
+                continue;
+            }
+
+            // The pattern is everything up to the opening block brace.
+            $pattern = trim((string) preg_replace('/\s*\{\s*$/', '', $trimmed));
+            $quoted = str_contains($pattern, '"') || str_contains($pattern, "'");
+
+            if (! $quoted && preg_match('/\{|\}/', substr($pattern, strlen('location ~')))) {
+                $offenders[] = $trimmed;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'an unquoted { or } in a location regex — nginx will refuse to start and the whole site 502s',
         );
     }
 
