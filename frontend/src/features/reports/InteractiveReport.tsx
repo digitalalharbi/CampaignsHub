@@ -1,3 +1,4 @@
+import type { FormatIntelligencePayload } from '@/features/content/api'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
 import { sectionShown, withStreamsSlide } from './reportSections'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
@@ -64,6 +65,14 @@ export interface ReportData {
   attention?: AttentionItem[] | null
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
+  /**
+   * CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», the same answer in every document.
+   *
+   * SAME NUMBERS EVERYWHERE: the interactive report, the PDF and the operator's own Analytics read
+   * one service. Only the depth drawn differs, never the figures — a print renderer that recomputed
+   * would be the second answer this contract exists to prevent.
+   */
+  content_formats?: FormatIntelligencePayload | null
   business_streams?: BusinessStreamRow[]
   business_streams_cover_total?: boolean
   period: { from: string; to: string }
