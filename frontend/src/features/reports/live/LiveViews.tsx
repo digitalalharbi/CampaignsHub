@@ -4,6 +4,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { money, rowMoney } from '@/features/analytics/format'
+import { FormatComparisonView } from '@/features/content/CreativeFormatComparison'
 import { canonicalPlatform } from '@/lib/platforms'
 import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
@@ -327,6 +328,27 @@ export function DashboardView({
             locale={locale}
             onOpen={onOpenContent}
           />
+
+          {/*
+            CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», for the client.
+
+            The same answer the operator reads, from the same service, carried in this payload because
+            the reader has no session to ask with. Beneath the content it is about: a reader came for
+            the creatives, and the comparison is what they read after seeing them.
+
+            A summary gets the compact answer — the verdict and what it cost — and a detailed report
+            the whole reading. The figures are identical either way; only the depth differs.
+          */}
+          {payload.content_formats != null && (
+            <div>
+              <SectionTitle>{ar ? 'أداء أنواع المحتوى' : 'Content format performance'}</SectionTitle>
+              <FormatComparisonView
+                payload={payload.content_formats}
+                depth={payload.form === 'executive_summary' ? 'compact' : 'full'}
+                ar={ar}
+              />
+            </div>
+          )}
         </section>
       )}
       {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}

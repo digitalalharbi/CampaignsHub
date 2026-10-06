@@ -47,7 +47,22 @@ export function CreativeFormatComparison({ projectId, from, to, accountId, campa
   if (answer.isLoading) return <Skeleton className="h-28 w-full rounded-xl" />
   if (answer.data === undefined) return null
 
-  const payload = answer.data
+  return <FormatComparisonView payload={answer.data} depth={depth} ar={ar} />
+}
+
+/**
+ * The same module, drawn from a payload that is already in hand.
+ *
+ * A client report carries its answer in the report payload — the reader has no session and no
+ * project endpoint to call — so the fetching and the drawing are separated rather than duplicated.
+ * One component renders both, which is what makes «the same numbers everywhere» true by
+ * construction rather than by discipline.
+ */
+export function FormatComparisonView({ payload, depth = 'full', ar }: {
+  payload: FormatIntelligencePayload
+  depth?: 'compact' | 'medium' | 'full'
+  ar: boolean
+}) {
   const lead = leadObjective(payload)
 
   if (lead === null) {

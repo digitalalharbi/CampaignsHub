@@ -5,6 +5,7 @@ import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
 import { deleteData, getData, postData, putData } from '@/lib/api/client'
+import type { FormatIntelligencePayload } from '@/features/content/api'
 import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import type { BusinessStreamRow } from './BusinessStreamsSection'
@@ -358,6 +359,17 @@ export interface LivePayload {
    * distinction the totals pivot cannot carry, because it coalesces every stage to zero.
    */
   result_stages?: Record<string, { count: number | null; reported: boolean }> | null
+  /**
+   * CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», carried rather than fetched.
+   *
+   * The reader of a client link has no session and no project endpoint to call, so the answer travels
+   * with the report. It is the SAME service's answer the operator reads, redacted where the link
+   * redacts: no ad accounts, and no spend mix on a link that hides spend.
+   *
+   * Null — never `[]` — when the content section is hidden: an empty array is truthy here, and the
+   * page would render the block and then read a key off it.
+   */
+  content_formats?: FormatIntelligencePayload | null
   /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *
