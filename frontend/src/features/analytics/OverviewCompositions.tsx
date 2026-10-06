@@ -16,6 +16,7 @@ import { useBudget, useCampaigns, useDrivers, useFreshness, usePlatforms, useSum
 import { useUi } from '@/stores/ui'
 import type { CommerceSummary, MetricFilters } from './api'
 import { KpiCards } from './KpiCards'
+import { CreativeFormatComparison } from '@/features/content/CreativeFormatComparison'
 
 /**
  * SURFACE-COMPOSITION-001 — one engine, two compositions.
@@ -142,7 +143,12 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
 
   // `projectId` travels with the data so the overview's campaign rows can open the campaign
   // they name — CAMPAIGN-DRILL-001.
-  return { ar, s, ts, objective, reportingCurrency, points, series, chartCurrency, comparable, drivers, strip, vm, campaigns, platformRows, projectId }
+  /*
+    `range` travels with the data for the same reason `projectId` does: a composition that draws a
+    block scoped to this period must be able to SAY which period, and re-deriving it from the
+    filters would be a second answer to «which window is this».
+  */
+  return { ar, s, ts, objective, reportingCurrency, points, series, chartCurrency, comparable, drivers, strip, vm, campaigns, platformRows, projectId, range }
 }
 
 export type OverviewData = ReturnType<typeof useOverviewData>
@@ -256,7 +262,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
  * region, and nothing that DRAWS may be rendered below the first block that EXPLAINS.
  */
 export function DashboardOverview(d: OverviewData) {
-  const { ar, s, ts, series, chartCurrency, comparable, drivers, vm, points, objective, reportingCurrency } = d
+  const { ar, s, ts, series, chartCurrency, comparable, drivers, vm, points, objective, reportingCurrency, projectId, range } = d
 
   return (
     <div className="space-y-4" data-testid="dashboard-overview" data-composition="dashboard">
@@ -457,6 +463,27 @@ export function DashboardOverview(d: OverviewData) {
           // reader is already looking at rather than on a second one fetched for the purpose.
           series={points}
         />
+
+        {/*
+          CREATIVE-FORMAT-INTELLIGENCE-001, compactly — «image or video, here?» on the dashboard.
+
+          DASHBOARD-HIERARCHY: beneath everything, like the diagnosis above it. This is an answer a
+          reader takes into next month's brief rather than a figure about today, and nothing
+          analytical may sit above the primary KPI region.
+
+          The COMPACT depth: the verdict, the two figures behind it and the evidence. The charts and
+          the exact table live in Content Analytics — repeating them here would be the deep reading
+          printed twice rather than an answer somebody can act on at a glance.
+        */}
+        {projectId != null && projectId !== '' && (
+          <CreativeFormatComparison
+            projectId={projectId}
+            from={range?.from}
+            to={range?.to}
+            depth="compact"
+            ar={ar}
+          />
+        )}
     </div>
   )
 }
