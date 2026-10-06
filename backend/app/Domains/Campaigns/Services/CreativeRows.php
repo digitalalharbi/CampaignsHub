@@ -427,29 +427,52 @@ final class CreativeRows
         $projectId = app(ProjectContext::class)->projectId();
         $metric = self::SORTABLE;
 
-        if (in_array($sort, $metric, true)) {
-            /*
-             * ANALYTICS-PROVENANCE-001 — the ORDER is a figure too.
-             *
-             * This ranks a real library by a total that included seeded rows, so a creative could
-             * outrank another on spend it never had. See `CreativeDemoPolicy` for why the scope and
-             * not the window decides.
-             */
-            $totals = DB::table('creative_daily_metrics')
+        /*
+         * CONTENT-OBJECTIVE-SORT-001 — a RATE is not a sum, and the owner asked for one by name.
+         *
+         * «Engagement rate» is the one metric in his list that no column holds. It is computed over
+         * the WINDOW's totals — `SUM(engagements) / SUM(impressions)` — rather than as an average of
+         * daily rates, because averaging days weights a day with ten impressions the same as one with
+         * ten thousand, and a creative that served once at 100% would lead the library.
+         *
+         * No impressions is no RATE, never a zero one: a zero would read as «nobody engaged» about a
+         * creative nobody was shown. `NULLIF` makes the division null and `NULLS LAST` puts it where
+         * an unknown belongs, which is the same treatment every other unmeasured figure gets here.
+         */
+        if ($sort === 'engagement_rate') {
+            $projectId = app(ProjectContext::class)->projectId();
+
+            $rates = DB::table('creative_daily_metrics')
                 ->select('creative_id')
-                ->selectRaw('SUM('.$sort.') AS sort_total')
+                ->selectRaw('SUM(engagements)::numeric / NULLIF(SUM(impressions), 0) AS sort_total')
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                 ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
                 ->groupBy('creative_id');
 
             return $query
-                ->leftJoinSub($totals, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
+                ->leftJoinSub($rates, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
                 ->select('external_creatives.*')
-                // NULLS LAST: a creative the platform reported nothing for has not «earned last
-                // place» on spend — it has no figure at all, and floating it to the top of an
-                // ascending sort would read as the cheapest creative in the project.
                 ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+                ->orderBy('external_creatives.name')
                 ->orderBy('external_creatives.id');
+        }
+
+        /*
+         * CONTENT-MEASURED-FIRST-001 — an explicit metric sort obeys the same rule the automatic one
+         * does, and for the same reason.
+         *
+         * This used to be its own ordering: `SUM(metric) DESC NULLS LAST` then `id`. Observed on a
+         * real library, ordering by `engagements` where no creative had any made every total null, so
+         * every row tied and fell to `id` — and three creatives with NO figures of any kind came out
+         * above ones that had spent thousands, in an order a UUID decided. That is the owner's
+         * original complaint arriving through a different door.
+         *
+         * One ordering serves all three now — `relevance`, `auto` and an explicitly chosen metric —
+         * so they cannot drift into disagreeing about what «measured» means, and a metric the window
+         * is silent about falls to spend rather than to an identifier.
+         */
+        if (in_array($sort, $metric, true)) {
+            return $this->applyMeasuredFirst($query, $sort, $from, $to);
         }
 
         return match ($sort) {

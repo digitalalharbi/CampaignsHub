@@ -142,6 +142,83 @@ final class CreativeObjectiveSortTest extends TestCase
         $this->assertSame('spend', $rows->objectiveSortMetric('a objective nobody has heard of'));
     }
 
+    /**
+     * CONTENT-OBJECTIVE-SORT-001 — «engagement rate» is a RATE, and a rate is not a sum.
+     *
+     * The owner asked for it by name among the filters. It is the one he listed that no column holds:
+     * it is `engagements ÷ impressions`, computed over the window's totals rather than averaged over
+     * days, because an average of daily rates weights a day with ten impressions the same as one with
+     * ten thousand.
+     */
+    public function test_engagement_rate_orders_by_the_ratio_rather_than_by_the_count(): void
+    {
+        /*
+         * The names are deliberately in the WRONG alphabetical order for the expected result.
+         *
+         * An unrecognised sort key falls through to the default arm, which breaks its ties on name —
+         * so a fixture whose names happen to agree with the expected order passes whether or not the
+         * sort exists. The first draft of this test did exactly that and went green before a line of
+         * it was implemented.
+         */
+        $this->creative('a — many engagements, enormous reach', spend: 1.0, impressions: 1_000_000, engagements: 10_000);
+        $this->creative('z — fewer engagements, tiny reach', spend: 1.0, impressions: 1_000, engagements: 500);
+
+        // 1% against 50%: the smaller count is the higher rate, which is the whole point of the sort.
+        $this->assertSame(
+            ['z — fewer engagements, tiny reach', 'a — many engagements, enormous reach'],
+            $this->orderedBy('engagement_rate'),
+        );
+    }
+
+    /** No impressions is no rate — never a zero one, which would read as «nobody engaged». */
+    public function test_a_creative_with_no_impressions_has_no_rate_and_sorts_last(): void
+    {
+        $this->creative('a — no impressions', spend: 5.0, impressions: 0, engagements: 0);
+        $this->creative('z — has a rate', spend: 1.0, impressions: 100, engagements: 1);
+
+        $this->assertSame(['z — has a rate', 'a — no impressions'], $this->orderedBy('engagement_rate'));
+    }
+
+    /**
+     * CONTENT-MEASURED-FIRST-001 — an explicit metric sort obeys the same rule the automatic one does.
+     *
+     * Observed on a real library, ordering by `engagements` where no creative had any: every total
+     * was null, so every row tied and fell to `id` — and three creatives with NO figures of any kind
+     * came out above ones that had spent thousands. That is the owner's original complaint arriving
+     * through a different door, so it is closed the same way: measured first, whatever the chosen
+     * metric reports.
+     */
+    public function test_a_metric_sort_still_puts_measured_content_above_unmeasured(): void
+    {
+        // Neither has the metric; one of them has figures, and that is the whole difference.
+        $this->creative('a — nothing at all');
+        $this->creative('z — spent, but no engagements', spend: 500.0, impressions: 9_000);
+
+        $this->assertSame(
+            ['z — spent, but no engagements', 'a — nothing at all'],
+            $this->orderedBy('engagements'),
+        );
+    }
+
+    /** And spend breaks the tie when the chosen metric is silent for everyone. */
+    public function test_a_silent_metric_falls_to_spend_rather_than_to_an_identifier(): void
+    {
+        $this->creative('a — small spend', spend: 10.0, impressions: 100);
+        $this->creative('z — large spend', spend: 5_000.0, impressions: 100);
+
+        $this->assertSame(['z — large spend', 'a — small spend'], $this->orderedBy('engagements'));
+    }
+
+    /** @return list<string> */
+    private function orderedBy(string $sort): array
+    {
+        $query = ExternalCreative::query()->where('project_id', $this->project->id);
+
+        return app(CreativeRows::class)
+            ->applySort($query, $sort, $this->to->copy()->subDays(30), $this->to)
+            ->get()->pluck('name')->map(strval(...))->all();
+    }
+
     /** @return list<string> */
     private function ordered(?string $objective): array
     {

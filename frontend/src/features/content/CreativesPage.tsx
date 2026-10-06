@@ -145,6 +145,7 @@ const COPY = {
     sortEngagements: 'الأعلى تفاعلًا',
     sortVideoViews: 'الأعلى مشاهدة',
     sortReach: 'الأوسع وصولًا',
+    sortEngagementRate: 'الأعلى معدل تفاعل',
     sortName: 'الاسم',
     compare: 'مقارنة',
     compareHint: 'اختر إعلانين أو أكثر للمقارنة.',
@@ -231,6 +232,7 @@ const COPY = {
     sortEngagements: 'Most engagements',
     sortVideoViews: 'Most views',
     sortReach: 'Widest reach',
+    sortEngagementRate: 'Highest engagement rate',
     sortName: 'Name',
     compare: 'Compare',
     compareHint: 'Select two or more ads to compare.',
@@ -939,6 +941,9 @@ export function CreativesPage() {
                 { value: 'clicks', label: t.sortClicks },
                 { value: 'impressions', label: t.sortImpressions },
                 { value: 'engagements', label: t.sortEngagements },
+                /* A RATE, computed over the window's totals — see `applySort`'s note on why not an
+                   average of daily rates. */
+                { value: 'engagement_rate', label: t.sortEngagementRate },
                 { value: 'video_views', label: t.sortVideoViews },
                 { value: 'reach', label: t.sortReach },
                 { value: 'name', label: t.sortName },
@@ -1988,6 +1993,7 @@ function metricName(metric: string, ar: boolean): string {
     impressions: { ar: 'الظهور', en: 'impressions' },
     clicks: { ar: 'النقرات', en: 'clicks' },
     engagements: { ar: 'التفاعلات', en: 'engagements' },
+    engagement_rate: { ar: 'معدل التفاعل', en: 'engagement rate' },
     video_views: { ar: 'المشاهدات', en: 'views' },
     reach: { ar: 'الوصول', en: 'reach' },
     revenue: { ar: 'الإيراد', en: 'revenue' },
