@@ -30,6 +30,41 @@ import { useUi } from '@/stores/ui'
  */
 
 export const CHART_SERIES = ['var(--brand-600)', 'var(--info)', 'var(--purple)', 'var(--teal)', 'var(--warning)']
+/**
+ * CHART-TICK-DIRECTION-001 — an axis tick is laid out in the direction recharts anchors it.
+ *
+ * ## The defect
+ *
+ * Recharts draws a tick as `<text text-anchor="end" x="120">`, which right-aligns the label against
+ * the axis — exactly what a horizontal bar chart's category column needs. But `text-anchor` resolves
+ * in the WRITING direction, and on an Arabic page the chart inherits `direction: rtl` from the
+ * document. «End» then means the left-hand end, so every label is laid out from its anchor OUTWARD
+ * INTO the plot area, where the chart clips it.
+ *
+ * Measured on `/app/leads` in Arabic: «جديد» occupied 23px starting at the axis line and running
+ * under the bars, of which one glyph was visible. Every other label on that axis was in the same
+ * state, and so was every horizontal ranking chart in the product read in Arabic.
+ *
+ * ## It has already cost the product a chart
+ *
+ * `PlatformResultsBars` in the live report is hand-rolled markup, and its docblock says why: «under
+ * `dir="rtl"` that chart dropped its category labels». The conclusion drawn at the time was that
+ * recharts does not work in RTL; the actual cause is this one inherited property, and the price was
+ * a second bar-chart implementation.
+ *
+ * ## Why the tick and not the chart
+ *
+ * Only text LAYOUT is affected. Recharts computes every x and y in JavaScript and writes them as SVG
+ * attributes, so no axis, bar or line moves because of direction — a blanket rule on the container
+ * would fix the same labels and also take the LEGEND, which is HTML whose reading order should keep
+ * following the page. The Arabic label still shapes and renders right-to-left inside its own run;
+ * that is the bidi algorithm, not the box.
+ *
+ * Applied in both languages rather than behind `rtl:`, because the anchor is the same in both and a
+ * page should not depend on an inherited default that nothing states.
+ */
+const TICK_LTR = '[&_.recharts-cartesian-axis-tick_text]:[direction:ltr]'
+
 const AXIS = { stroke: 'var(--text-muted)', fontSize: 12 }
 const GRID = <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 
@@ -82,6 +117,7 @@ export function MetricLineChart({
   const axisOf = (key: string) => (split && key === rightAxisFor ? 'right' : 'left')
 
   return (
+    <div className={TICK_LTR}>
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         {GRID}
@@ -103,6 +139,7 @@ export function MetricLineChart({
         ))}
       </LineChart>
     </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -140,6 +177,7 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: 
   const series = spendRevenueSeriesNames(ar)
 
   return (
+    <div className={TICK_LTR}>
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <defs>
@@ -155,6 +193,7 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: 
         <Area name={series.revenue} type="monotone" dataKey="revenue" stroke="var(--info)" strokeWidth={2} fill="url(#aRev)" isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -224,6 +263,7 @@ export function RankingBarChart({
 }) {
   const cat = horizontal ? { type: 'category' as const } : {}
   return (
+    <div className={TICK_LTR}>
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
         {GRID}
@@ -254,6 +294,7 @@ export function RankingBarChart({
         ))}
       </BarChart>
     </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -463,6 +504,7 @@ export function SpendEfficiencyScatter({
   }
 
   return (
+    <div className={TICK_LTR}>
     <ResponsiveContainer width="100%" height={height}>
       <ScatterChart margin={{ top: 8, right: 12, bottom: 24, left: 8 }}>
         <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -490,6 +532,7 @@ export function SpendEfficiencyScatter({
         <Scatter data={points} fill="var(--brand-600)" />
       </ScatterChart>
     </ResponsiveContainer>
+    </div>
   )
 }
 
