@@ -277,6 +277,13 @@ final class ReportGenerator
              */
             'ads_roster' => $ads['roster'],
             'creatives_in_scope' => $ads['creatives_in_scope'],
+            /*
+             * CONTENT-MEASURED-FIRST-001 §B — how many of the scope the period holds no figure for.
+             *
+             * Travels beside `creatives_in_scope` so the section can say «65 ran, 7 of them with no
+             * figures in this period» rather than quietly listing 58 under a heading that claims 65.
+             */
+            'creatives_unmeasured' => $ads['creatives_unmeasured'],
             'creatives_withheld' => $ads['creatives_withheld'],
             'ads_absent_reason' => $ads['reason'],
             /*

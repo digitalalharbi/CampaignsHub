@@ -12,7 +12,7 @@ import { MetricValue } from './MetricValue'
 import { metricLabel } from './metrics'
 import { canonicalFigureKeys } from './canonicalFigures'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
-import { absenceLabel, aspectClass, assetAspect, mediaFitClass, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, assetAspect, mediaFitClass, posterSource, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -1524,7 +1524,22 @@ function CreativeGridCard({
            * synced; the preview payload carries them now. Where it says nothing the frame keeps the
            * shape it has always had, because guessing tall is a claim too.
            */
-          className={showPreviewPanel ? `block w-full bg-surface-hover ${aspectClass(preview.aspect ?? null) ?? 'aspect-video'}` : 'block w-full bg-surface-hover'}
+          /*
+            CONTENT-COVER-FILL-001 — one frame for every cover, and the picture fills it.
+
+            The frame took each asset's OWN aspect, so a 9:16 story produced a card twice the height
+            of the 16:9 beside it and a mixed library became a wall of strips of different heights.
+            The owner named exactly that: «the cover must be the full cover, not a tall shape … so it
+            holds an image that fills the whole cover, not only a portrait strip.»
+
+            Square, because the wall holds both: a 16:9 frame would take a story down to its middle
+            third, and a 9:16 frame is the tall card being removed. A square crops both shapes by a
+            similar amount and tiles evenly at every column count.
+
+            The crop is real, and is why the whole asset stays one click away — the viewer contains,
+            its own guard is untouched, and the owner has confirmed that surface reads correctly.
+          */
+          className={showPreviewPanel ? 'block w-full bg-surface-hover aspect-square' : 'block w-full bg-surface-hover'}
         >
           {usablePoster ? (
             <PosterImage
@@ -1556,7 +1571,7 @@ function CreativeGridCard({
                 about one creative. Where the platform stated no shape the frame is a guessed 16:9
                 and the asset is contained rather than cropped into it.
               */
-              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null)}`}
+              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null, 'cover')}`}
             />
           ) : video ? (
             /*
@@ -1583,7 +1598,7 @@ function CreativeGridCard({
                * disagreeing about what a portrait creative is.
                */
               /* The same rule as the still above, from the same source — see CONTENT-PREVIEW-FIT-001. */
-              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null)}`}
+              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null, 'cover')}`}
               onUnavailable={() => setBrokenVideo(true)}
             />
           ) : showPreviewPanel ? (

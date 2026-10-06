@@ -398,8 +398,31 @@ final class CreativeRows
         return match ($sort) {
             'name' => $query->orderBy('name')->orderBy('id'),
             /*
-             * ENTITY-RELEVANCE-ORDERING-001 — what is running, then what spent most, then a key that
-             * cannot move.
+             * CONTENT-MEASURED-FIRST-001 / ENTITY-RELEVANCE-ORDERING-001 — what the window MEASURED,
+             * then what spent most, then what is running, then a key that cannot move.
+             *
+             * ## The running-state used to come first, and that was the defect the owner found
+             *
+             * A creative that had not delivered in over a year, with no metric row of any kind in the
+             * window, sits in the «idle» bucket — and idle outranks «stopped», so it was placed above
+             * a paused creative that had actually spent 2,704.50 in the same window. Measured on a
+             * real library: position 3 «Old untouched active», nothing at all; position 4 «Bundle
+             * Carousel», 2,704.50 across 6,010 impressions.
+             *
+             * On a page whose purpose is putting budget where it performs, that tells an operator the
+             * thing nothing is known about matters more than the thing the money went to. It also
+             * reads as a DATA fault rather than an ordering one: dead content at the top of a
+             * performance list makes a reader stop trusting the figures beside it.
+             *
+             * So measurement leads. A creative the window holds a figure for ranks above one it holds
+             * nothing for, whatever either status says; within the measured, spend decides descending,
+             * because continuous management moves budget toward what performs and spend order is
+             * therefore performance order; within the unmeasured — everything we cannot rank — the
+             * previous reading applies unchanged.
+             *
+             * A reported ZERO is measurement. «The platform told us this spent nothing» and «the
+             * platform told us nothing» are different facts, and `measured` counts ROWS rather than
+             * money so the first keeps its place ahead of the second.
              *
              * The library's default was `last_active_at DESC`, which is recency and not relevance:
              * a paused campaign's creative that delivered yesterday sorted above a serving creative
@@ -418,6 +441,12 @@ final class CreativeRows
                     DB::table('creative_daily_metrics')
                         ->select('creative_id')
                         ->selectRaw('SUM(spend) AS sort_total')
+                        /*
+                         * Rows, not money. A creative the platform reported a zero for is MEASURED;
+                         * one it reported nothing for is not, and `SUM(spend)` cannot tell them apart
+                         * because both give 0 or NULL depending on the join alone.
+                         */
+                        ->selectRaw('COUNT(*) AS measured_rows')
                         ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                         /* Relevance is spend, and seeded spend is not this customer's — see above. */
                         ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
@@ -428,12 +457,14 @@ final class CreativeRows
                     'external_creatives.id',
                 )
                 ->select('external_creatives.*')
+                /* Measured first — the whole of this rule's correction. */
+                ->orderByRaw('CASE WHEN COALESCE(sorted.measured_rows, 0) > 0 THEN 0 ELSE 1 END')
+                ->orderByRaw('sorted.sort_total DESC NULLS LAST')
                 ->orderByRaw(
                     'CASE WHEN external_creatives.status IN ('.implode(', ', array_fill(0, count(Relevance::NOT_RUNNING), '?')).') THEN 2'
                     .' WHEN external_creatives.last_active_at >= ? THEN 0 ELSE 1 END',
                     [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
                 )
-                ->orderByRaw('sorted.sort_total DESC NULLS LAST')
                 /*
                  * ENTITY-RELEVANCE-ORDERING-001 — and the same tie, in the order the library
                  * actually opens on.
