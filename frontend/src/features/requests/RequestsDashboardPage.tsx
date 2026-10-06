@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-react'
 import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestBreakdown, type RequestFilters, type RequestRow } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
-import { ChartCard } from '@/features/analytics/charts'
+import { ChartCard, RankingBarChart, StatusMixBar } from '@/features/analytics/charts'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -108,7 +108,7 @@ export function RequestsDashboardPage() {
 
       {/* Filters */}
       <RequestCharts breakdown={query.data?.meta?.breakdown} ar={ar} loading={query.isLoading}
-        error={query.isError} failure={query.error} />
+        queueTotal={query.data?.meta?.summary?.total} error={query.isError} failure={query.error} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <form className="relative" onSubmit={(e) => { e.preventDefault(); set({ q: search || undefined }) }}>
@@ -288,12 +288,21 @@ function RequestCharts({
   breakdown,
   ar,
   loading,
+  queueTotal,
   error,
   failure,
 }: {
   breakdown?: RequestBreakdown
   ar: boolean
   loading: boolean
+  /**
+   * How many requests the filter actually matched — the SLA composition's denominator.
+   *
+   * Summing the status buckets would work right up until a status this build has no row for appears,
+   * at which point every share would be computed over «the part we have names for» and all of them
+   * would be too large. The server already counts the set; this is that count.
+   */
+  queueTotal?: number
   error: boolean
   /** The thrown value behind `error`, so a refusal can be told apart from a broken summary. */
   failure: unknown
@@ -327,59 +336,90 @@ function RequestCharts({
   }
 
   const sla = breakdown.sla
-  const slaTotal = sla.breached + sla.due_soon + sla.on_track
+  const bars = (rows: Array<{ key: string; label: string; label_en: string; total: number }>) =>
+    rows.map((r) => ({ label: ar ? r.label : r.label_en, count: r.total }))
 
   return (
     <div className="mb-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts">
       <ChartCard title={ar ? 'حسب الحالة' : 'By status'}>
-        <BarRows rows={breakdown.by_status.map((r) => ({ label: ar ? r.label : r.label_en, value: r.total }))} total={total} />
+        <RankedBreakdown testId="requests-by-status" rows={bars(breakdown.by_status)} ar={ar} />
       </ChartCard>
 
       <ChartCard title={ar ? 'حسب نوع الخدمة' : 'By service type'}>
         {breakdown.by_type.length > 0
-          ? <BarRows rows={breakdown.by_type.map((r) => ({ label: ar ? r.label : r.label_en, value: r.total }))} total={total} />
-          : <p className="py-8 text-center text-sm text-text-muted">{ar ? 'لا توجد أنواع لعرضها.' : 'No types to show.'}</p>}
+          ? <RankedBreakdown testId="requests-by-type" rows={bars(breakdown.by_type)} ar={ar} />
+          : <p data-testid="requests-by-type-empty" className="py-8 text-center text-sm text-text-muted">{ar ? 'لا توجد أنواع لعرضها.' : 'No types to show.'}</p>}
       </ChartCard>
 
+      {/*
+        VIZ-REQUESTS-001 — the SLA card is a COMPOSITION, and was drawn as three comparisons.
+
+        Breached, due soon, on track and «no SLA» are mutually exclusive states of the same requests.
+        Three separate bars, each scaled to the same total, asks the reader to add three lengths back
+        together to see the one thing this card exists to say: how much of the queue is in trouble.
+
+        The denominator is the queue's own total rather than the sum of the bands. They DO sum to it —
+        the server's four filters partition the set — but passing the total is what makes that a
+        checked fact rather than an assumption: a build where they stop partitioning shows a named
+        remainder instead of silently rescaling.
+      */}
       <ChartCard title={ar ? 'الالتزام بالـSLA' : 'SLA'}>
-        <div className="grid gap-2">
-          {([
-            ['breached', sla.breached, ar ? 'متجاوَز' : 'Breached', 'bg-danger'],
-            ['due_soon', sla.due_soon, ar ? 'يستحق خلال 24 ساعة' : 'Due within 24h', 'bg-warning'],
-            ['on_track', sla.on_track, ar ? 'ضمن المدة' : 'On track', 'bg-success'],
-          ] as const).map(([key, value, label, tone]) => (
-            <div key={key} className="flex items-center gap-2.5" data-testid={`sla-${key}`}>
-              <span className="w-36 shrink-0 truncate text-xs text-text-secondary">{label}</span>
-              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-secondary">
-                <div className={`h-full rounded-full ${tone}`} style={{ width: `${slaTotal > 0 ? (value / slaTotal) * 100 : 0}%` }} />
-              </div>
-              <span className="tnum w-10 shrink-0 text-end text-xs font-semibold text-text-primary">{value}</span>
-            </div>
-          ))}
-        </div>
+        <StatusMixBar
+          testId="sla-mix"
+          ar={ar}
+          label={ar ? 'الطلبات' : 'Requests'}
+          total={queueTotal ?? total}
+          residualLabel={ar ? 'غير محتسَب' : 'Unaccounted'}
+          bands={[
+            { key: 'breached', label: ar ? 'متجاوَز' : 'Breached', count: sla.breached, tone: 'danger' },
+            { key: 'due_soon', label: ar ? 'يستحق خلال 24 ساعة' : 'Due within 24h', count: sla.due_soon, tone: 'warning' },
+            { key: 'on_track', label: ar ? 'ضمن المدة' : 'On track', count: sla.on_track, tone: 'success' },
+            /*
+             * Neutral, deliberately. «No SLA» is not a grade — it is the absence of one — and giving
+             * it the success colour is exactly the mistake the server-side bucket was making.
+             */
+            { key: 'no_sla', label: ar ? 'بلا مدّة متفق عليها' : 'No SLA set', count: sla.no_sla, tone: 'neutral' },
+          ]}
+        />
       </ChartCard>
     </div>
   )
 }
 
 /**
- * A labelled proportion bar per row.
+ * A breakdown, ranked, through the product's own bar chart.
  *
- * Bars rather than a pie: these lists have up to eight entries with a long tail, and a reader comparing
- * «under review» to «new» wants two lengths side by side, not two wedges they have to estimate.
+ * This drew its own: a label column, a track, a fill, a percentage width. The original's docblock
+ * argued bars over a pie — «a reader comparing under review to new wants two lengths side by side,
+ * not two wedges they have to estimate» — and that argument is right and is exactly what the canonical
+ * ranked bar already does, with an axis, a tooltip and the product's shared type scale.
+ *
+ * The list beneath is the chart's key, not a duplicate: a recharts chart is an SVG a screen reader
+ * walks as unlabelled shapes, and the labels here are the axis's own.
  */
-function BarRows({ rows, total }: { rows: Array<{ label: string; value: number }>; total: number }) {
+function RankedBreakdown({ testId, rows, ar }: { testId: string; rows: Array<{ label: string; count: number }>; ar: boolean }) {
   return (
-    <div className="grid gap-2">
-      {rows.map((r) => (
-        <div key={r.label} className="flex items-center gap-2.5">
-          <span className="w-32 shrink-0 truncate text-xs text-text-secondary" title={r.label}>{r.label}</span>
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-secondary">
-            <div className="h-full rounded-full bg-brand-500" style={{ width: `${total > 0 ? (r.value / total) * 100 : 0}%` }} />
-          </div>
-          <span className="tnum w-10 shrink-0 text-end text-xs font-semibold text-text-primary">{r.value}</span>
-        </div>
-      ))}
+    <div data-testid={testId} className="min-w-0">
+      <RankingBarChart
+        horizontal
+        /*
+          46px a band, not 38. A service type is a SENTENCE — «Tracking & conversions setup» — and the
+          category axis wraps it to two lines inside a 120px column; at 38 the second line of one label
+          sat against the first line of the next. Measured on the service-type card at 1440.
+        */
+        height={Math.max(160, rows.length * 46)}
+        data={rows}
+        bars={[{ key: 'count', name: ar ? 'طلبات' : 'Requests', kind: 'num' }]}
+      />
+      <ul data-testid={`${testId}-legend`} className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
+        {rows.map((r) => (
+          <li key={r.label} className="flex items-center gap-1">
+            <span>{r.label}</span>
+            <span className="tnum font-bold text-text-primary" dir="ltr">{r.count.toLocaleString('en-US')}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
+
