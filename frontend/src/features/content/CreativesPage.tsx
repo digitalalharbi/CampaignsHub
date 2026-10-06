@@ -817,26 +817,6 @@ export function CreativesPage() {
         locale={locale}
       />
 
-      {/*
-        CREATIVE-FORMAT-INTELLIGENCE-001, compactly — «image or video, here?» where content is browsed.
-
-        The COMPACT depth: the verdict for the objective most of this project was bought for, what it
-        cost, and the evidence it rests on. The whole reading lives in Content Analytics; repeating
-        it here would be a second page of the same analysis rather than an answer somebody can act on
-        while they are looking at the assets themselves.
-
-        Same endpoint, same figures. Only the depth differs.
-      */}
-      {currentProjectId != null && currentProjectId !== '' && (
-        <CreativeFormatComparison
-          projectId={currentProjectId}
-          from={from}
-          to={to}
-          depth="compact"
-          ar={ar}
-        />
-      )}
-
       <FilterBar
         id="content"
         ar={ar}
@@ -1011,6 +991,33 @@ export function CreativesPage() {
             />
         </>
       </FilterBar>
+
+      {/*
+        BELOW the toolbar, not above it — CONTENT-TOOLBAR-STABLE-001.
+        *
+        * This block arrives with its own query, and anything that appears LATE above the toolbar
+        * pushes the view toggle down: measured at 144px, which is a reader aiming at a control and
+        * hitting whatever took its place. Beneath the toolbar a late arrival moves only itself.
+      */}
+      {/*
+        CREATIVE-FORMAT-INTELLIGENCE-001, compactly — «image or video, here?» where content is browsed.
+
+        The COMPACT depth: the verdict for the objective most of this project was bought for, what it
+        cost, and the evidence it rests on. The whole reading lives in Content Analytics; repeating
+        it here would be a second page of the same analysis rather than an answer somebody can act on
+        while they are looking at the assets themselves.
+
+        Same endpoint, same figures. Only the depth differs.
+      */}
+      {currentProjectId != null && currentProjectId !== '' && (
+        <CreativeFormatComparison
+          projectId={currentProjectId}
+          from={from}
+          to={to}
+          depth="compact"
+          ar={ar}
+        />
+      )}
 
       {selected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs text-text-secondary">
