@@ -297,6 +297,15 @@ export interface LibraryPage {
    * whether the platform was never asked, the request failed, or the creative did not run.
    */
   metrics_availability: Record<string, import('./availability').MetricsAvailability>
+  /**
+   * CONTENT-OBJECTIVE-SORT-001 — the order the server actually applied, and where it came from.
+   *
+   * `metric` is the column the automatic sort ranked by; `objective` is the one it read that from, or
+   * null where the filter named none or several and the order fell back to spend. Stated rather than
+   * inferred, because an order a reader cannot account for is indistinguishable from a bug — which is
+   * the reason this field exists at all.
+   */
+  sort?: { applied: string; metric: string; objective: string | null }
   filters: LibraryFilterOptions
 }
 

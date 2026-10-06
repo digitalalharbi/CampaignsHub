@@ -132,11 +132,19 @@ const COPY = {
     from: 'من',
     to: 'إلى',
     sort: 'الترتيب',
+    sortAuto: 'تلقائي — حسب هدف الحملة',
+    sortedBy: 'مرتَّب حسب',
+    sortedByObjective: 'لأن هدف الحملات هنا',
+    sortedBySpendFallback: 'مرتَّب حسب الإنفاق — لم تُحدَّد وجهة واحدة لترتيبها عليها.',
     sortRelevance: 'ما يعمل الآن',
     sortRecent: 'الأحدث نشاطًا',
     sortSpend: 'الأعلى إنفاقًا',
     sortImpressions: 'الأعلى ظهورًا',
-    sortConversions: 'الأعلى نتائج',
+    sortConversions: 'الأعلى طلبات',
+    sortClicks: 'الأعلى نقرًا',
+    sortEngagements: 'الأعلى تفاعلًا',
+    sortVideoViews: 'الأعلى مشاهدة',
+    sortReach: 'الأوسع وصولًا',
     sortName: 'الاسم',
     compare: 'مقارنة',
     compareHint: 'اختر إعلانين أو أكثر للمقارنة.',
@@ -210,11 +218,19 @@ const COPY = {
     from: 'From',
     to: 'To',
     sort: 'Sort',
+    sortAuto: 'Automatic — by campaign objective',
+    sortedBy: 'Ordered by',
+    sortedByObjective: 'because the objective here is',
+    sortedBySpendFallback: 'Ordered by spend — no single objective was named to rank on.',
     sortRelevance: 'What is running',
     sortRecent: 'Most recently active',
     sortSpend: 'Highest spend',
     sortImpressions: 'Most impressions',
-    sortConversions: 'Most results',
+    sortConversions: 'Most orders',
+    sortClicks: 'Most clicks',
+    sortEngagements: 'Most engagements',
+    sortVideoViews: 'Most views',
+    sortReach: 'Widest reach',
     sortName: 'Name',
     compare: 'Compare',
     compareHint: 'Select two or more ads to compare.',
@@ -430,7 +446,16 @@ export function CreativesPage() {
   const [search, setSearch] = useState(() => initial.current.get('search') ?? '')
   const [from, setFrom] = useState(() => initial.current.get('from') ?? isoDaysAgo(29))
   const [to, setTo] = useState(() => initial.current.get('to') ?? isoDaysAgo(0))
-  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'relevance')
+  /*
+   * CONTENT-OBJECTIVE-SORT-001 — the default is the OBJECTIVE's metric, not a fixed one.
+   *
+   * Spend is the right order for «where is the money» and the wrong one for «what worked»: an
+   * awareness campaign that spent most is not the creative that was seen most, and ranking a sales
+   * library by spend puts the expensive creative above the one that actually sold. The server
+   * resolves which metric from the scope's objective and says so in `sort.metric`, which the strip
+   * below prints — an order a reader cannot account for is indistinguishable from a bug.
+   */
+  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'auto')
   const [page, setPage] = useState(1)
   const [axes, setAxes] = useState<Record<string, string[]>>(() => {
     const seeded: Record<string, string[]> = {}
@@ -817,6 +842,29 @@ export function CreativesPage() {
         locale={locale}
       />
 
+      {/*
+        CONTENT-OBJECTIVE-SORT-001 — the automatic order, accounted for.
+
+        An order a reader cannot explain is indistinguishable from a bug, and this unit exists
+        because an order nobody could explain made the owner doubt the figures beside it. So the
+        automatic sort says which metric it ranked by, and which objective it read that from — and
+        where the filter named none or several, it says it fell back to spend rather than implying a
+        goal the library does not have.
+
+        Only for `auto`: every other sort names its own metric in the control the reader just used.
+
+        Gated on what the SERVER applied, not on the local control. The two agree in normal use and
+        the server is the authority when they do not — it is the thing that actually ordered the rows,
+        and a note sourced from the control would describe an order the page merely asked for.
+      */}
+      {data?.sort?.applied === 'auto' && (
+        <p data-testid="content-sort-note" className="text-sm text-text-secondary">
+          {data.sort.objective !== null
+            ? `${t.sortedBy} ${metricName(data.sort.metric, ar)} — ${t.sortedByObjective} ${objectiveLabel(data.sort.objective, locale)}.`
+            : t.sortedBySpendFallback}
+        </p>
+      )}
+
       <FilterBar
         id="content"
         ar={ar}
@@ -877,11 +925,22 @@ export function CreativesPage() {
                  * thing an operator saw was work they could do nothing about. «Most recently active»
                  * stays on the list, because it is a real question — it is just not the first one.
                  */
+                /*
+                  CONTENT-OBJECTIVE-SORT-001 — the automatic order leads, because it is the default.
+                  «Most orders if the objective is sales, most clicks if it is engagement, most
+                  impressions if it is awareness, and so on for every objective» — the metric is
+                  resolved on the server from `ObjectiveFamily`, so this list never names one.
+                */
+                { value: 'auto', label: t.sortAuto },
                 { value: 'relevance', label: t.sortRelevance },
                 { value: 'recent', label: t.sortRecent },
                 { value: 'spend', label: t.sortSpend },
-                { value: 'impressions', label: t.sortImpressions },
                 { value: 'conversions', label: t.sortConversions },
+                { value: 'clicks', label: t.sortClicks },
+                { value: 'impressions', label: t.sortImpressions },
+                { value: 'engagements', label: t.sortEngagements },
+                { value: 'video_views', label: t.sortVideoViews },
+                { value: 'reach', label: t.sortReach },
                 { value: 'name', label: t.sortName },
               ]}
               onChange={(v) => { setSort(v); setPage(1) }}
@@ -1070,7 +1129,7 @@ export function CreativesPage() {
       )}
 
       {!libraryQuery.isPending && !libraryQuery.isError && creatives.length === 0 && (
-        <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-secondary">
+        <div data-testid="content-no-results" className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-secondary">
           {filtersTouched ? t.empty : t.emptyAll}
         </div>
       )}
@@ -1912,4 +1971,27 @@ function EmptyReasonPanel({ reason }: { reason: EmptyReason }) {
       )}
     </div>
   )
+}
+
+/**
+ * The sort metric's name, for the sentence that accounts for the automatic order.
+ *
+ * Local and small on purpose: these are the few keys {@see CreativeRows::SORTABLE} can order by, and
+ * the metric catalogue's own labels are written for a figure in a card rather than for the middle of
+ * a sentence. A key this list has not met prints as itself, which is visible and fixable, rather than
+ * as «—», which is not.
+ */
+function metricName(metric: string, ar: boolean): string {
+  const names: Record<string, { ar: string; en: string }> = {
+    spend: { ar: 'الإنفاق', en: 'spend' },
+    conversions: { ar: 'الطلبات', en: 'orders' },
+    impressions: { ar: 'الظهور', en: 'impressions' },
+    clicks: { ar: 'النقرات', en: 'clicks' },
+    engagements: { ar: 'التفاعلات', en: 'engagements' },
+    video_views: { ar: 'المشاهدات', en: 'views' },
+    reach: { ar: 'الوصول', en: 'reach' },
+    revenue: { ar: 'الإيراد', en: 'revenue' },
+  }
+
+  return names[metric] ? (ar ? names[metric]!.ar : names[metric]!.en) : metric
 }
