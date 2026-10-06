@@ -45,6 +45,7 @@ import {
   CampaignReportsTab,
 } from './CampaignCommandCenter'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
+import { CreativeFormatComparison } from '@/features/content/CreativeFormatComparison'
 import { RangeTabs } from '@/features/analytics/components'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
@@ -396,6 +397,28 @@ export function CampaignDetailPage() {
         <TabPanel>
           <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
           <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
+
+          {/*
+            CREATIVE-FORMAT-INTELLIGENCE-001, scoped to THIS campaign.
+
+            «Image or video» is a different answer per campaign than per account, and a campaign page
+            that could only show the account-wide verdict would be handing the reader somebody else's
+            evidence for the decision in front of them. The scope travels: project, period and this
+            campaign.
+
+            MEDIUM depth — the scoreboard, the comparison and the spend mix. The trend and the exact
+            table stay in Content Analytics, where somebody has come to read rather than to check.
+          */}
+          <div className="mt-4">
+            <CreativeFormatComparison
+              projectId={projectId}
+              campaignId={campaignId}
+              from={range.from}
+              to={range.to}
+              depth="medium"
+              ar={locale === 'ar'}
+            />
+          </div>
         </TabPanel>
       )}
 

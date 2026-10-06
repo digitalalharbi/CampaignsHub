@@ -67,6 +67,29 @@
  * thing every occurrence here has ever measured. The number stays, the evidence is recorded, and the
  * job is re-run.
  */
+/*
+ * SEVENTH occurrence, 2026-10-06 (#596) — and the protocol followed before anything was re-run.
+ *
+ * `/agency/settings` «never rendered» on webkit at 47.4s while chromium, firefox, backend, frontend
+ * and image all passed the same commit. 632 of 633 cases passed around it, in 38.9 minutes on one
+ * worker — the shape of a loaded runner rather than of a broken page.
+ *
+ * Three facts, gathered before the re-run:
+ *
+ *   REPRODUCED FIRST. `cross-product-consistency` on webkit locally: 12 of 12 in 1.4 minutes, the
+ *   failing case among them.
+ *
+ *   THE ROUTE IS UNCHANGED. `git diff origin/main..HEAD -- src/features/settings src/app
+ *   src/layouts` is EMPTY. The page is byte-identical to the commit whose webkit gate was green, and
+ *   this branch's diff reaches only content, analytics, campaigns and reports.
+ *
+ *   NOTHING REFUSED. The job's own log carries no 500, no 502 and no exception — its three matches
+ *   for those strings are a Vite chunk-size warning and two test NUMBERS.
+ *
+ * The ceiling stays where it is, for the reason this file already gives: a number tuned to the last
+ * failure is a number that fails again on a busier day, and a gate that needs a retry teaches its
+ * readers that red means «try again». What is owed is the record, which is this.
+ */
 export const RAIL_PAINT_TIMEOUT = 45_000
 
 /** Per-path budget for a walk that visits many routes in one test, on the same reasoning. */

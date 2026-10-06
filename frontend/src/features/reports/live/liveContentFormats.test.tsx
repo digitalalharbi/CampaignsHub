@@ -51,7 +51,9 @@ describe('the format comparison a client receives', () => {
 
     expect(screen.getByTestId('creative-format-comparison')).toBeInTheDocument()
     expect(screen.getByTestId('format-verdict-sales')).toHaveTextContent('الفيديو')
-    expect(screen.getByTestId('format-spend-mix')).toHaveTextContent('75%')
+    // The donut's centre figure — the total the shares are read against. Its slices are SVG from the
+    // product's chart layer, which has no size in jsdom.
+    expect(screen.getByTestId('format-spend-mix')).toHaveTextContent(/1[,.]?2/)
   })
 
   /** The agency's accounts are its own arrangement — the server sends none, and none is drawn. */

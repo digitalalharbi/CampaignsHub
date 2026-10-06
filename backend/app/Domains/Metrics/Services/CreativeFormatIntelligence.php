@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * CREATIVE-FORMAT-INTELLIGENCE-001 — «image or video, HERE?», answered once for every surface.
@@ -63,6 +64,15 @@ final class CreativeFormatIntelligence
 
     private const HIGH_CREATIVES = 5;
 
+    /**
+     * How many periods the trend is cut into, whatever window was asked for.
+     *
+     * A bound rather than a granularity: a month reads as weeks, a quarter as fortnights, and the
+     * cost of the chart does not grow with the period. Eight points is enough to see a direction and
+     * few enough that each one rests on a defensible number of days.
+     */
+    private const TREND_BUCKETS = 8;
+
     public function __construct(
         private readonly CreativeMetrics $metrics,
         private readonly ContentIntelligence $intelligence,
@@ -93,10 +103,135 @@ final class CreativeFormatIntelligence
                 'campaign_id' => $campaignId,
             ],
             'accounts' => $this->accounts($creatives),
+            /*
+             * The currency the spend figures are IN — a money figure without one is a count.
+             *
+             * Null when the project's rows disagree about it, exactly as the library's own reading
+             * does: one amount under two currencies added together is the mix the money contract
+             * refuses everywhere else, and a surface that guessed a symbol would present it anyway.
+             */
+            'currency' => $this->currency($projectId),
             'coverage' => $this->coverage($creatives, $figures),
             'spend_mix' => $this->spendMix($creatives, $figures),
-            'objectives' => $this->byObjective($creatives, $figures),
+            'objectives' => $objectives = $this->byObjective($creatives, $figures),
+            'trend' => $this->trend($creatives, $objectives, $from, $to),
         ];
+    }
+
+    /**
+     * Is the leading format's advantage STRENGTHENING or decaying? — in buckets, not in days.
+     *
+     * A verdict for one window answers «which is better», and the question an operator asks next is
+     * whether it is still becoming true. That needs the same comparison read over time.
+     *
+     * ## Weeks rather than days, and at most eight of them
+     *
+     * A daily ratio over a handful of creatives is noise wearing the shape of a trend: one order on
+     * one day moves a cost-per-result by half, and a reader shown that line will act on weather. The
+     * window is divided into at most `TREND_BUCKETS` periods, so a month reads as weeks and a quarter
+     * as fortnights, and the cost is bounded whatever period is asked for.
+     *
+     * ## It reuses the aggregate rather than summing its own
+     *
+     * Each bucket is `forCreatives()` for that bucket and `aggregate()` per format — the same two
+     * calls the headline comparison makes, over a narrower window. No arithmetic is repeated here, so
+     * a point on this line and the figure in the scoreboard cannot disagree about what a cost per
+     * result is.
+     *
+     * Only the LEAD objective is charted. Drawing every objective's own metric on one axis would put
+     * a cost per order and a CTR on the same line, which is the comparison with two units this module
+     * exists to refuse.
+     *
+     * @param  list<array{id: string, format: ?string, objective: ?string}>  $creatives
+     * @param  list<array<string, mixed>>  $objectives
+     * @return array{metric: ?string, lower_is_better: bool, points: list<array<string, mixed>>}
+     */
+    private function trend(array $creatives, array $objectives, Carbon $from, Carbon $to): array
+    {
+        $lead = null;
+
+        foreach ($objectives as $objective) {
+            if (($objective['comparison']['refusal'] ?? null) === null) {
+                $lead = $objective;
+
+                break;
+            }
+        }
+
+        $metric = $lead['comparison']['metric'] ?? null;
+        $empty = ['metric' => null, 'lower_is_better' => false, 'points' => []];
+
+        if (! is_string($metric)) {
+            return $empty;
+        }
+
+        $family = $lead['family'];
+        $mine = array_values(array_filter(
+            $creatives,
+            fn (array $c): bool => $this->metrics->familyFor($c['objective'] ?? null)->value === $family,
+        ));
+
+        $days = $from->diffInDays($to) + 1;
+
+        // Two buckets is the fewest that can show a direction; below that there is no trend to draw.
+        if ($mine === [] || $days < 2) {
+            return $empty;
+        }
+
+        $size = (int) max(1, (int) ceil($days / self::TREND_BUCKETS));
+        $ids = array_map(static fn (array $c): string => $c['id'], $mine);
+        $points = [];
+
+        for ($start = $from->copy(); $start->lessThanOrEqualTo($to); $start->addDays($size)) {
+            $end = $start->copy()->addDays($size - 1)->min($to);
+            $figures = $this->metrics->forCreatives($ids, $start, $end);
+
+            $point = ['from' => $start->toDateString(), 'to' => $end->toDateString()];
+            $sets = [];
+
+            foreach ($mine as $creative) {
+                $row = $figures[$creative['id']] ?? null;
+
+                if (is_array($row)) {
+                    $sets[$this->format($creative['format'] ?? null)][] = $row;
+                }
+            }
+
+            foreach ($sets as $format => $rows) {
+                $aggregate = $this->metrics->aggregate($rows);
+                $value = $aggregate[$metric] ?? null;
+
+                // Null, never 0 — a bucket the format could not answer is a gap in the line.
+                $point[$format] = is_numeric($value) ? (float) $value : null;
+            }
+
+            $points[] = $point;
+        }
+
+        return [
+            'metric' => $metric,
+            'lower_is_better' => (bool) ($lead['comparison']['lower_is_better'] ?? false),
+            'points' => $points,
+        ];
+    }
+
+    /**
+     * The project's own reporting currency, or null when its rows do not agree on one.
+     *
+     * Read the way the content library reads it, from the rows themselves rather than from a setting:
+     * what the figures are denominated in is a fact about the data, and a project whose stored rows
+     * carry two currencies has no single one to name.
+     */
+    private function currency(string $projectId): ?string
+    {
+        $currencies = DB::table('daily_metrics')
+            ->where('project_id', $projectId)
+            ->whereNotNull('project_currency')
+            ->distinct()
+            ->pluck('project_currency')
+            ->all();
+
+        return count($currencies) === 1 ? (string) $currencies[0] : null;
     }
 
     /**

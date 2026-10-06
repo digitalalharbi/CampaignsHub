@@ -350,6 +350,79 @@ final class CreativeFormatIntelligenceTest extends TestCase
         return $user;
     }
 
+    /**
+     * The trend reads the SAME metric the verdict was decided on, bucketed rather than daily.
+     *
+     * A daily ratio over a handful of creatives is noise wearing the shape of a trend: one order on
+     * one day moves a cost per result by half. Buckets keep each point resting on a defensible number
+     * of days, and the cost of the chart does not grow with the window.
+     */
+    public function test_the_trend_follows_the_metric_the_verdict_was_decided_on(): void
+    {
+        $campaign = $this->campaign('sales', 'Sales');
+
+        $this->creatives($this->meta, $campaign, 'video', 3, ['spend' => 300.0, 'conversions' => 30.0]);
+        $this->creatives($this->meta, $campaign, 'image', 3, ['spend' => 300.0, 'conversions' => 10.0]);
+
+        $answer = $this->ask($this->meta->getKey());
+        $trend = $answer['trend'];
+
+        $this->assertSame($answer['objectives'][0]['comparison']['metric'], $trend['metric']);
+        $this->assertNotSame([], $trend['points'], 'the comparison had a metric and the trend had no points');
+        $this->assertLessThanOrEqual(8, count($trend['points']), 'the trend grew with the window instead of being bucketed');
+
+        foreach ($trend['points'] as $point) {
+            $this->assertArrayHasKey('from', $point);
+            $this->assertArrayHasKey('to', $point);
+        }
+    }
+
+    /**
+     * A bucket a format could not answer is a GAP, never a zero.
+     *
+     * The whole module refuses to turn an absence into a figure, and a line chart is the easiest
+     * place to lose that: a missing point drawn at zero reads as a collapse in performance.
+     */
+    public function test_a_bucket_a_format_could_not_answer_is_a_gap(): void
+    {
+        $campaign = $this->campaign('sales', 'Sales');
+
+        $this->creatives($this->meta, $campaign, 'video', 3, ['spend' => 300.0, 'conversions' => 30.0]);
+        $this->creatives($this->meta, $campaign, 'image', 3, ['spend' => 300.0, 'conversions' => 10.0]);
+
+        $points = $this->ask($this->meta->getKey())['trend']['points'];
+
+        // One day of the window carries every figure, so every other bucket must be a gap.
+        $withData = array_values(array_filter(
+            $points,
+            static fn (array $p): bool => ($p['video'] ?? null) !== null || ($p['image'] ?? null) !== null,
+        ));
+
+        $this->assertNotSame([], $withData);
+        $this->assertLessThan(count($points), count($withData), 'empty buckets were filled rather than left as gaps');
+
+        foreach ($points as $point) {
+            foreach (['video', 'image'] as $format) {
+                if (array_key_exists($format, $point)) {
+                    $this->assertNotSame(0, $point[$format], 'an unanswerable bucket was drawn as a zero');
+                }
+            }
+        }
+    }
+
+    /** With nothing the comparison could decide on, there is no line to draw. */
+    public function test_a_refused_comparison_draws_no_trend(): void
+    {
+        $campaign = $this->campaign('sales', 'Sales');
+
+        $this->creatives($this->meta, $campaign, 'video', 1, ['spend' => 100.0, 'conversions' => 9.0]);
+
+        $trend = $this->ask($this->meta->getKey())['trend'];
+
+        $this->assertNull($trend['metric']);
+        $this->assertSame([], $trend['points']);
+    }
+
     /** @return array<string, mixed> */
     private function ask(mixed $accountId): array
     {

@@ -227,17 +227,24 @@ export function RankingBarChart({
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
         {GRID}
-        {horizontal ? (
-          <>
-            <XAxis type="number" tick={AXIS} tickFormatter={(v) => compact(Number(v))} />
-            <YAxis type="category" dataKey="label" tick={AXIS} width={120} {...cat} />
-          </>
-        ) : (
-          <>
-            <XAxis dataKey="label" tick={AXIS} interval={0} angle={data.length > 5 ? -15 : 0} textAnchor={data.length > 5 ? 'end' : 'middle'} height={data.length > 5 ? 48 : 24} />
-            <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
-          </>
-        )}
+        {/*
+          CHART-AXIS-DISCOVERY-001 — an axis inside a FRAGMENT is an axis this chart does not have.
+          *
+          * Recharts finds its axes by walking `props.children` for elements of the axis types, and it
+          * does not descend into fragments. Both branches of this used to return `<>…</>`, so every
+          * ranking chart in the product rendered with NO axes at all — and a bar chart without a
+          * category axis cannot band its bars either: measured on the content format comparison, four
+          * bars came out as one full-width rectangle and three of zero size.
+          *
+          * One ternary per axis keeps each one a DIRECT child, which is the only shape the discovery
+          * walk sees. The props still differ by orientation; what changed is where they are returned.
+        */}
+        {horizontal
+          ? <XAxis type="number" tick={AXIS} tickFormatter={(v) => compact(Number(v))} />
+          : <XAxis dataKey="label" tick={AXIS} interval={0} angle={data.length > 5 ? -15 : 0} textAnchor={data.length > 5 ? 'end' : 'middle'} height={data.length > 5 ? 48 : 24} />}
+        {horizontal
+          ? <YAxis type="category" dataKey="label" tick={AXIS} width={120} {...cat} />
+          : <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />}
         <Tooltip {...tooltipProps} formatter={(v: number, name) => fmt(bars.find((b) => b.name === name)?.kind ?? 'num', currency)(v)} />
         {bars.length > 1 && <Legend wrapperStyle={{ fontSize: 13 }} />}
         {bars.map((b, i) => (

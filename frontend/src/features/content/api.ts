@@ -412,6 +412,14 @@ export interface FormatIntelligencePayload {
   /** The ad accounts this answer is about — the axis a project rollup is drilled into. */
   accounts: Array<{ id: string; name: string; provider: string }>
   /**
+   * What the spend figures are denominated in — a money figure without one is a count.
+   *
+   * Null when the project's rows disagree about it, and the surface then prints the amount BARE
+   * rather than under a guessed symbol. That is the money contract's own rule, applied here so this
+   * module cannot be the place that breaks it.
+   */
+  currency?: string | null
+  /**
    * The evidence base, per format. Stated because «90% of spend on video» reads as «video is 90%
    * better» until the reader knows how many creatives stood behind each format.
    */
@@ -426,6 +434,19 @@ export interface FormatIntelligencePayload {
     total: number | null
     complete: boolean
   }
+  /**
+   * Is the leading format's advantage STRENGTHENING or decaying?
+   *
+   * The same metric the verdict was decided on, read over BUCKETS rather than days: a daily ratio
+   * over a handful of creatives is noise wearing the shape of a trend, and a reader shown that line
+   * acts on weather. A bucket a format could not answer is `null` — a gap in the line, never a zero,
+   * because a missing point drawn at zero reads as a collapse.
+   */
+  trend?: {
+    metric: string | null
+    lower_is_better: boolean
+    points: Array<{ from: string; to: string } & Record<string, string | number | null>>
+  } | null
   /** One comparison per objective family — incompatible jobs are split, never ranked together. */
   objectives: Array<{
     family: string
