@@ -916,7 +916,6 @@ final class CreativeRows
         ];
     }
 
-
     /**
      * The metrics a creative listing may be ordered by — every one a column this grain holds.
      *
