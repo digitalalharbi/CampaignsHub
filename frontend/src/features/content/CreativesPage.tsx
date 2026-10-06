@@ -36,6 +36,7 @@ import { PeriodLabel } from '@/components/patterns/Status'
 import { useFreshness } from '@/features/analytics/api'
 import { listProjects } from '@/features/projects/api'
 import { ContentSummary } from './ContentSummary'
+import { CreativeFormatComparison } from './CreativeFormatComparison'
 import { metricsForKeys } from '@/features/analytics/metricCatalog'
 import type { Summary } from '@/features/analytics/api'
 
@@ -815,6 +816,26 @@ export function CreativesPage() {
         currency={data?.currency ?? null}
         locale={locale}
       />
+
+      {/*
+        CREATIVE-FORMAT-INTELLIGENCE-001, compactly — «image or video, here?» where content is browsed.
+
+        The COMPACT depth: the verdict for the objective most of this project was bought for, what it
+        cost, and the evidence it rests on. The whole reading lives in Content Analytics; repeating
+        it here would be a second page of the same analysis rather than an answer somebody can act on
+        while they are looking at the assets themselves.
+
+        Same endpoint, same figures. Only the depth differs.
+      */}
+      {currentProjectId != null && currentProjectId !== '' && (
+        <CreativeFormatComparison
+          projectId={currentProjectId}
+          from={from}
+          to={to}
+          depth="compact"
+          ar={ar}
+        />
+      )}
 
       <FilterBar
         id="content"
