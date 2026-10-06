@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { AgencyDashboardPage } from './AgencyDashboardPage'
 import { renderWithProviders } from '@/test/utils'
 import type { AgencyDashboard, ClientBudgetRow } from './api'
@@ -62,7 +62,14 @@ describe('the project rung under the client that raised the question', () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([client({ projects_breakdown: [] })])
     renderWithProviders(<AgencyDashboardPage />)
 
-    expect(await screen.findByText('Acme')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Acme/ })).toBeNull()
+    /*
+      Scoped to the table, because the client's name is now in two places on this page: the pace
+      chart above names every client it can place, and so does the row beneath it. An unscoped
+      `findByText` was never asserting «the row exists» — it was asserting «this name appears once»,
+      which stopped being true the moment the page drew the same clients twice.
+    */
+    const table = within(await screen.findByTestId('client-budgets'))
+    expect(table.getByText('Acme')).toBeInTheDocument()
+    expect(table.queryByRole('button', { name: /Acme/ })).toBeNull()
   })
 })
