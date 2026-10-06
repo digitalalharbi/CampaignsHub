@@ -6,6 +6,7 @@ import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck }
 import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { money, ratio } from '@/features/analytics/format'
+import { ChartCard, RankingBarChart, RatioBars, StatusMixBar } from '@/features/analytics/charts'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Badge } from '@/components/ui/Badge'
@@ -91,47 +92,112 @@ function Metric({
   )
 }
 
+/**
+ * VIZ-AGENCY-001 — the objective split, drawn by the product's own chart layer.
+ *
+ * This hand-rolled its bars: a track div, a fill div and a percentage width, computed against the
+ * largest count rather than the total. It worked, and that was never the objection — the objection is
+ * that it was a SECOND opinion about what a bar chart is, on a page a reader reaches from the same
+ * rail as Analytics and the reports, where the ranked bar has a tooltip, an axis, a colour sequence
+ * and a shared type scale. Two bar chart implementations in one product is one too many, and the one
+ * that loses is the one with no axis.
+ *
+ * Ranked horizontally, because the categories are NAMES of unequal length — «تثبيت التطبيق» and
+ * «app_installs» both need a readable label, and a vertical chart gives a category label the width of
+ * one bar and then rotates it.
+ */
 function ObjectiveBreakdown({ data, ar }: { data: AgencyDashboard['campaigns']; ar: boolean }) {
-  const entries = Object.entries(data.by_objective).sort((a, b) => b[1] - a[1])
-  const max = entries.length > 0 ? Math.max(...entries.map(([, c]) => c)) : 0
+  const entries = Object.entries(data.by_objective ?? {}).sort((a, b) => b[1] - a[1])
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="font-heading text-lg font-extrabold text-text-primary">
-        {ar ? 'الحملات حسب الهدف' : 'Campaigns by objective'}
-      </h2>
-      <p className="mt-1 text-sm text-text-secondary">
-        {ar
-          ? 'رقم واحد يخلط الأهداف لا يعني شيئًا — التوزيع هنا حسب هدف كل حملة.'
-          : 'One blended number across objectives means nothing — this is the split by each campaign’s objective.'}
-      </p>
-
+    <ChartCard
+      title={ar ? 'الحملات حسب الهدف' : 'Campaigns by objective'}
+      subtitle={ar
+        ? 'رقم واحد يخلط الأهداف لا يعني شيئًا — التوزيع هنا حسب هدف كل حملة.'
+        : 'One blended number across objectives means nothing — this is the split by each campaign’s objective.'}
+    >
       {entries.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">
+        <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">
           {ar ? 'لا توجد حملات ضمن نطاقك بعد.' : 'No campaigns within your scope yet.'}
         </p>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {entries.map(([objective, count]) => {
-            const label = OBJECTIVE_LABELS[objective]
-            return (
-              <li key={objective}>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-semibold text-text-primary">{label ? (ar ? label.ar : label.en) : objective}</span>
-                  <span className="tnum font-bold text-text-secondary" dir="ltr">{num(count)}</span>
-                </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-secondary">
-                  <div
-                    className="h-full rounded-full bg-brand-500"
-                    style={{ width: `${max === 0 ? 0 : Math.round((count / max) * 100)}%` }}
-                  />
-                </div>
+        <div data-testid="agency-objective-chart" className="min-w-0">
+          <RankingBarChart
+            horizontal
+            height={Math.max(180, entries.length * 44)}
+            data={entries.map(([objective, count]) => ({
+              label: objectiveLabel(objective, ar),
+              count,
+            }))}
+            bars={[{ key: 'count', name: ar ? 'حملات' : 'Campaigns', kind: 'num' }]}
+          />
+          {/*
+            The same figures as text, under the chart.
+            *
+            * A recharts chart is an SVG a screen reader walks as a pile of unlabelled shapes, and the
+            * PDF renderer and a printed page are both places this card can end up. The list is the
+            * chart's key, not a duplicate of it: it is what the reader falls back to when the drawing
+            * is unavailable, which is why the labels here are the same ones the axis carries.
+          */}
+          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
+            {entries.map(([objective, count]) => (
+              <li key={objective} className="flex items-center gap-1.5">
+                <span>{objectiveLabel(objective, ar)}</span>
+                <span className="tnum font-bold text-text-primary" dir="ltr">{num(count)}</span>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+        </div>
       )}
-    </section>
+    </ChartCard>
+  )
+}
+
+/**
+ * An objective the platform never set is NAMED as unset.
+ *
+ * `by_objective` is a group-by, so a campaign with a null objective arrives under the empty key — and
+ * the old list rendered that key raw, printing a bar with a blank label and leaving the reader to
+ * guess whether the name failed to load. «Unspecified» is what the data says.
+ */
+function objectiveLabel(objective: string, ar: boolean): string {
+  if (objective === '' || objective === 'null') return ar ? 'غير محدد' : 'Unspecified'
+  const label = OBJECTIVE_LABELS[objective]
+  return label ? (ar ? label.ar : label.en) : objective
+}
+
+/**
+ * VIZ-AGENCY-001 — how much of the book is in each state, as one divided bar.
+ *
+ * The four client figures were four cards' worth of arithmetic: «24 total · 18 active · 3 onboarding ·
+ * 2 needing attention» answers «how many» four times and «how much of my book is in trouble» never.
+ *
+ * The total is passed as the denominator rather than summed from the states, because the states do
+ * not have to cover it — a client that is neither active, onboarding nor flagged is in a state nobody
+ * named, and summing would redefine the estate as the part we have labels for. That remainder is
+ * drawn and named instead.
+ */
+function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: boolean }) {
+  return (
+    <ChartCard
+      title={ar ? 'حالة محفظة العملاء' : 'The shape of the client book'}
+      subtitle={ar
+        ? 'نسبة كل حالة من إجمالي العملاء داخل نطاقك.'
+        : 'What share of the clients in your scope sits in each state.'}
+    >
+      <StatusMixBar
+        testId="client-mix"
+        ar={ar}
+        label={ar ? 'العملاء' : 'Clients'}
+        total={clients.total}
+        residualLabel={ar ? 'بلا حالة محدّدة' : 'Other'}
+        bands={[
+          { key: 'active', label: ar ? 'نشط' : 'Active', count: clients.active, tone: 'success' },
+          { key: 'onboarding', label: ar ? 'قيد التهيئة' : 'Onboarding', count: clients.onboarding, tone: 'info' },
+          { key: 'attention', label: ar ? 'يحتاج متابعة' : 'Needs attention', count: clients.needs_attention, tone: 'warning' },
+        ]}
+      />
+    </ChartCard>
   )
 }
 
@@ -272,6 +338,14 @@ export function AgencyDashboardPage() {
         />
       </div>
 
+      {/*
+        The shape of the book before its parts: full width, because a composition bar is one row tall
+        and reads worse the narrower it gets — a segment holding 4% of 24 clients is a sliver at 340px.
+      */}
+      <div className="mb-4">
+        <ClientMix clients={d.clients} ar={ar} />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <ObjectiveBreakdown data={d.campaigns} ar={ar} />
 
@@ -331,6 +405,8 @@ export function AgencyDashboardPage() {
         against it. Nothing here is a second budget engine — the figures are the same aggregator's,
         rolled up per client through the same rules the campaigns overview applies per project.
       */}
+      <ClientPace rows={budgets.data ?? []} ar={ar} />
+
       <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
 
     </div>
@@ -364,6 +440,67 @@ function AttentionRow({ to, label, value, ar }: { to: string; label: string; val
   )
 }
 
+
+/**
+ * VIZ-AGENCY-001 — «which client is going to overrun», as a shape rather than a column.
+ *
+ * The budget table beneath this already carries every pace. Reading it means scanning a column of
+ * «1.24 / 0.88 / 1.02 / —» and holding 1.0 in your head on every row; the chart draws that line once
+ * and orders the rows against it, so the client to open first is the top bar.
+ *
+ * ## Why these rows may share one chart across currencies
+ *
+ * Pace is `projected / budget` — a dimensionless number. A client budgeted in riyals pacing at 1.2 and
+ * one budgeted in dollars pacing at 1.2 are overrunning by the same proportion, and comparing them
+ * breaks no money rule, because there is no money in the comparison. This is the one chart on the page
+ * that is allowed to span currencies, and it is allowed because of what it plots.
+ *
+ * ## What it withholds
+ *
+ * - A client the aggregator could not give a pace (`pace: null`) — usually no committed budget at all.
+ *   There is no «0» to draw: zero pace means «forecast to spend nothing», which is a claim about a
+ *   client we have no budget for.
+ * - A client whose OWN roll-up mixes currencies (`currencies > 1`). Its pace is a ratio whose
+ *   denominator added riyals to dollars, so the ratio itself is unsound — being unitless does not
+ *   rescue a figure built on a sum that was never valid.
+ *
+ * Both are counted in a note under the chart, never dropped silently, because a pace ranking missing
+ * the client with no budget reads as «every client is accounted for».
+ */
+function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
+  if (rows.length === 0) return null
+
+  const drawable = rows
+    .filter((r) => r.pace !== null && Number.isFinite(r.pace) && (r.pace as number) >= 0 && r.currencies <= 1)
+    .map((r) => ({ id: r.client_id, label: r.client_name, value: r.pace as number }))
+  const withheld = rows.length - drawable.length
+
+  return (
+    <section className="mt-6">
+      <ChartCard
+        title={ar ? 'سرعة إنفاق كل عميل' : 'How fast each client is spending'}
+        subtitle={ar
+          ? 'المتوقع ÷ الميزانية. الخط عند 1.0 هو حدّ الميزانية، وما فوقه تجاوز.'
+          : 'Forecast ÷ budget. The line at 1.0 is the budget; anything past it overruns.'}
+      >
+        <RatioBars
+          testId="client-pace"
+          ar={ar}
+          rows={drawable}
+          reference={1}
+          referenceLabel={ar ? 'على الميزانية' : 'On budget'}
+        />
+        {withheld > 0 && (
+          <p data-testid="client-pace-withheld" className="mt-3 text-sm text-text-muted">
+            {ar
+              ? `${num(withheld)} من العملاء بلا سرعة قابلة للمقارنة — إمّا بلا ميزانية معتمدة أو بميزانية بعملات مختلفة.`
+              : `${num(withheld)} client(s) have no comparable pace — either no committed budget, or a budget held in more than one currency.`}
+          </p>
+        )}
+      </ChartCard>
+    </section>
+  )
+}
 
 /**
  * One client's whole budget, and whether it is going to hold.
