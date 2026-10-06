@@ -47,7 +47,22 @@ export function CreativeFormatComparison({ projectId, from, to, accountId, campa
   if (answer.isLoading) return <Skeleton className="h-28 w-full rounded-xl" />
   if (answer.data === undefined) return null
 
-  const payload = answer.data
+  return <FormatComparisonView payload={answer.data} depth={depth} ar={ar} />
+}
+
+/**
+ * The same module, drawn from a payload that is already in hand.
+ *
+ * A client report carries its answer in the report payload — the reader has no session and no
+ * project endpoint to call — so the fetching and the drawing are separated rather than duplicated.
+ * One component renders both, which is what makes «the same numbers everywhere» true by
+ * construction rather than by discipline.
+ */
+export function FormatComparisonView({ payload, depth = 'full', ar }: {
+  payload: FormatIntelligencePayload
+  depth?: 'compact' | 'medium' | 'full'
+  ar: boolean
+}) {
   const lead = leadObjective(payload)
 
   if (lead === null) {
@@ -62,7 +77,7 @@ export function CreativeFormatComparison({ projectId, from, to, accountId, campa
   const accounts = Array.isArray(payload.accounts) ? payload.accounts : []
 
   return (
-    <section className="grid gap-3" data-testid="creative-format-comparison" data-depth={depth}>
+    <section className="grid min-w-0 gap-3" data-testid="creative-format-comparison" data-depth={depth}>
       {/*
         WHOSE answer this is. A project rollup that does not name its accounts invites the reader to
         take an agency-wide blend for one advertiser's truth.
@@ -103,7 +118,7 @@ function ObjectiveBlock({ objective, coverage, depth, ar }: {
     : []
 
   return (
-    <div className="grid gap-2 rounded-xl border border-border bg-surface p-3" data-testid={`format-objective-${objective.family}`}>
+    <div className="grid min-w-0 gap-2 rounded-xl border border-border bg-surface p-3" data-testid={`format-objective-${objective.family}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-text-primary">{ar ? objective.label.ar : objective.label.en}</span>
         <EvidencePill evidence={evidence} ar={ar} />
@@ -176,7 +191,15 @@ function ExactTable({ objective, coverage, ar }: {
   const rows = Array.isArray(objective.comparison.formats) ? objective.comparison.formats : []
 
   return (
-    <div data-testid={`format-table-${objective.family}`}>
+    /*
+      `min-w-0 max-w-full`, or the container does not contain anything.
+      *
+      * `MetricTable` already wraps itself in an `overflow-x-auto` box, and that box can only clip if
+      * every ancestor is allowed to SHRINK: a flex or grid item defaults to `min-width: auto`, so a
+      * 640px table grows the item to 640px instead of scrolling inside it. Measured on the client
+      * report at 375px: 307px of sideways scroll, which is exactly 640 minus the usable width.
+    */
+    <div className="min-w-0 max-w-full" data-testid={`format-table-${objective.family}`}>
       <DataMetricTable
         columns={[
           { key: 'format', label: ar ? 'النوع' : 'Format', kind: 'text' },
