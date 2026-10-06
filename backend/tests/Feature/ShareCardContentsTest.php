@@ -246,6 +246,59 @@ final class ShareCardContentsTest extends TestCase
     }
 
     /**
+     * SHARE-CARD-SVG-001 — a brand SVG is the commonest logo there is, and the card dropped it.
+     *
+     * `DrawableImage` answers a different question: it was written for creative media from a
+     * provider's CDN, where «an allow-listed RASTER signature whose header decodes» is exactly
+     * right, and it excludes SVG on purpose. A brand mark is the opposite case — `BrandingSpec`
+     * accepts SVG first, it is what the upload control recommends, and the card is drawn by headless
+     * Chromium from an HTML document, which renders an inline SVG perfectly.
+     *
+     * Found by fetching a real card: the client's mark resolved to 298 bytes of SVG and the picture
+     * came back with nothing on it.
+     */
+    public function test_a_brand_svg_is_drawn_on_the_card(): void
+    {
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'client', (string) $this->client->id, 'client_logo', 'any',
+            UploadedFile::fake()->createWithContent('mark.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'),
+        );
+        app(TenantContext::class)->forget();
+
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        $this->assertIsString($card['logo'], 'a brand SVG was judged by the media rule and dropped');
+        $this->assertStringStartsWith('data:image/svg+xml;base64,', $card['logo']);
+    }
+
+    /**
+     * A mark this renderer cannot draw falls through to the next ROLE rather than blanking the card.
+     *
+     * `??` stopped at the first non-null bytes and the drawability test then rejected them, so a
+     * client with an undrawable mark produced a card with none at all — while the agency's perfectly
+     * good one sat behind a fallback that could never run.
+     */
+    public function test_an_undrawable_client_mark_falls_through_to_the_agency(): void
+    {
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'client', (string) $this->client->id, 'client_logo', 'any',
+            UploadedFile::fake()->createWithContent('broken.png', 'this is not an image at all'),
+        );
+        app(BrandingService::class)->storeAsset(
+            'tenant', null, 'report_logo', 'any',
+            UploadedFile::fake()->createWithContent('agency.png', $this->png()),
+        );
+        app(TenantContext::class)->forget();
+
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        $this->assertIsString($card['logo'], 'the card blanked instead of using the mark behind it');
+        $this->assertStringStartsWith('data:image/png;base64,', $card['logo']);
+    }
+
+    /**
      * Bytes a browser would not draw are not a mark.
      *
      * `DrawableImage` decides, and it reads the leading bytes rather than the stored content type —

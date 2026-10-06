@@ -235,21 +235,66 @@ final class ShareCardRenderer
     {
         $tenantId = (string) $share->tenant_id;
 
-        $bytes = $this->branding->logoBytes($report, $tenantId, 'client')
-            ?? $this->branding->logoBytes($report, $tenantId, 'agency')
-            ?? $this->branding->logoBytes($report, $tenantId);
+        /*
+         * The first role whose mark is actually DRAWABLE, not the first role that has one.
+         *
+         * `??` stopped at the first non-null bytes and the drawability test below then rejected them,
+         * so a client whose mark this renderer could not draw produced a card with NO mark — even
+         * though the agency had a perfectly good one sitting behind it. The fallback existed and
+         * could never run. Found by fetching a real card: the client's mark resolved to 298 bytes of
+         * SVG and the picture came back with nothing on it.
+         */
+        foreach (['client', 'agency', null] as $role) {
+            $bytes = $this->branding->logoBytes($report, $tenantId, $role);
 
-        if ($bytes === null) {
-            return null;
+            if ($bytes === null) {
+                continue;
+            }
+
+            $uri = self::asDataUri($bytes);
+
+            if ($uri !== null) {
+                return $uri;
+            }
         }
 
+        return null;
+    }
+
+    /**
+     * A brand mark as a data URI this card can draw, or null — SHARE-CARD-SVG-001.
+     *
+     * `DrawableImage` answers a different question. It was written for CREATIVE MEDIA fetched from a
+     * provider's CDN, where the useful rule is «an allow-listed raster signature whose header
+     * decodes», and it deliberately excludes SVG: an ad still that claims to be a vector is not one.
+     *
+     * A brand mark is the opposite case. `BrandingSpec::ALLOWED_MIME` accepts SVG first — it is the
+     * format a brand kit ships and the one the upload control recommends — and the card is drawn by
+     * headless Chromium from an HTML document, which renders an inline SVG perfectly. Judging a brand
+     * asset with the media instrument silently dropped the most common kind of logo there is.
+     *
+     * Raster bytes still go through `DrawableImage`, because for those its rule is exactly right.
+     */
+    private static function asDataUri(string $bytes): ?string
+    {
         $format = DrawableImage::sniff($bytes);
 
-        if ($format === null || ! DrawableImage::draws($bytes)) {
-            return null;
+        if ($format !== null) {
+            return DrawableImage::draws($bytes) ? 'data:image/'.$format.';base64,'.base64_encode($bytes) : null;
         }
 
-        return 'data:image/'.$format.';base64,'.base64_encode($bytes);
+        /*
+         * An SVG, judged by what it IS rather than by what it was uploaded as. A leading XML
+         * declaration or a byte-order mark is ordinary, so the test is «an `<svg` element opens
+         * somewhere near the front», not «the file starts with one».
+         */
+        $head = ltrim(substr($bytes, 0, 512));
+
+        if (stripos($head, '<svg') !== false || (str_starts_with($head, '<?xml') && stripos($bytes, '<svg') !== false)) {
+            return 'data:image/svg+xml;base64,'.base64_encode($bytes);
+        }
+
+        return null;
     }
 
     private function period(Report $report): ?string
