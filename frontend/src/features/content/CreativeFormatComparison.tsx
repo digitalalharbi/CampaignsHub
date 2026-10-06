@@ -77,7 +77,7 @@ export function FormatComparisonView({ payload, depth = 'full', ar }: {
   const accounts = Array.isArray(payload.accounts) ? payload.accounts : []
 
   return (
-    <section className="grid gap-3" data-testid="creative-format-comparison" data-depth={depth}>
+    <section className="grid min-w-0 gap-3" data-testid="creative-format-comparison" data-depth={depth}>
       {/*
         WHOSE answer this is. A project rollup that does not name its accounts invites the reader to
         take an agency-wide blend for one advertiser's truth.
@@ -118,7 +118,7 @@ function ObjectiveBlock({ objective, coverage, depth, ar }: {
     : []
 
   return (
-    <div className="grid gap-2 rounded-xl border border-border bg-surface p-3" data-testid={`format-objective-${objective.family}`}>
+    <div className="grid min-w-0 gap-2 rounded-xl border border-border bg-surface p-3" data-testid={`format-objective-${objective.family}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-text-primary">{ar ? objective.label.ar : objective.label.en}</span>
         <EvidencePill evidence={evidence} ar={ar} />
@@ -191,7 +191,15 @@ function ExactTable({ objective, coverage, ar }: {
   const rows = Array.isArray(objective.comparison.formats) ? objective.comparison.formats : []
 
   return (
-    <div data-testid={`format-table-${objective.family}`}>
+    /*
+      `min-w-0 max-w-full`, or the container does not contain anything.
+      *
+      * `MetricTable` already wraps itself in an `overflow-x-auto` box, and that box can only clip if
+      * every ancestor is allowed to SHRINK: a flex or grid item defaults to `min-width: auto`, so a
+      * 640px table grows the item to 640px instead of scrolling inside it. Measured on the client
+      * report at 375px: 307px of sideways scroll, which is exactly 640 minus the usable width.
+    */
+    <div className="min-w-0 max-w-full" data-testid={`format-table-${objective.family}`}>
       <DataMetricTable
         columns={[
           { key: 'format', label: ar ? 'النوع' : 'Format', kind: 'text' },
