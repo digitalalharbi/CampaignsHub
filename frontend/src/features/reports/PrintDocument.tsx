@@ -7,6 +7,9 @@ import { ReportWatermark } from './ReportWatermark'
 import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
 import { AttentionBlocks } from './AttentionBlocks'
 import { sectionShown, type ReportSectionKey } from './reportSections'
+import { formatWord, leadObjective, verdictFor } from '@/features/content/formatVerdict'
+import { metricLabel } from '@/features/content/metrics'
+import type { ContentIntelligence } from '@/features/content/api'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
 import { metricState } from '@/features/content/metrics'
@@ -266,6 +269,28 @@ export function PrintDocument({
     The same rows the interactive deck shows, read the same way: `available` is the only state that
     carries a picture, and the other three carry their own sentence rather than an empty frame.
   */
+  /*
+    The format answer, read off the payload the interactive report drew from.
+
+    The objective chosen is the one that surface leads with — the first that can actually be judged —
+    so page and file name the same comparison rather than each picking their own.
+  */
+  const formatObjective = leadObjective(data.content_formats ?? undefined)
+  const formatComparison = formatObjective?.comparison
+  const formatMetricLabel = formatComparison?.metric == null
+    ? '—'
+    : metricLabel(formatComparison.metric, 'en')
+  const formatVerdictLine = formatObjective === null || formatObjective === undefined
+    ? ''
+    : verdictFor(formatObjective.comparison, formatObjective.evidence).en
+  const formatRows = ((formatComparison?.formats ?? []) as ContentIntelligence['formats']).map((row) => ({
+    format: formatWord(row.format, false),
+    value: Math.abs(row.value) >= 100 ? row.value.toFixed(0) : row.value.toFixed(2),
+    // «—» for a withheld amount: a zero would be money the account never spent.
+    spend: row.spend === null ? '—' : row.spend.toFixed(2),
+    creatives: String(data.content_formats?.coverage?.[row.format]?.creatives ?? row.creatives),
+  }))
+
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
     /*
       CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks, not a second chain.
@@ -646,6 +671,41 @@ export function PrintDocument({
           <h2>{section('ads')?.title_en ?? 'Ads'}</h2>
           {/* The generator's own reason, not this file's guess at one. */}
           <p>{section('ads')?.absent_reason_en ?? adsAbsence}</p>
+        </section>
+      )}
+
+      {/*
+        CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», printed from the SAME answer.
+
+        REPORT-EXPORT-PARITY: the figures here are the ones the interactive report drew, read
+        straight off the payload. A renderer that recomputed would be the second answer the canonical
+        service exists to prevent, and the first time the page and the file disagreed the client
+        would be holding the evidence.
+
+        Printed natively rather than through the screen module: this document has its own stylesheet
+        and no Tailwind, so a component built for the app would arrive unstyled on a page a client
+        keeps. What is shared is the DATA, which is the half that has to agree.
+      */}
+      {shown('content_performance') && formatRows.length > 0 && (
+        <section className="doc-section">
+          <h2>Content format performance</h2>
+          <p className="doc-sub">{formatVerdictLine}</p>
+          <table className="doc-table">
+            <thead>
+              <tr><th>Format</th><th>{formatMetricLabel}</th><th>Spend</th><th>Creatives</th></tr>
+            </thead>
+            <tbody>
+              {formatRows.map((row) => (
+                <tr key={row.format}>
+                  <td>{row.format}</td>
+                  <td>{row.value}</td>
+                  {/* A withheld amount is «—», never a zero the account never spent. */}
+                  <td>{row.spend}</td>
+                  <td>{row.creatives}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
       )}
 

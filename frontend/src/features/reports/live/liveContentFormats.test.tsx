@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import { FormatComparisonView } from '@/features/content/CreativeFormatComparison'
@@ -88,5 +88,55 @@ describe('the format comparison a client receives', () => {
 
     expect(screen.queryByTestId('format-spend-mix')).toBeNull()
     expect(screen.getByTestId('format-verdict-sales')).toHaveTextContent('الفيديو')
+  })
+})
+
+/**
+ * REPORT-EXPORT-PARITY — the PDF prints the figures the page drew.
+ *
+ * Both read `content_formats` off the same payload and neither recomputes: the print renderer has
+ * its own stylesheet and no Tailwind, so what is shared is the DATA rather than the component, which
+ * is the half that has to agree. The first time a page and the file a client keeps disagreed, the
+ * client would be holding the evidence.
+ */
+describe('the printed format section', () => {
+  /*
+    `document.fonts` does not exist in jsdom and the document awaits `fonts.ready` before it declares
+    itself printable — the same stub every other print test here uses.
+  */
+  beforeAll(() => {
+    if (!(document as Document & { fonts?: unknown }).fonts) {
+      Object.defineProperty(document, 'fonts', { value: { ready: Promise.resolve() }, configurable: true })
+    }
+  })
+
+  it('prints the same verdict and the same figures as the page', async () => {
+    const { PrintDocument } = await import('../PrintDocument')
+    const data = { content_formats: payload(), report_sections: ['content_performance'] } as never
+
+    renderWithProviders(
+      <PrintDocument data={data} reportName="R" currency="SAR" />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByText('Content format performance')).toBeInTheDocument()
+    // The verdict the page shows, in the document's own language.
+    expect(screen.getByText(/Video performs better/)).toBeInTheDocument()
+    // And the figure behind it, unrounded into the same two decimals.
+    expect(screen.getByText('10.00')).toBeInTheDocument()
+  })
+
+  /** A withheld amount prints «—», never a zero the account never spent. */
+  it('prints a withheld spend as unavailable', async () => {
+    const { PrintDocument } = await import('../PrintDocument')
+    const withheld = payload()
+    withheld.objectives[0].comparison.formats[0].spend = null
+
+    renderWithProviders(
+      <PrintDocument data={{ content_formats: withheld, report_sections: ['content_performance'] } as never} reportName="R" currency="SAR" />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 })
