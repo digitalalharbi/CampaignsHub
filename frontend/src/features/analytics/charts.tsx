@@ -160,6 +160,18 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: 
 
 // ---- Donut: distribution with total in the center, share %, Others grouping ----------------------
 
+/**
+ * The «Others» slice's name, as a function of the locale.
+ *
+ * It was the Arabic literal «أخرى», so an English reader met one Arabic slice in an otherwise English
+ * legend — the same defect `spendRevenueSeriesNames` records for the area chart's two series, in the
+ * one place in this file the fix did not reach. Exported for the same reason that one is: recharts
+ * draws nothing in jsdom, so a legend assertion through the component proves nothing about the name.
+ */
+export function donutOthersName(ar: boolean): string {
+  return ar ? 'أخرى' : 'Others'
+}
+
 export function PlatformDonutChart({
   data,
   height = 260,
@@ -176,11 +188,12 @@ export function PlatformDonutChart({
   currency?: string
   colorBy?: 'platform' | 'series'
 }) {
+  const ar = useUi((s) => s.locale) === 'ar'
   const total = data.reduce((a, b) => a + b.value, 0)
   // Group small slices (<4%) into "Others".
   const big = data.filter((d) => d.value / (total || 1) >= 0.04)
   const small = data.filter((d) => d.value / (total || 1) < 0.04)
-  const rows = small.length > 1 ? [...big, { name: 'أخرى', value: small.reduce((a, b) => a + b.value, 0) }] : data
+  const rows = small.length > 1 ? [...big, { name: donutOthersName(ar), value: small.reduce((a, b) => a + b.value, 0) }] : data
   const keyOf = (name: string) => data.find((d) => d.name === name)?.key ?? name
   // A platform's colour is looked up by its KEY: a translated name («جوجل») matched no colour, so every slice was drawn the same.
   const color = (name: string, i: number) => (colorBy === 'platform' ? platformColor(keyOf(name)) : CHART_SERIES[i % CHART_SERIES.length])
