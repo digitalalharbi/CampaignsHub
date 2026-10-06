@@ -83,6 +83,17 @@ final class RequestsController
      * about to be, and they are counted separately because they need different actions — the first is
      * an apology, the second is a reprioritisation.
      *
+     * `no_sla` is the fourth, and it exists because «on track» used to absorb it. The bucket read
+     * `sla_due_at IS NULL OR sla_due_at > NOW() + 24h`, so a request nobody ever promised anything
+     * about — no SLA on its service type, or one never set — was counted beside requests that have a
+     * deadline and are comfortably inside it. That is a promise reported as KEPT where no promise
+     * exists, and it inflates the one figure a team uses to decide whether they are coping, in the
+     * direction of comfort: the requests we know least about counted as the ones going best.
+     *
+     * All four are mutually exclusive and together exhaustive, so they sum to the filtered total.
+     * That is what lets the dashboard draw them as one divided bar: a composition needs its parts to
+     * be parts OF something, and here they are.
+     *
      * @param  Builder<ExternalRequest>  $query
      * @return array<string, mixed>
      */
@@ -120,7 +131,8 @@ final class RequestsController
         $sla = (array) (clone $base)
             ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NOT NULL) AS breached')
             ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NULL AND sla_due_at IS NOT NULL AND sla_due_at <= NOW() + INTERVAL \'24 hours\') AS due_soon')
-            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NULL AND (sla_due_at IS NULL OR sla_due_at > NOW() + INTERVAL \'24 hours\')) AS on_track')
+            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NULL AND sla_due_at IS NOT NULL AND sla_due_at > NOW() + INTERVAL \'24 hours\') AS on_track')
+            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NULL AND sla_due_at IS NULL) AS no_sla')
             ->first();
 
         return [
@@ -130,6 +142,7 @@ final class RequestsController
                 'breached' => (int) ($sla['breached'] ?? 0),
                 'due_soon' => (int) ($sla['due_soon'] ?? 0),
                 'on_track' => (int) ($sla['on_track'] ?? 0),
+                'no_sla' => (int) ($sla['no_sla'] ?? 0),
             ],
         ];
     }
