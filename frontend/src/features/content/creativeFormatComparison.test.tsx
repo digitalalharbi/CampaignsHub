@@ -98,7 +98,8 @@ describe('the creative format comparison', () => {
     const mix = screen.getByTestId('format-spend-mix')
 
     expect(mix).toBeInTheDocument()
-    expect(mix).toHaveTextContent('1200')
+    // The total through the product's money formatter, under the currency the server named.
+    expect(mix).toHaveTextContent(/1[,.]?2/)
     expect(screen.getByText(/توزيع الإنفاق/)).toBeInTheDocument()
   })
 
@@ -225,6 +226,11 @@ describe('the creative format comparison', () => {
 
     expect(screen.getByTestId('format-bars-sales')).toBeInTheDocument()
     expect(screen.getByText(/المقارنة على/)).toBeInTheDocument()
+    /*
+      Which direction is GOOD, said rather than assumed: on a cost per result the longest bar is the
+      worst, and a reader scanning a chart takes the biggest bar for the winner.
+    */
+    expect(screen.getByTestId('format-bars-direction-sales')).toHaveTextContent('الأقل أفضل')
   })
 
   /** Two bars of one value each is a decoration — a single format is not charted. */
@@ -265,7 +271,7 @@ describe('the creative format comparison', () => {
 
     expect(screen.getByTestId('format-trend')).toBeInTheDocument()
     // Which direction is good is stated, because «lower is better» is not guessable from a line.
-    expect(screen.getByText(/الأقل أفضل/)).toBeInTheDocument()
+    expect(screen.getByTestId('format-trend-direction')).toHaveTextContent('الأقل أفضل')
   })
 
   it('draws no trend from a single point', async () => {

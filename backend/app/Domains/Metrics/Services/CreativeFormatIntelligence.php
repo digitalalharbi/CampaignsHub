@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * CREATIVE-FORMAT-INTELLIGENCE-001 — «image or video, HERE?», answered once for every surface.
@@ -102,6 +103,14 @@ final class CreativeFormatIntelligence
                 'campaign_id' => $campaignId,
             ],
             'accounts' => $this->accounts($creatives),
+            /*
+             * The currency the spend figures are IN — a money figure without one is a count.
+             *
+             * Null when the project's rows disagree about it, exactly as the library's own reading
+             * does: one amount under two currencies added together is the mix the money contract
+             * refuses everywhere else, and a surface that guessed a symbol would present it anyway.
+             */
+            'currency' => $this->currency($projectId),
             'coverage' => $this->coverage($creatives, $figures),
             'spend_mix' => $this->spendMix($creatives, $figures),
             'objectives' => $objectives = $this->byObjective($creatives, $figures),
@@ -204,6 +213,25 @@ final class CreativeFormatIntelligence
             'lower_is_better' => (bool) ($lead['comparison']['lower_is_better'] ?? false),
             'points' => $points,
         ];
+    }
+
+    /**
+     * The project's own reporting currency, or null when its rows do not agree on one.
+     *
+     * Read the way the content library reads it, from the rows themselves rather than from a setting:
+     * what the figures are denominated in is a fact about the data, and a project whose stored rows
+     * carry two currencies has no single one to name.
+     */
+    private function currency(string $projectId): ?string
+    {
+        $currencies = DB::table('daily_metrics')
+            ->where('project_id', $projectId)
+            ->whereNotNull('project_currency')
+            ->distinct()
+            ->pluck('project_currency')
+            ->all();
+
+        return count($currencies) === 1 ? (string) $currencies[0] : null;
     }
 
     /**

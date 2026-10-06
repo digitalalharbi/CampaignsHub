@@ -412,6 +412,14 @@ export interface FormatIntelligencePayload {
   /** The ad accounts this answer is about — the axis a project rollup is drilled into. */
   accounts: Array<{ id: string; name: string; provider: string }>
   /**
+   * What the spend figures are denominated in — a money figure without one is a count.
+   *
+   * Null when the project's rows disagree about it, and the surface then prints the amount BARE
+   * rather than under a guessed symbol. That is the money contract's own rule, applied here so this
+   * module cannot be the place that breaks it.
+   */
+  currency?: string | null
+  /**
    * The evidence base, per format. Stated because «90% of spend on video» reads as «video is 90%
    * better» until the reader knows how many creatives stood behind each format.
    */

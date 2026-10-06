@@ -8,6 +8,7 @@ import { ChartCard, MetricLineChart, PlatformDonutChart, RankingBarChart } from 
 import { formatIntelligence, type FormatIntelligencePayload } from './api'
 import { formatWord, leadObjective, verdictFor, type Evidence } from './formatVerdict'
 import { metricLabel } from './metrics'
+import { money } from '@/features/analytics/format'
 
 /**
  * CREATIVE-FORMAT-INTELLIGENCE-001 — «image or video, here?», drawn once and reused.
@@ -101,13 +102,14 @@ export function FormatComparisonView({ payload, depth = 'full', ar }: {
           key={objective.family}
           objective={objective}
           coverage={payload.coverage}
+          currency={payload.currency ?? null}
           depth={depth}
           ar={ar}
         />
       ))}
 
       {depth !== 'compact' && payload.spend_mix !== undefined && (
-        <SpendMix mix={payload.spend_mix} ar={ar} />
+        <SpendMix mix={payload.spend_mix} currency={payload.currency ?? null} ar={ar} />
       )}
 
       {depth === 'full' && <FormatTrend trend={payload.trend} ar={ar} />}
@@ -117,9 +119,10 @@ export function FormatComparisonView({ payload, depth = 'full', ar }: {
 
 type Depth = 'compact' | 'medium' | 'full'
 
-function ObjectiveBlock({ objective, coverage, depth, ar }: {
+function ObjectiveBlock({ objective, coverage, currency, depth, ar }: {
   objective: FormatIntelligencePayload['objectives'][number]
   coverage: FormatIntelligencePayload['coverage']
+  currency: string | null
   depth: Depth
   ar: boolean
 }) {
@@ -167,6 +170,7 @@ function ObjectiveBlock({ objective, coverage, depth, ar }: {
               label={label}
               winner={verdict.winner === row.format}
               cover={coverage[row.format]}
+              currency={currency}
               ar={ar}
             />
           ))}
@@ -188,8 +192,21 @@ function ObjectiveBlock({ objective, coverage, depth, ar }: {
               horizontal
               data={rows.map((row) => ({ label: formatWord(row.format, ar), value: row.value }))}
               bars={[{ key: 'value', name: label, kind: metricKind(metric) }]}
+              currency={currency ?? undefined}
             />
           </div>
+          {/*
+            WHICH DIRECTION IS GOOD, said rather than assumed.
+
+            On a cost per result the LONGEST bar is the worst one, and a reader scanning a chart takes
+            the biggest bar for the winner — the one misreading a comparison chart invites for free.
+            The rows are already ordered best-first by the server; this says why.
+          */}
+          <p className="mt-1 text-[11px] text-text-muted" data-testid={`format-bars-direction-${objective.family}`}>
+            {comparison.lower_is_better
+              ? (ar ? 'الأقل أفضل في هذا المؤشر — الشريط الأطول هو الأعلى تكلفة.' : 'Lower is better here — the longest bar is the most expensive.')
+              : (ar ? 'الأعلى أفضل في هذا المؤشر.' : 'Higher is better on this metric.')}
+          </p>
         </ChartCard>
       )}
 
@@ -221,16 +238,21 @@ function ObjectiveBlock({ objective, coverage, depth, ar }: {
  * evidence stands behind it. `tone` carries the verdict, `trailing` the badge, `hint` the evidence
  * base — in that order, because that is the order the reader's questions arrive in.
  */
-function FormatCard({ row, label, winner, cover, ar }: {
+function FormatCard({ row, label, winner, cover, currency, ar }: {
   row: { format: string; value: number; spend: number | null; creatives: number }
   label: string
   winner: boolean
   cover?: { creatives: number; with_metrics: number; without_metrics: number }
+  currency: string | null
   ar: boolean
 }) {
   const total = cover?.creatives ?? row.creatives
   const withData = cover?.with_metrics ?? row.creatives
-  const spend = row.spend === null ? '—' : round(row.spend)
+  /*
+    Money through the product's own formatter, under the currency the server named — «46,619» beside
+    a cost per result is a count, and a symbol this surface guessed would be worse than none.
+  */
+  const spend = row.spend === null ? '—' : money(row.spend, currency)
 
   return (
     <StatCard
@@ -247,8 +269,13 @@ function FormatCard({ row, label, winner, cover, ar }: {
         : `Spend ${spend} · ${total} creatives · ${withData} with data`}
       trailing={winner
         ? (
+          /*
+            «Best», not «Leads». In an advertising product `leads` is a METRIC, and a badge reading
+            «Leads» on a card headed «Cost per result» invites exactly the misreading this module
+            exists to prevent.
+          */
           <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white">
-            {ar ? 'الأفضل' : 'Leads'}
+            {ar ? 'الأفضل' : 'Best'}
           </span>
         )
         : undefined}
@@ -305,7 +332,7 @@ function ExactTable({ objective, coverage, ar }: {
  * against video, because somebody deciding what to commission needs to see the money that is already
  * somewhere else.
  */
-function SpendMix({ mix, ar }: { mix: FormatIntelligencePayload['spend_mix']; ar: boolean }) {
+function SpendMix({ mix, currency, ar }: { mix: FormatIntelligencePayload['spend_mix']; currency: string | null; ar: boolean }) {
   if (!Array.isArray(mix.formats) || mix.formats.length === 0) return null
 
   if (!mix.complete) {
@@ -331,8 +358,9 @@ function SpendMix({ mix, ar }: { mix: FormatIntelligencePayload['spend_mix']; ar
           data={slices}
           colorBy="series"
           height={220}
+          currency={currency ?? undefined}
           centerLabel={ar ? 'إجمالي الإنفاق' : 'Total spend'}
-          centerValue={mix.total === null ? '—' : round(mix.total)}
+          centerValue={mix.total === null ? '—' : money(mix.total, currency)}
         />
       </div>
     </ChartCard>
@@ -383,7 +411,7 @@ function FormatTrend({ trend, ar }: { trend: FormatIntelligencePayload['trend'];
           series={keys.map((key) => ({ key, name: formatWord(key, ar), kind: metricKind(trend.metric ?? '') }))}
         />
       </div>
-      <p className="mt-1 text-[11px] text-text-muted">
+      <p className="mt-1 text-[11px] text-text-muted" data-testid="format-trend-direction">
         {trend.lower_is_better
           ? (ar ? 'الأقل أفضل في هذا المؤشر.' : 'Lower is better on this metric.')
           : (ar ? 'الأعلى أفضل في هذا المؤشر.' : 'Higher is better on this metric.')}
