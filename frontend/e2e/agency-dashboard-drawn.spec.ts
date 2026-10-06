@@ -41,14 +41,35 @@ test('the objective chart actually draws its bars and its category axis', async 
     the axis ELEMENT, not on the chart being present.
   */
   await expect(chart.locator('.recharts-yAxis')).toHaveCount(1)
-  const bars = chart.locator('.recharts-bar-rectangle')
-  expect(await bars.count()).toBeGreaterThan(0)
 
-  // Every bar has a real width. One full-width rectangle and three of zero size is what a missing
-  // category axis looks like, and it looks like a chart until the widths are read.
-  for (const box of await bars.all()) {
-    expect((await box.boundingBox())?.width ?? 0).toBeGreaterThan(0)
-  }
+  /*
+    The defect's signature is BANDING, not width.
+
+    Without a category axis the chart drew one full-width rectangle and three of zero SIZE — zero
+    height as well as zero width, because there were no bands to lay the bars into. Height is
+    therefore what proves the axis: a category band is the same height whatever its value, so a bar
+    for a count of 1 beside a count of 500 still has the full band, while its WIDTH is a legitimate
+    sub-pixel that firefox rounds to 0 and chromium does not.
+
+    Polled rather than read once. `ResponsiveContainer` renders the chart twice — once before it has
+    measured its parent, when every bar's path is still degenerate, and again with real dimensions.
+    Reading the geometry on the first pass is a race that this spec lost on the firefox gate and then,
+    once it was looking at height, on chromium too: the bars were correct both times and simply had
+    not been laid out yet.
+  */
+  const bars = chart.locator('.recharts-bar-rectangle')
+  const categories = await chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick').count()
+
+  await expect.poll(async () => {
+    const boxes = await Promise.all((await bars.all()).map((b) => b.boundingBox()))
+
+    return {
+      bars: boxes.length,
+      allBanded: boxes.length > 0 && boxes.every((b) => (b?.height ?? 0) > 0),
+      // Drawn to scale: the largest category has a bar somebody can see.
+      widestOverTenPx: Math.max(0, ...boxes.map((b) => b?.width ?? 0)) > 10,
+    }
+  }, { timeout: 15000 }).toEqual({ bars: categories, allBanded: true, widestOverTenPx: true })
 })
 
 test('the pace chart ranks clients against a line it keeps on the card', async ({ page }) => {
