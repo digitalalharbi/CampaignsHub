@@ -472,6 +472,15 @@ final class CreativeAnalysisController extends Controller
             // The funnel is a reshaping of `metrics` above — same figures, no second query, and only
             // the steps this platform actually reported (§15.6).
             'funnel' => $funnel->build($current),
+            /*
+             * CONTENT-VIDEO-RETENTION-001 — a second, different question about the same impression.
+             *
+             * Not folded into `funnel`: that one is a person's path from seeing to buying, and
+             * putting «50% watched» between «clicks» and «landing page views» would say somebody
+             * watched half a video after clicking through it. An image creative gets no stages, so
+             * the surface renders nothing rather than an empty chart.
+             */
+            'video_retention' => $funnel->video($current),
             'trend' => $trend,
             // Rolled up from the daily rows already in hand, so the two charts cannot disagree.
             'weekly' => $this->weekly($trend),
