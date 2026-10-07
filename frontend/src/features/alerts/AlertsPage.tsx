@@ -392,7 +392,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       )}
 
       {events.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
+        <p data-testid="alert-ledger-empty" className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           {/*
             «لا يوجد شيء هنا» reads as a page that failed to load. An empty alert ledger is a
             RESULT — nothing has fired — and saying which rules were watching is what tells the
