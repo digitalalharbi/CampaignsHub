@@ -242,10 +242,40 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('frontend/package-lock.json') }}
+      # BROWSER-INSTALL-RETRY-001 — the apt mirror stalls, and one stall used to cost a whole gate.
+      #
+      # The cache above holds the BROWSER BINARIES. `--with-deps` is a separate job: it shells out to
+      # apt for the system libraries, and those come from the runner's mirror on every run, cache hit
+      # or not. Three gate runs in one day died there — two firefox, one webkit — each ending
+      # «The action 'Browsers' has timed out after 25 minutes» with the log stopped mid-download on
+      # azure.archive.ubuntu.com. No test had run. The result reads as a failed gate on the pull
+      # request, which is the worst part: a red check that says nothing about the change.
+      #
+      # So the budget is spent as three attempts of eight minutes rather than one of twenty-five. A
+      # stalled mirror is abandoned early and retried — on a different connection, usually a
+      # different mirror — instead of being waited out. The ceiling is unchanged, so a genuine
+      # problem still fails and still names this step, which is what the cache note above asks for.
       - name: Browsers
         working-directory: frontend
         timeout-minutes: 25
-        run: npx playwright install --with-deps chromium ${{ matrix.browser }}
+        run: |
+          # `timeout` is GNU coreutils and ships in the ubuntu runner image. If it ever does not,
+          # the per-attempt bound is lost but the step must still be able to SUCCEED — without this
+          # guard every attempt would fail on a missing binary and the gate would go red for a
+          # reason that has nothing to do with the change, which is the exact failure mode being
+          # fixed here. The step's own `timeout-minutes` is the backstop in that case.
+          bounded() {
+            if command -v timeout >/dev/null 2>&1; then timeout 480 "$@"; else "$@"; fi
+          }
+          for attempt in 1 2 3; do
+            if bounded npx playwright install --with-deps chromium ${{ matrix.browser }}; then
+              exit 0
+            fi
+            echo "::warning::browser install attempt ${attempt} stalled or failed — retrying"
+            sleep 15
+          done
+          echo "::error::browser install failed three times; the runner could not reach its package mirror"
+          exit 1
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
       # would mean the gate exercises a different code path than a developer's machine does.
