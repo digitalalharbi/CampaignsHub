@@ -134,41 +134,6 @@ export function SpendLimitsPage() {
         )}
       />
 
-      {limits.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
-          {/*
-            VIZ-BUDGET-001 — how much of the workspace is in each state, as one bar.
-
-            The four KPI cards above answer «how many» four times. «How much of what I set is in
-            trouble» is a fifth question none of them answers, and it is the one somebody opens this
-            page to ask. The total is the denominator rather than the sum of the bands — they do cover
-            it, because every limit carries exactly one state, and passing the total is what makes
-            that a checked fact rather than an assumption.
-          */}
-          <ChartCard title={ar ? 'حالة الحدود' : 'How the limits stand'}>
-            <StatusMixBar
-              testId="limit-states"
-              ar={ar}
-              label={ar ? 'حدود' : 'Limits'}
-              total={limits.length}
-              bands={[
-                { key: 'ok', label: ar ? 'ضمن الحد' : 'Within the limit', count: counts.ok, tone: 'success' },
-                { key: 'approaching', label: ar ? 'تقترب من الحد' : 'Near the limit', count: counts.approaching, tone: 'warning' },
-                { key: 'over', label: ar ? 'تجاوزت الحد' : 'Over the limit', count: counts.over, tone: 'danger' },
-                /*
-                 * Neutral, never green. A limit whose spend could not be compared has told nobody
-                 * they are within it, and colouring it as success is the page asserting safety it
-                 * has no reading for.
-                 */
-                { key: 'unknown', label: ar ? 'غير قابلة للمقارنة' : 'Not comparable', count: counts.unknown, tone: 'neutral' },
-              ]}
-            />
-          </ChartCard>
-
-          <LimitPace limits={limits} ar={ar} locale={locale} />
-        </div>
-      )}
-
       {/*
         The same sentence was on screen three times.
 
@@ -211,6 +176,49 @@ export function SpendLimitsPage() {
           </ul>
         )}
       </Panel>
+
+      {limits.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+          {/*
+            VIZ-BUDGET-001 §2 — the readings come AFTER the limits they are about.
+
+            The owner's rule: «the feature and the service come first on the page, clearly, without
+            needing to scroll — and the analytical results after them.» The feature here is the
+            limits: setting them, seeing them, changing them. These two charts first sat between the
+            head and the list, so a page for MANAGING limits opened on a reading of limits and pushed
+            the limits themselves below it.
+
+            VIZ-BUDGET-001 — how much of the workspace is in each state, as one bar.
+
+            The four KPI cards above answer «how many» four times. «How much of what I set is in
+            trouble» is a fifth question none of them answers, and it is the one somebody opens this
+            page to ask. The total is the denominator rather than the sum of the bands — they do cover
+            it, because every limit carries exactly one state, and passing the total is what makes
+            that a checked fact rather than an assumption.
+          */}
+          <ChartCard title={ar ? 'حالة الحدود' : 'How the limits stand'}>
+            <StatusMixBar
+              testId="limit-states"
+              ar={ar}
+              label={ar ? 'حدود' : 'Limits'}
+              total={limits.length}
+              bands={[
+                { key: 'ok', label: ar ? 'ضمن الحد' : 'Within the limit', count: counts.ok, tone: 'success' },
+                { key: 'approaching', label: ar ? 'تقترب من الحد' : 'Near the limit', count: counts.approaching, tone: 'warning' },
+                { key: 'over', label: ar ? 'تجاوزت الحد' : 'Over the limit', count: counts.over, tone: 'danger' },
+                /*
+                 * Neutral, never green. A limit whose spend could not be compared has told nobody
+                 * they are within it, and colouring it as success is the page asserting safety it
+                 * has no reading for.
+                 */
+                { key: 'unknown', label: ar ? 'غير قابلة للمقارنة' : 'Not comparable', count: counts.unknown, tone: 'neutral' },
+              ]}
+            />
+          </ChartCard>
+
+          <LimitPace limits={limits} ar={ar} locale={locale} />
+        </div>
+      )}
     </div>
   )
 }
