@@ -5,12 +5,12 @@ import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 vi.mock('./api', async (orig) => ({
   ...(await (orig() as Promise<Record<string, unknown>>)),
-  listShortLinks: vi.fn(),
+  listShortLinks: vi.fn(), listShortLinksWithMeta: vi.fn(),
   createShortLink: vi.fn(),
   disableShortLink: vi.fn(),
 }))
 
-import { createShortLink, listShortLinks } from './api'
+import { createShortLink, listShortLinksWithMeta } from './api'
 
 /**
  * SHORT-LINKS-001 — two fields, one action, and a link to take away.
@@ -29,6 +29,7 @@ const LINK = {
   short_url: 'https://campaignshub.io/l/k7m2ph4',
   shows: 'https://example.com/offer',
   clicks: 12,
+  recorded_follows: null,
   last_clicked_at: null,
   is_active: true,
   created_at: null,
@@ -37,7 +38,7 @@ const LINK = {
 describe('the short-link utility', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(listShortLinks).mockResolvedValue([])
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [], meta: {} } as never)
     signInWith(['campaigns.view', 'campaigns.update'])
   })
   afterEach(() => signOut())
@@ -120,7 +121,7 @@ describe('the short-link utility', () => {
   })
 
   it('lists what a person acts on, and what they typed', async () => {
-    vi.mocked(listShortLinks).mockResolvedValue([LINK])
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [LINK], meta: {} } as never)
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
     const row = await screen.findByTestId('short-link-k7m2ph4')
