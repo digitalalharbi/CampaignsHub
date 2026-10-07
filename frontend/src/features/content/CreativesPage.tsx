@@ -844,29 +844,6 @@ export function CreativesPage() {
         locale={locale}
       />
 
-      {/*
-        CONTENT-OBJECTIVE-SORT-001 — the automatic order, accounted for.
-
-        An order a reader cannot explain is indistinguishable from a bug, and this unit exists
-        because an order nobody could explain made the owner doubt the figures beside it. So the
-        automatic sort says which metric it ranked by, and which objective it read that from — and
-        where the filter named none or several, it says it fell back to spend rather than implying a
-        goal the library does not have.
-
-        Only for `auto`: every other sort names its own metric in the control the reader just used.
-
-        Gated on what the SERVER applied, not on the local control. The two agree in normal use and
-        the server is the authority when they do not — it is the thing that actually ordered the rows,
-        and a note sourced from the control would describe an order the page merely asked for.
-      */}
-      {data?.sort?.applied === 'auto' && (
-        <p data-testid="content-sort-note" className="text-sm text-text-secondary">
-          {data.sort.objective !== null
-            ? `${t.sortedBy} ${metricName(data.sort.metric, ar)} — ${t.sortedByObjective} ${objectiveLabel(data.sort.objective, locale)}.`
-            : t.sortedBySpendFallback}
-        </p>
-      )}
-
       <FilterBar
         id="content"
         ar={ar}
@@ -1131,6 +1108,38 @@ export function CreativesPage() {
             <Skeleton key={i} className="h-64" />
           ))}
         </div>
+      )}
+
+      {/*
+        CONTENT-OBJECTIVE-SORT-001 — the automatic order, accounted for.
+
+        An order a reader cannot explain is indistinguishable from a bug, and this unit exists
+        because an order nobody could explain made the owner doubt the figures beside it. So the
+        automatic sort says which metric it ranked by, and which objective it read that from — and
+        where the filter named none or several, it says it fell back to spend rather than implying a
+        goal the library does not have.
+
+        Only for `auto`: every other sort names its own metric in the control the reader just used.
+
+        Gated on what the SERVER applied, not on the local control. The two agree in normal use and
+        the server is the authority when they do not — it is the thing that actually ordered the rows.
+
+        ## Below the toolbar, not above it
+
+        It first sat between the figures and the filter bar, where it appears only once the query
+        resolves — so the toolbar dropped 40px the moment the options arrived and a reader aiming at
+        the view toggle hit whatever took its place. `creative-analysis.spec.ts`'s «the library
+        toolbar holds still while it loads» caught it, which is exactly what that guard is for.
+
+        Here it costs the toolbar nothing, and it reads better: it describes the order of the ROWS,
+        so it belongs immediately above them rather than above the controls that produced them.
+      */}
+      {data?.sort?.applied === 'auto' && (
+        <p data-testid="content-sort-note" className="text-sm text-text-secondary">
+          {data.sort.objective !== null
+            ? `${t.sortedBy} ${metricName(data.sort.metric, ar)} — ${t.sortedByObjective} ${objectiveLabel(data.sort.objective, locale)}.`
+            : t.sortedBySpendFallback}
+        </p>
       )}
 
       {!libraryQuery.isPending && !libraryQuery.isError && creatives.length === 0 && (
