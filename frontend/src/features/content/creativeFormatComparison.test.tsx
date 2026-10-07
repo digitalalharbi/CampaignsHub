@@ -191,7 +191,8 @@ describe('the creative format comparison', () => {
 
     await show('full')
 
-    expect(screen.getByTestId('format-too-few-sales')).toHaveTextContent('الدوارة')
+    /* «الكاروسيل» since CONTENT-KIND-VOCABULARY-001 — one vocabulary, in the words buyers use. */
+    expect(screen.getByTestId('format-too-few-sales')).toHaveTextContent('الكاروسيل')
   })
 
   /** A withheld spend prints «—», never a zero the account never spent. */
