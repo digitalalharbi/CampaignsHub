@@ -50,14 +50,31 @@ export interface Pagination {
   last_page: number
 }
 
+/**
+ * The stages a lead can actually be in, in the order it moves through them.
+ *
+ * This was the SALES lifecycle — new, contacted, qualified, proposal sent, negotiation, won, lost —
+ * and the backend replaced it with `LeadStage` when lead operations shipped. That enum's own
+ * docblock records why: the sales list has no answer for «has anybody been given this lead», «has
+ * anybody tried to reach them» and «is this a real person at all», so `assigned` was invisible, a
+ * call nobody answered looked like no call, and junk had to be filed as `lost` beside a real
+ * customer who chose a competitor.
+ *
+ * Only the filter dropdown read this list, which is how it survived: it offered two options
+ * (`proposal_sent`, `negotiation`) that no row can carry and therefore always returned nothing, and
+ * omitted the four (`assigned`, `contact_attempted`, `appointment`, `invalid`) that an operations
+ * team opens this page to find.
+ */
 export const LEAD_STATUSES = [
   'new',
+  'assigned',
+  'contact_attempted',
   'contacted',
   'qualified',
-  'proposal_sent',
-  'negotiation',
+  'appointment',
   'won',
   'lost',
+  'invalid',
 ] as const
 
 export const LEAD_SOURCES = [
