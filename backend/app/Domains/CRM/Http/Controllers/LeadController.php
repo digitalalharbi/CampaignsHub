@@ -66,9 +66,7 @@ final class LeadController extends Controller
 
         $query = $visibility->scopeForReader($query, $request->user(), $projectId);
 
-        if ($status = $request->string('status')->toString()) {
-            $query->where('status', $status);
-        }
+        $status = $request->string('status')->toString();
         if ($source = $request->string('source')->toString()) {
             $query->where('source', $source);
         }
@@ -88,6 +86,50 @@ final class LeadController extends Controller
                     ->orWhere('email', 'ilike', "%{$search}%")
                     ->orWhere('phone', 'ilike', "%{$search}%");
             });
+        }
+
+        /*
+         * VIZ-LEADS-001 — the SHAPE of the pipeline, taken before the status filter is applied.
+         *
+         * «How many are sitting at qualified» is a question about the whole pipeline. A client that
+         * answered it from the page it was given would be reporting fifteen rows as the estate — a
+         * funnel that changes when you turn the page — so the grouping happens here, on the builder
+         * the reader's visibility already narrowed.
+         *
+         * The status filter is the one narrowing it ignores: a pipeline cut down to the stage you are
+         * looking at is a funnel of one bar, which answers nothing. Every other filter — project,
+         * source, search — applies, so the shape and the list agree about WHICH leads. The response
+         * says which of the two happened, so the figures are never read as one scope.
+         *
+         * Every stage is emitted, including the empty ones, in `rank()` order. A funnel that omits
+         * the stages nobody reached reads as though nothing is stuck there, when what it says is
+         * that nothing got there.
+         */
+        /*
+         * `select()` and `reorder()` are both load-bearing. The list's builder carries
+         * `withCount('duplicates')` as a select subquery and `latest()` as an ordering, and Postgres
+         * refuses both beside a GROUP BY — the subquery because `leads.id` is not grouped, the
+         * ordering for the same reason. `selectRaw` ADDS a column rather than replacing the list, so
+         * clearing it first is what makes this an aggregate rather than the list with a count stapled on.
+         */
+        $grouped = (clone $query)->toBase()
+            ->reorder()
+            ->select('status')
+            ->selectRaw('count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status');
+
+        $stages = array_map(
+            static fn (LeadStage $stage): array => [
+                'status' => $stage->value,
+                'count' => (int) ($grouped[$stage->value] ?? 0),
+                'terminal' => $stage->isTerminal(),
+            ],
+            self::pipelineOrder(),
+        );
+
+        if ($status !== '') {
+            $query->where('status', $status);
         }
 
         /*
@@ -124,8 +166,31 @@ final class LeadController extends Controller
                  * audience, with nothing on screen to say which.
                  */
                 'counts' => ['received' => $received, 'unique' => $unique],
+                'stages' => $stages,
+                /*
+                 * The one disagreement, stated. Without it, a reader filtered to «new» sees a list
+                 * of one stage beside a funnel of nine and has no way to know which is the lie.
+                 */
+                'stages_ignore_status_filter' => $status !== '',
             ],
         );
+    }
+
+    /**
+     * The stages, in the order a lead moves through them.
+     *
+     * `rank()` gives the three terminal stages one shared rank because they are ends rather than
+     * degrees — a lead marked invalid did not get further than one that was won. They still need a
+     * stable position to be drawn, so ties keep the enum's own declaration order.
+     *
+     * @return list<LeadStage>
+     */
+    private static function pipelineOrder(): array
+    {
+        $cases = LeadStage::cases();
+        usort($cases, static fn (LeadStage $a, LeadStage $b): int => $a->rank() <=> $b->rank());
+
+        return $cases;
     }
 
     public function store(StoreLeadRequest $request, CreateLead $action): JsonResponse
