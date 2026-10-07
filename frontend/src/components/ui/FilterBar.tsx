@@ -352,8 +352,16 @@ export function FilterSelect({
         measured clean at every width because the measurement was of the NARROWER font.
 
         A closed select sized by text nobody chose is the same hazard at any density. Capping it
-        everywhere removes the whole class rather than the one instance, and it is why no caller has
-        to remember that a long option is a layout risk.
+        removes the whole class rather than the one instance, and it is why no caller has to remember
+        that a long option is a layout risk.
+
+        ## Capped on a phone, not on a desk
+
+        The cap is where the room runs out. A phone cannot fit a 323px control at all — the viewport's
+        content box is 311px — so there it truncates; from `sm` up the bar has room to give the
+        control its full width, and truncating there would hide a label for nothing. A dense bar keeps
+        its cap at every width, because its whole purpose is holding one row, which is a different
+        constraint from running out of viewport.
       */}
       <select
         id={id}
@@ -363,7 +371,7 @@ export function FilterSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`h-9 truncate rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
-          dense ? 'max-w-40' : 'max-w-48'
+          dense ? 'max-w-40' : 'max-w-48 sm:max-w-none'
         }`}
       >
         {options.map((o) => (
