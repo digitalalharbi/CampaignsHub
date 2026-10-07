@@ -69,3 +69,51 @@ describe('StatusMixBar', () => {
     expect(screen.getByTestId('mix-bar')).toHaveAccessibleName(/Active 6/)
   })
 })
+
+describe('StatusMixBar divides money as readily as it divides counts', () => {
+  const money = [
+    { key: 'current', label: 'Current', count: 7500, tone: 'success' as const },
+    { key: 'late', label: '1–30 days', count: 2500, tone: 'warning' as const },
+  ]
+
+  it('prints each band through the formatter it was given', () => {
+    render(
+      <StatusMixBar
+        testId="aging"
+        ar={false}
+        total={10_000}
+        bands={money}
+        format={(v) => `${v.toLocaleString('en-US')} SAR`}
+      />,
+    )
+
+    expect(screen.getByTestId('aging-legend')).toHaveTextContent('7,500 SAR')
+  })
+
+  it('sizes the bands by their share, whatever the formatter prints', () => {
+    render(<StatusMixBar testId="aging" ar={false} total={10_000} bands={money} format={(v) => `${v} SAR`} />)
+
+    expect(screen.getByTestId('aging-segment-current')).toHaveStyle({ width: '75%' })
+  })
+
+  it('speaks the formatted figure, not the raw one', () => {
+    render(
+      <StatusMixBar
+        testId="aging"
+        ar={false}
+        label="Outstanding"
+        total={10_000}
+        bands={money}
+        format={(v) => `${v.toLocaleString('en-US')} SAR`}
+      />,
+    )
+
+    expect(screen.getByTestId('aging-bar')).toHaveAccessibleName(/7,500 SAR/)
+  })
+
+  it('still counts plainly when no formatter is given', () => {
+    render(<StatusMixBar testId="mix" ar={false} total={10} bands={bands()} />)
+
+    expect(screen.getByTestId('mix-legend')).toHaveTextContent('6')
+  })
+})
