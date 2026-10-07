@@ -160,48 +160,6 @@ export function TasksPage() {
       />
 
       {/*
-        VIZ-OPS-001 — how much of the ledger is still open, which four counts cannot say.
-
-        The cards answer «how many» four times. «How much of it is still open» is a fifth question,
-        and the one somebody opens this board to ask.
-
-        ## `overdue` is NOT a band here, and drawing it as one would be wrong arithmetic
-
-        The server counts it as «a due date in the past that nobody has finished» — a SUBSET of open,
-        not a sibling. Putting the three in one bar would count every overdue task twice and push the
-        bands past the total, which `StatusMixBar` refuses outright rather than normalising. So the
-        bar divides open · done · everything else, and lateness is stated where it lives: inside open.
-
-        «Everything else» is a real band, not padding: `cancelled` is neither open nor done, so the
-        two do not cover the ledger, and calling their sum the total would make both shares too large.
-      */}
-      {summary.total > 0 && (
-        <ChartCard
-          title={ar ? 'حالة المهام' : 'How the board stands'}
-          subtitle={ar ? 'حصة كل حالة من إجمالي المهام المطابقة للتصفية.' : 'Each state’s share of every task the filter matched.'}
-        >
-          <StatusMixBar
-            testId="task-mix"
-            ar={ar}
-            label={ar ? 'المهام' : 'Tasks'}
-            total={summary.total}
-            residualLabel={ar ? 'أخرى' : 'Neither'}
-            bands={[
-              { key: 'open', label: ar ? 'مفتوحة' : 'Open', count: summary.open, tone: 'info' },
-              { key: 'done', label: ar ? 'منجزة' : 'Done', count: summary.done, tone: 'success' },
-            ]}
-          />
-          {summary.overdue > 0 && (
-            <p data-testid="task-overdue-note" className="mt-3 text-sm text-warning">
-              {ar
-                ? `${summary.overdue.toLocaleString('en-US')} من المهام المفتوحة تجاوزت موعدها.`
-                : `${summary.overdue.toLocaleString('en-US')} of the open tasks are past their due date.`}
-            </p>
-          )}
-        </ChartCard>
-      )}
-
-      {/*
         The filters, on the page — UX-SWEEP-001.
 
         SIMPLIFY-002 folded status, assignee and priority behind one button. Those are the three
@@ -328,6 +286,58 @@ export function TasksPage() {
             </button>
           </span>
         </nav>
+      )}
+
+      {/*
+        VIZ-OPS-001 — how much of the ledger is still open, BELOW the ledger itself.
+
+        ## Why it is after the list
+
+        The owner's rule: «the feature and the service come first on the page, clearly, without
+        needing to scroll — and the analytical results after them.» A task board is a place to DO the
+        work; the reading of it is what you look at once you have seen the work. This first sat
+        between the head and the filters, so the list every visit is actually about was pushed down by
+        a chart about the list.
+
+        The four counts cannot say it either way — that part has not changed.
+
+        The cards answer «how many» four times. «How much of it is still open» is a fifth question,
+        and the one somebody opens this board to ask.
+
+        ## `overdue` is NOT a band here, and drawing it as one would be wrong arithmetic
+
+        The server counts it as «a due date in the past that nobody has finished» — a SUBSET of open,
+        not a sibling. Putting the three in one bar would count every overdue task twice and push the
+        bands past the total, which `StatusMixBar` refuses outright rather than normalising. So the
+        bar divides open · done · everything else, and lateness is stated where it lives: inside open.
+
+        «Everything else» is a real band, not padding: `cancelled` is neither open nor done, so the
+        two do not cover the ledger, and calling their sum the total would make both shares too large.
+      */}
+      {summary.total > 0 && (
+        <ChartCard
+          title={ar ? 'حالة المهام' : 'How the board stands'}
+          subtitle={ar ? 'حصة كل حالة من إجمالي المهام المطابقة للتصفية.' : 'Each state’s share of every task the filter matched.'}
+        >
+          <StatusMixBar
+            testId="task-mix"
+            ar={ar}
+            label={ar ? 'المهام' : 'Tasks'}
+            total={summary.total}
+            residualLabel={ar ? 'أخرى' : 'Neither'}
+            bands={[
+              { key: 'open', label: ar ? 'مفتوحة' : 'Open', count: summary.open, tone: 'info' },
+              { key: 'done', label: ar ? 'منجزة' : 'Done', count: summary.done, tone: 'success' },
+            ]}
+          />
+          {summary.overdue > 0 && (
+            <p data-testid="task-overdue-note" className="mt-3 text-sm text-warning">
+              {ar
+                ? `${summary.overdue.toLocaleString('en-US')} من المهام المفتوحة تجاوزت موعدها.`
+                : `${summary.overdue.toLocaleString('en-US')} of the open tasks are past their due date.`}
+            </p>
+          )}
+        </ChartCard>
       )}
 
       {selected && (

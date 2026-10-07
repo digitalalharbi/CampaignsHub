@@ -217,51 +217,6 @@ export function ShortLinksPage() {
         )}
       />
 
-      {/*
-        VIZ-OPS-001 — which links people actually press.
-
-        The list carries a click count per row and the card above totals them. «Which of these is
-        doing the work» is the one question a short-link library exists to answer, and it was a column
-        to scan.
-
-        ## What this deliberately does not claim
-
-        There is no per-day series on this payload, so there is no trend here and none is implied —
-        only a ranking of what has been counted. A link nobody has pressed is a reported ZERO rather
-        than a missing figure, so it stays in the ranking at the bottom instead of being withheld.
-
-        Drawn only where there is a comparison to make: one link is not a ranking, it is the figure
-        the card already states; and a set where nothing has been pressed ranks nothing, with bars of
-        equal length implying a comparison nobody can make.
-      */}
-      {rows.length > 1 && rows.some((l) => (l.clicks ?? 0) > 0) && (
-        <ChartCard
-          title={ar ? 'الروابط الأكثر ضغطًا' : 'The links people press'}
-          subtitle={ar ? 'عدد الضغطات المسجّلة لكل رابط.' : 'Recorded clicks per link.'}
-        >
-          <div data-testid="short-link-clicks-chart" className="min-w-0">
-            <RankingBarChart
-              horizontal
-              height={Math.max(160, Math.min(rows.length, 10) * 40)}
-              data={[...rows]
-                .sort((a, b) => (b.clicks ?? 0) - (a.clicks ?? 0))
-                .slice(0, 10)
-                .map((l) => ({ label: l.slug, clicks: l.clicks ?? 0 }))}
-              bars={[{ key: 'clicks', name: t.clicks, kind: 'num' }]}
-            />
-          </div>
-          {/* The chart's key, and its fallback wherever the SVG is not read — print, or a screen reader. */}
-          <ul data-testid="short-link-clicks-legend" className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
-            {[...rows].sort((a, b) => (b.clicks ?? 0) - (a.clicks ?? 0)).slice(0, 10).map((l) => (
-              <li key={l.id} className="flex items-center gap-1">
-                <span dir="ltr">{l.slug}</span>
-                <span className="tnum font-bold text-text-primary" dir="ltr">{(l.clicks ?? 0).toLocaleString('en-US')}</span>
-              </li>
-            ))}
-          </ul>
-        </ChartCard>
-      )}
-
       {created !== null ? (
         <Card>
           <div className="flex flex-col gap-3" data-testid="short-link-result">
@@ -409,6 +364,61 @@ export function ShortLinksPage() {
           </div>
         )}
       </Card>
+
+      {/*
+        VIZ-OPS-001 — which links people actually press, BELOW the thing this page is for.
+
+        ## Why it is last
+
+        The owner's rule, and it is the right one: «the feature and the service come first on the
+        page, clearly, without needing to scroll — and the analytical results after them.» This chart
+        first sat above the create form, so a page whose job is MAKING a short link opened on a
+        reading of links already made. Somebody arriving to shorten a URL had to scroll past an
+        analysis of work they had already done to reach the one control they came for.
+
+        Analytics is the reward for having used the feature, not the toll for reaching it.
+
+        The list carries a click count per row and the card above totals them. «Which of these is
+        doing the work» is the one question a short-link library exists to answer, and it was a column
+        to scan.
+
+        ## What this deliberately does not claim
+
+        There is no per-day series on this payload, so there is no trend here and none is implied —
+        only a ranking of what has been counted. A link nobody has pressed is a reported ZERO rather
+        than a missing figure, so it stays in the ranking at the bottom instead of being withheld.
+
+        Drawn only where there is a comparison to make: one link is not a ranking, it is the figure
+        the card already states; and a set where nothing has been pressed ranks nothing, with bars of
+        equal length implying a comparison nobody can make.
+      */}
+      {rows.length > 1 && rows.some((l) => (l.clicks ?? 0) > 0) && (
+        <ChartCard
+          title={ar ? 'الروابط الأكثر ضغطًا' : 'The links people press'}
+          subtitle={ar ? 'عدد الضغطات المسجّلة لكل رابط.' : 'Recorded clicks per link.'}
+        >
+          <div data-testid="short-link-clicks-chart" className="min-w-0">
+            <RankingBarChart
+              horizontal
+              height={Math.max(160, Math.min(rows.length, 10) * 40)}
+              data={[...rows]
+                .sort((a, b) => (b.clicks ?? 0) - (a.clicks ?? 0))
+                .slice(0, 10)
+                .map((l) => ({ label: l.slug, clicks: l.clicks ?? 0 }))}
+              bars={[{ key: 'clicks', name: t.clicks, kind: 'num' }]}
+            />
+          </div>
+          {/* The chart's key, and its fallback wherever the SVG is not read — print, or a screen reader. */}
+          <ul data-testid="short-link-clicks-legend" className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
+            {[...rows].sort((a, b) => (b.clicks ?? 0) - (a.clicks ?? 0)).slice(0, 10).map((l) => (
+              <li key={l.id} className="flex items-center gap-1">
+                <span dir="ltr">{l.slug}</span>
+                <span className="tnum font-bold text-text-primary" dir="ltr">{(l.clicks ?? 0).toLocaleString('en-US')}</span>
+              </li>
+            ))}
+          </ul>
+        </ChartCard>
+      )}
     </div>
   )
 }
