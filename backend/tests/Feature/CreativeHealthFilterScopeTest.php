@@ -319,9 +319,17 @@ final class CreativeHealthFilterScopeTest extends TestCase
      *
      * The single-match cases prove the filter reaches the whole library; this proves the SLICE is a
      * slice of that answer. Three creatives with identical delivery share a verdict and tie on the
-     * chosen sort, so `applySort` falls through to `external_creatives.id` and the order is fully
-     * determined — which is what lets the two pages be asserted as an exact, ordered partition
-     * rather than as two sets that happen to add up.
+     * chosen sort, so the order is decided by `applySort`'s tiebreak and is fully determined — which
+     * is what lets the two pages be asserted as an exact, ordered partition rather than as two sets
+     * that happen to add up.
+     *
+     * The expected order is READ from an unpaged request rather than predicted from the tiebreak.
+     * This used to sort the ids and assume `applySort` would fall through to `external_creatives.id`;
+     * it now falls through to the NAME first, for the reason the default arm's own docblock gives —
+     * a UUID is deterministic and meaningless, and a reader scanning for a creative they know the
+     * name of had no order to scan. The property being tested is «the pages partition the filtered
+     * set in the set's own order», and asking the set for that order tests exactly that, whichever
+     * tiebreak is in force.
      *
      * Order matters here beyond tidiness: the page is re-read by `whereIn`, which promises no order
      * at all, so a page that did not restore the reader's sort would re-order itself silently.
@@ -339,8 +347,6 @@ final class CreativeHealthFilterScopeTest extends TestCase
             $needles[] = (string) $needle->getKey();
         }
 
-        sort($needles);
-
         $status = null;
         foreach ($this->library('&per_page=100')['creatives'] as $row) {
             if ($row['id'] === $needles[0]) {
@@ -350,6 +356,15 @@ final class CreativeHealthFilterScopeTest extends TestCase
 
         $this->assertNotSame(CreativeFatigue::INSUFFICIENT, $status, 'the needles were not judged, so this proves nothing');
 
+        /* The set's own order, unpaged — the thing the two pages must partition. */
+        $whole = array_column($this->library('&health='.$status.'&per_page=100')['creatives'], 'id');
+
+        /* And it is the right set: exactly the three that were judged, whatever order they are in. */
+        $sorted = $whole;
+        sort($sorted);
+        sort($needles);
+        $this->assertSame($needles, $sorted, 'the unpaged read is not the three judged creatives');
+
         $first = $this->library('&health='.$status.'&per_page=2&page=1');
         $second = $this->library('&health='.$status.'&per_page=2&page=2');
 
@@ -357,7 +372,7 @@ final class CreativeHealthFilterScopeTest extends TestCase
         $this->assertSame(3, $second['total'], 'the total must not change with the page it was asked about');
 
         $this->assertSame(
-            $needles,
+            $whole,
             [...array_column($first['creatives'], 'id'), ...array_column($second['creatives'], 'id')],
             'the two pages are not an ordered partition of the filtered set',
         );

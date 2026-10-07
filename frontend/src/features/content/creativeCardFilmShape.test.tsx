@@ -14,17 +14,25 @@ vi.mock('./api', async (importOriginal) => {
 import { listCreatives } from './api'
 
 /**
- * CONTENT-PREVIEW-SHAPES-001 — «a story is contained, never covered» applies to the FILM too.
+ * CONTENT-COVER-FILL-001 — the card's film and its still are ONE cover, and the cover fills.
  *
- * The still branch of the card has honoured that rule since it was written. The film branch was
- * `object-cover` with no shape in it at all, so a 9:16 creative whose frame does not match its
- * declared shape — every film whose platform returned a landscape cover, and every one in the demo —
- * is cropped to the middle third of a portrait box. On a story that is the logo and the call to
- * action, which is the exact loss the rule names.
+ * ## What this file used to assert, and why it changed
  *
- * Measured on the library before the fix: a 480×270 frame drawn `object-fit: cover` inside a 225×399
- * box. The fixture is a film with NO thumbnail and no image, because that is the payload that
- * reaches the film branch — a card with a still never gets there.
+ * It held «a story is contained, never covered» for the film branch, matching the still branch. That
+ * rule was right about the surface it was written for and the owner has confirmed it on that surface:
+ * the opened viewer shows the whole ad at its own dimensions, and its guard is untouched.
+ *
+ * The CARD is a different surface, and the owner named it directly: «the cover must be the full
+ * cover, not a tall shape … so it holds an image that fills the whole cover, not only a portrait
+ * strip». Containing inside a frame that also took each asset's own aspect produced a wall of strips
+ * of different heights, which is what he was looking at.
+ *
+ * So the card's frame is one square for every creative and both branches fill it. What stays is the
+ * thing the two branches must never disagree about: a still and a film of the same creative are the
+ * same cover, drawn the same way — which is what this file has always really been guarding.
+ *
+ * The crop is real. A story's logo and call to action sit at the top and bottom, and they are one
+ * click away in the viewer rather than on the tile.
  */
 /** Enough of a metrics payload for the card to render its grid; the figures are not the subject. */
 const METRICS = {
@@ -113,33 +121,28 @@ describe('a film on a content card', () => {
     })
   })
 
-  it('is contained when the creative is a story, so nothing is cropped away', async () => {
+  it('fills its cover when the creative is a story, rather than making the card tall', async () => {
     vi.mocked(listCreatives).mockResolvedValue(page(film({})))
     renderWithProviders(<CreativesPage />, { locale: 'ar' })
 
-    expect((await filmElement()).className).toContain('object-contain')
+    expect((await filmElement()).className).toContain('object-cover')
   })
 
   /**
-   * CONTENT-PREVIEW-FIT-001 — and a landscape film is contained too, which this used to forbid.
+   * And a landscape film fills the same square, for the same reason.
    *
-   * «A landscape film fills its own landscape box» was true about the AD and not about the FILE.
-   * The declared ratio describes what was bought; the frame the platform actually returns is
-   * frequently a different shape — a landscape cover for a 9:16 video is routine, which this
-   * codebase had already written down — so matching the declaration against the stage licensed a
-   * crop on evidence that does not say what it was read to say. Measured on the seeded library,
-   * six cards were drawn at 0.563 and 1.775 against an intrinsic 1.000 under exactly that rule.
-   *
-   * Containing costs a landscape film nothing when it really is landscape: the stage is already
-   * `aspect-video`, so the two fits are identical pixels. What it buys is that the one time the
-   * file is not the shape it was declared to be, the reader sees the whole ad instead of its middle.
+   * The fit no longer consults the declared ratio at all on this surface, which also removes the
+   * trap the previous rule was written around: the declaration describes what was BOUGHT, and a
+   * platform returning a landscape cover for a 9:16 video is routine, so a fit that branched on the
+   * declaration branched on evidence that does not say what it was read to say. A cover fills,
+   * whatever arrives.
    */
-  it('is contained when the creative is landscape, because the declaration is not the file', async () => {
+  it('fills its cover when the creative is landscape, on the same rule and without consulting the declaration', async () => {
     vi.mocked(listCreatives).mockResolvedValue(page(film({
       name: 'Story film', aspect_ratio: '16:9', width: 1920, height: 1080,
     })))
     renderWithProviders(<CreativesPage />, { locale: 'ar' })
 
-    expect((await filmElement()).className).toContain('object-contain')
+    expect((await filmElement()).className).toContain('object-cover')
   })
 })

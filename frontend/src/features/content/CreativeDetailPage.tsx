@@ -103,6 +103,8 @@ const COPY = {
     change: 'التغير عن الفترة السابقة',
     funnel: 'الفانل',
     funnelHint: 'المراحل التي أرسلتها المنصة فقط.',
+    retention: 'أين توقّف المشاهدون',
+    retentionHint: 'كل ربع من الفيديو، ونسبة من وصل إليه ممّن وصل إلى الربع الذي قبله.',
     funnelMissing: 'مراحل لا ترسلها هذه المنصة',
     funnelNone: 'لم ترسل المنصة أي مرحلة يمكن بناء فانل منها.',
     trend: 'الاتجاه الزمني',
@@ -184,6 +186,8 @@ const COPY = {
     change: 'Change vs previous period',
     funnel: 'Funnel',
     funnelHint: 'Only the stages the platform reported.',
+    retention: 'Where viewers stopped watching',
+    retentionHint: 'Each quarter of the video, and the share who reached it of those who reached the quarter before.',
     funnelMissing: 'Stages this platform does not report',
     funnelNone: 'The platform reported no stage a funnel could be built from.',
     trend: 'Trend over time',
@@ -608,6 +612,45 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           </p>
         )}
       </section>
+
+      {/*
+        CONTENT-VIDEO-RETENTION-001 — where people stopped watching.
+
+        A second section rather than more steps on the one above: the conversion funnel is a person's
+        path from seeing to buying, and «50% watched» between «clicks» and «landing page views» would
+        say somebody watched half a video after clicking through it.
+
+        Drawn only where the platform reported a watch-through. An image creative has none, and an
+        empty chart on its page would be a question asked of an asset that cannot answer it.
+      */}
+      {(data.video_retention?.stages.length ?? 0) > 0 && (
+        <section data-testid="creative-video-retention" className="rounded-lg border border-border bg-surface p-4">
+          <h2 className="text-sm font-semibold text-text-primary">{t.retention}</h2>
+          <p className="mt-1 text-xs text-text-secondary">{t.retentionHint}</p>
+          <div className="mt-4">
+            <ConversionFunnelChart
+              stages={data.video_retention!.stages.map((s) => ({
+                label: ar ? s.label_ar : s.label_en,
+                /* The null travels — an unreported quartile is a hole, never a cliff to zero. */
+                count: s.count,
+                step_rate: s.rate_from_previous,
+                /* No cost per quartile: the spend bought the impression, not the moment somebody
+                   stopped watching, and no platform reports such a figure. */
+                cost_per: null,
+              }))}
+              ar={ar}
+              currency={currency}
+            />
+          </div>
+          {data.video_retention!.missing.length > 0 && (
+            <p data-testid="creative-video-retention-missing" className="mt-3 text-xs text-text-muted">
+              {ar
+                ? `لم ترسل المنصة: ${data.video_retention!.missing.map((m) => m.label_ar).join('، ')}`
+                : `The platform did not report: ${data.video_retention!.missing.map((m) => m.label_en).join(', ')}`}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* ---- how it moved ---------------------------------------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">

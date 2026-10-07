@@ -13,7 +13,7 @@ import { MetricValue } from './MetricValue'
 import { metricLabel } from './metrics'
 import { canonicalFigureKeys } from './canonicalFigures'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
-import { absenceLabel, aspectClass, assetAspect, mediaFitClass, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, assetAspect, mediaFitClass, posterSource, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -133,11 +133,20 @@ const COPY = {
     from: 'من',
     to: 'إلى',
     sort: 'الترتيب',
+    sortAuto: 'تلقائي — حسب هدف الحملة',
+    sortedBy: 'مرتَّب حسب',
+    sortedByObjective: 'لأن هدف الحملات هنا',
+    sortedBySpendFallback: 'مرتَّب حسب الإنفاق — لم تُحدَّد وجهة واحدة لترتيبها عليها.',
     sortRelevance: 'ما يعمل الآن',
     sortRecent: 'الأحدث نشاطًا',
     sortSpend: 'الأعلى إنفاقًا',
     sortImpressions: 'الأعلى ظهورًا',
-    sortConversions: 'الأعلى نتائج',
+    sortConversions: 'الأعلى طلبات',
+    sortClicks: 'الأعلى نقرًا',
+    sortEngagements: 'الأعلى تفاعلًا',
+    sortVideoViews: 'الأعلى مشاهدة',
+    sortReach: 'الأوسع وصولًا',
+    sortEngagementRate: 'الأعلى معدل تفاعل',
     sortName: 'الاسم',
     compare: 'مقارنة',
     compareHint: 'اختر إعلانين أو أكثر للمقارنة.',
@@ -211,11 +220,20 @@ const COPY = {
     from: 'From',
     to: 'To',
     sort: 'Sort',
+    sortAuto: 'Automatic — by campaign objective',
+    sortedBy: 'Ordered by',
+    sortedByObjective: 'because the objective here is',
+    sortedBySpendFallback: 'Ordered by spend — no single objective was named to rank on.',
     sortRelevance: 'What is running',
     sortRecent: 'Most recently active',
     sortSpend: 'Highest spend',
     sortImpressions: 'Most impressions',
-    sortConversions: 'Most results',
+    sortConversions: 'Most orders',
+    sortClicks: 'Most clicks',
+    sortEngagements: 'Most engagements',
+    sortVideoViews: 'Most views',
+    sortReach: 'Widest reach',
+    sortEngagementRate: 'Highest engagement rate',
     sortName: 'Name',
     compare: 'Compare',
     compareHint: 'Select two or more ads to compare.',
@@ -440,7 +458,16 @@ export function CreativesPage() {
   const [search, setSearch] = useState(() => initial.current.get('search') ?? '')
   const [from, setFrom] = useState(() => initial.current.get('from') ?? isoDaysAgo(29))
   const [to, setTo] = useState(() => initial.current.get('to') ?? isoDaysAgo(0))
-  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'relevance')
+  /*
+   * CONTENT-OBJECTIVE-SORT-001 — the default is the OBJECTIVE's metric, not a fixed one.
+   *
+   * Spend is the right order for «where is the money» and the wrong one for «what worked»: an
+   * awareness campaign that spent most is not the creative that was seen most, and ranking a sales
+   * library by spend puts the expensive creative above the one that actually sold. The server
+   * resolves which metric from the scope's objective and says so in `sort.metric`, which the strip
+   * below prints — an order a reader cannot account for is indistinguishable from a bug.
+   */
+  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'auto')
   const [page, setPage] = useState(1)
   const [axes, setAxes] = useState<Record<string, string[]>>(() => {
     const seeded: Record<string, string[]> = {}
@@ -887,11 +914,25 @@ export function CreativesPage() {
                  * thing an operator saw was work they could do nothing about. «Most recently active»
                  * stays on the list, because it is a real question — it is just not the first one.
                  */
+                /*
+                  CONTENT-OBJECTIVE-SORT-001 — the automatic order leads, because it is the default.
+                  «Most orders if the objective is sales, most clicks if it is engagement, most
+                  impressions if it is awareness, and so on for every objective» — the metric is
+                  resolved on the server from `ObjectiveFamily`, so this list never names one.
+                */
+                { value: 'auto', label: t.sortAuto },
                 { value: 'relevance', label: t.sortRelevance },
                 { value: 'recent', label: t.sortRecent },
                 { value: 'spend', label: t.sortSpend },
-                { value: 'impressions', label: t.sortImpressions },
                 { value: 'conversions', label: t.sortConversions },
+                { value: 'clicks', label: t.sortClicks },
+                { value: 'impressions', label: t.sortImpressions },
+                { value: 'engagements', label: t.sortEngagements },
+                /* A RATE, computed over the window's totals — see `applySort`'s note on why not an
+                   average of daily rates. */
+                { value: 'engagement_rate', label: t.sortEngagementRate },
+                { value: 'video_views', label: t.sortVideoViews },
+                { value: 'reach', label: t.sortReach },
                 { value: 'name', label: t.sortName },
               ]}
               onChange={(v) => { setSort(v); setPage(1) }}
@@ -1079,8 +1120,40 @@ export function CreativesPage() {
         </div>
       )}
 
+      {/*
+        CONTENT-OBJECTIVE-SORT-001 — the automatic order, accounted for.
+
+        An order a reader cannot explain is indistinguishable from a bug, and this unit exists
+        because an order nobody could explain made the owner doubt the figures beside it. So the
+        automatic sort says which metric it ranked by, and which objective it read that from — and
+        where the filter named none or several, it says it fell back to spend rather than implying a
+        goal the library does not have.
+
+        Only for `auto`: every other sort names its own metric in the control the reader just used.
+
+        Gated on what the SERVER applied, not on the local control. The two agree in normal use and
+        the server is the authority when they do not — it is the thing that actually ordered the rows.
+
+        ## Below the toolbar, not above it
+
+        It first sat between the figures and the filter bar, where it appears only once the query
+        resolves — so the toolbar dropped 40px the moment the options arrived and a reader aiming at
+        the view toggle hit whatever took its place. `creative-analysis.spec.ts`'s «the library
+        toolbar holds still while it loads» caught it, which is exactly what that guard is for.
+
+        Here it costs the toolbar nothing, and it reads better: it describes the order of the ROWS,
+        so it belongs immediately above them rather than above the controls that produced them.
+      */}
+      {data?.sort?.applied === 'auto' && (
+        <p data-testid="content-sort-note" className="text-sm text-text-secondary">
+          {data.sort.objective !== null
+            ? `${t.sortedBy} ${metricName(data.sort.metric, ar)} — ${t.sortedByObjective} ${objectiveLabel(data.sort.objective, locale)}.`
+            : t.sortedBySpendFallback}
+        </p>
+      )}
+
       {!libraryQuery.isPending && !libraryQuery.isError && creatives.length === 0 && (
-        <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-secondary">
+        <div data-testid="content-no-results" className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-secondary">
           {filtersTouched ? t.empty : t.emptyAll}
         </div>
       )}
@@ -1534,7 +1607,22 @@ function CreativeGridCard({
            * synced; the preview payload carries them now. Where it says nothing the frame keeps the
            * shape it has always had, because guessing tall is a claim too.
            */
-          className={showPreviewPanel ? `block w-full bg-surface-hover ${aspectClass(preview.aspect ?? null) ?? 'aspect-video'}` : 'block w-full bg-surface-hover'}
+          /*
+            CONTENT-COVER-FILL-001 — one frame for every cover, and the picture fills it.
+
+            The frame took each asset's OWN aspect, so a 9:16 story produced a card twice the height
+            of the 16:9 beside it and a mixed library became a wall of strips of different heights.
+            The owner named exactly that: «the cover must be the full cover, not a tall shape … so it
+            holds an image that fills the whole cover, not only a portrait strip.»
+
+            Square, because the wall holds both: a 16:9 frame would take a story down to its middle
+            third, and a 9:16 frame is the tall card being removed. A square crops both shapes by a
+            similar amount and tiles evenly at every column count.
+
+            The crop is real, and is why the whole asset stays one click away — the viewer contains,
+            its own guard is untouched, and the owner has confirmed that surface reads correctly.
+          */
+          className={showPreviewPanel ? 'block w-full bg-surface-hover aspect-square' : 'block w-full bg-surface-hover'}
         >
           {usablePoster ? (
             <PosterImage
@@ -1566,7 +1654,7 @@ function CreativeGridCard({
                 about one creative. Where the platform stated no shape the frame is a guessed 16:9
                 and the asset is contained rather than cropped into it.
               */
-              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null)}`}
+              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null, 'cover')}`}
             />
           ) : video ? (
             /*
@@ -1593,7 +1681,7 @@ function CreativeGridCard({
                * disagreeing about what a portrait creative is.
                */
               /* The same rule as the still above, from the same source — see CONTENT-PREVIEW-FIT-001. */
-              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null)}`}
+              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null, 'cover')}`}
               onUnavailable={() => setBrokenVideo(true)}
             />
           ) : showPreviewPanel ? (
@@ -1907,4 +1995,28 @@ function EmptyReasonPanel({ reason }: { reason: EmptyReason }) {
       )}
     </div>
   )
+}
+
+/**
+ * The sort metric's name, for the sentence that accounts for the automatic order.
+ *
+ * Local and small on purpose: these are the few keys {@see CreativeRows::SORTABLE} can order by, and
+ * the metric catalogue's own labels are written for a figure in a card rather than for the middle of
+ * a sentence. A key this list has not met prints as itself, which is visible and fixable, rather than
+ * as «—», which is not.
+ */
+function metricName(metric: string, ar: boolean): string {
+  const names: Record<string, { ar: string; en: string }> = {
+    spend: { ar: 'الإنفاق', en: 'spend' },
+    conversions: { ar: 'الطلبات', en: 'orders' },
+    impressions: { ar: 'الظهور', en: 'impressions' },
+    clicks: { ar: 'النقرات', en: 'clicks' },
+    engagements: { ar: 'التفاعلات', en: 'engagements' },
+    engagement_rate: { ar: 'معدل التفاعل', en: 'engagement rate' },
+    video_views: { ar: 'المشاهدات', en: 'views' },
+    reach: { ar: 'الوصول', en: 'reach' },
+    revenue: { ar: 'الإيراد', en: 'revenue' },
+  }
+
+  return names[metric] ? (ar ? names[metric]!.ar : names[metric]!.en) : metric
 }

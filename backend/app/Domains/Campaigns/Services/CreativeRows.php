@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\CanonicalObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -356,9 +357,65 @@ final class CreativeRows
      * page, which looks identical on page one and is wrong everywhere after it. A joined aggregate
      * over the SAME window keeps the sort and the pagination talking about the same numbers.
      */
-    public function applySort(mixed $query, ?string $sort, Carbon $from, Carbon $to): mixed
+    /**
+     * CONTENT-OBJECTIVE-SORT-001 — which metric an objective is judged on.
+     *
+     * The owner's rule: «the automatic filter should be most orders if the objective is sales, most
+     * clicks if it is engagement, most impressions if it is awareness, and so on for every objective».
+     * Spend is the right order for «where is the money» and the wrong one for «what worked» — an
+     * awareness campaign that spent most is not the creative that was SEEN most.
+     *
+     * Read from `ObjectiveFamily::headlineMetrics()` rather than from a table written here.
+     * That list already answers «which number is the verdict for this family», ordered
+     * most-important-first with `spend` leading every one because it is always the question, so the
+     * leading RESULT is the second entry — which is how `ObjectivePerformance` already reads it.
+     * A second objective→metric map is precisely the drift this codebase keeps writing guards against.
+     *
+     * The name is then resolved to something `creative_daily_metrics` can actually hold: `orders` is
+     * `conversions` at this grain, as `CreativeMetrics` itself resolves it. A family whose result
+     * lives only at AD grain — `leads`, `installs` — has nothing to sort by here and falls back to
+     * spend, because an order by a column that does not exist is an order by nothing.
+     */
+    public function objectiveSortMetric(?string $objective): string
+    {
+        /*
+         * A caller may name either a FAMILY («sales») or a platform objective
+         * («OUTCOME_SALES»), because the library's filter carries one and a campaign row the other.
+         * Both resolve through the canonical pair rather than through a list written here.
+         */
+        $family = ObjectiveFamily::tryFrom((string) $objective)
+            ?? CampaignObjective::tryFrom((string) $objective)?->family()
+            ?? ObjectiveFamily::Unknown;
+
+        /*
+         * An objective nobody stated is ordered by SPEND, not by whatever `Unknown`'s list happens to
+         * lead with. The rule here is «the metric this objective is judged on», and an unknown
+         * objective is judged on nothing — so the order falls back to the one figure that is always
+         * the question, which is what `headlineMetrics()`' own docblock says spend is.
+         */
+        if ($family === ObjectiveFamily::Unknown) {
+            return 'spend';
+        }
+
+        $leading = $family->headlineMetrics()[1] ?? 'spend';
+
+        /* `orders` is `conversions` one grain down — the same resolution `CreativeMetrics` makes. */
+        $leading = $leading === 'orders' ? 'conversions' : $leading;
+
+        return in_array($leading, self::SORTABLE, true) ? $leading : 'spend';
+    }
+
+    public function applySort(mixed $query, ?string $sort, Carbon $from, Carbon $to, ?string $objective = null): mixed
     {
         $sort = (string) $sort;
+
+        /*
+         * `auto` is the objective's own metric, and everything else about the order is unchanged:
+         * measured first, then the result, then spend to break its ties, then the running state.
+         */
+        if ($sort === 'auto') {
+            return $this->applyMeasuredFirst($query, $this->objectiveSortMetric($objective), $from, $to);
+        }
 
         /*
          * The project whose creatives are being ranked, for the demo policy below.
@@ -368,38 +425,84 @@ final class CreativeRows
          * about the scope they all share.
          */
         $projectId = app(ProjectContext::class)->projectId();
-        $metric = ['spend', 'impressions', 'clicks', 'conversions', 'revenue'];
+        $metric = self::SORTABLE;
 
-        if (in_array($sort, $metric, true)) {
-            /*
-             * ANALYTICS-PROVENANCE-001 — the ORDER is a figure too.
-             *
-             * This ranks a real library by a total that included seeded rows, so a creative could
-             * outrank another on spend it never had. See `CreativeDemoPolicy` for why the scope and
-             * not the window decides.
-             */
-            $totals = DB::table('creative_daily_metrics')
+        /*
+         * CONTENT-OBJECTIVE-SORT-001 — a RATE is not a sum, and the owner asked for one by name.
+         *
+         * «Engagement rate» is the one metric in his list that no column holds. It is computed over
+         * the WINDOW's totals — `SUM(engagements) / SUM(impressions)` — rather than as an average of
+         * daily rates, because averaging days weights a day with ten impressions the same as one with
+         * ten thousand, and a creative that served once at 100% would lead the library.
+         *
+         * No impressions is no RATE, never a zero one: a zero would read as «nobody engaged» about a
+         * creative nobody was shown. `NULLIF` makes the division null and `NULLS LAST` puts it where
+         * an unknown belongs, which is the same treatment every other unmeasured figure gets here.
+         */
+        if ($sort === 'engagement_rate') {
+            $projectId = app(ProjectContext::class)->projectId();
+
+            $rates = DB::table('creative_daily_metrics')
                 ->select('creative_id')
-                ->selectRaw('SUM('.$sort.') AS sort_total')
+                ->selectRaw('SUM(engagements)::numeric / NULLIF(SUM(impressions), 0) AS sort_total')
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                 ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
                 ->groupBy('creative_id');
 
             return $query
-                ->leftJoinSub($totals, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
+                ->leftJoinSub($rates, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
                 ->select('external_creatives.*')
-                // NULLS LAST: a creative the platform reported nothing for has not «earned last
-                // place» on spend — it has no figure at all, and floating it to the top of an
-                // ascending sort would read as the cheapest creative in the project.
                 ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+                ->orderBy('external_creatives.name')
                 ->orderBy('external_creatives.id');
+        }
+
+        /*
+         * CONTENT-MEASURED-FIRST-001 — an explicit metric sort obeys the same rule the automatic one
+         * does, and for the same reason.
+         *
+         * This used to be its own ordering: `SUM(metric) DESC NULLS LAST` then `id`. Observed on a
+         * real library, ordering by `engagements` where no creative had any made every total null, so
+         * every row tied and fell to `id` — and three creatives with NO figures of any kind came out
+         * above ones that had spent thousands, in an order a UUID decided. That is the owner's
+         * original complaint arriving through a different door.
+         *
+         * One ordering serves all three now — `relevance`, `auto` and an explicitly chosen metric —
+         * so they cannot drift into disagreeing about what «measured» means, and a metric the window
+         * is silent about falls to spend rather than to an identifier.
+         */
+        if (in_array($sort, $metric, true)) {
+            return $this->applyMeasuredFirst($query, $sort, $from, $to);
         }
 
         return match ($sort) {
             'name' => $query->orderBy('name')->orderBy('id'),
             /*
-             * ENTITY-RELEVANCE-ORDERING-001 — what is running, then what spent most, then a key that
-             * cannot move.
+             * CONTENT-MEASURED-FIRST-001 / ENTITY-RELEVANCE-ORDERING-001 — what the window MEASURED,
+             * then what spent most, then what is running, then a key that cannot move.
+             *
+             * ## The running-state used to come first, and that was the defect the owner found
+             *
+             * A creative that had not delivered in over a year, with no metric row of any kind in the
+             * window, sits in the «idle» bucket — and idle outranks «stopped», so it was placed above
+             * a paused creative that had actually spent 2,704.50 in the same window. Measured on a
+             * real library: position 3 «Old untouched active», nothing at all; position 4 «Bundle
+             * Carousel», 2,704.50 across 6,010 impressions.
+             *
+             * On a page whose purpose is putting budget where it performs, that tells an operator the
+             * thing nothing is known about matters more than the thing the money went to. It also
+             * reads as a DATA fault rather than an ordering one: dead content at the top of a
+             * performance list makes a reader stop trusting the figures beside it.
+             *
+             * So measurement leads. A creative the window holds a figure for ranks above one it holds
+             * nothing for, whatever either status says; within the measured, spend decides descending,
+             * because continuous management moves budget toward what performs and spend order is
+             * therefore performance order; within the unmeasured — everything we cannot rank — the
+             * previous reading applies unchanged.
+             *
+             * A reported ZERO is measurement. «The platform told us this spent nothing» and «the
+             * platform told us nothing» are different facts, and `measured` counts ROWS rather than
+             * money so the first keeps its place ahead of the second.
              *
              * The library's default was `last_active_at DESC`, which is recency and not relevance:
              * a paused campaign's creative that delivered yesterday sorted above a serving creative
@@ -413,40 +516,7 @@ final class CreativeRows
              * the id is last for the reason every ordering here ends with it: ties repeat and skip
              * rows across pages.
              */
-            'relevance' => $query
-                ->leftJoinSub(
-                    DB::table('creative_daily_metrics')
-                        ->select('creative_id')
-                        ->selectRaw('SUM(spend) AS sort_total')
-                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-                        /* Relevance is spend, and seeded spend is not this customer's — see above. */
-                        ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
-                        ->groupBy('creative_id'),
-                    'sorted',
-                    'sorted.creative_id',
-                    '=',
-                    'external_creatives.id',
-                )
-                ->select('external_creatives.*')
-                ->orderByRaw(
-                    'CASE WHEN external_creatives.status IN ('.implode(', ', array_fill(0, count(Relevance::NOT_RUNNING), '?')).') THEN 2'
-                    .' WHEN external_creatives.last_active_at >= ? THEN 0 ELSE 1 END',
-                    [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
-                )
-                ->orderByRaw('sorted.sort_total DESC NULLS LAST')
-                /*
-                 * ENTITY-RELEVANCE-ORDERING-001 — and the same tie, in the order the library
-                 * actually opens on.
-                 *
-                 * Relevance is «is it running» then «what did it spend». A freshly connected
-                 * account answers neither: nothing has delivered, so every creative is in one
-                 * status bucket with a null spend, and the whole first page tied and fell to `id`.
-                 * The name is inserted before it for the reason given on the default arm below —
-                 * `id` is deterministic and meaningless, and a reader scanning for a creative they
-                 * know the name of had no order to scan.
-                 */
-                ->orderBy('external_creatives.name')
-                ->orderBy('external_creatives.id'),
+            'relevance' => $this->applyMeasuredFirst($query, 'spend', $from, $to),
             'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
             /*
              * SNAP-CREATIVE-METRICS-LIVE-001 — NULLS LAST, and it is not a refinement.
@@ -867,6 +937,79 @@ final class CreativeRows
                 CreativeFatigue::FATIGUED, CreativeFatigue::INSUFFICIENT,
             ],
         ];
+    }
+
+    /**
+     * The metrics a creative listing may be ordered by — every one a column this grain holds.
+     *
+     * `conversions` is what the product calls «orders» at this grain; `engagements`, `reach`,
+     * `video_views`, `purchases` and `landing_page_views` were already written on every row and had
+     * no way of being asked for, which is the owner's «add filters by clicks, impressions,
+     * engagement rate or orders» in the places it could be answered honestly.
+     *
+     * @var list<string>
+     */
+    private const SORTABLE = [
+        'spend', 'impressions', 'clicks', 'conversions', 'revenue',
+        'engagements', 'reach', 'video_views', 'purchases', 'landing_page_views',
+    ];
+
+    /**
+     * CONTENT-MEASURED-FIRST-001 — the one ordering, with the deciding metric handed in.
+     *
+     * `relevance` and `auto` are the same rule reading a different column, so they are the same code
+     * reading a different column: measured first, then the metric that decides this objective, then
+     * spend to break its ties, then what is running, then a name a reader can scan.
+     *
+     * Why measurement leads is recorded where the owner found it: a creative with no figure of any
+     * kind in the window sat in the «idle» bucket and outranked a paused creative that had spent
+     * 2,704.50 in the same window, because the status bucket used to come first. On a page whose
+     * purpose is putting budget where it performs, that says the thing nothing is known about matters
+     * more than the thing the money went to — and it reads as a data fault rather than an ordering
+     * one, which is what makes a reader stop trusting the figures beside it.
+     *
+     * `measured_rows` counts ROWS, not money: «the platform told us this spent nothing» and «the
+     * platform told us nothing» are different facts, and `SUM()` cannot tell them apart.
+     *
+     * @param  string  $metric  a key from {@see SORTABLE}; the caller resolves the objective
+     */
+    private function applyMeasuredFirst(mixed $query, string $metric, Carbon $from, Carbon $to): mixed
+    {
+        $metric = in_array($metric, self::SORTABLE, true) ? $metric : 'spend';
+        $projectId = app(ProjectContext::class)->projectId();
+
+        $totals = DB::table('creative_daily_metrics')
+            ->select('creative_id')
+            ->selectRaw('SUM('.$metric.') AS sort_total')
+            /* Spend breaks the result's ties, so the order is total rather than arbitrary. */
+            ->selectRaw('SUM(spend) AS sort_spend')
+            ->selectRaw('COUNT(*) AS measured_rows')
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            /* Relevance is a figure, and seeded figures are not this customer's. */
+            ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
+            ->groupBy('creative_id');
+
+        return $query
+            ->leftJoinSub($totals, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
+            ->select('external_creatives.*')
+            ->orderByRaw('CASE WHEN COALESCE(sorted.measured_rows, 0) > 0 THEN 0 ELSE 1 END')
+            ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+            ->orderByRaw('sorted.sort_spend DESC NULLS LAST')
+            ->orderByRaw(
+                'CASE WHEN external_creatives.status IN ('.implode(', ', array_fill(0, count(Relevance::NOT_RUNNING), '?')).') THEN 2'
+                .' WHEN external_creatives.last_active_at >= ? THEN 0 ELSE 1 END',
+                [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
+            )
+            /*
+             * ENTITY-RELEVANCE-ORDERING-001 — the same tie, in the order the library actually opens on.
+             *
+             * A freshly connected account answers none of the keys above: nothing has delivered, so
+             * every creative is in one status bucket with a null total, and the whole first page tied
+             * and fell to `id` — deterministic and meaningless, with no order for a reader scanning
+             * for a creative whose name they know.
+             */
+            ->orderBy('external_creatives.name')
+            ->orderBy('external_creatives.id');
     }
 
     /** A bare creative query — the model's own tenant scope and nothing else yet. */

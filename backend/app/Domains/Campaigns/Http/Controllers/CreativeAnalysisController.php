@@ -197,6 +197,20 @@ final class CreativeAnalysisController extends Controller
              * inferred from an absent value: an empty metrics object looks identical in all three.
              */
             'metrics_availability' => app(CreativeMetricsAvailability::class)->forCreatives($creatives),
+            /*
+             * CONTENT-OBJECTIVE-SORT-001 — the order, stated.
+             *
+             * An order a reader cannot account for is indistinguishable from a bug, and this unit
+             * exists because an order nobody could account for made the owner doubt the figures. So
+             * the automatic sort says which metric it ranked by and which objective it read that from
+             * — and `objective: null` is the honest answer when the filter named none or several,
+             * where the order falls back to spend.
+             */
+            'sort' => [
+                'applied' => $request->string('sort')->toString() ?: 'auto',
+                'metric' => $this->rows->objectiveSortMetric($this->sortObjective($request)),
+                'objective' => $this->sortObjective($request),
+            ],
             'filters' => $this->filterOptions($request, $project),
         ], 'Creative library.');
     }
@@ -458,6 +472,15 @@ final class CreativeAnalysisController extends Controller
             // The funnel is a reshaping of `metrics` above — same figures, no second query, and only
             // the steps this platform actually reported (§15.6).
             'funnel' => $funnel->build($current),
+            /*
+             * CONTENT-VIDEO-RETENTION-001 — a second, different question about the same impression.
+             *
+             * Not folded into `funnel`: that one is a person's path from seeing to buying, and
+             * putting «50% watched» between «clicks» and «landing page views» would say somebody
+             * watched half a video after clicking through it. An image creative gets no stages, so
+             * the surface renders nothing rather than an empty chart.
+             */
+            'video_retention' => $funnel->video($current),
             'trend' => $trend,
             // Rolled up from the daily rows already in hand, so the two charts cannot disagree.
             'weekly' => $this->weekly($trend),
@@ -725,7 +748,34 @@ final class CreativeAnalysisController extends Controller
 
     private function applySort(mixed $query, Request $request, Carbon $from, Carbon $to): mixed
     {
-        return $this->rows->applySort($query, $request->string('sort')->toString(), $from, $to);
+        return $this->rows->applySort(
+            $query,
+            $request->string('sort')->toString(),
+            $from,
+            $to,
+            $this->sortObjective($request),
+        );
+    }
+
+    /**
+     * CONTENT-OBJECTIVE-SORT-001 — which objective the automatic order reads.
+     *
+     * The filter may name several, and «the objective» is only answerable when it names ONE. Picking
+     * a winner among three would order the library by a goal two thirds of it was never bought for,
+     * and announcing that order as «by orders» would be a claim about the whole library made from a
+     * third of it.
+     *
+     * So: exactly one named objective decides; anything else leaves it unanswered and the order falls
+     * back to spend, which is the figure that is always the question.
+     */
+    private function sortObjective(Request $request): ?string
+    {
+        $objectives = array_values(array_filter(
+            (array) $request->input('objectives', []),
+            static fn (mixed $o): bool => is_string($o) && trim($o) !== '',
+        ));
+
+        return count($objectives) === 1 ? (string) $objectives[0] : null;
     }
 
     /**
