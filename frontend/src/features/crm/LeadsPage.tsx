@@ -7,6 +7,8 @@ import { LeadAttributionTrail } from './LeadAttributionTrail'
 import { NewLeadModal } from './NewLeadModal'
 import { sourceLabel, statusLabel, statusTone } from './labels'
 import { LEAD_SOURCES, LEAD_STATUSES, type Lead } from './types'
+import type { LeadStageCount } from './api'
+import { ChartCard, RankingBarChart } from '@/features/analytics/charts'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -77,6 +79,7 @@ export function LeadsPage() {
   })
 
   const counts = leadsQuery.data?.counts ?? null
+  const stages = leadsQuery.data?.stages ?? null
 
   const convertMutation = useMutation({
     mutationFn: convertLead,
@@ -296,6 +299,14 @@ export function LeadsPage() {
         </p>
       )}
 
+      {stages !== null && (
+        <LeadPipeline
+          stages={stages}
+          ignoresStatusFilter={leadsQuery.data?.stagesIgnoreStatusFilter === true}
+          locale={locale}
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Select
           value={uniqueOnly ? 'unique' : 'all'}
@@ -362,5 +373,100 @@ export function LeadsPage() {
         )}
       </Modal>
     </section>
+  )
+}
+
+/**
+ * VIZ-LEADS-001 — where the pipeline is standing, and the claim this chart refuses to make.
+ *
+ * ## Occupancy, not a funnel
+ *
+ * The server groups leads by their CURRENT stage. That is a snapshot of who is standing where, and
+ * it is not a conversion flow — so no step rate is drawn and none is derived. The leads sitting at
+ * `new` have not failed to reach `contacted`; they arrived this morning. «40% of new leads convert»
+ * computed from occupancy is a sentence about a cohort, read off a photograph of a queue, and it
+ * would be wrong in whichever direction the team's recent volume happened to move.
+ *
+ * That is also why this is a ranked bar in pipeline ORDER rather than a funnel silhouette: a funnel's
+ * tapering shape is itself the flow claim, made before anybody reads a number.
+ *
+ * ## The order is the work's, and the ends are set apart
+ *
+ * `won`, `lost` and `invalid` share the pipeline's last rank because they are ends rather than
+ * degrees — a lead marked invalid did not get further than one that was won. They are drawn in their
+ * own group so the progressive stages read as a progression.
+ *
+ * ## A missing shape is not an empty pipeline
+ *
+ * The caller renders this only when the server sent `stages`. An older server sends nothing, and a
+ * chart of invented zeros would say «no leads anywhere» on behalf of a server that said nothing.
+ */
+function LeadPipeline({
+  stages,
+  ignoresStatusFilter,
+  locale,
+}: {
+  stages: LeadStageCount[]
+  ignoresStatusFilter: boolean
+  locale: 'ar' | 'en'
+}) {
+  const ar = locale === 'ar'
+  const open = stages.filter((s) => !s.terminal)
+  const ended = stages.filter((s) => s.terminal)
+  const rows = (group: LeadStageCount[]) =>
+    group.map((s) => ({ label: statusLabel(s.status, locale), count: s.count }))
+
+  return (
+    <div data-testid="lead-pipeline-panel">
+      <ChartCard
+        title={ar ? 'أين تقف العملاء المحتملون الآن' : 'Where the leads are standing'}
+        subtitle={ar
+          ? 'عدد من يقف عند كل مرحلة في هذه اللحظة — ليست نسب تحوّل بين المراحل.'
+          : 'How many are at each stage right now — not a conversion flow between them.'}
+      >
+        <div data-testid="lead-pipeline" className="grid min-w-0 gap-4 lg:grid-cols-[2fr_1fr]">
+          <div className="min-w-0">
+            <RankingBarChart
+              horizontal
+              height={Math.max(180, open.length * 40)}
+              data={rows(open)}
+              bars={[{ key: 'count', name: ar ? 'عملاء محتملون' : 'Leads', kind: 'num' }]}
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              {ar ? 'نهايات' : 'Ended'}
+            </p>
+            <RankingBarChart
+              horizontal
+              height={Math.max(140, ended.length * 40)}
+              data={rows(ended)}
+              bars={[{ key: 'count', name: ar ? 'عملاء محتملون' : 'Leads', kind: 'num' }]}
+            />
+          </div>
+        </div>
+
+        {/*
+          The same figures as text. A recharts chart is an SVG a screen reader walks as unlabelled
+          shapes, and this list is its key rather than a duplicate — the labels here are the axis's.
+        */}
+        <ul data-testid="lead-pipeline-legend" className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
+          {stages.map((s) => (
+            <li key={s.status} className="flex items-center gap-1.5">
+              <span>{statusLabel(s.status, locale)}</span>
+              <span className="tnum font-bold text-text-primary" dir="ltr">{s.count.toLocaleString('en-US')}</span>
+            </li>
+          ))}
+        </ul>
+
+        {ignoresStatusFilter && (
+          <p data-testid="lead-pipeline-scope-note" className="mt-3 text-sm text-text-muted">
+            {ar
+              ? 'القائمة أدناه مُصفّاة بمرحلة واحدة؛ هذا الشكل يتجاهل تلك التصفية ويعرض المسار كاملًا — فمسار بمرحلة واحدة لا يجيب عن شيء.'
+              : 'The list below is filtered to one stage; this shape ignores that filter and shows the whole pipeline — a pipeline cut to one stage answers nothing.'}
+          </p>
+        )}
+      </ChartCard>
+    </div>
   )
 }
