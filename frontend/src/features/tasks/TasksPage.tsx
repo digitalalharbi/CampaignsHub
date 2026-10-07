@@ -2,6 +2,7 @@ import { Num } from '@/components/ui/Num'
 import { useEffect, useMemo, useState } from 'react'
 import { useDebouncedValue } from '@/components/forms/useTypeahead'
 import { StatCard } from '@/components/ui/StatCard'
+import { ChartCard, StatusMixBar } from '@/features/analytics/charts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
@@ -157,6 +158,48 @@ export function TasksPage() {
           </>
         }
       />
+
+      {/*
+        VIZ-OPS-001 — how much of the ledger is still open, which four counts cannot say.
+
+        The cards answer «how many» four times. «How much of it is still open» is a fifth question,
+        and the one somebody opens this board to ask.
+
+        ## `overdue` is NOT a band here, and drawing it as one would be wrong arithmetic
+
+        The server counts it as «a due date in the past that nobody has finished» — a SUBSET of open,
+        not a sibling. Putting the three in one bar would count every overdue task twice and push the
+        bands past the total, which `StatusMixBar` refuses outright rather than normalising. So the
+        bar divides open · done · everything else, and lateness is stated where it lives: inside open.
+
+        «Everything else» is a real band, not padding: `cancelled` is neither open nor done, so the
+        two do not cover the ledger, and calling their sum the total would make both shares too large.
+      */}
+      {summary.total > 0 && (
+        <ChartCard
+          title={ar ? 'حالة المهام' : 'How the board stands'}
+          subtitle={ar ? 'حصة كل حالة من إجمالي المهام المطابقة للتصفية.' : 'Each state’s share of every task the filter matched.'}
+        >
+          <StatusMixBar
+            testId="task-mix"
+            ar={ar}
+            label={ar ? 'المهام' : 'Tasks'}
+            total={summary.total}
+            residualLabel={ar ? 'أخرى' : 'Neither'}
+            bands={[
+              { key: 'open', label: ar ? 'مفتوحة' : 'Open', count: summary.open, tone: 'info' },
+              { key: 'done', label: ar ? 'منجزة' : 'Done', count: summary.done, tone: 'success' },
+            ]}
+          />
+          {summary.overdue > 0 && (
+            <p data-testid="task-overdue-note" className="mt-3 text-sm text-warning">
+              {ar
+                ? `${summary.overdue.toLocaleString('en-US')} من المهام المفتوحة تجاوزت موعدها.`
+                : `${summary.overdue.toLocaleString('en-US')} of the open tasks are past their due date.`}
+            </p>
+          )}
+        </ChartCard>
+      )}
 
       {/*
         The filters, on the page — UX-SWEEP-001.
