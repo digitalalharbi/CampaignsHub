@@ -8,6 +8,7 @@ import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { compact, money } from '@/features/analytics/format'
+import { ProgressRing, StatusMixBar } from '@/features/analytics/charts'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 
@@ -37,6 +38,15 @@ const PAYMENT_STATUS: Record<string, { ar: string; tone: 'success' | 'warning' |
   failed: { ar: 'فاشلة', tone: 'danger' },
   refunded: { ar: 'مستردة', tone: 'neutral' },
 }
+
+/**
+ * The invoice states' colours, cycled.
+ *
+ * A state is a CATEGORY, not a degree: «sent» is not worse than «draft», and a severity ramp across
+ * them would be the chart asserting a judgement the data does not make. The ageing bands below are
+ * the opposite case and carry an explicit ramp for exactly that reason.
+ */
+const INVOICE_TONES = ['brand', 'info', 'success', 'warning', 'danger'] as const
 
 const AGING_LABEL: Array<[keyof FinanceOverview['aging'], string, string, string]> = [
   ['current', 'غير مستحقة بعد', 'Not due yet', 'bg-success'],
@@ -113,6 +123,68 @@ export function FinanceOverviewPage() {
             />
           </StatGrid>
 
+          {/*
+            VIZ-FINANCE-001 — how much of what was billed has come back, and the state it is in.
+
+            Both halves were already on the page as text: a «60% collected» sub-line on a card, and
+            three lists of state → count and total. What neither could do is show the SHAPE — that
+            most of the money is in one state, or that the collected share is a sliver — which is the
+            thing somebody opens a receivables page to see.
+          */}
+          <section className="grid gap-4 lg:grid-cols-[auto_1fr]" data-testid="collection-shape">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
+              <h2 className="mb-3 font-bold text-text-primary">{ar ? 'نسبة التحصيل' : 'Collection rate'}</h2>
+              {d.invoices.collection_rate !== null ? (
+                <div data-testid="collection-ring">
+                  <ProgressRing
+                    value={d.invoices.collection_rate}
+                    sublabel={ar ? 'من المفوتر' : 'of what was billed'}
+                    tone={d.invoices.collection_rate >= 0.8 ? 'success' : d.invoices.collection_rate >= 0.5 ? 'warning' : 'danger'}
+                  />
+                </div>
+              ) : (
+                /*
+                 * Null is not zero, and the payload says so in its own comment: the rate is null when
+                 * nothing was invoiced. A ring at 0% would say «none of it was collected» about a
+                 * period in which nothing was billed — a failing grade for an empty month.
+                 */
+                <p data-testid="collection-rate-absent" className="max-w-[200px] text-center text-sm text-text-muted">
+                  {ar
+                    ? 'لا توجد فواتير في هذه الفترة، فلا نسبة تحصيل لها.'
+                    : 'Nothing was invoiced in this period, so there is no rate to state.'}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
+              <h2 className="mb-1 font-bold text-text-primary">{ar ? 'أين يقف المال المفوتر' : 'Where the invoiced money stands'}</h2>
+              <p className="mb-3 text-sm text-text-secondary">
+                {ar ? 'حصة كل حالة من إجمالي ما تمّت فوترته.' : 'Each state’s share of everything invoiced.'}
+              </p>
+              {/*
+                The TOTAL is the denominator, not the sum of the states. An invoice in a state this
+                build has no label for still holds real money, and summing the labelled ones would
+                redefine «everything invoiced» as «the part we have names for» — every share then too
+                large. The bar names that remainder instead, and refuses outright if the states
+                somehow exceed the total.
+              */}
+              <StatusMixBar
+                testId="invoice-states"
+                ar={ar}
+                label={ar ? 'المفوتر' : 'Invoiced'}
+                total={d.invoices.total}
+                format={(v) => money(v, cur)}
+                residualLabel={ar ? 'حالات أخرى' : 'Other states'}
+                bands={Object.entries(d.invoices.by_status).map(([key, bucket], i) => ({
+                  key,
+                  label: INVOICE_STATUS[key] ? (ar ? INVOICE_STATUS[key].ar : INVOICE_STATUS[key].en) : key,
+                  count: bucket.total,
+                  tone: INVOICE_TONES[i % INVOICE_TONES.length],
+                }))}
+              />
+            </div>
+          </section>
+
           {/* Aging — where the outstanding money actually sits. */}
           <section className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -129,28 +201,37 @@ export function FinanceOverviewPage() {
                 {ar ? 'الإجمالي' : 'Total'} <span dir="ltr" className="tnum">{money(agingTotal, cur)}</span>
               </span>
             </div>
-            {agingTotal === 0 ? (
-              <p className="mt-3 text-sm text-text-muted">{ar ? 'لا توجد مبالغ مستحقة حاليًا.' : 'Nothing is outstanding right now.'}</p>
-            ) : (
-              <>
-                <div data-testid="aging-bar" className="mt-3 flex h-3 overflow-hidden rounded-full bg-surface-secondary">
-                  {AGING_LABEL.map(([key, labelAr, labelEn, color]) => {
-                    const v = d.aging[key]
-                    return v > 0 ? <span key={key} title={`${ar ? labelAr : labelEn} — ${money(v, cur)}`} className={color} style={{ width: `${(v / agingTotal) * 100}%` }} /> : null
-                  })}
-                </div>
-                <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                  {AGING_LABEL.map(([key, labelAr, labelEn, color]) => (
-                    <li key={key} className="rounded-xl bg-surface-secondary p-2.5">
-                      <span className="flex items-center gap-1.5 text-[11px] text-text-muted">
-                        <span className={`h-2 w-2 rounded-full ${color}`} /> {ar ? labelAr : labelEn}
-                      </span>
-                      <span className="tnum mt-0.5 block text-sm font-bold text-text-primary">{money(d.aging[key], cur)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
+            {/*
+              VIZ-FINANCE-001 — the same divided bar the rest of the product uses.
+
+              This drew its own: a flex track, a span per band, a percentage width and a legend
+              underneath. It was correct, and that was never the objection — the objection is that it
+              was a second copy of `StatusMixBar`'s contract WITHOUT its refusals. Bands exceeding
+              their total normalised silently here; on the canonical bar that is a contradiction and
+              it declines. Over money, that refusal is the one that matters: shares computed on an
+              incomplete denominator are every figure too large, and they look exactly like correct ones.
+
+              The bands carry explicit fills rather than semantic tones, because ageing is an ORDERED
+              ramp of five steps and the semantic set has four names. Telling a reader that money 40
+              days late and money 80 days late are the same thing is the one judgement this card exists
+              to make.
+            */}
+            <div className="mt-3">
+              <StatusMixBar
+                testId="aging"
+                ar={ar}
+                label={ar ? 'المستحق غير المحصَّل' : 'Outstanding'}
+                total={agingTotal}
+                format={(v) => money(v, cur)}
+                bands={AGING_LABEL.map(([key, labelAr, labelEn, color]) => ({
+                  key,
+                  label: ar ? labelAr : labelEn,
+                  count: d.aging[key],
+                  tone: 'neutral' as const,
+                  fill: color,
+                }))}
+              />
+            </div>
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">

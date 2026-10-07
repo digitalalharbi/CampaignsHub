@@ -586,8 +586,26 @@ export function StatusMixBar({
   residualLabel,
   testId,
   height = 10,
+  format = num,
 }: {
-  bands: Array<{ key: string; label: string; count: number; tone: MixTone }>
+  bands: Array<{
+    key: string
+    label: string
+    count: number
+    tone: MixTone
+    /**
+     * An explicit fill, for a band whose place in an ORDERED ramp the semantic tones cannot express.
+     *
+     * Debt ageing is the case this exists for: not due · 1–30 · 31–60 · 61–90 · 90+ is five steps of
+     * one severity scale, and the semantic set has four names for it. Collapsing two pairs together
+     * would tell a reader that money 40 days late and money 80 days late are the same thing, which
+     * is the single judgement a receivables page exists to make.
+     *
+     * Only for ramps. A set of CATEGORIES — platforms, objectives, statuses — has no order, so a
+     * colour chosen for one is a colour that means nothing, and those take a `tone`.
+     */
+    fill?: string
+  }>
   /** The whole these bands divide. Never the sum of the bands — see the note above. */
   total: number
   ar: boolean
@@ -597,6 +615,19 @@ export function StatusMixBar({
   residualLabel?: string
   testId: string
   height?: number
+  /**
+   * How each band's figure is printed. Defaults to a plain count.
+   *
+   * The bands are not always counts: outstanding money divided by how late it is has exactly this
+   * shape, and a composition is a composition whatever its parts are measured in. What a share of
+   * money still needs is its CURRENCY — «7,500» beside «2,500» under a heading somewhere else on the
+   * page is the sort of unmarked figure the product's money rules exist to prevent — so the caller
+   * passes `money(v, currency)` and the same string reaches the legend and the spoken summary.
+   *
+   * The band's own arithmetic is untouched: shares are computed from the raw numbers, never from
+   * whatever this returns.
+   */
+  format?: (value: number) => string
 }) {
   const named = bands.reduce((sum, b) => sum + Math.max(0, b.count), 0)
 
@@ -624,11 +655,11 @@ export function StatusMixBar({
   const segments = [
     ...bands.filter((b) => b.count > 0),
     ...(residual > 0
-      ? [{ key: 'residual', label: residualLabel ?? (ar ? 'أخرى' : 'Other'), count: residual, tone: 'neutral' as MixTone }]
+      ? [{ key: 'residual', label: residualLabel ?? (ar ? 'أخرى' : 'Other'), count: residual, tone: 'neutral' as MixTone, fill: undefined }]
       : []),
   ]
 
-  const spoken = [label, ...segments.map((s) => `${s.label} ${s.count} (${pct(s.count)})`)].filter(Boolean).join(' · ')
+  const spoken = [label, ...segments.map((s) => `${s.label} ${format(s.count)} (${pct(s.count)})`)].filter(Boolean).join(' · ')
 
   return (
     <div className="min-w-0">
@@ -643,7 +674,7 @@ export function StatusMixBar({
           <div
             key={s.key}
             data-testid={`${testId}-segment-${s.key}`}
-            className={`h-full ${MIX_FILL[s.tone]}`}
+            className={`h-full ${s.fill ?? MIX_FILL[s.tone]}`}
             style={{ width: `${share(s.count)}%` }}
           />
         ))}
@@ -651,9 +682,9 @@ export function StatusMixBar({
       <ul data-testid={`${testId}-legend`} className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
         {segments.map((s) => (
           <li key={s.key} className="flex items-center gap-1.5 text-sm">
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${MIX_FILL[s.tone]}`} aria-hidden />
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.fill ?? MIX_FILL[s.tone]}`} aria-hidden />
             <span className="text-text-secondary">{s.label}</span>
-            <span className="tnum font-bold text-text-primary" dir="ltr">{num(s.count)}</span>
+            <span className="tnum font-bold text-text-primary" dir="ltr">{format(s.count)}</span>
             <span className="tnum text-xs text-text-muted" dir="ltr">{pct(s.count)}</span>
           </li>
         ))}
