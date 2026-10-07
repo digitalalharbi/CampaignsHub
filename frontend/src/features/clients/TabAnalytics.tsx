@@ -3,6 +3,8 @@ import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getClientAnalytics, type ClientAnalytics } from './api'
 import { compact, money, moneyExact, num as fullNumber, ratio } from '@/features/analytics/format'
+import { ChartCard, MetricLineChart, SpendRevenueAreaChart, StatusMixBar, type MixTone } from '@/features/analytics/charts'
+import { objectiveLabel } from '@/features/campaigns/labels'
 import { useT } from '@/lib/i18n'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
@@ -92,6 +94,8 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
         <p className="rounded-lg border border-info/25 bg-info/10 px-3 py-2 text-xs text-info">{t('an_roas_not_primary')}</p>
       )}
 
+      <ClientTrends a={a} t={t} ar={ar} />
+
       {a.currency_mode === 'mixed' ? (
         <>
           <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">{t('an_mixed_currency_note')}</p>
@@ -179,11 +183,158 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
       )}
 
       {a.objective_mix.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-text-secondary">{t('an_objective_mix')}:</span>
-          {a.objective_mix.map((o) => <span key={o.objective} className="rounded-full bg-surface-secondary px-2 py-0.5 text-text-secondary">{o.objective} · {o.count}</span>)}
-        </div>
+        <ChartCard title={t('an_objective_mix')}>
+          {/*
+            The objective split is a COMPOSITION, so it is drawn as one divided bar rather than as a
+            row of chips. The chips also printed the stored key: `sales`, `app_installs`, `leads` —
+            the product has had a canonical label for those since the campaigns module, and this was
+            the one surface not using it.
+
+            It is a count, which is why it draws whatever the currency is doing. Blending riyals with
+            dollars makes a money chart unreadable; it says nothing about how many campaigns carry
+            which objective.
+          */}
+          <StatusMixBar
+            testId="client-objective-mix"
+            ar={ar}
+            label={t('an_objective_mix')}
+            total={a.objective_mix.reduce((sum, o) => sum + o.count, 0)}
+            bands={a.objective_mix.map((o, i) => ({
+              key: o.objective || 'unspecified',
+              label: o.objective ? objectiveLabel(o.objective, ar ? 'ar' : 'en') : (ar ? 'غير محدد' : 'Unspecified'),
+              count: o.count,
+              tone: OBJECTIVE_TONES[i % OBJECTIVE_TONES.length],
+            }))}
+          />
+        </ChartCard>
       )}
+    </div>
+  )
+}
+
+/**
+ * The bands' colours, cycled.
+ *
+ * An objective has no semantic colour — «sales» is not better or worse than «awareness» — so these
+ * are the chart layer's own sequence rather than the success/warning/danger set, which would read as
+ * a judgement the data is not making.
+ */
+const OBJECTIVE_TONES: MixTone[] = ['brand', 'info', 'success', 'warning', 'danger']
+
+/**
+ * VIZ-CLIENT-001 — the series this tab has always served, finally drawn.
+ *
+ * `timeseries` — date, spend, clicks, impressions, conversions, revenue — has been in this payload
+ * since the tab existed, and the tab rendered eight cards of period totals over it. «Spend 108K SAR»
+ * answers «how much»; it cannot answer «when», which is the question somebody opens a client's
+ * analytics to ask.
+ *
+ * ## What «mixed» actually does to this payload, and the note that nearly got it wrong
+ *
+ * `money_blended` reads like «these figures mix currencies». It means the opposite: the server sets
+ * it TRUE on the branch where a single currency was established and the money was safe to aggregate,
+ * and FALSE on the mixed branch where it refuses to aggregate at all. Reading the name rather than
+ * the service produced a page that declined to draw a money line while printing «96.1K SAR» in the
+ * card beside it — caught in the browser against a real client, not by a test.
+ *
+ * The mixed branch also sends `timeseries: []`. So on a mixed client there is no series of ANY kind,
+ * counts included, and the emptiness is a REFUSAL rather than an absence. Saying «no measured days»
+ * there would report withheld data as missing data, which is the one thing this product does not do
+ * — hence a note of its own, naming the currency rule as the reason.
+ *
+ * Where a series does arrive, both charts draw: money because a single currency was established, and
+ * counts because impressions, clicks and results carry no currency at all.
+ *
+ * ## And impressions get their own axis
+ *
+ * A daily impression count in the thousands beside a daily result count in single digits is one line
+ * and one flat mark along the bottom, and a line pinned to the axis reads as «this was zero». The
+ * chart layer's `rightAxisFor` exists for exactly this, and it follows the reader's direction.
+ */
+function ClientTrends({ a, t, ar }: { a: ClientAnalytics; t: ReturnType<typeof useT>; ar: boolean }) {
+  const points = a.timeseries ?? []
+
+  if (a.currency_mode === 'mixed') {
+    /*
+     * Not «no data» — a refusal. `ClientAnalyticsService` returns `timeseries: []` on this branch
+     * deliberately, because a daily line over two currencies would add riyals to dollars at every
+     * point. The per-project figures above carry the same money, each in its own currency.
+     */
+    return (
+      <p data-testid="client-trend-currency-withheld" className="rounded-xl border border-dashed border-warning/40 bg-warning/5 px-4 py-5 text-center text-sm text-text-secondary">
+        {ar
+          ? 'إنفاق هذا العميل بأكثر من عملة، فلا تُرسل سلسلة يومية مجمّعة — كل نقطة عليها ستكون جمعًا لعملات مختلفة. أرقام كل مشروع أعلاه بعملته.'
+          : 'This client’s spend spans more than one currency, so no combined daily series is sent — every point on it would add one currency to another. The per-project figures above are each in their own currency.'}
+      </p>
+    )
+  }
+
+  if (points.length === 0) {
+    return (
+      <p data-testid="client-trend-empty" className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
+        {ar ? 'لا توجد أيام مقيسة في هذه الفترة لرسمها.' : 'No measured days in this period to draw.'}
+      </p>
+    )
+  }
+
+  if (points.length < 2) {
+    /*
+     * One point is not a line. Drawing it produces a single dot on an empty grid, which reads as a
+     * chart that failed to load rather than as a window one day long — and a trend asserted from one
+     * day is a claim about direction that one day cannot make.
+     */
+    return (
+      <p data-testid="client-trend-too-short" className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
+        {ar
+          ? 'يوم واحد مقيس فقط — الاتجاه يحتاج يومين على الأقل.'
+          : 'Only one measured day — a trend needs at least two.'}
+      </p>
+    )
+  }
+
+  /*
+   * `money_blended` is NOT consulted. It is true on exactly the branch that establishes a single
+   * currency, so testing it would either be redundant with this line or, read the way its name
+   * suggests, invert it.
+   */
+  const drawMoney = a.currency_mode === 'single' && Boolean(a.currency)
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <ChartCard
+        title={ar ? 'الإنفاق مقابل الإيراد' : 'Spend against revenue'}
+        subtitle={ar ? 'لكل يوم في الفترة المختارة.' : 'For each day of the selected period.'}
+      >
+        {drawMoney ? (
+          <div data-testid="client-money-trend" className="min-w-0">
+            <SpendRevenueAreaChart data={points} currency={a.currency ?? 'SAR'} height={240} />
+          </div>
+        ) : (
+          <p data-testid="client-money-trend-withheld" className="rounded-xl border border-dashed border-warning/40 bg-warning/5 px-4 py-5 text-center text-sm text-text-secondary">
+            {ar
+              ? 'إنفاق هذا العميل بأكثر من عملة ولم يُحوَّل، فكل نقطة على الخط ستكون جمعًا لعملات مختلفة.'
+              : 'This client’s spend spans more than one currency and was not converted, so every point on the line would be a sum of different currencies.'}
+          </p>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title={ar ? 'النتائج والنقرات والظهور' : 'Results, clicks and impressions'}
+        subtitle={ar ? 'أعداد — لا تتأثر بعملة الإنفاق.' : 'Counts — untouched by what the spend is priced in.'}
+      >
+        <div data-testid="client-count-trend" className="min-w-0">
+          <MetricLineChart
+            height={240}
+            data={points}
+            rightAxisFor="impressions"
+            series={[
+              { key: 'conversions', name: t('an_results'), kind: 'num' },
+              { key: 'clicks', name: t('an_clicks'), kind: 'num' },
+              { key: 'impressions', name: t('an_impressions'), kind: 'num' },
+            ]}
+          />
+        </div>
+      </ChartCard>
     </div>
   )
 }
