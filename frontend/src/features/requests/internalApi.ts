@@ -118,7 +118,17 @@ export interface RequestSummary {
 export interface RequestBreakdown {
   by_status: Array<{ key: string; label: string; label_en: string; total: number }>
   by_type: Array<{ key: string; label: string; label_en: string; total: number }>
-  sla: { breached: number; due_soon: number; on_track: number }
+  /**
+   * The four states of the SLA promise, which PARTITION the filtered set.
+   *
+   * `no_sla` is requests nobody promised anything about — no SLA on the service type, or one never
+   * set. It used to be folded into `on_track`, which reported a promise as kept where no promise
+   * existed and inflated the figure in the direction of comfort.
+   *
+   * Because they partition, they can be drawn as one divided bar: a composition needs its parts to be
+   * parts OF something, and `summary.total` is that something.
+   */
+  sla: { breached: number; due_soon: number; on_track: number; no_sla: number }
 }
 
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {

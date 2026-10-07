@@ -24,19 +24,48 @@ export interface LeadCounts {
   unique: number
 }
 
+/**
+ * VIZ-LEADS-001 — one entry per stage, in pipeline order, counted over the LIST's scope.
+ *
+ * `count` is occupancy: how many leads are standing at this stage right now. It is NOT a cohort
+ * flow, so there is no rate here and none is derived from it — the leads sitting at `new` have not
+ * failed to reach `contacted`, they arrived this morning.
+ *
+ * A zero is a reported zero. `null` for the whole array is a server that does not send this at all,
+ * which is a different thing from an empty pipeline and must not be drawn as one.
+ */
+export interface LeadStageCount {
+  status: string
+  count: number
+  /** `won`, `lost` and `invalid` are ends rather than degrees, and are drawn apart from the rest. */
+  terminal: boolean
+}
+
 export interface LeadListResult {
   leads: Lead[]
   pagination: Pagination
   counts: LeadCounts | null
+  stages: LeadStageCount[] | null
+  /**
+   * The shape ignores a status filter that narrows the list, and this says when that happened.
+   *
+   * Without it, a reader filtered to «new» sees a list of one stage beside a pipeline of nine and
+   * has no way to tell which of the two is about what they asked for.
+   */
+  stagesIgnoreStatusFilter: boolean
 }
 
 export async function listLeads(params: LeadListParams): Promise<LeadListResult> {
   const response = await api.get<ApiEnvelope<Lead[]>>('/leads', { params })
   const counts = response.data.meta.counts as LeadCounts | undefined
 
+  const stages = response.data.meta.stages as LeadStageCount[] | undefined
+
   return {
     leads: response.data.data,
     counts: counts ?? null,
+    stages: Array.isArray(stages) ? stages : null,
+    stagesIgnoreStatusFilter: response.data.meta.stages_ignore_status_filter === true,
     pagination: (response.data.meta.pagination as Pagination) ?? {
       total: response.data.data.length,
       per_page: 15,
