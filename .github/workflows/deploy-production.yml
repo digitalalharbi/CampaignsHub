@@ -41,3 +41,50 @@ jobs:
             git checkout main
             git reset --hard origin/main
             bash scripts/deploy-production.sh
+
+      # DEPLOY-VERIFY-001 — the deploy says what production now SERVES, or it is not a verification.
+      #
+      # «merge ≠ deploy» has cost this project real time twice: a deploy whose SSH connection timed
+      # out reported failure for a build that had worked, and a deploy that reported success left the
+      # previous bundle in front of users because nothing checked. Both were found by hand, by
+      # fetching the site and reading the asset hash out of the HTML — and the host lives in a
+      # secret, so «which bundle is live?» was a question only somebody who already knew the URL
+      # could ask.
+      #
+      # So the run log answers it. The hash is the whole point: it changes when, and only when, the
+      # frontend was rebuilt from a different tree, which is the one thing a green SSH step cannot
+      # tell you. The domain is not a secret — it is a build argument in the compose file.
+      - name: Verify what production serves
+        run: |
+          set -Eeuo pipefail
+          SITE="https://campaignshub.io"
+          API="https://api.campaignshub.io/api/v1/health"
+
+          # The container restarts behind the proxy; a single immediate probe races it.
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SITE/" || echo 000)
+            [ "$code" = "200" ] && break
+            echo "attempt $attempt — site answered $code, waiting"
+            sleep 10
+          done
+          [ "$code" = "200" ] || { echo "::error::$SITE/ answered $code after the deploy"; exit 1; }
+
+          html=$(curl -s --max-time 20 "$SITE/")
+          bundle=$(printf '%s' "$html" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+          [ -n "$bundle" ] || { echo "::error::no hashed entry bundle in the served HTML"; exit 1; }
+
+          api=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$API" || echo 000)
+          [ "$api" = "200" ] || { echo "::error::$API answered $api"; exit 1; }
+
+          {
+            echo "### Production now serves"
+            echo ""
+            echo "| what | value |"
+            echo "| --- | --- |"
+            echo "| commit | \`${GITHUB_SHA:0:8}\` |"
+            echo "| entry bundle | \`$bundle\` |"
+            echo "| site | $code |"
+            echo "| api health | $api |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "served bundle: $bundle (commit ${GITHUB_SHA:0:8})"
