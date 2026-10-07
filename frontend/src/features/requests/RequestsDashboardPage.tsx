@@ -107,9 +107,6 @@ export function RequestsDashboardPage() {
       </div>
 
       {/* Filters */}
-      <RequestCharts breakdown={query.data?.meta?.breakdown} ar={ar} loading={query.isLoading}
-        queueTotal={query.data?.meta?.summary?.total} error={query.isError} failure={query.error} />
-
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <form className="relative" onSubmit={(e) => { e.preventDefault(); set({ q: search || undefined }) }}>
           <Search size={16} className="pointer-events-none absolute inset-y-0 my-auto ms-3 text-text-muted" />
@@ -153,6 +150,19 @@ export function RequestsDashboardPage() {
       ) : (
         <KanbanView rows={rows} onMove={(id, to) => move.mutate({ id, to })} ar={ar} />
       )}
+
+      {/*
+        VIZ-REQUESTS-001 §2 — the shape of the queue comes AFTER the queue.
+
+        The owner's rule: «the feature and the service come first on the page, clearly, without needing
+        to scroll — and the analytical results after them.» The service here is the inbox: reading the
+        requests and acting on them. These three panels sat above the filters, so the requests an
+        operator opened the page for started below the fold.
+
+        They still describe the SAME filtered set, which is the thing that must never change about them.
+      */}
+      <RequestCharts breakdown={query.data?.meta?.breakdown} ar={ar} loading={query.isLoading}
+        queueTotal={query.data?.meta?.summary?.total} error={query.isError} failure={query.error} />
     </div>
   )
 }
@@ -277,8 +287,8 @@ function ReqSummaryCard({ label, value, tone }: { label: string; value: number; 
  *
  * Not decoration: each panel is a question an operator asks before touching anything. «Where is
  * everything» (status), «what kind of work is this» (service), «are we late» (SLA). All three describe
- * the SAME filtered set as the table below, because they are computed from the same builder — a chart
- * that quietly described a wider set than the list under it would be worse than no chart.
+ * the SAME filtered set as the list ABOVE them, because they are computed from the same builder — a
+ * chart that quietly described a wider set than the list beside it would be worse than no chart.
  *
  * Loading, empty and error are all rendered, and they say different things. An empty queue is good
  * news and reads as such; a failed request is not the same as nothing to show, and a chart that fell
@@ -309,7 +319,7 @@ function RequestCharts({
 }) {
   if (loading) {
     return (
-      <div className="mb-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts-loading">
+      <div className="mt-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts-loading">
         {[0, 1, 2].map((i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
       </div>
     )
@@ -317,7 +327,7 @@ function RequestCharts({
 
   if (error) {
     return (
-      <div className="mb-4" data-testid="request-charts-error">
+      <div className="mt-4" data-testid="request-charts-error">
         <QueryFailure error={failure} ar={ar} testId="request-charts-failure"
           fallbackTitle={ar ? 'تعذّر تحميل ملخص الطلبات.' : 'Could not load the request summary.'} />
       </div>
@@ -329,7 +339,7 @@ function RequestCharts({
   const total = breakdown.by_status.reduce((a, b) => a + b.total, 0)
   if (total === 0) {
     return (
-      <p data-testid="request-charts-empty" className="mb-4 rounded-2xl border border-border bg-surface px-4 py-6 text-center text-sm text-text-muted">
+      <p data-testid="request-charts-empty" className="mt-4 rounded-2xl border border-border bg-surface px-4 py-6 text-center text-sm text-text-muted">
         {ar ? 'لا توجد طلبات مطابقة لعرضها في الملخص.' : 'No matching requests to summarise.'}
       </p>
     )
@@ -340,7 +350,7 @@ function RequestCharts({
     rows.map((r) => ({ label: ar ? r.label : r.label_en, count: r.total }))
 
   return (
-    <div className="mb-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts">
+    <div className="mt-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts">
       <ChartCard title={ar ? 'حسب الحالة' : 'By status'}>
         <RankedBreakdown testId="requests-by-status" rows={bars(breakdown.by_status)} ar={ar} />
       </ChartCard>
