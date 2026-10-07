@@ -107,8 +107,27 @@ test('the short links are ranked by the clicks they were given', async ({ page, 
   const bars = chart.locator('.recharts-bar-rectangle')
   const ticks = chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick')
 
-  // Every link on the axis gets a bar — `ResponsiveContainer` renders twice, so this is polled.
-  await expect.poll(async () => (await bars.all()).length, { timeout: 15000 }).toBe(await ticks.count())
+  /*
+    BOTH sides are polled, because only one of them used to be.
+
+    `expect.poll(…).toBe(await ticks.count())` reads as «wait until the bars match the ticks», and it
+    is not: the argument to `toBe` is evaluated ONCE, eagerly, when the poll is set up. On webkit the
+    axis had not laid out by then, so the expected value was frozen at 0 while the actual side
+    climbed to 2 and the poll could never converge — «Expected: 0, Received: 2», on a chart that was
+    drawing correctly.
+
+    `ticks > 0` is the other half: without it a chart that never rendered would satisfy 0 === 0.
+  */
+  await expect
+    .poll(
+      async () => {
+        const [drawn, labelled] = await Promise.all([bars.count(), ticks.count()])
+
+        return labelled > 0 && drawn === labelled ? 'every link on the axis has a bar' : `bars=${drawn} ticks=${labelled}`
+      },
+      { timeout: 15000 },
+    )
+    .toBe('every link on the axis has a bar')
 
   /*
     Ranked DESCENDING by clicks, and recharts lays a y-axis category out top-to-bottom, so the
