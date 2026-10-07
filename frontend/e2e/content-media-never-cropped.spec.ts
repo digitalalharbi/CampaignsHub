@@ -15,11 +15,17 @@ import { AUTH, seededProject, selectProject } from './helpers'
  * The tolerance is 2%: a contained element is laid out in CSS pixels and a 1080×1920 asset in a
  * 383×681 box will not divide exactly.
  *
- * ## The two surfaces, because the owner named both
+ * ## The two surfaces, because the owner named both — and they now have DIFFERENT rules
  *
  * «One creative + same period + same scope must tell the same factual story across card, popup,
  * detail, analytics, report, shared report.» The grid is where a reader scans and the viewer is
  * where they judge, and the viewer is the one that may never lose anything at all.
+ *
+ * CONTENT-COVER-FILL-001 — the owner has since named the grid separately: «the cover must be the
+ * full cover, not a tall shape … so it holds an image that fills the whole cover, not only a portrait
+ * strip», while confirming the viewer reads correctly as it is. So the grid is asserted to FILL and
+ * the viewer to lose nothing, and the arithmetic below serves both: a contained element renders at
+ * its own ratio and a covered one renders at its frame's.
  */
 test.use({ storageState: AUTH.owner })
 
@@ -62,7 +68,7 @@ for (const viewport of [
   { name: 'tablet', width: 768, height: 1024 },
   { name: 'phone', width: 390, height: 844 },
 ]) {
-  test(`no creative is cropped in the library grid — ${viewport.name}`, async ({ page, request }) => {
+  test(`every library cover fills a square frame — ${viewport.name}`, async ({ page, request }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
     await page.goto('/agency/content')
@@ -70,12 +76,41 @@ for (const viewport of [
     await expect(page.locator('article').first()).toBeVisible({ timeout: 30_000 })
     await page.waitForLoadState('networkidle')
 
-    const measured = await pictures(page, 'article')
+    /*
+      The grid's rule is the opposite of the viewer's, and is measured the same way: a cover renders
+      at its FRAME's ratio rather than its own. The frame is one square for every creative, so a wall
+      of mixed formats is a wall of equal tiles — which is the defect the owner reported, a 9:16 story
+      having produced a card twice the height of the 16:9 beside it.
+    */
+    const frames = await page.evaluate(() => {
+      const out: Array<{ ratio: number; fit: string }> = []
 
-    expect(measured.length, 'the library drew no pictures to measure').toBeGreaterThan(0)
+      document.querySelectorAll('article img').forEach((node) => {
+        const img = node as HTMLImageElement
+        if (img.naturalWidth < 8 || img.clientWidth < 8) return
+        out.push({
+          ratio: Number((img.clientWidth / img.clientHeight).toFixed(2)),
+          fit: getComputedStyle(img).objectFit,
+        })
+      })
+
+      return out
+    })
+
+    if (frames.length === 0) {
+      /*
+        A seeded world whose creatives carry no asset draws absence sentences, not pictures. That is
+        correct behaviour and not a cover defect, so this reports it rather than failing on it.
+      */
+      expect(await page.locator('[data-testid="creative-absence-note"]').count()).toBeGreaterThan(0)
+
+      return
+    }
+
+    expect(frames.every((f) => f.fit === 'cover'), `a cover was not filled: ${JSON.stringify(frames)}`).toBe(true)
     expect(
-      cropped(measured),
-      `these creatives are drawn at a ratio that is not their own:\n  ${cropped(measured).join('\n  ')}`,
+      frames.filter((f) => Math.abs(f.ratio - 1) > TOLERANCE),
+      `these covers are not square, so the wall is uneven: ${JSON.stringify(frames)}`,
     ).toEqual([])
   })
 

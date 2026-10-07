@@ -146,17 +146,36 @@ export function assetAspect(
  * ground the card already draws — «bounded stage + contained media + neutral intentional
  * background», which is the owner's own description of the grid.
  *
- * ## The one exception
+ * ## The two exceptions
  *
  * A `thumb` is a 48–64px navigation tile — a carousel strip, a group list, a ranking row — where the
  * reader is picking a row rather than judging an ad, and where letterboxing a square into a square
  * costs legibility for nothing. It still contains unless the shape is known and matches.
+ *
+ * CONTENT-COVER-FILL-001 — a `cover` is the card's own tile, and it fills.
+ *
+ * The owner's two instructions are about two surfaces and only look contradictory until the surface
+ * is named. The first — «default media fit: contain, NOT cover» — is about the VIEWER, and he has
+ * since confirmed it reads correctly: «after opening, the preview is excellent, the original content
+ * shows at its own dimensions». The second is about the COVER: «it must be the full cover, not a tall
+ * shape … so the cover holds an image that fills the whole cover, not only a portrait strip».
+ *
+ * The card's frame was taking each asset's own aspect, so a 9:16 story produced a tall card and a
+ * grid of mixed formats became a row of strips of different heights. A cover is a tile in a wall
+ * whose job is recognition at a glance; the viewer is where the ad is judged, and it loses nothing.
+ *
+ * The crop this buys is real and is not denied — a story's logo and call to action sit at the top and
+ * bottom — which is exactly why the whole asset stays one click away and the viewer's guard is
+ * untouched.
  */
 export function mediaFit(
   asset: MediaAspect | null | undefined,
   stage: MediaAspect | null | undefined,
-  surface: 'stage' | 'viewer' | 'thumb' = 'stage',
+  surface: 'stage' | 'viewer' | 'thumb' | 'cover' = 'stage',
 ): 'contain' | 'cover' {
+  /* A cover fills its frame whatever the asset is — including where nothing is known about it. */
+  if (surface === 'cover') return 'cover'
+
   if (surface !== 'thumb') return 'contain'
 
   return asset !== null && asset !== undefined && asset === (stage ?? 'horizontal') ? 'cover' : 'contain'
@@ -166,7 +185,7 @@ export function mediaFit(
 export function mediaFitClass(
   asset: MediaAspect | null | undefined,
   stage: MediaAspect | null | undefined,
-  surface: 'stage' | 'viewer' | 'thumb' = 'stage',
+  surface: 'stage' | 'viewer' | 'thumb' | 'cover' = 'stage',
 ): string {
   return mediaFit(asset, stage, surface) === 'contain' ? 'object-contain' : 'object-cover'
 }

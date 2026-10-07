@@ -86,7 +86,7 @@ final class ReportAds
     /**
      * @param  array<string, mixed>  $filters  `project_ids`, `providers`, `campaign_ids` — the scope
      * @param  string  $form  `executive_summary` curates; anything else is the full report
-     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, platform_groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_withheld: int}
+     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, platform_groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_unmeasured: int, creatives_withheld: int}
      */
     public function for(string $objective, Carbon $from, Carbon $to, array $filters = [], string $form = 'detailed', bool $liveMedia = false): array
     {
@@ -109,6 +109,82 @@ final class ReportAds
          * totals made one unit ago.
          */
         $inScope = (clone $query)->count();
+
+        /*
+         * CONTENT-MEASURED-FIRST-001 §B — a report lists what the PERIOD measured.
+         *
+         * The scope was «every creative matching the filters», with no reference to the window at
+         * all, so a creative that last ran a year before the period still arrived in the roster — at
+         * the end, because the spend sort puts nulls last, but present, named, and on a page a client
+         * reads. The owner found exactly that and said it makes the whole report look inaccurate.
+         *
+         * A report is a statement about a period, and a creative the period never measured has
+         * nothing to state. Listing it with a dash down every column is worse than omitting it: it
+         * reads as a creative that RAN and produced nothing, which is a claim the data does not make.
+         *
+         * A reported ZERO is measurement and stays — «the platform told us this spent nothing in this
+         * period» is a fact about the period, and the client is entitled to it. The predicate is the
+         * existence of a ROW, never the size of a figure, which is the same distinction the library's
+         * ordering draws one rung up.
+         *
+         * Nothing is dropped silently. `creatives_in_scope` keeps meaning what it always meant, so
+         * the section can still say «65 ran», and `creatives_unmeasured` says how many of those the
+         * period holds no figure for. A report that quietly shrank its own estate would be this same
+         * defect wearing the opposite sign.
+         */
+        $query->where(function ($outer) use ($from, $to): void {
+            $outer
+                ->whereExists(function ($sub) use ($from, $to): void {
+                    $sub->selectRaw('1')
+                        ->from('creative_daily_metrics')
+                        ->whereColumn('creative_daily_metrics.creative_id', 'external_creatives.id')
+                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+                })
+                /*
+                 * …or measured one grain down, at the AD.
+                 *
+                 * Not every platform reports per creative. Where it reports per ad, the creative has
+                 * no `creative_daily_metrics` row of its own and is still a creative that ran — the
+                 * same path `lean()` already walks to decide whether an ad delivered. Reading only
+                 * the creative grain dropped exactly those from the report, which is «unavailable
+                 * treated as absent», the error this change exists to remove rather than relocate.
+                 *
+                 * Caught by `LiveReportContentAccountCeilingTest`, whose fixture records campaign and
+                 * ad figures and no creative ones.
+                 */
+                ->orWhereExists(function ($sub) use ($from, $to): void {
+                    $sub->selectRaw('1')
+                        ->from('external_ads')
+                        ->whereColumn('external_ads.creative_id', 'external_creatives.id')
+                        ->whereExists(function ($inner) use ($from, $to): void {
+                            $inner->selectRaw('1')
+                                ->from('entity_daily_metrics')
+                                ->where('entity_type', 'ad')
+                                ->whereColumn('entity_daily_metrics.entity_id', 'external_ads.id')
+                                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+                        });
+                })
+                /*
+                 * …or the creative itself records that it was delivering inside the window.
+                 *
+                 * Some platforms report at the CAMPAIGN grain only: no creative row, no ad row, and a
+                 * creative that genuinely ran. What the sync does record on it is `last_active_at`,
+                 * which is the platform saying «this was delivering on this date». A date inside the
+                 * period is the period measuring something about this creative, and that is the whole
+                 * test being applied here.
+                 *
+                 * It is also what keeps this change narrow. What is excluded is content with NO
+                 * evidence of activity in the period from ANY grain — the owner's «no spend and no
+                 * indicators» — rather than everything a single table happens not to carry.
+                 */
+                ->orWhereBetween('external_creatives.last_active_at', [
+                    $from->copy()->startOfDay(),
+                    $to->copy()->endOfDay(),
+                ]);
+        });
+
+        $measured = (clone $query)->count();
+        $unmeasured = $inScope - $measured;
 
         /*
          * The roster FIRST, from its own lean read, because it is the one that must be complete.
@@ -143,6 +219,7 @@ final class ReportAds
                 'ads' => [], 'worst' => [], 'groups' => [], 'platform_groups' => [], 'roster' => $roster, 'level' => 'campaign',
                 'reason' => 'no_creatives_in_window',
                 'creatives_in_scope' => $inScope,
+                'creatives_unmeasured' => $unmeasured,
                 'creatives_withheld' => $inScope,
             ];
         }
@@ -251,8 +328,10 @@ final class ReportAds
         $withheld = max(0, $inScope - count($roster));
 
         return $ranked === []
-            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld]
-            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld];
+            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope,
+                'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld]
+            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope,
+                'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld];
     }
 
     /**

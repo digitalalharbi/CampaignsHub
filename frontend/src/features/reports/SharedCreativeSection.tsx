@@ -1,6 +1,6 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { AboutThisData } from '@/features/content/AboutThisData'
-import { aspectClass, clientAbsence, mediaFitClass, posterSource, readPreview } from '@/features/content/adPreview'
+import { clientAbsence, mediaFitClass, posterSource, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -1103,13 +1103,18 @@ function CreativeTile({
              * guessed shape is a claim about the ad.
              */
             /*
-              CONTENT-PREVIEW-FIT-001 §14 — the client's deck and the library must not disagree.
-              Where the platform stated a shape the frame IS that shape and covering crops nothing;
-              where it stated none the frame is a guessed square and the asset is contained rather
-              than cut through its own subject. The library made exactly this change in the same
-              unit, and «one creative, one story» is the point of making it twice.
+              CONTENT-COVER-FILL-001 — the client's deck and the library are ONE cover rule.
+
+              «One creative, one story» is why this changes with the library rather than after it. The
+              frame took the platform's stated shape, so a deck of mixed formats was a column of tiles
+              of different heights — the owner's «tall shape» — and the rule he gave is that a cover
+              holds a picture filling the whole of it.
+
+              The crop is the same crop the library accepts, and it is acceptable here for the same
+              reason: this card opens `AdPreviewDialog`, which contains, so the whole ad is one press
+              away for the client too.
             */
-            className={`w-full ${aspectClass(preview.aspect ?? null) ?? 'aspect-square'} ${mediaFitClass(preview.aspect ?? null, preview.aspect ?? 'square')}`}
+            className={`w-full aspect-square ${mediaFitClass(preview.aspect ?? null, preview.aspect ?? 'square', 'cover')}`}
           />
         ) : (
           <span className="flex aspect-square w-full items-center justify-center px-2 text-center text-[11px] text-text-muted">
