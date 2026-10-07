@@ -11,6 +11,7 @@ import {
 } from './api'
 import { listDeliveries, type NotificationDeliveryRow } from '@/features/notifications/api'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { ChartCard, StatusMixBar } from '@/features/analytics/charts'
 import { listProjects } from '@/features/projects/api'
 import { getData, putData } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
@@ -391,7 +392,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       )}
 
       {events.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
+        <p data-testid="alert-ledger-empty" className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           {/*
             «لا يوجد شيء هنا» reads as a page that failed to load. An empty alert ledger is a
             RESULT — nothing has fired — and saying which rules were watching is what tells the
@@ -481,6 +482,54 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {/*
+        VIZ-OPS-001 — how much of the ledger is still open, BELOW the alerts themselves.
+
+        ## Why it is after the list
+
+        The owner's rule: «the feature and the service come first on the page, clearly, without
+        needing to scroll — and the analytical results after them.» Somebody opens an alerts page to
+        see WHAT fired and act on it; the shape of the ledger is what they look at afterwards. This
+        first sat above the filters, so the events were pushed below a chart about the events.
+
+        What the badges cannot say is unchanged — only where it is said.
+
+        `open`, `snoozed` and `resolved` are the three statuses an event can be in, so they partition
+        the ledger and a divided bar over them is a true claim about it.
+
+        `open_critical` is NOT a fourth status. The server counts it as «status open AND severity
+        critical» — a subset of open, counted a second time. As a band it would push the parts past
+        their whole, which the bar refuses outright; if it somehow fitted, every share would be wrong.
+        It is stated as an emphasis inside open, which is where it lives.
+      */}
+      {total > 0 && (
+        <ChartCard
+          title={locale === 'ar' ? 'حالة التنبيهات' : 'How the alerts stand'}
+          subtitle={locale === 'ar'
+            ? 'حصة كل حالة من إجمالي التنبيهات في السجل.'
+            : 'Each status’s share of every alert in the ledger.'}
+        >
+          <StatusMixBar
+            testId="alert-mix"
+            ar={locale === 'ar'}
+            label={locale === 'ar' ? 'التنبيهات' : 'Alerts'}
+            total={total}
+            bands={[
+              { key: 'open', label: c.active, count: summary.open, tone: 'warning' },
+              { key: 'snoozed', label: c.snoozed, count: summary.snoozed, tone: 'neutral' },
+              { key: 'resolved', label: c.resolved, count: summary.resolved, tone: 'success' },
+            ]}
+          />
+          {summary.critical > 0 && (
+            <p data-testid="alert-critical-note" className="mt-3 text-sm text-danger">
+              {locale === 'ar'
+                ? `${summary.critical.toLocaleString('en-US')} من التنبيهات المفتوحة حرجة.`
+                : `${summary.critical.toLocaleString('en-US')} of the open alerts are critical.`}
+            </p>
+          )}
+        </ChartCard>
       )}
     </div>
   )
