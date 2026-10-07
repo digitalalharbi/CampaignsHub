@@ -1,3 +1,4 @@
+import { creativeKindLabel as creativeKindLabelImpl } from './creativeKind'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -289,18 +290,27 @@ const FATIGUE_LABEL: Record<FatigueStatus, { ar: string; en: string }> = {
  * Exported so the detail page reads this map rather than growing a second one three lines long,
  * which is how the label maps in this codebase have drifted every previous time.
  */
-export const KIND_LABEL: Record<string, { ar: string; en: string }> = {
-  image: { ar: 'صورة', en: 'Image' },
-  video: { ar: 'فيديو', en: 'Video' },
-  carousel: { ar: 'دوّار', en: 'Carousel' },
-}
+/*
+ * CONTENT-KIND-VOCABULARY-001 — the map moved to `creativeKind.ts`, and grew the kinds it was missing.
+ *
+ * The docblock above warned that these maps drift «every previous time», and it was already true of
+ * this one in two ways:
+ *
+ *  - it held THREE kinds. `CreativeKind::ALL` has five, and the filter offers all five — so
+ *    filtering by «كولكشن» produced a badge reading the bare English «collection», and a catalog
+ *    read «catalog». Two of the five shapes had no word in this product at all.
+ *  - two other tables named the same shapes differently («المجموعة»/«تشكيلة», «الدوارة»/«دوّار»).
+ *
+ * «An unknown kind shows as itself» was the other half, and it is why a provider token reached a
+ * reader as the ad's type: `external_creatives.format` carries whatever the platform called it, so
+ * «story_ad» was shown under «النوع». The intent — do not HIDE a shape we failed to classify — is
+ * kept and served better: the type says «غير مصنّف», and the platform's own token is shown beside
+ * it, named as the platform's.
+ */
+export { creativeKindLabel } from './creativeKind'
 
-/** An unknown kind shows as itself: a format the product does not recognise is worth seeing. */
-export function creativeKindLabel(kind: string | null | undefined, ar: boolean): string {
-  if (!kind) return '—'
-  const label = KIND_LABEL[kind]
-  return label ? (ar ? label.ar : label.en) : kind
-}
+/** This module re-exports the labeller, so it reads it under its own name. */
+const kindWord = (kind: string, ar: boolean): string => creativeKindLabelImpl(kind, ar)
 
 /**
  * Which of a creative's headline metrics is its RESULT, and which is its efficiency.
@@ -687,7 +697,7 @@ export function CreativesPage() {
 
     const out: AppliedFilter[] = [
       ...forAxis('providers', t.platform, (p) => providerLabel(p, locale)),
-      ...forAxis('kinds', t.kind, (k) => KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k),
+      ...forAxis('kinds', t.kind, (k) => kindWord(k, ar)),
       ...forAxis('objectives', t.objective, (o) => canonicalObjectiveLabel(o as CanonicalObjectiveKey, ar ? 'ar' : 'en')),
       ...forAxis('client_ids', t.client, (id) => nameOf(options?.clients, id)),
       ...forAxis('project_ids', t.project, (id) => nameOf(options?.projects, id)),
@@ -970,7 +980,7 @@ export function CreativesPage() {
             })))}
             {multi('kinds', t.kind, (options?.kinds ?? []).map((k) => ({
               value: k.key,
-              label: KIND_LABEL[k.key]?.[ar ? 'ar' : 'en'] ?? k.key,
+              label: kindWord(k.key, ar),
               count: k.count,
             })))}
 
@@ -1667,7 +1677,7 @@ function CreativeGridCard({
         {creative.preview.kind === 'video' && (
           <span className="absolute bottom-2 end-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-white">
             {creative.duration_seconds === null ? (
-              KIND_LABEL.video[ar ? 'ar' : 'en']
+              kindWord('video', ar)
             ) : (
               <span dir="ltr">{creative.duration_seconds}s</span>
             )}

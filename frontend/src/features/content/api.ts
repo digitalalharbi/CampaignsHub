@@ -174,7 +174,15 @@ export interface CreativeFatigue {
 export interface CreativeCard {
   id: string
   name: string
+  /** The PROVIDER's own token — `story_ad`, `collection_dynamic`, `text` — not a reader's word. */
   format: string
+  /**
+   * What the creative IS, from `CreativeKind` — the same answer the filter and the badge use.
+   *
+   * Optional because older payloads and a client report's boundary do not carry it; every labeller
+   * treats an absent kind the same as an unknown one and says «غير مصنّف» rather than a raw token.
+   */
+  kind?: string | null
   provider: string
   status: string
   campaign_id: string | null
