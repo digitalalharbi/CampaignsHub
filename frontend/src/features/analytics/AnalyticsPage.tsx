@@ -62,7 +62,6 @@ import { PathAnalysis } from './PathAnalysis'
 import { PathTrends } from './PathTrends'
 import { contentIntelligence, listCreatives, type CreativeCard } from '@/features/content/api'
 import { ContentReading } from './ContentReading'
-import { CreativeFormatComparison } from '@/features/content/CreativeFormatComparison'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
@@ -2902,33 +2901,17 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
       )}
 
       {/*
-        CREATIVE-FORMAT-INTELLIGENCE-001 — the same question, asked of a SCOPE anybody can reproduce.
-        *
-        * `ContentReading` above answers it for whatever this screen is currently filtered to, which
-        * is the right answer for this screen and cannot be quoted anywhere else: the filters are the
-        * surface's state rather than a scope. This block asks the canonical endpoint — project,
-        * optionally one ad account, one period — so the figures a dashboard, a campaign page and a
-        * client's report draw are the same ones, split by objective and carrying their evidence base.
-        *
-        * Full depth here because this is where the deep reading belongs. The same module draws a
-        * compact answer elsewhere; only the depth differs, never the numbers.
+        CONTENT-FORMAT-ROAS-REMOVED-001 — «أداء أنواع المحتوى» is gone, panel and all.
+
+        It divided creative-grain revenue by creative-grain spend. Spend is attributed to every
+        creative in full; revenue at that grain is reported only sometimes — so the ratio was a
+        fraction of the truth over all of it, and it read «0.02» beside a campaign reading 5x with
+        nothing on the page reconciling them. The verdict on top of it («الكولكشن أفضل») then asked
+        an operator to move budget on that number.
+
+        The panel went with it rather than being left empty: a titled box explaining that it has
+        nothing to say is still a box, and the owner's objection included the space this took.
       */}
-      {projectId !== undefined && projectId !== null && (
-        <Panel
-          title={ar ? 'أداء أنواع المحتوى' : 'Content format performance'}
-          description={ar
-            ? 'صور أم فيديو — لكل هدف على حدة، ومع قاعدة الأدلة التي يستند إليها الحكم'
-            : 'Image or video — per objective, with the evidence base the verdict rests on'}
-        >
-          <CreativeFormatComparison
-            projectId={projectId}
-            from={range.from}
-            to={range.to}
-            depth="full"
-            ar={ar}
-          />
-        </Panel>
-      )}
     </div>
   )
 }

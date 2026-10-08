@@ -37,7 +37,6 @@ import { PeriodLabel } from '@/components/patterns/Status'
 import { useFreshness } from '@/features/analytics/api'
 import { listProjects } from '@/features/projects/api'
 import { ContentSummary } from './ContentSummary'
-import { CreativeFormatComparison } from './CreativeFormatComparison'
 import { metricsForKeys } from '@/features/analytics/metricCatalog'
 import type { Summary } from '@/features/analytics/api'
 
@@ -1051,24 +1050,25 @@ export function CreativesPage() {
         * hitting whatever took its place. Beneath the toolbar a late arrival moves only itself.
       */}
       {/*
-        CREATIVE-FORMAT-INTELLIGENCE-001, compactly — «image or video, here?» where content is browsed.
+        CONTENT-FORMAT-ROAS-REMOVED-001 — the «which format wins» comparison is gone.
 
-        The COMPACT depth: the verdict for the objective most of this project was bought for, what it
-        cost, and the evidence it rests on. The whole reading lives in Content Analytics; repeating
-        it here would be a second page of the same analysis rather than an answer somebody can act on
-        while they are looking at the assets themselves.
+        The owner, with a screenshot: «يوجد خطأ فادح — كيف حققت الحملة أداء عائد إلى 5x بالمقابل
+        المحتويات العائد لها ضعيف جداً، غير منطقي».
 
-        Same endpoint, same figures. Only the depth differs.
+        He is right, and the contradiction was structural rather than a bug in the arithmetic. The
+        block divided creative-grain REVENUE by creative-grain SPEND. Spend is attributed to every
+        creative in full; revenue at that grain is reported by the platform only sometimes. So the
+        numerator was a fraction of the truth over a denominator that was all of it, and the result —
+        «الصور 0.02», «الكولكشن 0.10» — is not a return on anything. The campaign reading 5x beside
+        it was computed at campaign grain, where both halves are reported, and nothing on the page
+        reconciled the two.
+
+        A verdict («الكولكشن أفضل في هذه الفترة») on top of that is worse than the number: it tells
+        an operator to move budget on the strength of a figure nobody can stand behind.
+
+        The spend SHARE by format stays, above — it divides nothing and is simply where the money
+        went.
       */}
-      {currentProjectId != null && currentProjectId !== '' && (
-        <CreativeFormatComparison
-          projectId={currentProjectId}
-          from={from}
-          to={to}
-          depth="compact"
-          ar={ar}
-        />
-      )}
 
       {selected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs text-text-secondary">
