@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -108,21 +110,49 @@ final class CreativeResultAttribution
     private function campaignTotals(array $campaignIds, Carbon $from, Carbon $to): array
     {
         /*
-          Queried through `DB::table`, like every other sum in `CreativeMetrics`: these are
-          aggregates, not entities, and routing them through Eloquent would hydrate thousands of
-          models to add two columns.
+          Campaign results live in `daily_metrics`, not in `entity_daily_metrics`.
+
+          The first version of this read `entity_daily_metrics where entity_type = 'campaign'` and
+          would never have matched a single row: that table holds `ad_set` and `ad` grains only —
+          checked against the database rather than assumed. The campaign grain is `daily_metrics`,
+          keyed by `unified_campaign_id` with one row per `metric_key`, which is also the id
+          `external_creatives.campaign_id` carries, so both sides of the comparison key alike.
+
+          Narrowed through the one class that owns account visibility: a project with a deselected
+          second account would otherwise count that account's campaign sales here while the creative
+          side never sees its creatives, and every creative in the project would be reported
+          unattributable on the strength of rows the project may not show.
         */
-        /** @var array<int, object{entity_id: string, conversions: ?float, revenue: ?float}> $rows */
-        $rows = DB::table('entity_daily_metrics')
-            ->where('entity_type', 'campaign')
-            ->whereIn('entity_id', $campaignIds)
+        /** @var array<int, object{unified_campaign_id: string, metric_key: string, total: ?float}> $rows */
+        $rows = DB::table('daily_metrics')
+            /*
+             * The tenant predicate is written out because `DB::table()` has no global scope.
+             *
+             * Eloquent models carry `BelongsToTenant`; a raw builder carries nothing, so a service
+             * that reaches for the query builder — as every aggregate in this area does, to avoid
+             * hydrating thousands of models — has to state the tenant itself. The cross-tenant test
+             * failed without this, and it was right to: `BoundAccountVisibility` narrows by
+             * BINDING, which is a project-level fact and never claimed to be a tenant boundary.
+             */
+            ->where('tenant_id', app(TenantContext::class)->tenantId())
+            ->whereIn('unified_campaign_id', $campaignIds)
+            ->whereIn('metric_key', ['conversions', 'revenue'])
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->selectRaw('entity_id, sum(conversions) as conversions, sum(revenue) as revenue')
-            ->groupBy('entity_id')
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->selectRaw('unified_campaign_id, metric_key, sum(value) as total')
+            ->groupBy('unified_campaign_id', 'metric_key')
             ->get()
             ->all();
 
-        return $this->keyed($rows, 'entity_id');
+        $out = [];
+
+        foreach ($rows as $row) {
+            $id = (string) $row->unified_campaign_id;
+            $out[$id] ??= ['conversions' => 0.0, 'revenue' => 0.0];
+            $out[$id][$row->metric_key] = (float) ($row->total ?? 0);
+        }
+
+        return $out;
     }
 
     /**
@@ -133,8 +163,16 @@ final class CreativeResultAttribution
     {
         /** @var array<int, object{campaign_id: string, conversions: ?float, revenue: ?float}> $rows */
         $rows = DB::table('creative_daily_metrics')
+            /* The same reason as the campaign side: a raw builder carries no tenant scope. */
+            ->where('tenant_id', app(TenantContext::class)->tenantId())
             ->whereIn('campaign_id', $campaignIds)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            /* The same rule, in the spelling this table needs — see the note on the campaign side. */
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign(
+                $q,
+                '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)',
+                'creative_daily_metrics.project_id',
+            ))
             ->selectRaw('campaign_id, sum(conversions) as conversions, sum(revenue) as revenue')
             ->groupBy('campaign_id')
             ->get()

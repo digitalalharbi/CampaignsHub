@@ -7,6 +7,10 @@ namespace Tests\Feature;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeResultAttribution;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -40,6 +44,14 @@ final class CreativeResultAttributionTest extends TestCase
 
     private Project $project;
 
+    private ClientWorkspace $workspace;
+
+    private ProviderConnection $connection;
+
+    private ExternalAccount $selected;
+
+    private ExternalAccount $deselected;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -58,26 +70,120 @@ final class CreativeResultAttributionTest extends TestCase
             'name' => 'P',
             'status' => 'active',
         ]);
+
+        $this->workspace = $client;
+
+        $credential = new IntegrationCredential([
+            'tenant_id' => $this->tenant->id, 'provider' => 'snapchat', 'credential_scope' => 'project_only',
+            'credential_type' => 'oauth', 'status' => 'active',
+        ]);
+        $credential->setPayload('token');
+        $credential->save();
+
+        $this->connection = ProviderConnection::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'credential_id' => $credential->id, 'provider' => 'snapchat',
+            'connection_name' => 'snap-'.uniqid(), 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $this->selected = $this->account('act-selected');
+        $this->deselected = $this->account('act-deselected');
+
+        $this->bind($this->selected, true);
+        $this->bind($this->deselected, false);
     }
 
-    private function campaignDay(string $campaignId, float $conversions, float $revenue): void
+    private function account(string $externalId): ExternalAccount
     {
-        DB::table('entity_daily_metrics')->insert([
-            'id' => (string) Str::uuid(),
+        return ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $this->connection->id, 'provider' => 'snapchat',
+            'account_type' => 'ad_account', 'external_id' => $externalId.'-'.uniqid(), 'name' => $externalId, 'status' => 'active',
+            'discovered_at' => Carbon::now(),
+        ]);
+    }
+
+    private function bind(ExternalAccount $account, bool $active): void
+    {
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->workspace->id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->id, 'provider' => 'snapchat', 'purpose' => 'advertising', 'is_active' => $active,
+        ]);
+    }
+
+    /**
+     * A campaign-grain result, in the table that actually holds one.
+     *
+     * `daily_metrics`, keyed by `unified_campaign_id` with one row per `metric_key` — NOT
+     * `entity_daily_metrics`, which carries `ad_set` and `ad` grains only. The first version of
+     * this service read the latter and could never have matched a row; checked against the
+     * database rather than assumed.
+     */
+    /** @var array<string, string> unified campaign id → the external campaign row backing it */
+    private array $externalCampaigns = [];
+
+    private function externalCampaign(string $unifiedId, ExternalAccount $account): string
+    {
+        if (isset($this->externalCampaigns[$unifiedId])) {
+            return $this->externalCampaigns[$unifiedId];
+        }
+
+        /* The unified campaign the id names — `external_campaigns.unified_campaign_id` is a key. */
+        DB::table('unified_campaigns')->insert([
+            'id' => $unifiedId,
             'tenant_id' => $this->tenant->id,
             'project_id' => $this->project->id,
-            'provider' => 'snapchat',
-            'entity_type' => 'campaign',
-            'entity_id' => $campaignId,
-            'external_entity_id' => 'ext-'.substr($campaignId, 0, 8),
-            'attribution_window' => 'default',
-            'is_demo' => false,
-            'metric_date' => Carbon::now()->subDay()->toDateString(),
-            'conversions' => $conversions,
-            'revenue' => $revenue,
+            'name' => 'C-'.substr($unifiedId, 0, 8),
+            'objective' => 'sales',
+            'status' => 'active',
+            'budget_currency' => 'SAR',
+            'priority' => 'normal',
+            'objective_source' => 'provider',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        $id = (string) Str::uuid();
+
+        DB::table('external_campaigns')->insert([
+            'id' => $id,
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'unified_campaign_id' => $unifiedId,
+            'provider' => 'snapchat',
+            'external_id' => 'ec-'.substr($unifiedId, 0, 8),
+            'name' => 'C',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $this->externalCampaigns[$unifiedId] = $id;
+    }
+
+    private function campaignDay(string $campaignId, float $conversions, float $revenue, ?ExternalAccount $account = null): void
+    {
+        $account ??= $this->selected;
+        $externalCampaign = $this->externalCampaign($campaignId, $account);
+
+        foreach (['conversions' => $conversions, 'revenue' => $revenue] as $key => $value) {
+            DB::table('daily_metrics')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'provider' => 'snapchat',
+                'external_account_id' => $account->id,
+                'external_campaign_id' => $externalCampaign,
+                'unified_campaign_id' => $campaignId,
+                'metric_key' => $key,
+                'metric_date' => Carbon::now()->subDay()->toDateString(),
+                'value' => $value,
+                'project_currency' => 'SAR',
+                'original_currency' => 'SAR',
+                'data_freshness_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     /** A real creative row, because `creative_daily_metrics.creative_id` is a foreign key. */
@@ -242,6 +348,55 @@ final class CreativeResultAttributionTest extends TestCase
         ]);
 
         $this->assertSame([$campaign => true], $this->ask([$campaign]));
+    }
+
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-001 — a deselected account's campaign sales are not this project's.
+     *
+     * This is the failure the source guard existed to catch, and it is not cosmetic. Both sides of
+     * the comparison must see the same estate: the creative side goes through `CreativeRows` and is
+     * narrowed, so if the campaign side were not, a deselected account's sales would look like a
+     * campaign that sold with no creative behind it — and every creative in the project would be
+     * reported unattributable on the strength of rows the project may not show.
+     */
+    public function test_a_deselected_accounts_campaign_sales_do_not_reach_the_verdict(): void
+    {
+        $campaign = (string) Str::uuid();
+
+        /* The sale belongs to an account this project has deselected. */
+        $this->campaignDay($campaign, conversions: 109, revenue: 31_609, account: $this->deselected);
+        $this->creativeDay($campaign, $this->creative(), 0, 0);
+
+        $this->assertSame(
+            [],
+            $this->ask([$campaign]),
+            'a deselected account\'s sales were counted as this project\'s campaign result',
+        );
+    }
+
+    /** …and the selected account's sales do reach it, so the narrowing is not simply hiding everything. */
+    public function test_the_selected_accounts_campaign_sales_do_reach_the_verdict(): void
+    {
+        $campaign = (string) Str::uuid();
+
+        $this->campaignDay($campaign, conversions: 109, revenue: 31_609, account: $this->selected);
+        $this->creativeDay($campaign, $this->creative(), 0, 0);
+
+        $this->assertSame([$campaign => true], $this->ask([$campaign]));
+    }
+
+    /** Another tenant's rows are invisible here, whatever their bindings say. */
+    public function test_another_tenants_campaign_sales_do_not_reach_the_verdict(): void
+    {
+        $campaign = (string) Str::uuid();
+
+        $this->campaignDay($campaign, conversions: 109, revenue: 31_609, account: $this->selected);
+        $this->creativeDay($campaign, $this->creative(), 0, 0);
+
+        $other = Tenant::create(['name' => 'O', 'slug' => 'o-'.uniqid(), 'status' => 'active']);
+        app(TenantContext::class)->setTenantId($other->id);
+
+        $this->assertSame([], $this->ask([$campaign]), 'another tenant could read this project\'s campaign results');
     }
 
     public function test_no_campaigns_asked_is_no_query_and_no_answer(): void
