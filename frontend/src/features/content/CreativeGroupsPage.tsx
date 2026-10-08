@@ -418,7 +418,7 @@ function GroupDetail({
   const group: CreativeGroupDetail = detail.data
 
   return (
-    <div className="space-y-5" data-testid="creative-group-detail">
+    <div className="space-y-4" data-testid="creative-group-detail">
       {backLink}
 
       <section className="space-y-3 rounded-lg border border-border bg-surface p-4">

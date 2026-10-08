@@ -487,7 +487,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/*
         The page names the surface the reader arrived at, not the file it lives in.
 

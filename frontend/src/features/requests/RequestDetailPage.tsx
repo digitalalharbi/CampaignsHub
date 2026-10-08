@@ -114,7 +114,7 @@ export function RequestDetailPage() {
 
       {/* Details */}
       <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Communication */}
           <section className="rounded-2xl border border-border bg-surface p-5">
             <h2 className="mb-3 text-sm font-bold text-text-primary">{t('communication')}</h2>

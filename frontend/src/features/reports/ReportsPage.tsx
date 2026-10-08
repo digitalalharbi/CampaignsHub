@@ -195,7 +195,7 @@ export function ReportsPage() {
       }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/*
         UX-PAGE-HERO-001 — the product's own header, not a third spelling of one.
         This drew its own `<h1>` at `text-3xl` while the shared header is `PAGE_TITLE`, so Reports was
@@ -1211,7 +1211,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
 
   return (
     <Modal open onClose={onClose} title={ar ? 'روابط العميل الآمنة' : 'Secure client links'} size="lg">
-      <div className="space-y-5">
+      <div className="space-y-4">
         {created ? (
           <div className="rounded-2xl border border-brand-200 bg-[var(--brand-background)] p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-bold text-brand-700"><Link2 size={16} /> {ar ? 'تم إنشاء الرابط — انسخه الآن (يُعرض مرة واحدة)' : 'Link created — copy it now, it is shown once'}</div>

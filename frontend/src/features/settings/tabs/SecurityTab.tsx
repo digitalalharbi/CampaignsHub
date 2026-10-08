@@ -41,7 +41,7 @@ export function SecurityTab() {
   const enabled = activity.data?.two_factor_enabled
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Password */}
       <form onSubmit={changePw} className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-primary"><KeyRound size={18} /> {ar ? 'تغيير كلمة المرور' : 'Change your password'}</h2>

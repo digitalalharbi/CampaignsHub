@@ -115,7 +115,7 @@ export function ProviderReviewPage() {
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           {ar ? 'جاهزية مراجعة المزوّدين' : 'Provider review readiness'}

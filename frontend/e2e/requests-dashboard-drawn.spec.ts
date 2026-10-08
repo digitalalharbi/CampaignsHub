@@ -17,13 +17,28 @@ test('the status and type breakdowns draw banded bars against a category axis', 
   await expect(chart).toBeVisible({ timeout: 30000 })
 
   const bars = chart.locator('.recharts-bar-rectangle')
-  const categories = await chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick').count()
+  const ticks = chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick')
 
   /*
     Polled: `ResponsiveContainer` renders once before it has measured its parent and again with real
     dimensions, so reading the geometry on the first pass is a race rather than a measurement.
+
+    BOTH sides are polled. The axis count used to be read once, above, and handed to `toBe`, which
+    evaluates eagerly — so on the webkit gate, where the axis had not laid out by then, the
+    expectation froze at zero while the bars reached six: «Expected: 0, Received: 6» about a chart
+    that was drawing correctly. `categories > 0` is the other half, without which an unrendered
+    chart would satisfy 0 === 0.
   */
-  await expect.poll(async () => (await bars.all()).length, { timeout: 15000 }).toBe(categories)
+  await expect
+    .poll(
+      async () => {
+        const [drawn, categories] = await Promise.all([bars.count(), ticks.count()])
+
+        return categories > 0 && drawn === categories ? 'every category has a bar' : `bars=${drawn} categories=${categories}`
+      },
+      { timeout: 15000 },
+    )
+    .toBe('every category has a bar')
   await expect(page.getByTestId('requests-by-status-legend')).toBeVisible()
 })
 

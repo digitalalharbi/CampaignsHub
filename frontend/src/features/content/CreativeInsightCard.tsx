@@ -36,6 +36,7 @@ const CONFIDENCE_LABEL: Record<string, { ar: string; en: string }> = {
 const COPY = {
   ar: {
     action: 'الإجراء المقترح',
+    why: 'التفاصيل والإجراء',
     confidence: 'الثقة',
     previousPeriod: 'الفترة السابقة',
     aiReview: 'مولَّد آليًا — يحتاج مراجعة بشرية',
@@ -43,6 +44,7 @@ const COPY = {
   },
   en: {
     action: 'Suggested action',
+    why: 'Detail and action',
     confidence: 'Confidence',
     previousPeriod: 'Previous period',
     aiReview: 'Generated — needs human review',
@@ -100,13 +102,47 @@ export function CreativeInsightCard({
       data-also-count={alsoNamed?.length ?? 0}
       className={`rounded-md border p-3 ${SEVERITY_TONE[item.severity] ?? 'border-border'}`}
     >
+      {/*
+        UI-FINDING-DENSITY-001 — the finding leads; its account opens on demand.
+
+        Thirteen of these stack on the dashboard, and each printed three paragraphs: the title, the
+        detail, and the suggested action. Measured on the demo tenant that is 2,330 characters of
+        prose against two charts on the first screen an operator opens — «حاول تقليل الجانب النصي …
+        وليست نصية فقط».
+
+        Nothing is removed. The title and the severity are what a reader scans, so they stay; the
+        detail and the action are what they read once they have chosen a finding, so they sit behind
+        a disclosure. The evidence line stays out too, because a confidence and a window are what
+        stop a finding being read as settled, and burying those would be hiding the caveat rather
+        than the explanation.
+
+        `<details>` rather than React state: it is keyboard-operable, it is findable by the browser's
+        own in-page search, and its content stays in the DOM — so anything that asserts the detail or
+        the action is present still finds it.
+      */}
       <p className="text-sm font-semibold text-text-primary">{ar ? item.title_ar : item.title_en}</p>
-      <p className="mt-1 text-sm text-text-secondary">{ar ? item.detail_ar : item.detail_en}</p>
-      {action && (
-        <p className="mt-2 text-sm text-text-primary">
-          <span className="font-medium">{t.action}:</span> {action}
-        </p>
-      )}
+      <details className="group mt-1">
+        <summary className="cursor-pointer list-none text-xs font-medium text-text-secondary hover:text-text-primary">
+          <span className="underline decoration-dotted underline-offset-2">{t.why}</span>
+        </summary>
+        {/*
+          Collapsed EXPLICITLY, not by the user agent.
+
+          Measured in the browser: with `open` false the paragraphs still had boxes 21.7px tall, so
+          the wall of text was unchanged and only a summary had been added on top of it. Something
+          in this application's CSS out-specifies the UA rule that hides a closed `details`' content,
+          so the collapse is stated here instead of assumed — `group-open:` reads the same element's
+          own state, which keeps `<details>` doing the work and the markup semantic.
+        */}
+        <div className="hidden group-open:block">
+          <p className="mt-1.5 text-sm text-text-secondary">{ar ? item.detail_ar : item.detail_en}</p>
+          {action && (
+            <p className="mt-2 text-sm text-text-primary">
+              <span className="font-medium">{t.action}:</span> {action}
+            </p>
+          )}
+        </div>
+      </details>
       <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-secondary">
         <span>
           {t.confidence}: {CONFIDENCE_LABEL[item.confidence]?.[ar ? 'ar' : 'en'] ?? item.confidence}
