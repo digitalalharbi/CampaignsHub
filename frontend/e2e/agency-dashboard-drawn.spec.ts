@@ -58,18 +58,32 @@ test('the objective chart actually draws its bars and its category axis', async 
     not been laid out yet.
   */
   const bars = chart.locator('.recharts-bar-rectangle')
-  const categories = await chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick').count()
+  const ticks = chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick')
 
+  /*
+    The axis is counted INSIDE the poll, with the bars.
+
+    It used to be read once, above, and passed to `toEqual` — where it is evaluated eagerly, before
+    polling begins. On a browser that had not laid the axis out by that moment the expectation froze
+    at zero categories while the bars climbed to their real number, and the poll could never
+    converge. `requests-dashboard-drawn.spec.ts` lost exactly this on the webkit gate, reporting
+    «Expected: 0, Received: 6» about a chart that was drawing correctly, and this spec carried the
+    same latent bug on the same line.
+
+    `matched` rather than the counts themselves: a poll that compares two live values has to settle
+    on BOTH, and `categories > 0` is what stops an unrendered chart satisfying 0 === 0.
+  */
   await expect.poll(async () => {
     const boxes = await Promise.all((await bars.all()).map((b) => b.boundingBox()))
+    const categories = await ticks.count()
 
     return {
-      bars: boxes.length,
+      matched: categories > 0 && boxes.length === categories,
       allBanded: boxes.length > 0 && boxes.every((b) => (b?.height ?? 0) > 0),
       // Drawn to scale: the largest category has a bar somebody can see.
       widestOverTenPx: Math.max(0, ...boxes.map((b) => b?.width ?? 0)) > 10,
     }
-  }, { timeout: 15000 }).toEqual({ bars: categories, allBanded: true, widestOverTenPx: true })
+  }, { timeout: 15000 }).toEqual({ matched: true, allBanded: true, widestOverTenPx: true })
 })
 
 test('the pace chart ranks clients against a line it keeps on the card', async ({ page }) => {
