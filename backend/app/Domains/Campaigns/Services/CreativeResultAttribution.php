@@ -56,9 +56,6 @@ final class CreativeResultAttribution
      */
     public const RESULT_METRICS = ['conversions', 'purchases', 'revenue', 'roas', 'aov', 'cpa', 'leads', 'installs'];
 
-    /** The columns read to decide it, on both sides of the comparison. */
-    private const EVIDENCE = ['conversions', 'revenue'];
-
     /**
      * Campaign ids whose results are NOT attributed at creative grain in this window.
      *
@@ -102,6 +99,10 @@ final class CreativeResultAttribution
 
     /**
      * @param  list<string>  $campaignIds
+     *                                     `conversions` and `revenue` are the evidence on BOTH sides of the comparison, and they are
+     *                                     named in the two `selectRaw` calls rather than in a constant: a list declared once and then
+     *                                     hand-written into each query is two statements that can disagree, and PHPStan was right that
+     *                                     the constant was carrying none of the meaning.
      * @return array<string, array{conversions: float, revenue: float}>
      */
     private function campaignTotals(array $campaignIds, Carbon $from, Carbon $to): array
