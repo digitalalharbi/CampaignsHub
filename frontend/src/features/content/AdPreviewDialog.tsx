@@ -1,3 +1,5 @@
+import { campaignStatusLabel } from '@/features/campaigns/labels'
+import { creativeKindLabel } from './creativeKind'
 import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AdPoster } from './AdPoster'
@@ -383,8 +385,41 @@ export function AdPreviewDialog({
 
           <dl className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
             <Fact label={ar ? 'المنصة' : 'Platform'} value={providerLabel(creative.provider, locale)} />
-            <Fact label={ar ? 'النوع' : 'Format'} value={creative.format} />
-            <Fact label={ar ? 'الحالة' : 'Status'} value={creative.status} />
+            {/*
+              CONTENT-KIND-VOCABULARY-001 — «النوع» is the shape, in the reader's language.
+
+              This row printed `creative.format`, which is the PROVIDER's token: `story_ad`,
+              `collection_dynamic`, `text`, `chat_card`. So the field labelled «النوع» answered in
+              lowercase English, or in a platform's internal spelling, on an Arabic screen — and the
+              five shapes the rest of the page names («صورة», «فيديو», «كاروسيل», «كولكشن»,
+              «كتالوج») were nowhere near it.
+
+              The platform's own label is not discarded. It is shown as the platform's, and only
+              when it says something the kind does not — an operator pasting it back into the ad
+              manager needs it, and a reader deciding what they are looking at does not.
+            */}
+            <Fact label={ar ? 'النوع' : 'Format'} value={creativeKindLabel(creative.kind, ar)} />
+            {/*
+              `typeof`, not a null check — the payloads really are partial.
+
+              `format` is declared `string` and arrives undefined from a client report's boundary and
+              from older snapshots; `api.ts` says as much about its neighbours. A `!== null` guard
+              left `undefined.toLowerCase()` reachable and took the whole dialog down, which
+              `grainProvenance.test.tsx` caught on the first run — the same class of defect the
+              `ads` field's own comment records from the last time a dialog read a partial payload.
+            */}
+            {typeof creative.format === 'string'
+              && creative.format !== ''
+              && creative.format.toLowerCase() !== String(creative.kind ?? '').toLowerCase() && (
+                <Fact
+                  label={ar ? 'تسمية المنصة' : 'Platform’s own label'}
+                  value={creative.format}
+                />
+              )}
+            {/* A partial payload must not print «undefined» where a status belongs. */}
+            {typeof creative.status === 'string' && creative.status !== '' && (
+              <Fact label={ar ? 'الحالة' : 'Status'} value={campaignStatusLabel(creative.status, locale)} />
+            )}
             {creative.campaign_name && <Fact label={ar ? 'الحملة' : 'Campaign'} value={creative.campaign_name} />}
             {/*
               What it was bought FOR. The figures above are chosen by this objective, so a reader

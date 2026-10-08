@@ -1,3 +1,4 @@
+import { creativeKindLabel } from './creativeKind'
 import { formatMix } from './formatMix'
 import { creatives as countedCreatives } from '@/lib/counted'
 import { Num } from '@/components/ui/Num'
@@ -213,7 +214,7 @@ export function ContentSummary({
             {mix.shares.map((s, i) => (
               <li key={s.format} className="flex items-center gap-1.5 text-[11px] text-text-secondary">
                 <span className="h-2 w-2 rounded-full" style={{ background: SLICE[i % SLICE.length] }} aria-hidden />
-                <span className="font-semibold text-text-primary">{formatLabel(s.format, ar)}</span>
+                <span className="font-semibold text-text-primary">{creativeKindLabel(s.format, ar)}</span>
                 <span className="tnum" dir="ltr">{Math.round(s.share * 100)}%</span>
                 <span className="text-text-muted">
                   · {currency ? `${Math.round(s.spend).toLocaleString('en-US')} ${currency}` : Math.round(s.spend).toLocaleString('en-US')}
@@ -264,17 +265,4 @@ function MixPlaceholder() {
 /** Enough hues for the five canonical shapes, from the product's own brand ramp. */
 const SLICE = ['var(--brand-600)', 'var(--brand-400)', 'var(--success)', 'var(--warning)', 'var(--text-muted)']
 
-/** The shapes, in the reader's language — the same five the filters name. */
-function formatLabel(format: string, ar: boolean): string {
-  const labels: Record<string, [string, string]> = {
-    image: ['صورة', 'Image'],
-    video: ['فيديو', 'Video'],
-    carousel: ['دوّار', 'Carousel'],
-    collection: ['تشكيلة', 'Collection'],
-    catalog: ['كتالوج', 'Catalog'],
-  }
 
-  const pair = labels[format]
-
-  return pair === undefined ? format : (ar ? pair[0] : pair[1])
-}
