@@ -41,12 +41,14 @@ describe('the creative-format winner stays removed', () => {
   it('has no component and no verdict module to import', () => {
     expect(existsSync(join(SRC, 'features/content/CreativeFormatComparison.tsx'))).toBe(false)
     expect(existsSync(join(SRC, 'features/content/formatVerdict.ts'))).toBe(false)
+    /* The second implementation, found only because the owner saw it still on screen. */
+    expect(existsSync(join(SRC, 'features/analytics/ContentReading.tsx'))).toBe(false)
   })
 
   it('is imported by no surface', () => {
     const offenders = sources(SRC)
       .filter((file) => !file.endsWith('formatIsNotAVerdict.test.ts'))
-      .filter((file) => /from '[^']*(CreativeFormatComparison|formatVerdict)'/.test(readFileSync(file, 'utf8')))
+      .filter((file) => /from '[^']*(CreativeFormatComparison|formatVerdict|ContentReading)'/.test(readFileSync(file, 'utf8')))
       .map((file) => file.slice(SRC.length + 1))
 
     expect(offenders, 'a surface imports the removed format winner again').toEqual([])
@@ -59,7 +61,28 @@ describe('the creative-format winner stays removed', () => {
     defect would be identical. These are the exact strings the removed verdict composed.
   */
   it('composes no «which format is better» sentence anywhere', () => {
-    const CLAIMS = ['أفضل في هذه الفترة', 'performs better in this period']
+    /*
+      Widened after the first removal shipped incomplete.
+
+      The owner saw the verdict still standing on the dashboard, because `ContentReading` made the
+      same claim in different words — «الصور يحقق العائد على الإنفاق أفضل من الفيديو في هذه الفترة»
+      — and the first pass searched for component NAMES (`CreativeFormatComparison`, `formatVerdict`)
+      rather than for the claim. A guard that only knows the one implementation it was written
+      against cannot stop the second one.
+
+      So these are the sentence shapes those two verdicts actually composed — and no wider than
+      that. A first attempt added «أفضل من» and «الأعلى أفضل» on their own and flagged five innocent
+      files: `PathAnalysis`, `CampaignCommandCenter`, `CreativePulseSection` and the report, which
+      compare PATHS, CAMPAIGNS and individual CREATIVES. The constitution forbids declaring a FORMAT
+      better (§3) and explicitly keeps «best individual creatives where evidence is trustworthy»
+      (§4). A guard that cannot tell those apart would delete the product's legitimate comparisons.
+    */
+    const CLAIMS = [
+      'أفضل في هذه الفترة',
+      'performs better in this period',
+      /* `ContentReading`'s own wording, which the first pass of the removal missed entirely. */
+      'is reaching a better',
+    ]
 
     /*
       Comments are stripped first, and that correction matters.

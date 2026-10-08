@@ -60,8 +60,7 @@ import {
 } from './entityObjectiveColumns'
 import { PathAnalysis } from './PathAnalysis'
 import { PathTrends } from './PathTrends'
-import { contentIntelligence, listCreatives, type CreativeCard } from '@/features/content/api'
-import { ContentReading } from './ContentReading'
+import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
@@ -2693,35 +2692,11 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
   const currency = q.data?.currency ?? null
 
   /*
-   * ANALYTICS-DIFFERENTIATION-001 — the READING above the ranked table.
-   *
-   * Same reach, same filters, same window as the table below it, for the reason `pulse` states: a
-   * reading built on its own query is one that can contradict the table it sits above. It is a
-   * SEPARATE request rather than a field on the library page because the library is paged, and a
-   * format comparison computed from twenty-four rows would change every time the reader turned a
-   * page — the signature of a figure that is not measuring what it claims to.
-   */
-  const intelligence = useQuery({
-    queryKey: [
-      'analytics', 'content-intelligence', projectId, range.from, range.to,
-      filters.provider, filters.campaign, filters.objective,
-      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
-    ],
-    queryFn: () => contentIntelligence(
-      {
-        from: range.from,
-        to: range.to,
-        providers: filters.provider?.length ? filters.provider : undefined,
-        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
-        // ONE objective or none: a verdict has one metric, and picking arbitrarily from several
-        // would judge every format by a purpose most of them were not bought for.
-        objective: filters.objective?.length === 1 ? filters.objective[0] : undefined,
-        ...scope,
-      },
-      projectId!,
-    ),
-    enabled: Boolean(projectId),
-  })
+    CONTENT-FORMAT-ROAS-REMOVED-001 — the content-intelligence query went with the reading it fed.
+
+    Its only consumer was the format verdict. Leaving the fetch in place would keep paying for a
+    request whose answer nothing is allowed to publish.
+  */
 
   return (
     <div className="space-y-4">
@@ -2886,19 +2861,16 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
       </Panel>
 
       {/*
-        DASHBOARD-HIERARCHY — the reading sits BELOW the ads, not above them.
+        CONTENT-FORMAT-ROAS-REMOVED-001 — the format READING is gone too, not just the comparison.
 
-        «The cards, and beneath them the chart and the creative side.» The reader of this tab came
-        for the ads; the format comparison is what they read AFTER seeing them, and putting an
-        analysis above the thing it analyses is the same inversion the other tabs carried.
+        It was a second component making the same forbidden claim in different words: «الصور يحقق
+        العائد على الإنفاق أفضل من الفيديو في هذه الفترة». The first pass of this removal searched
+        for `CreativeFormatComparison` and `formatVerdict` and missed it entirely, which is why the
+        owner saw the verdict still standing after the removal shipped.
+
+        Same defect underneath: the ratio it ranked on divides creative-grain revenue by
+        creative-grain spend, and only the spend half is attributed in full.
       */}
-      {!intelligence.isLoading && (
-        <ContentReading
-          data={intelligence.data?.by_format}
-          currency={intelligence.data?.currency ?? currency}
-          creativesRead={intelligence.data?.creatives_read ?? 0}
-        />
-      )}
 
       {/*
         CONTENT-FORMAT-ROAS-REMOVED-001 — «أداء أنواع المحتوى» is gone, panel and all.
