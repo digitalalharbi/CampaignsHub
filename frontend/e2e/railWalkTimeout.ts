@@ -109,6 +109,27 @@ export const RAIL_PATH_BUDGET = 15_000
  * is the same either way: the inner wait and the outer budget are one decision, and a file that sets
  * one without the other has set neither.
  */
+/*
+ * EIGHTH occurrence, 2026-10-09 (#621) — and the FIRST that is not a paint timeout at all.
+ *
+ * `/agency/tasks did not render` on webkit, chromium and firefox green on the same head. The shape
+ * matches the family above, and the cause does not: the browser reported, repeatedly,
+ *
+ *     WebKit encountered an internal error
+ *
+ * while loading the JS bundle, the CSS bundle, the manifest and the fonts. That is the browser
+ * PROCESS failing to fetch static assets, not a page taking too long to paint — raising the
+ * ceiling would have been waiting longer for a fetch that never completes, and would have hidden
+ * it.
+ *
+ * Reproduced before anything was re-run, per the protocol: the whole `portal-audit.spec.ts` was run
+ * on clean webkit THREE times on this head, 20 tests each, 60 passes, no internal error and no slow
+ * paint. The branch touches `CreativeResultAttribution` and the content surfaces; it reaches no
+ * portal, asset-serving or build file.
+ *
+ * Recorded as runner/WebKit infrastructure evidence. The ceiling is untouched, because this
+ * occurrence is not evidence about the ceiling.
+ */
 export const PLAYWRIGHT_DEFAULT_TIMEOUT = 30_000
 
 /**
