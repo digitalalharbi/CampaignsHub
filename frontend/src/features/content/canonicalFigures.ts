@@ -48,11 +48,25 @@ export function moneyIsStatable(metrics: MoneyTotals, key: 'spend' | 'revenue', 
  * @param headline the server's objective-aware list for this creative — already availability-filtered
  * @param metrics  the creative's own figures, as the money contract's envelope
  */
+/**
+ * CREATIVE-GRAIN-TRUTH-001 — the result metrics, which an unattributed campaign must not re-append.
+ *
+ * Kept beside the appending loop rather than imported from the server's list, because this file is
+ * the one that can put a withheld figure back and it should carry the reason why it must not.
+ */
+const RESULT_FIGURES = new Set(['revenue', 'roas', 'conversions', 'purchases', 'aov', 'cpa', 'leads', 'installs'])
+
 export function canonicalFigureKeys(
   headline: readonly string[],
   metrics: MoneyTotals,
   currency: string | null,
   ar: boolean,
+  /**
+   * True when the platform reported this campaign's results and attributed none of them to any
+   * creative beneath it. The server has already dropped those metrics from `headline`; the bag
+   * still carries the platform's zeros, because the bag is what it sent.
+   */
+  resultsNotAttributable = false,
 ): string[] {
   const bag = (metrics ?? {}) as Record<string, unknown>
   const answers = (key: string): boolean =>
@@ -76,6 +90,20 @@ export function canonicalFigureKeys(
 
   for (const key of [...UNIVERSAL_FIGURES, 'revenue', 'roas']) {
     if (out.includes(key) || !answers(key)) continue
+
+    /*
+      The one door a withheld result could walk back through.
+
+      `answers()` asks whether the BAG holds a number, and for an unattributed campaign it does —
+      the platform sent `revenue: 0`. The server dropped it from `headline` precisely because that
+      zero is «not at this grain» rather than a result, and appending it here would undo that
+      decision in the browser, which cannot see the campaign's own figures to make it.
+
+      Delivery figures are untouched: impressions and clicks are reported per creative by every
+      platform that reports creatives at all, and hiding them would make the card emptier than the
+      truth requires.
+    */
+    if (resultsNotAttributable && RESULT_FIGURES.has(key)) continue
 
     out.push(key)
   }

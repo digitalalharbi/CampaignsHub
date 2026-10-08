@@ -2854,7 +2854,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               The dialog's own docblock promises it «cannot disagree with the line the reader
               clicked», and this was the one place it did.
             */
-            figures={creativeDialogFigures(openCreative.metrics ?? undefined, currency, ar, openCreative.headline_metrics ?? [])}
+            figures={creativeDialogFigures(openCreative.metrics ?? undefined, currency, ar, openCreative.headline_metrics ?? [], openCreative.results_not_attributable === true)}
             trend={projectId
               ? (
                 <>
