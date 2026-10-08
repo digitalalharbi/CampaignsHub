@@ -9,6 +9,7 @@ import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
 import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
+import { ReportLinksSection } from './ReportLinksSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { campaigns as countedCampaigns } from '@/lib/counted'
@@ -116,6 +117,29 @@ export interface ReportData {
   ads_absent_reason?: string | null
   /** REPORT-AD-PREVIEW-001 §A — ranked inside each objective, with the metric that ordered it. */
   ads_groups?: AdGroup[]
+  /**
+   * REPORT-LINK-SECTION-001 — the short links this window can speak for.
+   *
+   * Absent, or empty, where the generator reported the section absent; the outline carries the
+   * reason, which is either «none in this scope» or «this window closed before follows were
+   * recorded». The two are different facts and a renderer must print whichever it was given rather
+   * than deciding one.
+   */
+  links?: Array<{
+    slug: string
+    short_url: string
+    destination: string
+    kind: string
+    /** Measured INSIDE the report's window. */
+    follows: number
+    /** The lifetime counter — carried for context, never summed with `follows`. */
+    clicks_all_time: number
+    is_active: boolean
+  }>
+  /** When this installation began timing follows at all — null if it never has. */
+  links_recording_since?: string | null
+  /** Which absence applies — «none in scope» or «this window closed before recording». */
+  links_absent_reason?: string | null
   /** REPORT-DETAIL-PARITY-001 — the same ads ranked inside each platform. */
   ads_platform_groups?: AdPlatformGroup[]
   /**
@@ -355,6 +379,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case 'platform_screenshot': return <ScreenshotSlide platform={slide.platform!} />
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
     case 'ads': return <AdsSlide data={data} paged={paged} />
+    case 'links': return <LinksSlide data={data} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
     case 'objective_performance': return <GeneralPerformanceSlide data={data} />
@@ -1000,6 +1025,31 @@ function ScreenshotSlide({ platform }: { platform: string }) {
  * The section itself is shared with the live link and the printed document, so the three cannot
  * drift into showing different ads — or the same ad with different figures — for one scope.
  */
+/**
+ * REPORT-LINK-SECTION-001 — where the ads SENT people.
+ *
+ * It sits after the ads for that reason, and it is rendered whenever the outline promises it: a
+ * contents list naming a section the document does not have is the defect REPORT-DETAIL-PARITY-001
+ * was opened for, in the other direction.
+ */
+function LinksSlide({ data }: { data: ReportData }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+
+  return (
+    <div>
+      <Title sub={ar ? 'العناوين التي وجّه إليها الإنفاق' : 'The addresses the spend pointed at'}>
+        {ar ? 'الروابط المختصرة' : 'Short links'}
+      </Title>
+      <ReportLinksSection
+        links={data.links}
+        absentReason={data.links_absent_reason}
+        recordingSince={data.links_recording_since}
+        locale={ar ? 'ar' : 'en'}
+      />
+    </div>
+  )
+}
+
 function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [open, setOpen] = useState<ReportAd | null>(null)

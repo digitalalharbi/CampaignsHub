@@ -175,8 +175,9 @@ final class ReportAdsSectionTest extends TestCase
 
         $this->assertSame(
             // No «campaigns» — CLIENT-REPORT-ENTITY-BOUNDARY-001. The objective split before it says
-            // what the money was bought for; the ads after it show the work that did the buying.
-            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'findings', 'recommendations'],
+            // what the money was bought for; the ads after it show the work that did the buying,
+            // and «links» after THEM is where the ads sent people — REPORT-LINK-SECTION-001.
+            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'links', 'findings', 'recommendations'],
             array_column($outline, 'key'),
         );
 

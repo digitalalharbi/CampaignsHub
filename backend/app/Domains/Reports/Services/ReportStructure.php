@@ -57,6 +57,7 @@ final class ReportStructure
         'platforms',
         'objectives',
         'ads',
+        'links',
         'findings',
         'recommendations',
     ];
@@ -67,6 +68,7 @@ final class ReportStructure
         'platforms' => ['ar' => 'تفصيل المنصات', 'en' => 'Platform breakdown'],
         'objectives' => ['ar' => 'التفصيل حسب الهدف', 'en' => 'Breakdown by objective'],
         'ads' => ['ar' => 'الإعلانات والمواد', 'en' => 'Ads and media'],
+        'links' => ['ar' => 'الروابط المختصرة', 'en' => 'Short links'],
         'findings' => ['ar' => 'النتائج', 'en' => 'Findings'],
         'recommendations' => ['ar' => 'التوصيات', 'en' => 'Recommendations'],
     ];
@@ -84,6 +86,16 @@ final class ReportStructure
         'no_creatives_in_window' => ['ar' => 'لا إعلانات ضمن نطاق هذا التقرير وفترته.', 'en' => 'No ads fall inside this report’s scope and window.'],
         'no_rankable_metric_for_this_objective' => ['ar' => 'لا مقياس يصح ترتيب الإعلانات به لهذا الهدف.', 'en' => 'No metric ranks ads honestly for this objective.'],
         'no_ads_to_show' => ['ar' => 'لا إعلانات تُعرض.', 'en' => 'There are no ads to show.'],
+        'no_short_link_in_this_scope' => ['ar' => 'لا روابط مختصرة ضمن نطاق هذا التقرير.', 'en' => 'There are no short links in this report’s scope.'],
+        /*
+         * REPORT-LINK-SECTION-001 — the links exist and this period cannot be spoken for.
+         *
+         * Follows were only written down from the day `short_link_hops` began. A window closing
+         * before that has real links with real lifetime totals and no measured follows, and the
+         * alternative to saying so is a table of zeroes a client would read as «nobody clicked» over
+         * a month that may have been their best.
+         */
+        'links_not_recorded_in_this_window' => ['ar' => 'الروابط موجودة، لكن لم يُسجَّل وقت أي متابعة قبل نهاية هذه الفترة — فلا أرقام لهذه الفترة، وليست صفرًا.', 'en' => 'The links exist, but no follow had been timed before this period ended — so there are no figures for it, which is not the same as zero.'],
         /*
          * «Nothing was found» and «nothing was looked for» are different facts.
          *
@@ -142,6 +154,13 @@ final class ReportStructure
             'objectives' => ($data['objective_performance']['paths'] ?? []) !== [],
             'ads' => $has('ads'),
             /*
+             * REPORT-LINK-SECTION-001 — the addresses the money pointed at.
+             *
+             * After the ads, because a link is where an ad SENT somebody, and before the findings,
+             * which are allowed to reason about both.
+             */
+            'links' => $has('links'),
+            /*
              * Findings and recommendations are LAST and are absent when nothing is supported.
              *
              * They are the only sections that make a claim rather than report a figure, and a claim
@@ -162,6 +181,13 @@ final class ReportStructure
             // ranks ads honestly for this objective» are different facts, and only the section that
             // built the list knows which applies.
             'ads' => is_string($data['ads_absent_reason'] ?? null) ? $data['ads_absent_reason'] : 'no_ads_to_show',
+            /*
+             * The links section states its OWN reason, like the ads section and for the same kind of
+             * reason: «this scope has no short link» and «this window closed before follows were
+             * recorded» are different facts about very different situations, and only the service
+             * that looked knows which one applies.
+             */
+            'links' => is_string($data['links_absent_reason'] ?? null) ? $data['links_absent_reason'] : 'no_short_link_in_this_scope',
             'findings' => $composesNarrative ? 'no_finding_the_figures_support' : 'not_composed_for_a_live_link',
             /*
              * A live link DOES evaluate attention now, so where it carries the list (even empty) the
@@ -185,6 +211,8 @@ final class ReportStructure
             'platforms' => ['spend', 'results', 'share'],
             'objectives' => ['spend', 'results', 'cost_per_result'],
             'ads' => ['spend', 'results', 'ctr'],
+            /* Follows, and nothing derived from them: there is no spend on a link to divide by. */
+            'links' => ['follows'],
             'findings' => [],
             'recommendations' => [],
         ];
