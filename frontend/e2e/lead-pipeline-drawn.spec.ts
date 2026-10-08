@@ -20,9 +20,19 @@ test('every stage is drawn, in pipeline order, with the ends apart', async ({ pa
   const pipeline = page.getByTestId('lead-pipeline')
   await expect(pipeline).toBeVisible({ timeout: 30000 })
 
-  // Two charts: the progression and the ends. `won`, `lost` and `invalid` share the pipeline's last
-  // rank because they are ends rather than degrees.
-  expect(await pipeline.locator('.recharts-yAxis').count()).toBe(2)
+  /*
+    Two charts: the progression and the ends. `won`, `lost` and `invalid` share the pipeline's last
+    rank because they are ends rather than degrees.
+
+    Polled, because the container being VISIBLE is not the axes being drawn. This was a one-shot
+    `count()` and it read 0 on the webkit gate — «Expected: 2, Received: 0» — while chromium and
+    firefox passed the same commit. `ResponsiveContainer` renders once before it has measured its
+    parent and again with real dimensions, so a count taken on the first pass is a race, not a
+    measurement. The claim is unchanged: there are exactly two, and a third would still fail.
+  */
+  await expect
+    .poll(async () => pipeline.locator('.recharts-yAxis').count(), { timeout: 15000 })
+    .toBe(2)
 
   const legend = page.getByTestId('lead-pipeline-legend')
   await expect(legend).toContainText('Contact attempted')
