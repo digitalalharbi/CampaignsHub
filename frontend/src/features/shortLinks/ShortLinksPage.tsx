@@ -7,10 +7,11 @@ import { EmptyState } from '@/components/ui/States'
 import { Field } from '@/components/ui/Field'
 import { Badge } from '@/components/ui/Badge'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytics/charts'
 import { StatCard } from '@/components/ui/StatCard'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
-import { createShortLink, deleteShortLink, disableShortLink, listShortLinks, type ShortLink, type ShortLinkKind } from './api'
+import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -50,6 +51,13 @@ const COPY = {
     delete_cancel: 'إلغاء',
     delete_failed: 'تعذّر الحذف — لم يُحذف الرابط.',
     destination: 'الوجهة',
+    trend_title: 'متى تُتابَع روابطك',
+    trend_subtitle: 'عدد مرات فتح روابطك يوميًا.',
+    follows: 'متابعة',
+    since: (d: string) => `التسجيل يبدأ من ${d} — ما قبله غير مُسجَّل، وليس صفرًا.`,
+    not_recording: 'لم يُسجَّل وقت أي متابعة بعد، لذلك لا يوجد منحنى. العدّاد أعلاه يظل صحيحًا.',
+    partial: (recorded: number, total: number) =>
+      `المنحنى يغطي ${recorded} من ${total} متابعة — الباقي حدث قبل بدء التسجيل.`,
   },
   en: {
     title: 'Short Links',
@@ -76,6 +84,13 @@ const COPY = {
     delete_cancel: 'Cancel',
     delete_failed: 'The delete was refused — the link is still here.',
     destination: 'Destination',
+    trend_title: 'When your links are followed',
+    trend_subtitle: 'Follows per day.',
+    follows: 'follows',
+    since: (d: string) => `Recording starts ${d} — before that is unrecorded, not zero.`,
+    not_recording: 'No follow has been timed yet, so there is no curve. The counts above are still true.',
+    partial: (recorded: number, total: number) =>
+      `The curve covers ${recorded} of ${total} follows — the rest happened before recording began.`,
   },
 }
 
@@ -121,7 +136,12 @@ export function ShortLinksPage() {
   const [created, setCreated] = useState<ShortLink | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const links = useQuery({ queryKey: ['short-links'], queryFn: listShortLinks })
+  /*
+    The envelope, not just the rows: `meta` carries the recording boundary and the workspace's own
+    curve, and a page that drew the curve without the boundary would be inviting the reader to take
+    a fortnight of recorded history for the whole life of a link. See SHORT-LINK-HOPS-001.
+  */
+  const links = useQuery({ queryKey: ['short-links'], queryFn: listShortLinksWithMeta })
 
   const reset = () => {
     setPhone('')
@@ -177,7 +197,13 @@ export function ShortLinksPage() {
     },
   })
 
-  const rows = links.data ?? []
+  const rows = links.data?.data ?? []
+  const meta = links.data?.meta
+  const recordingSince = meta?.recording_since ?? null
+  const curve = meta?.daily ?? []
+  /* What the curve can account for, against what the counters say — stated, never reconciled away. */
+  const recordedTotal = rows.reduce((sum, l) => sum + (l.recorded_follows ?? 0), 0)
+  const countedTotal = rows.reduce((sum, l) => sum + (l.clicks ?? 0), 0)
 
   return (
     <div className="space-y-4">
@@ -363,6 +389,113 @@ export function ShortLinksPage() {
           </div>
         )}
       </Card>
+
+      {/*
+        VIZ-OPS-001 — which links people actually press, BELOW the thing this page is for.
+
+        ## Why it is last
+
+        The owner's rule, and it is the right one: «the feature and the service come first on the
+        page, clearly, without needing to scroll — and the analytical results after them.» This chart
+        first sat above the create form, so a page whose job is MAKING a short link opened on a
+        reading of links already made. Somebody arriving to shorten a URL had to scroll past an
+        analysis of work they had already done to reach the one control they came for.
+
+        Analytics is the reward for having used the feature, not the toll for reaching it.
+
+        The list carries a click count per row and the card above totals them. «Which of these is
+        doing the work» is the one question a short-link library exists to answer, and it was a column
+        to scan.
+
+        ## What this deliberately does not claim
+
+        There is no per-day series on this payload, so there is no trend here and none is implied —
+        only a ranking of what has been counted. A link nobody has pressed is a reported ZERO rather
+        than a missing figure, so it stays in the ranking at the bottom instead of being withheld.
+
+        Drawn only where there is a comparison to make: one link is not a ranking, it is the figure
+        the card already states; and a set where nothing has been pressed ranks nothing, with bars of
+        equal length implying a comparison nobody can make.
+      */}
+      {rows.length > 1 && rows.some((l) => (l.clicks ?? 0) > 0) && (
+        <ChartCard
+          title={ar ? 'الروابط الأكثر ضغطًا' : 'The links people press'}
+          subtitle={ar ? 'عدد الضغطات المسجّلة لكل رابط.' : 'Recorded clicks per link.'}
+        >
+          <div data-testid="short-link-clicks-chart" className="min-w-0">
+            <RankingBarChart
+              horizontal
+              height={Math.max(160, Math.min(rows.length, 10) * 40)}
+              data={[...rows]
+                .sort((a, b) => (b.clicks ?? 0) - (a.clicks ?? 0))
+                .slice(0, 10)
+                .map((l) => ({ label: l.slug, clicks: l.clicks ?? 0 }))}
+              bars={[{ key: 'clicks', name: t.clicks, kind: 'num' }]}
+            />
+          </div>
+          {/* The chart's key, and its fallback wherever the SVG is not read — print, or a screen reader. */}
+          <ul data-testid="short-link-clicks-legend" className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
+            {[...rows].sort((a, b) => (b.clicks ?? 0) - (a.clicks ?? 0)).slice(0, 10).map((l) => (
+              <li key={l.id} className="flex items-center gap-1">
+                <span dir="ltr">{l.slug}</span>
+                <span className="tnum font-bold text-text-primary" dir="ltr">{(l.clicks ?? 0).toLocaleString('en-US')}</span>
+              </li>
+            ))}
+          </ul>
+        </ChartCard>
+      )}
+
+      {/*
+        SHORT-LINK-HOPS-001 — «when», which a counter cannot answer.
+
+        The ranking above says which links people press. It cannot say whether a link is still being
+        pressed, and that is the question an operator asks of a link sitting in a live campaign: a
+        link whose follows stopped a fortnight ago looks exactly like one followed this morning when
+        all you have is a total that only goes up.
+
+        Below the links and the ranking, per the layout rule: the page's job is making a link, and
+        the analysis comes after the thing that does the job.
+
+        ## The boundary is part of the chart, not a footnote
+
+        The curve covers the period this installation has been recording. Every link older than that
+        has a real total and no history, so the card states where recording begins and how much of
+        the counted total the curve can actually account for. Drawing the line across the untimed
+        period — as zeroes — would turn «we were not writing this down» into «nobody came».
+      */}
+      {rows.length > 0 && (
+        <ChartCard title={t.trend_title} subtitle={t.trend_subtitle}>
+          {curve.length === 0 ? (
+            <p data-testid="short-link-trend-unrecorded" className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
+              {t.not_recording}
+            </p>
+          ) : (
+            <>
+              <div data-testid="short-link-trend-chart" className="min-w-0">
+                <MetricLineChart
+                  height={220}
+                  data={curve.map((d) => ({ label: d.day, follows: d.follows }))}
+                  series={[{ key: 'follows', name: t.follows, kind: 'num' }]}
+                />
+              </div>
+
+              <p data-testid="short-link-trend-since" className="mt-2 text-xs text-text-secondary">
+                {t.since(new Date(recordingSince ?? curve[0].day).toLocaleDateString('en-CA'))}
+              </p>
+
+              {/*
+                Only where the two actually differ. On an installation that recorded from the start
+                they agree, and a sentence explaining a gap that is not there is noise.
+              */}
+              {countedTotal > recordedTotal && (
+                <p data-testid="short-link-trend-partial" className="mt-1 text-xs text-warning">
+                  {t.partial(recordedTotal, countedTotal)}
+                </p>
+              )}
+            </>
+          )}
+        </ChartCard>
+      )}
     </div>
   )
 }

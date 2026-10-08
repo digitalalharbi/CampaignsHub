@@ -79,12 +79,39 @@ for (const p of PAGES) {
             .poll(async () => (await page.locator('main').innerText()).trim().length, { timeout: 20000 })
             .toBeGreaterThan(40)
 
-          expect(
-            await page.evaluate(
-              () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-            ),
-            `${where} scrolls sideways`,
-          ).toBe(false)
+          /*
+            NAME the element that overflows, rather than reporting that one does.
+            A bare boolean says a phone scrolls sideways and nothing about what made it, which is
+            unactionable when the failure is CI-only: the same page measured clean in every
+            appearance on a developer's webkit while the Linux build failed three runs running, and
+            there was nothing in the result to work from. Font metrics differ between the two, so the
+            element that bursts the viewport is exactly the thing the message has to carry.
+          */
+          const overflow = await page.evaluate(() => {
+            const de = document.documentElement
+            if (de.scrollWidth <= de.clientWidth + 1) return []
+            /*
+              BOTH edges, because the page is read in both directions.
+
+              Checked against the right edge alone, this named nothing on an Arabic page: in RTL the
+              overflow runs off the LEFT, so the element that burst the viewport had a negative
+              `left` and a `right` well inside it. The collector reported a scrollWidth of 900 on a
+              343px viewport and no culprit at all — which is the failure it exists to prevent.
+            */
+            const culprits: string[] = []
+            de.querySelectorAll('*').forEach((el) => {
+              const box = el.getBoundingClientRect()
+              if (box.width === 0) return
+              const past = box.right > de.clientWidth + 1 ? `right=${Math.round(box.right)}` : box.left < -1 ? `left=${Math.round(box.left)}` : null
+              if (past === null) return
+              const tid = el.getAttribute('data-testid')
+              culprits.push(
+                `<${el.tagName.toLowerCase()}${tid === null ? '' : ` data-testid="${tid}"`} class="${String((el as HTMLElement).className).slice(0, 70)}"> ${past} width=${Math.round(box.width)}`,
+              )
+            })
+            return [`viewport=${de.clientWidth} scrollWidth=${de.scrollWidth}`, ...culprits.slice(0, 10)]
+          })
+          expect(overflow, `${where} scrolls sideways\n  ${overflow.join('\n  ')}`).toEqual([])
 
           /*
            * A filter's own label must be READABLE, not merely present.

@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\ShortLinks\Services;
 
 use App\Domains\ShortLinks\Models\ShortLink;
+use App\Domains\ShortLinks\Models\ShortLinkHop;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use App\Support\Frontend;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Log;
 /**
  * SHORT-LINKS-001 — minting a slug, and serving the hop.
  *
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  * which a short link has. What IS copied is the part worth copying — the tenant scope removed for a
  * stranger's request, the active check done here rather than assumed, and an atomic increment.
  */
+use Throwable;
+
 final class ShortLinkHops
 {
     /**
@@ -77,12 +80,49 @@ final class ShortLinkHops
             return null;
         }
 
+        $now = Carbon::now();
+
         ShortLink::query()
             ->withoutGlobalScope(TenantScope::class)
             ->whereKey($link->getKey())
-            ->update(['clicks' => DB::raw('clicks + 1'), 'last_clicked_at' => Carbon::now()]);
+            ->update(['clicks' => DB::raw('clicks + 1'), 'last_clicked_at' => $now]);
+
+        $this->record($link, $now);
 
         return $link;
+    }
+
+    /**
+     * SHORT-LINK-HOPS-001 — the moment, so the counter above can be read as a curve.
+     *
+     * AFTER the increment and unable to undo it. The counter is the authoritative total and this is
+     * best-effort history: if this insert fails, a click has still been counted and the person is
+     * still redirected. The opposite order — or a transaction spanning both — would make a database
+     * hiccup in a history table cost a real click, or worse, cost somebody their redirect.
+     *
+     * `withoutGlobalScope` for the same reason the lookup above needs it: a stranger following a
+     * link carries no tenant, so the tenant is taken from the LINK, which is the only authority for
+     * it here.
+     */
+    private function record(ShortLink $link, Carbon $at): void
+    {
+        try {
+            ShortLinkHop::query()->withoutGlobalScope(TenantScope::class)->create([
+                'tenant_id' => $link->tenant_id,
+                'short_link_id' => $link->getKey(),
+                'occurred_at' => $at,
+            ]);
+        } catch (Throwable $e) {
+            /*
+             * Logged and swallowed. A redirect that 500s because a history row could not be written
+             * is a broken link in somebody's ad; a missing row is a gap in a curve that the surfaces
+             * already have to describe honestly, because every link older than this table has one.
+             */
+            Log::warning('short link hop not recorded', [
+                'short_link_id' => (string) $link->getKey(),
+                'reason' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

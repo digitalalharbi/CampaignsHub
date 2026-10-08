@@ -335,12 +335,33 @@ export function FilterSelect({
     <ControlRow width={width}>
       <ControlLabel htmlFor={id}>{label}</ControlLabel>
       {/*
-        A dense select is capped, because its width is its LONGEST OPTION's.
+        EVERY select is capped, because its width is its LONGEST OPTION's.
 
         «Awareness & engagement» and «Growth — Acquisition» stretched two controls to 299px and
         251px, and the row they would not fit on was the whole point of the dense bar. The cap
         truncates the closed control and nothing else: the full text is in the option list, in the
         accessible name, and in the title.
+
+        ## Why it is no longer only the dense bar
+
+        The cap was conditional on `dense`, and an uncapped select then burst a phone. The content
+        library's sort gained «Automatic — by campaign objective», which sized its closed control to
+        313px inside a 343px viewport — `ms-auto` placing it flush against the edge with nothing to
+        spare. CI's webkit renders that string about ten pixels wider than a developer's does, so
+        there the page scrolled sideways and here it did not, three runs in a row, and the control
+        measured clean at every width because the measurement was of the NARROWER font.
+
+        A closed select sized by text nobody chose is the same hazard at any density. Capping it
+        removes the whole class rather than the one instance, and it is why no caller has to remember
+        that a long option is a layout risk.
+
+        ## Capped on a phone, not on a desk
+
+        The cap is where the room runs out. A phone cannot fit a 323px control at all — the viewport's
+        content box is 311px — so there it truncates; from `sm` up the bar has room to give the
+        control its full width, and truncating there would hide a label for nothing. A dense bar keeps
+        its cap at every width, because its whole purpose is holding one row, which is a different
+        constraint from running out of viewport.
       */}
       <select
         id={id}
@@ -349,8 +370,8 @@ export function FilterSelect({
         title={options.find((o) => o.value === value)?.label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`h-9 rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
-          dense ? 'max-w-40 truncate' : ''
+        className={`h-9 truncate rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+          dense ? 'max-w-40' : 'max-w-48 sm:max-w-none'
         }`}
       >
         {options.map((o) => (

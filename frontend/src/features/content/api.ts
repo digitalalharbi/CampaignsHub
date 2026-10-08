@@ -174,7 +174,15 @@ export interface CreativeFatigue {
 export interface CreativeCard {
   id: string
   name: string
+  /** The PROVIDER's own token — `story_ad`, `collection_dynamic`, `text` — not a reader's word. */
   format: string
+  /**
+   * What the creative IS, from `CreativeKind` — the same answer the filter and the badge use.
+   *
+   * Optional because older payloads and a client report's boundary do not carry it; every labeller
+   * treats an absent kind the same as an unknown one and says «غير مصنّف» rather than a raw token.
+   */
+  kind?: string | null
   provider: string
   status: string
   campaign_id: string | null
@@ -297,6 +305,15 @@ export interface LibraryPage {
    * whether the platform was never asked, the request failed, or the creative did not run.
    */
   metrics_availability: Record<string, import('./availability').MetricsAvailability>
+  /**
+   * CONTENT-OBJECTIVE-SORT-001 — the order the server actually applied, and where it came from.
+   *
+   * `metric` is the column the automatic sort ranked by; `objective` is the one it read that from, or
+   * null where the filter named none or several and the order fell back to spend. Stated rather than
+   * inferred, because an order a reader cannot account for is indistinguishable from a bug — which is
+   * the reason this field exists at all.
+   */
+  sort?: { applied: string; metric: string; objective: string | null }
   filters: LibraryFilterOptions
 }
 
@@ -567,6 +584,14 @@ export interface CreativeDetail {
   path: string
   fatigue: CreativeFatigue
   funnel: CreativeFunnelShape
+  /**
+   * CONTENT-VIDEO-RETENTION-001 — where people stopped watching.
+   *
+   * The same shape as `funnel` and a different question: these quartiles NEST, so a tapering chart is
+   * a true claim about them. `stages: []` is an image creative — a surface renders nothing rather
+   * than an empty chart — and `undefined` is a server that does not send it yet.
+   */
+  video_retention?: CreativeFunnelShape
   trend: Array<Record<string, number | string | null>>
   weekly: Array<Record<string, number | string | null>>
   by_platform: Array<{ creative_id: string; provider: string; metrics: CreativeMetrics | null; source: string }>

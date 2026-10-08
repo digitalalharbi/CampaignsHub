@@ -76,7 +76,21 @@ final class CreativePresenter
         return [
             'id' => (string) $creative->getKey(),
             'name' => (string) ($creative->client_display_name ?: $creative->name),
+            /*
+             * CONTENT-KIND-VOCABULARY-001 — what the creative IS, beside what the platform CALLED it.
+             *
+             * `format` is the provider's own token and stays, because an operator pastes it back into
+             * the platform. It is not a reader's word for the shape: Snapchat's importer maps the
+             * types it knows and stores `strtolower($type)` for the rest, so `story_ad` and
+             * `collection_dynamic` are real values here, as are X's `text` and the chat card's
+             * `chat_card`. The preview dialog labelled this column «النوع» and printed it, which is
+             * how a provider token reached a reader as the ad's type.
+             *
+             * `kind` is the answer `CreativeKind` already gives the card and the filter. Sending it
+             * means the label, the badge and the filter cannot disagree about one row.
+             */
             'format' => $creative->format,
+            'kind' => CreativeKind::of($creative),
             'provider' => $creative->provider,
             'status' => $creative->status,
             'campaign_id' => $creative->campaign_id === null ? null : (string) $creative->campaign_id,

@@ -1,3 +1,5 @@
+import { creativeKindSubject } from './creativeKind'
+
 import type { ContentIntelligence, FormatIntelligencePayload } from './api'
 
 /**
@@ -24,17 +26,14 @@ export interface Verdict {
   en: string
 }
 
-const FORMAT_WORDS: Record<string, { ar: string; en: string }> = {
-  image: { ar: 'الصور', en: 'Images' },
-  video: { ar: 'الفيديو', en: 'Video' },
-  carousel: { ar: 'الدوارة', en: 'Carousel' },
-  collection: { ar: 'المجموعة', en: 'Collection' },
-  catalog: { ar: 'الكتالوج', en: 'Catalog' },
-  unlabelled: { ar: 'غير مصنّف', en: 'Unlabelled' },
-}
-
-export const formatWord = (format: string, ar: boolean): string =>
-  (FORMAT_WORDS[format] ?? { ar: format, en: format })[ar ? 'ar' : 'en']
+/**
+ * The sentence form, from the one vocabulary — see CONTENT-KIND-VOCABULARY-001.
+ *
+ * This file used to carry its own table. It said «المجموعة» and «الدوارة» where `ContentSummary`
+ * said «تشكيلة» and «دوّار», so the verdict and the pie beside it named the same shape differently,
+ * and both fell through to printing the raw key for anything they did not list.
+ */
+export const formatWord = (format: string, ar: boolean): string => creativeKindSubject(format, ar)
 
 /**
  * One objective's verdict.

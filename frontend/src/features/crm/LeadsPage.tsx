@@ -299,14 +299,6 @@ export function LeadsPage() {
         </p>
       )}
 
-      {stages !== null && (
-        <LeadPipeline
-          stages={stages}
-          ignoresStatusFilter={leadsQuery.data?.stagesIgnoreStatusFilter === true}
-          locale={locale}
-        />
-      )}
-
       <div className="flex flex-wrap gap-2">
         <Select
           value={uniqueOnly ? 'unique' : 'all'}
@@ -362,6 +354,14 @@ export function LeadsPage() {
         </p>
       )}
 
+      {stages !== null && (
+        <LeadPipeline
+          stages={stages}
+          ignoresStatusFilter={leadsQuery.data?.stagesIgnoreStatusFilter === true}
+          locale={locale}
+        />
+      )}
+
       <NewLeadModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <Modal
         open={trail !== null}
@@ -378,6 +378,13 @@ export function LeadsPage() {
 
 /**
  * VIZ-LEADS-001 — where the pipeline is standing, and the claim this chart refuses to make.
+ *
+ * ## It is drawn AFTER the leads, not before them
+ *
+ * The owner's rule: «the feature and the service come first on the page, clearly, without needing to
+ * scroll — and the analytical results after them.» The feature here is the leads themselves: the
+ * list, the filters, adding one, converting one. This first sat between the counts and the filters,
+ * so a page for WORKING leads opened on a chart about leads and pushed the work below it.
  *
  * ## Occupancy, not a funnel
  *

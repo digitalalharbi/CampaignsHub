@@ -37,6 +37,20 @@ final class CreativeFunnel
      * on an awareness creative the view IS the funnel. On an image creative the key is unreported and
      * the step simply is not there.
      */
+    /**
+     * The watch-through, in the order a viewer passes through it.
+     *
+     * `video_views` is the denominator the quartiles are shares of — a platform counts a «view» at
+     * its own threshold and then counts who reached each quarter of what followed.
+     */
+    private const VIDEO_STAGES = [
+        'video_views' => ['ar' => 'المشاهدات', 'en' => 'Video views'],
+        'video_p25' => ['ar' => 'شاهدوا 25%', 'en' => 'Watched 25%'],
+        'video_p50' => ['ar' => 'شاهدوا 50%', 'en' => 'Watched 50%'],
+        'video_p75' => ['ar' => 'شاهدوا 75%', 'en' => 'Watched 75%'],
+        'video_p100' => ['ar' => 'أكملوا المشاهدة', 'en' => 'Watched to the end'],
+    ];
+
     private const STAGES = [
         'impressions' => ['ar' => 'الظهور', 'en' => 'Impressions'],
         'video_views' => ['ar' => 'المشاهدات', 'en' => 'Video views'],
@@ -108,6 +122,81 @@ final class CreativeFunnel
             // Named rather than dropped: a reader who cannot see «add to cart» needs to know the
             // platform never sent it, or they will read its absence as a creative that sold nothing.
             'missing' => $missing,
+            'source' => 'platform_reported',
+        ];
+    }
+
+    /**
+     * CONTENT-VIDEO-RETENTION-001 — where people stop watching, which every row already knew.
+     *
+     * `video_p25`, `video_p50`, `video_p75` and `video_p100` are written on every metric row, carry
+     * labels in the catalogue, and were drawn nowhere. For a video creative «where do people stop
+     * watching» is the question the asset is judged on, and the answer was four numbers in a table.
+     *
+     * ## It is a real funnel, which not every list of stages is
+     *
+     * The quartiles NEST: everybody who reached 50% reached 25% first, so a tapering shape is a true
+     * claim about this data. That is what separates it from a snapshot of who is standing at which
+     * stage, where the shape would assert a flow nobody measured — and it is why this gets a funnel
+     * and the leads pipeline deliberately does not.
+     *
+     * Separate from `build()` rather than appended to it: the conversion funnel is one person's path
+     * from seeing to buying, and the quartiles are a different question about the same impression.
+     * Putting «50% watched» between «clicks» and «landing page views» would say somebody watched half
+     * a video after clicking through it.
+     *
+     * Every refusal `build()` makes is made here, for the same reasons: an unreported quartile is a
+     * HOLE and not a zero — filling it would draw a video everybody abandoned at the first quarter and
+     * then finished anyway — and no rate is derived from a step of zero, because «100% of nothing» is
+     * not a retention rate.
+     *
+     * @param  array<string, mixed>|null  $metrics  a row from `CreativeMetrics::forCreatives()`
+     * @return array{stages: list<array<string, mixed>>, missing: list<array<string, string>>, source: string}
+     */
+    public function video(?array $metrics): array
+    {
+        $reported = is_array($metrics['reported'] ?? null) ? $metrics['reported'] : [];
+
+        $stages = [];
+        $missing = [];
+        $previousCount = null;
+        $previousKey = null;
+
+        foreach (self::VIDEO_STAGES as $key => $label) {
+            if (($reported[$key] ?? false) !== true) {
+                $missing[] = ['key' => $key, 'label_ar' => $label['ar'], 'label_en' => $label['en']];
+
+                continue;
+            }
+
+            $count = is_numeric($metrics[$key] ?? null) ? (float) $metrics[$key] : null;
+
+            $stages[] = [
+                'key' => $key,
+                'label_ar' => $label['ar'],
+                'label_en' => $label['en'],
+                'count' => $count === null ? null : (int) $count,
+                'from_stage' => $previousKey,
+                'rate_from_previous' => $previousCount !== null && $previousCount > 0.0 && $count !== null
+                    ? $count / $previousCount
+                    : null,
+                /*
+                 * No cost per quartile. The spend bought the impression, not the moment somebody
+                 * stopped watching, and a «cost per 50% view» is a figure no platform reports and no
+                 * decision uses — the conversion funnel carries cost because its steps are outcomes.
+                 */
+                'cost_per' => null,
+                'source' => 'platform_reported',
+            ];
+
+            $previousKey = $key;
+            $previousCount = $count;
+        }
+
+        return [
+            /* An image creative has no watch-through, and is given no empty chart to look at. */
+            'stages' => $stages,
+            'missing' => $stages === [] ? [] : $missing,
             'source' => 'platform_reported',
         ];
     }

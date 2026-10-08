@@ -308,6 +308,41 @@ final class CreativeDetailPageTest extends TestCase
     }
 
     /**
+     * CONTENT-VIDEO-RETENTION-001 — the watch-through reaches the endpoint, not just the builder.
+     *
+     * The quartiles have been written on every metric row since the column existed and were drawn
+     * nowhere. This asserts the wiring: a video creative's page carries the stages, and an image
+     * creative's carries none — an empty chart would be a question asked of an asset that cannot
+     * answer it.
+     */
+    public function test_a_video_creatives_page_carries_its_watch_through(): void
+    {
+        $video = $this->creative([
+            'name' => 'Brand film', 'format' => 'video', 'campaign_id' => $this->awareness->getKey(),
+        ]);
+        $this->day($video, now()->subDays(2)->toDateString(), [
+            'spend' => 900, 'impressions' => 400000, 'video_views' => 180000,
+            'video_p25' => 120000, 'video_p50' => 80000, 'video_p75' => 55000, 'video_p100' => 40000,
+        ]);
+
+        $retention = $this->open($video)->assertOk()->json('data.video_retention');
+
+        $this->assertSame(
+            ['video_views', 'video_p25', 'video_p50', 'video_p75', 'video_p100'],
+            array_column($retention['stages'], 'key'),
+        );
+        $this->assertSame([180000, 120000, 80000, 55000, 40000], array_column($retention['stages'], 'count'));
+    }
+
+    public function test_an_image_creatives_page_carries_no_watch_through_at_all(): void
+    {
+        $image = $this->creative(['name' => 'Still', 'format' => 'image']);
+        $this->day($image, now()->subDays(2)->toDateString(), ['spend' => 10, 'impressions' => 500, 'clicks' => 9]);
+
+        $this->assertSame([], $this->open($image)->assertOk()->json('data.video_retention.stages'));
+    }
+
+    /**
      * §15.17 as a contract: the library, the dashboard section and this page cannot disagree.
      *
      * Not a reconciliation — they read the same service, and this asserts that they still do. A

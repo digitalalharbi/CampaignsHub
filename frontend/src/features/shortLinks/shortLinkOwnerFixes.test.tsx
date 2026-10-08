@@ -6,13 +6,13 @@ import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 vi.mock('./api', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
-  listShortLinks: vi.fn(),
+  listShortLinks: vi.fn(), listShortLinksWithMeta: vi.fn(),
   createShortLink: vi.fn(),
   disableShortLink: vi.fn(),
   deleteShortLink: vi.fn(),
 }))
 
-import { createShortLink, deleteShortLink, listShortLinks } from './api'
+import { createShortLink, deleteShortLink, listShortLinksWithMeta } from './api'
 
 /**
  * SHORT-LINKS-001, Owner corrections observed in Production 2026-09-11.
@@ -31,7 +31,7 @@ const link = (over: Partial<ShortLink> = {}): ShortLink => ({
 describe('the short links page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(listShortLinks).mockResolvedValue([link()])
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [link()], meta: {} } as never)
     vi.mocked(createShortLink).mockResolvedValue(link({ id: 's2', slug: 'jm4bf2p' }) as never)
     vi.mocked(deleteShortLink).mockResolvedValue(undefined as never)
     signInWith(['campaigns.view', 'campaigns.manage'])

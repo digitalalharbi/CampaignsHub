@@ -1,11 +1,12 @@
 import { useProject } from '@/stores/project'
-import { useUi } from '@/stores/ui'
+import { useUi, type Locale } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
 import { Panel } from '@/features/analytics/components'
 import { EmptyState } from '@/components/ui/States'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { money, moneyExact, num, percent } from '@/features/analytics/format'
+import { ChartCard, RatioBars, StatusMixBar } from '@/features/analytics/charts'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useRemoveSpendLimit, useSpendLimits, type SpendLimitReading } from './spendLimitsApi'
 import { NewSpendLimitDialog } from './NewSpendLimitDialog'
@@ -103,6 +104,7 @@ export function SpendLimitsPage() {
    */
   const counts = {
     total: limits.length,
+    ok: limits.filter((l) => l.state === 'ok').length,
     approaching: limits.filter((l) => l.state === 'approaching').length,
     over: limits.filter((l) => l.state === 'over').length,
     unknown: limits.filter((l) => l.state === 'unknown').length,
@@ -174,6 +176,49 @@ export function SpendLimitsPage() {
           </ul>
         )}
       </Panel>
+
+      {limits.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+          {/*
+            VIZ-BUDGET-001 §2 — the readings come AFTER the limits they are about.
+
+            The owner's rule: «the feature and the service come first on the page, clearly, without
+            needing to scroll — and the analytical results after them.» The feature here is the
+            limits: setting them, seeing them, changing them. These two charts first sat between the
+            head and the list, so a page for MANAGING limits opened on a reading of limits and pushed
+            the limits themselves below it.
+
+            VIZ-BUDGET-001 — how much of the workspace is in each state, as one bar.
+
+            The four KPI cards above answer «how many» four times. «How much of what I set is in
+            trouble» is a fifth question none of them answers, and it is the one somebody opens this
+            page to ask. The total is the denominator rather than the sum of the bands — they do cover
+            it, because every limit carries exactly one state, and passing the total is what makes
+            that a checked fact rather than an assumption.
+          */}
+          <ChartCard title={ar ? 'حالة الحدود' : 'How the limits stand'}>
+            <StatusMixBar
+              testId="limit-states"
+              ar={ar}
+              label={ar ? 'حدود' : 'Limits'}
+              total={limits.length}
+              bands={[
+                { key: 'ok', label: ar ? 'ضمن الحد' : 'Within the limit', count: counts.ok, tone: 'success' },
+                { key: 'approaching', label: ar ? 'تقترب من الحد' : 'Near the limit', count: counts.approaching, tone: 'warning' },
+                { key: 'over', label: ar ? 'تجاوزت الحد' : 'Over the limit', count: counts.over, tone: 'danger' },
+                /*
+                 * Neutral, never green. A limit whose spend could not be compared has told nobody
+                 * they are within it, and colouring it as success is the page asserting safety it
+                 * has no reading for.
+                 */
+                { key: 'unknown', label: ar ? 'غير قابلة للمقارنة' : 'Not comparable', count: counts.unknown, tone: 'neutral' },
+              ]}
+            />
+          </ChartCard>
+
+          <LimitPace limits={limits} ar={ar} locale={locale} />
+        </div>
+      )}
     </div>
   )
 }
@@ -287,4 +332,65 @@ function LimitCard({
       )}
     </li>
   )
+}
+
+/**
+ * VIZ-BUDGET-001 — «which of these is running hot», ranked against the plan.
+ *
+ * Pace is `consumed ÷ expected-by-now`: not how much of the limit is gone — that is `utilisation` —
+ * but whether the spend is ahead of the clock, against the ELAPSED share of the limit. A workspace
+ * with nine limits is nine cards to scan and nine figures to compare in your head against 1.0; the
+ * line is drawn once here and every limit ranked against it, worst first.
+ *
+ * ## Why these may share one chart across currencies
+ *
+ * The ratio carries no unit. A limit set in riyals pacing at 1.3 and one set in dollars pacing at 1.3
+ * are running hot by the same proportion, and comparing them breaks no money rule because there is no
+ * money in the comparison — the same reasoning the client budget pace chart records.
+ *
+ * ## What it withholds
+ *
+ * A limit whose spend could not be compared carries `pace: null` — withheld, partial, or recorded in
+ * another currency. There is no zero to draw: «pacing at 0» means «spending nothing», which is a claim
+ * about a limit whose spend we could not read at all, and it would rank the limits we know least about
+ * as the best-behaved ones. They are withheld and counted beneath the chart.
+ */
+function LimitPace({ limits, ar, locale }: { limits: SpendLimitReading[]; ar: boolean; locale: Locale }) {
+  const drawable = limits
+    .filter((l) => l.pace !== null && Number.isFinite(l.pace) && (l.pace as number) >= 0)
+    .map((l) => ({ id: l.id, label: limitName(l, ar, locale), value: l.pace as number }))
+  const withheld = limits.length - drawable.length
+
+  return (
+    <ChartCard
+      title={ar ? 'سرعة الإنفاق مقابل الخطة' : 'Spending against the plan'}
+      subtitle={ar
+        ? 'المصروف ÷ المتوقَّع حتى الآن. الخط عند 1.0 هو إيقاع الفترة، وما فوقه أسرع منها.'
+        : 'Spent ÷ expected by now. The line at 1.0 is the period’s own pace; past it is faster than that.'}
+    >
+      <RatioBars
+        testId="limit-pace"
+        ar={ar}
+        rows={drawable}
+        reference={1}
+        referenceLabel={ar ? 'على الخطة' : 'On plan'}
+      />
+      {withheld > 0 && (
+        <p data-testid="limit-pace-withheld" className="mt-3 text-sm text-text-muted">
+          {ar
+            ? `${withheld.toLocaleString('en-US')} من الحدود بلا سرعة قابلة للمقارنة — إنفاقها جزئي أو محجوب أو بعملة أخرى.`
+            : `${withheld.toLocaleString('en-US')} limit(s) have no comparable pace — their spend is partial, withheld, or recorded in another currency.`}
+        </p>
+      )}
+    </ChartCard>
+  )
+}
+
+/** The same name the limit's own card carries, so the chart and the list name one thing once. */
+function limitName(limit: SpendLimitReading, ar: boolean, locale: Locale): string {
+  const scope = SCOPE_LABEL[limit.scope] ?? SCOPE_LABEL.project!
+
+  return limit.scope === 'platform' && limit.scope_id
+    ? providerLabel(limit.scope_id, locale)
+    : (ar ? scope.ar : scope.en)
 }

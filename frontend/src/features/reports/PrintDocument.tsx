@@ -44,6 +44,16 @@ type OutlineSection = {
 }
 
 /** One ad as the generator emits it — the fields this document prints, and its preview block. */
+/** REPORT-LINK-SECTION-001 — one short link, as the generator wrote it down. */
+type LinkRow = {
+  short_url: string
+  destination: string
+  /** Measured INSIDE this report's window. */
+  follows: number
+  /** The link's lifetime counter — carried for context, never summed with the above. */
+  clicks_all_time: number
+}
+
 type AdRow = {
   name?: string | null
   provider?: string | null
@@ -290,6 +300,13 @@ export function PrintDocument({
     spend: row.spend === null ? '—' : row.spend.toFixed(2),
     creatives: String(data.content_formats?.coverage?.[row.format]?.creatives ?? row.creatives),
   }))
+
+  /*
+    REPORT-LINK-SECTION-001 — read straight off the payload, like every other row in this document.
+    A renderer that recomputed would be a second answer, and the first time it disagreed with the
+    interactive report the client would be holding the evidence.
+  */
+  const linkRows = ((data.links ?? []) as LinkRow[]).slice(0, 20)
 
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
     /*
@@ -673,6 +690,52 @@ export function PrintDocument({
           <p>{section('ads')?.absent_reason_en ?? adsAbsence}</p>
         </section>
       )}
+
+      {/*
+        REPORT-LINK-SECTION-001 — the addresses the money pointed at, printed where they belong.
+
+        A short link is the one artefact of a campaign that LEAVES this product, and a report could
+        describe a month of spend without ever naming one. It prints after the ads because a link is
+        where an ad SENT somebody.
+
+        Two columns of counting, never summed: «Follows» is what was measured INSIDE this report's
+        window, and «All time» is the link's lifetime counter. Adding them would count a year of
+        clicks into a month. Where the window closed before follows were recorded, the generator
+        reports the section absent with its own reason and this prints that sentence instead of a
+        column of zeroes — see the absent branch below.
+      */}
+      {linkRows.length > 0 ? (
+        <section className="doc-section">
+          <h2>{heading('links', 'Short links')}</h2>
+          <table className="doc-table">
+            <thead>
+              <tr><th>Link</th><th>Destination</th><th>Follows</th><th>All time</th></tr>
+            </thead>
+            <tbody>
+              {linkRows.map((l, i) => (
+                <tr key={i}>
+                  {/*
+                    No `dir="ltr"` on the cell: this document is already laid out LTR, and a `dir` on
+                    a block box re-bases the whole box rather than isolating the value inside it —
+                    which is what `ltrNumeralAlignment` guards and what the first version of these
+                    two cells got wrong.
+                  */}
+                  <td>{l.short_url}</td>
+                  <td>{l.destination}</td>
+                  <td>{l.follows.toLocaleString('en-US')}</td>
+                  <td>{l.clicks_all_time.toLocaleString('en-US')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : section('links') !== undefined && section('links')?.present === false ? (
+        <section className="doc-section">
+          <h2>{section('links')?.title_en ?? 'Short links'}</h2>
+          {/* The generator's own reason — «not recorded» and «none in scope» are different facts. */}
+          <p>{section('links')?.absent_reason_en}</p>
+        </section>
+      ) : null}
 
       {/*
         CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», printed from the SAME answer.

@@ -46,10 +46,20 @@ describe('the tasks page', () => {
   it('shows the counts of everything, not of the rows that fitted', async () => {
     renderWithProviders(<TasksPage />, { locale: 'en' })
 
-    /* One row arrived; the ledger holds 120, 97 of them open. */
-    expect(await screen.findByText('97')).toBeInTheDocument()
-    expect(screen.getByText('120')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
+    /*
+      One row arrived; the ledger holds 120, 97 of them open.
+
+      Scoped to the KPI strip. These figures now appear twice on the page by design — the cards state
+      them and the composition bar's legend states them again beside their share — so an unscoped
+      `findByText('97')` was never asserting «the card shows the ledger's count». It was asserting
+      «this number appears exactly once», which stopped being true the moment the page drew the same
+      counts as a shape.
+    */
+    const kpis = within(await screen.findByTestId('tasks-intro'))
+    /* `findByText`, because the head renders before the counts arrive. */
+    expect(await kpis.findByText('97')).toBeInTheDocument()
+    expect(kpis.getByText('120')).toBeInTheDocument()
+    expect(kpis.getByText('12')).toBeInTheDocument()
   })
 
   /* No silent caps: twenty-five rows of a hundred with nothing saying so reads as a hundred-row workspace. */
