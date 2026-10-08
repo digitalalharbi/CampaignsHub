@@ -90,7 +90,7 @@ function TrackView({ token, ar }: { token: string; ar: boolean }) {
   const d = query.data!
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-surface p-5">
         <div className="flex items-center justify-between gap-3">
           <div>

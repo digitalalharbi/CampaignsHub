@@ -48,7 +48,7 @@ export function TeamTab() {
   const guard = (p: Promise<unknown>) => p.catch((e) => setErr(toApiError(e).message))
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <form onSubmit={doInvite} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-primary"><UserPlus size={18} /> {ar ? 'دعوة عضو' : 'Invite a member'}</h2>
         {err && <div className="mb-3"><Alert severity="danger" title={ar ? 'تعذّر تنفيذ الإجراء' : 'That action could not be completed'}>{err}</Alert></div>}

@@ -39,7 +39,7 @@ export function ProjectsTab() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <form onSubmit={doCreate} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-primary"><Plus size={18} /> {ar ? 'مشروع جديد' : 'New project'}</h2>
         {err && <div className="mb-3"><Alert severity="danger" title={ar ? 'تعذّر الإنشاء' : 'Could not create it'}>{err}</Alert></div>}

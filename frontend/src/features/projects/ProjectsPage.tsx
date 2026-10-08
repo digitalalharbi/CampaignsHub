@@ -326,7 +326,7 @@ export function ProjectsPage() {
     .at(-1) ?? null
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       {/*
         PRODUCT-VISUAL-001 §4 §10 — the same head grammar the portfolio uses.
         

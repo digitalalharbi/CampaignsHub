@@ -72,7 +72,7 @@ export function FinanceOverviewPage() {
   const agingTotal = d ? Object.values(d.aging).reduce((a, b) => a + b, 0) : 0
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/*
         UX-PAGE-HERO-001 — the shared head (§44).
 

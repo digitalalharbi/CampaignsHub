@@ -149,7 +149,7 @@ export function PortfolioPage() {
 
   if (overview.isLoading) {
     return (
-      <section className="space-y-5">
+      <section className="space-y-4">
         <Skeleton className="h-10 w-64" />
         <div className="grid gap-3 sm:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
@@ -200,7 +200,7 @@ export function PortfolioPage() {
     .sort((a, b) => ATTENTION_ORDER.indexOf(a.attention!) - ATTENTION_ORDER.indexOf(b.attention!))
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <PageIntro
         testid="portfolio-intro"
         title={t.title}

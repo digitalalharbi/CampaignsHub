@@ -115,7 +115,7 @@ export function CurrencyRatesPage() {
   const ready = feed.state === 'ready'
 
   return (
-    <div className="space-y-5" data-testid="admin-fx-rates">
+    <div className="space-y-4" data-testid="admin-fx-rates">
       <header>
         <h1 className="font-heading text-2xl font-bold text-text-primary">{t.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
