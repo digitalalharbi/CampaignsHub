@@ -69,7 +69,7 @@ export function DisclaimerTab() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-xl font-bold text-text-primary">{ar ? 'الملاحظات والمنهجية' : 'Notes & methodology'}</h2>
@@ -84,7 +84,7 @@ export function DisclaimerTab() {
         {save.isError && <div className="mb-4"><Alert severity="danger" title={ar ? 'تعذّر الحفظ' : 'Could not save'}>{ar ? 'تأكد من صلاحية settings.manage.' : 'Check that you hold settings.manage.'}</Alert></div>}
         {saved && <div className="mb-4"><Alert severity="positive" title={ar ? 'تم حفظ الملاحظات' : 'Notes saved'} /></div>}
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           {SECTIONS.map((s) => (
             <div key={s}>
               <h3 className="mb-2 text-sm font-bold text-text-primary">{ar ? `النص ${SECTION_LABELS[s].ar}` : `${SECTION_LABELS[s].en} text`}</h3>

@@ -41,9 +41,23 @@ describe('the cover surface fills, and nothing else starts to', () => {
     expect(mediaFit('vertical', 'vertical')).toBe('contain')
   })
 
-  it('leaves the navigation thumb rule exactly as it was', () => {
+  /*
+    CONTENT-THUMB-FILL-001 — the thumb rule moved, deliberately, and the same way the cover did.
+    The owner reported letterboxed covers a second time; see `mediaFit.test.ts` for the full account
+    of why an identifier fills while a surface that is READ still contains.
+  */
+  it('fills a navigation thumb as well, whatever the asset is', () => {
     expect(mediaFit('square', 'square', 'thumb')).toBe('cover')
-    expect(mediaFit('vertical', 'square', 'thumb')).toBe('contain')
+    expect(mediaFit('vertical', 'square', 'thumb')).toBe('cover')
+    expect(mediaFit(null, 'square', 'thumb')).toBe('cover')
+  })
+
+  /* …and the two surfaces somebody actually reads are untouched. */
+  it('still contains the stage and the viewer', () => {
+    for (const asset of ['square', 'vertical', 'horizontal', null] as const) {
+      expect(mediaFit(asset, 'square', 'stage')).toBe('contain')
+      expect(mediaFit(asset, 'square', 'viewer')).toBe('contain')
+    }
   })
 
   it('spells the utility so no surface writes the class itself', () => {

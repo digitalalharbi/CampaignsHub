@@ -773,7 +773,7 @@ export function CreativesPage() {
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/*
         PRODUCT-VISUAL-001 §4 §15 — WHICH project, WHAT window, HOW fresh.
 

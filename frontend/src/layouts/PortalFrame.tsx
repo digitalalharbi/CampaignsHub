@@ -124,7 +124,19 @@ export function PortalFrame({
           * the slack, the footer is last and therefore sits on the bottom edge of a short page.
           */}
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className={`mx-auto w-full min-w-0 flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6 ${contentWidth}`}>
+          {/*
+            UI-DENSITY-001 — the frame gives the work more of the screen.
+
+            The owner: «يوجد هوامش ومساحات كبيرة بين اجزاء النظام يجب تقليص الابعاد بين الاجزاء».
+            Measured before changing anything: 16px above the first block, 24px down each side and
+            48px of dead space under the last one, with 20px between every section — on a 1440px
+            desk that is a column of air around a product people read all day.
+
+            Tightened at the frame rather than per page, so every surface moves together and no page
+            drifts into its own rhythm. The side padding keeps a 12px floor on a phone, which is what
+            stops text meeting the bezel.
+          */}
+          <div className={`mx-auto w-full min-w-0 flex-1 px-3 pb-8 pt-3 sm:px-4 lg:px-5 ${contentWidth}`}>
             {children}
           </div>
           {/*

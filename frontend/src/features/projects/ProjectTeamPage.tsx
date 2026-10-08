@@ -80,7 +80,7 @@ export function ProjectTeamPage() {
   const removeError = removeMutation.isError ? toApiError(removeMutation.error) : null
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('project_team')}</h1>

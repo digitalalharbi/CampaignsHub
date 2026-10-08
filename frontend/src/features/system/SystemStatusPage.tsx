@@ -22,7 +22,7 @@ export function SystemStatusPage() {
   const ready = useHealth('/ready')
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <div>
         <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('dashboard')}</h1>
         <p className="mt-1 text-sm text-text-secondary">{t('system_status')}</p>

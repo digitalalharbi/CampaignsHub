@@ -82,7 +82,7 @@ export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaProps>(func
 
 export function FormSection({ title, description, children }: { title?: string; description?: string; children: ReactNode }) {
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       {(title || description) && (
         <div>
           {title && <h3 className="text-base font-bold text-text-primary">{title}</h3>}

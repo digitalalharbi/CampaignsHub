@@ -112,7 +112,7 @@ export function FollowUpWorkspacePage() {
     : []
 
   return (
-    <section className="space-y-5" data-testid="followup-workspace">
+    <section className="space-y-4" data-testid="followup-workspace">
       <PageIntro
         testid="followup-intro"
         title={ar ? 'متابعة العملاء المحتملين' : 'Lead follow-up'}
