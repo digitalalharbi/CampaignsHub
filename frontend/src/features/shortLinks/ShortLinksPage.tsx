@@ -7,11 +7,11 @@ import { EmptyState } from '@/components/ui/States'
 import { Field } from '@/components/ui/Field'
 import { Badge } from '@/components/ui/Badge'
 import { PageIntro } from '@/components/ui/PageIntro'
-import { ChartCard, RankingBarChart } from '@/features/analytics/charts'
+import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytics/charts'
 import { StatCard } from '@/components/ui/StatCard'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
-import { createShortLink, deleteShortLink, disableShortLink, listShortLinks, type ShortLink, type ShortLinkKind } from './api'
+import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -51,6 +51,13 @@ const COPY = {
     delete_cancel: 'إلغاء',
     delete_failed: 'تعذّر الحذف — لم يُحذف الرابط.',
     destination: 'الوجهة',
+    trend_title: 'متى تُتابَع روابطك',
+    trend_subtitle: 'عدد مرات فتح روابطك يوميًا.',
+    follows: 'متابعة',
+    since: (d: string) => `التسجيل يبدأ من ${d} — ما قبله غير مُسجَّل، وليس صفرًا.`,
+    not_recording: 'لم يُسجَّل وقت أي متابعة بعد، لذلك لا يوجد منحنى. العدّاد أعلاه يظل صحيحًا.',
+    partial: (recorded: number, total: number) =>
+      `المنحنى يغطي ${recorded} من ${total} متابعة — الباقي حدث قبل بدء التسجيل.`,
   },
   en: {
     title: 'Short Links',
@@ -77,6 +84,13 @@ const COPY = {
     delete_cancel: 'Cancel',
     delete_failed: 'The delete was refused — the link is still here.',
     destination: 'Destination',
+    trend_title: 'When your links are followed',
+    trend_subtitle: 'Follows per day.',
+    follows: 'follows',
+    since: (d: string) => `Recording starts ${d} — before that is unrecorded, not zero.`,
+    not_recording: 'No follow has been timed yet, so there is no curve. The counts above are still true.',
+    partial: (recorded: number, total: number) =>
+      `The curve covers ${recorded} of ${total} follows — the rest happened before recording began.`,
   },
 }
 
@@ -122,7 +136,12 @@ export function ShortLinksPage() {
   const [created, setCreated] = useState<ShortLink | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const links = useQuery({ queryKey: ['short-links'], queryFn: listShortLinks })
+  /*
+    The envelope, not just the rows: `meta` carries the recording boundary and the workspace's own
+    curve, and a page that drew the curve without the boundary would be inviting the reader to take
+    a fortnight of recorded history for the whole life of a link. See SHORT-LINK-HOPS-001.
+  */
+  const links = useQuery({ queryKey: ['short-links'], queryFn: listShortLinksWithMeta })
 
   const reset = () => {
     setPhone('')
@@ -178,7 +197,13 @@ export function ShortLinksPage() {
     },
   })
 
-  const rows = links.data ?? []
+  const rows = links.data?.data ?? []
+  const meta = links.data?.meta
+  const recordingSince = meta?.recording_since ?? null
+  const curve = meta?.daily ?? []
+  /* What the curve can account for, against what the counters say — stated, never reconciled away. */
+  const recordedTotal = rows.reduce((sum, l) => sum + (l.recorded_follows ?? 0), 0)
+  const countedTotal = rows.reduce((sum, l) => sum + (l.clicks ?? 0), 0)
 
   return (
     <div className="space-y-4">
@@ -417,6 +442,58 @@ export function ShortLinksPage() {
               </li>
             ))}
           </ul>
+        </ChartCard>
+      )}
+
+      {/*
+        SHORT-LINK-HOPS-001 — «when», which a counter cannot answer.
+
+        The ranking above says which links people press. It cannot say whether a link is still being
+        pressed, and that is the question an operator asks of a link sitting in a live campaign: a
+        link whose follows stopped a fortnight ago looks exactly like one followed this morning when
+        all you have is a total that only goes up.
+
+        Below the links and the ranking, per the layout rule: the page's job is making a link, and
+        the analysis comes after the thing that does the job.
+
+        ## The boundary is part of the chart, not a footnote
+
+        The curve covers the period this installation has been recording. Every link older than that
+        has a real total and no history, so the card states where recording begins and how much of
+        the counted total the curve can actually account for. Drawing the line across the untimed
+        period — as zeroes — would turn «we were not writing this down» into «nobody came».
+      */}
+      {rows.length > 0 && (
+        <ChartCard title={t.trend_title} subtitle={t.trend_subtitle}>
+          {curve.length === 0 ? (
+            <p data-testid="short-link-trend-unrecorded" className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
+              {t.not_recording}
+            </p>
+          ) : (
+            <>
+              <div data-testid="short-link-trend-chart" className="min-w-0">
+                <MetricLineChart
+                  height={220}
+                  data={curve.map((d) => ({ label: d.day, follows: d.follows }))}
+                  series={[{ key: 'follows', name: t.follows, kind: 'num' }]}
+                />
+              </div>
+
+              <p data-testid="short-link-trend-since" className="mt-2 text-xs text-text-secondary">
+                {t.since(new Date(recordingSince ?? curve[0].day).toLocaleDateString('en-CA'))}
+              </p>
+
+              {/*
+                Only where the two actually differ. On an installation that recorded from the start
+                they agree, and a sentence explaining a gap that is not there is noise.
+              */}
+              {countedTotal > recordedTotal && (
+                <p data-testid="short-link-trend-partial" className="mt-1 text-xs text-warning">
+                  {t.partial(recordedTotal, countedTotal)}
+                </p>
+              )}
+            </>
+          )}
         </ChartCard>
       )}
     </div>

@@ -50,12 +50,18 @@ final class ReportStructureTest extends TestCase
         return $out;
     }
 
-    public function test_it_lists_the_seven_sections_in_the_order_a_report_is_read(): void
+    /**
+     * Eight since REPORT-LINK-SECTION-001 — `links` sits after the ads and before the findings.
+     *
+     * After the ads because a short link is where an ad SENT somebody, so it reads as the next step
+     * in the same story; before the findings because the findings are allowed to reason about both.
+     */
+    public function test_it_lists_the_sections_in_the_order_a_report_is_read(): void
     {
         $sections = (new ReportStructure)->sections($this->snapshot());
 
         $this->assertSame(
-            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'findings', 'recommendations'],
+            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'links', 'findings', 'recommendations'],
             array_column($sections, 'key'),
         );
     }

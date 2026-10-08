@@ -5,10 +5,10 @@ import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
-  listShortLinks: vi.fn(), createShortLink: vi.fn(), deleteShortLink: vi.fn(),
+  listShortLinks: vi.fn(), listShortLinksWithMeta: vi.fn(), createShortLink: vi.fn(), deleteShortLink: vi.fn(),
 }))
 
-import { listShortLinks } from './api'
+import { listShortLinksWithMeta } from './api'
 
 /**
  * VIZ-OPS-001 — which links people actually press.
@@ -32,7 +32,7 @@ describe('the short link library, drawn', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('ranks the links by the clicks they were given', async () => {
-    vi.mocked(listShortLinks).mockResolvedValue([link('a', 3), link('b', 90), link('c', 40)] as never)
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [link('a', 3), link('b', 90), link('c', 40)], meta: {} } as never)
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
     expect(await screen.findByTestId('short-link-clicks-chart')).toBeInTheDocument()
@@ -41,7 +41,7 @@ describe('the short link library, drawn', () => {
   })
 
   it('keeps a link nobody has pressed, because a reported zero is a figure', async () => {
-    vi.mocked(listShortLinks).mockResolvedValue([link('busy', 50), link('quiet', 0)] as never)
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [link('busy', 50), link('quiet', 0)], meta: {} } as never)
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
     expect(await screen.findByTestId('short-link-clicks-legend')).toHaveTextContent('quiet')
@@ -49,7 +49,7 @@ describe('the short link library, drawn', () => {
 
   it('draws nothing when a single link cannot be compared with anything', async () => {
     // One bar is not a ranking; it is the same figure the card above already states.
-    vi.mocked(listShortLinks).mockResolvedValue([link('only', 12)] as never)
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [link('only', 12)], meta: {} } as never)
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
     await screen.findByTestId('short-links-kpi-clicks')
@@ -58,7 +58,7 @@ describe('the short link library, drawn', () => {
 
   it('draws nothing when no link has ever been pressed', async () => {
     // A ranking of zeros ranks nothing, and bars of equal length imply a comparison nobody can make.
-    vi.mocked(listShortLinks).mockResolvedValue([link('a', 0), link('b', 0)] as never)
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [link('a', 0), link('b', 0)], meta: {} } as never)
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
     await screen.findByTestId('short-links-kpi-clicks')

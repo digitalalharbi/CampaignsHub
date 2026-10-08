@@ -47,6 +47,7 @@ final class ReportGenerator
         private readonly DataFreshnessService $freshness,
         private readonly ReportStructure $structure,
         private readonly ReportAds $reportAds,
+        private readonly ReportLinks $reportLinks,
         private readonly ReportAttention $attention,
     ) {}
 
@@ -168,6 +169,8 @@ final class ReportGenerator
          * narrow the same way the campaign figures beside it do, or the two disagree about the scope
          * the reader was promised.
          */
+        $links = $this->reportLinks->forWindow((string) $report->project_id, $from, $to);
+
         $ads = $this->reportAds->for($objective, $from, $to, [
             'project_ids' => $scope->projectIds !== [] ? $scope->projectIds : [(string) $report->project_id],
             'providers' => $scope->providers,
@@ -260,6 +263,20 @@ final class ReportGenerator
              * sits at the end as an appendix, not as a gallery: every entry carries the objective's
              * own indicators beside the preview, so it reads as evidence rather than decoration.
              */
+            /*
+             * REPORT-LINK-SECTION-001 — the addresses the money pointed at.
+             *
+             * A short link is the one artefact of a campaign that LEAVES this product: pasted into
+             * an ad, read aloud, sent in a message. A report could describe a month of spend and
+             * never mention it, while the clicks were counted the whole time on a page nobody opens
+             * while reading a report.
+             *
+             * The report's own project, not the whole scope: a short link belongs to one project
+             * and there is no cross-project link to aggregate.
+             */
+            'links' => $links['links'],
+            'links_recording_since' => $links['recording_since'],
+            'links_absent_reason' => $links['absent_reason'],
             'ads' => $ads['ads'],
             'ads_level' => $ads['level'],
             // REPORT-AD-PREVIEW-001 §A — ranked INSIDE each objective, with the metric that ordered it.
