@@ -40,13 +40,20 @@ describe('how media is fitted to its stage', () => {
   })
 
   /**
-   * A navigation tile is the one exception, and only when the shape is known AND matches: a 48px
-   * row-picker letterboxing a square into a square costs legibility for nothing.
+   * CONTENT-THUMB-FILL-001 — a thumbnail FILLS, whatever is known about the asset.
+   *
+   * It used to fill only where the shape was known AND matched the frame. Every caller draws into a
+   * square of 36 to 64 pixels, so that meant a horizontal still letterboxed with grey bands down two
+   * sides — and the two callers that pass no shape at all contained every asset they ever drew.
+   *
+   * The rule it came from, «a story is contained, never covered», is about a surface somebody READS.
+   * Nobody reads a call to action at 36 pixels: a thumbnail is what you recognise a row by, and the
+   * whole asset is one click away in the viewer, which still contains.
    */
-  it('covers a thumbnail only where its shape is known to match', () => {
-    expect(mediaFit('square', 'square', 'thumb')).toBe('cover')
-    expect(mediaFit('vertical', 'square', 'thumb')).toBe('contain')
-    expect(mediaFit(null, 'square', 'thumb')).toBe('contain')
+  it('covers a thumbnail whatever is known about its shape', () => {
+    for (const asset of ['square', 'vertical', 'horizontal', null] as const) {
+      expect(mediaFit(asset, 'square', 'thumb'), `${asset} was letterboxed in a thumbnail`).toBe('cover')
+    }
   })
 })
 

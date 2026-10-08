@@ -169,16 +169,40 @@ export function assetAspect(
  * untouched.
  */
 export function mediaFit(
-  asset: MediaAspect | null | undefined,
-  stage: MediaAspect | null | undefined,
+  /*
+    `asset` and `stage` no longer decide anything — CONTENT-THUMB-FILL-001 below left the answer to
+    the SURFACE alone. They are kept because twelve call sites and the whole test suite pass them
+    positionally, and because what a caller knows about its asset is still the right thing for it to
+    state; a later unit can narrow the signature without being tangled up in this one.
+  */
+  _asset: MediaAspect | null | undefined,
+  _stage: MediaAspect | null | undefined,
   surface: 'stage' | 'viewer' | 'thumb' | 'cover' = 'stage',
 ): 'contain' | 'cover' {
-  /* A cover fills its frame whatever the asset is — including where nothing is known about it. */
-  if (surface === 'cover') return 'cover'
+  /*
+    A cover fills its frame whatever the asset is — including where nothing is known about it.
 
-  if (surface !== 'thumb') return 'contain'
+    ## A thumbnail is a cover (CONTENT-THUMB-FILL-001)
 
-  return asset !== null && asset !== undefined && asset === (stage ?? 'horizontal') ? 'cover' : 'contain'
+    `thumb` used to fill only where the asset's shape was KNOWN and matched the frame, and contain
+    otherwise. Every caller draws into a square of 36 to 64 pixels, so in practice that meant a
+    horizontal still letterboxed into a square with grey bands down two sides, and the two callers
+    that pass no shape at all — the campaign structure tab and the campaign comparison — contained
+    every asset they ever showed. The owner has now reported the same thing twice: «الغلاف ما زالت
+    ابعاد غير مناسبة وغير ممتلئة».
+
+    The rule it came from is CONTENT-PREVIEW-SHAPES-001: a story must not be cropped to its middle
+    third, because the top and bottom are the logo and the call to action. That reasoning is about a
+    surface somebody READS. Nobody reads a logo at 36 pixels — a thumbnail is an identifier, the
+    thing you recognise a row by — and the whole asset is one click away in the viewer, which
+    contains and whose guard is untouched below.
+
+    So the two surfaces that fill are the two that identify, and the two that contain are the two
+    that are read: stage and viewer.
+  */
+  if (surface === 'cover' || surface === 'thumb') return 'cover'
+
+  return 'contain'
 }
 
 /** The Tailwind utility for {@see mediaFit}, so no surface spells the class itself. */

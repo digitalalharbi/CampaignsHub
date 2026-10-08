@@ -179,7 +179,7 @@ export function ProjectIntegrationsPage() {
 
   if (missing) {
     return (
-      <section className="space-y-5">
+      <section className="space-y-4">
         <h1 className="font-[var(--font-heading)] text-3xl font-extrabold tracking-tight">{t('project_integrations')}</h1>
         <EmptyState
           title={lang === 'ar' ? 'هذا المشروع غير موجود' : 'This project does not exist'}
@@ -192,7 +192,7 @@ export function ProjectIntegrationsPage() {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       {/*
         PRODUCT-VISUAL-001 §4 §11 — the same head as every other surface, with the project named.
         
