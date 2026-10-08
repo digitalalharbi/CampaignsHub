@@ -55,6 +55,7 @@ final class CreativeRows
 {
     public function __construct(
         private readonly CreativeMetrics $metrics,
+        private readonly CreativeResultAttribution $attribution,
         private readonly CreativeFatigue $fatigue,
         private readonly CreativePresenter $presenter,
     ) {}
@@ -748,11 +749,29 @@ final class CreativeRows
             true,
         );
 
+        /*
+         * CREATIVE-GRAIN-TRUTH-001 — which campaigns' results never reached creative grain.
+         *
+         * One query for the page. A campaign that reported sales while every creative under it
+         * reports zero did not break the attribution down, and the zero is the platform saying «not
+         * at this grain». Publishing it as a result is what put «الطلبات 0» under a campaign
+         * reading 5x.
+         *
+         * Nothing is allocated downward here — see the service. This only decides whether the
+         * question can be answered, and where it cannot the row says so instead of printing a zero.
+         */
+        $unattributed = $this->attribution->unattributedCampaigns(
+            $creatives->pluck('campaign_id')->filter()->unique()->map(static fn (mixed $v): string => (string) $v)->values()->all(),
+            $from,
+            $to,
+        );
+
         $out = [];
         foreach ($creatives as $creative) {
             $id = (string) $creative->getKey();
             $campaign = $creative->campaign_id === null ? null : $campaigns->get($creative->campaign_id);
             $objective = $campaign?->objective;
+            $resultsNotAttributable = $creative->campaign_id !== null && isset($unattributed[(string) $creative->campaign_id]);
 
             $row = $this->presenter->card($creative, $campaign);
             $row['objective'] = $objective;
@@ -762,8 +781,14 @@ final class CreativeRows
              * metrics the card promises. A sales creative whose platform reports no revenue at
              * creative grain is not helped by a cell reserved for revenue.
              */
-            $row['headline_metrics'] = $this->metrics->headline($objective, $figures[$id] ?? null);
+            $row['headline_metrics'] = $this->metrics->headline($objective, $figures[$id] ?? null, $resultsNotAttributable);
             $row['metrics'] = $figures[$id] ?? null;
+            /*
+             * Stated on the row rather than inferred from an absence: a surface has to tell «the
+             * platform does not break this down» apart from «this metric is not part of the
+             * objective», and only one of those is worth a sentence to the reader.
+             */
+            $row['results_not_attributable'] = $resultsNotAttributable;
             // A fact about the AD, named as one — see CONTENT-AD-DELIVERED-001.
             $row['ad_delivered'] = isset($adDelivered[$id]);
 
