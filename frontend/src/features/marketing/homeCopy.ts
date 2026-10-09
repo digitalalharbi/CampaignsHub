@@ -188,7 +188,7 @@ const ar: HomeCopy = {
   hero: {
     eyebrow: 'إدارة الحملات الإعلانية المدفوعة',
     title: 'كل حملاتك. كل المنصات. مكان واحد.',
-    desc: 'اربط حساباتك الإعلانية، ونظّمها حسب العميل والمشروع، وتابع الحملات والميزانيات، وحلّل الأداء والإبداعات، وشارك التقارير — من مساحة عمل واحدة.',
+    desc: 'اربط حساباتك الإعلانية، ونظّمها حسب العميل والمشروع، وتابع الحملات والميزانيات، وحلّل الأداء والمحتويات، وشارك التقارير — من مساحة عمل واحدة.',
     support: 'أدر حملاتك بنفسك، أو اختر الخدمة التي تحتاجها ودعنا نساعدك في تنفيذها.',
     points: ['متابعة موحدة لجميع المنصات', 'مقارنة واضحة بين الحملات', 'بيانات من الحسابات المرتبطة', 'تقارير وتنبيهات تساعدك على اتخاذ القرار'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
@@ -539,7 +539,7 @@ const en: HomeCopy = {
   hero: {
     eyebrow: 'Paid advertising management',
     title: 'Every campaign. Every platform. One place.',
-    desc: 'Connect your advertising accounts, organise them by client and project, follow campaigns and budgets, analyse performance and creatives, and share reports — from one workspace.',
+    desc: 'Connect your advertising accounts, organise them by client and project, follow campaigns and budgets, analyse performance and content, and share reports — from one workspace.',
     support: 'Run your campaigns yourself, or pick the service you need and let us help you deliver it.',
     points: ['Unified tracking across all platforms', 'Clear comparison between campaigns', 'Data from your connected accounts', 'Reports and alerts that help you decide'],
     demoTag: 'Illustrative preview with demo data',
@@ -756,7 +756,7 @@ const en: HomeCopy = {
       { title: 'Performance comparison', desc: 'Compare campaigns and platforms, and spot the best fast.' },
       { title: 'Reports', desc: 'Objective-based reports, ready for a client or a team.' },
       { title: 'Budgets', desc: 'Monitor spend pace and forecast overruns early.' },
-      { title: 'Creatives', desc: 'Compare ad performance and see what works best.' },
+      { title: 'Ads', desc: 'Compare ad performance and see what works best.' },
       { title: 'Alerts', desc: 'Get alerted on rising costs or a stalled sync.' },
     ],
   },
