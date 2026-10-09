@@ -95,22 +95,46 @@ final class BudgetAllocatedWithoutSpendTest extends TestCase
     }
 
     /**
-     * Nothing spent is ZERO, not «we cannot tell».
+     * Nothing MEASURED is «we cannot tell», not zero — Owner directive 2026-10-09 §19.
      *
-     * The money contract separates an absent measurement from a measured zero, and this is the
-     * second: no delivery happened, so nothing was spent, and the whole budget remains. Reporting it
-     * as unknown would put a dash where an operator needs a number they can plan against.
+     * This case once asserted the opposite («no delivery happened, so nothing was spent») on a project
+     * that holds no measured row at all. That conflated two facts: a campaign whose sources were read
+     * and reported nothing (a measured zero, still reported as zero below), and a campaign whose
+     * project nobody has read in this window (no figure). The second put «0.00 spent» beside every
+     * client whose sources had never synced, which is the dishonest reading the directive forbids.
+     * The budget is still the budget; the spend, the remainder and the consumption are not known.
      */
-    public function test_an_unstarted_campaign_reports_zero_spent_and_its_whole_budget_remaining(): void
+    public function test_an_unstarted_campaign_in_an_unread_project_reports_no_spend_and_its_budget(): void
     {
         $this->campaign('Starts on Sunday', 50_000);
 
         $row = $this->pacing()[0];
 
-        $this->assertSame(0.0, $row['spent']);
-        $this->assertSame(50_000.0, $row['remaining']);
-        $this->assertSame(0.0, $row['consumed_pct']);
-        $this->assertSame('comparable', $row['pacing_basis'], 'an unstarted budget must count toward the portfolio');
+        $this->assertSame(50_000.0, $row['budget']);
+        $this->assertNull($row['spent']);
+        $this->assertNull($row['remaining']);
+        $this->assertNull($row['consumed_pct']);
+        $this->assertSame('nothing_measured_in_window', $row['pacing_basis']);
+        $this->assertFalse($row['measured']);
+    }
+
+    /**
+     * The measured zero is still a zero: a project whose window WAS read reports an unstarted
+     * sibling as spent 0.0 with its whole budget remaining — the reading above exists only where
+     * no reading happened.
+     */
+    public function test_an_unstarted_campaign_beside_a_measured_one_reports_a_measured_zero(): void
+    {
+        $this->campaign('Starts on Sunday', 50_000);
+        $this->spend($this->campaign('Running', 10_000), 2_500);
+
+        $rows = collect($this->pacing())->keyBy('campaign_name');
+
+        $this->assertSame(0.0, $rows['Starts on Sunday']['spent']);
+        $this->assertSame(50_000.0, $rows['Starts on Sunday']['remaining']);
+        $this->assertSame(0.0, $rows['Starts on Sunday']['consumed_pct']);
+        $this->assertSame('comparable', $rows['Starts on Sunday']['pacing_basis']);
+        $this->assertTrue($rows['Starts on Sunday']['measured']);
     }
 
     /** And the portfolio total carries it, which is the whole point. */

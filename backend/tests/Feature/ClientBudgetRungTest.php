@@ -110,10 +110,14 @@ final class ClientBudgetRungTest extends TestCase
 
         $rows = collect($this->budgets())->keyBy('client_name');
 
-        // Committed money counts whether or not it has started moving.
+        // Committed money counts whether or not it has started moving — and a campaign whose project
+        // nobody read in this window keeps its budget in the total while its spend stays unknown, so
+        // the client's remainder and pace are not stated (Owner directive 2026-10-09 §19).
         $this->assertEqualsWithDelta(60_000, $rows['Big Spender']['budget'], 0.01);
         $this->assertEqualsWithDelta(10_000, $rows['Big Spender']['spent'], 0.01);
-        $this->assertEqualsWithDelta(50_000, $rows['Big Spender']['remaining'], 0.01);
+        $this->assertNull($rows['Big Spender']['remaining']);
+        $this->assertNull($rows['Big Spender']['pace']);
+        $this->assertSame(1, $rows['Big Spender']['unmeasured']);
         $this->assertEqualsWithDelta(5_000, $rows['Small']['budget'], 0.01);
     }
 
