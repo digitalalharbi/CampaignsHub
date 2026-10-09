@@ -2034,11 +2034,25 @@ final class MetricsAggregator
                 ->whereIn('id', $ids->all())
                 ->get(['id', 'project_id', 'name', 'total_budget', 'budget_currency', 'status']);
 
+        /*
+         * Which projects the window measured AT ALL — the condition the zero below depends on.
+         *
+         * A budgeted campaign with no row is a measured zero only where the connector was answering,
+         * and «the project has any measured row in the window» is the fact that says so. A project
+         * with none — a stopped sync, a store not yet connected — has no zero to state, and stating
+         * one put «0.00× — on budget» on the dashboard's first screen for money nobody had looked at.
+         */
+        $measuredProjects = array_flip(array_map(
+            static fn ($id): string => (string) $id,
+            $this->base($from, $to)->distinct()->pluck('project_id')->all(),
+        ));
+
         $rows = [];
         foreach ($campaigns as $c) {
             $budget = (float) ($c->total_budget ?? 0);
             $budgetCurrency = $c->budget_currency;
             $row = $spentByCampaign[$c->id] ?? null;
+            $nothingMeasured = false;
 
             /*
              * The figure that is REAL, and the unit it is in — through the one money contract.
@@ -2071,9 +2085,21 @@ final class MetricsAggregator
              * planning next week needs to see.
              */
             if ($row === null && $budget > 0) {
-                $spent = 0.0;
-                $spentCurrency = $budgetCurrency;
-                $hasSpend = true;
+                if (isset($measuredProjects[(string) $c->project_id])) {
+                    $spent = 0.0;
+                    $spentCurrency = $budgetCurrency;
+                    $hasSpend = true;
+                } else {
+                    /*
+                     * Owner directive 2026-10-09 §19 — nothing measured is not a zero; see the note
+                     * above. `MoneyScope::of(0, …)` has already read the missing row as a measured
+                     * zero, so the figure is withdrawn here explicitly rather than left to the state.
+                     */
+                    $nothingMeasured = true;
+                    $spent = null;
+                    $spentCurrency = null;
+                    $hasSpend = false;
+                }
             }
 
             /*
@@ -2105,7 +2131,9 @@ final class MetricsAggregator
                 'spent' => $hasSpend ? round($spent, 2) : null,
                 'spent_currency' => $spentCurrency,
                 'spend_withheld' => $scope->state === MoneyState::CompleteWithheld,
-                'spend_state' => $scope->state->value,
+                'spend_state' => $nothingMeasured ? 'nothing_measured_in_window' : $scope->state->value,
+                /* False only where the whole project's window holds no measured row — not a zero, an absence. */
+                'measured' => ! $nothingMeasured,
                 'remaining' => $comparable ? round($budget - $spent, 2) : null,
                 'consumed_pct' => $comparable ? round($spent / $budget, 4) : null,
                 'pace' => $comparable && $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing
@@ -2135,9 +2163,11 @@ final class MetricsAggregator
                  */
                 'pacing_basis' => $comparable
                     ? 'comparable'
-                    : (! $hasSpend
-                        ? $scope->state->value
-                        : ($budget > 0 ? 'currency_mismatch' : 'no_budget')),
+                    : ($nothingMeasured
+                        ? 'nothing_measured_in_window'
+                        : (! $hasSpend
+                            ? $scope->state->value
+                            : ($budget > 0 ? 'currency_mismatch' : 'no_budget'))),
             ];
         }
         usort($rows, fn ($a, $b) => ($b['pace'] ?? 0) <=> ($a['pace'] ?? 0));
