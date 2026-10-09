@@ -234,6 +234,20 @@ final class ReportAds
             'preview' => $row['preview'],
             'format' => $row['format'] ?? null,
             /*
+             * REPORT-CONTENT-BROWSER-001 — the two facts «is this still running» is read from.
+             *
+             * The report's content section is ordered with running content first, and a client
+             * looking at a table ordered by a fact it does not carry cannot account for the order.
+             * They are FACTS about the ad, not figures: `status` is the platform's own word and
+             * `last_active_at` is when it last delivered, and the reader (`relevanceOf`) is the one
+             * the library and the campaigns workspace already use.
+             *
+             * Not a client-boundary concern: «this ad is running» is the client's own advertising,
+             * unlike a campaign's name, configuration or internal state.
+             */
+            'status' => $row['status'] ?? null,
+            'last_active_at' => $row['freshness']['last_active_at'] ?? null,
+            /*
              * CLIENT-REPORT-MONEY-REDACTION-001 — the money truth, not `?? 0`.
              *
              * `?? 0` printed «0» as an ad's spend whenever FX-001 had withheld the conversion, which
