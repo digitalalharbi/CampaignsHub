@@ -18,6 +18,7 @@ use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
+use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -501,6 +502,21 @@ final class ReportGenerator
         $data['mode'] = $report->config['mode'] ?? 'snapshot';
         /* Stated in the payload so every renderer, and the reader, know which shape this is. */
         $data['form'] = $report->form;
+        /*
+         * REPORT-PRODUCT-MODEL-001 — and composed as the shape it just stated.
+         *
+         * The line above was the whole of the form's effect on a snapshot: the label was stamped and
+         * the full detailed document was stored under it. `ReportComposition` says what each form
+         * contains and why the statement has to be applied where the payload is assembled rather
+         * than in a renderer — «every consumer downstream would have to remember the trimming
+         * separately» — and the live assembler applied it while this one, which produces the product
+         * the Owner actually generates, did not. That is Owner defect row 96 read literally: an
+         * executive summary that was a detailed report wearing a shorter label.
+         *
+         * Applied BEFORE the checksum, because the checksum describes the document that was stored
+         * and a trimming it did not cover would be a seal over the wrong bytes.
+         */
+        $data = ReportComposition::for($report->form)->apply($data);
         $data['generated_at'] = Carbon::now()->toIso8601String();
         $data['checksum'] = ExportReadinessGate::checksum($data);
 
