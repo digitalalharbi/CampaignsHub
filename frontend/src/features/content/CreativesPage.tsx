@@ -1456,7 +1456,7 @@ export function CreativesPage() {
           creative={creatives[viewerIndex]}
           locale={ar ? 'ar' : 'en'}
           /* This library's own window and currency — the popup never decides what «this period» is. */
-          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar, creatives[viewerIndex].headline_metrics ?? [])}
+          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar, creatives[viewerIndex].headline_metrics ?? [], creatives[viewerIndex].results_not_attributable === true)}
           trend={currentProjectId
             ? (
               <CreativeTrend
@@ -1559,7 +1559,14 @@ function CreativeGridCard({
    * carries it, through the money contract, which is the only reader that can state a withheld amount.
    */
   const [moreShown, setMoreShown] = useState(false)
-  const figureKeys = canonicalFigureKeys(creative.headline_metrics ?? [], creative.metrics ?? undefined, currency, ar)
+  const figureKeys = canonicalFigureKeys(
+    creative.headline_metrics ?? [],
+    creative.metrics ?? undefined,
+    currency,
+    ar,
+    /* CREATIVE-GRAIN-TRUTH-001 — without this the appending loop puts the withheld zeros back. */
+    creative.results_not_attributable === true,
+  )
     .filter((key) => key !== 'spend')
   const shownKeys = moreShown ? figureKeys : figureKeys.slice(0, CARD_FIGURES)
   const hiddenKeys = figureKeys.slice(CARD_FIGURES)
@@ -1918,6 +1925,26 @@ function CreativeGridCard({
 
             {figureKeys.length === 0 && (
               <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
+            )}
+
+            {/*
+              CREATIVE-GRAIN-TRUTH-001 — «the platform did not break this result down», said once.
+
+              The campaign above this creative reported sales and no creative under it reported a
+              single one, so the platform never attributed the result at this grain. The figures are
+              dropped server-side rather than printed as zeros — a zero here is what put «الطلبات 0»
+              under a campaign reading 5x — and this is the sentence that stops their absence being
+              read as «nobody bought».
+
+              Stated once per card, under the figures, rather than on each missing metric: the
+              reader needs the reason, not four copies of it.
+            */}
+            {creative.results_not_attributable === true && (
+              <p data-testid="creative-results-not-attributable" className="mt-2 text-[11px] text-text-muted">
+                {ar
+                  ? 'لم تُسنِد المنصة نتائج هذه الحملة إلى المحتوى — النتائج متاحة على مستوى الحملة فقط.'
+                  : 'The platform did not attribute this campaign’s results to content — they are reported at campaign level only.'}
+              </p>
             )}
           </div>
         )}
