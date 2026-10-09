@@ -827,9 +827,13 @@ blocks for the reviewed routes and carries 13 operator surfaces + the advertiser
 against `campaignshub_preview`; `DemoAccountsSeeder` was run there, so `advertiser@campaignshub.io`
 exists alongside `agency@`, `client@`, `admin@campaignshub.io` (all `password`). Browser tab `tab-3`.
 
-**Pre-push gate for this branch (in flight at the time of writing).** Full vitest (3,372 passed
-before the Team/PageIntro/catalogue/content-detail edits; re-run started), `tsc -b` clean, chromium
-sweep on the named/new surfaces; then firefox + webkit, rebase onto main, push.
+**Pre-push gate for this branch.** Full vitest 473 files / 3,372 passed on the final state; `tsc -b`
+clean; `first-viewport-sweep.spec.ts` chromium 166/166 (named + new surfaces), firefox 230/230 and
+webkit 230/230 (whole file); `first-viewport-detail.spec.ts` (campaign + creative detail, 32 cases)
+found the campaign detail scrolling sideways 364 px at 390 — the related-entities grid lacked a base
+column rule — fixed (`b0251d6f`), chromium 38/38 after, firefox + webkit re-run in flight;
+`platform-decision.spec.ts` 9/9 on all three. Rebased onto `a704de0f` (#630); push after ch-brand
+lands, per the single lane.
 
 **Matrix census caveat.** Counted on this branch's copy (based on `a46626fc`): 517 VERIFIED, 55
 IMPLEMENTED_NOT_VERIFIED, 31 PARTIAL, 15 IN_PROGRESS, 23 BLOCKED_EXTERNAL_CREDENTIALS, 10
