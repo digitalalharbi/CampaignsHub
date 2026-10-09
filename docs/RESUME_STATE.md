@@ -937,3 +937,13 @@ the rm-web preview (:5231/:8131, DB campaignshub_preview). The 390 overflow (100
 fixes — identical on the audience tab of this base. Matrix rows CAMPAIGN-MGMT-DOMAIN-001/-SURFACE-001 move only
 after the ledger PR (ch-req) merges, so the row edits land on the rows themselves. Lane after #634: ch-font →
 ledger → B6 → this branch.
+
+**CAMPAIGN-MGMT-CHANGE-HISTORY-001 on the same branch, 01:1x.** The audit log already carried who/what/when with
+before/after for every campaign write (created, updated, paused, activated, archived, linked, unlinked) and the activity
+timeline drew it as the server names it. `campaignChangeHistory` names each audited field and says each value the way the
+product does; the timeline shows the diff for every event that carries one. Live on the rm-web preview (:5231, advertiser
+session): a PATCH of the demo campaign's budget and priority produced «تعديل بيانات الحملة · Company Owner · 2026-10-10
+01:11 — الأولوية: متوسطة → عالية · الميزانية الإجمالية: 80,000 SAR → 85,000 SAR» (then reverted). Spec 3/3, tsc clean.
+The §A surface tabs the Owner named (Create · Drafts · Scheduled · Paused · Change History as views) remain PARTIAL: the
+read half exists (overview views, detail tabs incl. Settings and Activity/Change history); the write half waits on the
+registry admitting a provider write.
