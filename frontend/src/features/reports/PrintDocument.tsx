@@ -384,9 +384,33 @@ export function PrintDocument({
    */
   const outline = (data.outline ?? []) as OutlineSection[]
   const section = (key: string): OutlineSection | undefined => outline.find((s) => s.key === key)
+  const shown = (key: ReportSectionKey) => sectionShown(data, key)
+
+  /*
+   * Which of the outline's sections THIS document prints as a numbered section — decided once, and
+   * read by both the headings below and the numbering here, so the two cannot disagree.
+   *
+   * The generator's outline lists more than this document prints: `performance` is emitted second
+   * whenever a window has figures and `findings` seventh, and neither is a numbered section on this
+   * page — the KPI block sits under the executive summary, and findings travel with the
+   * recommendations. Counting over the outline therefore printed «1. Executive Summary» and then
+   * «3. Platform Performance» on every real report: the «stepped over» defect this numbering was
+   * written against, in its other direction, and invisible to a fixture whose outline carried only
+   * the keys the page prints. The operator's section switches and an empty table are part of the
+   * same decision — a section switched off is not printed, so it is not counted either.
+   */
+  const prints: Record<string, boolean> = {
+    executive_summary: section('executive_summary')?.present !== false,
+    platforms: shown('platform_comparison') && section('platforms')?.present !== false,
+    objectives: shown('advanced_segmentation') && section('objectives')?.present !== false && objectiveRows.length > 0,
+    ads: shown('content_performance') && adRows.length > 0,
+    links: linkRows.length > 0,
+    recommendations: shown('recommendations') && (recs.length > 0 || (data.attention?.length ?? 0) > 0),
+  }
+
   /** The printed number of a section — counted over what is actually printed, never over the list. */
   const numbers = new Map<string, number>()
-  outline.filter((s) => s.present).forEach((s, i) => numbers.set(s.key, i + 1))
+  outline.filter((s) => s.present && prints[s.key] === true).forEach((s, i) => numbers.set(s.key, i + 1))
   const heading = (key: string, fallback: string): string => {
     const s = section(key)
     const title = s ? s.title_en : fallback
@@ -399,7 +423,6 @@ export function PrintDocument({
    * REPORT-SECTION-SURFACES-001 — a section the report does not carry is not printed, and its
    * absence is not explained either: the page, the link and this document all leave it out.
    */
-  const shown = (key: ReportSectionKey) => sectionShown(data, key)
   const OUTLINE_SECTION: Record<string, ReportSectionKey> = { platforms: 'platform_comparison', objectives: 'advanced_segmentation', ads: 'content_performance' }
 
   const Absent = ({ sectionKey, fallback }: { sectionKey: string; fallback: string }) => {
@@ -495,7 +518,7 @@ export function PrintDocument({
       </header>
 
       {/* Executive summary */}
-      {section('executive_summary')?.present !== false && (
+      {prints.executive_summary && (
         <section className="doc-section">
           <h2>{heading('executive_summary', 'Executive Summary')}</h2>
           {(data.summary ?? []).map((s, i) => <p key={i}>{s}</p>)}
@@ -509,17 +532,8 @@ export function PrintDocument({
       )}
       <Absent sectionKey="executive_summary" fallback="No summary could be composed from this period’s figures." />
 
-      {/* Platform performance */}
-      {shown('platform_comparison') && section('platforms')?.present !== false && (
-        <section className="doc-section">
-          <h2>{heading('platforms', 'Platform Performance')}</h2>
-          <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
-        </section>
-      )}
-      <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
-
       {/* Breakdown by objective — the same spend, divided by what it was bought for. */}
-      {shown('advanced_segmentation') && section('objectives')?.present !== false && objectiveRows.length > 0 && (
+      {prints.objectives && (
         <section className="doc-section">
           <h2>{heading('objectives', 'Breakdown by Objective')}</h2>
           <Table
@@ -565,6 +579,22 @@ export function PrintDocument({
           </section>
         )
       })}
+
+      {/*
+        Platform performance — AFTER the objective split, as the outline orders it.
+
+        CLIENT-FACING-PRESENTATION-001: «at what cost, really» (the objective split) is read before
+        «where» (this table). The deck and the live link have read them in that order since the owner
+        decided it; this page numbered from an outline that said the opposite, and so printed the
+        platform table above the split it is supposed to follow.
+      */}
+      {prints.platforms && (
+        <section className="doc-section">
+          <h2>{heading('platforms', 'Platform Performance')}</h2>
+          <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
+        </section>
+      )}
+      <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
 
       {/* REPORT-DRILLDOWN-001 — each platform in detail, only when the operator enabled the section. */}
       {(data.platform_drilldowns?.length ?? 0) > 0 && (
@@ -616,7 +646,7 @@ export function PrintDocument({
         preview says `available`; every other state prints its reason, because a grey box in a
         client's PDF reads as a broken export.
       */}
-      {!shown('content_performance') ? null : adRows.length > 0 ? (
+      {!shown('content_performance') ? null : prints.ads ? (
         <section className="doc-section">
           <h2>{heading('ads', 'Ads')}</h2>
           <table className="doc-table doc-ads">
@@ -680,7 +710,7 @@ export function PrintDocument({
         reports the section absent with its own reason and this prints that sentence instead of a
         column of zeroes — see the absent branch below.
       */}
-      {linkRows.length > 0 ? (
+      {prints.links ? (
         <section className="doc-section">
           <h2>{heading('links', 'Short links')}</h2>
           <table className="doc-table">
@@ -750,7 +780,7 @@ export function PrintDocument({
       )}
 
       {/* Recommendations */}
-      {shown('recommendations') && (recs.length > 0 || (data.attention?.length ?? 0) > 0) && (
+      {prints.recommendations && (
         <section className="doc-section">
           <h2>{heading('recommendations', 'Recommendations')}</h2>
           {/* REPORT-RECOMMENDATION-BLOCKS-001 — the same blocks as the deck and the links, laid out open. */}

@@ -43,10 +43,11 @@ const base = {
   recommendations: [],
 }
 
+/* The generator's own order — objectives BEFORE platforms (CLIENT-FACING-PRESENTATION-001). */
 const outline = (over: Record<string, unknown>[] = []) => [
   { key: 'executive_summary', title_ar: 'الملخّص', title_en: 'Executive summary', present: true, absent_reason: null },
-  { key: 'platforms', title_ar: 'المنصات', title_en: 'Platform breakdown', present: true, absent_reason: null },
   { key: 'objectives', title_ar: 'الأهداف', title_en: 'Breakdown by objective', present: true, absent_reason: null },
+  { key: 'platforms', title_ar: 'المنصات', title_en: 'Platform breakdown', present: true, absent_reason: null },
   ...over,
 ]
 
@@ -55,8 +56,8 @@ describe('the printed document’s sections', () => {
     render(<PrintDocument data={{ ...base, outline: outline() } as never} currency="SAR" reportName="R" clientName="C" />)
 
     expect(screen.getByText('1. Executive summary')).toBeInTheDocument()
-    expect(screen.getByText('2. Platform breakdown')).toBeInTheDocument()
-    expect(screen.getByText('3. Breakdown by objective')).toBeInTheDocument()
+    expect(screen.getByText('2. Breakdown by objective')).toBeInTheDocument()
+    expect(screen.getByText('3. Platform breakdown')).toBeInTheDocument()
   })
 
   /**
@@ -66,6 +67,7 @@ describe('the printed document’s sections', () => {
   it('prints why a section is absent, and does not number it', () => {
     const withAbsent = [
       outline()[0]!,
+      outline()[1]!,
       {
         key: 'platforms',
         title_ar: 'المنصات',
@@ -74,15 +76,46 @@ describe('the printed document’s sections', () => {
         absent_reason: 'no_platform_reported_in_this_window',
         absent_reason_en: 'No platform reported figures in this window.',
       },
-      outline()[2]!,
     ]
 
     render(<PrintDocument data={{ ...base, platforms: [], outline: withAbsent } as never} currency="SAR" reportName="R" clientName="C" />)
 
     expect(screen.getByText('No platform reported figures in this window.')).toBeInTheDocument()
-    expect(screen.queryByText('2. Platform breakdown')).not.toBeInTheDocument()
-    // The objective split is the second thing actually printed, so it is numbered 2.
+    expect(screen.queryByText('3. Platform breakdown')).not.toBeInTheDocument()
+    expect(screen.queryByText('Platform breakdown', { exact: true })).toBeInTheDocument()
+    // The objective split is still the second thing printed; nothing after the absent section moves up into its place either.
     expect(screen.getByText('2. Breakdown by objective')).toBeInTheDocument()
+  })
+
+  /**
+   * The numbering is over what is PRINTED — and the generator's outline lists more than this
+   * document prints.
+   *
+   * `ReportStructure` emits `performance` second (and `findings` seventh) whenever a window has
+   * figures, and this document prints neither as a numbered section: the KPI block sits under the
+   * executive summary, and findings travel with the recommendations. Counting over the outline
+   * therefore printed «1. Executive summary» and then «3. Platform breakdown» on every real report
+   * — the «stepped over» defect this file was written against, in its other direction. The fixture
+   * above never showed it because its outline carried only the three keys the page prints.
+   */
+  it('numbers consecutively when the outline lists sections this document does not print', () => {
+    const generatorOrder = [
+      outline()[0]!,
+      { key: 'performance', title_ar: 'الأداء العام', title_en: 'Overall performance', present: true, absent_reason: null },
+      outline()[1]!,
+      outline()[2]!,
+      { key: 'findings', title_ar: 'النتائج', title_en: 'Findings', present: true, absent_reason: null },
+      { key: 'recommendations', title_ar: 'التوصيات', title_en: 'Recommendations', present: true, absent_reason: null },
+    ]
+
+    render(<PrintDocument data={{ ...base, outline: generatorOrder, recommendations: ['Shift budget to Meta.'] } as never} currency="SAR" reportName="R" clientName="C" />)
+
+    const numbered = screen
+      .getAllByRole('heading', { level: 2 })
+      .map((h) => h.textContent ?? '')
+      .filter((t) => /^\d+\. /.test(t))
+
+    expect(numbered).toEqual(['1. Executive summary', '2. Breakdown by objective', '3. Platform breakdown', '4. Recommendations'])
   })
 
   /** A snapshot written before the outline existed still prints, with its old headings. */
