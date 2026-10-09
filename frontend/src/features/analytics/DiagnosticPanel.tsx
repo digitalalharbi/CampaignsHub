@@ -55,6 +55,10 @@ const COPY: Record<string, { ar: string; en: string }> = {
     ar: 'هناك تحويلات بقيمة صفر. غالبًا لم تُرسل قيمة الشراء، لا أن الشراء بلا قيمة.',
     en: 'Conversions carry no value. Usually the value was never sent, not that it was zero.',
   },
+  value_refunded: {
+    ar: 'جزء كبير من الإيراد أُعيد كمرتجعات. المبيعات تحدث، لكن القيمة لا تبقى.',
+    en: 'A large share of the revenue came back as refunds. Sales are happening; the value is not staying.',
+  },
 }
 
 /**
@@ -86,6 +90,10 @@ const ACTION_COPY: Record<string, { ar: string; en: string }> = {
   conversions_without_value: {
     ar: 'أرسل قيمة الشراء مع حدث التحويل — التحويلات مسجَّلة بقيمة صفر.',
     en: 'Send the purchase value with the conversion event — conversions are recorded with no value.',
+  },
+  value_refunded: {
+    ar: 'راجع أسباب المرتجعات في المتجر — المنتج، التوصيل، أو الوصف — قبل تغيير الإنفاق.',
+    en: 'Look at why orders are refunded in the store — the product, the delivery, or the listing — before changing spend.',
   },
   /*
    * The action is about the FORM and the audience, not about spending less.
