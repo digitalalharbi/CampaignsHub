@@ -96,6 +96,8 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   lead_follow_up_overdue: { ar: 'متابعة متأخرة', en: 'Follow-up overdue' },
   /* Same wording as the taxonomy option the picker reads — one name for one type. */
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
+  sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
+  measurement_outage: { ar: 'انقطاع القياس (GA4)', en: 'Measurement outage (GA4)' },
 }
 
 const sevClass: Record<AlertEvent['severity'], string> = {
