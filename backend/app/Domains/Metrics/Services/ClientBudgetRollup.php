@@ -32,14 +32,24 @@ final class ClientBudgetRollup
 {
     /**
      * @param  list<array<string, mixed>>  $rows  campaign rows from `MetricsAggregator::budgetPacing()`
-     * @return array{budget: float|null, spent: float|null, remaining: float|null, projected: float|null, pace: float|null, currency: string|null, currencies: int, excluded: int, campaigns: int}
+     * @return array{budget: float|null, spent: float|null, remaining: float|null, projected: float|null, pace: float|null, currency: string|null, currencies: int, excluded: int, unmeasured: int, campaigns: int}
      */
     public function of(array $rows): array
     {
+        /*
+         * Counted by name, not filed under «excluded»: a campaign whose project's window holds no
+         * measured row has no figure (Owner directive 2026-10-09 §19), which is a different fact from
+         * a campaign with no budget or a budget in another currency — and the reader is told which.
+         */
+        $unmeasured = count(array_filter(
+            $rows,
+            static fn (array $r): bool => ($r['pacing_basis'] ?? null) === 'nothing_measured_in_window',
+        ));
+
         $empty = [
             'budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null,
             'pace' => null, 'currency' => null, 'currencies' => 0, 'excluded' => 0,
-            'campaigns' => count($rows),
+            'unmeasured' => $unmeasured, 'campaigns' => count($rows),
         ];
 
         $usable = array_values(array_filter(
@@ -47,22 +57,49 @@ final class ClientBudgetRollup
             static fn (array $r): bool => ($r['pacing_basis'] ?? null) === 'comparable' && (float) ($r['budget'] ?? 0) > 0,
         ));
 
-        $excluded = count($rows) - count($usable);
+        /*
+         * Committed money counts whether or not it has started moving. A campaign whose window holds
+         * no measured row still holds its budget — what is unknown is its SPEND, not its commitment —
+         * so its budget joins the client's committed total and its currency joins the comparability
+         * check, while spend, remaining and pace are stated only when every part of them is measured.
+         */
+        $committed = array_values(array_filter(
+            $rows,
+            static fn (array $r): bool => ($r['pacing_basis'] ?? null) === 'nothing_measured_in_window' && (float) ($r['budget'] ?? 0) > 0,
+        ));
 
-        if ($usable === []) {
+        $excluded = count($rows) - count($usable) - $unmeasured;
+
+        if ($usable === [] && $committed === []) {
             return ['excluded' => $excluded] + $empty;
         }
 
         $currencies = array_values(array_unique(array_filter(array_map(
             static fn (array $r): string => strtoupper((string) ($r['budget_currency'] ?? '')),
-            $usable,
+            [...$usable, ...$committed],
         ))));
 
         if (count($currencies) > 1) {
             return ['currencies' => count($currencies), 'excluded' => $excluded] + $empty;
         }
 
-        $budget = array_sum(array_map(static fn (array $r): float => (float) $r['budget'], $usable));
+        $budget = array_sum(array_map(static fn (array $r): float => (float) $r['budget'], [...$usable, ...$committed]));
+
+        if ($committed !== []) {
+            return [
+                'budget' => round($budget, 2),
+                'spent' => $usable === [] ? null : round(array_sum(array_map(static fn (array $r): float => (float) ($r['spent'] ?? 0), $usable)), 2),
+                'remaining' => null,
+                'projected' => null,
+                'pace' => null,
+                'currency' => $currencies[0] ?? null,
+                'currencies' => count($currencies),
+                'excluded' => $excluded,
+                'unmeasured' => $unmeasured,
+                'campaigns' => count($rows),
+            ];
+        }
+
         $spent = array_sum(array_map(static fn (array $r): float => (float) ($r['spent'] ?? 0), $usable));
 
         /*
@@ -89,6 +126,7 @@ final class ClientBudgetRollup
             'currency' => $currencies[0] ?? null,
             'currencies' => count($currencies),
             'excluded' => $excluded,
+            'unmeasured' => $unmeasured,
             'campaigns' => count($rows),
         ];
     }

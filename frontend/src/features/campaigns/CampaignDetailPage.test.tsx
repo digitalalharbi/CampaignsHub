@@ -81,6 +81,24 @@ describe('CampaignDetailPage', () => {
     expect(await screen.findByText('National Day')).toBeInTheDocument()
   })
 
+  /**
+   * Owner directive 2026-10-09 §7, §14 — the campaign's figures before its navigation.
+   *
+   * The related-entities panel (platforms, ad accounts, ad sets, ads, creatives, alerts, reports)
+   * sat between the header and the tabs: at 1366×768 the first viewport was the config header plus
+   * 273 px of counts, with the performance tab at 768 px. The panel is a drill-down index — useful,
+   * and second. Asserted as DOM order so it cannot drift back above the tabs.
+   */
+  it('shows the tabs and their figures before the related-entities index', async () => {
+    signInWith(['campaigns.view'])
+    renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
+    const related = await screen.findByTestId('related-entities')
+    /* The page's own tabs are the first tablist; the range tabs inside a panel are tablists too. */
+    const tabs = screen.getAllByRole('tablist')[0]!
+
+    expect(Boolean(tabs.compareDocumentPosition(related) & Node.DOCUMENT_POSITION_FOLLOWING), 'the related-entities index is drawn before the tabs').toBe(true)
+  })
+
   it('pause action is gated by campaigns.pause and calls the API', async () => {
     signInWith(['campaigns.view']) // can view, cannot pause
     const view = renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)

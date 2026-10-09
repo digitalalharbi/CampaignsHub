@@ -798,3 +798,93 @@ unreported); `ANALYTICS-FILTER-TRUTH-001` (propagation sweep per surface, read a
 cell's LAST paragraph is the claim (never prepend, never file prose in the Commit column);
 `getByText().first()` on ReportsPage hits the hidden phone card; `getByRole('option')` is
 page-wide; an XPath union's `.first()` is the OUTERMOST ancestor.
+
+---
+
+## Addendum — 2026-10-09, Track B unit on `ch-budget` (`feat/live-experience-b1`)
+
+**Lane.** #626 → #627 → #628 → #629 → #630 (`a704de0f`) → #631 (`bf2059c9`) merged and deployed;
+production bundle `index-BNMmpyVv.js` (unchanged by #630/#631, both backend/e2e/seed), API health 200
+after each deploy. #631 needed one fix after CI: `DemoIntegrationsSeeder` re-targeted the whole
+integration chain at the Scale project («most campaigns» rule) — now by name
+(`DemoAnalyticsSeeder::STORE_PROJECT`, `DemoIntegrationsSeederTargetTest`). Queue now, in order:
+ch-rmfmt (`feat/report-outline-browser-evidence`, pushed, PR opening), ch-brand
+(`feat/diagnostic-refund-arm`), this branch, then ch-font (`feat/adset-rung-evidence`, Track A:
+ad-set rung evidence, ads terminology, KPI/table/governance closes) — all rebased onto `bf2059c9`.
+Each is rebased onto the main of its turn before push; the matrix resolver script in the scratchpad
+merges rows per cell.
+
+**Production hosts.** `https://campaignshub.io/` (SPA, served bundle) and
+`https://api.campaignshub.io/api/v1/health`. `app.campaignshub.io` is NXDOMAIN — a probe against it
+reads as a network failure and is not one.
+
+**This branch.** `docs/LIVE_ROUTE_CHECKLIST.md` had every grouped route REVIEWED or IMPROVED (26 + 5); the
+Owner's correction (§F) split the groups into their sub-routes, and nine of those — a creative with media, the
+request detail, the client space picker and four client detail pages, the admin settings sub-pages, three
+account pages — are NOT_REVIEWED and stay so until opened. Improvements, each with before/after measurements in its commit: dashboard order +
+unmeasured-window pacing truth, StatCard/StatGrid density, PageIntro KPI row on StatGrid (+ two
+columns at phone width), Portfolio wrap at 768, campaign detail (related index below the tabs),
+content detail (stage sized by state, figures above identity), Team (identity | access row), project
+integrations (catalogue three abreast). `e2e/first-viewport-sweep.spec.ts` now names first-screen
+blocks for the reviewed routes and carries 13 operator surfaces + the advertiser's spend limits.
+
+**Preview stack for this branch.** `b1-api` (8000) / `b1-web` (5173) in `.claude/launch.json`
+against `campaignshub_preview`; `DemoAccountsSeeder` was run there, so `advertiser@campaignshub.io`
+exists alongside `agency@`, `client@`, `admin@campaignshub.io` (all `password`). Browser tab `tab-3`.
+
+**Pre-push gate for this branch.** Full vitest 473 files / 3,372 passed on the final state; `tsc -b`
+clean; `first-viewport-sweep.spec.ts` chromium 166/166 (named + new surfaces), firefox 230/230 and
+webkit 230/230 (whole file); `first-viewport-detail.spec.ts` (campaign + creative detail, 32 cases)
+found the campaign detail scrolling sideways 364 px at 390 — the related-entities grid lacked a base
+column rule — fixed (`b0251d6f`), chromium 38/38 after, firefox + webkit re-run in flight;
+`platform-decision.spec.ts` 9/9 on all three. Rebased onto `bf2059c9` (#631): `tsc -b` clean, vitest 474
+files / 3,376 passed, matrix guard 19/19; push after ch-brand lands, per the single lane.
+
+**Matrix census caveat.** Counted on this branch's copy (based on `a46626fc`): 517 VERIFIED, 55
+IMPLEMENTED_NOT_VERIFIED, 31 PARTIAL, 15 IN_PROGRESS, 23 BLOCKED_EXTERNAL_CREDENTIALS, 10
+BLOCKED_OPERATIONAL_EVIDENCE. Several of those open rows are already closed on the queued branches
+(REPORT-CREATION-UX-001, UX-MULTISELECT-SCALE-001, REPORT-SCOPE-SELECTION-001, REPORT-CONTENT-BROWSER-001
+on ch-req; REPORT-DETAIL-PARITY-001 and SHARE-PREVIEW-CLIENT-IDENTITY-001 on #630; BRANDING rows on
+#629); the true count is the one on main after the queue lands.
+
+**Matrix status discipline, same unit (commits `6a6bd1f1` → `cf2c8082`).** Fifty-four rows that had
+sat IMPLEMENTED_NOT_VERIFIED / PARTIAL / IN_PROGRESS with their last paragraph already naming an
+Owner-only or credential-bound step were moved onto that word: 14 VERIFIED on served-bundle markers
+(`index-BNMmpyVv.js`), Production headers (`/auth/me` → `no-store`) or the live review; 27
+BLOCKED_OPERATIONAL_EVIDENCE; 13 BLOCKED_EXTERNAL_CREDENTIALS (GA4-INTEGRATION-001 among them — the
+matrix has no AWAITING_CREDENTIALS word; the note carries it). Census on this branch afterwards:
+529 VERIFIED · 39 BOE · 37 BEC · 27 PARTIAL · 16 IN_PROGRESS · 4 INV, before the queued branches
+land their own closes. The rows still internally executable are real work, not status: the
+movement-pill/sparkline clauses of UX-KPI-PRESENTATION-001, the TABLE view of
+CONTENT-BROWSER-PARITY-001, account contribution in PLATFORM-DECISION-ANALYTICS-001, the ad-set grain
+seed for OBJECTIVE-ANALYTICS-DEPTH-001, the executive drill-down, REPORT-RECOMMENDATION-BLOCKS-001's
+1440/390 browser pass, ADS-TERMINOLOGY-001's remaining prose, DATA-QUALITY's stated confidence, the
+rest of PRODUCTION-TRUTH-AUDIT-001's list, and DASH-010 (closes on this PR's three-browser sweep).
+
+**#632 (ch-rmfmt) webkit gate, 2026-10-09 19:28.** Five checks green; webkit failed two «rail link opens a
+page» cases (`/agency/tasks` goto never reached `load` in 330 s; `/agency/team` «did not render»). Artifact:
+`#root present, 0 children, document complete`, console «WebKit encountered an internal error» — the browser,
+not the page; chromium/firefox passed the same specs in the run, and both routes passed 16 webkit combos
+locally in this session. Re-ran the failed job only (`gh run rerun 37952762111 --failed`).
+
+**Full backend on this branch after the rebase (4,573 passed, 2 failed) → `026f0ed2`.** The two failures were
+budget tests encoding the earlier reading (an unread project's unstarted campaign = spent 0; a client rollup that
+dropped an unmeasured campaign's committed budget). `ClientBudgetRollup` now counts committed budget over every
+same-currency row, sums spend over measured rows only, and withholds remaining/projection/pace while any row is
+unmeasured; the tests carry the directive's rule with the measured zero kept as its own case. Budget group 32/32;
+the second full backend run: 4,576 passed, 1 skipped (27,660 assertions). Branch ready to push when its lane turn comes.
+
+**#632 (ch-rmfmt) merged `c9b560d6`, deployed 20:20 (success).** Served bundle moved to `index-50K4Qvi0.js`
+(outline markers present), API health 200. #633 (ch-brand, `feat/diagnostic-refund-arm`) opened at
+https://github.com/digitalalharbi/CampaignsHub/pull/633; this branch and ch-font rebased onto `c9b560d6`
+(RESUME_STATE both-append conflicts resolved by union, matrix rows by the per-cell resolver; guards 19/19).
+
+**#633 (ch-brand) webkit gate, 2026-10-09 20:3x.** Five checks green; the webkit job failed BEFORE any test:
+«browser install attempt 1/2/3 stalled or failed», «Installation process exited with code: 100», «browser install
+failed three times; the runner could not reach its package mirror», exit 1. No test ran, so nothing on the branch
+was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
+
+**#633 (ch-brand) merged `8cda29cb`, deployed 21:53 (success).** Served bundle `index-CN4fzIyM.js` carries the
+refund arm (`value_refunded`, `filter_scope`); API health 200; ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 VERIFIED on
+that. The lane is clear: this branch (`feat/live-experience-b1`) pushes now; ch-font (`feat/adset-rung-evidence`)
+follows it.

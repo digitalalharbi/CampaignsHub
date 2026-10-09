@@ -100,6 +100,12 @@ export interface ClientBudgetRow {
   currencies: number
   excluded: number
   /**
+   * Campaigns whose project's window holds no measured row — not a zero, an absence (Owner directive
+   * 2026-10-09 §19). Counted by name so the dashboard can say «no measured figures in this period»
+   * where it used to pace an unmeasured client at 0.00×.
+   */
+  unmeasured?: number
+  /**
    * BUDGET-GOVERNANCE-001 — the PROJECT rung: which of the client's projects the money is in.
    *
    * The client row carried a project COUNT, so a client pacing at 1.4× named nothing responsible for

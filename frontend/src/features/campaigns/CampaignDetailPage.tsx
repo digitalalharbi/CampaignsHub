@@ -236,7 +236,7 @@ export function CampaignDetailPage() {
       disabled={!canUpdate || classifyMutation.isPending}
       value={value ?? ''}
       onChange={(e) => classifyMutation.mutate({ [field]: e.target.value } as never)}
-      className="rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold text-text-primary disabled:opacity-60"
+      className="max-w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold text-text-primary disabled:opacity-60"
     >
       <option value="">{t('cmc_not_set')}</option>
       {keys.map((k) => <option key={k} value={k}>{toLabel(k)}</option>)}
@@ -329,8 +329,6 @@ export function CampaignDetailPage() {
       </Card>
 
       {actionError && <Alert severity="danger" title={actionError} />}
-
-      <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
 
       <Tabs items={tabs} active={tab} onChange={setTab} />
 
@@ -477,6 +475,13 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
+      {/*
+        Owner directive 2026-10-09 §7, §14 — the figures before the index. This panel is the campaign's
+        drill-down map (platforms, ad accounts, ad sets, ads, creatives, alerts, reports); it used to
+        sit between the header and the tabs and put the performance tab at 768 px on a 1366×768 screen.
+      */}
+      <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
+
       <CampaignFormModal open={editOpen} onClose={() => setEditOpen(false)} projectId={projectId} campaign={c} />
       <LinkExternalModal open={linkOpen} onClose={() => setLinkOpen(false)} projectId={projectId} campaignId={campaignId} />
     </section>
@@ -485,9 +490,13 @@ export function CampaignDetailPage() {
 
 function HeaderFact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    /* `min-w-0` on the cell and `max-w-full` on what it holds: a native select is sized by its
+       longest option, and a grid cell that may not shrink below it widened the whole document by
+       364 px at 390 — the page scrolled sideways while the tab strip, which scrolls inside its own
+       box, took the blame in the sweep's report. */
+    <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-[11px] uppercase tracking-wide text-text-muted">{label}</span>
-      <span className="text-sm font-semibold text-text-primary">{children}</span>
+      <span className="min-w-0 max-w-full text-sm font-semibold text-text-primary">{children}</span>
     </div>
   )
 }

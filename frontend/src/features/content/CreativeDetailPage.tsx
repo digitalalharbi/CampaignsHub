@@ -399,7 +399,14 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
 
       {/* ---- the asset itself ---------------------------------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">
-        <div className="flex min-h-64 items-center justify-center overflow-auto rounded-md bg-surface-secondary p-3">
+        {/* The frame is sized for what it holds. A still or a film gets a stage; an absence gets its
+            one sentence and no more — at 1366×768 an empty 256 px stage pushed the creative's own
+            figures off the first screen, which is the opposite of what a reader without media needs. */}
+        <div
+          data-testid="creative-media-frame"
+          data-state={showing}
+          className={`flex items-center justify-center overflow-auto rounded-md bg-surface-secondary p-3 ${showing === 'none' ? 'min-h-20' : 'min-h-64'}`}
+        >
           {showing === 'video' && film ? (
             <CreativeVideoPlayer
               /* Keyed by the CREATIVE, not the file: two creatives sharing one asset produce an
@@ -435,12 +442,12 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
              * ONE short state, not a paragraph — the platform composes the creative per product at
              * delivery, so there is no fixed asset to have fetched.
              */
-            <div className="max-w-md p-6 text-center" data-testid="creative-catalog-state">
+            <div className="max-w-md p-3 text-center" data-testid="creative-catalog-state">
               <p className="text-sm font-medium text-text-primary">{t.catalogTitle}</p>
               <p className="mt-1 text-xs text-text-secondary">{t.catalogWhy}</p>
             </div>
           ) : (
-            <div className="max-w-md p-6 text-center text-sm text-text-secondary">
+            <div className="max-w-md p-3 text-center text-sm text-text-secondary">
               <p className="font-medium">{t.noPreview}</p>
               {/* The REASON, not a shrug: «expired» and «the platform does not expose this» call for
                   completely different actions, and one grey box asks for neither. */}
@@ -489,6 +496,25 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
 
       {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
       <CreativeCarousel preview={creative.preview} locale={locale} />
+
+      {/* ---- the figures first: the question this page answers (directive §7) ---------------- */}
+      <section className="rounded-lg border border-border bg-surface p-4">
+        <h2 className="text-sm font-semibold text-text-primary">{t.figures}</h2>
+        <p className="mt-1 text-xs text-text-secondary">{t.figuresHint}</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {data.headline_metrics.map((key) => (
+            <MetricBlock
+              key={key}
+              metricKey={key}
+              metrics={metrics}
+              previous={data.previous}
+              locale={locale}
+              currency={currency}
+              changeLabel={t.change}
+            />
+          ))}
+        </div>
+      </section>
 
       {/* ---- what it is, and where the figures came from ------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">
@@ -553,25 +579,6 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           </dl>
         </section>
       )}
-
-      {/* ---- the figures this creative was bought to move -------------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-text-primary">{t.figures}</h2>
-        <p className="mt-1 text-xs text-text-secondary">{t.figuresHint}</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {data.headline_metrics.map((key) => (
-            <MetricBlock
-              key={key}
-              metricKey={key}
-              metrics={metrics}
-              previous={data.previous}
-              locale={locale}
-              currency={currency}
-              changeLabel={t.change}
-            />
-          ))}
-        </div>
-      </section>
 
       {/* ---- the funnel, with only the steps the platform sent --------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">

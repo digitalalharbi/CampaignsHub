@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { StatCard, type StatTone } from '@/components/ui/StatCard'
+import { StatCard, StatGrid, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
 import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
@@ -299,7 +299,9 @@ export function AgencyDashboardPage() {
         </span>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
+      <div className="mb-4">
+      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <Metric
           to="/agency/clients"
           label={ar ? 'العملاء' : 'Clients'}
@@ -336,20 +338,19 @@ export function AgencyDashboardPage() {
           icon={Inbox}
           tone="warning"
         />
+      </StatGrid>
       </div>
 
       {/*
-        The shape of the book before its parts: full width, because a composition bar is one row tall
-        and reads worse the narrower it gets — a segment holding 4% of 24 clients is a sliver at 340px.
+        Owner directive 2026-10-09 §11, and the standing feature-first rule: the Dashboard's one
+        question is «what needs attention now?», so the answer comes before anything that merely
+        describes the estate. The attention block and the client pace — the operational signals —
+        open the page; the client-mix bar, the objective chart and the creative section follow.
+        The page used to draw two charts first and put the attention block at the fold, with the
+        money signals three thousand pixels down behind the creative section.
       */}
-      <div className="mb-4">
-        <ClientMix clients={d.clients} ar={ar} />
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-2">
-        <ObjectiveBreakdown data={d.campaigns} ar={ar} />
-
-        <section className="rounded-2xl border border-border bg-surface p-5">
+        <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="font-heading text-lg font-extrabold text-text-primary">
             {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
           </h2>
@@ -380,8 +381,19 @@ export function AgencyDashboardPage() {
             />
           </ul>
         </section>
+        <div>
+          <ClientPace rows={budgets.data ?? []} ar={ar} />
+        </div>
       </div>
-
+      <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
+      {/*
+        The shape of the book: full width, because a composition bar is one row tall and reads worse
+        the narrower it gets — a segment holding 4% of 24 clients is a sliver at 340px.
+      */}
+      <div className="mt-4 mb-4">
+        <ClientMix clients={d.clients} ar={ar} />
+      </div>
+      <ObjectiveBreakdown data={d.campaigns} ar={ar} />
       {/*
         §15.11 — the creative section, over the clients this operator actually reaches.
 
@@ -397,17 +409,6 @@ export function AgencyDashboardPage() {
           filters={AGENCY_WINDOW}
         />
       </div>
-
-      {/*
-        BUDGET-GOVERNANCE-001 — the CLIENT rung: «which client is overspending».
-
-        DATA → VISUAL → COMPARISON: one row per client, sorted by committed budget, with the pace
-        against it. Nothing here is a second budget engine — the figures are the same aggregator's,
-        rolled up per client through the same rules the campaigns overview applies per project.
-      */}
-      <ClientPace rows={budgets.data ?? []} ar={ar} />
-
-      <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
 
     </div>
   )
@@ -474,6 +475,9 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
     .filter((r) => r.pace !== null && Number.isFinite(r.pace) && (r.pace as number) >= 0 && r.currencies <= 1)
     .map((r) => ({ id: r.client_id, label: r.client_name, value: r.pace as number }))
   const withheld = rows.length - drawable.length
+  /* Owner directive 2026-10-09 §19 — an unmeasured window is named as such, not folded into «no budget». */
+  const unmeasured = rows.filter((r) => (r.unmeasured ?? 0) > 0 && r.pace === null).length
+  const otherWithheld = withheld - unmeasured
 
   return (
     <section className="mt-6">
@@ -490,11 +494,18 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
           reference={1}
           referenceLabel={ar ? 'على الميزانية' : 'On budget'}
         />
-        {withheld > 0 && (
+        {unmeasured > 0 && (
+          <p data-testid="client-pace-unmeasured" className="mt-3 text-sm text-text-muted">
+            {ar
+              ? `${num(unmeasured)} من العملاء بلا أرقام مقاسة في هذه الفترة — لم تُقرأ أي بيانات من مصادرهم، فلا سرعة تُحسب.`
+              : `${num(unmeasured)} client(s) have no measured figures in this period — nothing was read from their sources, so no pace is stated.`}
+          </p>
+        )}
+        {otherWithheld > 0 && (
           <p data-testid="client-pace-withheld" className="mt-3 text-sm text-text-muted">
             {ar
-              ? `${num(withheld)} من العملاء بلا سرعة قابلة للمقارنة — إمّا بلا ميزانية معتمدة أو بميزانية بعملات مختلفة.`
-              : `${num(withheld)} client(s) have no comparable pace — either no committed budget, or a budget held in more than one currency.`}
+              ? `${num(otherWithheld)} من العملاء بلا سرعة قابلة للمقارنة — إمّا بلا ميزانية معتمدة أو بميزانية بعملات مختلفة.`
+              : `${num(otherWithheld)} client(s) have no comparable pace — either no committed budget, or a budget held in more than one currency.`}
           </p>
         )}
       </ChartCard>
@@ -548,6 +559,11 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
               </button>
             ) : (
               <span className="font-semibold text-text-primary">{r.client_name}</span>
+            )}
+            {(r.unmeasured ?? 0) > 0 && (
+              <span className="text-[11px] text-text-muted" data-testid={`client-budget-unmeasured-${r.client_id}`}>
+                {ar ? 'لا أرقام مقاسة في هذه الفترة' : 'No measured figures in this period'}
+              </span>
             )}
             {/* No silent caps — what the total left out is said where the total is read. */}
             {r.excluded > 0 && (

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { StatGrid } from '@/components/ui/StatCard'
 import { PAGE_TITLE } from '@/styles/scale'
 import { RefreshCw } from 'lucide-react'
 
@@ -101,9 +102,14 @@ export function PageIntro({
         A KPI row that cannot shrink is the other common cause of a page that scrolls sideways, and
         this one sits above the fold where that is most visible.
       */}
+      {/*
+        The shared grid — Owner directive 2026-10-09 §8. These rows never carry a sparkline, so the
+        cards reserve no row for one; a page-local grid kept them outside that decision and every
+        hero KPI stood 174 px tall for 36 px of nothing. The page rhythm (two by two, then four) stays.
+      */}
       {kpis && (
-        <div data-testid={testid ? `${testid}-kpis` : undefined} className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {kpis}
+        <div data-testid={testid ? `${testid}-kpis` : undefined} className="min-w-0">
+          <StatGrid columns="grid-cols-2 lg:grid-cols-4">{kpis}</StatGrid>
         </div>
       )}
     </header>
