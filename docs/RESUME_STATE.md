@@ -888,3 +888,15 @@ was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
 refund arm (`value_refunded`, `filter_scope`); API health 200; ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 VERIFIED on
 that. The lane is clear: this branch (`feat/live-experience-b1`) pushes now; ch-font (`feat/adset-rung-evidence`)
 follows it.
+
+**§A foundation on `feat/campaign-management-domain` (ch-rmfmt) → `6736baf6`, 2026-10-09 23:13.** The Owner's
+campaign-management rule as code: `WriteCapabilityRegistry` (7 providers × 14 capabilities, each with its gating
+permission; four statuses; VERIFIED refused without a Production round-trip reference; NO X ADS pinned),
+`GET projects/{project}/campaign-management/capabilities` (campaigns.view), `ProviderWriteGate` (draws a provider
+write only when the server says allowed for this reader) and `CampaignWriteControl` on the campaign's new Settings
+tab — 98 cells, every one «غير منفَّذ» today, no button. Evidence: gate test 6/6 (427 assertions), vocabulary guard
+2/2, Vitest 5/5, tsc -b clean, chromium gate 8 passed (campaign-write-control.spec.ts), live at 1366 and 390 on
+the rm-web preview (:5231/:8131, DB campaignshub_preview). The 390 overflow (100px) is the detail-layout shift #634
+fixes — identical on the audience tab of this base. Matrix rows CAMPAIGN-MGMT-DOMAIN-001/-SURFACE-001 move only
+after the ledger PR (ch-req) merges, so the row edits land on the rows themselves. Lane after #634: ch-font →
+ledger → B6 → this branch.
