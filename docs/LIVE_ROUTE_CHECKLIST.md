@@ -46,7 +46,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | Route | Surface | Status | Evidence |
 |---|---|---|---|
 | `/agency/email` | Email settings / schedules | NOT_REVIEWED | |
-| `/agency/alerts` | Alerts | NOT_REVIEWED | |
+| `/agency/alerts` | Alerts | REVIEWED | **1366×768, ar, dark — empty state.** Overflow 0; page 768 px. First screen: h1, the alerts/rules/preferences/log tabs, four summary KPIs (open 0, critical 0, snoozed 0, resolved 0, each with its own empty sentence rather than a bare zero), the filter row (search, status, project, severity) and the ledger's honest empty state «لا تنبيهات مفتوحة». Nothing changed on this route; data-rich state not reachable on the preview estate (no rule fired), which the sweep records as an empty-state review. KPI row 174 px (hero grid). |
 | `/agency/notifications` | Notifications | NOT_REVIEWED | |
 
 ## B7 — remaining operational surfaces
