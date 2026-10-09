@@ -102,9 +102,19 @@ install that still names it as `SUBSCRIPTION_PROVIDER`.
 
 ## 2. Advertising platforms
 
-All of them are **`BLOCKED_EXTERNAL_CREDENTIALS`**. Each adapter is complete and read-only: semantic
-metric mapping, pagination, absent-is-never-zero, idempotent sync, fixtures. **No OAuth round trip
-has ever been made for any of them.**
+Each adapter is complete and read-only: semantic metric mapping, pagination, absent-is-never-zero,
+idempotent sync, fixtures.
+
+**The blanket sentence that used to stand here — «No OAuth round trip has ever been made for any of
+them» — is no longer true, and leaving it would have been the worse error.** Per
+`docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, **Meta** and **Snapchat** have both completed a real
+authorisation, account discovery, a binding and live syncs on production, with run ids and row
+counts recorded there (Meta, 2026-09-06: structure `success records=58`, metrics `stored 317`;
+Snapchat: 3,420 rows). That evidence is the matrix's, cited here rather than re-claimed.
+
+The rest are **`BLOCKED_EXTERNAL_CREDENTIALS`**, and which of them is configured on THIS install is
+a question only the install can answer: `/admin` → provider readiness reports it per provider. Do
+not read a state for your install out of this table.
 
 | Provider | Env |
 |---|---|
@@ -243,7 +253,7 @@ date its own merchant sold it on. Both facts are stored; neither overwrites the 
 | Apple sign-in | `BLOCKED_EXTERNAL_CREDENTIALS` | `APPLE_CLIENT_ID` · `APPLE_TEAM_ID` · `APPLE_KEY_ID` · `APPLE_PRIVATE_KEY` · `APPLE_REDIRECT_URI` |
 | Email delivery | `BLOCKED_EXTERNAL_CREDENTIALS` | SMTP, or `POSTMARK_API_KEY` / `RESEND_API_KEY` |
 | SMS / WhatsApp | `BLOCKED_EXTERNAL_CREDENTIALS` | Per `config/providers.php`; `Null*` adapters are the default |
-| GA4 | **Not integrated** | — |
+| Google Analytics 4 | `AWAITING_CREDENTIALS` | `GA4_CLIENT_ID` · `GA4_CLIENT_SECRET` — **its own OAuth client, not Google Ads'** · see §4a |
 
 **Email is the one to read carefully.** The whole notification system — digests, alerts, report-ready
 messages, invitations, account mail — is built, scheduled, deduplicated by database constraint and
@@ -251,7 +261,102 @@ rendered in both languages. With no provider the delivery state is `awaiting_cre
 `sent_at` stays null. **Nothing is ever recorded as «sent» without a provider acknowledgement**, and
 that is enforced by tests, not by convention.
 
-GA4 appears in no config and has no adapter. It is not «awaiting credentials»; it does not exist.
+GA4 is now integrated as a **measurement** source and has its own section below — §4a. The line
+that used to stand here («GA4 appears in no config and has no adapter… it does not exist») was true
+when it was written and is not true any more; it is replaced rather than left for somebody to act on.
+
+---
+
+## 4a. Google Analytics 4 — a MEASUREMENT source, not an advertising platform (`GA4-INTEGRATION-001`)
+
+Added 2026-10-09. **State: `AWAITING_CREDENTIALS`.** The catalogue entry, the consent journey, property
+discovery, property selection, the Data API read, the four-hourly sweep, the Connection Hub section and
+the client-report section all exist and are tested. No OAuth client exists for this install, so no live
+property has ever been discovered, read or reported — and nothing here may be called verified until one
+has.
+
+### What GA4 is NOT, in this product
+
+It is a third `ProviderKind`, and the separation is load-bearing rather than tidy:
+
+- It is **not** in `AdvertisingConnectorRegistry` and not among `ProviderCatalogue::ofKind(Advertising)`.
+- It does **not** appear on the Connection Hub, which is the paid-media board. It has its own section
+  on `/app/integrations`, below paid media and below commerce.
+- Its figures are **never** added to, divided by, or shown as one number with an ad platform's. GA4
+  measures the client's own site under GA4's attribution; an ad platform reports what IT believes its
+  ads caused. A blended return from the two is a number that is true of neither.
+- It is **not** counted as a connected advertising platform in any «which platforms are connected»
+  answer, and it consumes no ad-account quota.
+
+### The two credentials, and why they are GA4's own
+
+| | |
+|---|---|
+| Env | `GA4_CLIENT_ID` · `GA4_CLIENT_SECRET` |
+| Config | `config/measurement_platforms.php` (its own file, like `commerce_platforms.php`) |
+| Scope requested | `https://www.googleapis.com/auth/analytics.readonly` — **this one only** |
+| Redirect URI | `{APP_URL}/api/v1/oauth/measurement/ga4/callback` — on production, `https://api.campaignshub.io/api/v1/oauth/measurement/ga4/callback` |
+| Webhook | **None.** GA4 publishes no webhook; it is polled (`WebhookSupport::PollingOnly`) |
+
+**Do not reuse the Google Ads client.** They are different consent screens asking for different
+scopes: a customer connecting Analytics would be asked for advertising access, and revoking one would
+silently break the other.
+
+### What the Owner must do, in order
+
+1. **Google Cloud project** — use an existing one or create one. Enable **both**:
+   - Google Analytics **Admin** API (property discovery)
+   - Google Analytics **Data** API (the reporting read)
+
+   Enabling only the Data API is the common half-step. Discovery then fails with «Admin API has not
+   been used», which the product reports as a refusal — never as «no properties found».
+
+2. **OAuth consent screen** — publish it, requesting **only** `analytics.readonly`. Google reviews
+   this scope; a wider request (`analytics.edit`, `analytics.manage.users`) both delays review and puts
+   a claim in front of your customers that this product may change their Analytics configuration. It
+   cannot and must not ask to.
+
+3. **OAuth client** — type **Web application**. Add the redirect URI above **byte for byte**. Copy the
+   client id and secret.
+
+4. **Put them in the environment** on the API host: `GA4_CLIENT_ID`, `GA4_CLIENT_SECRET`. Never in the
+   repository. Or store them through `/admin` → provider configuration, which encrypts them at rest and
+   takes precedence over the environment.
+
+5. **Connect, as a tenant:** `/app/integrations` → **التحليلات والقياس** → «ربط أناليتكس». Google's own
+   consent screen appears; the returning browser lands back on the integrations page with the number of
+   properties discovered.
+
+6. **Select one property per project.** Discovery selects NOTHING — an agency's Google account commonly
+   reaches dozens of clients' properties, and syncing what it can see would pull one client's web
+   analytics into another client's project. Choose the project in the section's selector, then press
+   «اختر لهذا المشروع».
+
+7. **Press «اقرأ الآن»** on the selected property. The first read is also what teaches the product the
+   property's **timezone** and **currency** — discovery deliberately does not ask, so a never-read
+   property honestly says «يُعرف عند أول قراءة» rather than being shown a guessed UTC.
+
+8. **Turn the report section on** where you want it. `site_measurement` is **off by default** on
+   client-facing reports: an operator who shows a client their site measurement beside the campaigns'
+   figures is choosing to explain the difference, and that choice is deliberately theirs.
+
+### What proves it, and what does not
+
+A completed consent is not proof. For `GA4-INTEGRATION-001` to move past
+`IMPLEMENTED_NOT_VERIFIED` the whole chain has to be observed on a real property: consent →
+properties discovered → one selected → a read that returns days → those days on a client report, in
+the property's own timezone, with the property's own currency on its revenue and with the ad
+platforms' KPI revenue **unchanged** by it.
+
+### Two things to expect, so they are not read as faults
+
+- **A refresh token arrives only on the FIRST consent.** Google issues it when the authorise URL asks
+  for `access_type=offline` and `prompt=consent` together — which it does — and omits it from every
+  later refresh response. The stored one is kept for that reason.
+- **The Data API meters in TOKENS per property per day, not requests.** A wide report costs more than
+  a narrow one, and exhaustion arrives as `RESOURCE_EXHAUSTED`. That is why the sweep is four-hourly
+  rather than half-hourly, why the manual read is throttled, and why a backfill is capped at 365 days
+  per request. The product reports the refusal; it never writes the exhausted day down as zeros.
 
 ---
 

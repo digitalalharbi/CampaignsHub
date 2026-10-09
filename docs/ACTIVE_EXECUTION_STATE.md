@@ -2,6 +2,57 @@
 
 _Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
 
+## What landed on 2026-10-09, and where the internal work stops
+
+Three units, in the order the Owner set.
+
+| Unit | PR | What it closed |
+|---|---|---|
+| A — grain truth | #621 | A campaign's results are not its creatives' results. Deployed; the served bundle carries `creative-results-not-attributable`. |
+| Format verdict removal | #620 | «أفضل في هذه الفترة» is gone from production — proven by reading the bundle, which is the right proof for a requirement that is an ABSENCE. |
+| GA4 | this branch | Google Analytics 4 as a MEASUREMENT source: consent, discovery, selection, read, sweep, its own section on `/app/integrations`, and a client-report section that states it is not blended. |
+
+### Two matrix rows were saying NOT_STARTED about work that had already shipped
+
+`CREATIVE-GRAIN-TRUTH-001` and `CONTENT-RESULT-AVAILABILITY-001` were registered by #620 in their
+pre-implementation state, and #620 merged **after** #621 had already closed Unit A. The rows have been
+corrected against the code and against the served bundle, not against memory: the first is
+`IMPLEMENTED_NOT_VERIFIED`, the second is `PARTIAL` — its prominence half («الطلبات لا تظهر») is
+genuinely not done, and saying so is the point of the status.
+
+### Production evidence, 2026-10-09
+
+Deploy `eb973709`, served bundle `/assets/index-ZJ8jG3f_.js`, downloaded and read:
+
+```
+creative-results-not-attributable        1
+لم تُسنِد المنصة نتائج هذه الحملة          1
+أفضل في هذه الفترة                        0
+CreativeFormatComparison                 0
+formatVerdict                            0
+كاروسيل / كولكشن / غير مصنّف              present
+```
+
+The deploy before it had failed — `dial tcp ***:***: i/o timeout`, the runner unable to reach the VPS
+at all, 30 seconds in. Not the 600-second SSH ceiling this repo has hit before, and not a build
+failure: a re-run of the same commit succeeded. Worth distinguishing, because the two have different
+fixes and only one of them is ours.
+
+### Where building stops, and why
+
+GA4 is the last internally executable unit. Everything still open in the matrix is one of:
+
+- **Credential-gated.** GA4 and ChatGPT Ads are both `AWAITING_CREDENTIALS`; no code can supply an
+  OAuth client or a bearer key. `docs/INTEGRATION_CREDENTIALS_CHECKLIST.md` §4a is the Owner's ordered
+  action list for GA4, and §2 for ChatGPT Ads.
+- **Session-gated.** The remaining VERIFIED clauses need a figure observed on the Owner's own
+  authenticated surface — a report with their client's data on it. A served-bundle read proves the code
+  is there and nothing more, and this record does not pretend otherwise.
+- **Owner-decided.** The content/report units C and D (`CONTENT-BROWSER-PARITY-001`,
+  `REPORT-CONTENT-BROWSER-001`, `REPORT-CLIENT-OUTCOME-001`, `SHARE-PREVIEW-CLIENT-IDENTITY-001`)
+  are specified and NOT_STARTED. They are real work, not blocked work; they are after the stop the
+  Owner set.
+
 ## BRANDING's Production clause, and the one action that unblocks it
 
 `BRANDING-RENDER-EVIDENCE-001`'s bar is «the configured logo actually renders, proven per surface»,
