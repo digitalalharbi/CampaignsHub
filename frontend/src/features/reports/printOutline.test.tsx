@@ -85,6 +85,37 @@ describe('the printed document’s sections', () => {
     expect(screen.getByText('2. Breakdown by objective')).toBeInTheDocument()
   })
 
+  /**
+   * The numbering is over what is PRINTED — and the generator's outline lists more than this
+   * document prints.
+   *
+   * `ReportStructure` emits `performance` second (and `findings` seventh) whenever a window has
+   * figures, and this document prints neither as a numbered section: the KPI block sits under the
+   * executive summary, and findings travel with the recommendations. Counting over the outline
+   * therefore printed «1. Executive summary» and then «3. Platform breakdown» on every real report
+   * — the «stepped over» defect this file was written against, in its other direction. The fixture
+   * above never showed it because its outline carried only the three keys the page prints.
+   */
+  it('numbers consecutively when the outline lists sections this document does not print', () => {
+    const generatorOrder = [
+      outline()[0]!,
+      { key: 'performance', title_ar: 'الأداء العام', title_en: 'Overall performance', present: true, absent_reason: null },
+      outline()[1]!,
+      outline()[2]!,
+      { key: 'findings', title_ar: 'النتائج', title_en: 'Findings', present: true, absent_reason: null },
+      { key: 'recommendations', title_ar: 'التوصيات', title_en: 'Recommendations', present: true, absent_reason: null },
+    ]
+
+    render(<PrintDocument data={{ ...base, outline: generatorOrder, recommendations: ['Shift budget to Meta.'] } as never} currency="SAR" reportName="R" clientName="C" />)
+
+    const numbered = screen
+      .getAllByRole('heading', { level: 2 })
+      .map((h) => h.textContent ?? '')
+      .filter((t) => /^\d+\. /.test(t))
+
+    expect(numbered).toEqual(['1. Executive summary', '2. Platform breakdown', '3. Breakdown by objective', '4. Recommendations'])
+  })
+
   /** A snapshot written before the outline existed still prints, with its old headings. */
   it('falls back to its own titles when a report has no outline', () => {
     render(<PrintDocument data={base as never} currency="SAR" reportName="R" clientName="C" />)
