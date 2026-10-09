@@ -933,6 +933,8 @@ function parseThreshold(raw: string, type: AlertType): Record<string, number> | 
    * configured and is not. `lead_follow_up_overdue` takes none: a promised date is late or it is not.
    */
   if (type === 'lead_unassigned' || type === 'lead_no_contact') return { minutes: n }
+  // EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the box is hours: how long without a successful GA4 sync.
+  if (type === 'measurement_outage') return { hours: n }
   if (type === 'lead_follow_up_overdue') return undefined
   return { ratio: n }
 }
