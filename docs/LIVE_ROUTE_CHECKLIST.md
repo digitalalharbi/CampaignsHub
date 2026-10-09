@@ -19,14 +19,14 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/agency/portfolio` | Portfolio — which projects/clients need attention? | REVIEWED | **1366×768, ar, dark.** Overflow 0; page 1,710 px. First screen: h1, scope and health badges, period, freshness, four KPIs (projects 5, needing attention 4, campaigns 27, spend 116,819 SAR), spend trend with its breakdown, contribution by project, the platform-health header at the fold. The follow-up queue sits at 872 px and the projects list at 1,210 px. An overview, exempt from feature-first by the standing rule, and its first screen already carries context, scope, period, freshness, KPIs and two visuals; nothing changed here. The KPI cards are the shared primitive's height (174 px) — a B1 density topic, not this route's. Other viewports/themes: covered by the sweep spec once it runs. |
 | `/agency/projects` | Projects | NOT_REVIEWED | |
 | `/agency/clients`, `/agency/clients/:clientId` | Client overview | NOT_REVIEWED | |
-| `/agency/campaigns` | Campaigns — which are active and performing? | NOT_REVIEWED | |
+| `/agency/campaigns` | Campaigns — which are active and performing? | REVIEWED | **1366×768, ar, dark, demo store project.** Overflow 0; page 2,247 px. First screen: eyebrow, h1, period, freshness, search and the platform/objective/period filters, four KPIs (active 14, needing attention 4, spend 64.5K SAR, results 782), the secondary strip (budget, spent vs budget, cost per result, ROAS, paused), the five view tabs, the priority bands, budget pacing, and the spend-vs-revenue and spend-distribution chart headings at the fold. Without a project the page states «choose a project» rather than drawing an empty estate. Already compact and answer-first; nothing changed. KPI card height is the shared primitive's (B1). |
 | `/agency/campaigns/:projectId/:campaignId` | Campaign detail | NOT_REVIEWED | |
 
 ## B3 — analytics and content
 
 | Route | Surface | Status | Evidence |
 |---|---|---|---|
-| `/agency/analytics` | Analytics — why did performance change? | NOT_REVIEWED | |
+| `/agency/analytics` | Analytics — why did performance change? | REVIEWED | **1366×768, ar, dark, demo store project.** Overflow 0; page 3,399 px. First screen: eyebrow, h1, period, freshness, the filter block (project, period, eight platform chips, campaign, outcome, objective, more — 221 px tall), the tabs, then «أين الضعف» (diagnostic, healthy) and «أين يقع الإنفاق» (platform distribution) at the fold. The evidence KPIs sit at 1,338 px under «الأرقام التي بُني عليها ما سبق» — explanation before evidence is the row's own recorded order (`ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001`'s guard), so it stays. The one friction is the filter block's height, a shared `FilterBar` density topic for B1; nothing changed on this route. |
 | `/agency/content`, `/agency/content/groups` | Content — which creatives produce attributable outcomes? | NOT_REVIEWED | |
 | `/agency/content/:creativeId` | Content detail | NOT_REVIEWED | |
 | `/agency/recommendations` | Recommendations | NOT_REVIEWED | |
