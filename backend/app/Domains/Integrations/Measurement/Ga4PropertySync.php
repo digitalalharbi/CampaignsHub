@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Measurement;
 
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\ProviderErrorText;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -64,9 +67,42 @@ final class Ga4PropertySync
             throw new Ga4NotSelected('That account is not an Analytics property.');
         }
 
+        /*
+         * GA4-INTEGRATION-001 — every read is RECORDED, through the run the product already has.
+         *
+         * «History» and «freshness» were listed as pieces of this integration and neither existed:
+         * a property carried `last_synced_at` and nothing else, so «it says it synced two hours ago
+         * and the figures look wrong» had no answer — not how many figures arrived, not whether the
+         * last attempt failed, not whether the one before it did.
+         *
+         * `IntegrationSyncRun` with `type = 'measurement'`, not a table of our own. The commerce
+         * sweep writes `commerce` into the same table and the ad sweeps write theirs; a second
+         * history for a third family would be a second place for «did this run» to be answered, and
+         * the ops surfaces would have to learn about it one at a time.
+         *
+         * Opened BEFORE the first provider call, so a read that dies mid-flight leaves a `running`
+         * row the abandoned-run sweep can close, rather than leaving no trace at all.
+         */
+        $run = new IntegrationSyncRun;
+        $run->forceFill([
+            'tenant_id' => $account->tenant_id,
+            'provider_connection_id' => $account->provider_connection_id,
+            'type' => 'measurement',
+            'status' => SyncRunStatus::Running->value,
+            'started_at' => Carbon::now(),
+        ])->save();
+
         $projectId = $this->assignment->projectIdFor($account);
 
         if ($projectId === null) {
+            /*
+             * `awaiting_assignment`, the same word the commerce sweep uses for the same situation:
+             * nothing broke, and the next move is to choose a project. Recording it as `failed`
+             * would put a red row on the ops page for an estate that is merely unselected — which
+             * is the NORMAL state for most of an agency's discovered properties.
+             */
+            $this->finish($run, SyncRunStatus::AwaitingAssignment, 0, 'This property is not selected for a project yet, so nothing was read.');
+
             /*
              * Refused, not skipped silently.
              *
@@ -81,7 +117,20 @@ final class Ga4PropertySync
 
         $connection = ProviderConnection::withoutGlobalScopes()->findOrFail($account->provider_connection_id);
 
-        $settings = $this->reporting->settings($connection, (string) $account->external_id);
+        try {
+            $settings = $this->reporting->settings($connection, (string) $account->external_id);
+        } catch (Ga4ReportFailed $e) {
+            /*
+             * A refusal is a recorded FAILURE, and then it is re-thrown.
+             *
+             * Swallowing it here would turn «Google refused» into a quiet no-op, which is the one
+             * thing this integration refuses to do everywhere else. The caller still decides what
+             * the reader is told; the run is what remembers it happened.
+             */
+            $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage());
+
+            throw $e;
+        }
 
         /*
          * The property's own settings are written back before the figures are read.
@@ -100,11 +149,39 @@ final class Ga4PropertySync
         $to = Carbon::now($settings['timezone']);
         $from = $to->copy()->subDays(max(1, $days ?? self::RESTATEMENT_DAYS) - 1);
 
-        $rows = $this->reporting->dailyRows($connection, (string) $account->external_id, $from, $to);
+        try {
+            $rows = $this->reporting->dailyRows($connection, (string) $account->external_id, $from, $to);
+        } catch (Ga4ReportFailed $e) {
+            $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage());
+
+            throw $e;
+        }
 
         $written = $this->store($account, $projectId, $settings, $rows);
 
         $account->forceFill(['last_synced_at' => Carbon::now(), 'last_sync_error_category' => null])->save();
+
+        /*
+         * `no_data` when the property answered with nothing, and that is not a failure.
+         *
+         * A site with no traffic in the window is a true answer, and colouring it red would send
+         * somebody to fix an integration that is working. The same distinction the ad and commerce
+         * sweeps make, in the same word.
+         */
+        $this->finish(
+            $run,
+            $written === 0 ? SyncRunStatus::NoData : SyncRunStatus::Success,
+            $written,
+            null,
+            [
+                'project_id' => $projectId,
+                'property_id' => (string) $account->external_id,
+                'timezone' => $settings['timezone'],
+                'from' => $from->toDateString(),
+                'to' => $to->toDateString(),
+                'days' => count($rows),
+            ],
+        );
 
         return [
             'property_id' => (string) $account->external_id,
@@ -115,6 +192,36 @@ final class Ga4PropertySync
             'days' => count($rows),
             'figures' => $written,
         ];
+    }
+
+    /**
+     * Close a run with its verdict, and never leave one `running`.
+     *
+     * `records` is the count of FIGURES written, not of days: a day with no ecommerce configured
+     * legitimately carries fewer, and counting days would report «14» for a window that produced
+     * almost nothing.
+     *
+     * @param  array<string, mixed>  $meta
+     */
+    private function finish(IntegrationSyncRun $run, SyncRunStatus $status, int $records, ?string $error = null, array $meta = []): void
+    {
+        $run->forceFill([
+            'status' => $status->value,
+            'records' => $records,
+            /*
+             * Redacted before it is stored. A Google failure message can name the URL that failed,
+             * query string and all, and an access token has been seen in one — and this column is
+             * read back onto an operator's screen.
+             */
+            /*
+             * Bounded by the contract, never here. Five call sites once carried five different limits and
+             * the column threw on the largest; `ProviderErrorContractTest` refuses a trim at the call site,
+             * and `forStorage` is the one bound that knows the column and says when it fired.
+             */
+            'error' => $error === null ? null : ProviderErrorText::forStorage($error),
+            'meta' => $meta === [] ? null : $meta,
+            'finished_at' => Carbon::now(),
+        ])->save();
     }
 
     /**
