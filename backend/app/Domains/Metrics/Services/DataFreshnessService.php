@@ -254,6 +254,8 @@ final class DataFreshnessService
                 'data_as_of' => $this->iso($dataAsOf),
                 'latest_metric_date' => $d?->latest_metric_date ? Carbon::parse((string) $d->latest_metric_date)->toDateString() : null,
                 'last_checked_at' => $this->iso($run?->checked_at),
+                // LIVE-OPERATING-VIEW-001 — the latest run that actually delivered, apart from the latest attempt.
+                'succeeded_at' => $this->iso($run?->succeeded_at),
                 'last_sync_error' => null,
                 'state' => $state,
                 'missing_grain' => $state === 'partial'
@@ -333,6 +335,7 @@ final class DataFreshnessService
                     'data_as_of' => $this->iso($dataAsOf),
                     'latest_metric_date' => null,
                     'last_checked_at' => $this->iso($run?->checked_at),
+                    'succeeded_at' => $this->iso($run?->succeeded_at),
                     'last_sync_error' => $run?->last_error,
                     'state' => $this->verdict(
                         succeededAt: $run?->succeeded_at,
