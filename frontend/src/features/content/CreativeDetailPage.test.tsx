@@ -361,6 +361,51 @@ describe('CreativeDetailPage', () => {
     expect(screen.getByText(/has expired/)).toBeInTheDocument()
   })
 
+  /**
+   * The stage is sized by what stands on it. An absence is one sentence, and at 1366×768 a 256 px
+   * stage around that sentence pushed the creative's own figures off the first screen.
+   */
+  it('keeps the media stage short when there is no media to stage', async () => {
+    mocked.mockResolvedValue(withPreview({
+      state: 'expired', thumbnail_url: 'https://cdn.example.com/stale.jpg',
+      note_en: 'The platform link has expired — it needs a fresh sync.',
+    }))
+    render()
+    await screen.findByText('Hero image')
+
+    const frame = screen.getByTestId('creative-media-frame')
+    expect(frame).toHaveAttribute('data-state', 'none')
+    expect(frame.className).toContain('min-h-20')
+    expect(frame.className).not.toContain('min-h-64')
+  })
+
+  it('gives a drawn image its full stage', async () => {
+    mocked.mockResolvedValue(withPreview({ kind: 'video', thumbnail_url: 'https://cdn.example.com/meta-thumb.jpg' }))
+    render()
+    await screen.findByText('Hero image')
+
+    const frame = screen.getByTestId('creative-media-frame')
+    expect(frame).toHaveAttribute('data-state', 'image')
+    expect(frame.className).toContain('min-h-64')
+  })
+
+  /**
+   * The page answers «is this creative producing outcomes» before it files the ids. The identity
+   * block is a reference; the objective figures are the reason the reader opened the page, and at
+   * 1366×768 they stood below the first screen while the ad-set id stood on it.
+   */
+  it('puts the objective figures above the identity reference', async () => {
+    render()
+    await screen.findByText('Hero image')
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    const figures = headings.indexOf('Metrics for this objective')
+    const identity = headings.indexOf('Identity and source')
+    expect(figures).toBeGreaterThan(-1)
+    expect(identity).toBeGreaterThan(-1)
+    expect(figures).toBeLessThan(identity)
+  })
+
   /** A video arms nothing: metadata only, no autoplay, and the source is not fetched up front. */
   it('mounts a video with metadata only and no autoplay', async () => {
     mocked.mockResolvedValue(
