@@ -837,3 +837,17 @@ BLOCKED_OPERATIONAL_EVIDENCE. Several of those open rows are already closed on t
 (REPORT-CREATION-UX-001, UX-MULTISELECT-SCALE-001, REPORT-SCOPE-SELECTION-001, REPORT-CONTENT-BROWSER-001
 on ch-req; REPORT-DETAIL-PARITY-001 and SHARE-PREVIEW-CLIENT-IDENTITY-001 on #630; BRANDING rows on
 #629); the true count is the one on main after the queue lands.
+
+**Matrix status discipline, same unit (commits `6a6bd1f1` → `cf2c8082`).** Fifty-four rows that had
+sat IMPLEMENTED_NOT_VERIFIED / PARTIAL / IN_PROGRESS with their last paragraph already naming an
+Owner-only or credential-bound step were moved onto that word: 14 VERIFIED on served-bundle markers
+(`index-BNMmpyVv.js`), Production headers (`/auth/me` → `no-store`) or the live review; 27
+BLOCKED_OPERATIONAL_EVIDENCE; 13 BLOCKED_EXTERNAL_CREDENTIALS (GA4-INTEGRATION-001 among them — the
+matrix has no AWAITING_CREDENTIALS word; the note carries it). Census on this branch afterwards:
+529 VERIFIED · 39 BOE · 37 BEC · 27 PARTIAL · 16 IN_PROGRESS · 4 INV, before the queued branches
+land their own closes. The rows still internally executable are real work, not status: the
+movement-pill/sparkline clauses of UX-KPI-PRESENTATION-001, the TABLE view of
+CONTENT-BROWSER-PARITY-001, account contribution in PLATFORM-DECISION-ANALYTICS-001, the ad-set grain
+seed for OBJECTIVE-ANALYTICS-DEPTH-001, the executive drill-down, REPORT-RECOMMENDATION-BLOCKS-001's
+1440/390 browser pass, ADS-TERMINOLOGY-001's remaining prose, DATA-QUALITY's stated confidence, the
+rest of PRODUCTION-TRUTH-AUDIT-001's list, and DASH-010 (closes on this PR's three-browser sweep).
