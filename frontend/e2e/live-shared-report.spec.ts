@@ -234,28 +234,74 @@ test.describe('what the report says needs attention', () => {
   })
 })
 
-/** The client is on a phone more often than not, and in whichever language and theme they arrived in. */
-test.describe('the live report holds together on a phone', () => {
-  for (const locale of ['ar', 'en'] as const) {
-    for (const theme of ['light', 'dark'] as const) {
-      test(`375px · ${locale} · ${theme}: no sideways scroll`, async ({ page }) => {
-        await page.addInitScript(([l, t]) => {
-          window.localStorage.setItem('campaign-hub-locale', l)
-          window.localStorage.setItem('campaign-hub-theme', t)
-        }, [locale, theme] as const)
-        await page.setViewportSize({ width: 375, height: 812 })
-        await page.goto(URL)
+/**
+ * CLIENT-FACING-PRESENTATION-001 — the client's six questions, in order, at both widths the row names,
+ * in both directions and both themes. The client is on a phone more often than not, and in whichever
+ * language and theme they arrived in; the agency reviewing the link is at a desk.
+ *
+ * Two claims per combination. The page does not scroll sideways — a chart's width is what pushed it
+ * sideways once. And the blocks that answer the six questions appear in the order the row makes the
+ * requirement: what was spent and achieved (the KPI board), at what cost really (the objective split,
+ * where the link offers it), where (the platform block), the budget status, and only then what
+ * needs attention. Asserted as RELATIVE order among the blocks present, because the split is withheld
+ * where direct and blended agree and a literal list would fail on a link that has nothing to split.
+ */
+const SIX_QUESTIONS = [
+  'live-kpis',
+  'live-objective-split',
+  'live-platform-comparison',
+  'live-summary-platform-results',
+  'live-summary-budget',
+  'live-attention',
+] as const
 
-        await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
-        // Measure once the charts have laid out — a chart's width is what pushed this page sideways.
-        await page.waitForLoadState('networkidle')
+/** Both live products: the seeded detailed link, and the same link minted as an executive summary. */
+const LIVE_FORMS = [
+  { form: 'detailed', url: URL, mode: 'dashboard' },
+  { form: 'summary', url: '/reports/share/demo-live-summary-token', mode: 'summary' },
+] as const
 
-        expect(
-          await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1),
-          `${locale}/${theme} scrolls sideways on a phone`,
-        ).toBe(false)
-      })
+test.describe('the live report holds together at both widths, in both directions and themes', () => {
+  for (const { form, url, mode } of LIVE_FORMS) {
+  for (const width of [375, 1440] as const) {
+    for (const locale of ['ar', 'en'] as const) {
+      for (const theme of ['light', 'dark'] as const) {
+        test(`${form} · ${width}px · ${locale} · ${theme}: no sideways scroll, six questions in order`, async ({ page }) => {
+          await page.addInitScript(([l, t]) => {
+            window.localStorage.setItem('campaign-hub-locale', l)
+            window.localStorage.setItem('campaign-hub-theme', t)
+          }, [locale, theme] as const)
+          await page.setViewportSize({ width, height: width === 375 ? 812 : 900 })
+          await page.goto(url)
+
+          await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
+          /* The product under test, not assumed: the form decides which view opens. */
+          await expect(page.getByTestId('live-report')).toHaveAttribute('data-mode', mode)
+          await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr')
+          await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+          // Measure once the charts have laid out — a chart's width is what pushed this page sideways.
+          await page.waitForLoadState('networkidle')
+
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1),
+            `${locale}/${theme} scrolls sideways at ${width}px`,
+          ).toBe(false)
+
+          /* The blocks present, in DOM order — then that order must be the six questions' order. */
+          const present = await page.evaluate((ids) => {
+            const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-testid]'))
+              .filter((el) => (ids as readonly string[]).includes(el.dataset.testid ?? ''))
+            return nodes.map((el) => el.dataset.testid as string)
+          }, SIX_QUESTIONS)
+
+          expect(present, 'the KPI board is not on the page').toContain('live-kpis')
+          expect(present.length, 'only one of the six-question blocks rendered — nothing to order').toBeGreaterThan(2)
+          const ranks = present.map((id) => (SIX_QUESTIONS as readonly string[]).indexOf(id))
+          expect(ranks, `blocks out of the six-question order: ${present.join(' → ')}`).toEqual([...ranks].sort((a, b) => a - b))
+        })
+      }
     }
+  }
   }
 })
 
