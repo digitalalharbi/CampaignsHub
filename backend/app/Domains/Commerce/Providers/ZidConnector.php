@@ -123,6 +123,10 @@ final class ZidConnector extends ApiCommerceConnector
                     explicit: is_array($o['utm'] ?? null) ? $o['utm'] : [],
                     landingUrl: is_string($o['landing_page'] ?? null) ? $o['landing_page'] : null,
                     referrer: is_string($o['referrer'] ?? null) ? $o['referrer'] : null,
+                    // Zid names the applied coupon `coupon_code`, or `coupon.code` on the detailed shape.
+                    couponCode: is_string($o['coupon_code'] ?? null)
+                        ? $o['coupon_code']
+                        : (is_array($o['coupon'] ?? null) && is_string($o['coupon']['code'] ?? null) ? $o['coupon']['code'] : null),
                 ),
                 'raw' => (array) $o,
             ];

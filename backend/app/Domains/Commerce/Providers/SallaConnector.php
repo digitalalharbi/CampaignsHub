@@ -236,6 +236,10 @@ final class SallaConnector extends ApiCommerceConnector
                 ? $row['landing_page']
                 : (is_string($source['landing_page'] ?? null) ? $source['landing_page'] : null),
             referrer: is_string($source['referrer'] ?? null) ? $source['referrer'] : null,
+            // Salla carries the applied coupon as an object (`coupon.code`) or, on older payloads, a bare `coupon_code`.
+            couponCode: is_array($row['coupon'] ?? null)
+                ? (is_string($row['coupon']['code'] ?? null) ? $row['coupon']['code'] : null)
+                : (is_string($row['coupon_code'] ?? null) ? $row['coupon_code'] : (is_string($row['coupon'] ?? null) ? $row['coupon'] : null)),
         );
     }
 

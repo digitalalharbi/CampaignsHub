@@ -460,6 +460,8 @@ export interface LedgerRow {
   campaign?: string | null
   method: string
   evidence_rank: number
+  /** ATTR-EVIDENCE-INFLUENCER-COUPON-001 — the creator's code the order was placed with, when that is the evidence. */
+  coupon?: string | null
   revenue: number | null
   refunded: number | null
   currency: string | null
@@ -486,6 +488,8 @@ export interface Reconciliation {
   platforms: ReconciledPlatform[]
   unattributed: { orders: number; revenue: number } | null
   conflict: { orders: number; revenue: number } | null
+  /** Orders placed on a creator's discount code — their own layer, neither a platform nor unattributed. */
+  influencer?: { orders: number; revenue: number; codes: { code: string; orders: number; revenue: number }[] } | null
   ledger: { total: number; truncated: boolean; cap: number; rows: LedgerRow[] } | null
 }
 

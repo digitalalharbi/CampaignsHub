@@ -37,7 +37,7 @@ final class CommerceOrder extends Model
         // which link of the chain answered. `placed_on` is what a merchant-day total groups by.
         'placed_at_timezone', 'placed_on', 'time_source',
         'shipping_total', 'tax_total', 'discount_total', 'total', 'refunded_total', 'refunded_at',
-        'cancelled_at', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+        'cancelled_at', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'coupon_code',
         'click_id', 'click_id_provider', 'landing_url', 'referrer_url', 'external_campaign_id',
         'unified_campaign_id', 'attribution_method', 'attributed_at', 'is_demo', 'last_synced_at',
         /*
