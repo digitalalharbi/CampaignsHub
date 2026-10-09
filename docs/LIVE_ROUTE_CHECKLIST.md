@@ -39,7 +39,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/reports/share/:token` | Shared live/snapshot report (client) | REVIEWED | **1366×768, ar, dark, demo live token (dashboard mode).** Overflow 0; page 4,086 px. First screen: client name/by line, download menu, report title + form label (115 px), four mode tabs (156), range 7/30/90 + four platform toggles + computed-at + refresh (227–236), four primary KPIs with sparks (292, 174 px), six secondary KPIs (478), scope counts (561), time-series + spend-distribution charts from 625 px. Context, period, scope, freshness, filters, KPIs and one visual all above the fold. Nothing moved. Snapshot/summary forms: measured in `report-live-two-forms.spec` sweep (ch-rmfmt) at 375/1440. |
 | `/reports/print/:token` | Print / PDF document | REVIEWED | Print is the snapshot document; the preview seed carries live and summary tokens only, so the live token is refused there with «الرمز غير صالح أو منتهٍ» (correct). Browser evidence: `e2e/report-print-outline.spec.ts` (ch-rmfmt, chromium/firefox/webkit on the gate seed) renders the document and asserts the printed outline numbering; no viewport measurement of its own beyond the print layout. |
 | `/r/:token` | Short share path | NOT_REVIEWED | |
-| `/portal/reports`, `/portal/clients/:clientSlug/reports` | Client portal reports | NOT_REVIEWED | |
+| `/portal/reports`, `/portal/clients/:clientSlug/reports` | Client portal reports | REVIEWED | **1366×768, ar, dark, seeded client (Acme Managed).** Overflow 0; page 866 px; h1 + three report cards (name, period, type chip, open) on the first screen. No campaign identity on the cards (CLIENT-REPORT-ENTITY-BOUNDARY-001 holds on the list). |
 
 ## B5 — email dashboard and alerts
 
