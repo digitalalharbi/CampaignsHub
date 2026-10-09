@@ -919,3 +919,9 @@ and null `reconciled_revenue`/`refunded` under `hide_revenue`. Panel section und
 Backend 11 + 2 new cases, panel +7, all fail-first; transparency suites 52; analytics vitest 591; tsc/lint
 clean. Matrix row ATTRIBUTION-RECONCILIATION-001 added (IMPLEMENTED_NOT_VERIFIED until deployed). Queued
 after ch-budget (#634) and ch-font in the single lane.
+
+**B6 after the rebase onto `a471af9b` (#634), 2026-10-10 00:1x.** Conflicts were docs only (matrix rows by the per-row
+resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full backend suite alone on its own database:
+4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
+`mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
+gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
