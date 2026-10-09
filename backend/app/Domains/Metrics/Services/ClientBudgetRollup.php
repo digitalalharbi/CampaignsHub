@@ -36,10 +36,20 @@ final class ClientBudgetRollup
      */
     public function of(array $rows): array
     {
+        /*
+         * Counted by name, not filed under «excluded»: a campaign whose project's window holds no
+         * measured row has no figure (Owner directive 2026-10-09 §19), which is a different fact from
+         * a campaign with no budget or a budget in another currency — and the reader is told which.
+         */
+        $unmeasured = count(array_filter(
+            $rows,
+            static fn (array $r): bool => ($r['pacing_basis'] ?? null) === 'nothing_measured_in_window',
+        ));
+
         $empty = [
             'budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null,
             'pace' => null, 'currency' => null, 'currencies' => 0, 'excluded' => 0,
-            'campaigns' => count($rows),
+            'unmeasured' => $unmeasured, 'campaigns' => count($rows),
         ];
 
         $usable = array_values(array_filter(
@@ -47,7 +57,7 @@ final class ClientBudgetRollup
             static fn (array $r): bool => ($r['pacing_basis'] ?? null) === 'comparable' && (float) ($r['budget'] ?? 0) > 0,
         ));
 
-        $excluded = count($rows) - count($usable);
+        $excluded = count($rows) - count($usable) - $unmeasured;
 
         if ($usable === []) {
             return ['excluded' => $excluded] + $empty;
@@ -89,6 +99,7 @@ final class ClientBudgetRollup
             'currency' => $currencies[0] ?? null,
             'currencies' => count($currencies),
             'excluded' => $excluded,
+            'unmeasured' => $unmeasured,
             'campaigns' => count($rows),
         ];
     }
