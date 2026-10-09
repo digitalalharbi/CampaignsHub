@@ -436,7 +436,7 @@ export interface DuplicatedShop {
 
 /** ATTRIBUTION-RECONCILIATION-001 — a ROAS always says what it was counted on. */
 export interface BasedRoas {
-  basis: 'platform_reported' | 'store_confirmed'
+  basis: 'platform_reported' | 'reconciled' | 'store_confirmed'
   value: number | null
 }
 
@@ -449,7 +449,7 @@ export interface ReconciledPlatform {
   reconciled_orders: number | null
   reconciled_revenue: number | null
   overclaim_orders: number | null
-  roas: { platform_reported: BasedRoas; store_confirmed: BasedRoas }
+  roas: { platform_reported: BasedRoas; reconciled: BasedRoas }
 }
 
 export interface LedgerRow {
@@ -481,6 +481,8 @@ export interface Reconciliation {
     revenue: number | null
     currency: string | null
   }
+  /** Business ROAS — the whole ledger's net revenue over the whole spend; the one basis no claim touches. */
+  business_roas?: { basis: 'store_confirmed'; value: number | null; revenue: number | null; spend: number | null }
   platforms: ReconciledPlatform[]
   unattributed: { orders: number; revenue: number } | null
   conflict: { orders: number; revenue: number } | null
