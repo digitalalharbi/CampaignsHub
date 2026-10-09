@@ -177,7 +177,7 @@ final class ReportAdsSectionTest extends TestCase
             // No «campaigns» — CLIENT-REPORT-ENTITY-BOUNDARY-001. The objective split before it says
             // what the money was bought for; the ads after it show the work that did the buying,
             // and «links» after THEM is where the ads sent people — REPORT-LINK-SECTION-001.
-            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'links', 'findings', 'recommendations'],
+            ['executive_summary', 'performance', 'objectives', 'platforms', 'ads', 'links', 'findings', 'recommendations'],
             array_column($outline, 'key'),
         );
 
