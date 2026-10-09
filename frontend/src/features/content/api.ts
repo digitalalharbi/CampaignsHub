@@ -177,6 +177,14 @@ export interface CreativeCard {
   /** The PROVIDER's own token — `story_ad`, `collection_dynamic`, `text` — not a reader's word. */
   format: string
   /**
+   * CREATIVE-GRAIN-TRUTH-001 — the campaign sold and no creative under it did.
+   *
+   * True when the platform reported results for this creative's campaign and attributed none of
+   * them to any creative beneath it. The result metrics are then absent from `headline_metrics`
+   * rather than present as zeros, and the surface says why.
+   */
+  results_not_attributable?: boolean
+  /**
    * What the creative IS, from `CreativeKind` — the same answer the filter and the badge use.
    *
    * Optional because older payloads and a client report's boundary do not carry it; every labeller

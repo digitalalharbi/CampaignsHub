@@ -60,6 +60,14 @@ export function creativeDialogFigures(
    * deserves would be a second opinion, and the two would drift the first time a family changed.
    */
   headlineMetrics: string[] = [],
+  /**
+   * CREATIVE-GRAIN-TRUTH-001 — the panel obeys the same rule as the card.
+   *
+   * REPORT-DETAIL-PARITY-001 is why this is a parameter rather than a default: a panel that
+   * appended a withheld zero the card refused would have the two surfaces disagreeing about one
+   * creative, which is the exact drift that list exists to prevent.
+   */
+  resultsNotAttributable = false,
 ): DialogFigure[] {
   const locale: Locale = ar ? 'ar' : 'en'
   const bag = (metrics ?? {}) as Record<string, unknown>
@@ -158,7 +166,7 @@ export function creativeDialogFigures(
    * the platform sent nothing, which a panel opened to study one creative should — and everything
    * beyond them is this creative's answerable set, decided once.
    */
-  for (const key of canonicalFigureKeys(headlineMetrics, metrics, currency, ar)) {
+  for (const key of canonicalFigureKeys(headlineMetrics, metrics, currency, ar, resultsNotAttributable)) {
     if (shown.has(key)) continue
     shown.add(key)
 

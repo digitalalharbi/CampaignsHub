@@ -45,7 +45,6 @@ import {
   CampaignReportsTab,
 } from './CampaignCommandCenter'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
-import { CreativeFormatComparison } from '@/features/content/CreativeFormatComparison'
 import { RangeTabs } from '@/features/analytics/components'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
@@ -410,14 +409,9 @@ export function CampaignDetailPage() {
             table stay in Content Analytics, where somebody has come to read rather than to check.
           */}
           <div className="mt-4">
-            <CreativeFormatComparison
-              projectId={projectId}
-              campaignId={campaignId}
-              from={range.from}
-              to={range.to}
-              depth="medium"
-              ar={locale === 'ar'}
-            />
+            {/* CONTENT-FORMAT-ROAS-REMOVED-001 — see `CreativesPage.tsx`: a return computed from
+                partially-reported creative revenue over fully-attributed creative spend is not a
+                return, and the verdict built on it told operators to move budget on it. */}
           </div>
         </TabPanel>
       )}

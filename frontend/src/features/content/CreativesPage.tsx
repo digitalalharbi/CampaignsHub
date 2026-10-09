@@ -37,7 +37,6 @@ import { PeriodLabel } from '@/components/patterns/Status'
 import { useFreshness } from '@/features/analytics/api'
 import { listProjects } from '@/features/projects/api'
 import { ContentSummary } from './ContentSummary'
-import { CreativeFormatComparison } from './CreativeFormatComparison'
 import { metricsForKeys } from '@/features/analytics/metricCatalog'
 import type { Summary } from '@/features/analytics/api'
 
@@ -1051,24 +1050,25 @@ export function CreativesPage() {
         * hitting whatever took its place. Beneath the toolbar a late arrival moves only itself.
       */}
       {/*
-        CREATIVE-FORMAT-INTELLIGENCE-001, compactly — «image or video, here?» where content is browsed.
+        CONTENT-FORMAT-ROAS-REMOVED-001 — the «which format wins» comparison is gone.
 
-        The COMPACT depth: the verdict for the objective most of this project was bought for, what it
-        cost, and the evidence it rests on. The whole reading lives in Content Analytics; repeating
-        it here would be a second page of the same analysis rather than an answer somebody can act on
-        while they are looking at the assets themselves.
+        The owner, with a screenshot: «يوجد خطأ فادح — كيف حققت الحملة أداء عائد إلى 5x بالمقابل
+        المحتويات العائد لها ضعيف جداً، غير منطقي».
 
-        Same endpoint, same figures. Only the depth differs.
+        He is right, and the contradiction was structural rather than a bug in the arithmetic. The
+        block divided creative-grain REVENUE by creative-grain SPEND. Spend is attributed to every
+        creative in full; revenue at that grain is reported by the platform only sometimes. So the
+        numerator was a fraction of the truth over a denominator that was all of it, and the result —
+        «الصور 0.02», «الكولكشن 0.10» — is not a return on anything. The campaign reading 5x beside
+        it was computed at campaign grain, where both halves are reported, and nothing on the page
+        reconciled the two.
+
+        A verdict («الكولكشن أفضل في هذه الفترة») on top of that is worse than the number: it tells
+        an operator to move budget on the strength of a figure nobody can stand behind.
+
+        The spend SHARE by format stays, above — it divides nothing and is simply where the money
+        went.
       */}
-      {currentProjectId != null && currentProjectId !== '' && (
-        <CreativeFormatComparison
-          projectId={currentProjectId}
-          from={from}
-          to={to}
-          depth="compact"
-          ar={ar}
-        />
-      )}
 
       {selected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs text-text-secondary">
@@ -1456,7 +1456,7 @@ export function CreativesPage() {
           creative={creatives[viewerIndex]}
           locale={ar ? 'ar' : 'en'}
           /* This library's own window and currency — the popup never decides what «this period» is. */
-          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar, creatives[viewerIndex].headline_metrics ?? [])}
+          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar, creatives[viewerIndex].headline_metrics ?? [], creatives[viewerIndex].results_not_attributable === true)}
           trend={currentProjectId
             ? (
               <CreativeTrend
@@ -1559,7 +1559,14 @@ function CreativeGridCard({
    * carries it, through the money contract, which is the only reader that can state a withheld amount.
    */
   const [moreShown, setMoreShown] = useState(false)
-  const figureKeys = canonicalFigureKeys(creative.headline_metrics ?? [], creative.metrics ?? undefined, currency, ar)
+  const figureKeys = canonicalFigureKeys(
+    creative.headline_metrics ?? [],
+    creative.metrics ?? undefined,
+    currency,
+    ar,
+    /* CREATIVE-GRAIN-TRUTH-001 — without this the appending loop puts the withheld zeros back. */
+    creative.results_not_attributable === true,
+  )
     .filter((key) => key !== 'spend')
   const shownKeys = moreShown ? figureKeys : figureKeys.slice(0, CARD_FIGURES)
   const hiddenKeys = figureKeys.slice(CARD_FIGURES)
@@ -1918,6 +1925,26 @@ function CreativeGridCard({
 
             {figureKeys.length === 0 && (
               <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
+            )}
+
+            {/*
+              CREATIVE-GRAIN-TRUTH-001 — «the platform did not break this result down», said once.
+
+              The campaign above this creative reported sales and no creative under it reported a
+              single one, so the platform never attributed the result at this grain. The figures are
+              dropped server-side rather than printed as zeros — a zero here is what put «الطلبات 0»
+              under a campaign reading 5x — and this is the sentence that stops their absence being
+              read as «nobody bought».
+
+              Stated once per card, under the figures, rather than on each missing metric: the
+              reader needs the reason, not four copies of it.
+            */}
+            {creative.results_not_attributable === true && (
+              <p data-testid="creative-results-not-attributable" className="mt-2 text-[11px] text-text-muted">
+                {ar
+                  ? 'لم تُسنِد المنصة نتائج هذه الحملة إلى المحتوى — النتائج متاحة على مستوى الحملة فقط.'
+                  : 'The platform did not attribute this campaign’s results to content — they are reported at campaign level only.'}
+              </p>
             )}
           </div>
         )}

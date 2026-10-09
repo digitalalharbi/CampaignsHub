@@ -1354,7 +1354,7 @@ final class CreativeMetrics
      * @param  array<string, mixed>|null  $figures  this creative's own figures for the window, when
      *                                              known; null asks only what the FAMILY wants
      */
-    public function headline(?string $objective, ?array $figures = null): array
+    public function headline(?string $objective, ?array $figures = null, bool $resultsNotAttributable = false): array
     {
         /*
          * OBJECTIVE-AWARE-KPI-001 — chosen by the objective's FAMILY, not by its marketing path.
@@ -1379,6 +1379,21 @@ final class CreativeMetrics
         $metrics = $family === ObjectiveFamily::Awareness
             ? array_values(array_unique([...$metrics, 'video_views', 'view_rate', 'completion_rate', 'cost_per_view']))
             : $metrics;
+
+        /*
+         * CREATIVE-GRAIN-TRUTH-001 — a result the platform never attributed here is not a figure.
+         *
+         * `supportable()` asks whether the ROW answers a metric, and for these the row does answer:
+         * the platform returned a zero. What it cannot answer is whether that zero means anything,
+         * because the campaign above it sold while no creative under it reported a single sale. A
+         * breakdown that was never made is not a result of nought.
+         *
+         * Dropped rather than zeroed, so the card neither claims a sale nor claims the absence of
+         * one; `results_not_attributable` on the row is what lets the surface say which it is.
+         */
+        if ($resultsNotAttributable) {
+            $metrics = array_values(array_diff($metrics, CreativeResultAttribution::RESULT_METRICS));
+        }
 
         return $this->supportable($metrics, $figures);
     }
