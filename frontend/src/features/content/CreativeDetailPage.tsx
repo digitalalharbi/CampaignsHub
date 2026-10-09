@@ -397,6 +397,14 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         </div>
       </header>
 
+      {/*
+        CONTENT-DETAIL-MEDIA-FIRST-VIEWPORT-001 — the stage and the figures share the first screen.
+
+        A story-shaped film is capped at 70vh, which at 1366×768 is 538 px of player under a 263 px
+        header: the objective figures — the question this page answers — began at 825 px, below the
+        fold. On a wide screen the two sit side by side; on a phone they stack as before.
+      */}
+      <div data-testid="creative-first-screen" className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
       {/* ---- the asset itself ---------------------------------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">
         {/* The frame is sized for what it holds. A still or a film gets a stage; an absence gets its
@@ -494,14 +502,11 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         </div>
       </section>
 
-      {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
-      <CreativeCarousel preview={creative.preview} locale={locale} />
-
       {/* ---- the figures first: the question this page answers (directive §7) ---------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text-primary">{t.figures}</h2>
         <p className="mt-1 text-xs text-text-secondary">{t.figuresHint}</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2">
           {data.headline_metrics.map((key) => (
             <MetricBlock
               key={key}
@@ -515,6 +520,10 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           ))}
         </div>
       </section>
+      </div>
+
+      {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
+      <CreativeCarousel preview={creative.preview} locale={locale} />
 
       {/* ---- what it is, and where the figures came from ------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">

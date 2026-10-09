@@ -379,6 +379,24 @@ describe('CreativeDetailPage', () => {
     expect(frame.className).not.toContain('min-h-64')
   })
 
+  /**
+   * CONTENT-DETAIL-MEDIA-FIRST-VIEWPORT-001 — with media present, the stage and the objective figures
+   * share one first-screen row at desktop widths. The live review at 1366×768 measured a 9:16 film's
+   * stage ending at 825 px with the figures below it; now both are children of one two-column grid.
+   */
+  it('puts the stage and the objective figures in one first-screen row', async () => {
+    mocked.mockResolvedValue(withPreview({ kind: 'video', thumbnail_url: 'https://cdn.example.com/meta-thumb.jpg' }))
+    render()
+    await screen.findByText('Hero image')
+
+    const row = screen.getByTestId('creative-first-screen')
+    expect(row.className).toContain('lg:grid-cols-2')
+    expect(row.contains(screen.getByTestId('creative-media-frame'))).toBe(true)
+    expect(row.contains(screen.getByText(/Metrics for this objective|المؤشرات حسب الهدف/))).toBe(true)
+    // Exactly the two sections — the carousel and the identity block stay below the row.
+    expect(row.querySelectorAll(':scope > section')).toHaveLength(2)
+  })
+
   it('gives a drawn image its full stage', async () => {
     mocked.mockResolvedValue(withPreview({ kind: 'video', thumbnail_url: 'https://cdn.example.com/meta-thumb.jpg' }))
     render()
