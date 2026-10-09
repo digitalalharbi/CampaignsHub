@@ -415,7 +415,7 @@ final class CreativeRows
          * measured first, then the result, then spend to break its ties, then the running state.
          */
         if ($sort === 'auto') {
-            return $this->applyMeasuredFirst($query, $this->objectiveSortMetric($objective), $from, $to);
+            return $this->applyMeasuredFirst($query, $this->objectiveSortMetric($objective), $from, $to, runningFirst: true);
         }
 
         /*
@@ -517,7 +517,7 @@ final class CreativeRows
              * the id is last for the reason every ordering here ends with it: ties repeat and skip
              * rows across pages.
              */
-            'relevance' => $this->applyMeasuredFirst($query, 'spend', $from, $to),
+            'relevance' => $this->applyMeasuredFirst($query, 'spend', $from, $to, runningFirst: true),
             'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
             /*
              * SNAP-CREATIVE-METRICS-LIVE-001 — NULLS LAST, and it is not a refinement.
@@ -998,8 +998,13 @@ final class CreativeRows
      *
      * @param  string  $metric  a key from {@see SORTABLE}; the caller resolves the objective
      */
-    private function applyMeasuredFirst(mixed $query, string $metric, Carbon $from, Carbon $to): mixed
-    {
+    private function applyMeasuredFirst(
+        mixed $query,
+        string $metric,
+        Carbon $from,
+        Carbon $to,
+        bool $runningFirst = false,
+    ): mixed {
         $metric = in_array($metric, self::SORTABLE, true) ? $metric : 'spend';
         $projectId = app(ProjectContext::class)->projectId();
 
@@ -1018,13 +1023,63 @@ final class CreativeRows
             ->leftJoinSub($totals, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
             ->select('external_creatives.*')
             ->orderByRaw('CASE WHEN COALESCE(sorted.measured_rows, 0) > 0 THEN 0 ELSE 1 END')
-            ->orderByRaw('sorted.sort_total DESC NULLS LAST')
-            ->orderByRaw('sorted.sort_spend DESC NULLS LAST')
-            ->orderByRaw(
+            /*
+             * CONTENT-BROWSER-PARITY-001 — what is RUNNING leads what has stopped, above the metric.
+             *
+             * The owner: «يجب أن تكون المحتويات التي لا تعمل أن تبقى آخر المحتويات». This clause
+             * already existed and sat FOURTH, below the metric and below spend — which in practice
+             * meant it almost never fired, because a metric and a spend rarely tie. So a paused
+             * creative with the period's highest spend led a page whose reader can do nothing about
+             * it, and the instruction looked unimplemented because, in effect, it was.
+             *
+             * ## This does NOT revert CONTENT-MEASURED-FIRST-001, and the distinction is the point
+             *
+             * That row is about MEASUREMENT against silence: a creative with no figure of any kind
+             * outranked a paused creative that had spent 2,704.50, and the owner read that as a data
+             * fault. Measurement still leads, on the line above — so the paused 2,704.50 creative
+             * still outranks everything unmeasured, which is exactly what he asked for then. What
+             * changes is the order WITHIN the measured, where «running» now outranks «spent more».
+             *
+             * ## And it is not a new judgement either
+             *
+             * The campaigns workspace settled the same question first, and `relevanceOf`'s own
+             * docblock records it: «a finished campaign that outspent every running one used to lead
+             * the operational list, so the first thing an operator saw was a campaign they could do
+             * nothing about». Serving first, then by spend. One product decision, now read the same
+             * way at the creative rung rather than a second answer to it.
+             *
+             * The three buckets are the three `relevanceOf` returns — serving, idle, stopped — from
+             * the same two constants, so the SQL and the TypeScript cannot drift (`Relevance`).
+             *
+             * ## And ONLY for the default order — `$runningFirst`
+             *
+             * A reader who explicitly picks «sort by spend» has asked for spend, and a delivery
+             * state that outranked their choice would be the product overruling them. The
+             * constitution says «DEFAULT order puts active content first», and that word is the
+             * whole of this flag: `auto` and `relevance` opt in, an explicitly chosen metric does
+             * not. `CreativeLibraryApiTest` caught this within a minute of the first version —
+             * `Dear`, which had spent 9,000 but was five days quiet, lost its own spend sort to a
+             * serving creative that had spent 10.
+             */
+            ->when($runningFirst, fn ($q) => $q->orderByRaw(
                 'CASE WHEN external_creatives.status IN ('.implode(', ', array_fill(0, count(Relevance::NOT_RUNNING), '?')).') THEN 2'
                 .' WHEN external_creatives.last_active_at >= ? THEN 0 ELSE 1 END',
                 [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
-            )
+            ))
+            ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+            ->orderByRaw('sorted.sort_spend DESC NULLS LAST')
+            /*
+             * The same clause again, as the TIEBREAK, for an explicitly chosen metric.
+             *
+             * It has always been here and it stays: where two creatives tie on the metric a reader
+             * named, what is running is the better answer. What it must not do is OUTRANK the metric
+             * they asked for — see the note above.
+             */
+            ->when(! $runningFirst, fn ($q) => $q->orderByRaw(
+                'CASE WHEN external_creatives.status IN ('.implode(', ', array_fill(0, count(Relevance::NOT_RUNNING), '?')).') THEN 2'
+                .' WHEN external_creatives.last_active_at >= ? THEN 0 ELSE 1 END',
+                [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
+            ))
             /*
              * ENTITY-RELEVANCE-ORDERING-001 — the same tie, in the order the library actually opens on.
              *

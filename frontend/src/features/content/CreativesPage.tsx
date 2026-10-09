@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
+import { DeliveryBadge } from './DeliveryBadge'
+import { relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { PosterImage } from './PosterImage'
 import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
@@ -135,7 +137,16 @@ const COPY = {
     sortAuto: 'تلقائي — حسب هدف الحملة',
     sortedBy: 'مرتَّب حسب',
     sortedByObjective: 'لأن هدف الحملات هنا',
-    sortedBySpendFallback: 'مرتَّب حسب الإنفاق — لم تُحدَّد وجهة واحدة لترتيبها عليها.',
+    sortedBySpendFallback: 'ما يعمل أولًا، ثم حسب الإنفاق — لم تُحدَّد وجهة واحدة لترتيبها عليها.',
+    /*
+     * CONTENT-BROWSER-PARITY-001 — the running-first clause is SAID, because it now decides.
+     *
+     * It used to sit below the metric and below spend, where it almost never fired, so leaving it
+     * out of the sentence cost nothing. It leads the measured now, and an order a reader cannot
+     * account for is indistinguishable from a bug — which is the defect this whole statement exists
+     * to prevent.
+     */
+    sortedRunningFirst: 'ما يعمل أولًا، ثم',
     sortRelevance: 'ما يعمل الآن',
     sortRecent: 'الأحدث نشاطًا',
     sortSpend: 'الأعلى إنفاقًا',
@@ -220,9 +231,10 @@ const COPY = {
     to: 'To',
     sort: 'Sort',
     sortAuto: 'Automatic — by campaign objective',
-    sortedBy: 'Ordered by',
+    sortedBy: 'ordered by',
     sortedByObjective: 'because the objective here is',
-    sortedBySpendFallback: 'Ordered by spend — no single objective was named to rank on.',
+    sortedBySpendFallback: 'What is running first, then by spend — no single objective was named to rank on.',
+    sortedRunningFirst: 'What is running first, then',
     sortRelevance: 'What is running',
     sortRecent: 'Most recently active',
     sortSpend: 'Highest spend',
@@ -1147,7 +1159,7 @@ export function CreativesPage() {
       {data?.sort?.applied === 'auto' && (
         <p data-testid="content-sort-note" className="text-sm text-text-secondary">
           {data.sort.objective !== null
-            ? `${t.sortedBy} ${metricName(data.sort.metric, ar)} — ${t.sortedByObjective} ${objectiveLabel(data.sort.objective, locale)}.`
+            ? `${t.sortedRunningFirst} ${t.sortedBy} ${metricName(data.sort.metric, ar)} — ${t.sortedByObjective} ${objectiveLabel(data.sort.objective, locale)}.`
             : t.sortedBySpendFallback}
         </p>
       )}
@@ -1192,6 +1204,7 @@ export function CreativesPage() {
                 onOpen={() => setViewerIndex(index)}
                 showPreviewPanel={anyPreview}
                 detailsTo={`${creative.id}${libraryAddress}`}
+                windowEnd={to}
               />
             </li>
           ))}
@@ -1499,6 +1512,7 @@ function CreativeGridCard({
   onOpen,
   showPreviewPanel = true,
   detailsTo,
+  windowEnd,
 }: {
   creative: CreativeCard
   /** False when nothing in the result has an asset — the reserved 16:9 panel is then dead space. */
@@ -1514,6 +1528,13 @@ function CreativeGridCard({
   onSelect: () => void
   onOpen: () => void
   detailsTo: string
+  /**
+   * The END of the window the page is reading — what «still running» is measured against.
+   *
+   * Not `today`: a reader looking at last quarter is asking whether these ran THEN, and judging a
+   * September creative against today's date would mark the whole quarter stopped.
+   */
+  windowEnd: string
 }) {
   const preview = creative.preview
   /*
@@ -1797,6 +1818,28 @@ function CreativeGridCard({
           {creative.campaign_name ? ` · ${creative.campaign_name}` : ''}
           {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
         </p>
+
+        {/*
+          CONTENT-BROWSER-PARITY-001 — «is this still running on the platform?», asked for by name.
+          
+          The owner: «إذا كان هناك علامة لتوضيح هل المحتوى فعال أو واقف في المنصة جدا ممتاز». It is
+          not decoration: the list now puts what is running first, and a reader who cannot see WHY a
+          card is above another is back to an order they cannot account for.
+          
+          `relevanceOf` is the product's one answer to this question, already read by the campaigns
+          workspace and the analytics rows — not a fourth reading of `status`. Three states, because
+          there are three: serving, switched on and producing nothing, and stopped.
+          
+          Historical spend never implies «active»: the state is read from the status and the last
+          ACTIVE date, never from whether figures exist.
+        */}
+        <DeliveryBadge
+          state={relevanceOf(
+            { status: creative.status, last_active_on: creative.freshness.last_active_at },
+            windowEnd,
+          )}
+          ar={ar}
+        />
 
         {/*
           * CONTENT-STATE-SEMANTICS-001 — a creative with NO figures says why, once.
