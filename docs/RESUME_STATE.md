@@ -674,3 +674,93 @@ axis was labelled «Ads» / «الإعلانات», identical to the ads axis, i
 **Read `docs/ACTIVE_EXECUTION_STATE.md`** for the full blocked list; every remaining item names one
 external dependency — an authenticated session, a VPS shell, a provider credential, or an owner
 decision.
+
+---
+
+# ADDENDUM — 2026-10-09, the autonomous closure run
+
+_Appended rather than replacing what is above. The first version of this addendum OVERWROTE this
+file, which is governed: `MatrixStatusVocabularyTest` requires it to name the binding requirement
+ids and every registered family, and the overwrite failed CI on exactly that. The guard was right._
+
+## Where Git is now
+
+`origin/main` has moved a long way past the summary above. Read `git log origin/main` for the truth;
+the merges from this run are #622 (GA4 as a measurement source), #623 (the order count leads the
+content card), #624 (running content leads the library, delivery badge), #625 (the table names the
+ad account and the delivery state).
+
+## The merge lane
+
+ONE PR at a time. A second open PR puts the first in `BEHIND` and re-runs its full three-browser
+gate (~35 min). Prepare the next unit in its own worktree while a gate runs; push only when the lane
+is clear.
+
+## The exact position when this run stopped
+
+**GitHub became unreachable** — `api.github.com` answered nothing after 30s and `git push` failed
+with «Couldn't connect to server». Everything below is committed LOCALLY; nothing is lost, and the
+first action on resume is to push.
+
+| Branch | Local head | Pushed? |
+|---|---|---|
+| `feat/share-client-identity` (#626) | the e2e filename-guard fix | **NO — push this first** |
+| `feat/report-content-browser` | 8 commits | no, queued |
+| `feat/measurement-sync-history` | 1 commit | no, queued |
+
+#626 had five of six checks green; `gate (webkit)` failed on ONE case and the fix is the unpushed
+commit. The failure was a FALSE ACCUSATION by a proxy pattern, not a product defect:
+`report-tabular-download.spec.ts` asserted a download is not «named after its blob» with
+`[0-9a-f-]{36}` — any thirty-six hex-or-hyphen characters — and giving export filenames their
+period produced a forty-four-character run of them in a name that is entirely the report's own
+(`executive-summary-…-2026-09-10-2026-10-09-541b586e.xlsx`). The pattern is now the canonical
+8-4-4-4-12 uuid shape, checked both ways, with a positive assertion beside it because «is not a
+uuid» is true of `x.xlsx` too.
+
+## Units prepared and waiting for the lane
+
+| Worktree | Branch | Closes |
+|---|---|---|
+| `Developer/ch-report` | `feat/report-content-browser` | `REPORT-CONTENT-BROWSER-001`, `REPORT-CLIENT-OUTCOME-001` |
+| `Developer/ch-measure` | `feat/measurement-sync-history` | the history/freshness half of `GA4-INTEGRATION-001` |
+
+Each carries its own full test run in its commit message. Rebase on fresh main, re-run the focused
+suites, push.
+
+## Next requirement ids, in order
+
+1. `CONTENT-RESULT-AVAILABILITY-001` — re-read it; the prominence half shipped in #623 and the row
+   may be closable on evidence rather than code.
+2. `BRANDING-RENDER-EVIDENCE-001`, `BRANDING-HIERARCHY-001`, `BRAND-MARK-001`.
+3. The `IMPLEMENTED_NOT_VERIFIED` sweep: classify each row as credential-blocked,
+   owner-session-blocked, or verifiable read-only — and verify the third kind immediately.
+
+## Two dead ends already explored, so they are not explored twice
+
+**The preview report's «0 USD» headline over content reading 2,643 USD** is a demo-estate artefact,
+not the defect #621 fixed one rung down. Every creative in that project is `is_demo`: the content
+reader includes demo rows and the metrics aggregator excludes them, so the two disagree only where
+the data is seeded. Checked against the database — 36 campaign-grain and 54 creative-grain rows in
+the window — before concluding.
+
+**`TABLE-NUMERIC-ALIGNMENT-001`'s «browser evidence at 1440 and 390 in both locales on all three
+gate browsers»** already runs on every gate: `table-alignment-sweep.spec.ts` measures it
+geometrically, in both locales, at both widths, over the exempt surfaces as well as the migrated
+ones. The row was stale, and is corrected rather than re-built.
+
+## Constraints that cost time when forgotten
+
+- One local test suite at a time: every worktree's phpunit points at `mediabuying_test`.
+- Pint `bootstrap/app.php` after registering a command, or CI fails on style alone.
+- `*/` inside a `/* */` comment closes it early — a path like `lang/<locale>/x.php` written with a
+  glob in a docblock is a parse error.
+- A matrix row must have exactly as many columns as its header; replacing a cell without consuming
+  the old prose after it leaves a split cell and fails the width guard.
+- A client report carries **no campaign identity** (`CLIENT-REPORT-ENTITY-BOUNDARY-001`, owner,
+  "do not ask again"), whatever a generic column list says.
+
+## Local preview stack
+
+`ga4-api` on 8121 and `ga4-web` on 5221 in `.claude/launch.json`, against `campaignshub_preview`.
+Sign in as `agency@campaignshub.io` / `password`. A GA4 estate is seeded there — in that PRIVATE
+database only, never in a shared seeder.

@@ -124,21 +124,38 @@ final class ReportAgencyAndClientLogosTest extends TestCase
     }
 
     /**
-     * The link's title is the report's name ending with the product's, in the REPORT's language —
-     * Arabic «— كامبينز هب», English «— CampaignsHub» — on the card a pasted link renders as and in
-     * the spreadsheet's own title.
+     * The card is the CLIENT's, in the report's language — and this assertion changed with it.
+     *
+     * It used to read «تقرير الأداء الشهري — كامبينز هب»: the report's name ending with the
+     * product's. SHARE-PREVIEW-CLIENT-IDENTITY-001 overrides that — «Do NOT use CampaignsHub as the
+     * primary report-card identity when the Client has a logo» — because a crawler renders this
+     * line first and largest, and a client's first sight of their own report should not be our
+     * name.
+     *
+     * The LANGUAGE claim this test is really about is untouched and still asserted: the card, the
+     * document's `lang` and `og:site_name` all follow the report's own language.
      */
-    public function test_a_reports_title_ends_with_the_product_name_in_its_own_language(): void
+    public function test_a_reports_card_leads_with_the_client_in_the_reports_own_language(): void
     {
-        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $this->meta($this->preview(), 'og:title'));
+        $this->assertSame('Nakheel — تقرير الأداء الشهري', $this->meta($this->preview(), 'og:title'));
 
         app(TenantContext::class)->setTenantId($this->agency->id);
         $this->report->update(['name' => 'Monthly performance', 'config' => ['locale' => 'en']]);
         app(TenantContext::class)->forget();
 
         $html = $this->preview();
-        $this->assertSame('Monthly performance — CampaignsHub', $this->meta($html, 'og:title'));
-        $this->assertStringContainsString('<title>Monthly performance — CampaignsHub</title>', $html);
+        $this->assertSame('Nakheel — Monthly performance', $this->meta($html, 'og:title'));
+        /*
+         * The `<title>` matches, and that is right rather than an oversight.
+         *
+         * This document is the CRAWLER's — it is served only to a bot user-agent — and several
+         * crawlers read `<title>` when `og:title` is absent or when they prefer it. A card whose
+         * two titles disagreed would render differently depending on which one the reader's app
+         * happened to use. The HUMAN's browser tab is set by the SPA (`reportPageTitle`), which is
+         * where keeping the product's name still earns its place: it tells two open report links
+         * apart.
+         */
+        $this->assertStringContainsString('<title>Nakheel — Monthly performance</title>', $html);
         $this->assertStringContainsString('lang="en"', $html);
         $this->assertSame('CampaignsHub', $this->meta($html, 'og:site_name'));
     }

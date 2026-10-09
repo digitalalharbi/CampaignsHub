@@ -78,12 +78,29 @@ final class SharePreviewController extends Controller
             // The report's own language, and its title ends with the product's name in it (REPORT BRANDING).
             'lang' => $locale,
             'dir' => $locale === 'ar' ? 'rtl' : 'ltr',
-            'title' => ReportIdentity::pageTitle($report),
+            /*
+             * SHARE-PREVIEW-CLIENT-IDENTITY-001 — the CLIENT leads the card, not the product.
+             *
+             * This was `ReportIdentity::pageTitle()`, which appends the product's name — correct for
+             * a BROWSER TAB, where it is what tells two open report links apart, and wrong here. The
+             * owner's instruction is explicit: «Do NOT use CampaignsHub as the primary report-card
+             * identity when the Client has a logo», and a WhatsApp card renders this line first and
+             * largest. A client's first sight of their own report read «… — كامبينز هب».
+             *
+             * So where the identity resolved to somebody — a client, or the agency on a link that
+             * has no client — that name leads and the report's own name follows it. The product's
+             * name is still on the card, in `og:site_name`, which is where a platform belongs.
+             *
+             * Where nothing resolved, the identity IS the product and the old title stands: a card
+             * reading «CampaignsHub — CampaignsHub» would be the «Nakheel, by Nakheel» bug the
+             * resolver already avoids one field down.
+             */
+            'title' => $this->cardTitle($report, $identity),
             /*
              * The period and nothing else. It is what makes the card useful in a chat — «which
              * report is this?» — and it is already implied by the link the sender chose to send.
              */
-            'description' => $period === null ? $who : "{$who} · {$period}",
+            'description' => $this->cardDescription($report, $who, $period, $identity),
             /*
              * BRAND-CANONICAL-001 — `brand.name`, and not the framework's name key.
              *
@@ -135,6 +152,77 @@ final class SharePreviewController extends Controller
             'imageWidth' => (int) config('reports.og.width', 1200),
             'imageHeight' => (int) config('reports.og.height', 630),
         ]);
+    }
+
+    /**
+     * The card's headline: whose report this is, then which report.
+     *
+     * @param  array<string, mixed>  $identity
+     */
+    private function cardTitle(Report $report, array $identity): string
+    {
+        $who = trim((string) ($identity['name'] ?? ''));
+        $product = ReportIdentity::productName($report->reportLocale());
+
+        /*
+         * Nothing resolved, so the identity IS the product — keep the browser-tab form rather than
+         * printing the product's name twice.
+         */
+        if ($who === '' || $who === $product) {
+            return ReportIdentity::pageTitle($report);
+        }
+
+        $name = trim((string) ($report->name ?? ''));
+
+        if ($name === '') {
+            $name = $report->reportLocale() === 'en' ? 'Performance report' : 'تقرير الأداء';
+        }
+
+        return "{$who} — {$name}";
+    }
+
+    /**
+     * The second line: the period, and the preparing company as SECONDARY attribution.
+     *
+     * `by` is already «the agency, under a client's name» — absent when the two identities are one,
+     * because «Nakheel, by Nakheel» reads as a bug. The client's own name is no longer repeated
+     * here: it now leads the title, and a card that said it twice would spend its second line
+     * saying nothing.
+     *
+     * Still no figures. Spend and revenue would be visible to everyone the message reaches,
+     * including a group the client forwarded it into — the rule this whole card was built under.
+     *
+     * @param  array<string, mixed>  $identity
+     */
+    private function cardDescription(Report $report, string $who, ?string $period, array $identity): string
+    {
+        $by = trim((string) ($identity['by'] ?? ''));
+        $leads = trim((string) ($identity['name'] ?? '')) !== '' && $this->titleCarriesIdentity($identity);
+
+        $parts = array_values(array_filter([
+            $leads ? null : $who,
+            $period,
+            /*
+             * REPORT-IDENTITY-001's own words — «من إعداد», not «بواسطة».
+             *
+             * «بواسطة» is a byline; this is a report somebody PREPARED for somebody else. The
+             * public report's header already says it this way, and a card that said it differently
+             * would be a second phrasing for one relationship. Composed here rather than through a
+             * translation key because this domain has no `reports` language file and inventing one
+             * for a single string is how a vocabulary ends up in two places.
+             */
+            $by === '' ? null : ($report->reportLocale() === 'en' ? "Prepared by {$by}" : "من إعداد {$by}"),
+        ], static fn (?string $p): bool => $p !== null && trim($p) !== ''));
+
+        return $parts === [] ? $who : implode(' · ', $parts);
+    }
+
+    /** Whether {@see cardTitle} put the identity's name at the front. */
+    private function titleCarriesIdentity(array $identity): bool
+    {
+        $who = trim((string) ($identity['name'] ?? ''));
+
+        return $who !== '' && $who !== ReportIdentity::productName('ar') && $who !== ReportIdentity::productName('en');
     }
 
     /**

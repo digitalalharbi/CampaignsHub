@@ -138,14 +138,50 @@ final class ReportIdentity
      */
     private static function period(Report $report): ?string
     {
+        /*
+         * REPORT-TITLE-METADATA-001 — the COLUMNS first, and that is a defect being fixed.
+         *
+         * This read `config.period` and nothing else. Not one report in the estate stores a period
+         * there: every row carries `period_start` / `period_end` and leaves the config key unset,
+         * so this returned null for all of them — and the dates silently vanished from the two
+         * surfaces that need them most.
+         *
+         * The result was an email subject reading «تقرير تفصيلي — آساس الثبات» for January and the
+         * identical string for February, and an export filename distinguished only by eight
+         * characters of a uuid. The docblock above has always said why that matters — «the dates are
+         * what make two files in one folder distinguishable, which is the entire point of naming
+         * them» — so the intent was recorded and simply unmet, which is exactly the shape of thing
+         * «untested» hides.
+         *
+         * The config keys are kept as a fallback: a report built before the columns existed, or one
+         * whose period is a config-only concept, still names itself.
+         */
         $config = (array) ($report->config ?? []);
-        $from = $config['period']['from'] ?? $config['from'] ?? null;
-        $to = $config['period']['to'] ?? $config['to'] ?? null;
 
-        if (! is_string($from) || ! is_string($to) || $from === '' || $to === '') {
+        $from = self::day($report->period_start) ?? self::stringOrNull($config['period']['from'] ?? $config['from'] ?? null);
+        $to = self::day($report->period_end) ?? self::stringOrNull($config['period']['to'] ?? $config['to'] ?? null);
+
+        if ($from === null || $to === null) {
             return null;
         }
 
         return $from === $to ? $from : $from.' → '.$to;
+    }
+
+    /** A date column as `Y-m-d`, or null where it is unset — never «now» by accident. */
+    private static function day(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        $text = self::stringOrNull($value);
+
+        return $text === null ? null : substr($text, 0, 10);
+    }
+
+    private static function stringOrNull(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? $value : null;
     }
 }
