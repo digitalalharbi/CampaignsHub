@@ -117,7 +117,7 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
     },
   })
 
-  if (q.isLoading) return <div className="grid gap-3 lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</div>
+  if (q.isLoading) return <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-48" />)}</div>
   if (q.isError || !q.data) {
     return <QueryFailure error={q.error} ar={ar} testId="project-platforms-failure" onRetry={() => void q.refetch()}
       fallbackTitle={ar ? 'تعذّر تحميل المنصات.' : 'The platforms could not be loaded.'} />
@@ -149,7 +149,9 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
         <Stat label={ar ? 'حملات مكتشفة' : 'Campaigns discovered'} value={String(summary.discovered_campaigns)} />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      {/* Three abreast from xl: at 1366×768 seven platform cards two abreast took four rows
+          (1,150 px) for a catalogue whose cards are 275 px tall and read fine at a third of the width. */}
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
         {platforms.map((p) => {
           // INTEG-RUNTIME §8 — the word and the colour come from the one module that decides them.
           const syncMeta = p.last_sync ? syncStatusMeaning(p.last_sync.status) : null
