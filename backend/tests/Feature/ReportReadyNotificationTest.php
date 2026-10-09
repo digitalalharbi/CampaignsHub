@@ -63,7 +63,7 @@ final class ReportReadyNotificationTest extends TestCase
         $this->assertNotNull($n, 'the author was not told');
         $this->assertSame((int) $this->author->id, (int) $n->user_id);
         $this->assertStringContainsString('Ramadan — monthly', (string) $n->title);
-        $this->assertSame('/app/reports', (string) $n->action_url);
+        $this->assertSame('/reports', (string) $n->action_url, 'portal-relative, never a minted /app/… (NOTIF-LINK-001)');
         $this->assertDatabaseHas('notification_deliveries', ['notification_id' => $n->id, 'channel' => 'email', 'status' => 'awaiting_credentials']);
     }
 
