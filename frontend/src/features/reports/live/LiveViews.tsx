@@ -325,6 +325,8 @@ export function DashboardView({
               reading={payload.ads_reading}
               locale={locale}
               onOpen={onOpenContent}
+              /* «Still running» is measured against the period the client is reading, never today. */
+              windowEnd={payload.period?.to ?? null}
               restWhere={{ ar: '«المحتوى»', en: 'Content' }}
             />
           </div>
