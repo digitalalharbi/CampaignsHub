@@ -507,8 +507,9 @@ describe('the platform-reported vs store-confirmed comparison', () => {
       const ledger = await screen.findByTestId('reconciliation-ledger')
       const refs = within(ledger).getAllByTestId(/^ledger-row-/).map((r) => r.getAttribute('data-testid'))
       expect(refs).toEqual(['ledger-row-ORD-1', 'ledger-row-ORD-2', 'ledger-row-ORD-3'])
-      expect(within(ledger).getByTestId('ledger-row-ORD-3')).toHaveTextContent(/unattributed/i)
-      expect(within(ledger).getByTestId('ledger-row-ORD-1')).toHaveTextContent('Ramadan')
+      const rowOf = (ref: string) => within(ledger).getByTestId(`ledger-row-${ref}`).closest('tr')!
+      expect(rowOf('ORD-3')).toHaveTextContent(/unattributed/i)
+      expect(rowOf('ORD-1')).toHaveTextContent('Ramadan')
     })
 
     it('states the measurement layer as absent rather than drawing a zero', async () => {
