@@ -870,4 +870,4 @@ budget tests encoding the earlier reading (an unread project's unstarted campaig
 dropped an unmeasured campaign's committed budget). `ClientBudgetRollup` now counts committed budget over every
 same-currency row, sums spend over measured rows only, and withholds remaining/projection/pace while any row is
 unmeasured; the tests carry the directive's rule with the measured zero kept as its own case. Budget group 32/32;
-a second full backend run is in flight before push.
+the second full backend run: 4,576 passed, 1 skipped (27,660 assertions). Branch ready to push when its lane turn comes.
