@@ -911,12 +911,16 @@ function channelLabel(key: string, options: Option[], locale: 'ar' | 'en'): stri
 function sevLabel(s: AlertEvent['severity'], c: Copy) {
   return s === 'info' ? c.sev_info : s === 'warning' ? c.sev_warning : c.sev_critical
 }
+/* An event that carries its title in the reader's language is read in it; the English the engine has
+   always written stays the fallback, so older event types read exactly as before. */
 function labelFor(e: AlertEvent, locale: 'ar' | 'en'): string {
   const t = TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type
+  const localised = locale === 'ar' && e.context && typeof e.context.title_ar === 'string' ? e.context.title_ar : null
   const title = (e.context && typeof e.context.title === 'string') ? e.context.title : null
-  return title ?? t
+  return localised ?? title ?? t
 }
 function messageFor(e: AlertEvent, locale: 'ar' | 'en'): string {
+  if (locale === 'ar' && e.context && typeof e.context.message_ar === 'string') return e.context.message_ar
   if (e.context && typeof e.context.message === 'string') return e.context.message
   return TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type
 }
