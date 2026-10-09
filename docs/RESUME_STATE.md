@@ -764,3 +764,37 @@ ones. The row was stale, and is corrected rather than re-built.
 `ga4-api` on 8121 and `ga4-web` on 5221 in `.claude/launch.json`, against `campaignshub_preview`.
 Sign in as `agency@campaignshub.io` / `password`. A GA4 estate is seeded there — in that PRIVATE
 database only, never in a shared seeder.
+
+## 2026-10-09 — mid-run position (appended; the sections above are history)
+
+**Main is `a46626fc`** (#627 merged and deployed; served bundle `index-CpxeZPfb.js`). #626 merged as
+`c0dba731` and deployed (backend-only; no bundle change by design).
+
+**The merge lane is #628** (`feat/measurement-sync-history`, GA4 sync history). Its backend check
+FAILED on CI while every sync-run suite passes locally after the rebase (97/97); the CI log could
+not be fetched through the network outage and a full local backend suite was started as the honest
+reproduction. Do not retry blind: read the job log, reproduce, fix, push.
+
+**Queued behind it, in this order, each rebased onto `a46626fc`, verified and committed:**
+
+| Worktree | Branch | Carries |
+|---|---|---|
+| `ch-font` | `feat/branding-font-control` | font control withdrawn (section 9 delegation), BRAND-MARK-001 evidence, AGGREGATION-TRUTH-001 reclassified |
+| `ch-ga4` | `feat/report-product-composition` | snapshot executive summary composed as one (REPORT-PRODUCT-MODEL-001), REPORT-DETAIL-PARITY-001 and SHARE-PREVIEW-CLIENT-IDENTITY-001 reclassified |
+| `ch-req` | `feat/report-sections-at-creation` | REPORT-CREATION-UX-001 VERIFIED, REPORT-SCOPE-SELECTION-001 VERIFIED, UX-MULTISELECT-SCALE-001 VERIFIED (241-campaign seed + 3-browser spec), ENTITY-RELEVANCE-ORDERING-001 (3-browser spec), REPORT-CONTENT-BROWSER-001 VERIFIED (client-link spec + served bundle) |
+| `ch-rmfmt` | `feat/report-outline-browser-evidence` | print numbering counts what it prints (defect found by the browser evidence), outline reads cost before where (CLIENT-FACING-PRESENTATION-001), two-form live sweep at 375/1440 × ar/en × dark/light, summary live link seeded |
+
+Push one at a time: fresh main → rebase (the per-row matrix resolver is
+`scratchpad/resolve_matrix2.py` — rows both sides appended are merged by appending the branch's
+delta) → focused suites → push → CI → merge → deploy → verify by served-asset marker.
+
+**Next requirement ids, in order:** `ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001` (the refund arm —
+`refunds` into the summary totals from `CommerceOrder.refunded_total`, `reported.refunds` when a
+store is in scope, a `value` finding when refunds erode revenue, `missing` naming refunds when
+unreported); `ANALYTICS-FILTER-TRUTH-001` (propagation sweep per surface, read against
+`FilterTruthAuditSurfacesTest`); `TABLE-PRESENTATION-CONTRACT-001` (migrate exempt surfaces).
+
+**Lessons that cost time today, now in memory:** a `|` inside a matrix cell splits the row; a gap
+cell's LAST paragraph is the claim (never prepend, never file prose in the Commit column);
+`getByText().first()` on ReportsPage hits the hidden phone card; `getByRole('option')` is
+page-wide; an XPath union's `.first()` is the OUTERMOST ancestor.
