@@ -26,6 +26,18 @@ import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
  */
 const PROJECT = 'متجر تجريبي — Demo'
 
+/**
+ * The two rungs this table serves — OBJECTIVE-ANALYTICS-DEPTH-001's drill reaches the ad-set grain
+ * through the same component (`EntityTab level="ad_set"`), and `DemoAdCreativeLinkSeeder::adSetMetrics`
+ * writes that grain as the SUM of each ad set's own ads, so the ad-set table spans the same two
+ * objective families the ads table does. Reached by URL (`?tab=`), never by clicking a translated
+ * label — `platform-decision.spec.ts` learned that one five times over.
+ */
+const RUNGS = [
+  { level: 'ad', tab: 'ads' },
+  { level: 'ad_set', tab: 'ad_sets' },
+] as const
+
 const COPY = {
   ar: {
     ads: /^الإعلانات$/,
@@ -45,35 +57,23 @@ const COPY = {
   },
 }
 
-async function openAds(page: Page, locale: 'ar' | 'en') {
-  await page.goto('/agency/analytics')
+async function openRung(page: Page, locale: 'ar' | 'en', rung: (typeof RUNGS)[number]) {
+  await page.goto(`/agency/analytics?tab=${rung.tab}`)
 
   if (locale === 'en') {
     await switchToEnglish(page)
   }
 
-  const tab = page.getByRole('tab', { name: COPY[locale].ads })
-
   /*
-   * Click until it TAKES, rather than clicking once and waiting longer.
-   *
-   * This wait was raised to fifteen seconds for exactly this failure and then failed again at 16.2s
-   * on firefox, which is the evidence that a longer budget was the wrong fix: a click delivered
-   * before React has attached the tab's handler is LOST, and no amount of waiting recovers a click
-   * that nothing received. A `toPass` loop re-clicks and re-checks, so a lost click costs one
-   * retry and a slow render costs nothing.
-   *
-   * Six sibling call sites assert the same flip on the default five seconds —
-   * `analytics-normalization`, `auth-redesign`, `homepage`, `one-ad-level`,
-   * `platform-within-objective` and `responsive-audit`. Named here so the next one is an edit
-   * rather than another investigation.
+   * The tab is named in the ADDRESS, so there is no click to lose and no label to translate. The
+   * earlier `toPass` click loop (raised to fifteen seconds, then failing at 16.2s on firefox) existed
+   * because a click delivered before React attached the handler was lost; `useUrlState('tab')` reads
+   * the query string on mount and the panel renders without a click at all.
    */
-  await expect(async () => {
-    await tab.click()
-    await expect(tab, 'the ads tab never became selected').toHaveAttribute('aria-selected', 'true', { timeout: 5_000 })
-  }).toPass({ timeout: 30_000 })
+  const table = page.getByTestId(`entity-table-${rung.level}`)
+  await expect(table, `the ${rung.level} table never rendered from ?tab=${rung.tab}`).toBeVisible({ timeout: 30_000 })
 
-  return page.getByTestId('entity-table-ad')
+  return table
 }
 
 /**
@@ -90,20 +90,20 @@ async function narrowObjective(page: Page, value: string) {
   await page.waitForLoadState('networkidle')
 }
 
-for (const locale of ['ar', 'en'] as const) {
+for (const rung of RUNGS) for (const locale of ['ar', 'en'] as const) {
   const t = COPY[locale]
 
-  test.describe(`the ads table follows the objective (${locale})`, () => {
+  test.describe(`the ${rung.level} table follows the objective (${locale})`, () => {
     test.use({ storageState: AUTH.owner })
 
     test('refuses a blended verdict across objectives, and says why', async ({ page, request }) => {
       await selectProject(page, await seededProject(request, PROJECT))
-      const table = await openAds(page, locale)
+      const table = await openRung(page, locale, rung)
       await expect(table).toBeVisible({ timeout: 30000 })
 
       /* The demo now holds a sales family and an awareness family, so the unfiltered table is mixed. */
-      await expect(page.getByTestId('entity-mixed-objectives-ad')).toBeVisible()
-      await expect(page.getByTestId('entity-mixed-objectives-ad')).toHaveText(t.mixed)
+      await expect(page.getByTestId(`entity-mixed-objectives-${rung.level}`)).toBeVisible()
+      await expect(page.getByTestId(`entity-mixed-objectives-${rung.level}`)).toHaveText(t.mixed)
 
       /*
        * Neither family's verdict, because neither is true of the whole list: a return over a scope half
@@ -125,19 +125,19 @@ for (const locale of ['ar', 'en'] as const) {
 
     test('gives a sales-only table its own return, with no excuse attached', async ({ page, request }) => {
       await selectProject(page, await seededProject(request, PROJECT))
-      const table = await openAds(page, locale)
+      const table = await openRung(page, locale, rung)
       await expect(table).toBeVisible({ timeout: 30000 })
 
       await narrowObjective(page, 'sales')
 
       await expect(table.locator('thead')).toContainText(t.roas)
-      await expect(page.getByTestId('entity-mixed-objectives-ad')).toHaveCount(0)
+      await expect(page.getByTestId(`entity-mixed-objectives-${rung.level}`)).toHaveCount(0)
       await expect(table).toContainText(t.spend)
     })
 
     test('gives an awareness-only table reach, and no cost per order', async ({ page, request }) => {
       await selectProject(page, await seededProject(request, PROJECT))
-      const table = await openAds(page, locale)
+      const table = await openRung(page, locale, rung)
       await expect(table).toBeVisible({ timeout: 30000 })
 
       await narrowObjective(page, 'awareness_engagement')
@@ -151,7 +151,7 @@ for (const locale of ['ar', 'en'] as const) {
     /** Spend is the operational fact, and it survives every narrowing and the mixed state alike. */
     test('keeps spend through every objective state', async ({ page, request }) => {
       await selectProject(page, await seededProject(request, PROJECT))
-      const table = await openAds(page, locale)
+      const table = await openRung(page, locale, rung)
       await expect(table).toBeVisible({ timeout: 30000 })
 
       await expect(table).toContainText(t.spend)
