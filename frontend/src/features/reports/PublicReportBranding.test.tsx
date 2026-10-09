@@ -90,11 +90,23 @@ describe('a shared report header that cannot show its logo', () => {
     expect(screen.getByTestId('shared-report-name')).toHaveTextContent('Nakheel')
   })
 
-  /** With no logo at all there is no image to break, and the name still stands. */
+  /**
+   * With no logo at all there is no image to break, and the name still stands.
+   *
+   * Waits for the CONTENT, not for the element — and the difference is the whole of why this failed
+   * on CI while passing on every laptop. `shared-report-name` is rendered before the branding
+   * request resolves, carrying `headerIdentity(undefined)`'s honest fallback «CampaignsHub», so
+   * `findByTestId` returns on the first paint and the assertion reads the pre-branding value. It
+   * passed only while the mocked promise happened to flush before that paint, which a slower runner
+   * does not guarantee: CI saw «CampaignsHub» where the test expected «Nakheel».
+   *
+   * The sibling case above never had this problem because it awaits the LOGO, which exists only
+   * after branding arrives — so it was waiting for the right thing by accident.
+   */
   it('renders the name alone when no logo resolved', async () => {
     open(null)
 
-    expect(await screen.findByTestId('shared-report-name')).toHaveTextContent('Nakheel')
+    await waitFor(() => expect(screen.getByTestId('shared-report-name')).toHaveTextContent('Nakheel'))
     expect(screen.queryByTestId('shared-report-logo')).not.toBeInTheDocument()
   })
 })
@@ -134,7 +146,14 @@ describe('the configured mark reaches the shared header', () => {
     open('https://cdn.example.test/nakheel.png', { mode: 'live' })
 
     expect(await screen.findByTestId('live-body')).toBeInTheDocument()
-    expect(screen.getByTestId('shared-report-logo')).toHaveAttribute('src', 'https://cdn.example.test/nakheel.png')
+
+    /*
+     * The LOGO is awaited, not read. `live-body` arrives with the REPORT, and the mark arrives with
+     * the BRANDING — two requests, and nothing orders them. Reading the mark on the strength of the
+     * body having appeared passed only while the mocked promises happened to flush in that order,
+     * and the sibling case below lost exactly that race on CI.
+     */
+    expect(await screen.findByTestId('shared-report-logo')).toHaveAttribute('src', 'https://cdn.example.test/nakheel.png')
     expect(screen.getByTestId('shared-report-name')).toHaveTextContent('Nakheel')
   })
 
@@ -161,9 +180,20 @@ describe('the configured mark reaches the shared header', () => {
    * getting wrong.
    */
   it('falls back to a name and draws no image when nothing resolved', async () => {
-    open(null, { name: 'CampaignsHub', source: 'none' })
+    /*
+     * `by` is here to make the assertion mean something, not for its own sake.
+     *
+     * «CampaignsHub» is ALSO what `headerIdentity(undefined)` answers before the branding request
+     * resolves, so asserting it on first paint is true of a header that never received an answer at
+     * all — the case this test exists to tell apart from the one where the chain genuinely ended in
+     * the product's name. `by` appears only once branding has arrived, so waiting for it is what
+     * makes «CampaignsHub» below a resolved value rather than a default.
+     */
+    open(null, { name: 'CampaignsHub', source: 'none', by: 'Al Harbi Digital' })
 
-    expect(await screen.findByTestId('shared-report-name')).toHaveTextContent('CampaignsHub')
+    await screen.findByTestId('shared-report-by')
+
+    expect(screen.getByTestId('shared-report-name')).toHaveTextContent('CampaignsHub')
     expect(screen.queryByTestId('shared-report-logo')).not.toBeInTheDocument()
     expect(document.querySelector('img[src=""]')).toBeNull()
   })

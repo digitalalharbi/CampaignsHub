@@ -110,7 +110,7 @@ final class PlatformCredentials
          * `Advertising` for an unknown key: `AdPlatforms::canonical()` has already resolved it, and a
          * key no catalogue carries will miss in that file and be refused below, as before.
          */
-        $root = ($definition?->kind ?? ProviderKind::Advertising)->configFile();
+        $root = ($definition === null ? ProviderKind::Advertising : $definition->kind)->configFile();
 
         $config = config("{$root}.platforms.{$canonical}");
 

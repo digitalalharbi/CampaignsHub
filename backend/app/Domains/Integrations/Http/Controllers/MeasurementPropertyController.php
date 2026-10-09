@@ -19,6 +19,7 @@ use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -75,8 +76,15 @@ final class MeasurementPropertyController extends Controller
                 ->latest('updated_at')
                 ->first();
 
+            /*
+             * An empty ELOQUENT collection, not `collect()`.
+             *
+             * The two branches have to be the same type or the union loses the model collection's
+             * own methods — `modelKeys()` below was the one that noticed, and only under static
+             * analysis, because the null branch never reaches it at runtime.
+             */
             $properties = $connection === null
-                ? collect()
+                ? new EloquentCollection
                 : ExternalAccount::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
                     ->where('provider_connection_id', $connection->getKey())

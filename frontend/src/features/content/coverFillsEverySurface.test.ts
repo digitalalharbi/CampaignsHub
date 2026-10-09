@@ -90,3 +90,68 @@ describe('every small creative frame asks for a filling surface', () => {
     }
   })
 })
+
+/**
+ * The OTHER component that draws a creative, and the one the second report was actually about.
+ *
+ * `mediaFitClass` is not the only door. `AdPoster` derives its own fit from the asset's shape unless
+ * the caller states one — which letterboxed every creative whose shape was not the tile's, and all
+ * of the ones whose shape the platform never sent. The library grid does not use it; the reports,
+ * the campaign grid and the analytics rows do, which is exactly the set the owner named: «في
+ * التقارير لم يتم تحديث الغلاف … أبعاد الغلاف غير ملائمة».
+ *
+ * So the surfaces are read from source, and they are split into the two kinds on purpose. A guard
+ * that only checked the filling half would go green on the day somebody made the viewer fill too,
+ * and that is the line this change would be wrong to cross.
+ */
+describe('every AdPoster surface states its own fit, and the right one', () => {
+  /** Cards and thumbnails: what you recognise a row by. They fill. */
+  const FILLING: Array<[string, string]> = [
+    ['src/features/reports/live/LiveContent.tsx', 'live-content-poster'],
+    ['src/features/reports/ReportAdsSection.tsx', 'testid={testidPrefix}'],
+    ['src/features/reports/ReportCreativeRoster.tsx', 'report-roster-poster'],
+    ['src/features/campaigns/CampaignCommandCenter.tsx', 'ad-poster-'],
+    ['src/features/analytics/AnalyticsPage.tsx', 'analytics-creative-poster'],
+    ['src/features/analytics/AnalyticsPage.tsx', 'ad-thumb-'],
+  ]
+
+  /** Surfaces somebody opened to LOOK at the ad. They must never crop. */
+  const READING: Array<[string, string]> = [
+    ['src/features/reports/ReportAdDetail.tsx', 'report-ad-detail-poster'],
+    ['src/features/campaigns/CampaignCommandCenter.tsx', 'ad-preview-panel-poster'],
+  ]
+
+  /** The `<AdPoster …/>` element carrying this marker, as source. */
+  function element(file: string, marker: string): string {
+    const source = readFileSync(join(process.cwd(), file), 'utf8')
+    let found: string | null = null
+
+    for (let i = source.indexOf('<AdPoster'); i !== -1; i = source.indexOf('<AdPoster', i + 1)) {
+      const end = source.indexOf('/>', i)
+      const text = source.slice(i, end === -1 ? i + 600 : end)
+
+      if (text.includes(marker)) {
+        found = text
+        break
+      }
+    }
+
+    expect(found, `no <AdPoster> carrying ${marker} in ${file} — update the list`).not.toBeNull()
+
+    return found as string
+  }
+
+  it.each(FILLING)('%s (%s) fills its frame', (file, marker) => {
+    expect(
+      element(file, marker),
+      `a card or thumbnail is letterboxed again: ${file} (${marker})`,
+    ).toContain('fit="cover"')
+  })
+
+  it.each(READING)('%s (%s) is never cropped', (file, marker) => {
+    expect(
+      element(file, marker),
+      `a surface somebody opened to read was made to crop: ${file} (${marker})`,
+    ).not.toContain('fit="cover"')
+  })
+})

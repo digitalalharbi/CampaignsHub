@@ -48,7 +48,21 @@ export function ContentTile({
   const body = (
     <>
       <div className="relative">
-        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" forClient />
+      {/*
+          CONTENT-THUMB-FILL-001 — a report's content card is a COVER, so it fills.
+
+          The owner accepted the library's covers («الغلاف للمحتويات رائع») and reported this
+          surface in the same message: «في التقارير لم يتم تحديث الغلاف … أبعاد الغلاف غير ملائمة».
+          The library card was fixed through `mediaFit`'s `cover` surface; this one draws through
+          `AdPoster`, whose default derives the fit from the asset's shape and therefore letterboxed
+          every creative whose shape was not the tile's — which is most of them, and all of the ones
+          whose shape the platform never sent.
+
+          `fit="cover"` and not a new surface prop: the explicit override already exists on this
+          component and means exactly «this surface fills». The asset is one click away in the
+          viewer, which still contains — §12's line, and the one this change would be wrong to cross.
+      */}
+        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" fit="cover" forClient />
         {rank !== undefined && (
           <span className="tnum absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">
             <Num>{`#${rank}`}</Num>

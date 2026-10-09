@@ -419,7 +419,21 @@ function AdCard({
   const ar = locale === 'ar'
   const body = (
     <>
-      <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} forClient />
+      {/*
+          CONTENT-THUMB-FILL-001 — a report's content card is a COVER, so it fills.
+
+          The owner accepted the library's covers («الغلاف للمحتويات رائع») and reported this
+          surface in the same message: «في التقارير لم يتم تحديث الغلاف … أبعاد الغلاف غير ملائمة».
+          The library card was fixed through `mediaFit`'s `cover` surface; this one draws through
+          `AdPoster`, whose default derives the fit from the asset's shape and therefore letterboxed
+          every creative whose shape was not the tile's — which is most of them, and all of the ones
+          whose shape the platform never sent.
+
+          `fit="cover"` and not a new surface prop: the explicit override already exists on this
+          component and means exactly «this surface fills». The asset is one click away in the
+          viewer, which still contains — §12's line, and the one this change would be wrong to cross.
+      */}
+      <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} fit="cover" forClient />
 
       <div className="min-w-0">
         <div className="truncate text-sm font-bold text-text-primary" title={ad.name ?? undefined}>

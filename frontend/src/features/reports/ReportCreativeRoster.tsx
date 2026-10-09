@@ -232,6 +232,15 @@ function line(row: RosterRow, index: number, locale: Locale, onOpen?: (ad: Repor
         name={row.name ?? ''}
         className="h-9 w-12 shrink-0"
         testid={`report-roster-poster-${index}`}
+        /*
+          CONTENT-THUMB-FILL-001 — 36×48 pixels is a thumbnail, and a thumbnail fills.
+
+          The rule it used to follow, «a story is contained, never covered», is about a surface
+          somebody READS. At this size nobody reads a call to action; this is what you recognise a
+          row by, and a horizontal still sitting in it with grey bands down two sides is just a
+          smaller picture of nothing.
+        */
+        fit="cover"
         forClient
       />
       <span className="truncate font-medium text-text-primary" title={row.name ?? undefined}>
