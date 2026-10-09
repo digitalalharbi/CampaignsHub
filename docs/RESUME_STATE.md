@@ -864,3 +864,10 @@ page» cases (`/agency/tasks` goto never reached `load` in 330 s; `/agency/team`
 `#root present, 0 children, document complete`, console «WebKit encountered an internal error» — the browser,
 not the page; chromium/firefox passed the same specs in the run, and both routes passed 16 webkit combos
 locally in this session. Re-ran the failed job only (`gh run rerun 37952762111 --failed`).
+
+**Full backend on this branch after the rebase (4,573 passed, 2 failed) → `026f0ed2`.** The two failures were
+budget tests encoding the earlier reading (an unread project's unstarted campaign = spent 0; a client rollup that
+dropped an unmeasured campaign's committed budget). `ClientBudgetRollup` now counts committed budget over every
+same-currency row, sums spend over measured rows only, and withholds remaining/projection/pace while any row is
+unmeasured; the tests carry the directive's rule with the measured zero kept as its own case. Budget group 32/32;
+a second full backend run is in flight before push.
