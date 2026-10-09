@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\Catalogue\ProviderKind;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Measurement\Ga4NotSelected;
 use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
 use App\Domains\Integrations\Measurement\Ga4PropertySync;
 use App\Domains\Integrations\Measurement\Ga4ReportFailed;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -32,52 +37,108 @@ use Illuminate\Http\Request;
  */
 final class MeasurementPropertyController extends Controller
 {
-    public function __construct(private readonly TenantContext $tenant) {}
+    public function __construct(
+        private readonly TenantContext $tenant,
+        private readonly ProviderConfigurationService $settings,
+    ) {}
 
     /**
-     * GET /measurement/properties — every property discovered for this tenant, selected or not.
+     * GET /measurement/properties — one card per measurement provider, plus what it can see.
      *
-     * `is_selected` is stated per row rather than filtered out, because an operator's question is
-     * usually «which of these did we connect?» and a list that silently omitted the rest would make
-     * a property that was never selected look like one that was never found.
+     * The same shape as the commerce board, deliberately. The six situations a measurement
+     * connection can be in are the six a store connection can be in, and an operator who has learned
+     * that «بانتظار بيانات الاعتماد» means «the platform operator has not finished» should not have
+     * to learn a second phrase for the same fact one section further down.
+     *
+     * Driven off `ProviderCatalogue::ofKind(Measurement)` rather than off the string `ga4`, so a
+     * second measurement source needs no change here.
+     *
+     * Nothing in this response names a system credential. `awaiting_credentials` means «the platform
+     * operator has not finished setting this up», said without saying which key is absent: a customer
+     * cannot obtain an OAuth client secret for our app and does not need to know the shape of our
+     * registration.
      */
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
-        $accounts = ExternalAccount::withoutGlobalScopes()
-            ->where('tenant_id', (string) $this->tenant->tenantId())
-            ->where('account_type', Ga4PropertyDiscovery::ACCOUNT_TYPE)
-            ->orderBy('parent_name')
-            ->orderBy('name')
-            ->get();
+        $tenantId = (string) $this->tenant->tenantId();
+        $out = [];
 
-        $selected = ProjectIntegrationBinding::withoutGlobalScopes()
-            ->whereIn('external_account_id', $accounts->pluck('id')->all())
-            ->where('is_active', true)
-            ->pluck('project_id', 'external_account_id');
+        foreach (ProviderCatalogue::ofKind(ProviderKind::Measurement) as $definition) {
+            $creds = PlatformCredentials::for($definition->key);
 
-        return ApiResponse::success([
-            'properties' => $accounts->map(fn (ExternalAccount $a): array => [
-                'id' => (string) $a->getKey(),
-                'property_id' => (string) $a->external_id,
-                'name' => (string) $a->name,
-                /* The GA4 hierarchy, kept: a property is read as «Acme Group → Acme Store». */
-                'analytics_account_id' => $a->parent_external_id === null ? null : (string) $a->parent_external_id,
-                'analytics_account_name' => $a->parent_name === null ? null : (string) $a->parent_name,
+            $connection = ProviderConnection::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('provider', $definition->key)
+                ->whereIn('status', ['connected', 'error'])
+                ->latest('updated_at')
+                ->first();
+
+            $properties = $connection === null
+                ? collect()
+                : ExternalAccount::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->where('provider_connection_id', $connection->getKey())
+                    ->where('account_type', Ga4PropertyDiscovery::ACCOUNT_TYPE)
+                    ->orderBy('parent_name')
+                    ->orderBy('name')
+                    ->get();
+
+            $selected = $properties->isEmpty() ? collect() : ProjectIntegrationBinding::withoutGlobalScopes()
+                ->whereIn('external_account_id', $properties->modelKeys())
+                ->where('is_active', true)
+                ->pluck('project_id', 'external_account_id');
+
+            $state = match (true) {
                 /*
-                 * Null until the first sync asked the property for its own settings. Discovery does
-                 * not ask — see `Ga4PropertySync` — so a never-synced property honestly says «not
-                 * known yet» rather than being shown a guessed UTC and a guessed currency.
+                 * Ordered so an out-of-service provider reads as such even when its keys are
+                 * complete — otherwise an operator is offered a connect button the OAuth start is
+                 * going to refuse.
                  */
-                'timezone' => $a->timezone,
-                'currency' => $a->currency,
-                'is_selected' => $selected->has((string) $a->getKey()),
-                'project_id' => $selected->get((string) $a->getKey()),
-                'last_synced_at' => optional($a->last_synced_at)->toIso8601String(),
-                'discovered_at' => optional($a->discovered_at)->toIso8601String(),
-            ])->values()->all(),
-        ]);
+                ! $this->settings->isEnabled($definition->key) => 'unavailable',
+                ! $creds->isConfigured() => 'awaiting_credentials',
+                $connection === null || $properties->isEmpty() => 'disconnected',
+                $connection->status === 'error' => 'error',
+                default => 'connected',
+            };
+
+            $out[] = [
+                'key' => $definition->key,
+                'label' => $definition->label,
+                'label_ar' => $definition->labelAr,
+                'state' => $state,
+                'connection_error' => $connection?->last_error,
+                /*
+                 * «2 of 17 properties» is this family's version of the sentence the hub rows carry.
+                 * A count of discovered properties alone invites the belief that all of them are
+                 * being read, which is exactly the belief DISCOVERED ≠ SELECTED exists to correct.
+                 */
+                'discovered_count' => $properties->count(),
+                'selected_count' => $selected->count(),
+                'properties' => $properties->map(fn (ExternalAccount $a): array => [
+                    'id' => (string) $a->getKey(),
+                    'property_id' => (string) $a->external_id,
+                    'name' => (string) $a->name,
+                    /* The GA4 hierarchy, kept: a property reads as «Acme Group → Acme Store». */
+                    'analytics_account_id' => $a->parent_external_id === null ? null : (string) $a->parent_external_id,
+                    'analytics_account_name' => $a->parent_name === null ? null : (string) $a->parent_name,
+                    /*
+                     * Null until the first sync asked the property for its own settings. Discovery
+                     * does not ask — see `Ga4PropertySync` — so a never-synced property honestly says
+                     * «not known yet» rather than being shown a guessed UTC and a guessed currency.
+                     */
+                    'timezone' => $a->timezone,
+                    'currency' => $a->currency,
+                    'is_selected' => $selected->has((string) $a->getKey()),
+                    'project_id' => $selected->get((string) $a->getKey()),
+                    'last_synced_at' => optional($a->last_synced_at)->toIso8601String(),
+                    'discovered_at' => optional($a->discovered_at)->toIso8601String(),
+                ])->values()->all(),
+            ];
+        }
+
+        return ApiResponse::success($out, 'Measurement connections retrieved.');
     }
 
     /** POST /measurement/properties/{account}/sync — pull a selected property's days now. */

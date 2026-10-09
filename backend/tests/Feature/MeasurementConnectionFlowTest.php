@@ -204,6 +204,47 @@ final class MeasurementConnectionFlowTest extends TestCase
         $this->assertSame(0, ProviderConnection::withoutGlobalScopes()->count());
     }
 
+    /**
+     * The Connection Hub is the PAID MEDIA board, and a measurement source is not paid media.
+     *
+     * Constitution §23. The hub's row carries «1 of 17 accounts», a campaign drill-down and a
+     * platform breakdown — none of which a property can answer — and anything listed there is read
+     * by the product, and by the reader, as a place somebody buys advertising. One GA4 row on that
+     * board is how «which platforms are connected» starts including Analytics, and how its revenue
+     * ends up beside figures it is not comparable with.
+     */
+    public function test_a_measurement_connection_never_appears_on_the_paid_media_board(): void
+    {
+        $connection = $this->connection();
+        $this->property($connection, '111', 'Acme Store', selected: true);
+
+        /*
+         * An advertising authorisation beside it, because the assertion below is `assertNotContains`
+         * — and against an EMPTY hub that passes without the filter existing at all. The Meta row is
+         * what makes the absence of the GA4 row mean something.
+         */
+        app(TokenVault::class)->open(
+            tenantId: $this->tenant->id,
+            provider: 'meta',
+            tokens: new OAuthTokens('AT', 'RT', now()->addDays(30)),
+            connectionName: 'Meta',
+        );
+
+        $hub = $this->actingAs($this->owner, 'sanctum')
+            ->getJson('/api/v1/integrations/hub')
+            ->assertOk()
+            ->json('data.connections');
+
+        $providers = array_map(static fn (array $row): string => (string) $row['provider'], $hub ?? []);
+
+        $this->assertContains('meta', $providers, 'the hub listed nothing at all, so the absence below proves nothing');
+        $this->assertNotContains(
+            'ga4',
+            $providers,
+            'a measurement connection was listed among the advertising authorisations',
+        );
+    }
+
     // ── the properties the operator chooses from ───────────────────────────────────────────────
 
     /**
@@ -216,11 +257,22 @@ final class MeasurementConnectionFlowTest extends TestCase
         $chosen = $this->property($connection, '111', 'Acme Store', selected: true);
         $this->property($connection, '222', 'Other Client Store', selected: false);
 
-        $rows = $this->actingAs($this->owner, 'sanctum')
+        $this->configure();
+
+        $board = $this->actingAs($this->owner, 'sanctum')
             ->getJson('/api/v1/measurement/properties')
             ->assertOk()
-            ->json('data.properties');
+            ->json('data');
 
+        $this->assertCount(1, $board, 'one card per measurement provider');
+        $this->assertSame('ga4', $board[0]['key']);
+        $this->assertSame('connected', $board[0]['state']);
+
+        /* «2 discovered, 1 selected» — the sentence that stops «all of them are being read». */
+        $this->assertSame(2, $board[0]['discovered_count']);
+        $this->assertSame(1, $board[0]['selected_count']);
+
+        $rows = $board[0]['properties'];
         $this->assertCount(2, $rows);
 
         $byId = collect($rows)->keyBy('property_id');
