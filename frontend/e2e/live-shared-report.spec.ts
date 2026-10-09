@@ -274,7 +274,14 @@ test.describe('the live report holds together at both widths, in both directions
           await page.setViewportSize({ width, height: width === 375 ? 812 : 900 })
           await page.goto(url)
 
-          await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
+          /*
+           * Thirty seconds, measured rather than guessed. Sixteen combinations open the same link
+           * back to back and each open recomputes the live payload; on webkit the sixteenth
+           * rendered the share page's shell — title, download links — with the live block still
+           * pending at twenty seconds and nothing failed on the page. The claim here is the order and
+           * the overflow once the report is up, not how fast a loaded server answers.
+           */
+          await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 30000 })
           /* The product under test, not assumed: the form decides which view opens. */
           await expect(page.getByTestId('live-report')).toHaveAttribute('data-mode', mode)
           await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr')
