@@ -34,6 +34,17 @@ const ad = (over: Partial<ReportAd> = {}): ReportAd => ({
 const show = (ads: ReportAd[], extra: Record<string, unknown> = {}) =>
   render(<ReportAdsSection ads={ads} locale="ar" currency="SAR" windowEnd="2026-08-30" {...extra} />)
 
+/**
+ * The row a creative sits in. The press lives on the name cell (a button), and the primitive owns
+ * the `<tr>`, so a row is found from its name and walked up — not by a testid the table would
+ * have to be hand-rolled to carry.
+ */
+const row = (i: number): HTMLElement => {
+  const tr = screen.getByTestId(`report-content-open-${i}`).closest('tr')
+  if (!tr) throw new Error(`row ${i} is not inside a table row`)
+  return tr
+}
+
 describe('the report content section offers both views', () => {
   it('opens on cards, because recognising the ad is what the section is for', () => {
     show([ad()])
@@ -61,7 +72,8 @@ describe('the report content section offers both views', () => {
 
     fireEvent.click(screen.getByTestId('report-content-view-table'))
 
-    const headers = [...screen.getByTestId('report-content-table').querySelectorAll('th')].map((h) => h.textContent)
+    /* `thead` only: the primitive makes each row's first cell its header, which is a `th` too. */
+    const headers = [...screen.getByTestId('report-content-table').querySelectorAll('thead th')].map((h) => h.textContent)
 
     expect(headers).toEqual(['المحتوى', 'المنصة', 'حالة العرض', 'الإنفاق', 'النتائج', 'العائد'])
   })
@@ -102,7 +114,7 @@ describe('the report content section offers both views', () => {
     fireEvent.click(screen.getByTestId('report-content-view-table'))
 
     const states = [0, 1, 2].map((i) =>
-      within(screen.getByTestId(`report-content-row-${i}`)).getByTestId('creative-delivery-state').getAttribute('data-state'))
+      within(row(i)).getByTestId('creative-delivery-state').getAttribute('data-state'))
 
     expect(states).toEqual(['serving', 'stopped', 'idle'])
   })
@@ -118,8 +130,8 @@ describe('the report content section offers both views', () => {
 
     fireEvent.click(screen.getByTestId('report-content-view-table'))
 
-    const first = within(screen.getByTestId('report-content-row-0'))
-    const second = within(screen.getByTestId('report-content-row-1'))
+    const first = within(row(0))
+    const second = within(row(1))
 
     /* The first row answers both, which is what makes the dashes below mean something. */
     expect(first.getByText('4.20×')).toBeInTheDocument()
