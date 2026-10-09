@@ -6,7 +6,9 @@ import {
   addInternalNote, archiveRequest, assignRequest, changeRequestPriority, changeRequestStatus,
   convertRequest, getRequest, raiseQuoteFromRequest, replyToClientInternal, requestInformation,
 } from './internalApi'
-import { STATUS_LABELS, priorityTone, statusTone } from './labels'
+import { priorityLabel, priorityTone, statusLabel, statusTone } from './labels'
+import { INVOICE_STATUS } from '@/features/billing/InvoicesPage'
+import { moneyExact } from '@/features/analytics/format'
 import { Button } from '@/components/ui/Button'
 import { controlClass } from '@/components/ui/Field'
 import { TextareaField } from '@/components/ui/form'
@@ -79,10 +81,10 @@ export function RequestDetailPage() {
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
           <select aria-label={t('change_status')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} defaultValue="" onChange={(e) => { if (e.target.value) changeStatus.mutate(e.target.value) }}>
             <option value="">{t('change_status')}</option>
-            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{statusLabel(s, lang)}</option>)}
           </select>
           <select aria-label={t('col_priority')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} value={d.priority} onChange={(e) => changePriority.mutate(e.target.value)}>
-            {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{priorityLabel(p, lang)}</option>)}
           </select>
           {user?.id && (d.assigned_to ? (
             <Button variant="secondary" size="sm" onClick={() => assign.mutate(null)}>{t('unassign')}</Button>
@@ -165,10 +167,16 @@ export function RequestDetailPage() {
           <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
             <h2 className="mb-3 text-sm font-bold text-text-primary">{t('request_details')}</h2>
             <dl className="space-y-2">
-              <Info k={t('field_job_title')} v={d.objective ?? '—'} />
-              <Info k="Email" v={d.contact_email} />
+              {/*
+                REQ-DETAIL-LABELS-001 — the labels name what the value IS. This block read «المسمى
+                الوظيفي» over the objective, «Email» in English over an Arabic page, and «تنسيق
+                الأرقام» over the budget — three keys borrowed from other screens because they were
+                nearby. The budget is also money now, formatted as money is everywhere else.
+              */}
+              <Info k={t('objective_label')} v={d.objective ?? '—'} />
+              <Info k={t('email')} v={d.contact_email} />
               {d.company_name && <Info k={t('org_name')} v={d.company_name} />}
-              {d.budget && <Info k={t('field_number_format')} v={`${d.budget} ${d.currency}`} />}
+              {d.budget && <Info k={t('budget_label')} v={moneyExact(Number(d.budget), d.currency)} />}
               <Info k={t('col_assignee')} v={d.assignee ?? '—'} />
             </dl>
           </section>
@@ -210,7 +218,7 @@ export function RequestDetailPage() {
                     {b.invoice && (
                       <Link to="/app/billing/invoices" className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-1 text-text-secondary hover:text-brand-600">
                         <span className="font-mono text-[11px]" dir="ltr">{b.invoice.number}</span>
-                        <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold">{b.invoice.status}</span>
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${INVOICE_STATUS[b.invoice.status]?.tone ?? 'bg-surface-hover'}`}>{INVOICE_STATUS[b.invoice.status]?.[lang] ?? b.invoice.status}</span>
                       </Link>
                     )}
                   </li>
