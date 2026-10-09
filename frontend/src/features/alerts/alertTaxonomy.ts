@@ -54,6 +54,9 @@ const CATEGORY: Partial<Record<AlertType, AlertCategory>> = {
    * own next action rather than in its category.
    */
   metric_anomaly: 'performance',
+  // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the feed, not the figures.
+  sync_outage: 'data',
+  measurement_outage: 'data',
 }
 
 export function alertCategory(type: string): AlertCategory {
@@ -114,6 +117,14 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
   token_expiry: {
     ar: 'أعد ربط الحساب قبل انتهاء التوكن، وإلا تتوقف المزامنة.',
     en: 'Reconnect the account before the token expires, or syncing stops.',
+  },
+  sync_outage: {
+    ar: 'افتح العرض الحي للمصادر: المشروع كله متأخر أو فشلت مزامنته، والأرقام على الصفحات أقدم مما تبدو.',
+    en: 'Open the live source view — the whole project is stale or its sync failed, and the figures on the pages are older than they look.',
+  },
+  measurement_outage: {
+    ar: 'افحص ربط خاصية GA4: لا مزامنة ناجحة ضمن الحد، فأرقام القياس خارج الإسناد المنصّي متوقفة.',
+    en: 'Check the GA4 property connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
   },
   report_failed: {
     ar: 'أعد توليد التقرير، وإن تكرّر الفشل فالسبب في المصدر لا في التقرير.',
