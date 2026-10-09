@@ -627,6 +627,9 @@ final class TaxonomyEngineSeeder extends Seeder
                     // AUTOMATION-FIRST-OPERATIONS-001 — anomaly detection, which had a detector and
                     // no way to be told about it.
                     ['key' => 'metric_anomaly', 'label_ar' => 'يوم غير معتاد', 'label_en' => 'Unusual day', 'color' => '#8b5cf6', 'icon' => 'activity'],
+                    // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the feed's own alerts.
+                    ['key' => 'sync_outage', 'label_ar' => 'انقطاع المزامنة', 'label_en' => 'Sync outage', 'color' => '#f97316', 'icon' => 'cloud-off'],
+                    ['key' => 'measurement_outage', 'label_ar' => 'انقطاع القياس (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
                 ],
             ],
             [
