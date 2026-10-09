@@ -881,3 +881,8 @@ https://github.com/digitalalharbi/CampaignsHub/pull/633; this branch and ch-font
 «browser install attempt 1/2/3 stalled or failed», «Installation process exited with code: 100», «browser install
 failed three times; the runner could not reach its package mirror», exit 1. No test ran, so nothing on the branch
 was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
+
+**#633 (ch-brand) merged `8cda29cb`, deployed 21:53 (success).** Served bundle `index-CN4fzIyM.js` carries the
+refund arm (`value_refunded`, `filter_scope`); API health 200; ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 VERIFIED on
+that. The lane is clear: this branch (`feat/live-experience-b1`) pushes now; ch-font (`feat/adset-rung-evidence`)
+follows it.
