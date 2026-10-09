@@ -798,3 +798,42 @@ unreported); `ANALYTICS-FILTER-TRUTH-001` (propagation sweep per surface, read a
 cell's LAST paragraph is the claim (never prepend, never file prose in the Commit column);
 `getByText().first()` on ReportsPage hits the hidden phone card; `getByRole('option')` is
 page-wide; an XPath union's `.first()` is the OUTERMOST ancestor.
+
+---
+
+## Addendum — 2026-10-09, Track B unit on `ch-budget` (`feat/live-experience-b1`)
+
+**Lane.** #626 → #627 → #628 → #629 merged and deployed (production bundle `index-BNMmpyVv.js`
+carries `branding-fonts-legacy` / `branding-fonts-not-applied`, API health 200). #630
+(`feat/report-product-composition`, ch-ga4) is green on all six checks and merging through network
+timeouts. Queue after it, in order: ch-req (`feat/report-sections-at-creation`), ch-rmfmt
+(`feat/report-outline-browser-evidence`), ch-brand (`feat/diagnostic-refund-arm`), then this branch.
+Each is rebased onto the main of its turn before push; the matrix resolver script in the scratchpad
+merges rows per cell.
+
+**Production hosts.** `https://campaignshub.io/` (SPA, served bundle) and
+`https://api.campaignshub.io/api/v1/health`. `app.campaignshub.io` is NXDOMAIN — a probe against it
+reads as a network failure and is not one.
+
+**This branch.** `docs/LIVE_ROUTE_CHECKLIST.md` has no row left NOT_REVIEWED (26 REVIEWED, 5
+IMPROVED). Improvements, each with before/after measurements in its commit: dashboard order +
+unmeasured-window pacing truth, StatCard/StatGrid density, PageIntro KPI row on StatGrid (+ two
+columns at phone width), Portfolio wrap at 768, campaign detail (related index below the tabs),
+content detail (stage sized by state, figures above identity), Team (identity | access row), project
+integrations (catalogue three abreast). `e2e/first-viewport-sweep.spec.ts` now names first-screen
+blocks for the reviewed routes and carries 13 operator surfaces + the advertiser's spend limits.
+
+**Preview stack for this branch.** `b1-api` (8000) / `b1-web` (5173) in `.claude/launch.json`
+against `campaignshub_preview`; `DemoAccountsSeeder` was run there, so `advertiser@campaignshub.io`
+exists alongside `agency@`, `client@`, `admin@campaignshub.io` (all `password`). Browser tab `tab-3`.
+
+**Pre-push gate for this branch (in flight at the time of writing).** Full vitest (3,372 passed
+before the Team/PageIntro/catalogue/content-detail edits; re-run started), `tsc -b` clean, chromium
+sweep on the named/new surfaces; then firefox + webkit, rebase onto main, push.
+
+**Matrix census caveat.** Counted on this branch's copy (based on `a46626fc`): 517 VERIFIED, 55
+IMPLEMENTED_NOT_VERIFIED, 31 PARTIAL, 15 IN_PROGRESS, 23 BLOCKED_EXTERNAL_CREDENTIALS, 10
+BLOCKED_OPERATIONAL_EVIDENCE. Several of those open rows are already closed on the queued branches
+(REPORT-CREATION-UX-001, UX-MULTISELECT-SCALE-001, REPORT-SCOPE-SELECTION-001, REPORT-CONTENT-BROWSER-001
+on ch-req; REPORT-DETAIL-PARITY-001 and SHARE-PREVIEW-CLIENT-IDENTITY-001 on #630; BRANDING rows on
+#629); the true count is the one on main after the queue lands.
