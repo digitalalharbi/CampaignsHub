@@ -798,3 +798,16 @@ unreported); `ANALYTICS-FILTER-TRUTH-001` (propagation sweep per surface, read a
 cell's LAST paragraph is the claim (never prepend, never file prose in the Commit column);
 `getByText().first()` on ReportsPage hits the hidden phone card; `getByRole('option')` is
 page-wide; an XPath union's `.first()` is the OUTERMOST ancestor.
+
+---
+
+## Addendum — 2026-10-09, B6 Attribution Reconciliation on `ch-brand` (`feat/attribution-reconciliation`, from `8cda29cb`)
+
+The directive's only authorised new capability, built as an extension of `AttributionTransparency` (never a
+parallel engine): `reconciliation` on the same payload — four layers named, the ledger placed by strongest
+evidence (campaign id → name → click id → UTM source), overclaim per platform, no cross-platform total, GA4
+its own layer, ROAS per basis. Client links strip campaign identity (`ShareService::withoutCampaignIdentity`)
+and null `reconciled_revenue`/`refunded` under `hide_revenue`. Panel section under the overlap block.
+Backend 11 + 2 new cases, panel +7, all fail-first; transparency suites 52; analytics vitest 591; tsc/lint
+clean. Matrix row ATTRIBUTION-RECONCILIATION-001 added (IMPLEMENTED_NOT_VERIFIED until deployed). Queued
+after ch-budget (#634) and ch-font in the single lane.
