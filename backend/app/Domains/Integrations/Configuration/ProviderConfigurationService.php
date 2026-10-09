@@ -400,7 +400,8 @@ final class ProviderConfigurationService
      */
     private function environmentValues(ProviderDefinition $definition): array
     {
-        $file = $definition->kind === ProviderKind::Commerce ? 'commerce_platforms' : 'ad_platforms';
+        /* The kind owns this mapping — see `ProviderKind::configFile()` for why it is not here. */
+        $file = $definition->kind->configFile();
         $config = config("{$file}.platforms.{$definition->key}");
 
         if (! is_array($config)) {

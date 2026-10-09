@@ -99,7 +99,18 @@ final class PlatformCredentials
          */
         $definition = ProviderCatalogue::has($platform) ? ProviderCatalogue::get($platform) : null;
         $canonical = $definition?->key ?? AdPlatforms::canonical($platform);
-        $root = $definition?->kind === ProviderKind::Commerce ? 'commerce_platforms' : 'ad_platforms';
+        /*
+         * GA4-INTEGRATION-001 — three families, three files, and the kind decides which.
+         *
+         * This was a two-way ternary here and an identical one in
+         * `ProviderConfigurationService::environmentValues()`; a measurement provider fell through
+         * both to `ad_platforms`, where there is no GA4 entry. The mapping now lives on the enum, so
+         * there is one answer rather than two that can disagree.
+         *
+         * `Advertising` for an unknown key: `AdPlatforms::canonical()` has already resolved it, and a
+         * key no catalogue carries will miss in that file and be refused below, as before.
+         */
+        $root = ($definition?->kind ?? ProviderKind::Advertising)->configFile();
 
         $config = config("{$root}.platforms.{$canonical}");
 

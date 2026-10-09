@@ -148,6 +148,20 @@ Schedule::command('notifications:send-alerts')->cron('40 6,10,14,18 * * *')->wit
  */
 Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
 
+/*
+ * GA4-INTEGRATION-001 — the measurement sweep.
+ *
+ * Four-hourly, not half-hourly. GA4 is not restated as often as an ad platform's spend, and the Data
+ * API meters in TOKENS per property per day rather than in requests: a half-hourly pass would spend
+ * a client's whole daily allowance re-reading days that did not change, and the exhaustion lands on
+ * the client's own Analytics usage as well as ours.
+ *
+ * Offset to :25 so it does not start in the same minute as the hourly commerce sweep and the token
+ * refresh — three sweeps opening connections at once is how a worker pool is starved by its own
+ * schedule.
+ */
+Schedule::command('measurement:sync')->cron('25 */4 * * *')->withoutOverlapping();
+
 // Retain raw platform payloads for ninety days — long enough to settle a dispute about a figure,
 // short enough that the audit trail does not become the largest table in the database.
 Schedule::command('integrations:prune-raw')->dailyAt('03:30');

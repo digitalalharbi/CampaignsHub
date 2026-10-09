@@ -41,6 +41,27 @@ enum ProviderKind: string
         };
     }
 
+    /**
+     * Which config file holds this family's protocol half.
+     *
+     * Here rather than at the two call sites, because it WAS at the two call sites: a two-way ternary
+     * in `PlatformCredentials::for()` and an identical one in
+     * `ProviderConfigurationService::environmentValues()`. Adding a third kind made both of them
+     * answer `ad_platforms` for a measurement provider, and each had to be found separately — the
+     * first by a thrown «No platform configuration for 'ga4'», the second by a start endpoint that
+     * said «awaiting credentials» while the keys were sitting in the file.
+     *
+     * One `match` on the enum, so the next kind added cannot fall through either of them silently.
+     */
+    public function configFile(): string
+    {
+        return match ($this) {
+            self::Advertising => 'ad_platforms',
+            self::Commerce => 'commerce_platforms',
+            self::Measurement => 'measurement_platforms',
+        };
+    }
+
     /** What the Connection Hub files it under — «Paid Media» is not where a measurement source goes. */
     public function group(): string
     {

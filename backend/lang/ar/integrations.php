@@ -10,6 +10,7 @@ return [
     'account_type' => [
         'ad_account' => 'إعلاني',
         'store' => 'متجر',
+        'ga4_property' => 'خاصية قياس',
         'organization' => 'مؤسسة',
         'business' => 'حساب أعمال',
         'page' => 'صفحة',
