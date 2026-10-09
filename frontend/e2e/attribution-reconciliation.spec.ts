@@ -32,7 +32,7 @@ for (const locale of ['ar', 'en'] as const) {
       for (let i = 0; i < (await rows.count()); i++) {
         const row = rows.nth(i)
         await expect(row.locator('[data-testid^="roas-platform_reported-"]')).toHaveCount(1)
-        await expect(row.locator('[data-testid^="roas-store_confirmed-"]')).toHaveCount(1)
+        await expect(row.locator('[data-testid^="roas-reconciled-"]')).toHaveCount(1)
       }
 
       /* The ledger: the merchant's references, with an evidence badge on each. */

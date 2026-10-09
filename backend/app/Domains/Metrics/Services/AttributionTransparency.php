@@ -536,6 +536,7 @@ final class AttributionTransparency
                 'note_en' => 'With no store connected there is no order ledger to reconcile against; the platforms’ claims remain claims.',
                 'layers' => $labels,
                 'measurement' => $measurement,
+                'business_roas' => ['basis' => 'store_confirmed', 'value' => null, 'revenue' => null, 'spend' => round(array_sum($spend), 2)],
                 'platforms' => AdPlatforms::sortRows($rows, 'provider'),
                 'unattributed' => null,
                 'conflict' => null,
@@ -608,9 +609,22 @@ final class AttributionTransparency
             );
         }
 
+        $totalSpend = array_sum($spend);
+        $ledgerRevenue = array_sum(array_map(static fn (array $r): float => (float) $r['revenue'], $ledger));
+
         return [
             'available' => true,
             'unavailable_reason' => null,
+            /*
+             * Business ROAS — the merchant's net revenue in the window, attributed or not, over every
+             * riyal spent on every platform. The one ROAS that does not depend on who claimed what.
+             */
+            'business_roas' => [
+                'basis' => 'store_confirmed',
+                'value' => $totalSpend > 0 && $ledgerRevenue > 0 ? round($ledgerRevenue / $totalSpend, 2) : null,
+                'revenue' => round($ledgerRevenue, 2),
+                'spend' => round($totalSpend, 2),
+            ],
             'note_ar' => 'كل طلب في الدفتر يُوضع مرة واحدة على المنصة التي يحملها أقوى دليل فيه. المزاعم تبقى مزاعم، والفرق بين المزعوم والمُسوّى هو المطالبة الزائدة لكل منصة.',
             'note_en' => 'Each ledger order is placed once, on the platform its strongest evidence names. Claims stay claims; the gap between claimed and reconciled is each platform’s overclaim.',
             'layers' => $labels,
@@ -653,13 +667,18 @@ final class AttributionTransparency
             'reconciled_orders' => $orders,
             'reconciled_revenue' => $revenue,
             'overclaim_orders' => $overclaim,
+            /*
+             * Two bases per platform, each named: what the platform claims, and what the ledger placed
+             * on it. The third basis the Owner names — business ROAS — is not a platform's number: it
+             * is the whole ledger over the whole spend and lives on the block, below.
+             */
             'roas' => [
                 'platform_reported' => [
                     'basis' => 'platform_reported',
                     'value' => $spend > 0 && $claimedRevenue > 0 ? round($claimedRevenue / $spend, 2) : null,
                 ],
-                'store_confirmed' => [
-                    'basis' => 'store_confirmed',
+                'reconciled' => [
+                    'basis' => 'reconciled',
                     'value' => $spend > 0 && ($orders ?? 0) > 0 && ($revenue ?? 0.0) > 0 ? round((float) $revenue / $spend, 2) : null,
                 ],
             ],

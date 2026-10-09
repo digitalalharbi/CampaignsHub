@@ -128,7 +128,9 @@ final class AttributionReconciliationTest extends TestCase
         $this->assertSame(0.0, $meta['reconciled_revenue']);
         $this->assertSame(2, $r['unattributed']['orders']);
         $this->assertSame(1800.0, $r['unattributed']['revenue']);
-        $this->assertNull($meta['roas']['store_confirmed']['value'], 'no confirmed revenue on Meta, so no store-confirmed ROAS — not zero, not platform-reported in disguise');
+        $this->assertNull($meta['roas']['reconciled']['value'], 'no revenue placed on Meta, so no reconciled ROAS — not zero, not platform-reported in disguise');
+        $this->assertSame(1800.0, $r['business_roas']['revenue'], 'business ROAS counts the unattributed sales the platforms cannot claim');
+        $this->assertSame(1.8, $r['business_roas']['value']);
     }
 
     /** ATTRIB-001: a conflicting signal is the click id's platform, no campaign — and it is counted as a conflict. */
@@ -166,6 +168,7 @@ final class AttributionReconciliationTest extends TestCase
         $this->assertSame(3.0, $meta['platform_reported_orders']);
         $this->assertNull($meta['reconciled_orders']);
         $this->assertNull($meta['overclaim_orders']);
+        $this->assertNull($r['business_roas']['value'], 'no ledger, no business ROAS');
     }
 
     /** GA4 is its own layer: reported where it was read, absent where it was not, and never blended. */
@@ -201,7 +204,7 @@ final class AttributionReconciliationTest extends TestCase
 
     // ── ROAS names its basis ──────────────────────────────────────────────────────────────────
 
-    public function test_roas_is_stated_per_basis_and_never_without_one(): void
+    public function test_roas_is_stated_per_basis_platform_reconciled_and_business_and_never_without_one(): void
     {
         $store = $this->storeAccount();
         $this->conversions('meta', 4, 800);
@@ -213,9 +216,12 @@ final class AttributionReconciliationTest extends TestCase
         $this->assertSame(200.0, $meta['spend']);
         $this->assertSame('platform_reported', $meta['roas']['platform_reported']['basis']);
         $this->assertSame(4.0, $meta['roas']['platform_reported']['value']);
-        $this->assertSame('store_confirmed', $meta['roas']['store_confirmed']['basis']);
-        $this->assertSame(1.5, $meta['roas']['store_confirmed']['value']);
+        $this->assertSame('reconciled', $meta['roas']['reconciled']['basis']);
+        $this->assertSame(1.5, $meta['roas']['reconciled']['value']);
         $this->assertArrayNotHasKey('value', $meta['roas'], 'no bare ROAS');
+        $r = $this->build()['reconciliation'];
+        $this->assertSame('store_confirmed', $r['business_roas']['basis']);
+        $this->assertSame(1.5, $r['business_roas']['value'], 'one platform, one order: business and reconciled agree here and diverge only when sales go unattributed');
     }
 
     // ── The ledger ────────────────────────────────────────────────────────────────────────────

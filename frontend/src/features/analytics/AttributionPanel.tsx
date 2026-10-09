@@ -513,7 +513,8 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
     overclaim: ar ? 'مطالبة زائدة' : 'Overclaim',
     spend: ar ? 'الإنفاق' : 'Spend',
     roasPlatform: ar ? 'عائد (المنصة)' : 'ROAS (platform-reported)',
-    roasStore: ar ? 'عائد (المتجر)' : 'ROAS (store-confirmed)',
+    roasReconciled: ar ? 'عائد (مُسوّى)' : 'ROAS (reconciled)',
+    roasBusiness: ar ? 'عائد الأعمال (المتجر على كل الإنفاق)' : 'Business ROAS (store over all spend)',
     notStated: ar ? 'غير مُحدَّد' : 'not stated',
     unavailable: ar ? 'لا يوجد دفتر طلبات يُسوّى عليه' : 'No ledger to reconcile against',
     ledger: ar ? 'دفتر الطلبات' : 'Order ledger',
@@ -566,13 +567,21 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
               <span data-testid={`roas-platform_reported-${p.provider}`} className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">
                 {t.roasPlatform}: <span className="tnum font-semibold text-text-primary" dir="ltr">{p.roas.platform_reported.value === null ? t.notStated : `${p.roas.platform_reported.value}×`}</span>
               </span>
-              <span data-testid={`roas-store_confirmed-${p.provider}`} className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">
-                {t.roasStore}: <span className="tnum font-semibold text-text-primary" dir="ltr">{p.roas.store_confirmed.value === null ? t.notStated : `${p.roas.store_confirmed.value}×`}</span>
+              <span data-testid={`roas-reconciled-${p.provider}`} className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">
+                {t.roasReconciled}: <span className="tnum font-semibold text-text-primary" dir="ltr">{p.roas.reconciled.value === null ? t.notStated : `${p.roas.reconciled.value}×`}</span>
               </span>
             </div>
           </li>
         ))}
       </ul>
+
+      {/* Business ROAS — the ledger over all spend; the one basis no platform's claim touches. */}
+      {data.business_roas && (
+        <p data-testid="reconciliation-business-roas" className="mt-3 text-xs text-text-secondary">
+          <span className="font-semibold text-text-primary">{t.roasBusiness}: </span>
+          <span className="tnum font-semibold text-text-primary" dir="ltr">{data.business_roas.value === null ? t.notStated : `${data.business_roas.value}×`}</span>
+        </p>
+      )}
 
       {/* GA4 — its own line, never added into the rows above. */}
       <p data-testid="reconciliation-measurement" className="mt-3 text-xs text-text-secondary">
