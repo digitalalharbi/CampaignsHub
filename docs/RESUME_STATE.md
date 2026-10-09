@@ -947,3 +947,12 @@ after the tenant's rules (`evaluateAll`) — one `AlertBundleMail` per person pe
 honoured in the findings sweep's order (switched off → held for digest → quiet hours), project scope respected, and
 `awaiting_credentials` recorded instead of «sent» whenever no email provider is configured. AlertEventEmailTest 4/4; all
 fifteen alert suites together 87/87.
+
+**EMAIL-REPORT-READY-001 · EMAIL-DASH-VISUAL-001 · EMAIL-SAFE-CHARTS-001 on the same branch, 00:3x.** GenerateReportJob
+tells the report's author `report_ready` when generation completes and `report_failed` once, from the queue's terminal
+hook (retries stay quiet), both through the dispatcher (choices, quiet hours, honest email state); the catalogue had
+both types and nothing raised them. DigestMailVisualTest asserts against the RENDERED digest in both languages: ≥3 KPI
+tiles, ≥1 table-cell bar chart, cells outnumber paragraphs 4:1, no text run over 240 chars; and that every chart
+survives an email client — no img/svg/script/canvas, no remote url(), no external stylesheet, fixed-width tables, a
+declared direction. ReportReadyNotificationTest 2/2, DigestMailVisualTest 2/2, ReportsTest + ScheduledReportsTest
+unchanged (24 together). Delivery itself stays BLOCKED_EXTERNAL_CREDENTIALS (MAIL-SEND).
