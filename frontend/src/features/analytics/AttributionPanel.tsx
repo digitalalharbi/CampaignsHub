@@ -615,34 +615,40 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
               </span>
             )}
           </div>
-          <div className="mt-1.5 overflow-x-auto rounded-md border border-border">
-            <table className="w-full min-w-[560px] text-[11px]">
-              <thead className="bg-surface-secondary text-text-muted">
-                <tr>
-                  <th className="px-2 py-1 text-start font-semibold">{t.reference}</th>
-                  <th className="px-2 py-1 text-start font-semibold">{t.date}</th>
-                  <th className="px-2 py-1 text-start font-semibold">{t.platform}</th>
-                  {data.ledger.rows.some((r) => r.campaign !== undefined) && <th className="px-2 py-1 text-start font-semibold">{t.campaign}</th>}
-                  <th className="px-2 py-1 text-start font-semibold">{t.evidence}</th>
-                  <th className="px-2 py-1 text-end font-semibold">{t.revenue}</th>
-                  <th className="px-2 py-1 text-end font-semibold">{t.refunded}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.ledger.rows.map((r) => (
-                  <tr key={r.reference + (r.placed_at ?? '')} data-testid={`ledger-row-${r.reference}`} className="border-t border-border">
-                    <td className="px-2 py-1 font-semibold text-text-primary" dir="ltr">{r.reference}</td>
-                    <td className="tnum px-2 py-1 text-text-secondary" dir="ltr">{r.placed_at ?? '—'}</td>
-                    <td className="px-2 py-1 text-text-secondary">{r.platform === null ? '—' : providerLabel(r.platform, ar ? 'ar' : 'en')}</td>
-                    {data.ledger!.rows.some((x) => x.campaign !== undefined) && <td className="px-2 py-1 text-text-secondary">{r.campaign ?? '—'}</td>}
-                    <td className="px-2 py-1 text-text-secondary">{ar ? (evidence[r.method]?.ar ?? r.method) : (evidence[r.method]?.en ?? r.method)}</td>
-                    <td className="tnum px-2 py-1 text-end text-text-primary" dir="ltr">{r.revenue === null ? '—' : moneyExact(r.revenue, r.currency ?? undefined)}</td>
-                    <td className="tnum px-2 py-1 text-end text-text-secondary" dir="ltr">{r.refunded === null ? '—' : moneyExact(r.refunded, r.currency ?? undefined)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/*
+           * TABLE-PRESENTATION-CONTRACT-001 — the ledger is an analytical table and uses the product's
+           * one primitive: sort on any column, numerals aligned by the primitive, not by the cell. The
+           * row's test id rides on the reference cell. The campaign column exists only where the
+           * payload carries one — a client link never does.
+           */}
+          {(() => {
+            const withCampaign = data.ledger.rows.some((r) => r.campaign !== undefined)
+            const locale = ar ? 'ar' : 'en'
+            const head = [
+              t.reference, t.date, t.platform,
+              ...(withCampaign ? [t.campaign] : []),
+              t.evidence, t.revenue, t.refunded,
+            ]
+            const rows = data.ledger.rows.map((r) => [
+              <span key="ref" data-testid={`ledger-row-${r.reference}`} className="font-semibold text-text-primary">{r.reference}</span>,
+              <span key="date" className="text-text-secondary">{r.placed_at ?? '—'}</span>,
+              <span key="platform" className="text-text-secondary">{r.platform === null ? '—' : providerLabel(r.platform, locale)}</span>,
+              ...(withCampaign ? [<span key="campaign" className="text-text-secondary">{r.campaign ?? '—'}</span>] : []),
+              <span key="evidence" className="text-text-secondary">{ar ? (evidence[r.method]?.ar ?? r.method) : (evidence[r.method]?.en ?? r.method)}</span>,
+              <span key="revenue" className="text-text-primary">{r.revenue === null ? '—' : moneyExact(r.revenue, r.currency ?? undefined)}</span>,
+              <span key="refunded" className="text-text-secondary">{r.refunded === null ? '—' : moneyExact(r.refunded, r.currency ?? undefined)}</span>,
+            ])
+            const values: SortValues[] = data.ledger.rows.map((r) => [
+              r.reference, r.placed_at, r.platform === null ? null : providerLabel(r.platform, locale),
+              ...(withCampaign ? [r.campaign ?? null] : []),
+              r.evidence_rank, r.revenue, r.refunded,
+            ])
+            return (
+              <div className="mt-1.5 min-w-0">
+                <MetricTable head={head} rows={rows} values={values} initialSort={{ column: withCampaign ? 4 : 3, dir: 'asc' }} />
+              </div>
+            )
+          })()}
         </div>
       )}
     </section>
