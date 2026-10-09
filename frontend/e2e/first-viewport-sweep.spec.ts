@@ -28,15 +28,24 @@ const WIDTHS = [
 ] as const
 
 /** Route → the testids of blocks that must be at least partly inside the first viewport (desktop). */
-const SURFACES: Array<{ path: string; project?: boolean; firstScreen: string[] }> = [
+const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; firstScreen: string[] }> = [
   { path: '/agency/dashboard', firstScreen: ['agency-intro', 'agency-attention'] },
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
-  { path: '/agency/campaigns', project: true, firstScreen: [] },
-  { path: '/agency/analytics', project: true, firstScreen: [] },
-  { path: '/agency/content', project: true, firstScreen: [] },
-  { path: '/agency/reports', project: true, firstScreen: [] },
-  { path: '/agency/integrations', firstScreen: [] },
+  /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
+     answers each page's question, and the filter block that scopes it. */
+  { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-secondary-strip'] },
+  { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-overview'] },
+  { path: '/agency/content', project: true, firstScreen: ['content-summary', 'content-filters'] },
+  { path: '/agency/reports', project: true, firstScreen: ['reports-hero-kpis', 'reports-filters'] },
+  { path: '/agency/integrations', firstScreen: ['integrations-intro', 'connection-hub'] },
   { path: '/agency/alerts', firstScreen: [] },
+  { path: '/agency/clients', firstScreen: ['clients-intro-kpis', 'clients-filters'] },
+  { path: '/agency/requests', firstScreen: ['requests-intro-kpis'] },
+  { path: '/agency/tasks', firstScreen: ['tasks-intro-kpis', 'tasks-filters'] },
+  { path: '/agency/team', firstScreen: ['team-intro-kpis', 'agency-team'] },
+  /* `:projectId` is the seeded project's — the only detail route the sweep can address without
+     an entity id of its own. */
+  { path: '/agency/projects/:projectId/integrations', projectPath: true, firstScreen: ['project-integrations-intro-kpis'] },
 ]
 
 async function measure(page: Page, ids: string[]) {
@@ -106,11 +115,16 @@ test.describe('the first viewport, on every operator surface', () => {
             }, [locale, theme] as const)
             await page.setViewportSize({ width: w, height: h })
 
-            if (surface.project) {
-              await page.goto('/agency/dashboard')
-              await selectProject(page, await seededProject(request, PROJECT))
+            let path = surface.path
+            if (surface.project || surface.projectPath) {
+              const projectId = await seededProject(request, PROJECT)
+              if (surface.project) {
+                await page.goto('/agency/dashboard')
+                await selectProject(page, projectId)
+              }
+              path = path.replace(':projectId', projectId)
             }
-            await page.goto(surface.path)
+            await page.goto(path)
             await expect(page.locator('main')).toBeVisible({ timeout: 30_000 })
             await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr')
             await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
