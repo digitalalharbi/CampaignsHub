@@ -72,6 +72,29 @@ describe('the automatic order says what it ordered by', () => {
     expect(await screen.findByTestId('content-sort-note')).toHaveTextContent(/impressions/i)
   })
 
+  /**
+   * CONTENT-BROWSER-PARITY-001 — the running-first clause is SAID, because it now decides.
+   *
+   * It used to sit below the metric and below spend, where it almost never fired, so leaving it out
+   * of this sentence cost nothing. It leads the measured now. This whole note exists because an
+   * order a reader cannot account for is indistinguishable from a bug — the owner's own distrust —
+   * so a clause that decides the order and is not stated is the defect, not a detail.
+   */
+  it('says that what is running comes first, because it now does', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(page({ applied: 'auto', metric: 'conversions', objective: 'sales' }))
+    renderWithProviders(<CreativesPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('content-sort-note')).toHaveTextContent('ما يعمل أولًا')
+  })
+
+  /** …and in the spend fallback too, where there is no objective to name. */
+  it('says it in the spend fallback as well', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(page({ applied: 'auto', metric: 'spend', objective: null }))
+    renderWithProviders(<CreativesPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('content-sort-note')).toHaveTextContent('ما يعمل أولًا')
+  })
+
   it('says it in Arabic for an Arabic reader', async () => {
     vi.mocked(listCreatives).mockResolvedValue(page({ applied: 'auto', metric: 'conversions', objective: 'sales' }))
     renderWithProviders(<CreativesPage />, { locale: 'ar' })

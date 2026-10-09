@@ -121,6 +121,81 @@ final class CreativeMeasuredFirstTest extends TestCase
         $this->assertSame(['serving', 'stopped'], $this->ordered());
     }
 
+    /**
+     * CONTENT-BROWSER-PARITY-001 — among the MEASURED, what is running leads what has stopped.
+     *
+     * The owner: «يجب أن تكون المحتويات التي لا تعمل أن تبقى آخر المحتويات». This clause existed
+     * already and sat below the metric and below spend, where it almost never fired — a metric and
+     * a spend rarely tie — so a paused creative with the period's highest spend led a page whose
+     * reader can do nothing about it.
+     *
+     * The campaigns workspace settled the same question first, in `relevanceOf`'s own words: «a
+     * finished campaign that outspent every running one used to lead the operational list». Serving
+     * first, then by spend, at every rung.
+     */
+    public function test_a_serving_creative_leads_a_paused_one_that_spent_more(): void
+    {
+        $this->creative('paused, spent 5,000', 'paused', '2026-08-20', spend: 5_000.0);
+        $this->creative('serving, spent 12', 'active', '2026-08-29', spend: 12.0);
+
+        $this->assertSame(['serving, spent 12', 'paused, spent 5,000'], $this->ordered());
+    }
+
+    /**
+     * …and the paused big spender still leads everything UNMEASURED, which is the other rule intact.
+     *
+     * This is the case that proves the change is not a revert. CONTENT-MEASURED-FIRST-001 is about
+     * measurement against silence — the owner's «makes you doubt the accuracy of the data» — and it
+     * still decides first. What moved is the order WITHIN the measured, which that row never spoke
+     * about. Both of his instructions hold in the same list, and this test is where they meet.
+     */
+    public function test_the_paused_spender_still_outranks_everything_unmeasured(): void
+    {
+        $this->creative('unmeasured, serving', 'active', '2026-08-29');
+        $this->creative('paused, spent 5,000', 'paused', '2026-08-20', spend: 5_000.0);
+        $this->creative('serving, spent 12', 'active', '2026-08-29', spend: 12.0);
+
+        $this->assertSame(
+            ['serving, spent 12', 'paused, spent 5,000', 'unmeasured, serving'],
+            $this->ordered(),
+        );
+    }
+
+    /** Idle sits between the two: switched on and producing nothing is not the same as stopped. */
+    public function test_an_idle_creative_sits_between_serving_and_stopped(): void
+    {
+        $this->creative('stopped', 'archived', '2026-08-29', spend: 900.0);
+        $this->creative('idle', 'active', '2026-08-01', spend: 900.0);
+        $this->creative('serving', 'active', '2026-08-29', spend: 900.0);
+
+        $this->assertSame(['serving', 'idle', 'stopped'], $this->ordered());
+    }
+
+    /**
+     * …and an EXPLICIT metric sort is the reader's, not the product's.
+     *
+     * «Running first» is the DEFAULT order — the constitution's own word. A reader who picks «sort
+     * by spend» has asked for spend, and a delivery state that outranked their choice would be the
+     * product overruling them. `CreativeLibraryApiTest` caught the first version of this change
+     * within a minute: a creative that had spent 9,000 and gone quiet for five days lost its own
+     * spend sort to a serving creative that had spent 10.
+     *
+     * The state still breaks TIES on an explicit sort, where it is the better answer and overrules
+     * nothing.
+     */
+    public function test_an_explicitly_chosen_metric_is_not_overruled_by_the_running_state(): void
+    {
+        $this->creative('serving, spent 10', 'active', '2026-08-29', spend: 10.0);
+        $this->creative('quiet, spent 9,000', 'active', '2026-08-20', spend: 9_000.0);
+
+        $query = ExternalCreative::query()->where('project_id', $this->project->id);
+        $sorted = app(CreativeRows::class)
+            ->applySort($query, 'spend', $this->to->copy()->subDays(30), $this->to)
+            ->get()->pluck('name')->map(strval(...))->all();
+
+        $this->assertSame(['quiet, spent 9,000', 'serving, spent 10'], $sorted);
+    }
+
     /** Measurement is read inside the WINDOW. A figure from last year is not this period's evidence. */
     public function test_a_figure_outside_the_window_does_not_count_as_measured(): void
     {
