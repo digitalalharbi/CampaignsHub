@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Providers\Snapchat\SnapchatVocabulary;
 use App\Domains\Integrations\Reporting\ReportingWindow;
 use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
@@ -217,7 +218,13 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $body = $this->read($this->api($tokens)->get($url), $what);
 
             foreach ((array) ($body[$key] ?? []) as $wrapper) {
-                $items[] = (array) $wrapper;
+                $wrapper = (array) $wrapper;
+                // SNAP-OCT26-SUBREQUEST-WARNINGS — an element that failed on its own is named, not dropped silently.
+                $warning = SnapchatVocabulary::subRequestWarning($wrapper, $key, $what);
+                if ($warning !== null) {
+                    $this->warnings[] = $warning;
+                }
+                $items[] = $wrapper;
             }
 
             $next = $body['paging']['next_link'] ?? null;
@@ -344,7 +351,8 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'daily_budget' => isset($s['daily_budget_micro']) ? (float) $s['daily_budget_micro'] / self::MICRO : null,
                 'lifetime_budget' => isset($s['lifetime_budget_micro']) ? (float) $s['lifetime_budget_micro'] / self::MICRO : null,
                 'currency' => null,
-                'targeting' => $this->readableTargeting($s['targeting'] ?? null),
+                // SNAP-OCT26-CHAT-FEED — the placements ride with the targeting, tokens verbatim.
+                'targeting' => $this->withPlacements($this->readableTargeting($s['targeting'] ?? null), $s),
                 'starts_at' => isset($s['start_time']) ? (string) $s['start_time'] : null,
                 'ends_at' => isset($s['end_time']) ? (string) $s['end_time'] : null,
                 'raw' => $s,
@@ -424,6 +432,30 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      *
      * @return array{asked:int, resolved:int, error:?string}
      */
+    /** @var list<array{what: string, id: ?string, status: string, reason: ?string}> */
+    private array $warnings = [];
+
+    /**
+     * SNAP-OCT26-SUBREQUEST-WARNINGS — every element Snapchat refused inside an otherwise successful read.
+     *
+     * @return list<array{what: string, id: ?string, status: string, reason: ?string}>
+     */
+    public function lastWarnings(): array
+    {
+        return $this->warnings;
+    }
+
+    /** @param  array<string, mixed>  $squad */
+    private function withPlacements(?array $targeting, array $squad): ?array
+    {
+        $placements = SnapchatVocabulary::placements($squad);
+        if ($placements === null) {
+            return $targeting;
+        }
+
+        return [...($targeting ?? []), ...$placements];
+    }
+
     public function lastMediaOutcome(): array
     {
         return [
@@ -955,8 +987,12 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             }
             $isVideo = strtoupper((string) ($m['type'] ?? '')) === 'VIDEO';
 
+            $aiSource = SnapchatVocabulary::aiContentSource($m);
+
             $creatives[$id] = array_filter([
                 ...$creative,
+                // SNAP-OCT26-AI-MEDIA-DECLARATION — the declaration rides on the creative's own record.
+                'raw' => $aiSource === null ? ($creative['raw'] ?? null) : [...(array) ($creative['raw'] ?? []), 'ai_content_source' => $aiSource],
                 /*
                  * CONTENT-PREVIEW-SHAPES-001 — a shape the creative body did not state, answered by
                  * the media Snapchat resolved for it.

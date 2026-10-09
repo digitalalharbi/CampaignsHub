@@ -12,6 +12,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { mediaFitClass } from '@/features/content/adPreview'
+import { targetingChip } from '@/lib/snapchatVocabulary'
 
 /**
  * CAMPDET-010 / STRUCT-001 — the real ad-set / ad hierarchy beneath a campaign.
@@ -283,11 +284,16 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
                 <div className="border-t border-border px-3.5 pb-3.5 pt-3">
                   {s.targeting && Object.keys(s.targeting).length > 0 && (
                     <div className="mb-3 flex flex-wrap gap-1.5">
-                      {Object.entries(s.targeting).map(([k, v]) => (
-                        <span key={k} className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] text-text-secondary">
-                          <span className="text-text-muted">{k}:</span> {Array.isArray(v) ? v.join(' · ') : String(v)}
-                        </span>
-                      ))}
+                      {Object.entries(s.targeting).map(([k, v]) => {
+                        // SNAP-OCT26-CHAT-FEED — placements read in the reader's language; an unnamed token stays itself.
+                        const chip = targetingChip(k, v, ar)
+                        if (chip === null) return null
+                        return (
+                          <span key={k} data-testid={`adset-targeting-${k}`} className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] text-text-secondary">
+                            <span className="text-text-muted">{chip.label}:</span> {chip.value}
+                          </span>
+                        )
+                      })}
                     </div>
                   )}
 
