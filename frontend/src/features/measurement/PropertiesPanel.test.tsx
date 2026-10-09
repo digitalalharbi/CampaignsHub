@@ -52,7 +52,13 @@ function provider(over: Partial<MeasurementProvider> = {}): MeasurementProvider 
 describe('PropertiesPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    signInWith(['integrations.view', 'integrations.connect'])
+    /*
+     * `projects.view` is here because selecting a property REQUIRES a project, and the panel only
+     * fetches the project list for a reader who may see one — `GET /projects` answers 403 otherwise,
+     * which on `/app/integrations` is a console error the end-to-end gate fails on. The case below
+     * holds the other side of that.
+     */
+    signInWith(['integrations.view', 'integrations.connect', 'projects.view'])
     vi.mocked(listClientWorkspaces).mockResolvedValue([])
     vi.mocked(listProjects).mockResolvedValue([])
   })
@@ -166,6 +172,27 @@ describe('PropertiesPanel', () => {
 
     fireEvent.click(button)
     expect(bindAccount).not.toHaveBeenCalled()
+  })
+
+  /**
+   * A reader who cannot see projects is not shown a project selector, and nothing is requested.
+   *
+   * `GET /projects` answers 403 without `projects.view`. On `/app/integrations` — a page the
+   * end-to-end suite watches for console errors, and one that has failed that check three times
+   * before — a refused request is a gate failure on a page where nothing was wrong. It is also the
+   * honest behaviour: a reader who cannot see a project cannot select a property for one.
+   */
+  it('asks for no project list, and shows no selector, without the permission to see projects', async () => {
+    signInWith(['integrations.view'])
+    vi.mocked(listMeasurementProviders).mockResolvedValue([provider({
+      state: 'connected', discovered_count: 1, selected_count: 0, properties: [property()],
+    })])
+
+    renderWithProviders(<PropertiesPanel />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('ga4-select-111')).toBeDisabled()
+    expect(screen.queryByTestId('measurement-project')).not.toBeInTheDocument()
+    expect(listProjects).not.toHaveBeenCalled()
   })
 
   /** A selected property can be read on demand, and an unselected one has no such control. */

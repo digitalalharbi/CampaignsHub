@@ -14,6 +14,7 @@ import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
+import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 
@@ -156,8 +157,22 @@ export function PropertiesPanel() {
   const [clientWorkspaceId, setClientWorkspaceId] = useState('')
   const [projectId, setProjectId] = useState<string | null>(null)
 
+  /*
+   * The project list is fetched only by a reader who may SEE projects.
+   *
+   * `GET /projects` answers 403 without `projects.view`, and this panel sits on `/app/integrations`
+   * — a page the end-to-end suite watches for console errors, and one that has failed that check
+   * three times before for exactly this shape of thing. A refused request is a console error on a
+   * page where nothing was wrong.
+   *
+   * It is also the honest behaviour rather than a way around the gate: a reader who cannot see a
+   * project cannot select a property for one, so there is nothing to fetch. The selector simply
+   * does not appear, and the select control stays disabled with «اختر مشروعًا أولًا».
+   */
+  const maySeeProjects = useAuth((s) => s.hasPermission('projects.view'))
+
   const query = useQuery({ queryKey: ['measurement-properties'], queryFn: listMeasurementProviders })
-  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), enabled: true })
+  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), enabled: maySeeProjects })
   const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
 
   /*
