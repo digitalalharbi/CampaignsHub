@@ -57,7 +57,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/agency/projects/:projectId/integrations` | Project integrations | NOT_REVIEWED | |
 | `/app/spend-limits` | Budgets / spend limits — within intended pacing? (advertiser portal; the sweep's first run asked `/agency/spend-limits`, which does not exist) | REVIEWED | Swept under the advertiser session at 1366×768 × ar/en × dark/light: heading in the first viewport, overflow 0 (4/4 on the gate). Composition not yet reviewed by hand. |
 | `/agency/tasks` | Tasks / operations | REVIEWED | **1366×768, ar, dark, 1 task.** Overflow 0; page 768 px — fits the viewport. Intro + 4 KPIs, filters (search/status/priority/assignee), task row, status-mix bar. Nothing moved. |
-| `/agency/short-links` | Short links | NOT_REVIEWED | |
+| `/agency/short-links` | Short links | REVIEWED | **1366×768, ar, dark, empty.** Overflow 0; page 768 px — fits. Intro, kind toggle (WhatsApp / link), dial code + phone, submit, empty list state. Nothing moved. |
 | `/agency/branding` | Branding center | NOT_REVIEWED | |
 | `/agency/team`, `/agency/permissions`, `/agency/projects/:projectId/team` | Team / RBAC | NOT_REVIEWED | |
 | `/agency/settings/*`, `/agency/billing`, `/agency/account`, `/agency/audit` | Settings, billing, audit | NOT_REVIEWED | |
