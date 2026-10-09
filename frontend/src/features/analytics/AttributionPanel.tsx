@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Panel } from './components'
-import { money, num, percent } from './format'
-import type { Attribution, PlatformClaim } from './api'
+import { money, moneyExact, num, percent } from './format'
+import type { Attribution, PlatformClaim, Reconciliation as ReconciliationData } from './api'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Explainer } from '@/components/ui/Explainer'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -207,6 +207,7 @@ export function AttributionPanel({
          * invisible per platform: each figure is honest on its own terms.
          */}
         <Overlap overlap={data?.overlap} ar={ar} />
+        <Reconciliation data={data?.reconciliation} ar={ar} />
 
         {/* ── Store-Confirmed ───────────────────────────────────────────────────────────── */}
         <section className="min-w-0 border-t border-border pt-4">
@@ -487,6 +488,162 @@ function Overlap({ overlap, ar }: { overlap: Attribution['overlap'] | undefined;
             ? `المقارنة مبنية على ${percent(overlap.coverage, 0)} من طلبات المتجر — الباقي بلا إسناد.`
             : `Measured against ${percent(overlap.coverage, 0)} of the shop's orders — the rest carry no attribution.`}
         </p>
+      )}
+    </section>
+  )
+}
+
+/**
+ * ATTRIBUTION-RECONCILIATION-001 — Owner directive 2026-10-09 §50: the four layers and the ledger.
+ *
+ * The sections above keep the claims apart and set them beside the store. This one shows the step
+ * after: per platform, the claim and what the ledger actually placed there, the gap named as that
+ * platform's overclaim, and a ROAS that says which of the two it was counted on. Then the ledger
+ * itself — the merchant's own references, strongest evidence first — so «reconciled» is a list a
+ * reader can check, not a number they are asked to trust. GA4 is its own line: read where it was
+ * synced, stated absent where it was not, and never added into any of the others.
+ */
+function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar: boolean }) {
+  if (!data) return null
+
+  const t = {
+    title: ar ? 'التسوية' : 'Reconciliation',
+    claimed: ar ? 'المزعوم' : 'Claimed',
+    reconciled: ar ? 'المُسوّى' : 'Reconciled',
+    overclaim: ar ? 'مطالبة زائدة' : 'Overclaim',
+    spend: ar ? 'الإنفاق' : 'Spend',
+    roasPlatform: ar ? 'عائد (المنصة)' : 'ROAS (platform-reported)',
+    roasStore: ar ? 'عائد (المتجر)' : 'ROAS (store-confirmed)',
+    notStated: ar ? 'غير مُحدَّد' : 'not stated',
+    unavailable: ar ? 'لا يوجد دفتر طلبات يُسوّى عليه' : 'No ledger to reconcile against',
+    ledger: ar ? 'دفتر الطلبات' : 'Order ledger',
+    reference: ar ? 'المرجع' : 'Reference',
+    date: ar ? 'التاريخ' : 'Date',
+    platform: ar ? 'المنصة' : 'Platform',
+    campaign: ar ? 'الحملة' : 'Campaign',
+    evidence: ar ? 'الدليل' : 'Evidence',
+    revenue: ar ? 'الإيراد الصافي' : 'Net revenue',
+    refunded: ar ? 'مُسترد' : 'Refunded',
+    unattributed: ar ? 'غير مُسند' : 'Unattributed',
+    conflict: ar ? 'إشارات متعارضة' : 'Conflicting signals',
+    orders: ar ? 'طلبات' : 'orders',
+  }
+
+  const evidence: Record<string, { ar: string; en: string }> = {
+    utm_campaign_id: { ar: 'معرّف الحملة من المنصة', en: 'Campaign id from the platform' },
+    utm_campaign_name: { ar: 'اسم الحملة', en: 'Campaign name' },
+    click_id_platform_only: { ar: 'معرّف نقرة — المنصة فقط', en: 'Click id — platform only' },
+    utm_source_platform_only: { ar: 'مصدر UTM — المنصة فقط', en: 'UTM source — platform only' },
+    conflict: { ar: 'إشارات متعارضة', en: 'Conflicting signals' },
+    none: { ar: 'غير مُسند', en: 'Unattributed' },
+  }
+
+  return (
+    <section data-testid="reconciliation" className="min-w-0 border-t border-border pt-4">
+      <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t.title}</h4>
+      <p className="mt-1 text-xs text-text-secondary">{ar ? data.note_ar : data.note_en}</p>
+
+      {!data.available && (
+        <p data-testid="reconciliation-unavailable" className="mt-2 text-sm font-semibold text-text-primary">
+          {t.unavailable}
+        </p>
+      )}
+
+      {/* Per platform: claim · reconciled · overclaim · the two ROAS, each with its basis. */}
+      <ul className="mt-3 grid grid-cols-1 gap-2">
+        {data.platforms.map((p) => (
+          <li key={p.provider} data-testid={`reconciliation-row-${p.provider}`} className="min-w-0 rounded-lg border border-border bg-surface-secondary p-2.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="text-sm font-semibold text-text-primary">{providerLabel(p.provider, ar ? 'ar' : 'en')}</span>
+              <span className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-text-secondary">
+                <span><span className="text-text-muted">{t.claimed} </span><span className="tnum font-semibold text-text-primary" dir="ltr">{num(p.platform_reported_orders)}</span></span>
+                <span><span className="text-text-muted">{t.reconciled} </span><span className="tnum font-semibold text-text-primary" dir="ltr">{p.reconciled_orders === null ? '—' : num(p.reconciled_orders)}</span></span>
+                <span><span className="text-text-muted">{t.overclaim} </span><span className="tnum font-semibold text-warning" dir="ltr">{p.overclaim_orders === null ? '—' : num(p.overclaim_orders)}</span></span>
+                {p.spend !== null && <span><span className="text-text-muted">{t.spend} </span><span className="tnum" dir="ltr">{money(p.spend, data.ledger?.rows[0]?.currency ?? undefined)}</span></span>}
+              </span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-2 text-[11px]">
+              <span data-testid={`roas-platform_reported-${p.provider}`} className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">
+                {t.roasPlatform}: <span className="tnum font-semibold text-text-primary" dir="ltr">{p.roas.platform_reported.value === null ? t.notStated : `${p.roas.platform_reported.value}×`}</span>
+              </span>
+              <span data-testid={`roas-store_confirmed-${p.provider}`} className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">
+                {t.roasStore}: <span className="tnum font-semibold text-text-primary" dir="ltr">{p.roas.store_confirmed.value === null ? t.notStated : `${p.roas.store_confirmed.value}×`}</span>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* GA4 — its own line, never added into the rows above. */}
+      <p data-testid="reconciliation-measurement" className="mt-3 text-xs text-text-secondary">
+        <span className="font-semibold text-text-primary">{ar ? data.layers.measurement.ar : data.layers.measurement.en}: </span>
+        {data.measurement.available ? (
+          <>
+            <span className="tnum" dir="ltr">{num(data.measurement.transactions ?? 0)}</span>
+            {' '}{ar ? 'معاملة' : 'transactions'}
+            {data.measurement.revenue !== null && (
+              <>
+                {' · '}
+                <span className="tnum" dir="ltr">{moneyExact(data.measurement.revenue, data.measurement.currency ?? undefined)}</span>
+              </>
+            )}
+            {' — '}{ar ? data.measurement.note_ar : data.measurement.note_en}
+          </>
+        ) : (
+          <span>{ar ? data.measurement.note_ar : data.measurement.note_en}</span>
+        )}
+      </p>
+
+      {data.available && data.unattributed && data.conflict && (
+        <p data-testid="reconciliation-unplaced" className="mt-1 text-xs text-text-secondary">
+          {t.unattributed}: <span className="tnum" dir="ltr">{num(data.unattributed.orders)}</span> {t.orders}
+          {data.conflict.orders > 0 && (
+            <> · {t.conflict}: <span className="tnum" dir="ltr">{num(data.conflict.orders)}</span> {t.orders}</>
+          )}
+        </p>
+      )}
+
+      {data.ledger && (
+        <div data-testid="reconciliation-ledger" className="mt-3 min-w-0">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h5 className="text-xs font-semibold text-text-primary">{t.ledger}</h5>
+            {data.ledger.truncated && (
+              <span data-testid="reconciliation-ledger-cap" className="text-[11px] text-text-muted">
+                {ar
+                  ? `أحدث ${num(data.ledger.cap)} من ${num(data.ledger.total)} — بترتيب قوة الدليل`
+                  : `${num(data.ledger.cap)} of ${num(data.ledger.total)}, strongest evidence first`}
+              </span>
+            )}
+          </div>
+          <div className="mt-1.5 overflow-x-auto rounded-md border border-border">
+            <table className="w-full min-w-[560px] text-[11px]">
+              <thead className="bg-surface-secondary text-text-muted">
+                <tr>
+                  <th className="px-2 py-1 text-start font-semibold">{t.reference}</th>
+                  <th className="px-2 py-1 text-start font-semibold">{t.date}</th>
+                  <th className="px-2 py-1 text-start font-semibold">{t.platform}</th>
+                  {data.ledger.rows.some((r) => r.campaign !== undefined) && <th className="px-2 py-1 text-start font-semibold">{t.campaign}</th>}
+                  <th className="px-2 py-1 text-start font-semibold">{t.evidence}</th>
+                  <th className="px-2 py-1 text-end font-semibold">{t.revenue}</th>
+                  <th className="px-2 py-1 text-end font-semibold">{t.refunded}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.ledger.rows.map((r) => (
+                  <tr key={r.reference + (r.placed_at ?? '')} data-testid={`ledger-row-${r.reference}`} className="border-t border-border">
+                    <td className="px-2 py-1 font-semibold text-text-primary" dir="ltr">{r.reference}</td>
+                    <td className="tnum px-2 py-1 text-text-secondary" dir="ltr">{r.placed_at ?? '—'}</td>
+                    <td className="px-2 py-1 text-text-secondary">{r.platform === null ? '—' : providerLabel(r.platform, ar ? 'ar' : 'en')}</td>
+                    {data.ledger!.rows.some((x) => x.campaign !== undefined) && <td className="px-2 py-1 text-text-secondary">{r.campaign ?? '—'}</td>}
+                    <td className="px-2 py-1 text-text-secondary">{ar ? (evidence[r.method]?.ar ?? r.method) : (evidence[r.method]?.en ?? r.method)}</td>
+                    <td className="tnum px-2 py-1 text-end text-text-primary" dir="ltr">{r.revenue === null ? '—' : moneyExact(r.revenue, r.currency ?? undefined)}</td>
+                    <td className="tnum px-2 py-1 text-end text-text-secondary" dir="ltr">{r.refunded === null ? '—' : moneyExact(r.refunded, r.currency ?? undefined)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </section>
   )
