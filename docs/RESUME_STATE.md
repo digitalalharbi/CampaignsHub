@@ -888,3 +888,14 @@ was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
 refund arm (`value_refunded`, `filter_scope`); API health 200; ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 VERIFIED on
 that. The lane is clear: this branch (`feat/live-experience-b1`) pushes now; ch-font (`feat/adset-rung-evidence`)
 follows it.
+
+## Addendum — 2026-10-09, B6 Attribution Reconciliation on `ch-brand` (`feat/attribution-reconciliation`, from `8cda29cb`)
+
+The directive's only authorised new capability, built as an extension of `AttributionTransparency` (never a
+parallel engine): `reconciliation` on the same payload — four layers named, the ledger placed by strongest
+evidence (campaign id → name → click id → UTM source), overclaim per platform, no cross-platform total, GA4
+its own layer, ROAS per basis. Client links strip campaign identity (`ShareService::withoutCampaignIdentity`)
+and null `reconciled_revenue`/`refunded` under `hide_revenue`. Panel section under the overlap block.
+Backend 11 + 2 new cases, panel +7, all fail-first; transparency suites 52; analytics vitest 591; tsc/lint
+clean. Matrix row ATTRIBUTION-RECONCILIATION-001 added (IMPLEMENTED_NOT_VERIFIED until deployed). Queued
+after ch-budget (#634) and ch-font in the single lane.
