@@ -41,9 +41,18 @@ final class ReportStructure
      * The seven sections, in the order a report is read.
      *
      * Fixed order, because the sequence is itself an argument: what happened, then how it performed
-     * overall, then where it happened, then what it was bought for, then the ads that carried it,
+     * overall, then what it was bought for, then where it happened, then the ads that carried it,
      * and only then what to do about it. A findings section read before the evidence is an opinion;
      * read after it, it is a conclusion.
+     *
+     * Objectives BEFORE platforms — CLIENT-FACING-PRESENTATION-001, whose six questions are an order:
+     * what was spent, what was achieved, at what cost, what changed, WHERE, and what needs attention.
+     * «At what cost, really» is the objective split, because it is where direct and blended part
+     * company; «where» is the platform table. The deck has read them in that order since the owner
+     * decided it (`objective_performance` before `platform_comparison` in `ReportTemplateEngine`),
+     * and so has the live link — while this list, and the printed document that numbers from it,
+     * still said where before why. A contents page in one order over a body in the other is the
+     * exact disagreement an outline exists to prevent.
      *
      * «الحملات» was the fifth and is gone — CLIENT-REPORT-ENTITY-BOUNDARY-001. A report is written
      * for the person paying, and the campaign is the agency's own container: the objectives section
@@ -54,8 +63,8 @@ final class ReportStructure
     private const ORDER = [
         'executive_summary',
         'performance',
-        'platforms',
         'objectives',
+        'platforms',
         'ads',
         'links',
         'findings',
