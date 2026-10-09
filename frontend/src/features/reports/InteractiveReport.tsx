@@ -1067,6 +1067,12 @@ function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }
         /* A deck slide cannot grow; see the prop's note for the measurement. */
         paged={paged}
         onOpen={setOpen}
+        windowEnd={data.period?.to ?? null}
+        /*
+         * A PAGED slide offers no toggle: a deck page cannot grow to fit a table, and a control
+         * that cannot be pressed in a PDF is a control that should not be drawn.
+         */
+        browsable={!paged}
       />
 
       {/*
@@ -1173,6 +1179,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
         level={data.ads_level}
         locale={ar ? 'ar' : 'en'}
         onOpen={setOpen}
+        windowEnd={data.period?.to ?? null}
       />
 
       {open && (

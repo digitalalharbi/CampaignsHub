@@ -4,6 +4,9 @@ import { objectiveLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { ReportPlatformSummary } from './ReportPlatformSummary'
 import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
+import { useState } from 'react'
+import { LayoutGrid, Rows3 } from 'lucide-react'
+import { ReportContentTable } from './ReportContentTable'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
@@ -66,6 +69,18 @@ export type ReportAd = {
   roas?: number | null
   /** The ranker's own sentence: why this ad is in this list. */
   reason?: string | null
+  /**
+   * REPORT-CONTENT-BROWSER-001 — the two facts «is this still running» is read from.
+   *
+   * The platform's own word and the day it last delivered. FACTS about the ad rather than figures,
+   * and not a client-boundary concern: «this ad is running» is the client's own advertising, unlike
+   * a campaign's name or its configuration.
+   *
+   * Optional because older payloads do not carry them; `relevanceOf` reads a null pair as «idle»,
+   * which is the honest answer — the platform not saying is not the platform saying it ended.
+   */
+  status?: string | null
+  last_active_at?: string | null
 }
 
 /** The reasons the generator can give, said in the reader's language. */
@@ -171,6 +186,8 @@ export function ReportAdsSection({
   paged = false,
   onOpen,
   restWhere,
+  windowEnd,
+  browsable = true,
 }: {
   ads: ReportAd[] | undefined
   /**
@@ -218,9 +235,29 @@ export function ReportAdsSection({
    * table that is not there reads as a page that failed to load.
    */
   restWhere?: { ar: string; en: string }
+  /**
+   * REPORT-CONTENT-BROWSER-001 — the period's end, which «still running» is measured against.
+   *
+   * Never today: a client opening last quarter's report is asking whether these ran THEN, and
+   * judging a September creative against today would mark the whole quarter stopped.
+   */
+  windowEnd?: string | null
+  /**
+   * Whether this surface can offer the table at all.
+   *
+   * The printed page cannot: it is produced by Chromium from static markup and has no toggle to
+   * press, so offering one would draw a control that does nothing in the document a client keeps.
+   */
+  browsable?: boolean
 }) {
   const ar = locale === 'ar'
   const rows = (ads ?? []).slice(0, limit)
+  /*
+   * Cards by default, because recognising the ad is what a client opens this section for. The
+   * table is for COMPARING, which is the second question and the one the owner asked us to make
+   * easy: «ميزة العرض كجدول أو بطاقات … لسهولة الفلترة والتصفح».
+   */
+  const [view, setView] = useState<'cards' | 'table'>('cards')
   /*
    * «الإعلانات الأعلى أداءً», not «الإعلانات التي عملت».
    *
@@ -243,7 +280,40 @@ export function ReportAdsSection({
 
   return (
     <section data-testid="report-ads" data-state="present" data-level={level ?? 'ad'} className="flex flex-col gap-3">
-      <h3 className="text-base font-bold text-text-primary">{heading}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-bold text-text-primary">{heading}</h3>
+
+        {/*
+          REPORT-CONTENT-BROWSER-001 — the owner asked for both, in the report.
+
+          «يجب إضافة ميزة العرض كجدول أو بطاقات كذلك في التقارير … لسهولة الفلترة والتصفح». Cards
+          are for recognising an ad and the table is for comparing them, and the same rows feed
+          both through the same `figuresFor`. Absent on a surface that cannot offer it — the
+          printed page has no toggle to press.
+        */}
+        {browsable && (
+          <div className="inline-flex rounded-xl border border-border p-0.5" role="group" aria-label={ar ? 'طريقة العرض' : 'View'}>
+            <button
+              type="button"
+              data-testid="report-content-view-cards"
+              aria-pressed={view === 'cards'}
+              onClick={() => setView('cards')}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${view === 'cards' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" aria-hidden /> {ar ? 'بطاقات' : 'Cards'}
+            </button>
+            <button
+              type="button"
+              data-testid="report-content-view-table"
+              aria-pressed={view === 'table'}
+              onClick={() => setView('table')}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${view === 'table' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+            >
+              <Rows3 className="h-3.5 w-3.5" aria-hidden /> {ar ? 'جدول' : 'Table'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {reading?.signal && (
         <div data-testid="report-ads-reading" className="rounded-xl border border-border bg-surface-secondary/40 p-3">
@@ -275,7 +345,26 @@ export function ReportAdsSection({
         report. Each group is ordered on the metric its own objective is judged by and says so; a
         group whose objective reported none of its metrics shows its ads and claims no order.
       */}
-      {(groups ?? []).length > 0
+      {browsable && view === 'table'
+        ? (
+          /*
+            One table over the SAME rows, groups flattened.
+
+            The grouping exists because one list across objectives can only be ordered by what they
+            share — spend — and that is a card-reading problem. A table states each row's objective
+            figures in their own columns, so the comparison the grouping protects is visible without
+            it. The order inside the groups is preserved: it arrives decided and is not re-sorted
+            here.
+          */
+          <ReportContentTable
+            ads={(groups ?? []).length > 0 ? (groups ?? []).flatMap((g) => g.ads.slice(0, limit)) : rows}
+            locale={locale}
+            currency={currency ?? null}
+            windowEnd={windowEnd ?? null}
+            onOpen={onOpen}
+          />
+        )
+        : (groups ?? []).length > 0
         ? (
           <>
             {(paged ? (groups ?? []).slice(0, PAGED_GROUPS) : (groups ?? [])).map((group) => (
