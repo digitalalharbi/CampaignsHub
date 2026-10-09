@@ -227,6 +227,8 @@ final class DemoAnalyticsSeeder extends Seeder
             ],
         );
 
+        $this->seedScaleProject($ws);
+
         /*
          * One AWARENESS campaign, because a demo with one objective cannot exercise objective-awareness.
          *
@@ -337,5 +339,56 @@ final class DemoAnalyticsSeeder extends Seeder
         $ns = Uuid::uuid5(Uuid::NAMESPACE_DNS, self::DEMO_UUID_NS)->toString();
 
         return Uuid::uuid5($ns, $seed)->toString();
+    }
+
+    /** The campaign-picker cap the scale project has to exceed — `MetricsController::OPTION_LIMIT`. */
+    private const SCALE_CAMPAIGNS = 241;
+
+    public const SCALE_PROJECT = 'Scale — 241 campaigns';
+
+    /** Sorts after every «Scale campaign NNN», so it sits past the cap and is reachable only by search. */
+    public const SCALE_HIDDEN_CAMPAIGN = 'Zayed launch — past the cap';
+
+    /**
+     * A project at real production cardinality — UX-MULTISELECT-SCALE-001.
+     *
+     * The requirement is «usable at 5, 50, 200+ campaigns», and the demo store carries fifteen. So the
+     * campaign picker's cap (`OPTION_LIMIT = 120`, one row fetched past it so «more exist» is a fact)
+     * and the control's «narrow the search to reach the rest» note were unreachable in a browser on
+     * seeded data: `option-scale.spec.ts` could prove that a typed term reaches the server and nothing
+     * about what two hundred campaigns look like on screen, which is the whole of the row.
+     *
+     * A SEPARATE project, deliberately. Adding two hundred campaigns to the demo store would move
+     * every count a spec asserts on it and every figure it is the fixture for. This one carries no
+     * metrics at all — the cardinality is the point, not the figures — and one campaign whose name
+     * sorts after all the others, so the cap hides it and only the search can reach it.
+     *
+     * Idempotent by count: a reseed that finds the campaigns already there creates nothing, and a
+     * partial earlier run is completed rather than duplicated.
+     */
+    private function seedScaleProject(ClientWorkspace $ws): void
+    {
+        $project = Project::firstOrCreate(
+            ['client_workspace_id' => $ws->id, 'name' => self::SCALE_PROJECT],
+            ['status' => 'active', 'setup_completion' => 100],
+        );
+
+        $names = array_map(static fn (int $i): string => sprintf('Scale campaign %03d', $i), range(1, self::SCALE_CAMPAIGNS - 1));
+        $names[] = self::SCALE_HIDDEN_CAMPAIGN;
+
+        $existing = UnifiedCampaign::query()->where('project_id', $project->id)->pluck('name')->all();
+
+        foreach (array_diff($names, $existing) as $name) {
+            UnifiedCampaign::create([
+                'project_id' => $project->id,
+                'client_workspace_id' => $ws->id,
+                'name' => $name,
+                'objective' => 'sales',
+                'status' => 'active',
+                'total_budget' => 1000,
+                'budget_currency' => self::PROJECT_CURRENCY,
+                'meta' => ['is_demo' => true, 'primary_platform' => 'meta'],
+            ]);
+        }
     }
 }
