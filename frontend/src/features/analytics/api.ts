@@ -309,8 +309,10 @@ export interface BudgetRow {
   /**
    * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
    * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
+   * `nothing_measured_in_window` — the project's window holds no measured row, so a missing row is an
+   * absence rather than a zero (Owner directive 2026-10-09 §19).
    */
-  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
+  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency' | 'nothing_measured_in_window'
 }
 /**
  * One source behind the project's figures — an ad platform OR a connected store (UNIFIED-001).
@@ -902,7 +904,7 @@ export interface PlatformBudgetRow {
   /** Projected end spend minus the plan, signed: positive is an overrun. */
   over_under: number | null
   /** The server's own verdict on whether these two figures may be compared at all. */
-  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
+  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency' | 'nothing_measured_in_window'
   refusal: string | null
 }
 
