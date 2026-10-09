@@ -458,6 +458,8 @@ final class ShareService
      */
     public function sanitizeAttribution(array $payload, ReportShare $share): array
     {
+        $payload = $this->withoutCampaignIdentity($payload);
+
         if (! $share->hide_spend && ! $share->hide_revenue) {
             return $payload;
         }
@@ -473,6 +475,36 @@ final class ShareService
         );
 
         return $this->nullKeysDeeply($payload, array_values(array_unique($keys)));
+    }
+
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a client link names platforms and evidence, never a campaign.
+     *
+     * The reconciliation ledger carries each order's `campaign` for the operator's screen, and the
+     * `models` block lists campaign names behind each attribution model. Neither leaves through a
+     * client link: the key is removed, not nulled, so a client-side renderer cannot even draw an
+     * empty column for it. Applied before the money flags because it is not a flag — it is the
+     * boundary, and it holds on every link.
+     */
+    private function withoutCampaignIdentity(array $payload): array
+    {
+        if (isset($payload['reconciliation']['ledger']['rows']) && is_array($payload['reconciliation']['ledger']['rows'])) {
+            $payload['reconciliation']['ledger']['rows'] = array_map(static function (array $row): array {
+                unset($row['campaign']);
+
+                return $row;
+            }, $payload['reconciliation']['ledger']['rows']);
+        }
+
+        if (isset($payload['models']) && is_array($payload['models'])) {
+            $payload['models'] = array_map(static function (array $model): array {
+                unset($model['campaign_names']);
+
+                return $model;
+            }, $payload['models']);
+        }
+
+        return $payload;
     }
 
     /**

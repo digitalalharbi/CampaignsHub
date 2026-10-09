@@ -130,6 +130,8 @@ final class CreativeVisibility
      * @var list<string>
      */
     public const ATTRIBUTION_REVENUE_KEYS = [
+        'refunded',
+        'reconciled_revenue',
         'platform_reported_revenue', 'store_confirmed_revenue', 'total_revenue', 'revenue',
     ];
 

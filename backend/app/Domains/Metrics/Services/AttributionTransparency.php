@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Services\ProjectOrders;
 use App\Domains\Commerce\Services\ProjectStores;
+use App\Domains\Integrations\Measurement\MeasurementDailyMetric;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Support\AdPlatforms;
@@ -151,6 +152,7 @@ final class AttributionTransparency
             'dedup' => $this->dedup($hasStore, $platforms, $loaded),
             'models' => $this->models($projectId, $window['from_date'], $window['to_date']),
             'unattributed' => $this->unattributed($hasStore, $loaded['orders']),
+            'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
         ];
     }
 
@@ -487,6 +489,251 @@ final class AttributionTransparency
      * @param  list<string>  $providers
      * @return array<string,array{orders:float,revenue:float,currency:?string,windows:array<string,int>}>
      */
+    /**
+     * ATTRIBUTION-RECONCILIATION-001 — Owner directive 2026-10-09 §50: four truth layers and one ledger.
+     *
+     * The sections above already keep the platforms' claims apart and set them beside the store. This
+     * block is the step after that: the merchant's ledger placed on the platforms by the strongest
+     * evidence each order carries — a campaign named by the platform's own id, then a campaign named
+     * by name, then a click id that proves the platform alone, then a UTM source that names it — so a
+     * sale two platforms both claimed is ONE order on ONE row, and the claim with no order behind it
+     * is an overclaim stated per platform. Unattributed orders stay unattributed; a conflicting signal
+     * follows ATTRIB-001 (the click id's platform, no campaign) and is counted as such. GA4 is its own
+     * layer, read where it was synced and absent where it was not, and never blended into anybody's
+     * total. Every ROAS names its basis; there is no ROAS without one.
+     *
+     * @param  list<array<string,mixed>>  $platforms  the platform-reported rows built above
+     * @param  array{orders:Collection<int,CommerceOrder>}  $loaded
+     * @param  list<string>  $providers
+     * @return array<string,mixed>
+     */
+    private function reconciliation(bool $hasStore, array $platforms, array $loaded, string $projectId, string $tenantId, string $fromDate, string $toDate, array $providers): array
+    {
+        $spend = $this->spendByPlatform($projectId, $fromDate, $toDate, $providers);
+        $measurement = $this->measurement($tenantId, $projectId, $fromDate, $toDate);
+        $labels = [
+            'platform_reported' => ['ar' => 'ما أبلغت به المنصات', 'en' => 'Platform-reported'],
+            'measurement' => ['ar' => 'القياس (GA4)', 'en' => 'Measurement (GA4)'],
+            'commerce' => ['ar' => 'ما أكّده المتجر', 'en' => 'Commerce truth'],
+            'reconciled' => ['ar' => 'المُسوّى', 'en' => 'Reconciled'],
+        ];
+
+        $claimed = [];
+        foreach ($platforms as $p) {
+            $claimed[$p['provider']] = $p;
+        }
+
+        if (! $hasStore) {
+            $rows = [];
+            foreach ($claimed as $provider => $p) {
+                $rows[] = $this->reconciledRow($provider, $p, $spend[$provider] ?? 0.0, null, null, null);
+            }
+
+            return [
+                'available' => false,
+                'unavailable_reason' => 'no_store_connected',
+                'note_ar' => 'بلا متجر مربوط لا يوجد دفتر طلبات يُسوّى عليه؛ تبقى مزاعم المنصات مزاعم.',
+                'note_en' => 'With no store connected there is no order ledger to reconcile against; the platforms’ claims remain claims.',
+                'layers' => $labels,
+                'measurement' => $measurement,
+                'platforms' => AdPlatforms::sortRows($rows, 'provider'),
+                'unattributed' => null,
+                'conflict' => null,
+                'ledger' => null,
+            ];
+        }
+
+        $live = $loaded['orders']->filter(fn (CommerceOrder $o) => $o->cancelled_at === null);
+        $campaignIds = $live->pluck('external_campaign_id')->filter()->unique()->values()->all();
+        $campaigns = $campaignIds === []
+            ? collect()
+            : ExternalCampaign::withoutGlobalScopes()->whereIn('id', $campaignIds)->get(['id', 'provider', 'name'])->keyBy(fn (ExternalCampaign $c) => (string) $c->getKey());
+
+        $placed = [];
+        $unattributed = ['orders' => 0, 'revenue' => 0.0];
+        $conflict = ['orders' => 0, 'revenue' => 0.0];
+        $ledger = [];
+
+        foreach ($live as $order) {
+            $campaign = $order->external_campaign_id === null ? null : $campaigns->get((string) $order->external_campaign_id);
+            $method = (string) ($order->attribution_method ?: 'none');
+            $raw = $campaign !== null ? $campaign->provider : $order->click_id_provider;
+            if ($raw === null && $order->utm_source !== null && $method === 'utm_source_platform_only') {
+                $raw = $order->utm_source;
+            }
+            $platform = $raw === null ? null : AdPlatforms::canonical((string) $raw);
+            $revenue = $order->netRevenue() ?? 0.0;
+            $rank = self::EVIDENCE_RANK[$method] ?? 6;
+
+            if ($platform === null) {
+                $unattributed['orders']++;
+                $unattributed['revenue'] += $revenue;
+            } else {
+                $placed[$platform] ??= ['orders' => 0, 'revenue' => 0.0];
+                $placed[$platform]['orders']++;
+                $placed[$platform]['revenue'] += $revenue;
+            }
+            if ($method === 'conflict') {
+                $conflict['orders']++;
+                $conflict['revenue'] += $revenue;
+            }
+
+            $ledger[] = [
+                'reference' => $order->reference !== null && $order->reference !== '' ? (string) $order->reference : (string) $order->external_id,
+                'placed_at' => $order->placed_at?->toDateString(),
+                'platform' => $platform,
+                'campaign' => $campaign?->name,
+                'method' => $method,
+                'evidence_rank' => $rank,
+                'revenue' => round($revenue, 2),
+                'refunded' => round((float) $order->refunded_total, 2),
+                'currency' => $order->currency,
+            ];
+        }
+
+        usort($ledger, static fn (array $a, array $b): int => [$a['evidence_rank'], $b['placed_at'] ?? ''] <=> [$b['evidence_rank'], $a['placed_at'] ?? '']);
+
+        $rows = [];
+        foreach (array_unique([...array_keys($claimed), ...array_keys($placed)]) as $provider) {
+            $p = $claimed[$provider] ?? null;
+            $got = $placed[$provider] ?? ['orders' => 0, 'revenue' => 0.0];
+            $claim = $p === null ? 0.0 : (float) $p['platform_reported_orders'];
+            $rows[] = $this->reconciledRow(
+                $provider,
+                $p,
+                $spend[$provider] ?? 0.0,
+                $got['orders'],
+                round($got['revenue'], 2),
+                max(0, (int) round($claim) - $got['orders']),
+            );
+        }
+
+        return [
+            'available' => true,
+            'unavailable_reason' => null,
+            'note_ar' => 'كل طلب في الدفتر يُوضع مرة واحدة على المنصة التي يحملها أقوى دليل فيه. المزاعم تبقى مزاعم، والفرق بين المزعوم والمُسوّى هو المطالبة الزائدة لكل منصة.',
+            'note_en' => 'Each ledger order is placed once, on the platform its strongest evidence names. Claims stay claims; the gap between claimed and reconciled is each platform’s overclaim.',
+            'layers' => $labels,
+            'measurement' => $measurement,
+            'platforms' => AdPlatforms::sortRows($rows, 'provider'),
+            'unattributed' => ['orders' => $unattributed['orders'], 'revenue' => round($unattributed['revenue'], 2)],
+            'conflict' => ['orders' => $conflict['orders'], 'revenue' => round($conflict['revenue'], 2)],
+            'ledger' => [
+                'total' => count($ledger),
+                'truncated' => count($ledger) > self::LEDGER_CAP,
+                'cap' => self::LEDGER_CAP,
+                'rows' => array_slice($ledger, 0, self::LEDGER_CAP),
+            ],
+        ];
+    }
+
+    /** The evidence order a ledger row sorts by: what the platform itself can prove first. */
+    private const EVIDENCE_RANK = [
+        'utm_campaign_id' => 1,
+        'utm_campaign_name' => 2,
+        'click_id_platform_only' => 3,
+        'utm_source_platform_only' => 4,
+        'conflict' => 5,
+        'none' => 6,
+    ];
+
+    private const LEDGER_CAP = 200;
+
+    /** @return array<string,mixed> */
+    private function reconciledRow(string $provider, ?array $claim, float $spend, ?int $orders, ?float $revenue, ?int $overclaim): array
+    {
+        $claimedOrders = $claim === null ? 0.0 : (float) $claim['platform_reported_orders'];
+        $claimedRevenue = $claim === null ? 0.0 : (float) $claim['platform_reported_revenue'];
+
+        return [
+            'provider' => $provider,
+            'spend' => round($spend, 2),
+            'platform_reported_orders' => round($claimedOrders, 2),
+            'platform_reported_revenue' => round($claimedRevenue, 2),
+            'reconciled_orders' => $orders,
+            'reconciled_revenue' => $revenue,
+            'overclaim_orders' => $overclaim,
+            'roas' => [
+                'platform_reported' => [
+                    'basis' => 'platform_reported',
+                    'value' => $spend > 0 && $claimedRevenue > 0 ? round($claimedRevenue / $spend, 2) : null,
+                ],
+                'store_confirmed' => [
+                    'basis' => 'store_confirmed',
+                    'value' => $spend > 0 && ($orders ?? 0) > 0 && ($revenue ?? 0.0) > 0 ? round((float) $revenue / $spend, 2) : null,
+                ],
+            ],
+        ];
+    }
+
+    /** @return array<string,float> canonical platform → spend in the window */
+    private function spendByPlatform(string $projectId, string $fromDate, string $toDate, array $providers): array
+    {
+        $rows = DailyMetric::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->where('metric_key', 'spend')
+            ->when($providers !== [], fn ($q) => $q->whereIn('provider', $providers))
+            ->groupBy('provider')
+            ->select('provider')
+            ->selectRaw('SUM(value) AS total')
+            ->toBase()
+            ->get();
+        $out = [];
+        foreach ($rows as $row) {
+            $key = AdPlatforms::canonical((string) $row->provider);
+            $out[$key] = ($out[$key] ?? 0.0) + (float) $row->total;
+        }
+
+        return $out;
+    }
+
+    /**
+     * GA4's own count of what happened on the site — a third layer, never a correction to the others.
+     *
+     * @return array<string,mixed>
+     */
+    private function measurement(string $tenantId, string $projectId, string $fromDate, string $toDate): array
+    {
+        $rows = MeasurementDailyMetric::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('project_id', $projectId)
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->whereIn('metric_key', ['transactions', 'revenue'])
+            ->groupBy('metric_key')
+            ->select('metric_key')
+            ->selectRaw('SUM(value) AS total')
+            ->selectRaw('MAX(currency) AS currency')
+            ->toBase()
+            ->get()
+            ->keyBy('metric_key');
+
+        if ($rows->isEmpty()) {
+            return [
+                'available' => false,
+                'basis' => 'measurement',
+                'unavailable_reason' => 'no_measurement_rows',
+                'note_ar' => 'لم تُقرأ أي أرقام قياس لهذه الفترة — لا خاصية GA4 مربوطة أو لم تُزامَن بعد.',
+                'note_en' => 'No measurement figures were read for this period — no GA4 property is connected, or none has synced yet.',
+                'transactions' => null,
+                'revenue' => null,
+                'currency' => null,
+            ];
+        }
+
+        return [
+            'available' => true,
+            'basis' => 'measurement',
+            'unavailable_reason' => null,
+            'note_ar' => 'ما عدّته خاصية GA4 على الموقع نفسه. طبقة قائمة بذاتها، لا تُصحّح المنصات ولا الدفتر ولا تُخلط بهما.',
+            'note_en' => 'What the GA4 property counted on the site itself. A layer of its own — it corrects neither the platforms nor the ledger and is blended into neither.',
+            'transactions' => isset($rows['transactions']) ? (float) $rows['transactions']->total : null,
+            'revenue' => isset($rows['revenue']) ? round((float) $rows['revenue']->total, 2) : null,
+            'currency' => $rows['revenue']->currency ?? null,
+        ];
+    }
+
     private function platformRows(string $projectId, string $fromDate, string $toDate, array $providers): array
     {
         $rows = DailyMetric::withoutGlobalScopes()
