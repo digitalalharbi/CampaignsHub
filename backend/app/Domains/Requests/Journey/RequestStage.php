@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Journey;
 
+use App\Domains\Requests\Services\RequestJourneyService;
+
 /**
  * The full professional lifecycle of an external request, modelled as an explicit state machine.
  *
@@ -135,6 +137,70 @@ enum RequestStage: string
     public function label(): string
     {
         return ucwords(str_replace('_', ' ', $this->value));
+    }
+
+    /** The same label in Arabic — the client portal's default language. */
+    public function labelAr(): string
+    {
+        return match ($this) {
+            self::Draft => 'مسودة',
+            self::ContactVerification => 'التحقق من التواصل',
+            self::Submitted => 'تم الاستلام',
+            self::UnderReview => 'قيد المراجعة',
+            self::WaitingForInformation => 'بانتظار معلومات منك',
+            self::Qualified => 'مؤهّل',
+            self::ProposalSent => 'أُرسل العرض',
+            self::AwaitingClientApproval => 'بانتظار موافقتك',
+            self::PaymentPending => 'بانتظار السداد',
+            self::Paid => 'مدفوع',
+            self::Onboarding => 'التهيئة',
+            self::InProgress => 'قيد التنفيذ',
+            self::ClientReview => 'مراجعتك',
+            self::Completed => 'مكتمل',
+            self::Archived => 'مؤرشف',
+            self::Rejected => 'مرفوض',
+            self::Cancelled => 'ملغى',
+            self::PaymentFailed => 'فشل السداد',
+            self::Refunded => 'مستردّ',
+            self::OnHold => 'معلّق',
+        };
+    }
+
+    /** The label in the reader's language. */
+    public function labelFor(string $locale): string
+    {
+        return $locale === 'ar' ? $this->labelAr() : $this->label();
+    }
+
+    /**
+     * REQ-JOURNEY-FALLBACK-001 — the stage a request's STATUS implies, for a request the journey never wrote.
+     *
+     * The journey column is written by {@see RequestJourneyService::transition()};
+     * a request that moved through the status workflow alone (the internal detail page, a seed, an
+     * import) has a status and no journey stage, and the client's rail read «Draft» over a request
+     * that was in progress — the live review caught it on a seeded request. A status is a fact about
+     * the request; this is that fact restated in the journey's vocabulary. Null for a status key the
+     * journey has no stage for.
+     */
+    public static function fromStatusKey(?string $statusKey): ?self
+    {
+        return match ($statusKey) {
+            // `new` is deliberately absent: a new request has not begun its journey, and Draft — where
+            // the journey starts — is the honest stage for it (RequestJourneyTest walks that path).
+            'under_review', 'triage', 'reviewing' => self::UnderReview,
+            'waiting_client', 'information_requested' => self::WaitingForInformation,
+            'qualified' => self::Qualified,
+            'quoted' => self::ProposalSent,
+            'approved', 'accepted' => self::AwaitingClientApproval,
+            'in_progress' => self::InProgress,
+            'delivered' => self::ClientReview,
+            'completed' => self::Completed,
+            'on_hold' => self::OnHold,
+            'rejected' => self::Rejected,
+            'cancelled' => self::Cancelled,
+            'archived' => self::Archived,
+            default => null,
+        };
     }
 
     /** @return list<string> All stage values. */
