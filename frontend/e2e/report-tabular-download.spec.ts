@@ -87,7 +87,31 @@ test('export → download → the XLSX and CSV a person receives are real files 
 
       const disposition = response.headers()['content-disposition'] ?? ''
       expect(disposition, `the ${format} response would open in the browser rather than be saved`).toContain('attachment')
-      expect(disposition, `the ${format} download is named after its blob, not its report`).not.toMatch(/[0-9a-f-]{36}\.\w+/)
+      /*
+       * «Named after its blob» means a UUID, and the pattern now says UUID.
+       *
+       * It used to be `[0-9a-f-]{36}` — any thirty-six characters drawn from hex and hyphen. That
+       * is a proxy, and REPORT-TITLE-METADATA-001 tripped it the moment export filenames started
+       * carrying their period: `…-1791530024942-2026-09-10-2026-10-09-541b586e.xlsx` is a run of
+       * forty-four such characters and not a blob name at all. The filename was right and the
+       * guard called it wrong — a false accusation against the product, which this suite has
+       * recorded before and which costs more than the defect it was watching for.
+       *
+       * The canonical 8-4-4-4-12 shape cannot be produced by dates, timestamps or a short id, so
+       * the assertion now fails on what it was always about and on nothing else. The positive half
+       * below is what actually holds the requirement: the file carries the report's own words.
+       */
+      expect(disposition, `the ${format} download is named after its blob, not its report`)
+        .not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\w+/)
+      /*
+       * REPORT-TITLE-METADATA-001 — and it is named after the REPORT, which the negative cannot say.
+       *
+       * A filename of `x.xlsx` passes every «is not a uuid» check ever written. The kind is the one
+       * part that is always present — it is what makes an Arabic-titled report produce a real ASCII
+       * name rather than «.xlsx» — so it is what this asserts.
+       */
+      expect(disposition, `the ${format} download does not carry the report's own name`)
+        .toMatch(/(executive-summary|detailed-report)/)
       expect(disposition).toContain(`.${format}`)
 
       return Buffer.from(await response.body())
