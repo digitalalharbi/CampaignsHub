@@ -140,7 +140,7 @@ export function RelatedEntitiesPanel({ projectId, campaignId }: { projectId: str
           </>
         )
         return (
-          <li key={key} data-testid={`relation-${key}`}>
+          <li key={key} data-testid={`relation-${key}`} className="min-w-0">
             {target && rel.count > 0
               ? <Link to={target} className={`${TILE} transition-colors hover:bg-surface-hover`}>{body}</Link>
               : <span className={TILE}>{body}</span>}
@@ -168,7 +168,11 @@ function Frame({ testid, chain, children }: { testid?: string; chain: ReactNode;
         {chain}
       </nav>
 
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{children}</ul>
+      {/* `grid-cols-1` is the base rule, not a default: without it the single column below `sm` is
+          `auto`, sized by the longest sample line, and `truncate` on that line has nothing to truncate
+          against — the panel widened the campaign detail by 364 px at 390. `min-w-0` on each tile for
+          the same reason (a grid item may not shrink below its content unless told). */}
+      <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">{children}</ul>
     </section>
   )
 }
