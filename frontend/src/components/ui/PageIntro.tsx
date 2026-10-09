@@ -109,7 +109,7 @@ export function PageIntro({
       */}
       {kpis && (
         <div data-testid={testid ? `${testid}-kpis` : undefined} className="min-w-0">
-          <StatGrid columns="sm:grid-cols-2 lg:grid-cols-4">{kpis}</StatGrid>
+          <StatGrid columns="grid-cols-2 lg:grid-cols-4">{kpis}</StatGrid>
         </div>
       )}
     </header>
