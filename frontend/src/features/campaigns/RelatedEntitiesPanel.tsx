@@ -85,8 +85,9 @@ export function RelatedEntitiesPanel({ projectId, campaignId }: { projectId: str
    * happened, which is exactly what «an absent link is information» was written against.
    */
   if (q.isLoading || q.isError || !q.data) {
+    // The same anchor in every state: finding the panel must not depend on the request having answered.
     return (
-      <Frame chain={<Skeleton className="h-7 w-64" />}>
+      <Frame testid="related-entities" chain={<Skeleton className="h-7 w-64" />}>
         {RELATION_KEYS.map((key) => (
           <li key={key}>
             <span className={TILE}>
