@@ -53,7 +53,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 
 | Route | Surface | Status | Evidence |
 |---|---|---|---|
-| `/agency/integrations`, `/agency/integrations/review`, `/agency/connections` | Integrations — are sources connected and fresh? | NOT_REVIEWED | |
+| `/agency/integrations`, `/agency/integrations/review`, `/agency/connections` | Integrations — are sources connected and fresh? | REVIEWED | **1366×768, ar, dark.** Overflow 0; page 1,181 px. First screen: h1 with the connect action, three KPIs (sources 4, needing re-auth 0, accounts 2), and all four provider rows — each with its accounts, auth state, sync state («لم تُجرَ مزامنة» / last sync time) and actions — with the «all discovered accounts» toggle at the fold. It answers «connected and fresh?» at once; nothing changed on this route. The KPI row is a page-level hero grid (174 px) — converted with the others if the shared intro grid moves onto `StatGrid`. |
 | `/agency/projects/:projectId/integrations` | Project integrations | NOT_REVIEWED | |
 | `/agency/spend-limits` | Budgets / spend limits — within intended pacing? | NOT_REVIEWED | |
 | `/agency/tasks` | Tasks / operations | NOT_REVIEWED | |
