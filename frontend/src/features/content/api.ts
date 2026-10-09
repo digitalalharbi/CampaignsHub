@@ -595,6 +595,8 @@ export interface CreativeDetail {
     dimensions: { width: number | null; height: number | null; aspect_ratio: string | null; file_size: number | null }
     destination_url: string | null
     external_ids: { creative: string; ad_set: string | null; campaign: string | null }
+    /** SNAP-OCT26-AI-MEDIA-DECLARATION — only what the platform stated; `declared: false` is «not declared», never «not AI». */
+    ai_media?: { declared: boolean; source: string | null; label_ar: string | null; label_en: string | null }
   }
   period: { from: string; to: string; days: number }
   previous_period: { from: string; to: string }

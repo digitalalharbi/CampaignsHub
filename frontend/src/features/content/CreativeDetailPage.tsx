@@ -72,6 +72,8 @@ const COPY = {
     catalogTitle: 'إعلان كتالوج — بلا أصل ثابت',
     catalogWhy: 'تُركّب المنصة الإعلان لكل منتج عند العرض.',
     identity: 'التعريف والمصدر',
+    aiMedia: 'وسائط مولَّدة بالذكاء الاصطناعي',
+    aiMediaNotDeclared: 'غير مُعلَن',
     platform: 'المنصة',
     campaign: 'الحملة',
     adSet: 'المجموعة الإعلانية',
@@ -155,6 +157,8 @@ const COPY = {
     catalogTitle: 'Catalog ad — no fixed asset',
     catalogWhy: 'The platform composes one per product at delivery.',
     identity: 'Identity and source',
+    aiMedia: 'AI-generated media',
+    aiMediaNotDeclared: 'Not declared',
     platform: 'Platform',
     campaign: 'Campaign',
     adSet: 'Ad set',
@@ -542,6 +546,12 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <Fact k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} block />
           <Fact k={t.path} v={marketingPathLabel(data.path, locale)} block />
           <Fact k={t.kind} v={creativeKindLabel(preview.kind, ar)} block />
+          {/* SNAP-OCT26-AI-MEDIA-DECLARATION — only what the platform stated; «not declared» is not «not AI». */}
+          <Fact
+            k={t.aiMedia}
+            v={creative.ai_media?.declared ? ((ar ? creative.ai_media.label_ar : creative.ai_media.label_en) ?? creative.ai_media.source ?? t.aiMediaNotDeclared) : t.aiMediaNotDeclared}
+            block
+          />
           <Fact k={t.firstSeen} v={creative.freshness.first_seen_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastActive} v={creative.freshness.last_active_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />

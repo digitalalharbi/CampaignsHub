@@ -248,7 +248,12 @@ final class DemoIntegrationsSeeder extends Seeder
                         'bid_strategy' => $bid,
                         'daily_budget' => $budget,
                         'currency' => $external->currency ?: 'SAR',
-                        'targeting' => $targeting,
+                        // SNAP-OCT26-CHAT-FEED — the demo Snapchat squads carry placements the way the API sends them.
+                        'targeting' => $external->provider === 'snapchat'
+                            ? [...($targeting ?? []), ...($j === 0
+                                ? ['placement_config' => 'custom', 'placements' => ['FEED', 'CHAT_FEED', 'INTERSTITIAL_USER']]
+                                : ['placement_config' => 'automatic', 'placements' => []])]
+                            : $targeting,
                         'source_type' => 'demo',
                         'is_demo' => true,
                         'last_synced_at' => Carbon::now()->subHours(3),
