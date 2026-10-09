@@ -554,7 +554,7 @@ final class AttributionTransparency
         $placed = [];
         $unattributed = ['orders' => 0, 'revenue' => 0.0];
         $conflict = ['orders' => 0, 'revenue' => 0.0];
-        $influencer = ['orders' => 0, 'revenue' => 0.0, 'codes' => []];
+        $influencer = ['orders' => 0, 'revenue' => 0.0, 'currency' => null, 'codes' => []];
         $ledger = [];
 
         foreach ($live as $order) {
@@ -572,6 +572,7 @@ final class AttributionTransparency
             if ($viaCoupon) {
                 // ATTR-EVIDENCE-INFLUENCER-COUPON-001 — placed on the creator's code, its own layer: not a platform, not unattributed.
                 $code = (string) $order->coupon_code;
+                $influencer['currency'] ??= $order->currency;
                 $influencer['orders']++;
                 $influencer['revenue'] += $revenue;
                 $influencer['codes'][$code] ??= ['code' => $code, 'orders' => 0, 'revenue' => 0.0];
@@ -647,6 +648,7 @@ final class AttributionTransparency
             'influencer' => [
                 'orders' => $influencer['orders'],
                 'revenue' => round($influencer['revenue'], 2),
+                'currency' => $influencer['currency'],
                 'codes' => array_values(array_map(static fn (array $c): array => [...$c, 'revenue' => round($c['revenue'], 2)], $influencer['codes'])),
             ],
             'ledger' => [

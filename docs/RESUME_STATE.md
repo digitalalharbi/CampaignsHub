@@ -925,3 +925,16 @@ resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full bac
 4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
 `mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
 gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
+
+**§C on `feat/influencer-coupon-evidence` (ch-brand, stacked on B6 `32c7e16c`), 2026-10-10 00:5x–01:0x.**
+ATTR-EVIDENCE-INFLUENCER-COUPON-001: `commerce_orders.coupon_code` (migration), read from Salla (`coupon.code` /
+`coupon_code`) and Zid (`coupon_code` / `coupon.code`) through the attribution value object; the resolver places an order
+whose code matches an ACTIVE discount-code asset on the collaboration's campaign with method `influencer_coupon` — rank 4,
+below a platform click id, above a bare utm_source, under a UTM campaign id; unknown/inactive/link codes are nothing;
+redemptions recounted from confirmed uncancelled orders (source `platform`). Reconciliation gains the `influencer` layer
+(orders, revenue, currency, per code); the ledger row carries the code; the panel states the layer on its own line and
+names the code on the row. Demo seeds: the demo creator holds SARA20, every tenth demo order is placed with it, and the
+seeder recounts (65 orders → redemptions 65, source platform). Evidence: InfluencerCouponEvidenceTest 4/4,
+AttributionReconciliationTest 12/12 with ranks re-pinned, attribution/store-sync/share suites 101 passed; panel Vitest
+29/29; tsc clean; live on the br-web preview (:5261, store project, quality tab, 1366×768): «عبر أكواد المؤثرين: 24
+طلبات · 12,960 SAR · الأكواد: SARA20 (24)», 24 ledger rows reading «مؤثر · SARA20», overflow 0. Pushes after B6.
