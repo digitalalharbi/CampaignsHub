@@ -62,14 +62,15 @@ const reconciliation = (over: Partial<NonNullable<Attribution['reconciliation']>
     {
       provider: 'meta', spend: 1000, platform_reported_orders: 40, platform_reported_revenue: 4000,
       reconciled_orders: 30, reconciled_revenue: 2700, overclaim_orders: 10,
-      roas: { platform_reported: { basis: 'platform_reported', value: 4 }, store_confirmed: { basis: 'store_confirmed', value: 2.7 } },
+      roas: { platform_reported: { basis: 'platform_reported', value: 4 }, reconciled: { basis: 'reconciled', value: 2.7 } },
     },
     {
       provider: 'snapchat', spend: 500, platform_reported_orders: 40, platform_reported_revenue: 2000,
       reconciled_orders: 5, reconciled_revenue: 450, overclaim_orders: 35,
-      roas: { platform_reported: { basis: 'platform_reported', value: 4 }, store_confirmed: { basis: 'store_confirmed', value: 0.9 } },
+      roas: { platform_reported: { basis: 'platform_reported', value: 4 }, reconciled: { basis: 'reconciled', value: 0.9 } },
     },
   ],
+  business_roas: { basis: 'store_confirmed', value: 2.1, revenue: 3150, spend: 1500 },
   unattributed: { orders: 0, revenue: 0 },
   conflict: { orders: 0, revenue: 0 },
   ledger: {
@@ -497,9 +498,12 @@ describe('the platform-reported vs store-confirmed comparison', () => {
       render(payload())
       const row = await screen.findByTestId('reconciliation-row-meta')
       expect(within(row).getByTestId('roas-platform_reported-meta')).toHaveTextContent('4')
-      expect(within(row).getByTestId('roas-store_confirmed-meta')).toHaveTextContent('2.7')
+      expect(within(row).getByTestId('roas-reconciled-meta')).toHaveTextContent('2.7')
       expect(within(row).getByTestId('roas-platform_reported-meta')).toHaveTextContent(/platform/i)
-      expect(within(row).getByTestId('roas-store_confirmed-meta')).toHaveTextContent(/store/i)
+      expect(within(row).getByTestId('roas-reconciled-meta')).toHaveTextContent(/reconciled/i)
+      /* The third basis is the business's, on the block: the ledger over all spend. */
+      expect(screen.getByTestId('reconciliation-business-roas')).toHaveTextContent('2.1')
+      expect(screen.getByTestId('reconciliation-business-roas')).toHaveTextContent(/business/i)
     })
 
     it('lists the ledger by evidence, with the merchant reference and an evidence badge', async () => {
@@ -528,7 +532,7 @@ describe('the platform-reported vs store-confirmed comparison', () => {
     })
 
     it('says the reconciled layer is unavailable without a store, not zero', async () => {
-      render(payload({ reconciliation: reconciliation({ available: false, unavailable_reason: 'no_store_connected', ledger: null, unattributed: null, conflict: null, platforms: [{ provider: 'meta', spend: 1000, platform_reported_orders: 40, platform_reported_revenue: 4000, reconciled_orders: null, reconciled_revenue: null, overclaim_orders: null, roas: { platform_reported: { basis: 'platform_reported', value: 4 }, store_confirmed: { basis: 'store_confirmed', value: null } } }] }) }))
+      render(payload({ reconciliation: reconciliation({ available: false, unavailable_reason: 'no_store_connected', ledger: null, unattributed: null, conflict: null, platforms: [{ provider: 'meta', spend: 1000, platform_reported_orders: 40, platform_reported_revenue: 4000, reconciled_orders: null, reconciled_revenue: null, overclaim_orders: null, roas: { platform_reported: { basis: 'platform_reported', value: 4 }, reconciled: { basis: 'reconciled', value: null } } }] }) }))
       const block = await screen.findByTestId('reconciliation')
       expect(within(block).getByTestId('reconciliation-unavailable')).toBeInTheDocument()
       expect(within(block).queryByTestId('reconciliation-ledger')).toBeNull()
