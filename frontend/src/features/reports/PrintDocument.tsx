@@ -532,15 +532,6 @@ export function PrintDocument({
       )}
       <Absent sectionKey="executive_summary" fallback="No summary could be composed from this period’s figures." />
 
-      {/* Platform performance */}
-      {prints.platforms && (
-        <section className="doc-section">
-          <h2>{heading('platforms', 'Platform Performance')}</h2>
-          <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
-        </section>
-      )}
-      <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
-
       {/* Breakdown by objective — the same spend, divided by what it was bought for. */}
       {prints.objectives && (
         <section className="doc-section">
@@ -588,6 +579,22 @@ export function PrintDocument({
           </section>
         )
       })}
+
+      {/*
+        Platform performance — AFTER the objective split, as the outline orders it.
+
+        CLIENT-FACING-PRESENTATION-001: «at what cost, really» (the objective split) is read before
+        «where» (this table). The deck and the live link have read them in that order since the owner
+        decided it; this page numbered from an outline that said the opposite, and so printed the
+        platform table above the split it is supposed to follow.
+      */}
+      {prints.platforms && (
+        <section className="doc-section">
+          <h2>{heading('platforms', 'Platform Performance')}</h2>
+          <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
+        </section>
+      )}
+      <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
 
       {/* REPORT-DRILLDOWN-001 — each platform in detail, only when the operator enabled the section. */}
       {(data.platform_drilldowns?.length ?? 0) > 0 && (

@@ -61,7 +61,7 @@ final class ReportStructureTest extends TestCase
         $sections = (new ReportStructure)->sections($this->snapshot());
 
         $this->assertSame(
-            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'links', 'findings', 'recommendations'],
+            ['executive_summary', 'performance', 'objectives', 'platforms', 'ads', 'links', 'findings', 'recommendations'],
             array_column($sections, 'key'),
         );
     }
