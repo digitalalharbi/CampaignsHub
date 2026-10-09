@@ -888,3 +888,21 @@ was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
 refund arm (`value_refunded`, `filter_scope`); API health 200; ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 VERIFIED on
 that. The lane is clear: this branch (`feat/live-experience-b1`) pushes now; ch-font (`feat/adset-rung-evidence`)
 follows it.
+
+## Addendum — 2026-10-09, Track A unit on `ch-font` (`feat/adset-rung-evidence`, from `a704de0f`)
+
+Queued behind ch-req (#631), ch-rmfmt, ch-brand and ch-budget in the single lane. Carries:
+- `objective-aware-entity-columns.spec.ts` runs its four cases on BOTH rungs (`?tab=ads`, `?tab=ad_sets`), reached by
+  URL — OBJECTIVE-ANALYTICS-DEPTH-001's "demo cannot populate the ad-set grain" clause was stale (`adSetMetrics()`
+  seeds it); the row closes once the three-browser run lands.
+- UX-KPI-PRESENTATION-001 VERIFIED on a call-site audit (49 `<StatCard>` sites; the 31 without pill/spark are counts
+  without a window, or Portfolio's per-currency spend); TABLE-PRESENTATION-CONTRACT-001 and
+  TABLE-NUMERIC-ALIGNMENT-001 VERIFIED on the alignment sweep + served bundle; GOVERNANCE-ANTILOSS-001 VERIFIED as the
+  rule in force (queue on main: 95); PRODUCTION-TRUTH-AUDIT-001 carries today's audit entry (five items still unchecked).
+- ADS-TERMINOLOGY-001: backend mail copy audited clean; `homeCopy.ts` three values corrected («المحتويات» / content,
+  «Ads»); `adsTerminology.test.ts` reads the copy file's values; `homepage.spec.ts` reads the rendered hero in ar/en.
+  Row still PARTIAL until the browser case runs on the gate.
+
+**#631 fix (on ch-req, pushed `09bf8ac9`):** `DemoIntegrationsSeeder` targets the store project by name
+(`DemoAnalyticsSeeder::STORE_PROJECT`); the most-campaigns rule had re-pointed the whole integration chain at the
+Scale project, emptying the store project's Ads table on all three gate browsers. `DemoIntegrationsSeederTargetTest` (4).
