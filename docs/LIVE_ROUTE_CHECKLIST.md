@@ -45,9 +45,9 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 
 | Route | Surface | Status | Evidence |
 |---|---|---|---|
-| `/agency/email` | Email settings / schedules | NOT_REVIEWED | |
+| `/admin/email` (platform admin — `EmailOperationsPage`; the registry carries no `/agency/email`) | Email operations | NOT_REVIEWED | Agency-side email schedules are reached from Reports (schedule controls on the report), not from a route of their own. Admin role needed; the preview's agency account cannot open it. |
 | `/agency/alerts` | Alerts | REVIEWED | **1366×768, ar, dark — empty state.** Overflow 0; page 768 px. First screen: h1, the alerts/rules/preferences/log tabs, four summary KPIs (open 0, critical 0, snoozed 0, resolved 0, each with its own empty sentence rather than a bare zero), the filter row (search, status, project, severity) and the ledger's honest empty state «لا تنبيهات مفتوحة». Nothing changed on this route; data-rich state not reachable on the preview estate (no rule fired), which the sweep records as an empty-state review. **KPI density (B1):** hero row converted with the others — 174 → 132 px. |
-| `/agency/notifications` | Notifications | NOT_REVIEWED | |
+| `/agency/account/notifications` (the registry redirects `/agency/notifications` here) | Personal notifications | REVIEWED | **1366×768, ar, dark.** Overflow 0; page 4,396 px (eleven preference groups). First screen: h1, master toggles (in-app/email), the Performance group's rows. A long preference list by nature; nothing moved. |
 
 ## B7 — remaining operational surfaces
 
@@ -58,9 +58,9 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/app/spend-limits` | Budgets / spend limits — within intended pacing? (advertiser portal; the sweep's first run asked `/agency/spend-limits`, which does not exist) | REVIEWED | Swept under the advertiser session at 1366×768 × ar/en × dark/light: heading in the first viewport, overflow 0 (4/4 on the gate). Composition not yet reviewed by hand. |
 | `/agency/tasks` | Tasks / operations | REVIEWED | **1366×768, ar, dark, 1 task.** Overflow 0; page 768 px — fits the viewport. Intro + 4 KPIs, filters (search/status/priority/assignee), task row, status-mix bar. Nothing moved. |
 | `/agency/short-links` | Short links | REVIEWED | **1366×768, ar, dark, empty.** Overflow 0; page 768 px — fits. Intro, kind toggle (WhatsApp / link), dial code + phone, submit, empty list state. Nothing moved. |
-| `/agency/branding` | Branding center | NOT_REVIEWED | |
-| `/agency/team`, `/agency/permissions`, `/agency/projects/:projectId/team` | Team / RBAC | NOT_REVIEWED | |
-| `/agency/settings/*`, `/agency/billing`, `/agency/account`, `/agency/audit` | Settings, billing, audit | NOT_REVIEWED | |
+| `/agency/settings/branding` (the registry redirects `/agency/branding` here) | Branding center | REVIEWED | **1366×768, ar, dark.** Overflow 0; page 1,631 px. First screen: settings sub-nav, h1, identity-slug field, two logo slots (primary horizontal, report logo) with dark/light tiles and format notes; square icon + favicon at 758. Nothing moved. |
+| `/agency/team`, `/agency/settings/permissions` (no `/agency/permissions` in the registry), `/agency/projects/:projectId/team` | Team / RBAC | REVIEWED | **1366×768, ar, dark.** `/agency/settings/permissions`: overflow 0; page 1,172 px; invite form + member table on the first screen. `/agency/team`: overflow 0; page 1,260 px; intro + 3 KPIs (212 px), then four member cards of 165–213 px each (815 px for four members, 2.5 visible). Candidate for a denser member row — see IMPROVED entry when landed. `/agency/projects/:projectId/team`: not yet opened. |
+| `/agency/settings/workspace`, `/agency/account/{profile,password,security,preferences}` (billing and audit are `/admin/billing`, `/admin/audit`) | Settings, account | REVIEWED | **1366×768, ar, dark.** `/agency/settings/workspace`: overflow 0; page 1,064 px; general settings form (name, type, site, phone, country, language, currency, timezone, date format) on the first screen. `/agency/account/*`: not yet opened. |
 | `/agency/requests`, `/agency/leads`, `/agency/deliverables`, `/agency/files`, `/agency/drive` | Requests, leads, deliverables, files | NOT_REVIEWED | |
 
 ## Portals and admin
