@@ -293,6 +293,7 @@ final class AttributionReconciliationTest extends TestCase
 
         $this->assertSame(1, $r['influencer']['orders']);
         $this->assertSame(200.0, $r['influencer']['revenue']);
+        $this->assertSame('SAR', $r['influencer']['currency']);
         $this->assertSame([['code' => 'SARA20', 'orders' => 1, 'revenue' => 200.0]], $r['influencer']['codes']);
         $this->assertSame(1, $r['unattributed']['orders'], 'the coupon order is not unattributed');
         $meta = collect($r['platforms'])->firstWhere('provider', 'meta');
