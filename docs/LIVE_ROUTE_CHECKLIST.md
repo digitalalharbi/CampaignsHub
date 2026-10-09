@@ -73,3 +73,9 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/`, `/services`, `/services/:category`, `/welcome`, auth routes | Public / auth | REVIEWED | **1366×768, ar, dark, signed-out.** `/`: overflow 0; page 4,018 px; hero heading, platform coverage chips, campaign-overview preview (top campaigns / platform comparison / spend split) and the four start-paths on the first screen. `/services`: overflow 0; page 5,235 px; h1, nine category tiles, «all services 95» from 609. `/welcome`: overflow 0; page 2,786 px; hero h1 + CTAs, problem/solution at 565. `/login` while signed in redirects to the portal dashboard (expected). |
 
 Out of scope by §59: nothing here adds a product. Routes not in the registry are not invented.
+
+## Evidence runs
+
+- **2026-10-09, `first-viewport-sweep.spec.ts` on the gate (own DB/servers per browser):** chromium 166/166 on the named and newly added surfaces (campaigns, analytics, content, reports, integrations, clients, requests, tasks, team, project integrations — 5.0 min); firefox 230/230 on the whole file (9.8 min); webkit 230/230 on the whole file (11.6 min). 14 operator surfaces + the advertiser's spend limits, 1366/1440/768/390 × ar/en × dark/light; overflow ≤ 1 everywhere, first-screen blocks present at ≥ 1366.
+- **Detail pages:** `first-viewport-detail.spec.ts` (campaign detail, creative detail; 32 cases per browser) — run recorded below when it lands.
+
