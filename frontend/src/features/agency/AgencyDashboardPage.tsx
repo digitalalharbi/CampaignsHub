@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { StatCard, type StatTone } from '@/components/ui/StatCard'
+import { StatCard, StatGrid, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
 import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
@@ -299,7 +299,9 @@ export function AgencyDashboardPage() {
         </span>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
+      <div className="mb-4">
+      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <Metric
           to="/agency/clients"
           label={ar ? 'العملاء' : 'Clients'}
@@ -336,6 +338,7 @@ export function AgencyDashboardPage() {
           icon={Inbox}
           tone="warning"
         />
+      </StatGrid>
       </div>
 
       {/*
