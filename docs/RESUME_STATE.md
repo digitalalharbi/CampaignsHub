@@ -803,11 +803,14 @@ page-wide; an XPath union's `.first()` is the OUTERMOST ancestor.
 
 ## Addendum — 2026-10-09, Track B unit on `ch-budget` (`feat/live-experience-b1`)
 
-**Lane.** #626 → #627 → #628 → #629 merged and deployed (production bundle `index-BNMmpyVv.js`
-carries `branding-fonts-legacy` / `branding-fonts-not-applied`, API health 200). #630
-(`feat/report-product-composition`, ch-ga4) is green on all six checks and merging through network
-timeouts. Queue after it, in order: ch-req (`feat/report-sections-at-creation`), ch-rmfmt
-(`feat/report-outline-browser-evidence`), ch-brand (`feat/diagnostic-refund-arm`), then this branch.
+**Lane.** #626 → #627 → #628 → #629 → #630 (`a704de0f`) → #631 (`bf2059c9`) merged and deployed;
+production bundle `index-BNMmpyVv.js` (unchanged by #630/#631, both backend/e2e/seed), API health 200
+after each deploy. #631 needed one fix after CI: `DemoIntegrationsSeeder` re-targeted the whole
+integration chain at the Scale project («most campaigns» rule) — now by name
+(`DemoAnalyticsSeeder::STORE_PROJECT`, `DemoIntegrationsSeederTargetTest`). Queue now, in order:
+ch-rmfmt (`feat/report-outline-browser-evidence`, pushed, PR opening), ch-brand
+(`feat/diagnostic-refund-arm`), this branch, then ch-font (`feat/adset-rung-evidence`, Track A:
+ad-set rung evidence, ads terminology, KPI/table/governance closes) — all rebased onto `bf2059c9`.
 Each is rebased onto the main of its turn before push; the matrix resolver script in the scratchpad
 merges rows per cell.
 
