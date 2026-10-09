@@ -69,6 +69,20 @@ describe('CONTENT-TERMINOLOGY-001 — navigation', () => {
     expect(library).toMatchObject({ ar: 'المحتويات', en: 'Content' })
   })
 
+  /**
+   * The marketing site's prose follows the same split: a visitor reads «الإعلانات / Ads» for the
+   * advertising entity and «المحتويات / Content» for the library, never «الإبداعات» or «creatives».
+   * Only quoted VALUES are read — `creatives:` as an object key is code, not copy.
+   */
+  it('keeps the old word out of the marketing home copy, in both languages', () => {
+    const source = read('src/features/marketing/homeCopy.ts')
+    /* `: '…'` — a value after a key; the key itself (`creatives:`) is never captured. */
+    const values = [...source.matchAll(/:\s*'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1])
+    expect(values.length).toBeGreaterThan(50)
+    const offenders = values.filter((v) => v.includes('الإبداعات') || /\bcreatives?\b/i.test(v))
+    expect(offenders).toEqual([])
+  })
+
   /** «الإبداعات» was never one of the two names and is still not. */
   it.each(['appNav.ts', 'agencyNav.ts'])('%s never says «الإبداعات» or «Creative»', (file) => {
     const offenders = leaves(file).filter((l) => l.ar.includes('الإبداعات') || /Creative/i.test(l.en))

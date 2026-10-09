@@ -254,7 +254,7 @@ final class DemoAdCreativeLinkSeeder extends Seeder
 
         $sums = DB::table('entity_daily_metrics')
             ->select([
-                'tenant_id', 'project_id', 'provider', 'external_ad_set_id', 'metric_date',
+                'tenant_id', 'project_id', 'provider', 'external_ad_set_id', 'external_campaign_id', 'metric_date',
                 DB::raw('SUM(impressions) AS impressions'),
                 DB::raw('SUM(clicks) AS clicks'),
                 DB::raw('SUM(spend) AS spend'),
@@ -263,7 +263,7 @@ final class DemoAdCreativeLinkSeeder extends Seeder
             ->where('entity_type', EntityDailyMetric::AD)
             ->whereNotNull('external_ad_set_id')
             ->whereNotIn('external_ad_set_id', $already)
-            ->groupBy('tenant_id', 'project_id', 'provider', 'external_ad_set_id', 'metric_date')
+            ->groupBy('tenant_id', 'project_id', 'provider', 'external_ad_set_id', 'external_campaign_id', 'metric_date')
             ->get();
 
         if ($sums->isEmpty()) {
@@ -298,6 +298,14 @@ final class DemoAdCreativeLinkSeeder extends Seeder
                 'entity_id' => $sum->external_ad_set_id,
                 'external_entity_id' => (string) $externalId,
                 'external_ad_set_id' => $sum->external_ad_set_id,
+                /*
+                 * The campaign the ad set belongs to, carried from its ads. The objective and campaign
+                 * filters narrow entity rows by `external_campaign_id`; an ad-set row written without
+                 * it survives the unfiltered table and vanishes under «sales» or «awareness» — which is
+                 * how the ad-set rung answered «no data for this period» the moment the objective-aware
+                 * columns were asked for there (six of eight browser cases, 2026-10-09).
+                 */
+                'external_campaign_id' => $sum->external_campaign_id,
                 'metric_date' => $sum->metric_date,
                 'attribution_window' => 'default',
                 'impressions' => $sum->impressions,

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { switchToEnglish } from './helpers'
 
 /**
  * Public homepage journey (guest). Covers language + theme toggles, the interactive product preview,
@@ -136,4 +137,23 @@ test.describe('homepage visual regression @visual', () => {
       await expect(page).toHaveScreenshot(`home-${theme}.png`, { fullPage: true, maxDiffPixelRatio: 0.02 })
     })
   }
+})
+
+/**
+ * ADS-TERMINOLOGY-001 — the visitor reads the two names and never the old one, in both languages.
+ * `adsTerminology.test.ts` reads the copy file; this reads the RENDERED hero, which is what a visitor
+ * reads, in Arabic first and then after the language toggle.
+ */
+test.describe('the home page names things the way the product does', () => {
+  test('the hero never says «الإبداعات» or "creatives", in either language', async ({ page }) => {
+    await page.goto('/')
+    const hero = page.getByTestId('hero-heading').locator('..')
+    await expect(hero).toContainText('المحتويات')
+    await expect(hero).not.toContainText('الإبداعات')
+
+    await switchToEnglish(page)
+    await expect(hero).toContainText(/content/i)
+    await expect(hero).not.toContainText(/creatives?/i)
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+  })
 })
