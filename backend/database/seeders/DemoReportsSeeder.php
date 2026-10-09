@@ -127,29 +127,43 @@ final class DemoReportsSeeder extends Seeder
             (array) (($report->data ?? [])['platforms'] ?? []),
         ))));
 
-        ReportShare::updateOrCreate(
-            ['token_hash' => hash('sha256', self::DEMO_LIVE_TOKEN)],
-            [
-                'tenant_id' => $report->tenant_id,
-                'report_id' => $report->id,
-                'mode' => 'live',
-                'scope' => [
-                    'project_id' => (string) $project->id,
-                    'campaign_ids' => $campaigns,
-                    'providers' => $providers,
-                    'earliest' => Carbon::today()->subDays(89)->toDateString(),
-                    'latest' => Carbon::today()->addYear()->toDateString(),
-                ],
-                'allow_download' => true,
-                'watermark' => false,
-                'created_by' => $owner?->id,
-                // Tagged, so the client page shows a Demo badge rather than passing seeded figures off
-                // as a real account's spend.
-                'is_demo' => true,
+        $share = [
+            'tenant_id' => $report->tenant_id,
+            'report_id' => $report->id,
+            'mode' => 'live',
+            'scope' => [
+                'project_id' => (string) $project->id,
+                'campaign_ids' => $campaigns,
+                'providers' => $providers,
+                'earliest' => Carbon::today()->subDays(89)->toDateString(),
+                'latest' => Carbon::today()->addYear()->toDateString(),
             ],
+            'allow_download' => true,
+            'watermark' => false,
+            'created_by' => $owner?->id,
+            // Tagged, so the client page shows a Demo badge rather than passing seeded figures off
+            // as a real account's spend.
+            'is_demo' => true,
+        ];
+
+        ReportShare::updateOrCreate(['token_hash' => hash('sha256', self::DEMO_LIVE_TOKEN)], $share);
+
+        /* The summary form of the same link — see the constant. */
+        ReportShare::updateOrCreate(
+            ['token_hash' => hash('sha256', self::DEMO_LIVE_SUMMARY_TOKEN)],
+            $share + ['form' => 'executive_summary'],
         );
     }
 
     /** The demo live link's token: `/reports/share/{token}`. Local/testing/demo only — see seedLiveShare. */
     public const DEMO_LIVE_TOKEN = 'demo-live-report-token';
+
+    /**
+     * The same link as a LIVE × Executive Summary — CLIENT-FACING-PRESENTATION-001.
+     *
+     * The row applies to both live products and the seed minted only the detailed one, so the
+     * summary composition could be asserted on a rendered component and never on the page a client
+     * opens. Same report, same scope, one column different, so what the sweep compares is the form.
+     */
+    public const DEMO_LIVE_SUMMARY_TOKEN = 'demo-live-summary-token';
 }
