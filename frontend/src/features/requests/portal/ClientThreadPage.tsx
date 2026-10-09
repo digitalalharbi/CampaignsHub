@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { fmtDateTime } from '@/lib/datetime'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, Send } from 'lucide-react'
@@ -129,7 +130,7 @@ function MessageBubble({ m, you, team }: { m: PortalMessage; you: string; team: 
   return (
     <div className={`rounded-xl border border-border px-3 py-2 text-sm ${mine ? 'bg-brand-primary-soft/40' : 'bg-surface-secondary'}`}>
       <div className="text-[11px] font-semibold text-text-secondary">
-        {mine ? you : team} · <span className="tnum">{m.created_at ? new Date(m.created_at).toLocaleString('en-CA') : ''}</span>
+        {mine ? you : team} · <span className="tnum">{m.created_at ? fmtDateTime(m.created_at) : ''}</span>
       </div>
       <div className="whitespace-pre-wrap text-text-primary">{m.body}</div>
     </div>
