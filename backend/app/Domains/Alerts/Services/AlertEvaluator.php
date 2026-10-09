@@ -251,6 +251,7 @@ final class AlertEvaluator
     private function recover(AlertRule $rule, AlertEvent $event, Carbon $now): void
     {
         $title = (string) ($event->context['title'] ?? $rule->name);
+        $titleAr = (string) ($event->context['title_ar'] ?? $title);
         $context = (array) $event->context;
         $context['recovered_at'] = $now->toIso8601String();
 
@@ -264,6 +265,8 @@ final class AlertEvaluator
             'severity' => 'info',
             'title' => 'Recovered: '.$title,
             'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
+            'title_ar' => 'تعافى: '.$titleAr,
+            'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
             'source' => 'alerts',
             'entity_type' => $event->entity_type,
             'entity_id' => $event->entity_id,
@@ -480,6 +483,12 @@ final class AlertEvaluator
                     : 'No fresh figures from: '.$names.'.')
                     .($state['last_sync_at'] ? ' Last figures dated '.$state['last_sync_at'].'.' : ' No figures have ever arrived.'),
                 'context' => [
+                    // The reader's language, beside the English the rest of the engine carries.
+                    'title_ar' => $failed ? 'انقطاع مزامنة البيانات' : 'البيانات متأخرة',
+                    'message_ar' => ($failed
+                        ? 'فشلت آخر مزامنة لـ: '.$names.'.'
+                        : 'لا أرقام حديثة من: '.$names.'.')
+                        .($state['last_sync_at'] ? ' آخر أرقام بتاريخ '.$state['last_sync_at'].'.' : ' لم تصل أي أرقام بعد.'),
                     'state' => $state['state'],
                     'last_sync_at' => $state['last_sync_at'],
                     'missing_days' => $state['missing_days'],
@@ -532,6 +541,10 @@ final class AlertEvaluator
                     ? 'The latest GA4 sync failed'.($latest->error ? ': '.$latest->error : '.')
                     : 'No successful GA4 sync in the last '.$hours.' hours'.($lastSuccess?->finished_at ? ' (last success '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
                 'context' => [
+                    'title_ar' => $failedNow ? 'فشلت مزامنة القياس' : 'بيانات القياس متأخرة',
+                    'message_ar' => $failedNow
+                        ? 'فشلت آخر مزامنة لـ GA4'.($latest->error ? ': '.$latest->error : '.')
+                        : 'لا مزامنة ناجحة لـ GA4 خلال آخر '.$hours.' ساعة'.($lastSuccess?->finished_at ? ' (آخر نجاح '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
                     'provider' => 'ga4',
                     'sync_run_id' => (string) $latest->id,
                     'error' => $latest->error,
