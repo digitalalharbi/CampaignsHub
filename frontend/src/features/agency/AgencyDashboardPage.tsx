@@ -339,17 +339,15 @@ export function AgencyDashboardPage() {
       </div>
 
       {/*
-        The shape of the book before its parts: full width, because a composition bar is one row tall
-        and reads worse the narrower it gets — a segment holding 4% of 24 clients is a sliver at 340px.
+        Owner directive 2026-10-09 §11, and the standing feature-first rule: the Dashboard's one
+        question is «what needs attention now?», so the answer comes before anything that merely
+        describes the estate. The attention block and the client pace — the operational signals —
+        open the page; the client-mix bar, the objective chart and the creative section follow.
+        The page used to draw two charts first and put the attention block at the fold, with the
+        money signals three thousand pixels down behind the creative section.
       */}
-      <div className="mb-4">
-        <ClientMix clients={d.clients} ar={ar} />
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-2">
-        <ObjectiveBreakdown data={d.campaigns} ar={ar} />
-
-        <section className="rounded-2xl border border-border bg-surface p-5">
+        <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="font-heading text-lg font-extrabold text-text-primary">
             {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
           </h2>
@@ -380,8 +378,19 @@ export function AgencyDashboardPage() {
             />
           </ul>
         </section>
+        <div>
+          <ClientPace rows={budgets.data ?? []} ar={ar} />
+        </div>
       </div>
-
+      <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
+      {/*
+        The shape of the book: full width, because a composition bar is one row tall and reads worse
+        the narrower it gets — a segment holding 4% of 24 clients is a sliver at 340px.
+      */}
+      <div className="mt-4 mb-4">
+        <ClientMix clients={d.clients} ar={ar} />
+      </div>
+      <ObjectiveBreakdown data={d.campaigns} ar={ar} />
       {/*
         §15.11 — the creative section, over the clients this operator actually reaches.
 
@@ -397,17 +406,6 @@ export function AgencyDashboardPage() {
           filters={AGENCY_WINDOW}
         />
       </div>
-
-      {/*
-        BUDGET-GOVERNANCE-001 — the CLIENT rung: «which client is overspending».
-
-        DATA → VISUAL → COMPARISON: one row per client, sorted by committed budget, with the pace
-        against it. Nothing here is a second budget engine — the figures are the same aggregator's,
-        rolled up per client through the same rules the campaigns overview applies per project.
-      */}
-      <ClientPace rows={budgets.data ?? []} ar={ar} />
-
-      <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
 
     </div>
   )

@@ -67,6 +67,30 @@ describe('AgencyDashboardPage', () => {
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(4)
   })
 
+  /**
+   * Owner directive 2026-10-09 §11 — the Dashboard's one question is «what needs attention now?» —
+   * and the standing feature-first rule: the feature at the top, the charts below it.
+   *
+   * The page opened with four count cards, a client-mix bar and an objective chart, and put the
+   * attention block at the fold; the client pace and budgets — the money signals — sat below a
+   * three-thousand-pixel creative section. Asserted as DOM order, so a chart cannot be moved back
+   * above the answer without this failing.
+   */
+  it('answers «what needs attention» before it draws the charts', async () => {
+    vi.mocked(fetchAgencyDashboard).mockResolvedValue(payload())
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard', locale: 'en' })
+    await waitFor(() => expect(screen.getByTestId('agency-objective-chart')).toBeInTheDocument())
+
+    const precedes = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    const attention = screen.getByTestId('agency-attention')
+    const mix = screen.getByTestId('client-mix-bar')
+    const chart = screen.getByTestId('agency-objective-chart')
+
+    expect(precedes(screen.getByTestId('agency-intro'), attention), 'the context must still open the page').toBe(true)
+    expect(precedes(attention, mix), 'the client-mix chart is drawn before the attention block').toBe(true)
+    expect(precedes(attention, chart), 'the objective chart is drawn before the attention block').toBe(true)
+  })
+
   it('breaks campaigns down by objective, largest first', async () => {
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(
       payload({ campaigns: { total: 6, active: 6, paused: 0, by_objective: { awareness: 1, sales: 5 } } }),
