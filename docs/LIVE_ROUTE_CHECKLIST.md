@@ -77,5 +77,5 @@ Out of scope by §59: nothing here adds a product. Routes not in the registry ar
 ## Evidence runs
 
 - **2026-10-09, `first-viewport-sweep.spec.ts` on the gate (own DB/servers per browser):** chromium 166/166 on the named and newly added surfaces (campaigns, analytics, content, reports, integrations, clients, requests, tasks, team, project integrations — 5.0 min); firefox 230/230 on the whole file (9.8 min); webkit 230/230 on the whole file (11.6 min). 14 operator surfaces + the advertiser's spend limits, 1366/1440/768/390 × ar/en × dark/light; overflow ≤ 1 everywhere, first-screen blocks present at ≥ 1366.
-- **Detail pages:** `first-viewport-detail.spec.ts` (campaign detail, creative detail; 32 cases per browser) — run recorded below when it lands.
+- **Detail pages, 2026-10-09:** `first-viewport-detail.spec.ts` (campaign detail, creative detail; 32 cases per browser) — first run failed the campaign detail at 390 on all four locale/theme combos (364 px sideways, the related-entities grid); after `b0251d6f`: chromium 38/38, firefox 38/38 (4.5 min), webkit 38/38 (1.9 min).
 
