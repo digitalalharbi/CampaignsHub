@@ -617,7 +617,7 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
       {data.available && data.influencer && data.influencer.orders > 0 && (
         <p data-testid="reconciliation-influencer" className="mt-1 text-xs text-text-secondary">
           {t.influencer}: <span className="tnum" dir="ltr">{num(data.influencer.orders)}</span> {t.orders}
-          {' · '}<span className="tnum" dir="ltr">{moneyExact(data.influencer.revenue, data.measurement?.currency ?? undefined)}</span>
+          {' · '}<span className="tnum" dir="ltr">{moneyExact(data.influencer.revenue, data.influencer.currency ?? data.measurement?.currency ?? undefined)}</span>
           {' · '}{t.codes}: {data.influencer.codes.map((c) => `${c.code} (${num(c.orders)})`).join(' · ')}
         </p>
       )}

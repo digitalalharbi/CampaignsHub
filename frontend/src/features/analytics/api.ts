@@ -489,7 +489,7 @@ export interface Reconciliation {
   unattributed: { orders: number; revenue: number } | null
   conflict: { orders: number; revenue: number } | null
   /** Orders placed on a creator's discount code — their own layer, neither a platform nor unattributed. */
-  influencer?: { orders: number; revenue: number; codes: { code: string; orders: number; revenue: number }[] } | null
+  influencer?: { orders: number; revenue: number; currency?: string | null; codes: { code: string; orders: number; revenue: number }[] } | null
   ledger: { total: number; truncated: boolean; cap: number; rows: LedgerRow[] } | null
 }
 
