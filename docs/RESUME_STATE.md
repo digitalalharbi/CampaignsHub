@@ -908,3 +908,14 @@ Queued behind ch-req (#631), ch-rmfmt, ch-brand and ch-budget in the single lane
 **#631 fix (on ch-req, pushed `09bf8ac9`):** `DemoIntegrationsSeeder` targets the store project by name
 (`DemoAnalyticsSeeder::STORE_PROJECT`); the most-campaigns rule had re-pointed the whole integration chain at the
 Scale project, emptying the store project's Ads table on all three gate browsers. `DemoIntegrationsSeederTargetTest` (4).
+
+## Addendum — 2026-10-09, B6 Attribution Reconciliation on `ch-brand` (`feat/attribution-reconciliation`, from `8cda29cb`)
+
+The directive's only authorised new capability, built as an extension of `AttributionTransparency` (never a
+parallel engine): `reconciliation` on the same payload — four layers named, the ledger placed by strongest
+evidence (campaign id → name → click id → UTM source), overclaim per platform, no cross-platform total, GA4
+its own layer, ROAS per basis. Client links strip campaign identity (`ShareService::withoutCampaignIdentity`)
+and null `reconciled_revenue`/`refunded` under `hide_revenue`. Panel section under the overlap block.
+Backend 11 + 2 new cases, panel +7, all fail-first; transparency suites 52; analytics vitest 591; tsc/lint
+clean. Matrix row ATTRIBUTION-RECONCILIATION-001 added (IMPLEMENTED_NOT_VERIFIED until deployed). Queued
+after ch-budget (#634) and ch-font in the single lane.
