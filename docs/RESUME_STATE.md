@@ -925,3 +925,4 @@ resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full bac
 4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
 `mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
 gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
+
