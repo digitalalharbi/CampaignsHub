@@ -1,4 +1,4 @@
-/** Arabic status labels + tone helpers shared by the internal requests dashboard and detail. */
+/** Status and priority labels + tone helpers shared by the internal requests dashboard and detail. */
 export const STATUS_LABELS: Record<string, string> = {
   new: 'جديد',
   under_review: 'تحت المراجعة',
@@ -37,4 +37,43 @@ export function priorityTone(priority: string): string {
     case 'low': return 'bg-surface-secondary text-text-muted'
     default: return 'bg-info/15 text-info'
   }
+}
+
+/**
+ * REQ-DETAIL-LABELS-001 — the status and priority CHOICES in the reader's language.
+ *
+ * The header badges already read `status_label_en` from the server (REQ-LABELS-001), but the two
+ * selects beside them offered Arabic-only statuses and raw `critical / high / medium / low` tokens
+ * to every reader. The server's own English status names are not available for the option list, so
+ * the English half lives here, beside the Arabic half it mirrors.
+ */
+const STATUS_LABELS_EN: Record<string, string> = {
+  new: 'New',
+  under_review: 'Under review',
+  waiting_client: 'Waiting on client',
+  qualified: 'Qualified',
+  quoted: 'Quote sent',
+  approved: 'Approved',
+  in_progress: 'In progress',
+  delivered: 'Delivered',
+  on_hold: 'On hold',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+  archived: 'Archived',
+}
+
+export function statusLabel(status: string, lang: 'ar' | 'en'): string {
+  return (lang === 'ar' ? STATUS_LABELS[status] : STATUS_LABELS_EN[status]) ?? status
+}
+
+const PRIORITY_LABELS: Record<string, { ar: string; en: string }> = {
+  critical: { ar: 'حرجة', en: 'Critical' },
+  high: { ar: 'عالية', en: 'High' },
+  medium: { ar: 'متوسطة', en: 'Medium' },
+  low: { ar: 'منخفضة', en: 'Low' },
+}
+
+export function priorityLabel(priority: string, lang: 'ar' | 'en'): string {
+  return PRIORITY_LABELS[priority]?.[lang] ?? priority
 }
