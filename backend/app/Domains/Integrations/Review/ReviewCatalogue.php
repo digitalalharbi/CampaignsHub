@@ -214,6 +214,28 @@ final class ReviewCatalogue
                     'قبل الاعتماد لا يعمل التطبيق إلا على متجر المطوّر.',
                     'Before approval the app works only against the developer’s own store.'),
             ],
+            /*
+             * GA4-INTEGRATION-001 — a measurement source's blockers are its own.
+             *
+             * Two APIs rather than one is the item operators actually miss: Admin discovers the
+             * properties and Data reads them, they are enabled separately in Google Cloud, and a
+             * project with only one of them connects and then finds nothing — or discovers
+             * properties it cannot read.
+             */
+            'ga4' => [
+                self::item('admin_api_enabled', 'declared', 'تفعيل Google Analytics Admin API', 'Google Analytics Admin API enabled',
+                    'بدونها لا يمكن اكتشاف الحسابات والخصائص، ويضطر العميل لكتابة معرّف الخاصية يدويًا.',
+                    'Without it no account or property can be discovered and the customer is reduced to typing a property id.'),
+                self::item('data_api_enabled', 'declared', 'تفعيل Google Analytics Data API', 'Google Analytics Data API enabled',
+                    'تُفعَّل منفصلة عن Admin API؛ مشروع يملك الأولى فقط يكتشف خصائص لا يستطيع قراءتها.',
+                    'Enabled separately from the Admin API; a project holding only the first discovers properties it cannot read.'),
+                self::item('readonly_scope_only', 'derived', 'نطاق القراءة فقط', 'Read-only scope only',
+                    'الطلب يقتصر على analytics.readonly — طلب نطاق تحرير يضع أمام العميل شاشة موافقة تدّعي أن المنتج قد يغيّر إعداداته.',
+                    'Only analytics.readonly is requested — asking for an edit scope puts a consent screen in front of the customer claiming this product may change their configuration.'),
+                self::item('consent_screen_published', 'declared', 'نشر شاشة الموافقة', 'Consent screen published',
+                    'شاشة في وضع الاختبار تقبل حسابات الاختبار المضافة يدويًا فقط.',
+                    'A testing-mode screen accepts only the test accounts added to it by hand.'),
+            ],
         ];
     }
 

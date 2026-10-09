@@ -82,10 +82,23 @@ final class PlatformProviderSettingsTest extends TestCase
 
         $keys = array_column($response->json('data.providers'), 'key');
         $this->assertSame(
-            ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads', 'salla', 'zid'],
+            ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads', 'salla', 'zid', 'ga4'],
             $keys,
-            'the console lists the advertising providers in the product order, then the stores',
+            'the console lists the advertising providers in the product order, then the stores, then measurement',
         );
+
+        /*
+         * GA4-INTEGRATION-001 — it is HERE because this console configures platform credentials and
+         * GA4 needs a Google OAuth client like any other, and it is LAST because the order is by
+         * spend and a measurement source carries none.
+         *
+         * Where it must NOT appear is any surface that answers «which advertising platforms are
+         * connected». `ProviderKind::Measurement` is what keeps it out of those, and
+         * `Ga4IsNotAnAdPlatformTest` holds that line rather than this assertion, which is only
+         * about the credential console.
+         */
+        $ga4 = collect($response->json('data.providers'))->firstWhere('key', 'ga4');
+        $this->assertSame('measurement', $ga4['kind'] ?? null, 'GA4 is listed as an advertising platform');
 
         $google = collect($response->json('data.providers'))->firstWhere('key', 'google');
         /*

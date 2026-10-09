@@ -26,6 +26,7 @@ use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\ScopeCleanupCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
 use App\Domains\Notifications\Console\RenderMailPreviews;
@@ -139,6 +140,9 @@ return Application::configure(basePath: dirname(__DIR__))
         CloseAbandonedSyncRunsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        // GA4-INTEGRATION-001 — the measurement sweep: a selected Analytics property's days, in the
+        // property's own calendar. Only properties somebody bound to a project are read.
+        SyncMeasurementCommand::class,
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
         // ships configured: the day an operator sets one, the schedule already exists.
         ImportCurrencyRatesCommand::class,

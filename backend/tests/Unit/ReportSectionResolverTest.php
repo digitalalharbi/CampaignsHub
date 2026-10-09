@@ -40,6 +40,10 @@ final class ReportSectionResolverTest extends TestCase
             'budget' => [['provider' => 'meta', 'budget' => 2000.0, 'spent' => 700.0]],
             'funnel' => [['stage' => 'impressions', 'reported' => true, 'count' => 90000]],
             'store_funnel' => null,
+            /* GA4-INTEGRATION-001 — a selected property with days read; the section's availability
+               predicate is «is there a measurement payload», and without one «everything on» cannot
+               include it. */
+            'site_measurement' => ['property' => ['id' => '111', 'name' => 'Site', 'timezone' => 'Asia/Riyadh'], 'days' => 2],
             'ads' => [['name' => 'Ad', 'spend' => 300.0]],
             'ads_roster' => [['name' => 'Ad']],
             'ads_absent_reason' => null,
@@ -63,7 +67,7 @@ final class ReportSectionResolverTest extends TestCase
     {
         $this->assertSame([
             'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation',
+            'site_measurement', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

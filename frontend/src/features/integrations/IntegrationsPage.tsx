@@ -11,6 +11,7 @@ import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { AccountsPanel } from './AccountsPanel'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
+import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
 import { Button } from '@/components/ui/Button'
 import { platformColor } from '@/features/analytics/components'
 import { platformLabel, sortByPlatform } from '@/lib/platforms'
@@ -172,6 +173,16 @@ export function IntegrationsPage() {
         «organisation → ad account» flow above asks them a question they have no answer to.
       */}
       <StoresPanel />
+
+      {/*
+        GA4-INTEGRATION-001 / constitution §23 — measurement has its own section, below paid media.
+
+        Not a hub row, and not folded into the stores section either. The hub is the paid-media board
+        and a property answers none of its questions; a store and a property are different sources
+        with different journeys. The order is deliberate: paid media, then commerce, then the
+        client's own site measurement — widest claim to narrowest.
+      */}
+      <PropertiesPanel />
 
       {picking && (
         <ProviderPicker

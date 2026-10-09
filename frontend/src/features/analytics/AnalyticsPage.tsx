@@ -2778,10 +2778,12 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
                 onClick={() => setOpenCreative(cr)}
                 className="flex items-center gap-2 text-start hover:text-brand-600"
               >
+                {/* CONTENT-THUMB-FILL-001 — 36 pixels is a thumbnail, and a thumbnail fills. */}
                 <AdPoster
                   preview={cr.preview}
                   name={cr.name ?? ''}
                   className="h-9 w-9 shrink-0 rounded-md"
+                  fit="cover"
                   testid={`analytics-creative-poster-${cr.id}`}
                 />
                 <span className="block max-w-44 truncate font-medium text-text-primary">{cr.name}</span>
@@ -3115,10 +3117,12 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
           }}
           className="shrink-0 overflow-hidden rounded-lg border border-border transition-colors hover:border-brand-500"
         >
+          {/* CONTENT-THUMB-FILL-001 — the same 36-pixel rule as the creative row above. */}
           <AdPoster
             preview={creativeByAd.get(row.external_id ?? '')?.preview}
             name={row.name ?? row.external_id ?? ''}
             className="h-9 w-9"
+            fit="cover"
             testid={`ad-thumb-${row.entity_id}`}
           />
         </button>

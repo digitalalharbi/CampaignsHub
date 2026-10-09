@@ -37,6 +37,13 @@ final class ProviderDisplayName
         'openai_ads' => ['ar' => 'إعلانات ChatGPT', 'en' => 'ChatGPT Ads'],
         'salla' => ['ar' => 'سلة', 'en' => 'Salla'],
         'zid' => ['ar' => 'زد', 'en' => 'Zid'],
+        /*
+         * GA4-INTEGRATION-001 — last in this list because the list is ordered by SPEND, and GA4
+         * carries none: it is a measurement source, not a place anybody buys advertising.
+         * `ProviderKind::Measurement` is what keeps it out of the paid-media grouping; this map
+         * only gives it a name.
+         */
+        'ga4' => ['ar' => 'جوجل أناليتكس 4', 'en' => 'Google Analytics 4'],
     ];
 
     /**

@@ -454,6 +454,29 @@ export interface LivePayload {
   attention?: AttentionItem[] | null
   store_funnel: StoreFunnelPayload | null
   /**
+   * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
+   *
+   * Null where no property is selected for the project, or where nothing has been read in the
+   * window. Two different facts, both of which mean «no section» and neither of which is a zero.
+   *
+   * Its revenue is measured under GA4's attribution and the platforms' under theirs, so the two are
+   * never added, never divided into one another, and never shown as one figure. `absent` names the
+   * metrics this property does not measure at all; `withheld` names the ones the operator hid on
+   * this link. Those are different, and merging them would tell a reader the site has no ecommerce.
+   */
+  site_measurement?: {
+    property: { id: string; name: string; timezone: string | null }
+    currency: string | null
+    from: string
+    to: string
+    days: number
+    totals: Record<string, number | null>
+    rates: Record<string, number | null>
+    series: Array<Record<string, number | string | null>>
+    absent: string[]
+    withheld?: string[]
+  } | null
+  /**
    * CLIENT-FACING-PRESENTATION-001 — «what needs attention», which the link never carried.
    *
    * Empty when the operator hid spend from this link: a budget block with no money in it is a row of

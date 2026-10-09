@@ -49,6 +49,16 @@ final class ScheduledWorkInventoryTest extends TestCase
         'integrations:refresh-tokens',
         'integrations:sync',
         'integrations:sync-structure',
+        /*
+         * Added 2026-10-09 (GA4-INTEGRATION-001). Four-hourly at :25, not half-hourly: the GA4 Data
+         * API meters in TOKENS per property per day rather than in requests, so a frequent sweep
+         * would spend a client's whole daily allowance re-reading days that did not change — and the
+         * exhaustion lands on the client's own Analytics usage as well as ours.
+         *
+         * This test caught its own omission the moment the schedule gained it, which is what the
+         * inventory is for.
+         */
+        'measurement:sync',
         'notifications:send-alerts',
         'notifications:send-digests',
         'reports:dispatch-scheduled',
@@ -128,6 +138,13 @@ final class ScheduledWorkInventoryTest extends TestCase
             'notifications:send-digests',
             'notifications:send-alerts',
             'commerce:sync',
+            /*
+             * Overlap here costs QUOTA rather than correctness: the unique key on
+             * `measurement_daily_metrics` makes a double write an update. Two sweeps reading the
+             * same properties would spend a client's Data API tokens twice for one answer, and
+             * exhaustion is refused for everybody on that property until midnight.
+             */
+            'measurement:sync',
             'fx:rates',
             'subscriptions:lifecycle',
         ];

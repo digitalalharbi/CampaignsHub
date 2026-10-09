@@ -867,7 +867,11 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((c) => (
             <div key={c.id} className="space-y-2 rounded-2xl border border-border bg-surface p-3">
-              <AdPoster preview={c.preview} name={c.client_display_name || c.name} testid={`ad-poster-${c.id}`} />
+              {/*
+                CONTENT-THUMB-FILL-001 — a grid card is a cover and fills; the PANEL below, which is
+                the surface somebody opened to look at the ad, deliberately still contains.
+              */}
+              <AdPoster preview={c.preview} name={c.client_display_name || c.name} testid={`ad-poster-${c.id}`} fit="cover" />
               <div className="flex items-start justify-between gap-2">
                 <button
                   type="button"

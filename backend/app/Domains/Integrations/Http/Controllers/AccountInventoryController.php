@@ -57,6 +57,20 @@ use Illuminate\Validation\Rule;
  */
 final class AccountInventoryController extends Controller
 {
+    /**
+     * The source types this page manages — one list, because it was written out four times.
+     *
+     * GA4-INTEGRATION-001 added the third. A measurement property IS an external thing somebody
+     * authorised us to read, behind one connection and one encrypted credential, so it belongs in the
+     * same inventory, the same revoke path and the same «linked / unlinked» count as the other two.
+     * It was invisible here while the list was a literal: discovery wrote the rows and no screen in
+     * the product could show them.
+     *
+     * It does NOT count toward the ad-account quota — that is decided per row by `account_type`, and
+     * stays decided there.
+     */
+    private const MANAGED_TYPES = ['ad_account', 'store', 'ga4_property'];
+
     /** How many runs are read before collapsing, and how many survive to the response. */
     private const RUNS_READ = 200;
 
@@ -84,7 +98,7 @@ final class AccountInventoryController extends Controller
         $validated = $request->validate([
             'provider' => ['sometimes', 'nullable', 'string', 'max:40'],
             'connection' => ['sometimes', 'nullable', 'uuid'],
-            'account_type' => ['sometimes', 'nullable', Rule::in(['ad_account', 'store'])],
+            'account_type' => ['sometimes', 'nullable', Rule::in(self::MANAGED_TYPES)],
             'link' => ['sometimes', 'nullable', Rule::in(['linked', 'unlinked'])],
             /*
              * INTEGRATION-DATASOURCE-WIZARD-001 §17 — «this client's accounts», for the estate row.
@@ -102,7 +116,7 @@ final class AccountInventoryController extends Controller
 
         $base = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereIn('account_type', ['ad_account', 'store']);
+            ->whereIn('account_type', self::MANAGED_TYPES);
 
         $summary = $this->summarise($tenantId);
 
@@ -394,7 +408,7 @@ final class AccountInventoryController extends Controller
 
         $base = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereIn('account_type', ['ad_account', 'store']);
+            ->whereIn('account_type', self::MANAGED_TYPES);
 
         $total = (clone $base)->count();
         $linked = (clone $base)->whereIn('id', $linkedIds)->count();
@@ -415,7 +429,7 @@ final class AccountInventoryController extends Controller
     {
         $account = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $this->tenant->tenantId())
-            ->whereIn('account_type', ['ad_account', 'store'])
+            ->whereIn('account_type', self::MANAGED_TYPES)
             ->find($accountId);
 
         abort_if($account === null, 404);

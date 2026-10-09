@@ -30,6 +30,9 @@ use RuntimeException;
  */
 final class PlatformOAuth
 {
+    /** The providers consenting at Google's own authorisation server — see the note below. */
+    private const GOOGLE_CONSENT = ['google', 'ga4'];
+
     /**
      * The URL to send somebody to in order to authorise us.
      *
@@ -99,9 +102,16 @@ final class PlatformOAuth
                     in_array($creds->platform, ['meta', 'snapchat'], true) ? ',' : ' ',
                     $creds->scopes(),
                 ),
-                // Google only issues a refresh token when both are asked for, and only on first consent.
-                'access_type' => $creds->platform === 'google' ? 'offline' : null,
-                'prompt' => $creds->platform === 'google' ? 'consent' : null,
+                /*
+                 * Google only issues a refresh token when BOTH are asked for, and only on the first
+                 * consent. The rule belongs to Google's authorisation server, not to Google Ads, so
+                 * GA4 — which consents at the same `accounts.google.com` — is named here too.
+                 *
+                 * Omitting it would not fail visibly: the connection would open, sync once on the
+                 * access token, and then go dark an hour later with nothing to refresh from.
+                 */
+                'access_type' => in_array($creds->platform, self::GOOGLE_CONSENT, true) ? 'offline' : null,
+                'prompt' => in_array($creds->platform, self::GOOGLE_CONSENT, true) ? 'consent' : null,
             ], static fn ($v) => $v !== null),
         };
 

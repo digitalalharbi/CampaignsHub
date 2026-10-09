@@ -9,6 +9,7 @@ return [
     'account_type' => [
         'ad_account' => 'ad account',
         'store' => 'store',
+        'ga4_property' => 'Analytics property',
         'organization' => 'organisation',
         'business' => 'business account',
         'page' => 'page',

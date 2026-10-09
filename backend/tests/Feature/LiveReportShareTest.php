@@ -8,7 +8,10 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
+use App\Domains\Integrations\Measurement\MeasurementDailyMetric;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -862,6 +865,199 @@ final class LiveReportShareTest extends TestCase
         $this->assertSame([], $res->json('data.store_funnel.comparisons.products'));
         // The order COUNT is not money and stays: hiding it would misrepresent the funnel's shape.
         $this->assertSame(1, $res->json('data.store_funnel.totals.orders'));
+    }
+
+    // ── GA4-INTEGRATION-001 — the client's own site, measured, and never blended ──────────────
+
+    /**
+     * A project with no Analytics property gets NULL rather than a section of nulls.
+     *
+     * A block of empty figures reads as one that failed to load, and a client would ask why — about
+     * a property they never connected.
+     */
+    public function test_a_live_link_omits_site_measurement_when_no_property_is_selected(): void
+    {
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        $this->assertNull($res->json('data.site_measurement'));
+    }
+
+    /**
+     * With a selected property, the link carries the measured days — and they stay OUT of the ad
+     * figures.
+     *
+     * The second half is the claim that matters. GA4 measured 900 of the client's own revenue in
+     * this window while the campaigns reported their own; if the two were ever added, the link's KPI
+     * revenue would move. It must not.
+     */
+    public function test_a_live_link_carries_site_measurement_without_moving_the_ad_figures(): void
+    {
+        $before = (float) $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')
+            ->assertOk()->json('data.totals.revenue');
+
+        $this->seedProperty();
+
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        $this->assertNotNull($res->json('data.site_measurement'));
+        $this->assertSame('111', $res->json('data.site_measurement.property.id'));
+        $this->assertSame('Asia/Riyadh', $res->json('data.site_measurement.property.timezone'));
+        $this->assertSame(900.0, (float) $res->json('data.site_measurement.totals.revenue'));
+        $this->assertSame('SAR', $res->json('data.site_measurement.currency'));
+
+        /* The campaigns' own revenue is untouched — nothing was blended into it. */
+        $this->assertSame($before, (float) $res->json('data.totals.revenue'));
+    }
+
+    /**
+     * The internal account id never travels; the GA4 property id does.
+     *
+     * «Do not expose asset ids or private storage paths» — a primary key on a client's report is the
+     * same mistake in a different column.
+     */
+    public function test_site_measurement_names_the_property_and_not_our_primary_key(): void
+    {
+        $account = $this->seedProperty();
+
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        /* The section has to BE there, or the absence below is true of a payload that carries nothing. */
+        $this->assertSame('111', $res->json('data.site_measurement.property.id'));
+        $this->assertStringNotContainsString((string) $account->getKey(), $res->getContent());
+    }
+
+    /**
+     * A rate is averaged, never summed.
+     *
+     * Two days at 0.60 and 0.70 are not 1.30. Adding a week of fractions produces a number above 1
+     * that reads as a percentage, which is how a 61% engagement rate becomes 427%.
+     */
+    public function test_a_measured_rate_is_averaged_rather_than_summed(): void
+    {
+        $this->seedProperty();
+
+        $rate = (float) $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')
+            ->assertOk()->json('data.site_measurement.rates.engagement_rate');
+
+        /* 0.60 over 1000 sessions and 0.80 over 3000 → 0.75, not 1.40. */
+        $this->assertEqualsWithDelta(0.75, $rate, 0.0001);
+    }
+
+    /**
+     * A metric the property does not measure is NAMED as unmeasured, not shown as a zero.
+     *
+     * A property with no ecommerce reports no transactions. «‏0 عملية» would tell a client their
+     * site sold nothing.
+     */
+    public function test_a_metric_the_property_does_not_measure_is_named_rather_than_zeroed(): void
+    {
+        $this->seedProperty();
+
+        $data = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')
+            ->assertOk()->json('data.site_measurement');
+
+        $this->assertContains('key_events', $data['absent']);
+        $this->assertNull($data['totals']['key_events']);
+    }
+
+    /**
+     * A link that hides revenue hides the SITE's revenue too.
+     *
+     * Otherwise the flag covers the KPI cards and prints the figure one section further down. And
+     * the withholding is named separately from `absent`: «hidden by the operator» and «this property
+     * does not measure it» are different facts, and merging them would tell a reader the client's
+     * site has no ecommerce.
+     */
+    public function test_a_link_that_hides_revenue_hides_the_measured_revenue_as_well(): void
+    {
+        $this->seedProperty();
+
+        [, $hidden] = app(ShareService::class)->create($this->report, [
+            'hide_revenue' => true,
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->shared->id],
+                'providers' => ['meta'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $data = $this->getJson("/api/v1/reports/shared/{$hidden}/live")->assertOk()->json('data.site_measurement');
+
+        $this->assertNull($data['totals']['revenue']);
+        $this->assertNull($data['currency']);
+        $this->assertSame(['revenue'], $data['withheld']);
+        $this->assertNotContains('revenue', $data['absent'], 'a withheld figure was reported as unmeasured');
+
+        /* The session COUNT is not money and stays: hiding it would misrepresent the site's traffic. */
+        $this->assertSame(4000.0, (float) $data['totals']['sessions']);
+    }
+
+    /**
+     * Two measured days for a property SELECTED for this project.
+     *
+     * Deliberately missing `key_events`, so the absent-not-zero claim above has something to be true
+     * of, and with two different engagement rates over two different session counts so the weighted
+     * average is not the same number as the plain one.
+     */
+    private function seedProperty(): ExternalAccount
+    {
+        $connection = app(TokenVault::class)->open(
+            tenantId: (string) $this->report->tenant_id,
+            provider: 'ga4',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)),
+            connectionName: 'Google Analytics 4',
+        );
+
+        $property = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->report->tenant_id,
+            'provider_connection_id' => $connection->getKey(),
+            'provider' => 'ga4', 'account_type' => Ga4PropertyDiscovery::ACCOUNT_TYPE,
+            'external_id' => '111', 'name' => 'موقع العميل', 'parent_external_id' => '100',
+            'parent_name' => 'Acme Group', 'timezone' => 'Asia/Riyadh', 'currency' => 'SAR',
+            'status' => 'active',
+        ]);
+
+        /*
+         * The section is OFF by default on a client-facing report — an operator who shows a client
+         * their site measurement beside the campaigns' figures is choosing to explain the difference.
+         * These tests are about what the section CONTAINS once that choice is made, so the choice is
+         * made here; `test_a_live_link_omits_site_measurement_when_no_property_is_selected` covers
+         * the other half, and the default itself is asserted in `ReportSectionRegistry`'s own tests.
+         */
+        $this->report->update(['section_settings' => ['sections' => ['site_measurement' => true]]]);
+
+        /* Selection is the EXISTING binding, with `purpose = analytics`. */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $property->getKey(),
+            'provider' => 'ga4', 'purpose' => 'analytics', 'is_active' => true,
+        ]);
+
+        $days = [
+            ['2026-07-15', ['sessions' => 1000, 'revenue' => 300, 'engagement_rate' => 0.60]],
+            ['2026-07-16', ['sessions' => 3000, 'revenue' => 600, 'engagement_rate' => 0.80]],
+        ];
+
+        foreach ($days as [$date, $values]) {
+            foreach ($values as $key => $value) {
+                MeasurementDailyMetric::withoutGlobalScopes()->create([
+                    'tenant_id' => $this->report->tenant_id,
+                    'project_id' => $this->project->id,
+                    'external_account_id' => $property->getKey(),
+                    'property_id' => '111',
+                    'metric_date' => $date,
+                    'metric_key' => $key,
+                    'value' => $value,
+                    'currency' => $key === 'revenue' ? 'SAR' : null,
+                    'timezone' => 'Asia/Riyadh',
+                ]);
+            }
+        }
+
+        return $property;
     }
 
     /** A store with one order in the link's window, so the funnel has something to state. */
