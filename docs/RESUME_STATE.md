@@ -876,3 +876,8 @@ the second full backend run: 4,576 passed, 1 skipped (27,660 assertions). Branch
 (outline markers present), API health 200. #633 (ch-brand, `feat/diagnostic-refund-arm`) opened at
 https://github.com/digitalalharbi/CampaignsHub/pull/633; this branch and ch-font rebased onto `c9b560d6`
 (RESUME_STATE both-append conflicts resolved by union, matrix rows by the per-cell resolver; guards 19/19).
+
+**#633 (ch-brand) webkit gate, 2026-10-09 20:3x.** Five checks green; the webkit job failed BEFORE any test:
+«browser install attempt 1/2/3 stalled or failed», «Installation process exited with code: 100», «browser install
+failed three times; the runner could not reach its package mirror», exit 1. No test ran, so nothing on the branch
+was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
