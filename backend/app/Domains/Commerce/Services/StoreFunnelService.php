@@ -82,6 +82,31 @@ final class StoreFunnelService
     /**
      * @return array<string,mixed>
      */
+    /**
+     * The money handed back in the window — the diagnostic chain's last link.
+     *
+     * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 reads «spend → … → purchases → AOV → refunds», and the
+     * summary the diagnostic reads is built from `daily_metrics`, where no refund has ever lived.
+     * This is the one figure the funnel already computes, exposed on its own so the summary can carry
+     * it without re-deriving carts, products and coverage it does not need.
+     *
+     * NULL when no store is in scope — never zero. A project with no shop connected has not refunded
+     * nothing; it has told us nothing, and a zero here would let the diagnosis call its value healthy
+     * on evidence that does not exist. Same window rule as `build()`: the store's own timezone decides
+     * which day an order belongs to, and the sum is in the reporting currency by construction.
+     */
+    public function refundedInWindow(string $tenantId, string $projectId, Carbon $from, Carbon $to): ?float
+    {
+        if ($this->projectStores->forProject($tenantId, $projectId)->isEmpty()) {
+            return null;
+        }
+
+        $window = $this->timezones->window($projectId, $from, $to);
+        $orders = $this->projectOrders->forWindow($tenantId, $projectId, $window['from'], $window['to'])['orders'];
+
+        return round((float) $orders->sum(fn (CommerceOrder $o) => (float) $o->refunded_total), 2);
+    }
+
     public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to): array
     {
         /*

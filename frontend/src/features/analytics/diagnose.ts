@@ -81,6 +81,9 @@ const EVIDENCE: Record<DiagnosticStage, string[]> = {
 
 const n = (v: number | null | undefined): number => (typeof v === 'number' ? v : 0)
 
+/** Refunds at or above this share of revenue are said out loud. A threshold of visibility, not of health. */
+const REFUND_SHARE_WORTH_SAYING = 0.25
+
 export function diagnose({ objective, totals, reported }: DiagnosticInput): Diagnosis {
   const spend = n(totals.spend)
 
@@ -123,6 +126,32 @@ export function diagnose({ objective, totals, reported }: DiagnosticInput): Diag
 
     const finding = judge(stage, totals)
     if (finding !== null) findings.push(finding)
+  }
+
+  /*
+   * The refund arm — the chain's last link, and the one `daily_metrics` never held.
+   *
+   * «… → purchases → AOV → refunds»: revenue handed straight back is not value, and a diagnosis that
+   * stops at revenue calls a store refunding a third of its sales healthy. Refunds come from the
+   * commerce order, not the ad platform, so three things follow. They belong to money chains only.
+   * They are judged only when a store reported them; a project with no shop is told so by name —
+   * `missing` carries `refunds` — and is still judged on the value evidence it does have, because
+   * «we cannot see your refunds» must not silence «your conversions carry no value». And the finding
+   * is OBSERVED: both figures are measured, and the share is a reporting threshold rather than a
+   * benchmark — it says when the measured refunds are large enough to be worth a sentence, not what
+   * a healthy rate is.
+   */
+  if (stages.includes('value')) {
+    if (reported.refunds !== true) {
+      if (!missing.includes('refunds')) missing.push('refunds')
+    } else {
+      const revenue = n(totals.revenue)
+      const refunds = n(totals.refunds)
+
+      if (revenue > 0 && refunds / revenue >= REFUND_SHARE_WORTH_SAYING) {
+        findings.push({ stage: 'value', confidence: 'observed', evidence: ['revenue', 'refunds'], code: 'value_refunded' })
+      }
+    }
   }
 
   return {
