@@ -330,8 +330,6 @@ export function CampaignDetailPage() {
 
       {actionError && <Alert severity="danger" title={actionError} />}
 
-      <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
-
       <Tabs items={tabs} active={tab} onChange={setTab} />
 
       {tab === 'overview' && (
@@ -476,6 +474,13 @@ export function CampaignDetailPage() {
           <CampaignNotesTab campaign={c} projectId={projectId} canUpdate={canUpdate} canApprove={canApprove} />
         </TabPanel>
       )}
+
+      {/*
+        Owner directive 2026-10-09 §7, §14 — the figures before the index. This panel is the campaign's
+        drill-down map (platforms, ad accounts, ad sets, ads, creatives, alerts, reports); it used to
+        sit between the header and the tabs and put the performance tab at 768 px on a 1366×768 screen.
+      */}
+      <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
 
       <CampaignFormModal open={editOpen} onClose={() => setEditOpen(false)} projectId={projectId} campaign={c} />
       <LinkExternalModal open={linkOpen} onClose={() => setLinkOpen(false)} projectId={projectId} campaignId={campaignId} />
