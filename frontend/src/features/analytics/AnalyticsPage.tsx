@@ -139,6 +139,7 @@ import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
+import { LiveOperatingTab } from './LiveOperatingTab'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
@@ -222,6 +223,12 @@ const TAB_GROUPS = [
     key: 'trust',
     ar: 'الجودة', en: 'Quality',
     tabs: [{ id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' }],
+  },
+  {
+    // LIVE-OPERATING-VIEW-001 — one screen per source: latest success · source timestamp · next sync · state.
+    key: 'live',
+    ar: 'التشغيل', en: 'Operations',
+    tabs: [{ id: 'live', ar: 'العرض الحي للمصادر', en: 'Live source view' }],
   },
 ] as const
 
@@ -760,6 +767,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         {tab === 'site' && <SiteAnalyticsTab projectId={currentProjectId} range={range} />}
         {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'live' && <LiveOperatingTab projectId={currentProjectId} />}
         </>
       )}
 
