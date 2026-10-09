@@ -362,21 +362,51 @@ function SettingsTab({ c, scope, scopeId, canManage }: {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-border pt-4">
-        <h3 className="text-sm font-bold text-text-primary">{c.fonts}</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {FONT_KEYS.map(({ key, label }) => (
-            <label key={key} className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
-              {c[label]}
-              <input
-                type="text" disabled={!canManage} value={fonts[key] ?? ''} placeholder="Inter"
-                onChange={(e) => saveM.mutate({ fonts: { ...fonts, [key]: e.target.value } })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary disabled:opacity-50"
-              />
-            </label>
-          ))}
+      {/*
+        BRANDING-HIERARCHY-001 — the font control is WITHDRAWN, not deleted, and here is why.
+        
+        It was a text input per font that saved and did nothing. Nothing in the product reads
+        `branding_settings.fonts`: the type scale comes from `--font-body` / `--font-heading` in
+        `tokens.css`, and no surface has ever consulted a tenant's value. An operator typed a brand
+        font, saw «تم الحفظ», and every screen stayed exactly as it was.
+        
+        A control that accepts input and changes nothing is worse than no control: it spends a
+        customer's trust once, and then again every time they look for the change.
+        
+        ## Why withdrawn rather than implemented
+        
+        Applying a font needs a SOURCE policy this product does not have. A family name alone cannot
+        load — `font-family: "Brand Sans"` resolves to nothing unless the face is already on the
+        device — and the only way to make it real is to fetch a font file, which on a CLIENT'S
+        REPORT means a remote resource chosen by whoever typed into this box. That is a decision
+        about what a client's browser is asked to download, not a styling detail, and it is not one
+        to take by widening an input.
+        
+        ## What is preserved
+        
+        Everything stored. The column, the API field and the validation are untouched, so a tenant
+        who set a value years ago still has it and a future implementation still has it to read.
+        Only the EDITOR is gone, and only where there is nothing stored — a tenant who does have a
+        value is shown it, read-only, with the one sentence that was missing all along.
+      */}
+      {Object.values(fonts).some((v) => typeof v === 'string' && v.trim() !== '') && (
+        <div className="flex flex-col gap-2 border-t border-border pt-4" data-testid="branding-fonts-legacy">
+          <h3 className="text-sm font-bold text-text-primary">{c.fonts}</h3>
+          <dl className="grid gap-2 sm:grid-cols-2">
+            {FONT_KEYS.filter(({ key }) => (fonts[key] ?? '').trim() !== '').map(({ key, label }) => (
+              <div key={key} className="flex flex-col gap-0.5 text-xs">
+                <dt className="font-semibold text-text-secondary">{c[label]}</dt>
+                <dd className="text-sm text-text-primary">{fonts[key]}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-[11px] leading-relaxed text-text-muted" data-testid="branding-fonts-not-applied">
+            {ar
+              ? 'هذه القيم محفوظة ولا تُطبَّق على أي سطح حاليًا. تظهر هنا لأنها ضُبطت سابقًا، ولم تُحذف.'
+              : 'These values are stored and are not applied on any surface today. They appear here because they were set earlier, and they have not been deleted.'}
+          </p>
         </div>
-      </div>
+      )}
 
       {/*
         BRANDING-WHITE-LABEL-ENTITLEMENT — the switch says whether it is IN FORCE, not just whether it
