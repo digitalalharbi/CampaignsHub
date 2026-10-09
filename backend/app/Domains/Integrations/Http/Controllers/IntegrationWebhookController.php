@@ -183,6 +183,16 @@ final class IntegrationWebhookController extends Controller
                     Carbon::now()->toDateString(),
                     ['source' => 'webhook', 'topic' => $event->topic],
                 ),
+                /*
+                 * GA4-INTEGRATION-001 — a measurement source has no webhook to arrive from.
+                 *
+                 * Google Analytics publishes no push notification for reporting data; GA4 is
+                 * `WebhookSupport::PollingOnly` in the catalogue and is synced on a schedule. So
+                 * this arm is unreachable in practice and says so, rather than dispatching an
+                 * advertising job for a provider that has no ad account — which is what a default
+                 * arm would quietly have done.
+                 */
+                ProviderKind::Measurement => null,
             };
 
             $dispatched++;
