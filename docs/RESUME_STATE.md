@@ -908,3 +908,17 @@ Queued behind ch-req (#631), ch-rmfmt, ch-brand and ch-budget in the single lane
 **#631 fix (on ch-req, pushed `09bf8ac9`):** `DemoIntegrationsSeeder` targets the store project by name
 (`DemoAnalyticsSeeder::STORE_PROJECT`); the most-campaigns rule had re-pointed the whole integration chain at the
 Scale project, emptying the store project's Ads table on all three gate browsers. `DemoIntegrationsSeederTargetTest` (4).
+
+**§D alerts unit on `feat/alert-recovery-outage` (ch-alerts, new worktree from `a471af9b`), 2026-10-10 00:1x–00:2x.**
+EMAIL-ALERT-RECOVERY-001: the sweep resolves every open/snoozed event of an evaluable rule whose entity is no longer
+breached, stamps `recovered_at`, and dispatches «Recovered: …» (severity info, own dedup key); unevaluated types never
+recover anything. EMAIL-ALERT-SYNC-OUTAGE-001: `sync_outage` fires per bound project from DataFreshnessService's SOURCE
+states (failed/stale), not the roll-up alone. EMAIL-ALERT-MEASUREMENT-OUTAGE-001: `measurement_outage` reads GA4's own
+integration_sync_runs (latest failed, or no success within threshold.hours, default 12). Both types in the API, the
+taxonomy seed the rule picker reads, the frontend union/taxonomy/labels, and the threshold parser (hours). Evidence:
+AlertRecoveryAndOutageTest 6/6, thirteen existing alert suites 79/79, TaxonomyAlignmentTest 11/11; tsc clean; alerts
+Vitest 37/37; alerts-ui.spec.ts chromium gate 8 passed; live on the al-web preview (:5241, DB campaignshub_preview): the
+picker lists 15 types ending with the two outages; a `sync_outage` rule created through the API (201) and one sweep
+raised «Data sync outage — The latest sync failed for: google, meta, tiktok, sandbox. Last figures dated 2026-09-27». Not
+yet: the email path for engine-A events, report_ready, the visual-dashboard assertions (next bounded unit). Matrix rows
+move after the ledger PR merges.
