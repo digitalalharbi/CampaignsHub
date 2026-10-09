@@ -1801,6 +1801,21 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
     )
   }
 
+  /*
+   * The third refusal — Owner directive 2026-10-09 §19. A budget whose window nobody read has no pace
+   * to draw; a bar at 0% here once said «nothing spent» about a project nobody had measured. The
+   * committed budget stays in the strip; here, the reason the pace is not stated.
+   */
+  if (b.pace === null && b.unmeasured > 0) {
+    return (
+      <p className="text-xs text-text-muted" data-testid="budget-pacing-unavailable">
+        {ar
+          ? `لا أرقام مقاسة لهذه الفترة — ${countedCampaigns(b.unmeasured, 'ar')} بميزانية لم تُقرأ مصادرها، فلا سرعة تُحسب على الميزانية`
+          : `No measured figures in this period — ${countedCampaigns(b.unmeasured, 'en')} with a budget whose sources were not read, so no pace against the budget is stated`}
+      </p>
+    )
+  }
+
   const over = b.pace !== null && b.pace > 1
   const overBy = b.projected !== null && b.budget !== null ? b.projected - b.budget : null
 

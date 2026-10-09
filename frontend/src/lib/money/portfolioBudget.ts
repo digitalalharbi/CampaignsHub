@@ -44,13 +44,15 @@ export interface PortfolioBudget {
   currency: string | null
   /** How many comparable rows disagreed about currency — a total is refused above one. */
   currencies: number
+  /** Rows whose project holds no measured figure in the window: their budget counts, their spend is unknown. */
+  unmeasured: number
   /** Rows the server refused to compare, or that carry no budget. Stated, never dropped in silence. */
   excluded: number
 }
 
 const EMPTY: PortfolioBudget = {
   budget: null, spent: null, remaining: null, projected: null,
-  pace: null, currency: null, currencies: 0, excluded: 0,
+  pace: null, currency: null, currencies: 0, excluded: 0, unmeasured: 0,
 }
 
 /**
@@ -88,6 +90,13 @@ export function portfolioBudget(rows: PacedRow[]): PortfolioBudget {
   const refused = ['currency_mismatch', 'no_budget', 'partial', 'mixed_currency']
   const usable = rows.filter((r) => ! refused.includes(String(r.pacing_basis ?? 'comparable')) && (r.budget ?? 0) > 0)
   const excluded = rows.length - usable.length
+  /*
+   * Owner directive 2026-10-09 §19 — committed money counts whether or not it has started moving,
+   * but a window nobody read has no spend and no pace. These rows join the budget and the currency
+   * check and withhold everything else, mirroring `ClientBudgetRollup` so the two surfaces agree.
+   */
+  const unmeasured = usable.filter((r) => r.pacing_basis === 'nothing_measured_in_window').length
+  const measured = usable.filter((r) => r.pacing_basis !== 'nothing_measured_in_window')
 
   if (usable.length === 0) return { ...EMPTY, excluded }
 
@@ -100,6 +109,19 @@ export function portfolioBudget(rows: PacedRow[]): PortfolioBudget {
   }
 
   const budget = usable.reduce((a, r) => a + (r.budget ?? 0), 0)
+
+  if (unmeasured > 0) {
+    return {
+      ...EMPTY,
+      budget: round(budget),
+      spent: measured.length === 0 ? null : round(measured.reduce((a, r) => a + (r.spent ?? 0), 0)),
+      currency: [...currencies][0] ?? null,
+      currencies: currencies.size,
+      excluded,
+      unmeasured,
+    }
+  }
+
   const spent = usable.reduce((a, r) => a + (r.spent ?? 0), 0)
 
   /*
@@ -119,6 +141,7 @@ export function portfolioBudget(rows: PacedRow[]): PortfolioBudget {
     currency: [...currencies][0] ?? null,
     currencies: currencies.size,
     excluded,
+    unmeasured: 0,
   }
 }
 

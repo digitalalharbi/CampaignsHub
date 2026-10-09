@@ -217,6 +217,8 @@ test('the campaigns overview paces the portfolio budget', async ({ page }) => {
      * A refusal is a correct answer and must SAY which one — «no comparable budget» and «different
      * currencies» are different facts, and a blank row would be neither.
      */
-    await expect(refusal).toContainText(/comparable budget|currencies|الميزانية|عملات/)
+    // Three refusals now, each naming its fact: no comparable budget, different currencies, or a
+    // window nobody measured (Owner directive 2026-10-09 §19) — never a blank row.
+    await expect(refusal).toContainText(/comparable budget|currencies|measured|الميزانية|عملات|مقاسة/)
   }
 })

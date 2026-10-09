@@ -142,4 +142,33 @@ describe('the portfolio budget', () => {
     expect(portfolioBudget(older).budget).toBe(3000)
     expect(portfolioBudget(older).excluded).toBe(0)
   })
+
+  /**
+   * Owner directive 2026-10-09 §19 — a window nobody read is not a pace of zero.
+   *
+   * A row whose project holds no measured figure in the window arrives as `nothing_measured_in_window`
+   * with `spent: null`. Summing it as 0 drew a pacing bar at 0% for a project nobody had read; the
+   * committed budget is still committed, the spend and the pace are not known, and the card has to be
+   * able to say which of the two it is looking at.
+   */
+  it('keeps the committed budget but states no pace when a row was never measured', () => {
+    const b = portfolioBudget([
+      row({ budget: 10_000, spent: 1_000, projected_spend: 3_000 }),
+      row({ budget: 5_000, spent: null, projected_spend: null, pacing_basis: 'nothing_measured_in_window' }),
+    ])
+    expect(b.budget).toBe(15_000)
+    expect(b.spent).toBe(1_000)
+    expect(b.unmeasured).toBe(1)
+    expect(b.remaining).toBeNull()
+    expect(b.projected).toBeNull()
+    expect(b.pace).toBeNull()
+  })
+
+  it('states nothing but the budget when every row is unmeasured', () => {
+    const b = portfolioBudget([row({ budget: 5_000, spent: null, projected_spend: null, pacing_basis: 'nothing_measured_in_window' })])
+    expect(b.budget).toBe(5_000)
+    expect(b.spent).toBeNull()
+    expect(b.unmeasured).toBe(1)
+    expect(b.pace).toBeNull()
+  })
 })

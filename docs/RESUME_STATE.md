@@ -818,8 +818,10 @@ merges rows per cell.
 `https://api.campaignshub.io/api/v1/health`. `app.campaignshub.io` is NXDOMAIN — a probe against it
 reads as a network failure and is not one.
 
-**This branch.** `docs/LIVE_ROUTE_CHECKLIST.md` has no row left NOT_REVIEWED (26 REVIEWED, 5
-IMPROVED). Improvements, each with before/after measurements in its commit: dashboard order +
+**This branch.** `docs/LIVE_ROUTE_CHECKLIST.md` had every grouped route REVIEWED or IMPROVED (26 + 5); the
+Owner's correction (§F) split the groups into their sub-routes, and nine of those — a creative with media, the
+request detail, the client space picker and four client detail pages, the admin settings sub-pages, three
+account pages — are NOT_REVIEWED and stay so until opened. Improvements, each with before/after measurements in its commit: dashboard order +
 unmeasured-window pacing truth, StatCard/StatGrid density, PageIntro KPI row on StatGrid (+ two
 columns at phone width), Portfolio wrap at 768, campaign detail (related index below the tabs),
 content detail (stage sized by state, figures above identity), Team (identity | access row), project
