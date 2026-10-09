@@ -90,10 +90,20 @@ final class SharePreviewMetadataTest extends TestCase
     {
         $html = $this->preview();
 
-        // REPORT BRANDING (Owner): the title is the report's name ending with the product's, in the
-        // report's language; whose report it is travels in the description below.
-        $this->assertStringContainsString('<title>تقرير الأداء الشهري — كامبينز هب</title>', $html);
-        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $this->meta($html, 'og:title'));
+        /*
+         * SHARE-PREVIEW-CLIENT-IDENTITY-001 — the CLIENT leads, and this assertion changed with it.
+         *
+         * It used to read «تقرير الأداء الشهري — كامبينز هب», under a comment saying the title is
+         * the report's name ending with the product's and that whose report it is travels in the
+         * description. The owner's constitution overrides that: «Do NOT use CampaignsHub as the
+         * primary report-card identity when the Client has a logo». A WhatsApp card renders this
+         * line first and largest, so the description was the wrong place for the only fact that
+         * tells a client the report is theirs.
+         *
+         * The product keeps `og:site_name`, which is where a platform belongs on a card.
+         */
+        $this->assertStringContainsString('<title>Nakheel — تقرير الأداء الشهري</title>', $html);
+        $this->assertSame('Nakheel — تقرير الأداء الشهري', $this->meta($html, 'og:title'));
         $this->assertSame('كامبينز هب', $this->meta($html, 'og:site_name'));
         $this->assertSame('article', $this->meta($html, 'og:type'));
     }
@@ -103,7 +113,55 @@ final class SharePreviewMetadataTest extends TestCase
     {
         $description = (string) $this->meta($this->preview(), 'og:description');
 
-        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $description);
+        /*
+         * The client's name is no longer repeated here — it leads the title now, and a card that
+         * said it twice would spend its second line saying nothing. What the line carries instead
+         * is the period and the preparing company, which is the SECONDARY attribution the owner
+         * asked for: «Secondary only: Prepared by Company Name».
+         *
+         * «من إعداد» rather than «بواسطة», the same words REPORT-IDENTITY-001 fixed on the public
+         * header: «بواسطة» is a byline, and this is a report somebody PREPARED for somebody else.
+         */
+        $this->assertSame('2026-07-01 — 2026-07-31 · من إعداد Agency', $description);
+        $this->assertStringNotContainsString('918273', $description);
+    }
+
+    /**
+     * The product does NOT lead a card that has a client — SHARE-PREVIEW-CLIENT-IDENTITY-001.
+     *
+     * Stated as its own case rather than left implied by the title above, because this is the
+     * owner's sentence and the thing he saw: a WhatsApp card reading «CampaignsHub Advertiser» over
+     * a report about his client. The title may CONTAIN the product nowhere, and `og:site_name` is
+     * the one place it belongs.
+     */
+    public function test_the_product_name_does_not_lead_a_card_that_has_a_client(): void
+    {
+        $title = (string) $this->meta($this->preview(), 'og:title');
+
+        $this->assertStringStartsWith('Nakheel', $title);
+        $this->assertStringNotContainsString('كامبينز هب', $title);
+        $this->assertStringNotContainsString('CampaignsHub', $title);
+    }
+
+    /**
+     * …and where the identity IS the product, the old form stands.
+     *
+     * A card reading «CampaignsHub — CampaignsHub» would be the «Nakheel, by Nakheel» bug the
+     * resolver already avoids one field down. The rule is «do not put the product FIRST when there
+     * is a client», not «never name the product».
+     *
+     * Reached by naming the tenant and the client after the product rather than by a report with
+     * no project: `reports.project_id` and `projects.client_workspace_id` are both NOT NULL, so
+     * «a report with nobody attached» is not a state this schema has. What IS reachable — and what
+     * this guards — is the resolved name coinciding with the product's.
+     */
+    public function test_an_identity_that_is_the_product_keeps_the_browser_tab_form(): void
+    {
+        $this->client->forceFill(['name' => 'كامبينز هب'])->save();
+
+        $title = (string) $this->meta($this->preview(), 'og:title');
+
+        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $title);
     }
 
     /**
@@ -137,7 +195,7 @@ final class SharePreviewMetadataTest extends TestCase
 
         $html = $this->preview($gated);
 
-        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $this->meta($html, 'og:title'));
+        $this->assertSame('Nakheel — تقرير الأداء الشهري', $this->meta($html, 'og:title'));
         $this->assertStringNotContainsString('918273', $html);
         $this->assertStringNotContainsString('let-me-in', $html);
     }
@@ -216,8 +274,8 @@ final class SharePreviewMetadataTest extends TestCase
 
         $html = $this->preview();
 
-        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $this->meta($html, 'og:image:alt'));
-        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $this->metaName($html, 'twitter:image:alt'));
+        $this->assertSame('2026-07-01 — 2026-07-31 · من إعداد Agency', $this->meta($html, 'og:image:alt'));
+        $this->assertSame('2026-07-01 — 2026-07-31 · من إعداد Agency', $this->metaName($html, 'twitter:image:alt'));
     }
 
     /**
