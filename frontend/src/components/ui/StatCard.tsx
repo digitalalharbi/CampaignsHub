@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import { Delta } from '@/components/ui/Delta'
 import { useUi } from '@/stores/ui'
 import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } from '@/styles/scale'
@@ -31,6 +31,24 @@ import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } fro
  * are the same height. Cards of different heights in one row read as a layout accident, and an
  * operator scanning a row of them loses the alignment that makes scanning work.
  */
+/**
+ * Whether the cards in this grid may carry a sparkline — Owner directive 2026-10-09 §8.
+ *
+ * The spark row below is RESERVED on every card for a measured reason: on a real KPI row some
+ * metrics have a series behind them and some cannot, and a grid where the top row reserved the row
+ * and the bottom row did not stood at 174/174/174/174/132/132 on Production. That reason holds
+ * exactly where a sparkline can appear. On the eight grids that never pass one — the dashboard's
+ * counts, the portfolio's and the campaigns' head KPIs, the reports list — the reservation was
+ * 36 px of empty space in every card of the first viewport, which is the one place the directive
+ * says is premium analytical space.
+ *
+ * So the GRID says whether its cards may carry a spark (`StatGrid sparks`), and a card reserves the
+ * row only when it holds one or sits in a grid that said so. A card drawn outside any `StatGrid`
+ * keeps the reservation — the spark-bearing surfaces lay their cards out themselves, and nothing
+ * about them changes.
+ */
+const StatGridContext = createContext<{ sparks: boolean }>({ sparks: true })
+
 export type StatTone = 'neutral' | 'brand' | 'info' | 'success' | 'warning' | 'danger'
 
 const DOT: Record<StatTone, string> = {
@@ -139,6 +157,7 @@ export function StatCard({
   shape?: 'auto' | 'square'
   testid?: string
 }) {
+  const grid = useContext(StatGridContext)
   return (
     <div
       data-testid={testid}
@@ -213,7 +232,9 @@ export function StatCard({
         `MetricStrip` has reserved its chart row from the start. This card did not, and that is the
         whole difference between the two components' geometry.
       */}
-      <div className={`mt-auto ${SPARK_ROW}`} aria-hidden={!spark}>{spark}</div>
+      {(spark !== undefined || grid.sparks) && (
+        <div className={`mt-auto ${SPARK_ROW}`} aria-hidden={!spark}>{spark}</div>
+      )}
     </div>
   )
 }
@@ -228,16 +249,26 @@ export function StatCard({
  * The minimum is what stops them colliding: below it the grid drops a column instead of squeezing a
  * number until it wraps mid-figure.
  */
-export function StatGrid({ children, min = '11.5rem' }: { children: ReactNode; min?: string }) {
+/**
+ * `columns` — a page's own column rhythm, where it has one.
+ *
+ * `auto-fit` is the right default for a row of KPIs that may grow. A few pages lay a fixed row out
+ * on purpose — the dashboard's four counts are two-by-two on a phone and one row on a desk — and
+ * used a page-local grid to say so, which put their cards OUTSIDE this grid and its spark decision.
+ * Naming the rhythm here keeps the decision and the density in one place.
+ */
+export function StatGrid({ children, min = '11.5rem', sparks = false, columns }: { children: ReactNode; min?: string; sparks?: boolean; columns?: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
   return (
-    <div
-      dir={ar ? 'rtl' : 'ltr'}
-      className={`grid ${CARD_GAP}`}
-      style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}, 100%), 1fr))` }}
-    >
-      {children}
-    </div>
+    <StatGridContext.Provider value={{ sparks }}>
+      <div
+        dir={ar ? 'rtl' : 'ltr'}
+        className={`grid ${CARD_GAP} ${columns ?? ''}`}
+        style={columns ? undefined : { gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}, 100%), 1fr))` }}
+      >
+        {children}
+      </div>
+    </StatGridContext.Provider>
   )
 }
