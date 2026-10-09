@@ -218,8 +218,14 @@ function MemberRow({
     .map((c) => ({ value: c.id, label: c.name }))
 
   return (
-    <li data-testid={`team-member-${member.user.email ?? member.id}`} className="rounded-2xl border border-border bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <li
+      data-testid={`team-member-${member.user.email ?? member.id}`}
+      /* Identity beside access, not above it: at 1366×768 four stacked cards of 165–213 px showed
+         two and a half members. The left column holds who they are; the right holds what they
+         reach. Below `sm` the two stack again. */
+      className="rounded-lg border border-border bg-surface p-4 sm:grid sm:grid-cols-[minmax(14rem,18rem)_1fr] sm:gap-6"
+    >
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 sm:flex-col sm:justify-start">
         <div className="min-w-0">
           <p className="font-heading text-[15px] font-bold text-text-primary">{member.user.name ?? '—'}</p>
           <p className="mt-0.5 truncate text-[13px] text-text-muted" dir="ltr">{member.user.email}</p>
@@ -245,7 +251,7 @@ function MemberRow({
         </span>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3 min-w-0 sm:mt-0">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">
           {ar ? 'الوصول إلى العملاء' : 'Client access'}
         </p>
