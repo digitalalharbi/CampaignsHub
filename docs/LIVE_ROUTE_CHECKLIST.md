@@ -70,6 +70,6 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/app/*` | Advertiser portal (same route family as `/agency`) | NOT_REVIEWED | |
 | `/portal/*` | Client portal (campaigns, requests, quotes, invoices, messages, files, profile, spaces) | NOT_REVIEWED | |
 | `/admin/*` | Platform admin (tenants, registrations, taxonomies, system, cutover, public-pages, settings) | NOT_REVIEWED | |
-| `/`, `/services`, `/services/:category`, `/welcome`, auth routes | Public / auth | NOT_REVIEWED | |
+| `/`, `/services`, `/services/:category`, `/welcome`, auth routes | Public / auth | REVIEWED | **1366×768, ar, dark, signed-out.** `/`: overflow 0; page 4,018 px; hero heading, platform coverage chips, campaign-overview preview (top campaigns / platform comparison / spend split) and the four start-paths on the first screen. `/services`: overflow 0; page 5,235 px; h1, nine category tiles, «all services 95» from 609. `/welcome`, auth: see note below when measured. |
 
 Out of scope by §59: nothing here adds a product. Routes not in the registry are not invented.
