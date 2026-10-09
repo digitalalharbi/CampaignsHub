@@ -36,7 +36,6 @@ const SURFACES: Array<{ path: string; project?: boolean; firstScreen: string[] }
   { path: '/agency/content', project: true, firstScreen: [] },
   { path: '/agency/reports', project: true, firstScreen: [] },
   { path: '/agency/integrations', firstScreen: [] },
-  { path: '/agency/spend-limits', project: true, firstScreen: [] },
   { path: '/agency/alerts', firstScreen: [] },
 ]
 
@@ -61,6 +60,36 @@ async function measure(page: Page, ids: string[]) {
     }
   }, ids)
 }
+
+/**
+ * Spend limits live in the ADVERTISER portal (`/app`), not the agency's — the route registry says so,
+ * and a sweep that asked `/agency/spend-limits` measured a page that does not exist for thirty
+ * seconds per combination. The advertiser's own session opens it.
+ */
+test.describe('the first viewport, on the advertiser portal', () => {
+  test.use({ storageState: AUTH.advertiser })
+
+  for (const { w, h } of WIDTHS) {
+    for (const locale of ['ar', 'en'] as const) {
+      for (const theme of ['dark', 'light'] as const) {
+        test(`/app/spend-limits · ${w}×${h} · ${locale} · ${theme}`, async ({ page }) => {
+          test.setTimeout(90_000)
+          await page.addInitScript(([l, t]) => {
+            window.localStorage.setItem('campaign-hub-locale', l)
+            window.localStorage.setItem('campaign-hub-theme', t)
+          }, [locale, theme] as const)
+          await page.setViewportSize({ width: w, height: h })
+          await page.goto('/app/spend-limits')
+          await expect(page.locator('main')).toBeVisible({ timeout: 30_000 })
+          await page.waitForLoadState('networkidle')
+          await expect.poll(async () => (await measure(page, [])).heading, { timeout: 30_000 }).toBe(true)
+          const m = await measure(page, [])
+          expect(m.overflow, `/app/spend-limits scrolls sideways at ${w}px (${locale}/${theme}); widest: ${m.widest.join(' | ')}`).toBeLessThanOrEqual(1)
+        })
+      }
+    }
+  }
+})
 
 test.describe('the first viewport, on every operator surface', () => {
   test.use({ storageState: AUTH.owner })
