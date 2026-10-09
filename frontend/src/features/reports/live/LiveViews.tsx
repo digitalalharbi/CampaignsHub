@@ -249,6 +249,14 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
         />
       )}
       {sectionOn(payload, 'budget_pacing') && <BudgetRing payload={payload} ar={ar} />}
+      {/*
+        GA4-INTEGRATION-001 — the summary carries it too, and that is not duplication.
+
+        The summary is the view a shared link OPENS on and the one that gets forwarded; a section
+        that appeared only in the dashboard would be invisible to most of the people the report is
+        for. Before the insights, after the money — context for the campaigns, never a verdict.
+      */}
+      {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
   )
