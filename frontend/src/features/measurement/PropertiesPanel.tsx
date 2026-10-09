@@ -9,6 +9,7 @@ import { bindAccount, listClientWorkspaces, listProjects } from '@/features/proj
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
+import { Num } from '@/components/ui/Num'
 import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Skeleton } from '@/components/ui/States'
@@ -81,7 +82,7 @@ function PropertyRow({ property, ar, projectId, onSelect, onSync, busy }: {
           <p className="truncate text-[11px] text-text-muted">
             {property.analytics_account_name ?? (ar ? 'حساب غير مسمّى' : 'Unnamed account')}
             {' · '}
-            <span className="tnum" dir="ltr">{property.property_id}</span>
+            <Num className="tnum">{property.property_id}</Num>
           </p>
         </div>
 
@@ -130,7 +131,12 @@ function PropertyRow({ property, ar, projectId, onSelect, onSync, busy }: {
         {property.currency !== null && (
           <div>
             <dt className="inline text-text-muted">{ar ? 'العملة' : 'Currency'}: </dt>
-            <dd className="inline font-semibold" dir="ltr">{property.currency}</dd>
+            {/*
+              KPI-ALIGNMENT-002 — `<Num>`, not `dir="ltr"` on the `<dd>`.
+              `dir` sets reading order AND re-bases every logical property on the element, so an RTL
+              page would put the label at the right edge and its own value at the left.
+            */}
+            <dd className="inline font-semibold"><Num>{property.currency}</Num></dd>
           </div>
         )}
       </dl>

@@ -17,6 +17,7 @@ export type ReportSectionKey =
   | 'budget_pacing'
   | 'funnel'
   | 'content_performance'
+  | 'site_measurement'
   | 'recommendations'
   | 'detailed_tables'
   | 'objective_breakdown'

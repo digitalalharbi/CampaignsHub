@@ -22,6 +22,7 @@ import {
   FunnelSection,
   ObjectiveLeaders,
   ObjectiveSplit,
+  SiteMeasurementSection,
   StoreFunnelSection,
   TrendAndDistribution,
   useSpendCharting,
@@ -352,6 +353,12 @@ export function DashboardView({
       {sectionOn(payload, 'detailed_tables') && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
       {sectionOn(payload, 'budget_pacing') && <ClientAttention payload={payload} currency={currency} locale={locale} />}
       {sectionOn(payload, 'funnel') && <StoreFunnelSection payload={payload} ar={ar} />}
+      {/*
+        GA4-INTEGRATION-001 — after the paid-media story and before the insights, because that is
+        what it is: context for the campaigns, never a verdict on them. Off by default on a
+        client-facing link; `sectionOn` is what the operator's choice flows through.
+      */}
+      {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
   )

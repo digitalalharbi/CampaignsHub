@@ -257,6 +257,133 @@ export function FunnelSection({ payload, ar, currency }: { payload: LivePayload;
   )
 }
 
+/**
+ * GA4-INTEGRATION-001 — the client's own site, measured by their own Analytics.
+ *
+ * ## Why it is a section of its own and not another row of KPIs
+ *
+ * An ad platform reports what IT believes its ads caused. GA4 reports what happened on the client's
+ * site, attributed by GA4's own model, in the property's own calendar. The two are not addable, and
+ * a reader shown two revenue figures on one page will add them unless the page says not to. So this
+ * block says it, in one line, every time it is drawn.
+ *
+ * ## What it never does
+ *
+ * No ratio is computed between these figures and the campaigns'. No «return» appears here, because a
+ * return needs a spend and GA4 has none — and the spend one section up was paid to platforms whose
+ * attribution is not this one's.
+ *
+ * ## Absent, withheld and zero are three different things
+ *
+ * `absent` is «this property does not measure it» — a site with no ecommerce reports no revenue, and
+ * «‏0.00 ر.س» would tell a client their site earned nothing. `withheld` is «the operator hid it on
+ * this link». Both are said in their own words, and neither is a zero.
+ */
+const MEASURED_COUNTS = ['sessions', 'users', 'new_users', 'page_views', 'key_events', 'transactions'] as const
+
+const MEASURED_LABELS: Record<string, { ar: string; en: string }> = {
+  sessions: { ar: 'الجلسات', en: 'Sessions' },
+  users: { ar: 'المستخدمون', en: 'Users' },
+  new_users: { ar: 'مستخدمون جدد', en: 'New users' },
+  page_views: { ar: 'مشاهدات الصفحات', en: 'Page views' },
+  key_events: { ar: 'الأحداث الرئيسية', en: 'Key events' },
+  transactions: { ar: 'العمليات', en: 'Transactions' },
+  revenue: { ar: 'إيراد الموقع', en: 'Site revenue' },
+  engagement_rate: { ar: 'معدل التفاعل', en: 'Engagement rate' },
+}
+
+export function SiteMeasurementSection({ payload, ar }: { payload: LivePayload; ar: boolean }) {
+  const measured = payload.site_measurement
+
+  if (measured == null) return null
+
+  const withheld = measured.withheld ?? []
+  const absentNames = measured.absent
+    .map((key) => (ar ? MEASURED_LABELS[key]?.ar : MEASURED_LABELS[key]?.en) ?? key)
+
+  return (
+    <div data-testid="shared-site-measurement" className="rounded-2xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="font-bold text-text-primary">{ar ? 'قياس موقعك' : 'Your site, measured'}</h3>
+          {/*
+            The one sentence this block exists to say. Drawn every time, not once in a footnote:
+            without it two revenue numbers on one page are an invitation to add them.
+          */}
+          <p data-testid="site-measurement-not-blended" className="mt-1 text-xs leading-relaxed text-text-secondary">
+            {ar
+              ? 'هذه أرقام موقعك كما قاسها جوجل أناليتكس، ولا تُجمع مع أرقام المنصات الإعلانية أعلاه — نموذج الإحالة مختلف.'
+              : 'These are your site’s own figures as Google Analytics measured them. They are not added to the ad platforms’ figures above — the attribution model is different.'}
+          </p>
+        </div>
+        {measured.property.timezone && (
+          <p className="shrink-0 text-[11px] text-text-muted">
+            {ar ? 'بتوقيت' : 'Measured on'} <Num className="tnum">{measured.property.timezone}</Num>
+          </p>
+        )}
+      </div>
+
+      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {MEASURED_COUNTS.filter((key) => measured.totals[key] != null).map((key) => (
+          <div key={key} data-testid={`site-metric-${key}`} className="rounded-lg bg-surface-secondary px-3 py-2">
+            <dt className="text-[11px] text-text-muted">{ar ? MEASURED_LABELS[key]!.ar : MEASURED_LABELS[key]!.en}</dt>
+            <dd className="font-extrabold text-text-primary">
+              <Num className="tnum">
+                {measured.totals[key]!.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { maximumFractionDigits: 0 })}
+              </Num>
+            </dd>
+          </div>
+        ))}
+
+        {measured.totals.revenue != null && (
+          <div data-testid="site-metric-revenue" className="rounded-lg bg-surface-secondary px-3 py-2">
+            <dt className="text-[11px] text-text-muted">{ar ? MEASURED_LABELS.revenue!.ar : MEASURED_LABELS.revenue!.en}</dt>
+            <dd className="font-extrabold text-text-primary">
+              <Num className="tnum">
+                {measured.totals.revenue.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { maximumFractionDigits: 2 })}
+                {/* The PROPERTY's currency, which is frequently not the report's. Stated, never converted. */}
+                {measured.currency ? ` ${measured.currency}` : ''}
+              </Num>
+            </dd>
+          </div>
+        )}
+
+        {measured.rates.engagement_rate != null && (
+          <div data-testid="site-metric-engagement_rate" className="rounded-lg bg-surface-secondary px-3 py-2">
+            <dt className="text-[11px] text-text-muted">{ar ? MEASURED_LABELS.engagement_rate!.ar : MEASURED_LABELS.engagement_rate!.en}</dt>
+            <dd className="font-extrabold text-text-primary">
+              {/* Averaged by each day's sessions on the server — a week of fractions is not a sum. */}
+              <Num className="tnum">{(measured.rates.engagement_rate * 100).toFixed(1)}%</Num>
+            </dd>
+          </div>
+        )}
+      </dl>
+
+      {withheld.length > 0 && (
+        /* Said as withheld, so it is not read as unmeasured. */
+        <p data-testid="site-measurement-withheld" className="mt-2 text-[11px] text-text-muted">
+          {ar
+            ? `أُخفيت من هذا الرابط: ${withheld.map((k) => MEASURED_LABELS[k]?.ar ?? k).join('، ')}.`
+            : `Hidden on this link: ${withheld.map((k) => MEASURED_LABELS[k]?.en ?? k).join(', ')}.`}
+        </p>
+      )}
+
+      {absentNames.length > 0 && (
+        /* «This property does not measure it» — a different sentence from the one above, on purpose. */
+        <p data-testid="site-measurement-absent" className="mt-1 text-[11px] text-text-muted">
+          {ar
+            ? `لا تقيس هذه الخاصية: ${absentNames.join('، ')}. الفراغ ليس صفرًا.`
+            : `This property does not measure: ${absentNames.join(', ')}. A gap is not a zero.`}
+        </p>
+      )}
+
+      <p className="mt-2 text-[11px] text-text-muted">
+        {ar ? 'أيام مقروءة في الفترة' : 'Days read in the period'}: <Num className="tnum">{measured.days}</Num>
+      </p>
+    </div>
+  )
+}
+
 export function StoreFunnelSection({ payload, ar }: { payload: LivePayload; ar: boolean }) {
   return (
     <>

@@ -16,6 +16,7 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\SiteMeasurementService;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\BusinessStreams;
@@ -610,6 +611,17 @@ final class LiveReportService
             'business_streams_cover_total' => ($streamSet = $this->streamSettings($share)) !== []
                 && app(BusinessStreams::class)->coversTotal($engine, $streamSet, $from, $to),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
+            /*
+             * GA4-INTEGRATION-001 — the client's own site, measured by their own Analytics.
+             *
+             * Built alongside the store funnel and for the same reason: it is a source this link
+             * vouches for and the freshness footer has to be able to see it. Null where no property
+             * is selected or nothing has been read, so the section is ABSENT rather than
+             * present-and-empty.
+             *
+             * Never blended with the ad figures above — see `SiteMeasurementService`.
+             */
+            'site_measurement' => $this->siteMeasurement($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
@@ -1204,6 +1216,45 @@ final class LiveReportService
      *
      * @return array<string,mixed>|null
      */
+    /**
+     * GA4-INTEGRATION-001 — the measured site, with the same withholding rules as every other figure.
+     *
+     * `hide_revenue` empties the money here too. A link that hides the campaigns' revenue and then
+     * prints the site's would be a hole in the same decision: the operator hid revenue from this
+     * reader, and GA4's is still revenue.
+     *
+     * `hide_spend` does NOT touch it, and that is deliberate rather than an omission — nothing here
+     * is spend-derived, so there is no figure a reader could divide back to the one the operator hid.
+     */
+    private function siteMeasurement(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
+    {
+        $measured = app(SiteMeasurementService::class)->build((string) $share->tenant_id, $projectId, $from, $to);
+
+        if ($measured === null) {
+            return null;
+        }
+
+        if ($share->hide_revenue) {
+            $measured['totals']['revenue'] = null;
+            $measured['currency'] = null;
+            $measured['series'] = array_map(static function (array $row): array {
+                $row['revenue'] = null;
+
+                return $row;
+            }, $measured['series']);
+
+            /*
+             * Named as withheld rather than left to look unmeasured.
+             *
+             * `absent` means «this property does not measure it»; a hidden figure is a different
+             * fact, and merging the two would tell a reader the client's site has no ecommerce.
+             */
+            $measured['withheld'] = ['revenue'];
+        }
+
+        return $measured;
+    }
+
     private function storeFunnel(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
     {
         $funnel = app(StoreFunnelService::class)->build((string) $share->tenant_id, $projectId, $from, $to);

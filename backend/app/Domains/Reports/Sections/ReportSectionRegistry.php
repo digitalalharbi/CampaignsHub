@@ -103,6 +103,26 @@ final class ReportSectionRegistry
                 ],
                 slideTypes: ['ads', 'top_creatives'],
             ),
+            /*
+             * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
+             *
+             * After the paid-media story and before the insights, because that is what it is:
+             * context for the campaigns, never a verdict on them. Its revenue is measured under
+             * GA4's attribution and the platforms' is measured under theirs, so the two are never
+             * added, never divided into one another, and never shown as one number.
+             *
+             * OFF by default on a client-facing report. A reader shown two revenue figures on one
+             * page will add them, and an operator who puts this in front of a client is choosing to
+             * explain the difference. That choice is theirs to make deliberately rather than ours to
+             * make for them — the same reasoning as the detailed tables and advanced segmentation.
+             */
+            new ReportSection(
+                key: 'site_measurement',
+                titleAr: 'قياس موقع العميل',
+                titleEn: 'Client site measurement',
+                payloadKeys: ['site_measurement'],
+                clientDefault: false,
+            ),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
@@ -180,6 +200,14 @@ final class ReportSectionRegistry
         $this->availableWhen('content_performance', 'has_content', static fn (SectionContext $c): bool => $c->rows('ads') !== [] || $c->rows('ads_roster') !== []
             // A summary withholds the list and states the count; the count alone is still the section.
             || (int) ($c->value('creatives_in_scope') ?? 0) > 0);
+
+        /*
+         * A property somebody selected, with days actually read in this window.
+         *
+         * `build()` already returns null for «no property» and for «nothing read yet» — two different
+         * facts that are both «no section», and neither of which is a zero.
+         */
+        $this->availableWhen('site_measurement', 'has_measured_days', static fn (SectionContext $c): bool => is_array($c->value('site_measurement')));
 
         $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 
