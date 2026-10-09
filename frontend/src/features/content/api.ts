@@ -195,6 +195,18 @@ export interface CreativeCard {
   status: string
   campaign_id: string | null
   campaign_name: string | null
+  /**
+   * CONTENT-BROWSER-PARITY-001 — WHICH ad account ran this.
+   *
+   * A project reads more than one, and «which of ours was this on» was a question the library could
+   * not answer: two creatives with the same name under two accounts were indistinguishable. It is
+   * also the axis ACCOUNT-SCOPE-ISOLATION-001 is about, and a reader who cannot see it cannot check
+   * the isolation they are being promised.
+   *
+   * Null where the creative carries no external campaign yet, which is a real state — a creative can
+   * be imported before its campaign is linked. Optional because older payloads do not send it.
+   */
+  ad_account?: { id: string; name: string } | null
   /** The two rungs between the campaign and the creative — the dashboard's drill-down needs both. */
   ad_set_id: string | null
   /**
