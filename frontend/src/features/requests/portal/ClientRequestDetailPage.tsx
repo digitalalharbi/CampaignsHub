@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { fmtDateTime } from '@/lib/datetime'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Bell, Check, CheckCircle2, Download, Loader2, Paperclip, Send, Sparkles } from 'lucide-react'
@@ -116,7 +117,7 @@ export function ClientRequestDetailPage() {
               <li key={i} className="relative">
                 <span className="absolute -start-[22px] top-1 h-2 w-2 rounded-full bg-brand-500 ring-4 ring-surface" />
                 <div className="text-sm text-text-primary">{t.message ?? t.type}</div>
-                <div className="tnum text-[11px] text-text-muted">{t.at ? new Date(t.at).toLocaleString('en-CA') : ''}</div>
+                <div className="tnum text-[11px] text-text-muted">{t.at ? fmtDateTime(t.at) : ''}</div>
               </li>
             ))}
           </ol>
@@ -127,7 +128,7 @@ export function ClientRequestDetailPage() {
             {d.comments.length === 0 && <p className="text-sm text-text-muted">{ar ? 'لا توجد رسائل بعد.' : 'No messages yet.'}</p>}
             {d.comments.map((c, i) => (
               <div key={i} className={`rounded-xl border border-border px-3 py-2 text-sm ${c.author === 'Client' ? 'bg-brand-primary-soft/40' : 'bg-surface-secondary'}`}>
-                <div className="tnum text-[11px] font-semibold text-text-secondary">{c.author === 'Client' ? (ar ? 'أنت' : 'You') : (ar ? 'الفريق' : 'Team')} · {c.at ? new Date(c.at).toLocaleString('en-CA') : ''}</div>
+                <div className="tnum text-[11px] font-semibold text-text-secondary">{c.author === 'Client' ? (ar ? 'أنت' : 'You') : (ar ? 'الفريق' : 'Team')} · {c.at ? fmtDateTime(c.at) : ''}</div>
                 <div className="text-text-primary">{c.body}</div>
               </div>
             ))}
