@@ -696,6 +696,27 @@ ONE PR at a time. A second open PR puts the first in `BEHIND` and re-runs its fu
 gate (~35 min). Prepare the next unit in its own worktree while a gate runs; push only when the lane
 is clear.
 
+## The exact position when this run stopped
+
+**GitHub became unreachable** — `api.github.com` answered nothing after 30s and `git push` failed
+with «Couldn't connect to server». Everything below is committed LOCALLY; nothing is lost, and the
+first action on resume is to push.
+
+| Branch | Local head | Pushed? |
+|---|---|---|
+| `feat/share-client-identity` (#626) | the e2e filename-guard fix | **NO — push this first** |
+| `feat/report-content-browser` | 8 commits | no, queued |
+| `feat/measurement-sync-history` | 1 commit | no, queued |
+
+#626 had five of six checks green; `gate (webkit)` failed on ONE case and the fix is the unpushed
+commit. The failure was a FALSE ACCUSATION by a proxy pattern, not a product defect:
+`report-tabular-download.spec.ts` asserted a download is not «named after its blob» with
+`[0-9a-f-]{36}` — any thirty-six hex-or-hyphen characters — and giving export filenames their
+period produced a forty-four-character run of them in a name that is entirely the report's own
+(`executive-summary-…-2026-09-10-2026-10-09-541b586e.xlsx`). The pattern is now the canonical
+8-4-4-4-12 uuid shape, checked both ways, with a positive assertion beside it because «is not a
+uuid» is true of `x.xlsx` too.
+
 ## Units prepared and waiting for the lane
 
 | Worktree | Branch | Closes |
