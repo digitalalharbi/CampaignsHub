@@ -64,6 +64,8 @@ final readonly class Attribution
         public ?string $clickId = null,
         public ?string $clickIdProvider = null,
         public ?string $landingUrl = null,
+        /** ATTR-EVIDENCE-INFLUENCER-COUPON-001 — the coupon the order was placed with, verbatim. */
+        public ?string $couponCode = null,
         public ?string $referrer = null,
     ) {}
 
@@ -86,7 +88,7 @@ final readonly class Attribution
      *
      * @param  array<string,mixed>  $explicit
      */
-    public static function read(array $explicit = [], ?string $landingUrl = null, ?string $referrer = null): self
+    public static function read(array $explicit = [], ?string $landingUrl = null, ?string $referrer = null, ?string $couponCode = null): self
     {
         $fromUrl = self::queryOf($landingUrl);
 
@@ -111,6 +113,7 @@ final readonly class Attribution
             clickId: $clickId,
             clickIdProvider: $clickProvider,
             landingUrl: self::trimmed($landingUrl),
+            couponCode: self::code($couponCode),
             referrer: self::trimmed($referrer),
         );
     }
@@ -127,6 +130,7 @@ final readonly class Attribution
             'click_id' => $this->clickId,
             'click_id_provider' => $this->clickIdProvider,
             'landing_url' => $this->landingUrl,
+            'coupon_code' => $this->couponCode,
             'referrer_url' => $this->referrer,
         ];
     }
@@ -168,6 +172,14 @@ final readonly class Attribution
         $flat = array_filter($parsed, 'is_string');
 
         return $flat;
+    }
+
+    /** A coupon code: trimmed, kept in the case the store sent, bounded to the column. */
+    private static function code(?string $value): ?string
+    {
+        $value = is_string($value) ? trim($value) : '';
+
+        return $value === '' ? null : mb_substr($value, 0, 64);
     }
 
     private static function trimmed(?string $value): ?string

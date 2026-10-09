@@ -540,6 +540,7 @@ final class AttributionTransparency
                 'platforms' => AdPlatforms::sortRows($rows, 'provider'),
                 'unattributed' => null,
                 'conflict' => null,
+                'influencer' => null,
                 'ledger' => null,
             ];
         }
@@ -553,6 +554,7 @@ final class AttributionTransparency
         $placed = [];
         $unattributed = ['orders' => 0, 'revenue' => 0.0];
         $conflict = ['orders' => 0, 'revenue' => 0.0];
+        $influencer = ['orders' => 0, 'revenue' => 0.0, 'codes' => []];
         $ledger = [];
 
         foreach ($live as $order) {
@@ -564,9 +566,18 @@ final class AttributionTransparency
             }
             $platform = $raw === null ? null : AdPlatforms::canonical((string) $raw);
             $revenue = $order->netRevenue() ?? 0.0;
-            $rank = self::EVIDENCE_RANK[$method] ?? 6;
+            $rank = self::EVIDENCE_RANK[$method] ?? 7;
+            $viaCoupon = $method === 'influencer_coupon';
 
-            if ($platform === null) {
+            if ($viaCoupon) {
+                // ATTR-EVIDENCE-INFLUENCER-COUPON-001 — placed on the creator's code, its own layer: not a platform, not unattributed.
+                $code = (string) $order->coupon_code;
+                $influencer['orders']++;
+                $influencer['revenue'] += $revenue;
+                $influencer['codes'][$code] ??= ['code' => $code, 'orders' => 0, 'revenue' => 0.0];
+                $influencer['codes'][$code]['orders']++;
+                $influencer['codes'][$code]['revenue'] += $revenue;
+            } elseif ($platform === null) {
                 $unattributed['orders']++;
                 $unattributed['revenue'] += $revenue;
             } else {
@@ -586,6 +597,7 @@ final class AttributionTransparency
                 'campaign' => $campaign?->name,
                 'method' => $method,
                 'evidence_rank' => $rank,
+                'coupon' => $viaCoupon ? (string) $order->coupon_code : null,
                 'revenue' => round($revenue, 2),
                 'refunded' => round((float) $order->refunded_total, 2),
                 'currency' => $order->currency,
@@ -632,6 +644,11 @@ final class AttributionTransparency
             'platforms' => AdPlatforms::sortRows($rows, 'provider'),
             'unattributed' => ['orders' => $unattributed['orders'], 'revenue' => round($unattributed['revenue'], 2)],
             'conflict' => ['orders' => $conflict['orders'], 'revenue' => round($conflict['revenue'], 2)],
+            'influencer' => [
+                'orders' => $influencer['orders'],
+                'revenue' => round($influencer['revenue'], 2),
+                'codes' => array_values(array_map(static fn (array $c): array => [...$c, 'revenue' => round($c['revenue'], 2)], $influencer['codes'])),
+            ],
             'ledger' => [
                 'total' => count($ledger),
                 'truncated' => count($ledger) > self::LEDGER_CAP,
@@ -646,9 +663,11 @@ final class AttributionTransparency
         'utm_campaign_id' => 1,
         'utm_campaign_name' => 2,
         'click_id_platform_only' => 3,
-        'utm_source_platform_only' => 4,
-        'conflict' => 5,
-        'none' => 6,
+        // ATTR-EVIDENCE-INFLUENCER-COUPON-001 — below a platform's click id, above a bare utm_source.
+        'influencer_coupon' => 4,
+        'utm_source_platform_only' => 5,
+        'conflict' => 6,
+        'none' => 7,
     ];
 
     private const LEDGER_CAP = 200;

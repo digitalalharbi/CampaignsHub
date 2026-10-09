@@ -149,7 +149,8 @@ final class AttributionReconciliationTest extends TestCase
         $this->assertSame(1, $r['conflict']['orders']);
         $this->assertSame(250.0, $r['conflict']['revenue']);
         $this->assertNull($r['ledger']['rows'][0]['campaign']);
-        $this->assertSame(5, $r['ledger']['rows'][0]['evidence_rank']);
+        // ATTR-EVIDENCE-INFLUENCER-COUPON-001 moved the creator's code to rank 4; a conflict is 6 now.
+        $this->assertSame(6, $r['ledger']['rows'][0]['evidence_rank']);
     }
 
     // ── The layers ────────────────────────────────────────────────────────────────────────────
@@ -238,7 +239,7 @@ final class AttributionReconciliationTest extends TestCase
         $ledger = $this->build()['reconciliation']['ledger'];
 
         $this->assertSame(['ORD-1', 'ORD-5', 'ORD-9'], array_column($ledger['rows'], 'reference'));
-        $this->assertSame([1, 3, 6], array_column($ledger['rows'], 'evidence_rank'));
+        $this->assertSame([1, 3, 7], array_column($ledger['rows'], 'evidence_rank'));
         $this->assertSame('meta', $ledger['rows'][0]['platform']);
         $this->assertNull($ledger['rows'][2]['platform']);
         foreach ($ledger['rows'] as $row) {
@@ -276,6 +277,32 @@ final class AttributionReconciliationTest extends TestCase
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────────────────────────
+
+    /** ATTR-EVIDENCE-INFLUENCER-COUPON-001 — a creator's code is its own layer: not a platform, not unattributed. */
+    public function test_an_order_placed_on_a_creator_code_is_its_own_layer_and_still_one_order(): void
+    {
+        $store = $this->storeAccount();
+        $this->spend('meta', 1000.0);
+        $this->conversions('meta', 2.0, 500.0);
+        $this->order('o-1', 300.0, $store, $this->campaign('meta'), null, 'utm_campaign_id', 'REF-1');
+        $coupon = $this->order('o-2', 200.0, $store, null, null, 'influencer_coupon', 'REF-2');
+        $coupon->forceFill(['coupon_code' => 'SARA20'])->save();
+        $this->order('o-3', 100.0, $store, null, null, 'none', 'REF-3');
+
+        $r = $this->build()['reconciliation'];
+
+        $this->assertSame(1, $r['influencer']['orders']);
+        $this->assertSame(200.0, $r['influencer']['revenue']);
+        $this->assertSame([['code' => 'SARA20', 'orders' => 1, 'revenue' => 200.0]], $r['influencer']['codes']);
+        $this->assertSame(1, $r['unattributed']['orders'], 'the coupon order is not unattributed');
+        $meta = collect($r['platforms'])->firstWhere('provider', 'meta');
+        $this->assertSame(1, $meta['reconciled_orders'] ?? $meta['orders'] ?? null, 'the coupon order is not placed on a platform');
+        $row = collect($r['ledger']['rows'])->firstWhere('reference', 'REF-2');
+        $this->assertSame('SARA20', $row['coupon']);
+        $this->assertNull($row['platform']);
+        $this->assertSame(4, $row['evidence_rank'], 'below a click id (3), above a bare utm_source (5)');
+        $this->assertSame(3, $r['ledger']['total'], 'one order, one row — the code adds evidence, never a second order');
+    }
 
     private function build(): array
     {
