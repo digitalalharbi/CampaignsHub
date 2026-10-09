@@ -939,3 +939,11 @@ picker lists 15 types ending with the two outages; a `sync_outage` rule created 
 raised «Data sync outage — The latest sync failed for: google, meta, tiktok, sandbox. Last figures dated 2026-09-27». Not
 yet: the email path for engine-A events, report_ready, the visual-dashboard assertions (next bounded unit). Matrix rows
 move after the ledger PR merges.
+
+**EMAIL-ALERT-EVENTS-001 on the same branch, 00:3x.** `AlertEventMailer` is the email path for the alert engine's own
+events: the evaluator posts every raised, refreshed or recovered event to a per-tenant outbox and hands it to the mailer
+after the tenant's rules (`evaluateAll`) — one `AlertBundleMail` per person per sweep in the person's language, a
+`digest_sends` row (kind `alert_event`, key = event + trigger moment) so a re-run never sends twice, the person's choices
+honoured in the findings sweep's order (switched off → held for digest → quiet hours), project scope respected, and
+`awaiting_credentials` recorded instead of «sent» whenever no email provider is configured. AlertEventEmailTest 4/4; all
+fifteen alert suites together 87/87.

@@ -132,7 +132,16 @@ final class AlertEvaluator
         private readonly TenantContext $tenants,
         private readonly SpendLimitGovernor $limits,
         private readonly DataFreshnessService $freshness,
+        private readonly AlertEventMailer $mailer,
     ) {}
+
+    /**
+     * EMAIL-ALERT-EVENTS-001 — what this sweep raised, refreshed or recovered, per tenant, until the
+     * mailer takes it. One bundle per person per sweep is the aggregation rule.
+     *
+     * @var list<array<string,mixed>>
+     */
+    private array $outbox = [];
 
     /** Evaluate every active rule across all tenants. Returns the number of newly raised alerts. */
     public function evaluateAll(?Carbon $now = null): int
@@ -151,6 +160,7 @@ final class AlertEvaluator
                 ->each(function (AlertRule $rule) use ($now, &$raised) {
                     $raised += $this->evaluateRule($rule, $now);
                 });
+            $this->flushMail((string) $tenantId, $now);
         }
 
         $this->tenants->setTenantId($previous);
@@ -159,6 +169,20 @@ final class AlertEvaluator
     }
 
     /** Evaluate one rule; returns newly raised alerts for it. */
+    /**
+     * Hand the sweep's outbox for one tenant to the mailer. `evaluateAll()` does this per tenant;
+     * callers that evaluate single rules call it themselves when they want the mail to go.
+     *
+     * @return array<string,int>
+     */
+    public function flushMail(string $tenantId, ?Carbon $now = null): array
+    {
+        $items = $this->outbox;
+        $this->outbox = [];
+
+        return $this->mailer->sweep($tenantId, $items, $now ?? Carbon::now());
+    }
+
     public function evaluateRule(AlertRule $rule, ?Carbon $now = null): int
     {
         $now ??= Carbon::now();
@@ -275,6 +299,15 @@ final class AlertEvaluator
             // message, not a repeat of it, so it carries its own key past the dispatcher's dedup window.
             'dedup_extra' => 'recovered:'.$event->id,
         ]);
+
+        $this->post($rule, $event, [
+            'title' => 'Recovered: '.$title,
+            'title_ar' => 'تعافى: '.$titleAr,
+            'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
+            'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
+            'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
+            'context' => [],
+        ], 'info', $now, recovered: true);
     }
 
     private function dedupKey(AlertRule $rule, array $b): string
@@ -314,6 +347,7 @@ final class AlertEvaluator
                 'status' => 'open',
             ])->save();
             $this->notify($rule, $b);
+            $this->post($rule, $active, $b, $rule->severity, $now);
 
             return false;
         }
@@ -328,7 +362,7 @@ final class AlertEvaluator
         $notification = $this->notify($rule, $b);
         $taskId = $rule->create_task ? $this->openTask($rule, $b) : null;
 
-        AlertEvent::create([
+        $event = AlertEvent::create([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
             'rule_id' => $rule->id,
@@ -344,11 +378,29 @@ final class AlertEvaluator
             'task_id' => $taskId,
             'last_triggered_at' => $now,
         ]);
+        $this->post($rule, $event, $b, $rule->severity, $now);
 
         return true;
     }
 
     /** Raise the notification through the shared dispatcher; returns the notification id (or null if deduped). */
+    /** Put one event on the sweep's outbox for the mailer. */
+    private function post(AlertRule $rule, AlertEvent $event, array $b, string $severity, Carbon $now, bool $recovered = false): void
+    {
+        $this->outbox[] = [
+            'event_id' => (string) $event->id,
+            'notification_type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'severity' => $severity,
+            'title' => (string) $b['title'],
+            'title_ar' => $b['context']['title_ar'] ?? $b['title_ar'] ?? null,
+            'detail' => (string) $b['message'],
+            'detail_ar' => $b['context']['message_ar'] ?? $b['message_ar'] ?? null,
+            'project_id' => $b['project_id'] ?? $rule->project_id,
+            'project_name' => isset($b['project_id']) ? (Project::query()->whereKey($b['project_id'])->value('name') ?? '') : '',
+            'triggered_at' => ($recovered ? 'recovered:' : '').$now->toIso8601String(),
+        ];
+    }
+
     private function notify(AlertRule $rule, array $b): ?string
     {
         $n = $this->notifications->dispatch([
