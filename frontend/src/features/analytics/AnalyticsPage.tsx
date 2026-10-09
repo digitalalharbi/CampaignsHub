@@ -1687,7 +1687,9 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                 ? (ar ? 'جزء من المصروف محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
                 : r.pacing_basis === 'mixed_currency'
                   ? (ar ? 'المصروف بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
-                  : undefined
+                  : r.pacing_basis === 'nothing_measured_in_window'
+                    ? (ar ? 'لا أرقام مقاسة لهذا المشروع في هذه الفترة — غياب، لا صفر' : 'Nothing was measured for this project in this period — an absence, not a zero')
+                    : undefined
 
           return [
             /* CAMPAIGN-DRILL-001 — a budget row names a campaign, and «why is it pacing like this» is one click. */
