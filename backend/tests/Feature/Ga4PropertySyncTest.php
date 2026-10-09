@@ -11,6 +11,7 @@ use App\Domains\Integrations\Measurement\Ga4PropertySync;
 use App\Domains\Integrations\Measurement\Ga4ReportFailed;
 use App\Domains\Integrations\Measurement\MeasurementDailyMetric;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -317,6 +318,115 @@ final class Ga4PropertySyncTest extends TestCase
             MeasurementDailyMetric::count(),
             'another tenant could read this tenant\'s measured days',
         );
+    }
+
+    // ── Every read is remembered ──────────────────────────────────────────────────────────────
+
+    /**
+     * GA4-INTEGRATION-001 — «history» and «freshness», through the run the product already has.
+     *
+     * A property used to carry `last_synced_at` and nothing else, so «it says it synced two hours
+     * ago and the figures look wrong» had no answer: not how many figures arrived, not whether the
+     * last attempt failed, not whether the one before it did.
+     *
+     * `IntegrationSyncRun` with `type = 'measurement'` — the same table the commerce sweep writes
+     * `commerce` into. A second history for a third family would be a second place for «did this
+     * run» to be answered, and every ops surface would have to learn about it separately.
+     */
+    public function test_a_read_is_recorded_as_a_measurement_run(): void
+    {
+        $property = $this->property(selected: true);
+        $this->fakeGoogle();
+
+        app(Ga4PropertySync::class)->sync($property, 2);
+
+        $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->firstOrFail();
+
+        $this->assertSame('success', $run->status);
+        /* FIGURES, not days: a day with no ecommerce configured legitimately carries fewer. */
+        $this->assertSame(8, (int) $run->records);
+        $this->assertSame('111', $run->meta['property_id']);
+        $this->assertSame('Asia/Riyadh', $run->meta['timezone']);
+        $this->assertNotNull($run->finished_at);
+        $this->assertNull($run->error);
+    }
+
+    /**
+     * A property nobody selected is `awaiting_assignment`, not `failed`.
+     *
+     * Nothing broke, and the next move is to choose a project. Recording it as a failure would put
+     * a red row on the ops page for an estate that is merely unselected — the NORMAL state for most
+     * of an agency's discovered properties — and the commerce sweep already uses this exact word
+     * for this exact situation.
+     */
+    public function test_an_unselected_property_is_recorded_as_awaiting_assignment(): void
+    {
+        $property = $this->property(selected: false);
+        $this->fakeGoogle();
+
+        try {
+            app(Ga4PropertySync::class)->sync($property, 2);
+        } catch (Ga4NotSelected) {
+            // the refusal is the caller's; the run is what remembers it
+        }
+
+        $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->firstOrFail();
+
+        $this->assertSame('awaiting_assignment', $run->status);
+        $this->assertSame(0, (int) $run->records);
+    }
+
+    /**
+     * A refusal is recorded as a FAILURE and the message is redacted before it is stored.
+     *
+     * A Google failure can name the URL that failed, query string and all, and an access token has
+     * been seen in one — and this column is read back onto an operator's screen.
+     */
+    public function test_a_refusal_is_recorded_and_its_message_is_redacted(): void
+    {
+        $property = $this->property(selected: true);
+
+        Http::fake([
+            '*analyticsadmin.googleapis.com*' => Http::response(
+                ['error' => ['message' => 'request to https://analyticsadmin.googleapis.com/v1beta/properties/111?access_token=SECRET-VALUE failed']],
+                403,
+            ),
+        ]);
+
+        try {
+            app(Ga4PropertySync::class)->sync($property, 2);
+        } catch (Ga4ReportFailed) {
+            // re-thrown on purpose: swallowing it would turn «Google refused» into a quiet no-op
+        }
+
+        $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->firstOrFail();
+
+        $this->assertSame('failed', $run->status);
+        $this->assertNotNull($run->error);
+        $this->assertStringNotContainsString('SECRET-VALUE', (string) $run->error);
+    }
+
+    /**
+     * A property that answered with nothing is `no_data`, which is not a failure.
+     *
+     * A site with no traffic in the window is a true answer, and colouring it red would send
+     * somebody to fix an integration that is working.
+     */
+    public function test_a_window_with_no_figures_is_no_data_rather_than_failed(): void
+    {
+        $property = $this->property(selected: true);
+
+        Http::fake([
+            '*analyticsadmin.googleapis.com*' => Http::response(['displayName' => 'A', 'timeZone' => 'Asia/Riyadh', 'currencyCode' => 'SAR'], 200),
+            '*analyticsdata.googleapis.com*' => Http::response(['metricHeaders' => [], 'rows' => []], 200),
+        ]);
+
+        app(Ga4PropertySync::class)->sync($property, 2);
+
+        $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->firstOrFail();
+
+        $this->assertSame('no_data', $run->status);
+        $this->assertSame(0, (int) $run->records);
     }
 
     // ── Fixtures ──────────────────────────────────────────────────────────────────────────────
