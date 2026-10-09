@@ -80,7 +80,8 @@ final class GenerateReportJob implements ShouldQueue
             'source' => 'reports',
             'entity_type' => Report::class,
             'entity_id' => (string) $report->id,
-            'action_url' => '/app/reports',
+            // NOTIF-LINK-001 — portal-relative: the reader's own portal mounts the reports page.
+            'action_url' => '/reports',
             'dedup_extra' => $ready ? (string) $report->generated_at?->toIso8601String() : 'failed',
         ]);
     }
