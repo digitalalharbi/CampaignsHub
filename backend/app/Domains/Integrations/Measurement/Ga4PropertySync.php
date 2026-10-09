@@ -213,7 +213,12 @@ final class Ga4PropertySync
              * query string and all, and an access token has been seen in one — and this column is
              * read back onto an operator's screen.
              */
-            'error' => $error === null ? null : mb_substr(ProviderErrorText::forDisplay($error), 0, 500),
+            /*
+             * Bounded by the contract, never here. Five call sites once carried five different limits and
+             * the column threw on the largest; `ProviderErrorContractTest` refuses a trim at the call site,
+             * and `forStorage` is the one bound that knows the column and says when it fired.
+             */
+            'error' => $error === null ? null : ProviderErrorText::forStorage($error),
             'meta' => $meta === [] ? null : $meta,
             'finished_at' => Carbon::now(),
         ])->save();
