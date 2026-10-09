@@ -871,3 +871,8 @@ dropped an unmeasured campaign's committed budget). `ClientBudgetRollup` now cou
 same-currency row, sums spend over measured rows only, and withholds remaining/projection/pace while any row is
 unmeasured; the tests carry the directive's rule with the measured zero kept as its own case. Budget group 32/32;
 the second full backend run: 4,576 passed, 1 skipped (27,660 assertions). Branch ready to push when its lane turn comes.
+
+**#632 (ch-rmfmt) merged `c9b560d6`, deployed 20:20 (success).** Served bundle moved to `index-50K4Qvi0.js`
+(outline markers present), API health 200. #633 (ch-brand, `feat/diagnostic-refund-arm`) opened at
+https://github.com/digitalalharbi/CampaignsHub/pull/633; this branch and ch-font rebased onto `c9b560d6`
+(RESUME_STATE both-append conflicts resolved by union, matrix rows by the per-cell resolver; guards 19/19).
