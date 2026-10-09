@@ -15,7 +15,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 
 | Route | Surface | Status | Evidence |
 |---|---|---|---|
-| `/agency/dashboard` | Dashboard — what needs attention now? | NOT_REVIEWED | |
+| `/agency/dashboard` | Dashboard — what needs attention now? | IMPROVED | **1366×768, ar, dark.** Before: first screen = title, four count cards, client-mix bar, objective chart, the attention heading at the fold; client pace and budgets 4,018 px down behind a 3,138-px creative section; overflow 0; page 4,822 px. After: first screen = context, counts, attention (4 rows), client pace (5 clients), budgets heading; overflow 0 at 1366, 768 and 390; charts and the creative section follow. Guarded as DOM order (`AgencyDashboardPage.test.tsx`). **Truth defect found on the first screen and fixed:** five clients read «0.00× — on budget» for a window in which nothing had been measured for their budgeted campaigns (`budgetPacing` coalesced a missing row to a measured zero regardless of whether the project's window was measured at all); now the aggregator withdraws the figure when the project has no measured row, the rollup counts those campaigns as `unmeasured`, and the page reads «4 من العملاء بلا أرقام مقاسة في هذه الفترة» with a label beside each such client in the budgets table (`BudgetPacingNothingMeasuredTest`, 3; drawn-dashboard case). Light/en and 1440×900 not yet swept on this route. |
 | `/agency/portfolio` | Portfolio — which projects/clients need attention? | NOT_REVIEWED | |
 | `/agency/projects` | Projects | NOT_REVIEWED | |
 | `/agency/clients`, `/agency/clients/:clientId` | Client overview | NOT_REVIEWED | |
