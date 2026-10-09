@@ -15,6 +15,7 @@ use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Campaigns\Support\Relevance;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Closure;
@@ -707,6 +708,8 @@ final class CreativeRows
             ->get(['id', 'name', 'objective'])
             ->keyBy('id');
 
+        $accounts = $this->accountsFor($creatives);
+
         /*
          * CREATIVE-PRESENTER-ADS-BACKEND-001 — one query for every creative's ads, not one each.
          *
@@ -774,6 +777,21 @@ final class CreativeRows
             $resultsNotAttributable = $creative->campaign_id !== null && isset($unattributed[(string) $creative->campaign_id]);
 
             $row = $this->presenter->card($creative, $campaign);
+            /*
+             * CONTENT-BROWSER-PARITY-001 — WHICH ad account ran this, named on the row.
+             *
+             * A project reads more than one account, and «which of ours was this on» is a question
+             * the library could not answer: the column did not exist, so two creatives with the same
+             * name under two accounts were indistinguishable. It is also the axis
+             * ACCOUNT-SCOPE-ISOLATION-001 is about, and a reader who cannot see it cannot check the
+             * isolation they are being promised.
+             *
+             * Null where the creative carries no external campaign, which is real: a creative can be
+             * imported before its campaign is linked.
+             */
+            $row['ad_account'] = $creative->external_campaign_id === null
+                ? null
+                : ($accounts[(string) $creative->external_campaign_id] ?? null);
             $row['objective'] = $objective;
             $row['path'] = $this->metrics->pathFor($objective)->value;
             /*
@@ -1090,6 +1108,65 @@ final class CreativeRows
              */
             ->orderBy('external_creatives.name')
             ->orderBy('external_creatives.id');
+    }
+
+    /**
+     * The ad account behind each creative's campaign — one query for the page, never one per row.
+     *
+     * Two hops, because that is the shape of the data: a creative names its EXTERNAL campaign, and
+     * the external campaign names the account. The unified campaign cannot answer it — it is the
+     * cross-platform merge of several external ones and deliberately has no single account.
+     *
+     * Keyed by `external_campaign_id`, which is what the creative holds.
+     *
+     * @param  \Illuminate\Support\Collection<int, ExternalCreative>  $creatives
+     * @return array<string, array{id: string, name: string}>
+     */
+    private function accountsFor(mixed $creatives): array
+    {
+        $campaignIds = $creatives->pluck('external_campaign_id')->filter()->unique()->values()->all();
+
+        if ($campaignIds === []) {
+            return [];
+        }
+
+        /** @var array<int, object{external_campaign_id: string, account_id: ?string, account_name: ?string}> $rows */
+        $rows = DB::table('external_campaigns')
+            ->leftJoin('external_accounts', 'external_accounts.id', '=', 'external_campaigns.external_account_id')
+            /*
+             * The tenant predicate is written out because `DB::table()` carries no global scope —
+             * the same rule `CreativeResultAttribution` had to learn. A raw builder joining two
+             * tenant-owned tables with neither one stated is a cross-tenant read waiting to happen.
+             */
+            ->where('external_campaigns.tenant_id', app(TenantContext::class)->tenantId())
+            ->whereIn('external_campaigns.id', $campaignIds)
+            ->select([
+                'external_campaigns.id as external_campaign_id',
+                'external_accounts.id as account_id',
+                'external_accounts.name as account_name',
+            ])
+            ->get()
+            ->all();
+
+        $out = [];
+
+        foreach ($rows as $row) {
+            if ($row->account_id === null) {
+                continue; // a campaign whose account row is gone — absent, not a blank name
+            }
+
+            $out[(string) $row->external_campaign_id] = [
+                'id' => (string) $row->account_id,
+                /*
+                 * The platform's own name, or the id where it sent none. «Unnamed account» would be
+                 * our word for their omission, and the id is the thing an operator can actually look
+                 * up on the platform.
+                 */
+                'name' => ($row->account_name ?? '') !== '' ? (string) $row->account_name : (string) $row->account_id,
+            ];
+        }
+
+        return $out;
     }
 
     /** A bare creative query — the model's own tenant scope and nothing else yet. */

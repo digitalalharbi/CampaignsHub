@@ -123,6 +123,8 @@ const COPY = {
     client: 'العميل',
     project: 'المشروع',
     platform: 'المنصة',
+    adAccount: 'الحساب الإعلاني',
+    delivery: 'حالة العرض',
     campaign: 'الحملة',
     adSet: 'المجموعة الإعلانية',
     ad: 'الإعلان',
@@ -219,6 +221,8 @@ const COPY = {
     client: 'Client',
     project: 'Project',
     platform: 'Platform',
+    adAccount: 'Ad account',
+    delivery: 'Delivery',
     campaign: 'Campaign',
     adSet: 'Ad set',
     ad: 'Ad',
@@ -1241,8 +1245,26 @@ export function CreativesPage() {
                 {anyPreview && <th className="p-2 text-start">{t.preview}</th>}
                 <th className="p-2 text-start">{t.name}</th>
                 <th className="p-2 text-start">{t.platform}</th>
+                {/*
+                  CONTENT-BROWSER-PARITY-001 — which ad account ran it.
+
+                  A project reads more than one, so two creatives with the same name under two
+                  accounts were indistinguishable here. It is also the axis
+                  ACCOUNT-SCOPE-ISOLATION-001 is about: a reader who cannot see the account cannot
+                  check the isolation they are being promised.
+                */}
+                <th className="p-2 text-start">{t.adAccount}</th>
                 <th className="p-2 text-start">{t.campaign}</th>
                 <th className="p-2 text-start">{t.objective}</th>
+                {/*
+                  The delivery state, which the CARD carries and this table did not.
+
+                  «Fatigue» further right is a different question — whether a creative that IS
+                  running has worn out — and reading it as «is this on?» is the confusion this
+                  column removes. The default order now puts running content first, so the table
+                  has to show the fact it is ordered by.
+                */}
+                <th className="p-2 text-start">{t.delivery}</th>
                 {/*
                   TABLE-NUMERIC-ALIGNMENT-001 §58 — these three are the NUMERIC columns, so they
                   take the primitive's convention rather than the page's. `MetricTable` centres
@@ -1355,9 +1377,32 @@ export function CreativesPage() {
                       </Link>
                     </td>
                     <td className="p-2 text-text-secondary">{providerLabel(creative.provider, locale)}</td>
+                    <td className="max-w-40 truncate p-2 text-text-secondary" data-testid={`content-row-account-${creative.id}`}>
+                      {/*
+                        An em dash, not «unknown account». A creative imported before its campaign is
+                        linked genuinely has none yet, and naming that state would be inventing one.
+                      */}
+                      {creative.ad_account?.name ?? '—'}
+                    </td>
                     <td className="max-w-48 truncate p-2 text-text-secondary">{creative.campaign_name ?? '—'}</td>
                     <td className="p-2 text-text-secondary">
                       {creative.objective ? objectiveLabel(creative.objective, locale) : marketingPathLabel(creative.path, locale)}
+                    </td>
+                    <td className="p-2">
+                      {/*
+                        The same badge the card carries, from the same `relevanceOf`.
+                        
+                        A second reading of `status` for the table is how one surface comes to call a
+                        creative running while the other calls it stopped — about the same row, on the
+                        same page, behind one toggle.
+                      */}
+                      <DeliveryBadge
+                        state={relevanceOf(
+                          { status: creative.status, last_active_on: creative.freshness.last_active_at },
+                          to,
+                        )}
+                        ar={ar}
+                      />
                     </td>
                     {/*
                       * TABLE-NUMERIC-ALIGNMENT-001 — `dir` belongs to the NUMERAL, not to the cell.
