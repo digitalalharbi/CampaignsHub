@@ -925,3 +925,15 @@ resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full bac
 4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
 `mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
 gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
+
+**§A foundation on `feat/campaign-management-domain` (ch-rmfmt) → `6736baf6`, 2026-10-09 23:13.** The Owner's
+campaign-management rule as code: `WriteCapabilityRegistry` (7 providers × 14 capabilities, each with its gating
+permission; four statuses; VERIFIED refused without a Production round-trip reference; NO X ADS pinned),
+`GET projects/{project}/campaign-management/capabilities` (campaigns.view), `ProviderWriteGate` (draws a provider
+write only when the server says allowed for this reader) and `CampaignWriteControl` on the campaign's new Settings
+tab — 98 cells, every one «غير منفَّذ» today, no button. Evidence: gate test 6/6 (427 assertions), vocabulary guard
+2/2, Vitest 5/5, tsc -b clean, chromium gate 8 passed (campaign-write-control.spec.ts), live at 1366 and 390 on
+the rm-web preview (:5231/:8131, DB campaignshub_preview). The 390 overflow (100px) is the detail-layout shift #634
+fixes — identical on the audience tab of this base. Matrix rows CAMPAIGN-MGMT-DOMAIN-001/-SURFACE-001 move only
+after the ledger PR (ch-req) merges, so the row edits land on the rows themselves. Lane after #634: ch-font →
+ledger → B6 → this branch.
