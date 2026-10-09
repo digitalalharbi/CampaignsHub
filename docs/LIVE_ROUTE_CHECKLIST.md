@@ -29,7 +29,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 | `/agency/analytics` | Analytics — why did performance change? | REVIEWED | **1366×768, ar, dark, demo store project.** Overflow 0; page 3,399 px. First screen: eyebrow, h1, period, freshness, the filter block (project, period, eight platform chips, campaign, outcome, objective, more — 221 px tall), the tabs, then «أين الضعف» (diagnostic, healthy) and «أين يقع الإنفاق» (platform distribution) at the fold. The evidence KPIs sit at 1,338 px under «الأرقام التي بُني عليها ما سبق» — explanation before evidence is the row's own recorded order (`ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001`'s guard), so it stays. The one friction is the filter block's height, a shared `FilterBar` density topic for B1; nothing changed on this route. |
 | `/agency/content`, `/agency/content/groups` | Content — which creatives produce attributable outcomes? | REVIEWED | **1366×768, ar, dark, demo store project.** Overflow 0; page 4,351 px (24 cards). First screen: eyebrow, h1, period, freshness, «about the data», the performance summary (count, spend 335K SAR, impressions 6.35M, CTR 1.91%, CPA 68.08 SAR, format-mix bar), the filter block (search, client, project, provider chips, campaign, objective, kind, health, more, sort — 241 px tall), the sort note, and the first card row starting at 691 px. Answer-first already (summary before the grid); media-first cards with the honest absence reason where no preview was fetched. The filter block's height is the same friction as Analytics — one shared `FilterBar` density change (B1), not a per-route edit. |
 | `/agency/content/:creativeId` | Content detail | NOT_REVIEWED | |
-| `/agency/recommendations` | Recommendations | NOT_REVIEWED | |
+| `/app/recommendations` | Recommendations (advertiser portal — the registry carries it under `/app`, not `/agency`; `/agency/recommendations` answers the not-found page) | NOT_REVIEWED | |
 
 ## B4 — client report surfaces
 
@@ -55,7 +55,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 |---|---|---|---|
 | `/agency/integrations`, `/agency/integrations/review`, `/agency/connections` | Integrations — are sources connected and fresh? | REVIEWED | **1366×768, ar, dark.** Overflow 0; page 1,181 px. First screen: h1 with the connect action, three KPIs (sources 4, needing re-auth 0, accounts 2), and all four provider rows — each with its accounts, auth state, sync state («لم تُجرَ مزامنة» / last sync time) and actions — with the «all discovered accounts» toggle at the fold. It answers «connected and fresh?» at once; nothing changed on this route. **KPI density (B1):** converted with the other hero rows (`PageIntro` on `StatGrid`) — 174 → 132 px. |
 | `/agency/projects/:projectId/integrations` | Project integrations | NOT_REVIEWED | |
-| `/agency/spend-limits` | Budgets / spend limits — within intended pacing? | NOT_REVIEWED | |
+| `/app/spend-limits` | Budgets / spend limits — within intended pacing? (advertiser portal; the sweep's first run asked `/agency/spend-limits`, which does not exist) | NOT_REVIEWED | |
 | `/agency/tasks` | Tasks / operations | NOT_REVIEWED | |
 | `/agency/short-links` | Short links | NOT_REVIEWED | |
 | `/agency/branding` | Branding center | NOT_REVIEWED | |
