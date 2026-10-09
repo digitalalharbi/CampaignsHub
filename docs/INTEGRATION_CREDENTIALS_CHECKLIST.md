@@ -295,7 +295,7 @@ It is a third `ProviderKind`, and the separation is load-bearing rather than tid
 | Env | `GA4_CLIENT_ID` · `GA4_CLIENT_SECRET` |
 | Config | `config/measurement_platforms.php` (its own file, like `commerce_platforms.php`) |
 | Scope requested | `https://www.googleapis.com/auth/analytics.readonly` — **this one only** |
-| Redirect URI | `{APP_URL}/api/v1/oauth/measurement/ga4/callback` — on production, `https://api.campaignshub.io/api/v1/oauth/measurement/ga4/callback` |
+| Redirect URI | `{AD_PLATFORM_REDIRECT_BASE or APP_URL}/api/v1/oauth/measurement/ga4/callback` — the SAME base every other provider uses (`callbackBase()` reads that variable first). On production: `https://api.campaignshub.io/api/v1/oauth/measurement/ga4/callback` |
 | Webhook | **None.** GA4 publishes no webhook; it is polled (`WebhookSupport::PollingOnly`) |
 
 **Do not reuse the Google Ads client.** They are different consent screens asking for different

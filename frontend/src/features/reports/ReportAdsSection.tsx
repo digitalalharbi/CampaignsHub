@@ -532,31 +532,56 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): 
    * conversion ad in the section, because revenue is not attributed at ad level there — «nobody
    * measured this» became «this earned zero», on the ads a client is deciding about.
    */
+  /*
+   * CONTENT-RESULT-AVAILABILITY-001 — the COUNT comes before the ratio, and it is not an `else`.
+   *
+   * The owner, on the reports: «الطلبات لا تظهر». The cause was this chain. It read
+   * `roas` ELSE `cpa` ELSE the count, so an ad with any positive return never showed how many
+   * orders it produced — only the weakest ad in the section, the one with no return at all, fell
+   * through far enough to say «النتائج». That is exactly what he saw: two cards reading 8.75× and
+   * 5.47× with no count between them, and a third reading «النتائج 0».
+   *
+   * The order is now the order a client asks in: what it cost, WHAT IT BOUGHT, and then at what
+   * multiple. «‏120 طلبًا» is the sentence; «8.75×» is the commentary on it, and a report that
+   * printed only the commentary was answering a question nobody asked first.
+   *
+   * CTR is what gives way on a card that has a result, and deliberately: three figures is the
+   * card's shape, and a click-through rate is a traffic measure. It stays on every ad that reports
+   * no result, which is the only kind of ad it was ever the right third figure for.
+   */
+  const conversionState = ad.metrics ? metricState(ad.metrics as CreativeMetrics, 'conversions') : null
+  const countIsStated = ad.conversions !== null && ad.conversions !== undefined
+
+  if (countIsStated) {
+    /*
+     * Through the availability the server stated — §14. «Nobody measured this» must not print as
+     * «this produced zero» on the ads a client is deciding about, so an unattributable count is a
+     * dash. The card says WHY once, under the figures, rather than four times beside them.
+     */
+    out.push({
+      label: ar ? 'النتائج' : 'Results',
+      value: conversionState !== null && conversionState.kind !== 'value' ? '—' : (n(ad.conversions) ?? '—'),
+    })
+  }
+
+  /*
+   * A return of «0.00×» is a claim that the ad returned nothing, so a zero ratio is not printed at
+   * all — the same rule as before, unchanged.
+   */
   if (ad.roas !== null && ad.roas !== undefined && ad.roas > 0) {
     out.push({ label: ar ? 'العائد' : 'ROAS', value: `${ad.roas.toFixed(2)}×` })
   } else if (ad.cpa !== null && ad.cpa !== undefined && ad.cpa > 0) {
     out.push({ label: ar ? 'تكلفة النتيجة' : 'CPA', value: cash(ad.cpa, 2) ?? '—' })
-  } else if (ad.conversions !== null && ad.conversions !== undefined) {
-    /*
-     * Through the availability the server stated — CONTENT-RESULT-AVAILABILITY-001 §14.
-     *
-     * The paragraph above removed «0.00×» for exactly this reason on the ratio beside it: «nobody
-     * measured this» printing as «this earned zero», on the ads a client is deciding about. The
-     * COUNT had the same hole one line down, and it is the figure the client reads first.
-     */
-    const state = ad.metrics ? metricState(ad.metrics as CreativeMetrics, 'conversions') : null
-
-    out.push({
-      label: ar ? 'النتائج' : 'Results',
-      value: state !== null && state.kind !== 'value' ? '—' : (n(ad.conversions) ?? '—'),
-    })
   }
 
-  if (ad.ctr !== null && ad.ctr !== undefined) {
-    out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
-  } else {
-    const impressions = n(ad.impressions)
-    if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
+  /* Delivery, for an ad with no result to show — never instead of one. */
+  if (!countIsStated) {
+    if (ad.ctr !== null && ad.ctr !== undefined) {
+      out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    } else {
+      const impressions = n(ad.impressions)
+      if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
+    }
   }
 
   return out.slice(0, 3)
