@@ -81,7 +81,7 @@ final class DemoAnalyticsSeeder extends Seeder
         }
         $ws->save();
         $project = Project::firstOrCreate(
-            ['client_workspace_id' => $ws->id, 'name' => 'متجر تجريبي — Demo'],
+            ['client_workspace_id' => $ws->id, 'name' => self::STORE_PROJECT],
             ['status' => 'active', 'setup_completion' => 100],
         );
 
@@ -343,6 +343,9 @@ final class DemoAnalyticsSeeder extends Seeder
 
     /** The campaign-picker cap the scale project has to exceed — `MetricsController::OPTION_LIMIT`. */
     private const SCALE_CAMPAIGNS = 241;
+
+    /** The analytics demo's own project — the one the integration chain and the ad library belong to. */
+    public const STORE_PROJECT = 'متجر تجريبي — Demo';
 
     public const SCALE_PROJECT = 'Scale — 241 campaigns';
 

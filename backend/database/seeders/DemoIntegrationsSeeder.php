@@ -58,15 +58,7 @@ final class DemoIntegrationsSeeder extends Seeder
 
         app(TenantContext::class)->setTenantId($tenant->id);
 
-        // The demo tenant has several projects; the integration chain belongs to the one the analytics
-        // demo actually populated — the project holding the most campaigns. Picking "the first project"
-        // silently attached everything to an empty journey project.
-        $projectId = UnifiedCampaign::withoutGlobalScopes()
-            ->join('projects', 'projects.id', '=', 'unified_campaigns.project_id')
-            ->where('projects.tenant_id', $tenant->id)
-            ->groupBy('unified_campaigns.project_id')
-            ->orderByRaw('COUNT(*) DESC')
-            ->value('unified_campaigns.project_id');
+        $projectId = self::targetProjectId((string) $tenant->id);
 
         $project = $projectId ? Project::withoutGlobalScopes()->find($projectId) : null;
         if ($project === null) {
@@ -302,5 +294,37 @@ final class DemoIntegrationsSeeder extends Seeder
             'tiktok' => '18'.$slug,
             default => 'snap-'.$slug,
         };
+    }
+
+    /**
+     * The project the integration chain belongs to.
+     *
+     * By NAME first — `DemoAnalyticsSeeder::STORE_PROJECT`, the project the analytics demo populates and
+     * the ad library, the creative links and every Analytics E2E read from. The old rule, «the project
+     * holding the most campaigns», chose that same project for as long as it was the biggest; the day
+     * `DemoAnalyticsSeeder::seedScaleProject` wrote 241 campaigns into a sibling project, the rule
+     * attached every account, external campaign and ad to the Scale project instead, and the store
+     * project's Ads table read «no data for the period» on all three gate browsers. The count rule
+     * stays as the fallback for a tenant that has no store project at all.
+     */
+    public static function targetProjectId(string $tenantId): ?string
+    {
+        $byName = Project::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('name', DemoAnalyticsSeeder::STORE_PROJECT)
+            ->value('id');
+
+        if ($byName !== null) {
+            return (string) $byName;
+        }
+
+        $mostCampaigns = UnifiedCampaign::withoutGlobalScopes()
+            ->join('projects', 'projects.id', '=', 'unified_campaigns.project_id')
+            ->where('projects.tenant_id', $tenantId)
+            ->groupBy('unified_campaigns.project_id')
+            ->orderByRaw('COUNT(*) DESC')
+            ->value('unified_campaigns.project_id');
+
+        return $mostCampaigns === null ? null : (string) $mostCampaigns;
     }
 }
