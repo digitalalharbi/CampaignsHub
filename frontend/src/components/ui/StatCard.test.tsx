@@ -229,3 +229,41 @@ describe('a card is the same height whether or not it carries a hint or a pill',
     expect(row?.textContent).toBe('3 in total')
   })
 })
+
+/**
+ * Owner directive 2026-10-09 §8 — the spark row is reserved where a spark can appear, and nowhere else.
+ *
+ * The reservation exists for a measured reason (six cards at 174/174/174/174/132/132 on Production,
+ * because one row carried sparklines and the other could not), and that reason holds exactly where a
+ * grid may carry one. The eight grids that never pass a spark reserved 36 px of empty space in every
+ * card of the first viewport — the dashboard's counts, the portfolio's head KPIs, the reports list.
+ */
+describe('the spark row is reserved only where a spark can appear', () => {
+  const sparkRow = (card: HTMLElement) => card.querySelector('[aria-hidden="true"].h-9, .h-9[aria-hidden]')
+
+  it('reserves nothing inside a grid that carries no sparks', () => {
+    renderWithProviders(
+      <StatGrid>
+        <StatCard label="Clients" value="12" />
+      </StatGrid>,
+    )
+
+    expect(sparkRow(screen.getByText('Clients').closest('div.flex.flex-col') as HTMLElement)).toBeNull()
+  })
+
+  it('still reserves the row inside a grid that said its cards may carry one', () => {
+    renderWithProviders(
+      <StatGrid sparks>
+        <StatCard label="Spend" value="1.2K" />
+      </StatGrid>,
+    )
+
+    expect(sparkRow(screen.getByText('Spend').closest('div.flex.flex-col') as HTMLElement)).not.toBeNull()
+  })
+
+  it('keeps the reservation outside any grid — the spark-bearing surfaces lay themselves out', () => {
+    renderWithProviders(<StatCard label="ROAS" value="3.1×" />)
+
+    expect(sparkRow(screen.getByText('ROAS').closest('div.flex.flex-col') as HTMLElement)).not.toBeNull()
+  })
+})
