@@ -42,6 +42,8 @@ export const ALERT_TYPES = [
   'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
   // AUTOMATION-FIRST-OPERATIONS-001 — the type with no threshold to set.
   'metric_anomaly',
+  // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001
+  'sync_outage', 'measurement_outage',
 ] as const
 
 export type AlertType = (typeof ALERT_TYPES)[number]
