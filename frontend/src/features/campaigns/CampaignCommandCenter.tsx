@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { changeFieldLabel, changeValueLabel, changedFields } from './campaignChangeHistory'
+import { useUi } from '@/stores/ui'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import type { UnifiedCampaign } from './types'
 import {
@@ -469,6 +471,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
 
 /** CMC-5 (recent) + CMC-14 (full) — activity timeline from the audit log. */
 export function CampaignActivityTab({ campaign, projectId, limit }: { campaign: UnifiedCampaign; projectId: string; limit?: number }) {
+  const locale = useUi((st) => st.locale)
   const activity = useCampaignActivity(projectId, campaign.id)
   const events = (activity.data ?? []).slice(0, limit)
 
@@ -485,10 +488,13 @@ export function CampaignActivityTab({ campaign, projectId, limit }: { campaign: 
             <span className="text-sm font-semibold text-text-primary">{e.label}</span>
             <span className="text-[11px] text-text-muted">{e.actor} · {e.at ? fmtDateTime(e.at) : ''}</span>
           </div>
-          {e.action === 'campaign.updated' && e.before && e.after && (
-            <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-text-muted">
-              {Object.keys(e.after).filter((k) => (e.before as Record<string, unknown>)[k] !== (e.after as Record<string, unknown>)[k]).map((k) => (
-                <span key={k} className="tnum">{k}: {String((e.before as Record<string, unknown>)[k] ?? '—')} → {String((e.after as Record<string, unknown>)[k] ?? '—')}</span>
+          {/* CAMPAIGN-MGMT-CHANGE-HISTORY-001 — every audited change, named in the reader's language, before → after. */}
+          {changedFields(e.before, e.after).length > 0 && (
+            <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-text-muted" data-testid={`activity-diff-${e.id}`}>
+              {changedFields(e.before, e.after).map((k) => (
+                <span key={k} className="tnum" data-testid={`activity-change-${k}`}>
+                  {changeFieldLabel(k, locale)}: {changeValueLabel(k, e.before?.[k], locale, campaign.budget_currency)} → {changeValueLabel(k, e.after?.[k], locale, campaign.budget_currency)}
+                </span>
               ))}
             </div>
           )}
