@@ -68,6 +68,10 @@ const BASIS: Record<string, { ar: string; en: string }> = {
     en: 'The limit is in one currency and the spend in another — dividing them is not a utilisation.',
   },
   absent: { ar: 'لا يوجد إنفاق في هذه الفترة.', en: 'There is no spend in this period.' },
+  nothing_measured_in_window: {
+    ar: 'لا أرقام مقاسة لهذا المشروع في هذه الفترة — غياب، لا صفر.',
+    en: 'Nothing was measured for this project in this period — an absence, not a zero.',
+  },
 }
 
 const PROJECTION: Record<string, { ar: string; en: string }> = {
