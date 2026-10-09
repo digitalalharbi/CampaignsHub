@@ -21,7 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # Pulled from the ECR Public mirror of the Docker official image: Docker Hub's anonymous
+        # pull quota threw the gate out three runs in a row (toomanyrequests / auth.docker.io 504)
+        # before a single test ran. Same image, same tag, different front door.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_DB: mediabuying_test
           POSTGRES_USER: postgres
@@ -31,7 +34,7 @@ jobs:
           --health-cmd="pg_isready -U postgres" --health-interval=10s
           --health-timeout=5s --health-retries=5
       redis:
-        image: redis:7
+        image: public.ecr.aws/docker/library/redis:7
         ports: ['6379:6379']
     defaults:
       run:
@@ -179,7 +182,10 @@ jobs:
     timeout-minutes: 90
     services:
       postgres:
-        image: postgres:16
+        # Pulled from the ECR Public mirror of the Docker official image: Docker Hub's anonymous
+        # pull quota threw the gate out three runs in a row (toomanyrequests / auth.docker.io 504)
+        # before a single test ran. Same image, same tag, different front door.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_DB: mediabuying_e2e
           POSTGRES_USER: postgres
@@ -189,7 +195,7 @@ jobs:
           --health-cmd="pg_isready -U postgres" --health-interval=10s
           --health-timeout=5s --health-retries=5
       redis:
-        image: redis:7
+        image: public.ecr.aws/docker/library/redis:7
         ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v4
