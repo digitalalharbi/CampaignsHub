@@ -44,6 +44,14 @@ const CLIENT_SURFACES = [
   'src/features/reports/live/LiveSections.tsx',
   'src/features/reports/live/liveMetrics.tsx',
   'src/features/reports/ClientAttention.tsx',
+  /*
+   * REPORT-CONTENT-BROWSER-001 — the table a client can switch the content section into.
+   *
+   * Added with the surface itself rather than afterwards: a new client-facing component that the
+   * guard does not know about is a hole the guard reports as green, and the list above is the only
+   * thing that decides what «client-facing» means here.
+   */
+  'src/features/reports/ReportContentTable.tsx',
 ]
 
 /**
@@ -65,6 +73,23 @@ const OPERATOR_VOCABULARY = [
   'connector',
   'webhook',
   'API token',
+  /*
+   * REPORT-CLIENT-OUTCOME-001 — the constitution names more of the operator's product by name:
+   * «sync explanations, connector field states, measurement commentary, implementation labels,
+   * engineering provenance, account-binding states».
+   *
+   * These are the ones that are unambiguous. A word that also has an innocent client meaning is
+   * deliberately NOT here — «account» alone would flag «your Analytics account», which is the
+   * client's own and the thing the measurement section is about. A guard that cries wolf is one
+   * somebody eventually deletes.
+   */
+  'الحساب الإعلاني',
+  'ربط الحساب',
+  'حالة الربط',
+  'ad account',
+  'account binding',
+  'provenance',
+  'data_version',
 ]
 
 /**
