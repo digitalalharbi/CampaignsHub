@@ -69,8 +69,15 @@ test.describe('report builder — the choices reach the report', () => {
     expect(data.form, 'the form pressed in the modal is not the form stored').toBe('executive_summary')
     expect(data.config?.branding?.prefer, 'the identity pressed in the modal was not frozen into the report').toBe('agency')
 
-    /* And the list the operator is looking at shows what they just made. */
-    await expect(page.getByText('E2E creation choices').first()).toBeVisible({ timeout: 30000 })
+    /*
+     * And the list the operator is looking at shows what they just made.
+     *
+     * The ROW, by role — not `getByText(...).first()`. The page renders the list twice, a table for
+     * desktop and cards for phones (`reports-phone-cards`, `sm:hidden`), and the first text match
+     * at desktop width was the hidden card: the report was on screen and the assertion said it was
+     * not. A selector that can resolve to a copy the reader cannot see proves the wrong thing.
+     */
+    await expect(page.getByRole('row', { name: /E2E creation choices/ })).toBeVisible({ timeout: 30000 })
   })
 
   test('an unpressed identity sends no preference, so the hierarchy keeps deciding', async ({ page, request }) => {
