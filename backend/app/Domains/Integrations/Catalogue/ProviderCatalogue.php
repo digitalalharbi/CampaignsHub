@@ -87,6 +87,7 @@ final class ProviderCatalogue
             self::openAiAds(),
             self::salla(),
             self::zid(),
+            self::ga4(),
         ];
 
         $keyed = [];
@@ -321,6 +322,69 @@ final class ProviderCatalogue
             rateLimitNote: 'Operations are capped per developer token per day; exhaustion arrives as '
                 .'`RESOURCE_EXHAUSTED` rather than an HTTP 429.',
             paginationNote: '`nextPageToken` on search / searchStream.',
+        );
+    }
+
+    /**
+     * GA4-INTEGRATION-001 — Google Analytics 4, a MEASUREMENT source rather than an ad platform.
+     *
+     * It reports what happened on the client's own site. It buys nothing, holds no ad account, has
+     * no business manager and no campaign hierarchy of its own, and its revenue is measured under a
+     * different attribution model from any advertising platform's. `ProviderKind::Measurement` is
+     * what keeps it out of «which platforms are connected», out of the advertising registry, and —
+     * the one that actually costs money if it is got wrong — out of any blended return.
+     *
+     * The self-service path is OAuth with the read-only Analytics scope. A service account is a
+     * legitimate enterprise arrangement and is deliberately NOT the customer journey: it would ask
+     * every customer to paste a key file and share it with an email address, which is not a SaaS
+     * connection flow.
+     */
+    private static function ga4(): ProviderDefinition
+    {
+        return new ProviderDefinition(
+            key: 'ga4',
+            kind: ProviderKind::Measurement,
+            label: 'Google Analytics 4',
+            labelAr: 'جوجل أناليتكس 4',
+            fields: [
+                ProviderField::plain('client_id', 'OAuth client ID', 'معرّف عميل OAuth',
+                    'Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs (type: Web application)',
+                    'وحدة تحكم جوجل كلاود ← واجهات البرمجة والخدمات ← بيانات الاعتماد ← معرّفات OAuth 2.0 (النوع: تطبيق ويب)'),
+                ProviderField::secret('client_secret', 'OAuth client secret', 'سر عميل OAuth',
+                    'Same credential entry',
+                    'المدخل نفسه في بيانات الاعتماد'),
+            ],
+            /*
+             * Read-only, and only this one. GA4 offers `analytics.edit` and `analytics.manage.users`;
+             * neither is needed to READ a property, and asking for them would put a consent screen in
+             * front of a customer that claims this product can change their Analytics configuration.
+             */
+            scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+            usesPkce: false,
+            supportsRefresh: true,
+            tokenNote: 'A refresh token is issued only when the authorise URL asks for `access_type=offline` '
+                .'AND `prompt=consent`, and only on the FIRST consent — the same rule as Google Ads. Google '
+                .'omits it from every subsequent refresh response, so the stored one must be kept.',
+            tokenNoteAr: 'لا يُصدر رمز التجديد إلا عندما يطلب رابط الموافقة `access_type=offline` و`prompt=consent` معًا، '
+                .'وفي أول موافقة فقط — القاعدة نفسها في جوجل أدز. وتُغفله جوجل في كل استجابة تجديد لاحقة، لذا يجب الاحتفاظ بالمخزَّن.',
+            webhooks: WebhookSupport::PollingOnly,
+            webhookSignatureHeader: null,
+            prerequisites: [
+                'A Google Cloud project with the Google Analytics Admin API and the Google Analytics Data API both enabled.',
+                'The OAuth consent screen published, requesting only the read-only Analytics scope.',
+                'The redirect URI below added to the OAuth client\'s Authorised redirect URIs.',
+                'Each customer authorises their own Google account — this product never holds their Analytics credentials.',
+            ],
+            prerequisitesAr: [
+                'مشروع في جوجل كلاود مع تفعيل Google Analytics Admin API وGoogle Analytics Data API معًا.',
+                'نشر شاشة موافقة OAuth بطلب نطاق القراءة فقط.',
+                'إضافة رابط العودة أدناه ضمن روابط العودة المصرّح بها لعميل OAuth.',
+                'كل عميل يصرّح بحسابه في جوجل — هذا المنتج لا يحتفظ ببيانات دخوله إلى أناليتكس.',
+            ],
+            docsUrl: 'https://developers.google.com/analytics/devguides/reporting/data/v1',
+            rateLimitNote: 'The Data API meters per property per day and per hour in TOKENS, not requests — a '
+                .'wide report costs more than a narrow one, and exhaustion arrives as `RESOURCE_EXHAUSTED`.',
+            paginationNote: '`limit` and `offset` on runReport; `pageToken` on the Admin API listings.',
         );
     }
 
