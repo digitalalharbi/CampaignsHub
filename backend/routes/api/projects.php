@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Metrics\Http\Controllers\SpendLimitController;
@@ -208,6 +209,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/budget-platforms', [MetricsController::class, 'budgetPlatforms'])->middleware('project.can:budget.view')->name('metrics.budget-platforms');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+    // LIVE-OPERATING-VIEW-001 — per source: latest successful sync · source timestamp · next sync · state; never «real-time».
+    Route::get('live-view', [LiveOperatingViewController::class, 'show'])->name('live-view');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
     // source, objective comparability, and the canonical metric catalogue.
     Route::get('metrics/normalization', [MetricsController::class, 'normalization'])->name('metrics.normalization');
