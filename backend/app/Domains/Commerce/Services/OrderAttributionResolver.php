@@ -6,6 +6,7 @@ namespace App\Domains\Commerce\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -91,6 +92,21 @@ final class OrderAttributionResolver
             return $this->answer(null, 'click_id_platform_only');
         }
 
+        /*
+         * ATTR-EVIDENCE-INFLUENCER-COUPON-001 — a creator's discount code places the order on the
+         * collaboration's campaign. Weaker than a platform's click id (the platform proved the click),
+         * stronger than a bare utm_source (a word anybody can type). The asset must be active and a
+         * discount code; a link's code never matches an order, and an unknown code is nothing.
+         */
+        $coupon = $this->couponAsset($order);
+        if ($coupon !== null) {
+            return [
+                'external_campaign_id' => null,
+                'unified_campaign_id' => $coupon->collaboration?->campaign_id,
+                'attribution_method' => 'influencer_coupon',
+            ];
+        }
+
         if ($order->utm_source !== null && isset(self::SOURCE_PLATFORMS[strtolower($order->utm_source)])) {
             return $this->answer(null, 'utm_source_platform_only');
         }
@@ -110,7 +126,48 @@ final class OrderAttributionResolver
 
         $order->forceFill([...$resolution, 'attributed_at' => Carbon::now()])->save();
 
+        if ($resolution['attribution_method'] === 'influencer_coupon' && ($asset = $this->couponAsset($order)) !== null) {
+            // The code's redemptions are the store's confirmed orders carrying it — recounted, never incremented.
+            $this->recountRedemptions($asset);
+        }
+
         return $order;
+    }
+
+    /** The active discount code this order was placed with, if a creator holds one by that code. */
+    private function couponAsset(CommerceOrder $order): ?InfluencerTrackingAsset
+    {
+        $code = trim((string) $order->coupon_code);
+        if ($code === '') {
+            return null;
+        }
+
+        return InfluencerTrackingAsset::query()
+            ->where('kind', 'discount_code')
+            ->where('is_active', true)
+            ->whereRaw('lower(code) = ?', [mb_strtolower($code)])
+            ->with('collaboration')
+            ->first();
+    }
+
+    /**
+     * ATTR-EVIDENCE-INFLUENCER-COUPON-001 — redemptions from the store's own orders: confirmed, not cancelled,
+     * carrying the code. Source `platform`, which the asset reserved for exactly this.
+     */
+    public function recountRedemptions(InfluencerTrackingAsset $asset): InfluencerTrackingAsset
+    {
+        $count = CommerceOrder::query()
+            ->whereRaw('lower(coupon_code) = ?', [mb_strtolower((string) $asset->code)])
+            ->whereNull('cancelled_at')
+            ->count();
+
+        $asset->forceFill([
+            'redemptions' => $count,
+            'redemptions_source' => 'platform',
+            'redemptions_updated_at' => Carbon::now(),
+        ])->save();
+
+        return $asset;
     }
 
     /**
