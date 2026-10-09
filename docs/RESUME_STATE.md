@@ -956,3 +956,8 @@ tiles, ≥1 table-cell bar chart, cells outnumber paragraphs 4:1, no text run ov
 survives an email client — no img/svg/script/canvas, no remote url(), no external stylesheet, fixed-width tables, a
 declared direction. ReportReadyNotificationTest 2/2, DigestMailVisualTest 2/2, ReportsTest + ScheduledReportsTest
 unchanged (24 together). Delivery itself stays BLOCKED_EXTERNAL_CREDENTIALS (MAIL-SEND).
+
+**Full suites on the alerts branch, 01:0x.** Backend alone on its own database: 4,593 passed, 1 skipped, 1 failed —
+NotificationActionUrlGuardTest caught the report-ready link minted as `/app/reports`; fixed to the portal-relative
+`/reports` (NOTIF-LINK-001), guard + ReportReadyNotificationTest 3/3 together. Frontend Vitest whole: 474 files, 3,383
+tests passed. Branch is lane-ready behind the ledger, B6 and the §A/§E units.
