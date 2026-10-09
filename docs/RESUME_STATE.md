@@ -858,3 +858,9 @@ CONTENT-BROWSER-PARITY-001, account contribution in PLATFORM-DECISION-ANALYTICS-
 seed for OBJECTIVE-ANALYTICS-DEPTH-001, the executive drill-down, REPORT-RECOMMENDATION-BLOCKS-001's
 1440/390 browser pass, ADS-TERMINOLOGY-001's remaining prose, DATA-QUALITY's stated confidence, the
 rest of PRODUCTION-TRUTH-AUDIT-001's list, and DASH-010 (closes on this PR's three-browser sweep).
+
+**#632 (ch-rmfmt) webkit gate, 2026-10-09 19:28.** Five checks green; webkit failed two «rail link opens a
+page» cases (`/agency/tasks` goto never reached `load` in 330 s; `/agency/team` «did not render»). Artifact:
+`#root present, 0 children, document complete`, console «WebKit encountered an internal error» — the browser,
+not the page; chromium/firefox passed the same specs in the run, and both routes passed 16 webkit combos
+locally in this session. Re-ran the failed job only (`gh run rerun 37952762111 --failed`).
