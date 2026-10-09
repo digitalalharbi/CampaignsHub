@@ -925,3 +925,21 @@ resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full bac
 4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
 `mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
 gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
+
+**§B Snapchat (Oct 2026) on `feat/snapchat-oct26-vocabulary` (ch-snap, new worktree from `a471af9b`), 2026-10-10 00:4x.**
+What can be built without Snapchat credentials, built against the documented API shapes: `SnapchatVocabulary` names the
+2026 placements (FEED, CHAT_FEED, INTERSTITIAL_USER/CONTENT, SPOTLIGHT, CAMERA — an unnamed token stays verbatim; «In-stream
+Spotlight» is not a documented position token the lane could read, so it is not declared), reads `placement_v2` into the
+ad set's targeting (SNAP-OCT26-CHAT-FEED), reads the media object's `ai_content_source` (USER_AI_GEN / SNAP_AI_GENERATED)
+onto the creative and the creative detail states it in both languages — «not declared», never «not AI»
+(SNAP-OCT26-AI-MEDIA-DECLARATION), names every element a paged read refused (`sub_request_status` ≠ SUCCESS) and writes
+the list to the structure run's meta (SNAP-OCT26-SUBREQUEST-WARNINGS), and explains E9001 with its retry rule in front of
+Snapchat's own sentence (SNAP-OCT26-E9001). SnapchatMcpReadOnlyGuardTest keeps MCP from ever being named beside a write
+(SNAP-OCT26-MCP-READONLY). Evidence: SnapchatOct26VocabularyTest 4/4, SnapchatMcpReadOnlyGuardTest 1/1,
+CreativeAiMediaDeclarationTest 1/1; the 38 suites touching the connector, structure sync, PlatformHttp, presenter and
+seeders: 366 passed (1,918 assertions); frontend placements spec + structure + creative detail suites 29/29; tsc clean;
+live on the sn-web preview (:5251): the demo Snapchat campaign's ad sets read «المواضع: الخلاصة · خلاصة الدردشة · بين قصص
+المستخدمين» and «نمط المواضع: مواضع مخصّصة/تلقائية», the demo creative reads «وسائط مولَّدة بالذكاء الاصطناعي = أعلن
+المعلن…», overflow 0 at 1366. Reading any of it LIVE from Snapchat stays BLOCKED_EXTERNAL_CREDENTIALS; the rows that need
+the API (UA eligibility/metrics, age breakdown, target-cost, HCE, Promoted Places objective, Dynamic chat-feed ads, MMM)
+are untouched. Matrix rows move after the ledger PR merges.

@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Campaigns\Support\RefusedCreativeAccess;
+use App\Domains\Integrations\Providers\Snapchat\SnapchatVocabulary;
 
 /**
  * What a creative may safely show, and what it must admit it cannot (§15.1, §15.15).
@@ -183,6 +184,8 @@ final class CreativePresenter
              * `ads` above, each with its own `external_id`, which is the same fact without the
              * false singular.
              */
+            // SNAP-OCT26-AI-MEDIA-DECLARATION — stated when the platform stated it; «not declared» otherwise, never guessed.
+            'ai_media' => $this->aiMedia($creative),
             'external_ids' => [
                 'creative' => $creative->external_creative_id,
                 'ad_set' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
@@ -200,6 +203,21 @@ final class CreativePresenter
      *
      * @return array{note_ar: string, note_en: string, access_refused?: true}
      */
+    /** @return array{declared: bool, source: ?string, label_ar: ?string, label_en: ?string} */
+    private function aiMedia(ExternalCreative $creative): array
+    {
+        $raw = (array) ($creative->raw ?? []);
+        $source = isset($raw['ai_content_source']) && is_string($raw['ai_content_source']) ? strtoupper($raw['ai_content_source']) : null;
+        $words = $source === null ? null : (SnapchatVocabulary::AI_MEDIA[$source] ?? ['ar' => $source, 'en' => $source]);
+
+        return [
+            'declared' => $source !== null,
+            'source' => $source,
+            'label_ar' => $words['ar'] ?? null,
+            'label_en' => $words['en'] ?? null,
+        ];
+    }
+
     private function expiredNote(ExternalCreative $creative): array
     {
         if (app(PresentationAudience::class)->isOperator()

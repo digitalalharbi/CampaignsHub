@@ -162,6 +162,8 @@ final class AccountStructureSyncer
             $run->forceFill(['meta' => [
                 ...(array) ($run->meta ?? []),
                 'media' => $connector->lastMediaOutcome(),
+                // SNAP-OCT26-SUBREQUEST-WARNINGS — verbatim, beside the run they concern.
+                'warnings' => $connector->lastWarnings(),
             ]])->save();
         }
 
