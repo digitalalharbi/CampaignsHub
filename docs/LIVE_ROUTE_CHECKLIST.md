@@ -35,7 +35,7 @@ true/false, primary KPI visibility, filter visibility, chart visibility, before/
 
 | Route | Surface | Status | Evidence |
 |---|---|---|---|
-| `/agency/reports` | Reports — what happened for the client? (builder, list, sections) | NOT_REVIEWED | |
+| `/agency/reports` | Reports — what happened for the client? (builder, list, sections) | REVIEWED | **1366×768, ar, dark, demo store project.** Overflow 0; page 1,339 px. First screen: h1 with the two primary actions (new live link, report builder), four KPI cards (total 5, processing 1, failed 1, sent 0), the documents/schedules tabs, the filter row (search, status, type) and the first table rows. An operational list, answer-first; nothing changed here. The KPI card row is 174 px tall — the shared primitive's height, the same on Dashboard, Portfolio and Campaigns (B1). |
 | `/reports/share/:token` | Shared live/snapshot report (client) | NOT_REVIEWED | |
 | `/reports/print/:token` | Print / PDF document | NOT_REVIEWED | |
 | `/r/:token` | Short share path | NOT_REVIEWED | |
