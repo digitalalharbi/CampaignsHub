@@ -52,6 +52,8 @@ const FOR_CODE: Record<string, ActionKind> = {
   visits_lost: 'investigate',
   no_conversions: 'investigate',
   conversions_without_value: 'adjust',
+  /* Observed, and still `investigate`: the fix lives in the store — product, delivery, listing — not in the ad. */
+  value_refunded: 'investigate',
   /*
    * `investigate`, not `adjust`, even though the finding is OBSERVED.
    *

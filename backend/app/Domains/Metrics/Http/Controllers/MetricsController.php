@@ -78,6 +78,22 @@ final class MetricsController extends Controller
         $current = $this->scoped($request)->totals($from, $to);
         $previous = $this->scoped($request)->totals($prevFrom, $prevTo);
 
+        /*
+         * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — the refund arm.
+         *
+         * The diagnostic chain ends at refunds and reads THIS payload, and `daily_metrics` holds no
+         * refund: `refunded_total` lives on the commerce order. So the figure is read from the store
+         * funnel's own order scope and carried beside the ad figures — null when no store is in
+         * scope (an absence the diagnostic names, never a zero it would judge on), and reported only
+         * when a store is. Refunds have no campaign, objective or platform on them; the request's
+         * axes are declared unapplied below rather than silently ignored.
+         */
+        $commerce = app(StoreFunnelService::class);
+        $tenantId = (string) app(TenantContext::class)->tenantId();
+        $projectId = (string) app(ProjectContext::class)->projectId();
+        $current['refunds'] = $commerce->refundedInWindow($tenantId, $projectId, $from, $to);
+        $previous['refunds'] = $commerce->refundedInWindow($tenantId, $projectId, $prevFrom, $prevTo);
+
         $deltas = [];
         foreach ($current as $k => $v) {
             $p = $previous[$k] ?? null;
@@ -95,7 +111,17 @@ final class MetricsController extends Controller
              * report landing-page views» from «it reported none». The map says which, per base
              * metric, and the strip renders «لم ترسله المنصة» rather than a zero for the first.
              */
-            'reported' => $this->scoped($request)->reportedKeys($from, $to),
+            'reported' => $this->scoped($request)->reportedKeys($from, $to) + ['refunds' => $current['refunds'] !== null],
+            /*
+             * The refund figure's own account of itself — `commerce` below is the store block the
+             * summary already carried, and this is the diagnostic's input: the value, whether any
+             * store reported it, and which of the request's axes it could not honour.
+             */
+            'refunds' => [
+                'value' => $current['refunds'],
+                'reported' => $current['refunds'] !== null,
+                'filter_scope' => $this->filterScope($request, []),
+            ],
             /*
              * METRICS-EMPTY-SCOPE-001 — «no rows here» is not «the platform does not report this».
              *

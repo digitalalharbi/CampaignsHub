@@ -47,7 +47,9 @@ describe('what the diagnostic layer will and will not claim', () => {
   })
 
   it('reads the chain when every step is reported', () => {
-    const d = diagnose(input())
+    /* Every step now includes the chain's last link: a store that reported its refunds. */
+    const base = input()
+    const d = diagnose({ ...base, totals: { ...base.totals, refunds: 0 }, reported: { ...base.reported, refunds: true } })
 
     expect(d.state).toBe('diagnosed')
     expect(d.missing).toEqual([])
@@ -225,5 +227,48 @@ describe('the lead quality stage', () => {
     })
 
     expect(d.findings.map((f) => f.code)).not.toContain('leads_none_qualified')
+  })
+})
+
+/**
+ * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — the refund arm: the chain's last link.
+ *
+ * «spend → … → purchases → AOV → refunds». Revenue that was handed straight back is not value, and
+ * a diagnosis that stops at revenue calls a store that refunds a third of its sales healthy.
+ */
+describe('the refund arm of the value stage', () => {
+  const sales = (totals: Record<string, number | null>, reported: Record<string, boolean>) =>
+    diagnose({ objective: 'sales', totals: { spend: 1000, impressions: 100_000, clicks: 2_000, landing_page_views: 1_800, conversions: 50, revenue: 5_000, ...totals }, reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, revenue: true, ...reported } })
+
+  it('names refunds eroding the value, as an observation with its evidence', () => {
+    const d = sales({ refunds: 2_000 }, { refunds: true })
+
+    const finding = d.findings.find((f) => f.code === 'value_refunded')
+    expect(finding, 'a store refunding 40% of its revenue was called healthy').toBeDefined()
+    expect(finding?.stage).toBe('value')
+    expect(finding?.confidence).toBe('observed')
+    expect(finding?.evidence).toEqual(['revenue', 'refunds'])
+  })
+
+  it('stays silent when refunds are a normal share of revenue', () => {
+    const d = sales({ refunds: 100 }, { refunds: true })
+
+    expect(d.findings.map((f) => f.code)).not.toContain('value_refunded')
+    expect(d.missing).not.toContain('refunds')
+  })
+
+  it('names refunds as missing evidence when no store reports them — and still judges value on what it has', () => {
+    const d = sales({ refunds: null }, { refunds: false })
+
+    expect(d.missing, 'the gap must be named, not inferred').toContain('refunds')
+    expect(d.state).toBe('diagnosed')
+    expect(d.findings.map((f) => f.code)).not.toContain('value_refunded')
+  })
+
+  it('belongs to the money chain alone', () => {
+    const d = diagnose({ objective: 'traffic', totals: { spend: 100, impressions: 10_000, clicks: 200, landing_page_views: 150, refunds: 900, revenue: 1000 }, reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, refunds: true, revenue: true } })
+
+    expect(d.findings.map((f) => f.code)).not.toContain('value_refunded')
+    expect(d.missing).not.toContain('refunds')
   })
 })
