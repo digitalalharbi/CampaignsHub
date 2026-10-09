@@ -436,7 +436,13 @@ export function PortfolioPage() {
                 <li
                   key={p.id}
                   data-testid={`portfolio-project-${p.id}`}
-                  className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-4"
+                  /*
+                    `sm:flex-wrap` — six cells in one row from 640px up, and the sweep measured the
+                    projects list pushing the page 95px sideways at 768px in English, where «Needs
+                    attention», «synced 2h ago» and «Open →» are longer than their Arabic. The row may
+                    wrap; the document may not scroll (Owner directive 2026-10-09 §6).
+                  */
+                  className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block break-words text-sm font-bold text-text-primary">{p.name}</span>
