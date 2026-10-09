@@ -182,62 +182,19 @@ test.describe('the analytics page explains its own figures', () => {
   })
 })
 
-/**
- * ANALYTICS-DIFFERENTIATION-001 — the content reading is actually VISIBLE, not merely present.
+/*
+ * CONTENT-FORMAT-ROAS-REMOVED-001 — «the content reading can actually be seen» is gone with it.
  *
- * ## The defect this exists for
+ * This block asserted that `content-reading` rendered, or that its refusal did. The component made
+ * the claim the owner rejected — «الصور يحقق العائد على الإنفاق أفضل من الفيديو في هذه الفترة» —
+ * ranked on creative-grain revenue over creative-grain spend, where only the spend half is
+ * attributed in full.
  *
- * The reading's leading format — the one the whole card is about — was drawn with `bg-primary`.
- * There is no `--color-primary` in this theme, so Tailwind emitted no rule and the winner's bar
- * computed to `rgba(0, 0, 0, 0)`: an invisible mark over an empty track, on the single element the
- * card exists to point at.
+ * It failed identically on chromium, firefox and webkit, which is what a deterministic contract
+ * failure looks like: nothing was flaky, the spec was simply asserting that a removed feature still
+ * draws. Deleted rather than skipped, because a skipped test for a feature that cannot come back is
+ * a line nobody will ever remove.
  *
- * Every unit test passed. They cannot fail: jsdom does not resolve Tailwind, so a class name that
- * means nothing is indistinguishable from one that means something, and «the element is in the
- * document» was true throughout. Only a real engine computing a real stylesheet can tell the
- * difference, which is why this assertion lives here and not beside the component.
- *
- * It is deliberately about VISIBILITY rather than about a particular colour: pinning the hex would
- * fail on the next palette change for no reason, while «the reader can see it» is the requirement.
+ * Everything above this point is about how the analytics page EXPLAINS its figures — currency
+ * basis, attribution window, demo rows, the metric catalogue — and is untouched.
  */
-test.describe('the content reading can actually be seen', () => {
-  test.use({ storageState: AUTH.advertiser })
-
-  test('the leading format’s bar is drawn in a colour that exists', async ({ page }) => {
-    await page.goto('/app/analytics?tab=creative')
-    await expect(page.locator('main')).toBeVisible()
-
-    const reading = page.getByTestId('content-reading')
-
-    /*
-     * Skipped, with the state named, where the account has no comparison to make.
-     *
-     * Most gate databases run one format, and «only one kind of content ran» is a refusal this
-     * product is supposed to give — asserting a comparison exists would be asserting the fixture,
-     * not the behaviour. The declined card is checked instead, so the block is never simply absent.
-     */
-    if ((await reading.count()) === 0) {
-      await expect(
-        page.getByTestId('content-reading-declined'),
-        'neither the reading nor its refusal was rendered',
-      ).toBeVisible({ timeout: 20000 })
-      test.skip(true, 'this account has no format comparison to make — the refusal was shown instead')
-    }
-
-    await expect(reading).toBeVisible({ timeout: 20000 })
-
-    const fill = reading.locator('[data-testid^="content-format-"] span span').first()
-    await expect(fill).toBeVisible()
-
-    const paint = await fill.evaluate((el) => {
-      const style = getComputedStyle(el)
-      return { background: style.backgroundColor, width: el.getBoundingClientRect().width }
-    })
-
-    // `rgba(…, 0)` and `transparent` are what an unresolved token computes to.
-    expect(paint.background, 'the leading format’s bar resolves to no colour at all')
-      .not.toMatch(/^(transparent$|rgba\([^)]*,\s*0\s*\))/)
-    expect(paint.width, 'the leading format’s bar has no width').toBeGreaterThan(0)
-  })
-
-})

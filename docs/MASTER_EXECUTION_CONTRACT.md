@@ -249,3 +249,89 @@ active membership, and by nothing else. Specifically:
 and its own data — routes, interface, data, permissions and services, not names. A section list that
 differs while the rendered rail does not is not a pass; REG-001 was invisible to every unit test the
 project had and was found by driving the product.
+
+## ADDENDUM — the Owner Product Constitution (2026-10-08)
+
+Binding product policy, issued by the owner as a permanent correction. It is recorded here rather
+than in a new document because this contract is already the authority; the matrix carries the rows
+and the evidence. **The latest owner decision supersedes only CONFLICTING earlier instructions; every
+non-conflicting requirement remains binding.**
+
+### A report is a client product, not an operator console — CLIENT-FACING-PRESENTATION-001
+
+Every report surface — executive, detailed, interactive, shared, print, PDF and the link preview a
+crawler renders — answers one sentence: **«here is what happened in your advertising during this
+period»**, never «here is everything CampaignsHub knows». A block that does not help the client
+understand investment, delivery, results, efficiency, trend, content or platform contribution
+belongs in Analytics, not in the report.
+
+Client-facing order: client identity → period → spend → results/orders → revenue → ROAS → cost per
+result → AOV → trend → platform → campaign/objective → funnel where trustworthy → content →
+short readable observations. «Detailed» means deeper, not internal.
+
+Where a figure is unavailable the client reads «غير متاح من المنصة» or «لا تتوفر بيانات كافية لهذه
+الفترة» — never an account of the pipeline, the connector or the sync state
+(CLIENT-DIAGNOSTIC-SEPARATION-001).
+
+### A format is a filter, never a verdict — CONTENT-FORMAT-ROAS-REMOVED-001
+
+The owner has **cancelled** the earlier instruction to generalise creative-format intelligence
+across the product. No surface may declare image, video, carousel or collection globally better, nor
+rank formats by a return derived from creative attribution.
+
+What stays, because it is factual: filtering by type, the type badge, counts by type, the spend
+distribution by type, individual creative metrics, objective-aware creative analysis, and
+fatigue/improving states where independently valid.
+
+### Grain is not transferable — CREATIVE-GRAIN-TRUTH-001
+
+A campaign reading 5x does **not** license assigning 5x to the creatives beneath it, and a creative
+reading 0 must not be published as a contradiction of that campaign when the truth is that revenue
+was never attributed at creative grain. Account, campaign, ad set, ad and creative are distinct
+grains; a higher-grain result is never projected downward unless the provider's data model proves
+the attribution.
+
+### Missing is never zero — CONTENT-RESULT-AVAILABILITY-001
+
+`null`, not reported, not attributable, unverified and withheld never render as `0`, `0.00%`,
+`0.00x` or a zero amount. A zero is a measured, confirmed zero. Where orders or revenue are genuinely
+attributable at creative grain they must be **prominent**, not buried; where they are not, the
+surface says so.
+
+### Content is a visual performance browser — CONTENT-BROWSER-PARITY-001
+
+Grid and table are both first-class, over the same scope and the same arithmetic — no second sum.
+Default order puts **active** content first, then the objective's own result (orders for sales, leads
+for leads, the relevant delivery metric for awareness), falling back to spend where the result is not
+attributable. Paused, stopped and inactive content sorts after active. Delivery state comes from the
+provider where it exists and is shown as a compact badge; historical spend never implies «active».
+
+### Cover fills, viewer contains — CONTENT-THUMB-FILL-001
+
+Accepted by the owner and now permanent. Cards, covers and compact thumbnails use `object-fit:
+cover` — cropped, undistorted, filled. The full viewer, modal and detail stage use `object-fit:
+contain` and never crop the advertisement. This holds on content, campaigns, analytics, reports,
+shared reports and print. Compact covers are not to be reverted to letterboxed stages.
+
+### The client's identity is the report's identity — BRANDING-HIERARCHY-001
+
+The client logo and name are primary on every report and in every shared-link preview; the preparing
+company is secondary attribution. Where a client logo exists it is used — the platform mark is not
+the default. No confidential metric appears in OpenGraph metadata, and client A's branding can never
+appear on client B's report (ACCOUNT-SCOPE-ISOLATION-001).
+
+A share preview counts as VERIFIED only when a crawler-shaped request receives the metadata, the
+`og:image` is reachable by that crawler, the rendered image actually carries the client identity, and
+the production renderer is operational. Code and tests alone are IMPLEMENTED_NOT_VERIFIED.
+
+### One number, many surfaces — REPORT-DETAIL-PARITY-001
+
+For one tenant, project, bound account, entity, period and grain, the figure is identical across the
+dashboard, campaigns, content, content detail, analytics, the report, the shared report and the
+print. Presentation may differ; arithmetic may not.
+
+### Status discipline
+
+Only NOT_STARTED · IN_PROGRESS · PARTIAL · IMPLEMENTED_NOT_VERIFIED · VERIFIED ·
+BLOCKED_EXTERNAL_CREDENTIALS · BLOCKED_OPERATIONAL_EVIDENCE. Documentation is not implementation and
+tests are not production evidence.

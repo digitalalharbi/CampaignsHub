@@ -7,9 +7,6 @@ import { ReportWatermark } from './ReportWatermark'
 import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
 import { AttentionBlocks } from './AttentionBlocks'
 import { sectionShown, type ReportSectionKey } from './reportSections'
-import { formatWord, leadObjective, verdictFor } from '@/features/content/formatVerdict'
-import { metricLabel } from '@/features/content/metrics'
-import type { ContentIntelligence } from '@/features/content/api'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
 import { metricState } from '@/features/content/metrics'
@@ -279,27 +276,6 @@ export function PrintDocument({
     The same rows the interactive deck shows, read the same way: `available` is the only state that
     carries a picture, and the other three carry their own sentence rather than an empty frame.
   */
-  /*
-    The format answer, read off the payload the interactive report drew from.
-
-    The objective chosen is the one that surface leads with — the first that can actually be judged —
-    so page and file name the same comparison rather than each picking their own.
-  */
-  const formatObjective = leadObjective(data.content_formats ?? undefined)
-  const formatComparison = formatObjective?.comparison
-  const formatMetricLabel = formatComparison?.metric == null
-    ? '—'
-    : metricLabel(formatComparison.metric, 'en')
-  const formatVerdictLine = formatObjective === null || formatObjective === undefined
-    ? ''
-    : verdictFor(formatObjective.comparison, formatObjective.evidence).en
-  const formatRows = ((formatComparison?.formats ?? []) as ContentIntelligence['formats']).map((row) => ({
-    format: formatWord(row.format, false),
-    value: Math.abs(row.value) >= 100 ? row.value.toFixed(0) : row.value.toFixed(2),
-    // «—» for a withheld amount: a zero would be money the account never spent.
-    spend: row.spend === null ? '—' : row.spend.toFixed(2),
-    creatives: String(data.content_formats?.coverage?.[row.format]?.creatives ?? row.creatives),
-  }))
 
   /*
     REPORT-LINK-SECTION-001 — read straight off the payload, like every other row in this document.
@@ -738,39 +714,20 @@ export function PrintDocument({
       ) : null}
 
       {/*
-        CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», printed from the SAME answer.
+        CONTENT-FORMAT-ROAS-REMOVED-001 — «Content format performance» is out of the client's copy.
 
-        REPORT-EXPORT-PARITY: the figures here are the ones the interactive report drew, read
-        straight off the payload. A renderer that recomputed would be the second answer the canonical
-        service exists to prevent, and the first time the page and the file disagreed the client
-        would be holding the evidence.
+        Two reasons, and either alone is enough.
 
-        Printed natively rather than through the screen module: this document has its own stylesheet
-        and no Tailwind, so a component built for the app would arrive unstyled on a page a client
-        keeps. What is shared is the DATA, which is the half that has to agree.
+        The figure was not sound: it divided creative-grain revenue by creative-grain spend, and
+        while spend is attributed to every creative in full, revenue at that grain is reported by the
+        platform only sometimes. The ratio was therefore a fraction of the truth over all of it — it
+        printed «0.02» in a document whose own campaign figures read 5x, with nothing reconciling
+        them.
+
+        And it is the wrong KIND of thing for this document: «جميع التقارير مقدمة للعميل — يجب أن
+        يرى البيانات التي تخص نتائج الحملة، وليست تحليلية». A table ranking formats by a derived
+        ratio is the agency's working analysis, not the client's result.
       */}
-      {shown('content_performance') && formatRows.length > 0 && (
-        <section className="doc-section">
-          <h2>Content format performance</h2>
-          <p className="doc-sub">{formatVerdictLine}</p>
-          <table className="doc-table">
-            <thead>
-              <tr><th>Format</th><th>{formatMetricLabel}</th><th>Spend</th><th>Creatives</th></tr>
-            </thead>
-            <tbody>
-              {formatRows.map((row) => (
-                <tr key={row.format}>
-                  <td>{row.format}</td>
-                  <td>{row.value}</td>
-                  {/* A withheld amount is «—», never a zero the account never spent. */}
-                  <td>{row.spend}</td>
-                  <td>{row.creatives}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
 
       {/*
         REPORT-CREATIVE-TRUTH-001 §B — everything that ran, under the twelve that worked best.

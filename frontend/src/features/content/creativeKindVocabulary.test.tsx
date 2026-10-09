@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import { CREATIVE_KINDS, creativeKindLabel, creativeKindSubject, isCreativeKind } from './creativeKind'
-import { formatWord } from './formatVerdict'
 import { AdPreviewDialog } from './AdPreviewDialog'
 import { renderWithProviders } from '@/test/utils'
 import type { CreativeCard, CreativePreview } from './api'
@@ -99,18 +98,12 @@ describe('the one vocabulary for what a creative is', () => {
   })
 
   /*
-   * The sentence form and the chip form must come from ONE entry.
-   *
-   * `formatWord` is what the verdict sentence reads. Before this it had a table of its own, and the
-   * drift between the two was invisible to every test because each asserted against its own table.
-   */
-  it('gives the verdict sentence the same vocabulary as the chip', () => {
-    for (const kind of CREATIVE_KINDS) {
-      for (const ar of [true, false]) {
-        expect(formatWord(kind, ar)).toBe(creativeKindSubject(kind, ar))
-      }
-    }
-  })
+    The sentence form used to be asserted here against `formatVerdict.formatWord`, which carried the
+    verdict's own table. That verdict — «الكولكشن أفضل في هذه الفترة» — is gone under
+    CONTENT-FORMAT-ROAS-REMOVED-001, and so is the second table, so the drift this guarded against
+    no longer has two sides to drift between. The subject form itself is still exercised above and
+    in `creativeKind.test.ts`, because the chips and the pie still read it.
+  */
 
   /*
    * These are REAL column values, not invented ones: Snapchat's importer maps the types it knows and

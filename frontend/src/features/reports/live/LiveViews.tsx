@@ -4,7 +4,6 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { money, rowMoney } from '@/features/analytics/format'
-import { FormatComparisonView } from '@/features/content/CreativeFormatComparison'
 import { canonicalPlatform } from '@/lib/platforms'
 import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
@@ -342,11 +341,9 @@ export function DashboardView({
           {payload.content_formats != null && (
             <div>
               <SectionTitle>{ar ? 'أداء أنواع المحتوى' : 'Content format performance'}</SectionTitle>
-              <FormatComparisonView
-                payload={payload.content_formats}
-                depth={payload.form === 'executive_summary' ? 'compact' : 'full'}
-                ar={ar}
-              />
+              {/* CONTENT-FORMAT-ROAS-REMOVED-001 — the format winner is gone: creative-grain revenue is
+              partially reported while creative spend is attributed in full, so the ratio could not be
+              reconciled with the campaign's own ROAS, and the verdict asked operators to act on it. */}
             </div>
           )}
         </section>
