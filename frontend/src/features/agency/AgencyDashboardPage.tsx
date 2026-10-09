@@ -472,6 +472,9 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
     .filter((r) => r.pace !== null && Number.isFinite(r.pace) && (r.pace as number) >= 0 && r.currencies <= 1)
     .map((r) => ({ id: r.client_id, label: r.client_name, value: r.pace as number }))
   const withheld = rows.length - drawable.length
+  /* Owner directive 2026-10-09 §19 — an unmeasured window is named as such, not folded into «no budget». */
+  const unmeasured = rows.filter((r) => (r.unmeasured ?? 0) > 0 && r.pace === null).length
+  const otherWithheld = withheld - unmeasured
 
   return (
     <section className="mt-6">
@@ -488,11 +491,18 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
           reference={1}
           referenceLabel={ar ? 'على الميزانية' : 'On budget'}
         />
-        {withheld > 0 && (
+        {unmeasured > 0 && (
+          <p data-testid="client-pace-unmeasured" className="mt-3 text-sm text-text-muted">
+            {ar
+              ? `${num(unmeasured)} من العملاء بلا أرقام مقاسة في هذه الفترة — لم تُقرأ أي بيانات من مصادرهم، فلا سرعة تُحسب.`
+              : `${num(unmeasured)} client(s) have no measured figures in this period — nothing was read from their sources, so no pace is stated.`}
+          </p>
+        )}
+        {otherWithheld > 0 && (
           <p data-testid="client-pace-withheld" className="mt-3 text-sm text-text-muted">
             {ar
-              ? `${num(withheld)} من العملاء بلا سرعة قابلة للمقارنة — إمّا بلا ميزانية معتمدة أو بميزانية بعملات مختلفة.`
-              : `${num(withheld)} client(s) have no comparable pace — either no committed budget, or a budget held in more than one currency.`}
+              ? `${num(otherWithheld)} من العملاء بلا سرعة قابلة للمقارنة — إمّا بلا ميزانية معتمدة أو بميزانية بعملات مختلفة.`
+              : `${num(otherWithheld)} client(s) have no comparable pace — either no committed budget, or a budget held in more than one currency.`}
           </p>
         )}
       </ChartCard>
@@ -546,6 +556,11 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
               </button>
             ) : (
               <span className="font-semibold text-text-primary">{r.client_name}</span>
+            )}
+            {(r.unmeasured ?? 0) > 0 && (
+              <span className="text-[11px] text-text-muted" data-testid={`client-budget-unmeasured-${r.client_id}`}>
+                {ar ? 'لا أرقام مقاسة في هذه الفترة' : 'No measured figures in this period'}
+              </span>
             )}
             {/* No silent caps — what the total left out is said where the total is read. */}
             {r.excluded > 0 && (

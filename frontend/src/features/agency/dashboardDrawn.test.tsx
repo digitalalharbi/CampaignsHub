@@ -111,6 +111,27 @@ describe('the agency dashboard draws its own composition', () => {
     expect(screen.getByTestId('client-pace-withheld')).toHaveTextContent('1')
   })
 
+  /**
+   * Owner directive 2026-10-09 §19 — «not reported» must not render as «0.00×». A client whose
+   * project's window holds no measured row arrives with `pace: null` and `unmeasured > 0`; the note
+   * names the reason instead of folding it into «no committed budget».
+   */
+  it('names a client nobody measured in this period, rather than pacing it at zero', async () => {
+    vi.mocked(fetchClientBudgets).mockResolvedValue([
+      row({}),
+      row({ client_id: 'c2', client_name: 'Unmeasured', pace: null, spent: null, unmeasured: 2 }),
+    ])
+    vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
+    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+
+    await screen.findByTestId('client-pace-row-c1')
+    expect(screen.queryByTestId('client-pace-row-c2')).toBeNull()
+    expect(screen.getByTestId('client-pace-unmeasured')).toHaveTextContent('1')
+    expect(screen.getByTestId('client-pace-unmeasured')).toHaveTextContent('no measured figures')
+    expect(screen.queryByTestId('client-pace-withheld')).toBeNull()
+    expect(screen.getByTestId('client-budget-unmeasured-c2')).toBeInTheDocument()
+  })
+
   it('withholds a client whose pace the aggregator could not state, and counts it', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([
       row({}),
