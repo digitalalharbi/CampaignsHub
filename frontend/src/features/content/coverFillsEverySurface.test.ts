@@ -155,3 +155,22 @@ describe('every AdPoster surface states its own fit, and the right one', () => {
     ).not.toContain('fit="cover"')
   })
 })
+
+/**
+ * The printed page draws its own `<img>`, and it has to fill too.
+ *
+ * `PrintDocument` cannot use `AdPoster` — the PDF is produced by Chromium from static markup, and
+ * that component renders states, hover and a dialog — so it styles its thumbnail in the document's
+ * own stylesheet. It was already `object-fit: cover`, which is why the owner never reported the PDF;
+ * this pins it, because the default for an `<img>` given both a width and a height is `fill`, and a
+ * STRETCHED creative in a document a client keeps is worse than a letterboxed one.
+ */
+describe('the printed thumbnail fills as well', () => {
+  it('sets object-fit: cover on the document ad thumbnail', () => {
+    const source = readFileSync(join(process.cwd(), 'src/features/reports/PrintDocument.tsx'), 'utf8')
+    const rule = source.split('\n').find((line) => line.includes('.doc-ad-thumb img'))
+
+    expect(rule, 'the printed thumbnail no longer has a rule of its own — update this guard').toBeDefined()
+    expect(rule, 'the printed creative is stretched or letterboxed').toContain('object-fit: cover')
+  })
+})
