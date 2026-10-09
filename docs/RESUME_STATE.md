@@ -888,3 +888,18 @@ was measured; re-ran the failed job only (`gh run rerun 37965637373 --failed`).
 refund arm (`value_refunded`, `filter_scope`); API health 200; ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 VERIFIED on
 that. The lane is clear: this branch (`feat/live-experience-b1`) pushes now; ch-font (`feat/adset-rung-evidence`)
 follows it.
+
+**Track B sub-routes closed on `fix/request-detail-labels` (ch-ga4), 2026-10-09 23:1x → 2026-10-10 00:1x.** The nine split
+NOT_REVIEWED rows of docs/LIVE_ROUTE_CHECKLIST.md are now REVIEWED or IMPROVED, each with what was opened and measured
+(agency session on the #634 preview :5173, client and agency sessions on the ga4 preview :5221, platform admin on :5173).
+Improved on this branch: `/agency/requests/:requestId` labels (REQ-DETAIL-LABELS-001 — objective/email/budget keys, money
+format, bilingual status and priority choices, invoice status chip; RequestDetailPage.labels.test.tsx 2/2); the client
+request journey rail (REQ-JOURNEY-FALLBACK-001 — a never-written journey stage is read from the status, `new` stays Draft,
+Arabic stage names, locale-aware label; RequestJourneyFallbackTest 3/3, journey suites 20/20); portal timestamps through
+fmtDateTime; and `/agency/content/:creativeId` with media (CONTENT-DETAIL-MEDIA-FIRST-VIEWPORT-001 — the stage and the
+objective figures share one two-column first-screen row at lg; at 1366×768 the figures heading moved from y=825 to y=263
+beside a 9:16 film; CreativeDetailPage.test.tsx 23/23; chromium gate on first-viewport-detail · content-grid-video ·
+creative-analysis: 62 passed, exit 0). Reviewed without change: the three account sub-pages, `/portal/spaces` (single-space
+redirect), client quote and invoice detail, the five admin settings sub-pages (one vocabulary observation on LinkedIn’s
+«بانتظار بيانات الاعتماد» vs «غير مهيأ», recorded in the row). Requests folder 86/86, tsc -b clean. Branch waits its lane
+turn after #635 → ledger (ch-req) → B6 (ch-brand) → §A (ch-rmfmt) → §E (ch-ga4 `feat/live-operating-view`).
