@@ -835,8 +835,8 @@ clean; `first-viewport-sweep.spec.ts` chromium 166/166 (named + new surfaces), f
 webkit 230/230 (whole file); `first-viewport-detail.spec.ts` (campaign + creative detail, 32 cases)
 found the campaign detail scrolling sideways 364 px at 390 — the related-entities grid lacked a base
 column rule — fixed (`b0251d6f`), chromium 38/38 after, firefox + webkit re-run in flight;
-`platform-decision.spec.ts` 9/9 on all three. Rebased onto `a704de0f` (#630); push after ch-brand
-lands, per the single lane.
+`platform-decision.spec.ts` 9/9 on all three. Rebased onto `bf2059c9` (#631): `tsc -b` clean, vitest 474
+files / 3,376 passed, matrix guard 19/19; push after ch-brand lands, per the single lane.
 
 **Matrix census caveat.** Counted on this branch's copy (based on `a46626fc`): 517 VERIFIED, 55
 IMPLEMENTED_NOT_VERIFIED, 31 PARTIAL, 15 IN_PROGRESS, 23 BLOCKED_EXTERNAL_CREDENTIALS, 10
