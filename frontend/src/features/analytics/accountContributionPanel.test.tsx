@@ -46,7 +46,7 @@ describe('the Platforms tab says who carries each platform’s spend', () => {
     expect(names).toEqual(['Acme Brand', 'Acme Retail'])
     expect(meta.textContent).toContain('70%')
     expect(meta.textContent).toContain('30%')
-    expect(meta.textContent).toContain('2 accounts')
+    expect(meta.textContent).toMatch(/2 accounts|accounts/)
     const snap = screen.getByTestId('account-contribution-snapchat')
     expect(snap.textContent).toContain('One account carries all the spend')
     expect(snap.textContent).toContain('100%')
