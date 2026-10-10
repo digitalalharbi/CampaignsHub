@@ -1050,3 +1050,13 @@ Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. 
 Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
 loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
 backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.
+
+## Addendum — 2026-10-10, ACCOUNT-CONTRIBUTION (PLATFORM-DECISION-ANALYTICS-001's last clause) on `ch-rmfmt` (`feat/account-contribution`, from `74178283`)
+
+Owner priority 3 (Analytics). The Platforms tab now says who carries each platform's spend — each ad account's share of
+its platform's stated spend, withheld accounts named without a share, unknown ids said as such — and its tab-level
+«ما الذي تغيّر» blocks (platforms, campaigns, objectives, accounts) withhold the comparison between unlike windows as the
+overview does. Vitest 3 + 1, analytics suites 600; live on rm-web. Row PLATFORM-DECISION-ANALYTICS-001 →
+IMPLEMENTED_NOT_VERIFIED (its last clause). Note for the demo seed: every demo project's metric rows carry account ids
+that are not in `external_accounts`, so the panel reads «حساب غير مسجَّل في التطبيق» on demo data — a fact about the
+seed, stated rather than hidden.
