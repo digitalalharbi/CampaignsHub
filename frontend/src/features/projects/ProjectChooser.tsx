@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+<<<<<<< HEAD
 import { usePortalBase } from '@/app/portalPath'
+=======
+>>>>>>> 7a494bed (First visit to Campaigns, Analytics or Reports is a choice on the page, not a dead end (PROJECT-FIRST-VISIT-001))
 import { FolderKanban } from 'lucide-react'
 import { listClientWorkspaces, listProjects, type Project } from './api'
 import { useProject } from '@/stores/project'
@@ -29,6 +32,7 @@ export function ProjectChooser({ purpose }: { purpose: 'campaigns' | 'analytics'
   const ar = useUi((s) => s.locale) === 'ar'
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()
+<<<<<<< HEAD
   /*
    * `/client-workspaces` is agency-scoped and answers 403 to an advertiser. The advertiser portal
    * mounts this for one render before its switcher picks a project, and that one render fired the
@@ -37,6 +41,9 @@ export function ProjectChooser({ purpose }: { purpose: 'campaigns' | 'analytics'
    */
   const agency = usePortalBase() === '/agency'
   const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agency })
+=======
+  const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces })
+>>>>>>> 7a494bed (First visit to Campaigns, Analytics or Reports is a choice on the page, not a dead end (PROJECT-FIRST-VISIT-001))
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
 
   const rows: Row[] = useMemo(() => {

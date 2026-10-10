@@ -36,7 +36,11 @@ describe('ProjectChooser', () => {
       project('p-new', 'c2', 'Launch', '2026-10-09T00:00:00Z', 7),
       project('p-none', 'c1', 'Quiet', null, 0),
     ] as never)
+<<<<<<< HEAD
     renderWithProviders(<ProjectChooser purpose="campaigns" />, { locale: 'ar', route: '/agency/campaigns' })
+=======
+    renderWithProviders(<ProjectChooser purpose="campaigns" />, { locale: 'ar' })
+>>>>>>> 7a494bed (First visit to Campaigns, Analytics or Reports is a choice on the page, not a dead end (PROJECT-FIRST-VISIT-001))
 
     const chooser = await screen.findByTestId('project-chooser')
     const order = [...chooser.querySelectorAll('[data-testid^="project-choice-"]')].map((b) => b.getAttribute('data-testid'))
@@ -54,12 +58,17 @@ describe('ProjectChooser', () => {
   it('chooses the only reachable project for the reader without asking', async () => {
     vi.mocked(listClientWorkspaces).mockResolvedValue([client('c1', 'Acme')] as never)
     vi.mocked(listProjects).mockResolvedValue([project('p1', 'c1', 'Solo', null)] as never)
+<<<<<<< HEAD
     renderWithProviders(<ProjectChooser purpose="analytics" />, { locale: 'en', route: '/agency/analytics' })
+=======
+    renderWithProviders(<ProjectChooser purpose="analytics" />, { locale: 'en' })
+>>>>>>> 7a494bed (First visit to Campaigns, Analytics or Reports is a choice on the page, not a dead end (PROJECT-FIRST-VISIT-001))
 
     await waitFor(() => expect(useProject.getState().currentProjectId).toBe('p1'))
     expect(useAgencyClient.getState().currentClientId).toBe('c1')
   })
 
+<<<<<<< HEAD
   /*
    * The advertiser portal has no clients to name and no right to ask: `/client-workspaces` is
    * agency-scoped and answered 403, which the console-cleanliness gate counts as an error.
@@ -77,6 +86,12 @@ describe('ProjectChooser', () => {
     vi.mocked(listClientWorkspaces).mockResolvedValue([] as never)
     vi.mocked(listProjects).mockResolvedValue([] as never)
     renderWithProviders(<ProjectChooser purpose="reports" />, { locale: 'ar', route: '/agency/reports' })
+=======
+  it('says honestly when the reader can reach no project at all', async () => {
+    vi.mocked(listClientWorkspaces).mockResolvedValue([] as never)
+    vi.mocked(listProjects).mockResolvedValue([] as never)
+    renderWithProviders(<ProjectChooser purpose="reports" />, { locale: 'ar' })
+>>>>>>> 7a494bed (First visit to Campaigns, Analytics or Reports is a choice on the page, not a dead end (PROJECT-FIRST-VISIT-001))
 
     expect(await screen.findByTestId('project-chooser-empty')).toBeTruthy()
     expect(useProject.getState().currentProjectId).toBeNull()
