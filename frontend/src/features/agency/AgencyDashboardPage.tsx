@@ -192,9 +192,10 @@ function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: b
         total={clients.total}
         residualLabel={ar ? 'بلا حالة محدّدة' : 'Other'}
         bands={[
-          { key: 'active', label: ar ? 'نشط' : 'Active', count: clients.active, tone: 'success' },
-          { key: 'onboarding', label: ar ? 'قيد التهيئة' : 'Onboarding', count: clients.onboarding, tone: 'info' },
-          { key: 'attention', label: ar ? 'يحتاج متابعة' : 'Needs attention', count: clients.needs_attention, tone: 'warning' },
+          /* DASHBOARD-DRILLDOWN-001 — each band is the portfolio filtered to exactly its members. */
+          { key: 'active', label: ar ? 'نشط' : 'Active', count: clients.active, tone: 'success', to: '/agency/clients?status=active' },
+          { key: 'onboarding', label: ar ? 'قيد التهيئة' : 'Onboarding', count: clients.onboarding, tone: 'info', to: '/agency/clients?status=onboarding' },
+          { key: 'attention', label: ar ? 'يحتاج متابعة' : 'Needs attention', count: clients.needs_attention, tone: 'warning', to: '/agency/clients?status=needs_attention' },
         ]}
       />
     </ChartCard>
@@ -377,12 +378,7 @@ export function AgencyDashboardPage() {
               value={d.requests.awaiting_client}
               ar={ar}
             />
-            <AttentionRow
-              to="/agency/campaigns?view=table&lifecycle=all&band=paused"
-              label={ar ? 'حملات موقوفة' : 'Paused campaigns'}
-              value={d.campaigns.paused}
-              ar={ar}
-            />
+            <PausedCampaignsRow campaigns={d.campaigns} ar={ar} />
           </ul>
         </section>
         <div>
@@ -445,6 +441,51 @@ function AttentionRow({ to, label, value, ar }: { to: string; label: string; val
   )
 }
 
+
+/** The Paused view of one project's campaigns table — CAMPAIGN-VIEWS-001's band, chosen on arrival. */
+const pausedIn = (projectId: string) => `/agency/campaigns?project=${projectId}&view=table&lifecycle=all&band=paused`
+
+/**
+ * DASHBOARD-DRILLDOWN-001 — «paused campaigns», with the project rung the campaigns surface needs.
+ *
+ * The count spans every client the operator reaches; the campaigns board shows one project. So the
+ * row cannot be one link that means the same thing on arrival unless the paused campaigns all sit in
+ * one project — then it is exactly that project's Paused view. Across several, the row itself opens
+ * the board with the Paused band already chosen (the chooser is the honest landing for «which
+ * project?»), and each project is listed beneath with its own count and its own link, so the number
+ * the reader clicks is the number they find.
+ */
+function PausedCampaignsRow({ campaigns, ar }: { campaigns: AgencyDashboard['campaigns']; ar: boolean }) {
+  const label = ar ? 'حملات موقوفة' : 'Paused campaigns'
+  const projects = campaigns.paused > 0 ? (campaigns.paused_by_project ?? []) : []
+
+  if (projects.length === 1) {
+    return <AttentionRow to={pausedIn(projects[0].project_id)} label={label} value={campaigns.paused} ar={ar} />
+  }
+
+  return (
+    <>
+      <AttentionRow to="/agency/campaigns?view=table&lifecycle=all&band=paused" label={label} value={campaigns.paused} ar={ar} />
+      {projects.length > 1 && (
+        <li>
+          <ul data-testid="attention-paused-projects" className="ms-4 space-y-1.5 border-s border-border ps-3">
+            {projects.map((p) => (
+              <li key={p.project_id}>
+                <Link
+                  to={pausedIn(p.project_id)}
+                  className="flex items-center justify-between gap-3 rounded-lg px-2 py-1 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+                >
+                  <span className="truncate">{p.project_name}</span>
+                  <span className="tnum shrink-0 font-semibold" dir="ltr">{num(p.paused)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </li>
+      )}
+    </>
+  )
+}
 
 /**
  * VIZ-AGENCY-001 — «which client is going to overrun», as a shape rather than a column.
@@ -605,7 +646,13 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
               : ['Project', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
             rows={(open.projects_breakdown ?? []).map((p) => [
               <div key="n" className="flex flex-col">
-                <span className="text-text-primary">{p.project_name}</span>
+                {/* DASHBOARD-DRILLDOWN-001 — the project rung opens that project's campaigns, chosen on arrival. */}
+                <Link
+                  to={`/agency/campaigns?project=${p.project_id}&view=table&lifecycle=all`}
+                  className="text-text-primary underline decoration-dotted underline-offset-4 hover:text-brand-600"
+                >
+                  {p.project_name}
+                </Link>
                 {p.excluded > 0 && (
                   <span className="text-[11px] text-text-muted">
                     {ar ? `${p.excluded} خارج الحساب` : `${p.excluded} excluded`}

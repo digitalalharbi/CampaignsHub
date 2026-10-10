@@ -52,6 +52,7 @@ import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
+import { useProjectFromUrl } from '@/features/projects/useProjectFromUrl'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
@@ -125,6 +126,8 @@ export function CampaignsPage() {
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
 
   const { currentProjectId: projectId } = useProject()
+  /* DASHBOARD-DRILLDOWN-001 — `?project=<id>` from a dashboard or budget link is chosen on arrival. */
+  useProjectFromUrl()
   /*
    * BUDGET-CONNECTED-001 — the project's active spend limits, read once for the whole board.
    *
