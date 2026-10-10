@@ -320,6 +320,12 @@ export interface LivePayload {
   currency: string | null
   totals: Record<string, number | null>
   deltas: Record<string, number | null>
+  /**
+   * REPORT-COVERAGE-001 — whether `totals` and the previous window may be compared at all. When
+   * they may not, every delta above is null and this says which window stopped short, who stopped,
+   * and through which date — the client is told the date, never the operator's reason.
+   */
+  comparison?: { comparable: boolean; window: 'current' | 'previous' | null; contributors: string[]; through: string | null }
   timeseries: Array<Record<string, unknown>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   /**
