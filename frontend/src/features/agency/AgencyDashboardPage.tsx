@@ -314,7 +314,7 @@ export function AgencyDashboardPage() {
         The page used to draw two charts first and put the attention block at the fold, with the
         money signals three thousand pixels down behind the creative section.
       */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="font-heading text-lg font-extrabold text-text-primary">
             {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}

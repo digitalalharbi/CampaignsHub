@@ -64,6 +64,7 @@ describe('the agency headline', () => {
     // Movement against the previous window, shown because both windows are complete.
     expect(within(spend).getByText(/22/)).toBeInTheDocument()
     expect(screen.queryByTestId('agency-coverage-note')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agency-compared-with')).toHaveTextContent('2026-08-12 → 2026-09-10')
     expect(screen.getByTestId('agency-freshness')).toBeInTheDocument()
   })
 
@@ -73,6 +74,7 @@ describe('the agency headline', () => {
     const spend = await screen.findByTestId('agency-kpi-spend')
     expect(spend).toHaveTextContent('40K SAR')
     expect(within(spend).queryByText(/%/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agency-compared-with')).not.toBeInTheDocument()
     expect(screen.getByTestId('agency-coverage-note')).toHaveTextContent('2026-09-27')
   })
 

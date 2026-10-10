@@ -107,7 +107,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   const prevCpa = previous ? readCostPer(previous, 'cpa', 'conversions', currency, ar) : null
   const prevRoas = previous ? readRoas(previous, ar) : null
   const deltaOf = (metric: string, cur: number | null | undefined, prev: number | null | undefined) =>
-    comparable && cur != null && prev != null ? { metric, current: cur, previous: prev, since: d.previous_period.from } : undefined
+    comparable && cur != null && prev != null ? { metric, current: cur, previous: prev } : undefined
   const notDerived = ar ? 'لا تُشتق على نافذة ناقصة' : 'Not derived over an incomplete window'
 
   return (
@@ -126,6 +126,17 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
         />
         <PeriodLabel from={d.period.from} to={d.period.to} testId="agency-period" />
         <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
+        {/*
+          The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),
+          which on a half-width phone card in English was wider than the card and scrolled the page
+          sideways (responsive-sweep, chromium, ltr). One line here says it for all four.
+        */}
+        {comparable && (
+          <span data-testid="agency-compared-with">
+            {ar ? 'مقارنةً بـ ' : 'Compared with '}
+            <span dir="ltr">{d.previous_period.from} → {d.previous_period.to}</span>
+          </span>
+        )}
         {currency === null && current !== undefined && (
           <span data-testid="agency-currency-note">{ar ? 'الأرقام بلا عملة واحدة — لا تُجمع عبر العملات.' : 'No single currency — figures are not summed across currencies.'}</span>
         )}
@@ -205,11 +216,17 @@ export function AgencyTrendAndPlatforms({ ar }: { ar: boolean }) {
     return { provider: row.provider, spend: readMoney(t, 'spend', currency, ar), conversions: conv ?? null, cpa: readCostPer(t, 'cpa', 'conversions', currency, ar), roas: readRoas(t, ar) }
   }), [d?.by_provider, currency, ar])
 
-  if (overview.isLoading) return <div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
+  if (overview.isLoading) return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
   if (overview.isError || !d) return null
 
+  /*
+   * `grid-cols-1` is not decoration. With no base track the single phone column is `auto`, sized to
+   * the min-content of what it holds — and the platform table is 640px wide inside its scroller, so
+   * the column became 640px and the page scrolled sideways at 375px (responsive-sweep, chromium).
+   * `minmax(0, 1fr)` lets the table's own scroller do the scrolling.
+   */
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <ChartCard
         title={ar ? 'الإنفاق والإيراد يوميًا' : 'Spend and revenue by day'}
         subtitle={ar ? 'عبر كل العملاء ضمن نطاقك — يوم بلا قياس لا يُرسم صفرًا.' : 'Across every client in your scope — a day with no measurement is not drawn as zero.'}
@@ -226,7 +243,7 @@ export function AgencyTrendAndPlatforms({ ar }: { ar: boolean }) {
         {platformRows.length === 0
           ? <p data-testid="agency-platforms-empty" className="flex h-[220px] items-center justify-center text-sm text-text-muted">{ar ? 'لا منصة أبلغت في هذه الفترة.' : 'No platform reported in this period.'}</p>
           : (
-            <div data-testid="agency-platforms">
+            <div data-testid="agency-platforms" className="min-w-0">
               <MetricTable
                 head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'تكلفة النتيجة', 'ROAS'] : ['Platform', 'Spend', 'Results', 'Cost per result', 'ROAS']}
                 rows={platformRows.map((r) => [
