@@ -1074,3 +1074,26 @@ backend suite alone: 4,614 passed, 1 skipped; full Vitest 3,409.
 branch). #645 and #646 rebased onto `892fb696` and in CI; #646's previous webkit failure was a blank document (no
 accessibility tree, no shell `main`) on cross-product-consistency, which chromium and firefox passed. #647 and #648
 wait their turn; each merge dirties the rest through the shared docs.
+## Addendum — 2026-10-10, BUDGET-PACING-COVERAGE-001 on `ch-brand` (`feat/budget-pacing-coverage`, from `a96b3fa8`)
+
+Pacing divided spend by the days elapsed to TODAY whatever the window's coverage, so a platform that stopped reporting
+read as under-spending. `MetricsAggregator::pacedThrough()` (one partial through-date → that day), both pacing methods
+and `SpendLimitGovernor::read()` pace through it and emit `paced_through`; the Budget tab prints «حتى <day>» beside the
+projection, the spend-limit card states it in a sentence. BudgetPacingCoverageTest 4/4 (hand-checkable figures),
+pacing/governance suites 80, larastan clean; SpendLimitsPage.test +2, budget Vitest green. Row added
+IMPLEMENTED_NOT_VERIFIED. Targeted runs on ch-brand now use `mediabuying_test_pacing` while the full suite holds
+`mediabuying_test_brand` — one suite per database.
+
+**Browser proof, 2026-10-10 ~09:05 (br-web 5261, agency owner, Q3 Launch):** the Budget tab prints «حتى 2026-09-27»
+beside every projected figure on the platform and campaign rows (20 matches), where the same window had paced to
+today before. Full backend suite re-running alone on `mediabuying_test_brand` for this branch; full Vitest in flight.
+
+**Lane, 2026-10-10 ~12:40.** #646 merged (main `6cdbda83`) and deployed; Production serves `index-Dw969BLs.js`, health
+200 ×3 → REPORT-CURRENCY-TRUTH-001 VERIFIED (this branch; the change carries no bundle marker, the deploy is the
+evidence, the live-link observation stays operational). #645 and #647 rebased onto `6cdbda83` and in CI; #648 (this
+branch) is rebased when its turn comes.
+
+**Lane, 2026-10-10 ~13:40.** #647 merged (main `74178283`), deployed (run 38045381216), bundle `index-Nudj_uVr.js`
+carries `report-comparison-withheld`, health 200 ×3 (one transient 000 right after the deploy, as seen before) →
+REPORT-SNAPSHOT-COMPARABILITY-001 VERIFIED (this branch). #645 and #648 rebased onto `74178283` and in CI; #649
+(CAMPAIGN-VIEWS-001) open and waiting its rebase.

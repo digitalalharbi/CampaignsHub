@@ -680,6 +680,35 @@ final class MetricsAggregator
      *
      * @return array<string, mixed>
      */
+    /**
+     * BUDGET-PACING-COVERAGE-001 — the day the window is actually measured through, when that is
+     * earlier than today.
+     *
+     * Pacing divided spend by the days elapsed up to TODAY. A platform that had reported through the
+     * 27th of a window still running on the 10th therefore paced seventeen days of money over thirty
+     * and projected a month that could not be reached — «under budget» on the one screen that
+     * exists to warn of the opposite. Where the window's coverage is partial and every contributor
+     * that stopped short stopped on the same date, that date is the honest end of «elapsed». Where
+     * they disagree, or nothing is partial, null: today stands, as before.
+     */
+    public function pacedThrough(Carbon $from, Carbon $to, Carbon $today): ?string
+    {
+        $coverage = $this->coverage($from, $to);
+        if (($coverage['state'] ?? 'complete') !== 'partial') {
+            return null;
+        }
+        $dates = array_values(array_unique(array_filter(array_map(
+            static fn (string $c): ?string => $coverage['reported_through'][$c] ?? null,
+            (array) ($coverage['partial_contributors'] ?? []),
+        ))));
+        if (count($dates) !== 1) {
+            return null;
+        }
+        $through = Carbon::parse($dates[0])->startOfDay();
+
+        return $through->lt($today->copy()->min($to)->startOfDay()) ? $through->toDateString() : null;
+    }
+
     private function coverage(Carbon $from, Carbon $to): array
     {
         $tenantId = app(TenantContext::class)->tenantId();
@@ -1997,7 +2026,10 @@ final class MetricsAggregator
             ->keyBy('unified_campaign_id');
 
         $periodDays = max(1, $from->diffInDays($to) + 1);
-        $elapsedDays = max(1, $from->diffInDays($today->min($to)) + 1);
+        // BUDGET-PACING-COVERAGE-001 — «elapsed» ends where the measurement ends, when that is earlier than today.
+        $pacedThrough = $this->pacedThrough($from, $to, $today);
+        $elapsedEnd = $pacedThrough !== null ? Carbon::parse($pacedThrough) : $today->min($to);
+        $elapsedDays = max(1, $from->diffInDays($elapsedEnd) + 1);
         $elapsedFraction = min(1.0, $elapsedDays / $periodDays);
 
         // Metrics not linked to a unified campaign group under a null key — exclude it so we never
@@ -2155,6 +2187,8 @@ final class MetricsAggregator
                  */
                 'expected_to_date' => $comparable ? round($expected, 2) : null,
                 'daily_average' => $comparable ? round($spent / $elapsedDays, 2) : null,
+                /* The day the pace is measured through when it is not today; null means today. */
+                'paced_through' => $pacedThrough,
                 'over_under' => $comparable && $projected !== null ? round($projected - $budget, 2) : null,
                 /*
                  * Why pacing is absent, when it is. `comparable` — computed. `currency_mismatch` —
@@ -2206,7 +2240,10 @@ final class MetricsAggregator
     public function budgetPacingByProvider(Carbon $from, Carbon $to, Carbon $today): array
     {
         $periodDays = max(1, $from->diffInDays($to) + 1);
-        $elapsedDays = max(1, $from->diffInDays($today->min($to)) + 1);
+        // BUDGET-PACING-COVERAGE-001 — «elapsed» ends where the measurement ends, when that is earlier than today.
+        $pacedThrough = $this->pacedThrough($from, $to, $today);
+        $elapsedEnd = $pacedThrough !== null ? Carbon::parse($pacedThrough) : $today->min($to);
+        $elapsedDays = max(1, $from->diffInDays($elapsedEnd) + 1);
         $elapsedFraction = min(1.0, $elapsedDays / $periodDays);
 
         /** @var array<string, list<string>> $platformsOf campaign id => the platforms its spend landed on */
@@ -2325,6 +2362,8 @@ final class MetricsAggregator
                 /* The same three as the campaign rung, withheld on the same verdict — see there. */
                 'expected_to_date' => $comparable ? round($expected, 2) : null,
                 'daily_average' => $comparable ? round($spent / $elapsedDays, 2) : null,
+                /* The day the pace is measured through when it is not today; null means today. */
+                'paced_through' => $pacedThrough,
                 'over_under' => $comparable && $elapsedFraction > 0
                     ? round(($spent / $elapsedFraction) - $budget, 2)
                     : null,
