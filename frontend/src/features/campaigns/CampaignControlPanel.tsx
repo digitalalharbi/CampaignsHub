@@ -1,0 +1,510 @@
+import { useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { usePortalBase } from '@/app/portalPath'
+import { CheckCircle2, Copy, History, Pause, Pencil, Play, Plus, Rocket, XCircle } from 'lucide-react'
+import type { UnifiedCampaign } from './types'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { DateField } from '@/components/ui/DateField'
+import { EmptyState, Skeleton } from '@/components/ui/States'
+import { QueryFailure } from '@/components/ui/QueryFailure'
+import { money } from '@/features/analytics/format'
+import { fmtDateTime } from '@/lib/datetime'
+import { useUi } from '@/stores/ui'
+import { campaignStatusLabel, campaignStatusTone, providerLabel } from './labels'
+import { useCampaignActivity } from './metrics'
+import {
+  ACTION_LABELS, NEEDS_AMOUNT, STATE_LABELS, createOnPlatform, objectiveName, performWrite, removalConsequence,
+  strategyName, useWriteOptions, type ActionState, type WriteActionKey, type WriteEntity, type WriteResult,
+} from './providerWrites'
+
+/**
+ * CAMPAIGN-MGMT-WRITE-001 — the campaign's platform entities, operated from here.
+ *
+ * Each platform campaign, its ad sets and its ads, with exactly the actions the PLATFORM allows and
+ * this reader may take — and, beside every action that is not offered, the reason. A change is sent
+ * to the platform, and the screen says what the platform answered: its confirmation (with the
+ * request id it gave), or its refusal in its own words. Nothing is shown as done until it is.
+ */
+type Dialog =
+  | { kind: 'action'; entity: WriteEntity; action: Exclude<WriteActionKey, 'pause' | 'resume'> }
+  | { kind: 'create' }
+  | null
+
+type Banner = { tone: 'success' | 'danger' | 'info'; text: string } | null
+
+const SECONDARY: Array<Exclude<WriteActionKey, 'pause' | 'resume'>> = ['rename', 'budget', 'schedule', 'bid_strategy', 'duplicate', 'archive', 'delete']
+const INACTIVE = new Set(['archived', 'deleted', 'removed'])
+
+export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { campaign: UnifiedCampaign; projectId: string; onOpenHistory?: () => void }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+  const locale = ar ? 'ar' : 'en'
+  const options = useWriteOptions(projectId, campaign.id)
+  const activity = useCampaignActivity(projectId, campaign.id)
+  const queryClient = useQueryClient()
+  const [dialog, setDialog] = useState<Dialog>(null)
+  const [banner, setBanner] = useState<Banner>(null)
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaign.id] })
+    void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaigns'] })
+  }
+
+  const describe = (result: WriteResult, entity: WriteEntity | null, action: string): Banner => {
+    const platform = entity ? providerLabel(entity.provider, locale) : ''
+    if (result.ok) {
+      const what = ACTION_LABELS[action as WriteActionKey]?.[locale] ?? action
+      const copy = result.new_external_id
+        ? (ar ? ` — أُنشئت نسخة (المعرّف ${result.new_external_id}) وتظهر هنا بعد المزامنة التالية` : ` — a copy was made (id ${result.new_external_id}); it appears here after the next sync`)
+        : ''
+      const rid = result.request_id ? (ar ? ` · معرّف الطلب ${result.request_id}` : ` · request ${result.request_id}`) : ''
+
+      return { tone: 'success', text: ar ? `أكّدت ${platform}: ${what} — ${entity?.name ?? ''}${copy}${rid}` : `${platform} confirmed: ${what} — ${entity?.name ?? ''}${copy}${rid}` }
+    }
+    const reason = result.refusal && result.refusal in STATE_LABELS
+      ? STATE_LABELS[result.refusal as Exclude<ActionState, 'available'>][locale]
+      : (result.message ?? (ar ? 'لم يُنفَّذ التغيير.' : 'The change was not made.'))
+
+    return { tone: 'danger', text: result.refusal === 'provider_refused' ? (ar ? `رفضت ${platform}: ${reason}` : `${platform} refused: ${reason}`) : reason }
+  }
+
+  const write = useMutation({
+    mutationFn: (v: { entity: WriteEntity; action: WriteActionKey; extra?: Record<string, unknown> }) =>
+      performWrite(projectId, campaign.id, { level: v.entity.level, entity_id: v.entity.id, action: v.action, ...(v.extra ?? {}) }),
+    onSuccess: (result, v) => {
+      setBanner(describe(result, v.entity, v.action))
+      if (result.ok) setDialog(null)
+      refresh()
+    },
+    onError: () => setBanner({ tone: 'danger', text: ar ? 'تعذّر الوصول إلى الخادم — لم يُرسل التغيير.' : 'The server could not be reached — nothing was sent.' }),
+  })
+
+  const create = useMutation({
+    mutationFn: (body: { external_account_id: string; objective: string; daily_budget?: number; launch?: boolean }) => createOnPlatform(projectId, campaign.id, body),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setDialog(null)
+        setBanner({
+          tone: 'success',
+          text: ar
+            ? `أُنشئت الحملة على المنصة (المعرّف ${result.external_id})${result.launched ? ' وشُغّلت' : ' موقوفةً'}${result.launch_message ? ` — لم تُشغَّل: ${result.launch_message}` : ''}`
+            : `Created on the platform (id ${result.external_id})${result.launched ? ' and launched' : ', paused'}${result.launch_message ? ` — not launched: ${result.launch_message}` : ''}`,
+        })
+      } else {
+        setBanner(describe(result, null, 'create'))
+      }
+      refresh()
+    },
+  })
+
+  const entities = options.data?.entities ?? []
+  const campaigns = entities.filter((e) => e.level === 'campaign')
+  const childrenOf = (id: string, level: 'ad_set' | 'ad') => entities.filter((e) => e.level === level && e.parent_id === id)
+  const looseAds = entities.filter((e) => e.level === 'ad' && !entities.some((s) => s.level === 'ad_set' && s.id === e.parent_id))
+  const changes = useMemo(() => (activity.data ?? []).filter((e) => e.action.startsWith('campaign.provider')).slice(0, 5), [activity.data])
+
+  if (options.isLoading) return <Skeleton className="h-64" />
+  if (options.isError) {
+    return <QueryFailure error={options.error} ar={ar} testId="control-failure" onRetry={() => void options.refetch()} fallbackTitle={ar ? 'تعذّرت قراءة ما يمكن تغييره' : 'What can be changed could not be read'} />
+  }
+
+  return (
+    <section data-testid="campaign-control" className="space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-heading text-lg font-extrabold text-text-primary">{ar ? 'التحكم على المنصات' : 'Platform control'}</h2>
+          <p className="text-sm text-text-secondary">
+            {ar ? 'كل تغيير يُرسل إلى المنصة نفسها ويُسجَّل باسمك؛ لا يظهر هنا إلا ما أكّدته المنصة.' : 'Every change goes to the platform itself and is recorded under your name; only what the platform confirms is shown here.'}
+          </p>
+        </div>
+        <Button data-testid="control-create" variant="secondary" onClick={() => setDialog({ kind: 'create' })}>
+          <Plus size={15} aria-hidden /> {ar ? 'إنشاء على منصة' : 'Create on a platform'}
+        </Button>
+      </header>
+
+      {banner && (
+        <div data-testid="control-banner" data-tone={banner.tone} role="status" className={`flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-sm ${banner.tone === 'success' ? 'border-success/40 bg-success/10' : banner.tone === 'danger' ? 'border-danger/40 bg-danger/10' : 'border-info/40 bg-info/10'}`}>
+          {banner.tone === 'success' ? <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-success" aria-hidden /> : <XCircle size={16} className="mt-0.5 shrink-0 text-danger" aria-hidden />}
+          <span className="min-w-0 break-words text-text-primary">{banner.text}</span>
+        </div>
+      )}
+
+      {campaigns.length === 0 ? (
+        <EmptyState
+          title={ar ? 'لا حملة على أي منصة بعد' : 'Not on any platform yet'}
+          description={ar
+            ? 'هذه الحملة غير مرتبطة بحملة على منصة إعلانية. أنشئها على منصة من حساب محدَّد لهذا المشروع، أو اربطها بحملة موجودة من الإعدادات.'
+            : 'This campaign is not linked to a platform campaign. Create it on a platform from an account selected for this project, or link an existing one from Settings.'}
+        />
+      ) : (
+        <ul className="space-y-3">
+          {campaigns.map((c) => (
+            <li key={c.id} data-testid={`control-campaign-${c.id}`} className="rounded-2xl border border-border bg-surface p-4">
+              <EntityRow entity={c} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: c, action })} onOpen={(action) => setDialog({ kind: 'action', entity: c, action })} prominent />
+              {childrenOf(c.id, 'ad_set').length > 0 && (
+                <ul className="mt-3 space-y-2 border-s-2 border-border ps-3">
+                  {childrenOf(c.id, 'ad_set').map((s) => (
+                    <li key={s.id} data-testid={`control-ad-set-${s.id}`} className="rounded-xl bg-surface-secondary p-3">
+                      <EntityRow entity={s} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: s, action })} onOpen={(action) => setDialog({ kind: 'action', entity: s, action })} />
+                      {childrenOf(s.id, 'ad').length > 0 && (
+                        <ul className="mt-2 space-y-1.5 border-s border-border ps-3">
+                          {childrenOf(s.id, 'ad').map((a) => (
+                            <li key={a.id} data-testid={`control-ad-${a.id}`}>
+                              <EntityRow entity={a} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: a, action })} onOpen={(action) => setDialog({ kind: 'action', entity: a, action })} compact />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+          {looseAds.length > 0 && (
+            <li className="rounded-2xl border border-border bg-surface p-4">
+              <p className="mb-2 text-xs text-text-muted">{ar ? 'إعلانات بلا مجموعة' : 'Ads with no ad set'}</p>
+              {looseAds.map((a) => (
+                <EntityRow key={a.id} entity={a} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: a, action })} onOpen={(action) => setDialog({ kind: 'action', entity: a, action })} compact />
+              ))}
+            </li>
+          )}
+        </ul>
+      )}
+
+      <section data-testid="control-history" className="rounded-2xl border border-border bg-surface p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="flex items-center gap-1.5 text-sm font-bold text-text-primary"><History size={15} aria-hidden /> {ar ? 'آخر التغييرات على المنصات' : 'Latest platform changes'}</h3>
+          {onOpenHistory && <button type="button" onClick={onOpenHistory} className="text-xs font-bold text-brand-600 hover:underline">{ar ? 'السجل كاملًا' : 'Full history'}</button>}
+        </div>
+        {changes.length === 0 ? (
+          <p className="mt-2 text-sm text-text-muted">{ar ? 'لم يُرسل أي تغيير إلى منصة من هنا بعد.' : 'No change has been sent to a platform from here yet.'}</p>
+        ) : (
+          <ul className="mt-2 divide-y divide-border text-sm">
+            {changes.map((e) => {
+              const before = (e.before ?? {}) as Record<string, unknown>
+              const action = String(before.action ?? '')
+              return (
+                <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+                  <span className="min-w-0">
+                    <Badge tone={e.action === 'campaign.provider_write_refused' ? 'danger' : 'success'}>{e.label}</Badge>{' '}
+                    <span className="font-semibold text-text-primary">{ACTION_LABELS[action as WriteActionKey]?.[locale] ?? action}</span>{' '}
+                    <span className="text-text-secondary">{String(before.name ?? '')} · {providerLabel(String(before.provider ?? ''), locale)}</span>
+                  </span>
+                  <span className="text-xs text-text-muted">{e.actor} · <span dir="ltr">{fmtDateTime(e.at)}</span></span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
+      {dialog?.kind === 'action' && (
+        <ActionDialog
+          entity={dialog.entity}
+          action={dialog.action}
+          ar={ar}
+          busy={write.isPending}
+          onClose={() => setDialog(null)}
+          onSubmit={(extra) => write.mutate({ entity: dialog.entity, action: dialog.action, extra })}
+        />
+      )}
+      {dialog?.kind === 'create' && (
+        <CreateDialog
+          campaign={campaign}
+          projectId={projectId}
+          accounts={options.data?.create ?? []}
+          ar={ar}
+          busy={create.isPending}
+          onClose={() => setDialog(null)}
+          onSubmit={(body) => create.mutate(body)}
+        />
+      )}
+    </section>
+  )
+}
+
+function EntityRow({ entity, ar, busy, onQuick, onOpen, prominent = false, compact = false }: {
+  entity: WriteEntity
+  ar: boolean
+  busy: boolean
+  onQuick: (action: 'pause' | 'resume') => void
+  onOpen: (action: Exclude<WriteActionKey, 'pause' | 'resume'>) => void
+  prominent?: boolean
+  compact?: boolean
+}) {
+  const locale = ar ? 'ar' : 'en'
+  const status = entity.status ?? ''
+  const inactive = INACTIVE.has(status)
+  const quick: 'pause' | 'resume' | null = inactive ? null : status === 'paused' ? 'resume' : 'pause'
+  const offered = SECONDARY.filter((a) => entity.actions[a] === 'available' && !(inactive && a !== 'duplicate'))
+  const withheld = (quick ? [quick, ...SECONDARY] : SECONDARY)
+    .filter((a) => entity.actions[a] !== 'available' && entity.actions[a] !== 'provider_unsupported')
+  const forbidden = SECONDARY.filter((a) => entity.actions[a] === 'provider_unsupported')
+  const budget = entity.daily_budget !== null
+    ? `${money(entity.daily_budget, entity.currency ?? '')} ${ar ? 'يوميًا' : 'daily'}`
+    : entity.lifetime_budget !== null ? `${money(entity.lifetime_budget, entity.currency ?? '')} ${ar ? 'إجمالًا' : 'lifetime'}` : null
+  /* A demo row exists on no platform: one badge says so, and no control is drawn for it. */
+  const demo = (Object.values(entity.actions) as ActionState[]).some((v) => v === 'demo')
+  const levelName = entity.level === 'campaign' ? (ar ? 'حملة' : 'Campaign') : entity.level === 'ad_set' ? (ar ? 'مجموعة' : 'Ad set') : (ar ? 'إعلان' : 'Ad')
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {prominent && <Badge tone="neutral">{providerLabel(entity.provider, locale)}</Badge>}
+            <span className="text-[11px] text-text-muted">{levelName}</span>
+            <span className={`truncate font-semibold text-text-primary ${compact ? 'text-xs' : 'text-sm'}`}>{entity.name ?? entity.external_id}</span>
+            <Badge tone={campaignStatusTone(status)}>{campaignStatusLabel(status, locale)}</Badge>
+            {demo && <Badge tone="neutral" data-testid={`control-demo-${entity.id}`}>{ar ? 'تجريبي' : 'Demo'}</Badge>}
+          </div>
+          {!compact && (
+            <p className="mt-0.5 text-xs text-text-secondary">
+              {entity.account?.name && <span>{entity.account.name} · </span>}
+              <span dir="ltr">{entity.external_id}</span>
+              {budget && <span> · <span dir="ltr">{budget}</span></span>}
+              {entity.bid_strategy && <span> · {strategyName(entity.bid_strategy.toUpperCase(), ar)}</span>}
+            </p>
+          )}
+        </div>
+        {!demo && <div className="flex flex-wrap items-center gap-1.5">
+          {quick && entity.actions[quick] !== 'available' && entity.actions[quick] !== 'provider_unsupported' && (
+            <Button data-testid={`control-${quick}-${entity.id}`} size="sm" variant="secondary" disabled title={STATE_LABELS[entity.actions[quick] as Exclude<ActionState, 'available'>][locale]}>
+              {quick === 'pause' ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />} {ACTION_LABELS[quick][locale]}
+            </Button>
+          )}
+          {quick && entity.actions[quick] === 'available' && (
+            <Button data-testid={`control-${quick}-${entity.id}`} size="sm" variant={quick === 'pause' ? 'secondary' : 'primary'} disabled={busy} onClick={() => onQuick(quick)}>
+              {quick === 'pause' ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />} {ACTION_LABELS[quick][locale]}
+            </Button>
+          )}
+          {!compact && withheld.filter((a) => a !== 'pause' && a !== 'resume' && !(inactive && a !== 'duplicate')).map((a) => (
+            <Button key={a} data-testid={`control-${a}-${entity.id}`} size="sm" variant="ghost" disabled title={STATE_LABELS[entity.actions[a] as Exclude<ActionState, 'available'>][locale]}>
+              {ACTION_LABELS[a][locale]}
+            </Button>
+          ))}
+          {offered.map((a) => (
+            <Button key={a} data-testid={`control-${a}-${entity.id}`} size="sm" variant={a === 'delete' ? 'danger' : 'ghost'} disabled={busy} onClick={() => onOpen(a)}>
+              {a === 'rename' && <Pencil size={13} aria-hidden />}
+              {a === 'duplicate' && <Copy size={13} aria-hidden />}
+              {ACTION_LABELS[a][locale]}
+            </Button>
+          ))}
+        </div>}
+      </div>
+      {!compact && !demo && (withheld.length > 0 || forbidden.length > 0) && (
+        <p data-testid={`control-withheld-${entity.id}`} className="text-[11px] text-text-muted">
+          {/* One line per REASON, not per action: the reason is what the reader needs, said once. */}
+          {Object.entries(groupByReason(withheld, entity)).map(([reason, actions], i) => (
+            <span key={reason}>
+              {i > 0 && ' · '}
+              {STATE_LABELS[reason as Exclude<ActionState, 'available'>][locale]}: {actions.map((a) => ACTION_LABELS[a][locale]).join(ar ? '، ' : ', ')}
+            </span>
+          ))}
+          {withheld.length > 0 && forbidden.length > 0 && ' · '}
+          {forbidden.length > 0 && (
+            <span>
+              {ar ? `لا تسمح به ${providerLabel(entity.provider, locale)}: ` : `${providerLabel(entity.provider, locale)} does not allow: `}
+              {forbidden.map((a) => ACTION_LABELS[a][locale]).join(ar ? '، ' : ', ')}
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function groupByReason(actions: WriteActionKey[], entity: WriteEntity): Record<string, WriteActionKey[]> {
+  const out: Record<string, WriteActionKey[]> = {}
+  for (const a of actions) {
+    const reason = entity.actions[a]
+    ;(out[reason] ??= []).push(a)
+  }
+
+  return out
+}
+
+function ActionDialog({ entity, action, ar, busy, onClose, onSubmit }: {
+  entity: WriteEntity
+  action: Exclude<WriteActionKey, 'pause' | 'resume'>
+  ar: boolean
+  busy: boolean
+  onClose: () => void
+  onSubmit: (extra: Record<string, unknown>) => void
+}) {
+  const locale = ar ? 'ar' : 'en'
+  const [name, setName] = useState(entity.name ?? '')
+  const [kind, setKind] = useState<'daily' | 'lifetime'>(entity.lifetime_budget !== null && entity.budget_kinds.includes('lifetime') ? 'lifetime' : (entity.budget_kinds[0] ?? 'daily'))
+  const [amount, setAmount] = useState(String((kind === 'daily' ? entity.daily_budget : entity.lifetime_budget) ?? ''))
+  const [startsAt, setStartsAt] = useState('')
+  const [endsAt, setEndsAt] = useState('')
+  const [strategy, setStrategy] = useState(entity.bid_strategy && entity.bid_strategies.includes(entity.bid_strategy) ? entity.bid_strategy : (entity.bid_strategies[0] ?? ''))
+  const [bid, setBid] = useState('')
+  const [understood, setUnderstood] = useState(false)
+
+  const destructive = action === 'archive' || action === 'delete'
+  const valid = action === 'rename' ? name.trim().length > 0
+    : action === 'budget' ? Number(amount) > 0
+      : action === 'schedule' ? (startsAt !== '' || endsAt !== '')
+        : action === 'bid_strategy' ? strategy !== '' && (!NEEDS_AMOUNT.has(strategy) || Number(bid) > 0)
+          : destructive ? understood : true
+
+  const submit = () => {
+    if (action === 'rename') return onSubmit({ name: name.trim() })
+    if (action === 'budget') return onSubmit({ [kind === 'daily' ? 'daily_budget' : 'lifetime_budget']: Number(amount) })
+    if (action === 'schedule') return onSubmit({ ...(startsAt ? { starts_at: startsAt } : {}), ...(endsAt ? { ends_at: endsAt } : {}) })
+    if (action === 'bid_strategy') return onSubmit({ strategy, ...(NEEDS_AMOUNT.has(strategy) ? { bid_amount: Number(bid) } : {}) })
+    if (destructive) return onSubmit({ confirm: true })
+
+    return onSubmit({})
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`${ACTION_LABELS[action][locale]} — ${entity.name ?? entity.external_id}`}
+      footer={(
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+          <Button data-testid="control-dialog-submit" variant={destructive ? 'danger' : 'primary'} disabled={!valid} loading={busy} onClick={submit}>
+            {ar ? `إرسال إلى ${providerLabel(entity.provider, locale)}` : `Send to ${providerLabel(entity.provider, locale)}`}
+          </Button>
+        </div>
+      )}
+    >
+      <div className="space-y-3 text-sm">
+        {action === 'rename' && (
+          <label className="block">
+            <span className="text-text-secondary">{ar ? 'الاسم على المنصة' : 'Name on the platform'}</span>
+            <Input data-testid="control-input-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={250} />
+          </label>
+        )}
+        {action === 'budget' && (
+          <>
+            {entity.budget_kinds.length > 1 && (
+              <Select data-testid="control-input-kind" value={kind} onChange={(e) => setKind(e.target.value as 'daily' | 'lifetime')} options={entity.budget_kinds.map((k) => ({ value: k, label: k === 'daily' ? (ar ? 'يومية' : 'Daily') : (ar ? 'إجمالية' : 'Lifetime') }))} />
+            )}
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'المبلغ' : 'Amount'} {entity.currency ? <span dir="ltr">({entity.currency})</span> : null}</span>
+              <Input data-testid="control-input-amount" type="number" min="0" step="0.01" inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </label>
+            {entity.provider === 'tiktok' && <p className="text-xs text-text-muted">{ar ? 'تيك توك يغيّر المبلغ ويُبقي نوع الميزانية كما هو على المنصة.' : 'TikTok changes the amount and keeps the budget type as set on the platform.'}</p>}
+          </>
+        )}
+        {action === 'schedule' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block"><span className="text-text-secondary">{ar ? 'البداية' : 'Start'}</span><DateField value={startsAt} onChange={setStartsAt} /></label>
+            <label className="block"><span className="text-text-secondary">{ar ? 'النهاية' : 'End'}</span><DateField value={endsAt} onChange={setEndsAt} /></label>
+          </div>
+        )}
+        {action === 'bid_strategy' && (
+          <>
+            <Select data-testid="control-input-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value)} options={entity.bid_strategies.map((s) => ({ value: s, label: strategyName(s, ar) }))} />
+            {NEEDS_AMOUNT.has(strategy) && (
+              <label className="block">
+                <span className="text-text-secondary">{ar ? 'قيمة المزايدة' : 'Bid amount'} {entity.currency ? <span dir="ltr">({entity.currency})</span> : null}</span>
+                <Input data-testid="control-input-bid" type="number" min="0" step="0.01" inputMode="decimal" dir="ltr" value={bid} onChange={(e) => setBid(e.target.value)} />
+              </label>
+            )}
+          </>
+        )}
+        {action === 'duplicate' && (
+          <p className="text-text-secondary">{ar ? 'تُنشئ ميتا نسخة كاملة موقوفة؛ لا تصرف شيئًا حتى تشغّلها.' : 'Meta makes a full copy, paused; it spends nothing until you resume it.'}</p>
+        )}
+        {destructive && (
+          <>
+            <p data-testid="control-consequence" className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-text-primary">{removalConsequence(entity.provider, action, ar)}</p>
+            <label className="flex items-center gap-2">
+              <input data-testid="control-understood" type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+              <span>{ar ? 'أفهم ما سيحدث على المنصة' : 'I understand what will happen on the platform'}</span>
+            </label>
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function CreateDialog({ campaign, projectId, accounts, ar, busy, onClose, onSubmit }: {
+  campaign: UnifiedCampaign
+  projectId: string
+  accounts: Array<{ id: string; provider: string; name: string | null; currency: string | null; state: ActionState; launch_permitted: boolean; objectives: string[] }>
+  ar: boolean
+  busy: boolean
+  onClose: () => void
+  onSubmit: (body: { external_account_id: string; objective: string; daily_budget?: number; launch?: boolean }) => void
+}) {
+  const locale = ar ? 'ar' : 'en'
+  const portalBase = usePortalBase()
+  const usable = accounts.filter((a) => a.state === 'available')
+  const [accountId, setAccountId] = useState(usable[0]?.id ?? '')
+  const account = accounts.find((a) => a.id === accountId)
+  const [objective, setObjective] = useState(account?.objectives[0] ?? '')
+  const [budget, setBudget] = useState('')
+  const [launch, setLaunch] = useState(false)
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={ar ? `إنشاء «${campaign.name}» على منصة` : `Create “${campaign.name}” on a platform`}
+      footer={(
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+          <Button data-testid="control-create-submit" disabled={!account || account.state !== 'available' || objective === ''} loading={busy}
+            onClick={() => onSubmit({ external_account_id: accountId, objective, ...(Number(budget) > 0 ? { daily_budget: Number(budget) } : {}), launch })}>
+            <Rocket size={14} aria-hidden /> {launch ? (ar ? 'إنشاء وتشغيل' : 'Create and launch') : (ar ? 'إنشاء موقوفة' : 'Create paused')}
+          </Button>
+        </div>
+      )}
+    >
+      <div className="space-y-3 text-sm">
+        {accounts.length === 0 && (
+          <p data-testid="control-create-none" className="rounded-xl border border-dashed border-border px-3 py-3 text-text-secondary">
+            {ar ? 'لا حساب إعلاني محدَّد لهذا المشروع — الإنشاء يكون على حساب اخترته للمشروع. ' : 'No ad account is selected for this project — a campaign is created on an account chosen for it. '}
+            <Link to={`${portalBase}/projects/${projectId}/integrations`} className="font-bold text-brand-600 hover:underline">{ar ? 'اختر حسابات المشروع' : 'Choose the project’s accounts'}</Link>
+          </p>
+        )}
+        <ul className="space-y-1.5" data-testid="control-create-accounts">
+          {accounts.map((a) => (
+            <li key={a.id}>
+              <label className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${a.state === 'available' ? 'cursor-pointer border-border hover:border-brand-400' : 'border-dashed border-border opacity-70'}`}>
+                <span className="flex items-center gap-2">
+                  <input type="radio" name="account" disabled={a.state !== 'available'} checked={accountId === a.id} onChange={() => { setAccountId(a.id); setObjective(a.objectives[0] ?? '') }} className="accent-brand-600" />
+                  <span className="font-semibold text-text-primary">{providerLabel(a.provider, locale)}</span>
+                  <span className="text-text-secondary">{a.name}</span>
+                </span>
+                {a.state !== 'available' && <span className="text-xs text-text-muted">{STATE_LABELS[a.state as Exclude<ActionState, 'available'>]?.[locale]}</span>}
+              </label>
+            </li>
+          ))}
+        </ul>
+        {account && account.state === 'available' && (
+          <>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'الهدف على المنصة' : 'Objective on the platform'}</span>
+              <Select data-testid="control-create-objective" value={objective} onChange={(e) => setObjective(e.target.value)} options={account.objectives.map((o) => ({ value: o, label: objectiveName(o, ar) }))} />
+            </label>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'ميزانية يومية' : 'Daily budget'} {account.currency ? <span dir="ltr">({account.currency})</span> : null}</span>
+              <Input data-testid="control-create-budget" type="number" min="0" step="0.01" inputMode="decimal" dir="ltr" value={budget} onChange={(e) => setBudget(e.target.value)} />
+            </label>
+            {account.launch_permitted && (
+              <label className="flex items-center gap-2">
+                <input data-testid="control-create-launch" type="checkbox" checked={launch} onChange={(e) => setLaunch(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+                <span>{ar ? 'شغّلها فور إنشائها' : 'Launch as soon as it is created'}</span>
+              </label>
+            )}
+            <p className="text-xs text-text-muted">{ar ? 'تُنشأ موقوفة دائمًا، ثم تُشغَّل فقط إن طلبت ذلك. الهدف لا يتغيّر بعد الإنشاء على أي منصة.' : 'Always created paused, then launched only if you ask. No platform lets the objective change after creation.'}</p>
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}

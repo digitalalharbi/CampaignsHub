@@ -33,6 +33,7 @@ const tone: Record<WriteStatus, 'neutral' | 'warning' | 'info' | 'success'> = {
   implemented_not_verified: 'warning',
   awaiting_credentials: 'info',
   verified: 'success',
+  provider_unsupported: 'neutral',
 }
 
 /**
@@ -62,7 +63,7 @@ export function CampaignWriteControl({ projectId }: { projectId: string }) {
   }
 
   const data = caps.data
-  const implemented = data.providers.flatMap((p) => p.capabilities).filter((c) => c.status !== 'not_implemented').length
+  const implemented = data.providers.flatMap((p) => p.capabilities).filter((c) => c.status !== 'not_implemented' && c.status !== 'provider_unsupported').length
   const verified = data.providers.flatMap((p) => p.capabilities).filter((c) => c.status === 'verified').length
   const allowed = data.providers.flatMap((p) => p.capabilities).filter((c) => c.allowed).length
 

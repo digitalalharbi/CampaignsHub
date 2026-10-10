@@ -422,6 +422,32 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
     }
 
     /** `{api_base}/{path}` without caring who wrote the slash. */
+    /**
+     * CAMPAIGN-MGMT-WRITE-001 — the authenticated request a provider WRITE goes out on.
+     *
+     * The same vault, token and per-platform headers as every read, so a write adapter cannot reach
+     * a provider by any other route. `$idempotent = false` turns the transport's retry OFF: a create
+     * or a copy re-sent after a timeout can leave two campaigns on the platform, and a duplicate the
+     * operator never asked for is worse than an error they can see and repeat.
+     *
+     * @param  array<string, string>  $headers
+     */
+    public function providerRequest(bool $idempotent = true, array $headers = []): PendingRequest
+    {
+        $request = $this->api($this->tokens());
+        if (! $idempotent) {
+            $request = $request->retry(1, 0, null, false);
+        }
+
+        return $headers === [] ? $request : $request->withHeaders($headers);
+    }
+
+    /** A provider path on this platform's pinned API base; an absolute URL is used as given. */
+    public function providerUrl(string $path): string
+    {
+        return str_starts_with($path, 'https://') ? $path : $this->url($path);
+    }
+
     protected function url(string $path): string
     {
         return $this->credentials()->apiBase().'/'.ltrim($path, '/');

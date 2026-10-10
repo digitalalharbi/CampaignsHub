@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Http\Controllers\CampaignCreativesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignMetricsController;
 use App\Domains\Campaigns\Http\Controllers\CampaignReportsController;
 use App\Domains\Campaigns\Http\Controllers\CampaignStructureController;
+use App\Domains\Campaigns\Http\Controllers\CampaignWriteController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\RelatedEntitiesController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
@@ -52,6 +53,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::post('campaigns/{campaign}/pause', [UnifiedCampaignController::class, 'pause'])->middleware('project.can:campaigns.manage')->name('pause');
         Route::post('campaigns/{campaign}/activate', [UnifiedCampaignController::class, 'activate'])->middleware('project.can:campaigns.manage')->name('activate');
         Route::delete('campaigns/{campaign}', [UnifiedCampaignController::class, 'destroy'])->middleware('project.can:campaigns.manage')->name('destroy');
+
+        /*
+         * CAMPAIGN-MGMT-WRITE-001 — provider writes. The options read takes `campaigns.view`; every
+         * write takes `campaigns.manage` here AND the capability's own permission in the service.
+         */
+        Route::get('campaigns/{campaign}/provider-writes', [CampaignWriteController::class, 'options'])->middleware('project.can:campaigns.view')->name('provider-writes.options');
+        Route::post('campaigns/{campaign}/provider-writes', [CampaignWriteController::class, 'perform'])->middleware('project.can:campaigns.manage')->name('provider-writes.perform');
+        Route::post('campaigns/{campaign}/provider-campaigns', [CampaignWriteController::class, 'create'])->middleware('project.can:campaigns.manage')->name('provider-campaigns.create');
 
         // External-campaign linking.
         Route::get('campaigns/{campaign}/external', [UnifiedCampaignController::class, 'external'])->middleware('project.can:campaigns.view')->name('external.index');
