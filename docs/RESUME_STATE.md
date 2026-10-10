@@ -1068,3 +1068,9 @@ VERIFIED (this branch). #645 retargeted to main and rebased `--onto origin/main 
 the browser-broke signature (`#root 0 children, document complete` + «WebKit encountered an internal error» on the
 bundle request) on /agency/tasks, which passed its eight first-viewport cases in the same run. Pacing branch full
 backend suite alone: 4,614 passed, 1 skipped; full Vitest 3,409.
+
+**Lane, 2026-10-10 ~11:45.** #642 merged (main `892fb696`), deployed (run 38038404601), bundle `index-DdwcuQrn.js` routes
+`/agency/recommendations` and `/agency/spend-limits`, health 200 ×3 → AGENCY-DECISION-SURFACES-001 VERIFIED (this
+branch). #645 and #646 rebased onto `892fb696` and in CI; #646's previous webkit failure was a blank document (no
+accessibility tree, no shell `main`) on cross-product-consistency, which chromium and firefox passed. #647 and #648
+wait their turn; each merge dirties the rest through the shared docs.
