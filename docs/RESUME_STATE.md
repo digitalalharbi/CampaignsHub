@@ -1011,3 +1011,12 @@ Twin at 1366 and 390: chooser with 5 cards, overflow 0, click lands on the campa
 Row PROJECT-FIRST-VISIT-001 added IMPLEMENTED_NOT_VERIFIED. Next visible gaps noted on the twin: reports list shows raw
 tokens for non-seeded reports (`type live/performance`, `status ready` — labels missing), dashboard mostly «لا أرقام
 مقاسة» for the stale demo window.
+
+## Addendum — 2026-10-10, REPORT-CURRENCY-TRUTH-001 on `ch-brand` (`feat/report-currency-truth`, from `16e1944c`)
+
+Proving REPORT-COVERAGE-001 on a live link of Q3 Launch showed «45.9K USD» in the KPI and «45.9K SAR» in the budget
+block for the same spend: the live path labelled SAR-normalised rows with the report row's `ReportingCurrency::DEFAULT`
+stamp, while the snapshot path already let the rows win. `LiveReportService::build()` now applies `currencyBasis()`
+(one basis → that unit; two → none; no money rows → the stamp), the attention block is withheld with no unit, and
+`LiveSharedReport` formats in the payload's unit. Backend 3 new + 46 related, larastan clean; Vitest 2 new, live
+suites 76. Row added IMPLEMENTED_NOT_VERIFIED. Independent of the coverage stack (#643 → #644 → #645).

@@ -138,7 +138,15 @@ export function LiveSharedReport({
     failedMessage,
   })
 
-  const reader = useLiveMetricReader(currency, ar)
+  /*
+   * REPORT-CURRENCY-TRUTH-001 — the money is formatted in the unit the PAYLOAD states, which is the
+   * unit the rows are normalised to. The `currency` prop is the report row's stamp — written by the
+   * controllers as the reporting default — and on the owner's live link it printed «45.9K USD» over
+   * figures the same payload's budget block called 45.9K SAR. Until the first payload lands the stamp
+   * is all there is; once it has, the rows win, and a scope held in two currencies formats bare.
+   */
+  const unit = whole === null ? currency : (whole.currency ?? '')
+  const reader = useLiveMetricReader(unit, ar)
   const onOpenContent = useMemo(() => (c: ReportAd) => setOpen(c), [])
 
   if (main.load.state === 'pending') {
@@ -169,7 +177,7 @@ export function LiveSharedReport({
 
   const { payload, refreshing, refreshError, computedAt } = main.load
   const stamp = computedAt.toLocaleTimeString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-  const common = { reader, currency, locale, onOpenContent }
+  const common = { reader, currency: unit, locale, onOpenContent }
 
   return (
     /*
