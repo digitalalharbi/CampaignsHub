@@ -348,6 +348,16 @@ export function CampaignsPage() {
      */
     const spendComplete = b.length > 0 && b.every((r) => r.spent !== null) && spentCurrencies.size <= 1
     const spent = spendComplete ? b.reduce((a, r) => a + Number(r.spent ?? 0), 0) : null
+    /*
+     * CAMPAIGN-BUDGET-TRUTH-001 — WHY there is no single spend figure, counted by cause.
+     *
+     * The strip said «partial or multi-currency» for every refusal. On the demo project every row is
+     * SAR and none is partial; seven campaigns simply have nothing measured in the window (Owner
+     * directive 2026-10-09 §19 — an absence, not a zero), and the sentence named a cause that was not
+     * there. The two causes are counted apart so the strip can name the one that applies.
+     */
+    const unmeasured = b.filter((r) => r.spent === null && r.pacing_basis === 'nothing_measured_in_window').length
+    const unreadable = b.filter((r) => r.spent === null).length - unmeasured
 
     const budgetCurrency = currencies.size === 1 ? [...currencies][0] : null
     const spentCurrency = spentCurrencies.size === 1 ? [...spentCurrencies][0] : null
@@ -365,6 +375,8 @@ export function CampaignsPage() {
       currency: budgetCurrency,
       spentCurrency,
       currencyCount: currencies.size,
+      unmeasured,
+      unreadable,
       /*
        * Whether there is a budget to speak about at all.
        *
