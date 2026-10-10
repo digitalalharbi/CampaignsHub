@@ -423,6 +423,17 @@ final class LiveReportService
          */
         $totals = ClientEntityBoundary::coverage($engine->totals($from, $to));
         $previous = ClientEntityBoundary::coverage($this->previousPeriod($engine, $from, $to));
+        /*
+         * REPORT-COVERAGE-001 — two windows compare only when both are whole.
+         *
+         * The client's page carried a trend pill on every KPI computed from `totals` against
+         * `previous`, and read neither window's `coverage`. A platform that had reported through the
+         * 27th of a window ending on the 10th put «+18 %» beside a spend that covered seventeen days
+         * against thirty — on the surface a paying client judges the month by. Where either window
+         * is partial every delta is withheld and `comparison` says why, with the date the figures
+         * run through, so the page can state it in the reader's language.
+         */
+        $comparison = $this->comparison($totals, $previous);
 
         $payload = [
             'period' => [
@@ -442,9 +453,10 @@ final class LiveReportService
              * saying different things about the same number.
              */
             'conversions_basis' => $engine->conversionsBasis($from, $to),
-            'deltas' => $this->deltas($totals, $previous),
+            'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
+            'comparison' => $comparison,
             'timeseries' => $engine->timeseries($from, $to),
-            'platforms' => $this->platformsWithMovement($engine, $from, $to),
+            'platforms' => $this->platformsWithMovement($engine, $from, $to, $comparison['comparable']),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries PERFORMANCE, not the campaign
              * plan that produced it.
@@ -1157,8 +1169,17 @@ final class LiveReportService
      *
      * @return list<array<string, mixed>>
      */
-    private function platformsWithMovement(MetricsAggregator $engine, Carbon $from, Carbon $to): array
+    private function platformsWithMovement(MetricsAggregator $engine, Carbon $from, Carbon $to, bool $comparable = true): array
     {
+        if (! $comparable) {
+            // REPORT-COVERAGE-001 — no per-platform movement between windows that are not alike.
+            return array_map(static function (array $row): array {
+                $row['movement'] = [];
+
+                return $row;
+            }, $engine->byProvider($from, $to));
+        }
+
         $current = $engine->byProvider($from, $to);
         $days = $from->diffInDays($to) + 1;
         $before = array_column(
@@ -1175,6 +1196,40 @@ final class LiveReportService
 
             return $row;
         }, $current);
+    }
+
+    /**
+     * Whether `totals` and `previous` may be compared, and — when they may not — which window stopped
+     * short, who stopped, and through which date (REPORT-COVERAGE-001).
+     *
+     * Read from the coverage blocks the two totals already carry. The client boundary has blanked
+     * their `reasons` by the time this runs; the contributor lists and `reported_through` survive it,
+     * which is exactly the part a client may be told.
+     *
+     * @param  array<string, mixed>  $totals
+     * @param  array<string, mixed>  $previous
+     * @return array{comparable: bool, window: string|null, contributors: list<string>, through: string|null}
+     */
+    private function comparison(array $totals, array $previous): array
+    {
+        $state = static fn (array $t): string => (string) ($t['coverage']['state'] ?? 'complete');
+        $partial = $state($totals) === 'partial' ? 'current' : ($state($previous) === 'partial' ? 'previous' : null);
+        if ($partial === null) {
+            return ['comparable' => true, 'window' => null, 'contributors' => [], 'through' => null];
+        }
+        $block = $partial === 'current' ? ($totals['coverage'] ?? []) : ($previous['coverage'] ?? []);
+        $contributors = array_values((array) ($block['excluded_contributors'] ?? []));
+        $dates = array_values(array_unique(array_filter(array_map(
+            static fn (string $c): ?string => $block['reported_through'][$c] ?? null,
+            (array) ($block['partial_contributors'] ?? []),
+        ))));
+
+        return [
+            'comparable' => false,
+            'window' => $partial,
+            'contributors' => $contributors,
+            'through' => count($dates) === 1 ? $dates[0] : null,
+        ];
     }
 
     /** The same window immediately before this one, for period-over-period deltas. */
