@@ -24,7 +24,8 @@ const base = {
 } as unknown as LivePayload
 
 function Board({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  const reader = useLiveMetricReader(payload.currency, ar)
+  // REPORT-CURRENCY-TRUTH-001 widened `currency` to string | null; the page formats bare when it is null.
+  const reader = useLiveMetricReader(payload.currency ?? '', ar)
   return <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={['spend', 'conversions', 'roas', 'cpa']} />
 }
 const board = (payload: LivePayload, locale: 'ar' | 'en') =>
