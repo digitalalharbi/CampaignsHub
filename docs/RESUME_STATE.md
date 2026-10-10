@@ -1092,3 +1092,8 @@ today before. Full backend suite re-running alone on `mediabuying_test_brand` fo
 200 ×3 → REPORT-CURRENCY-TRUTH-001 VERIFIED (this branch; the change carries no bundle marker, the deploy is the
 evidence, the live-link observation stays operational). #645 and #647 rebased onto `6cdbda83` and in CI; #648 (this
 branch) is rebased when its turn comes.
+
+**Lane, 2026-10-10 ~13:40.** #647 merged (main `74178283`), deployed (run 38045381216), bundle `index-Nudj_uVr.js`
+carries `report-comparison-withheld`, health 200 ×3 (one transient 000 right after the deploy, as seen before) →
+REPORT-SNAPSHOT-COMPARABILITY-001 VERIFIED (this branch). #645 and #648 rebased onto `74178283` and in CI; #649
+(CAMPAIGN-VIEWS-001) open and waiting its rebase.
