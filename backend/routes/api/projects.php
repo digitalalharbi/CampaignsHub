@@ -210,7 +210,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // LIVE-OPERATING-VIEW-001 — per source: latest successful sync · source timestamp · next sync · state; never «real-time».
-    Route::get('live-view', [LiveOperatingViewController::class, 'show'])->name('live-view');
+    Route::get('live-view', [LiveOperatingViewController::class, 'show'])->middleware('project.can:campaigns.view')->name('live-view');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
     // source, objective comparability, and the canonical metric catalogue.
     Route::get('metrics/normalization', [MetricsController::class, 'normalization'])->name('metrics.normalization');
