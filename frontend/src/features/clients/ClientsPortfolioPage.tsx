@@ -6,6 +6,7 @@ import { getTaxonomy, listClients, type ClientCard, type ClientFilters } from '.
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf } from './labels'
 import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
+import { optionLabel, type Option } from '@/components/forms/types'
 import { useT } from '@/lib/i18n'
 import { FilterBar, FilterSearch, type AppliedFilter } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
@@ -64,8 +65,16 @@ export function ClientsPortfolioPage() {
    * shows. Labels come from the taxonomy options rather than the stored keys — «عميل مميز» is what
    * somebody chose, `premium` is what the database calls it.
    */
-  const labelOf = (opts: readonly { value: string; label?: string }[] | undefined, v: string | null | undefined) =>
-    v == null ? null : (opts?.find((o) => o.value === v)?.label ?? v)
+  /*
+   * DASHBOARD-DRILLDOWN-001 — the chip reads the option the product's way. Taxonomy options carry
+   * `label_ar` / `label_en`, not `label`, so this printed the raw key («needs_attention») beside a
+   * select that said «يحتاج انتباه» — visible the moment a dashboard row arrived with the filter set.
+   */
+  const labelOf = (opts: readonly Option[] | undefined, v: string | null | undefined) => {
+    if (v == null) return null
+    const opt = opts?.find((o) => o.value === v)
+    return opt ? optionLabel(opt, lang) : v
+  }
 
   const patchOne = (p: Partial<ClientFilters>) => () => setFilters((f) => ({ ...f, ...p, page: 1 }))
 
