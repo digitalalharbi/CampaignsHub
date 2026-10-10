@@ -17,7 +17,6 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
-import { CANONICAL_CURRENCY } from '@/lib/money/contract'
 import { MetricTable } from '@/components/ui/MetricTable'
 import { creativeMoney } from './creativeMoney'
 import { Num } from '@/components/ui/Num'
@@ -293,7 +292,13 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
   const data = detail.data
   const creative = data?.creative
   const metrics: CreativeMetrics | null = data?.metrics ?? null
-  const currency = data?.currency ?? CANONICAL_CURRENCY
+  /*
+   * CHART-CURRENCY-DEFAULT-001 — no currency is decided for the ad. The fallback was the canonical
+   * constant, USD, while every converted figure in this product is in the project's reporting
+   * currency: a creative whose payload named no currency printed its spend as dollars. A payload
+   * that names none gets bare figures, which read as incomplete rather than as a unit nobody stated.
+   */
+  const currency = data?.currency ?? ''
 
   const trendRows = useMemo(() => {
     if (!data) return []
