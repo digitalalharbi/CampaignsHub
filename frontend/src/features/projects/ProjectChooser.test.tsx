@@ -73,6 +73,20 @@ describe('ProjectChooser', () => {
     expect(listClientWorkspaces).not.toHaveBeenCalled()
   })
 
+  /*
+   * A viewer scoped to projects alone reaches no client workspace. Choosing their one project must
+   * set the project and leave the client untouched — a client id the switcher cannot find makes it
+   * clear both selections, and the chooser and the switcher chase each other.
+   */
+  it('sets only the project for a reader who holds no client workspace', async () => {
+    vi.mocked(listClientWorkspaces).mockResolvedValue([] as never)
+    vi.mocked(listProjects).mockResolvedValue([project('p1', 'c1', 'Only', null), project('p2', 'c1', 'Other', null)] as never)
+    renderWithProviders(<ProjectChooser purpose="campaigns" />, { locale: 'en', route: '/agency/campaigns' })
+    fireEvent.click(await screen.findByTestId('project-choice-p1'))
+    expect(useProject.getState().currentProjectId).toBe('p1')
+    expect(useAgencyClient.getState().currentClientId).toBeNull()
+  })
+
   it('says honestly when the reader can reach no project at all', async () => {
     vi.mocked(listClientWorkspaces).mockResolvedValue([] as never)
     vi.mocked(listProjects).mockResolvedValue([] as never)
