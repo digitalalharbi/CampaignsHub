@@ -44,7 +44,9 @@ export function LiveKpiBoard({
 }) {
   if (!sectionShown(payload, 'kpis')) return null
   const t = payload.totals
-  const d = payload.deltas ?? {}
+  // Withheld (REPORT-COVERAGE-001): `undefined` removes the pill; a null would draw «—» beside every figure.
+  const withheld = payload.comparison !== undefined && !payload.comparison.comparable
+  const d: Record<string, number | null | undefined> = withheld ? {} : (payload.deltas ?? {})
   const known = keys.filter((k) => reader.meta[k])
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
