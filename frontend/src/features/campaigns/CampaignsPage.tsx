@@ -51,6 +51,7 @@ import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
+import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
@@ -701,12 +702,8 @@ export function CampaignsPage() {
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
           {ar ? 'الحملات' : 'Campaigns'}
         </h1>
-        <EmptyState
-          title={ar ? 'اختر مشروعًا' : 'Select a project'}
-          description={ar
-            ? 'حملات كل مشروع مستقلة — اختر مشروعًا من المبدّل لعرض حملاته.'
-            : 'Each project has its own campaigns — pick one from the switcher to see them.'}
-        />
+        {/* PROJECT-FIRST-VISIT-001 — the choice on the page, not a sentence pointing at the sidebar. */}
+        <ProjectChooser purpose="campaigns" />
       </div>
     )
   }
