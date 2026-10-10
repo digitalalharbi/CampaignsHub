@@ -990,3 +990,14 @@ changeDiagnosis.test +2; live on rm-web: the withheld line present, «+21.3%» a
 on this branch). #643 rebased onto `16e1944c` (docs conflicts only), #644 restacked; #641 reopened to trigger CI on its
 chooser fix (`d46f7cd3`). Next candidate gap: shared/client REPORTS printing period figures without the coverage the
 summary states.
+
+## Addendum — 2026-10-10, REPORT-COVERAGE-001 on `ch-rmfmt` (`feat/report-coverage`, stacked on #644)
+
+The client's live report carried a trend pill on every KPI from `totals` against `previous` and read neither window's
+coverage. `LiveReportService::comparison()` (from the coverage blocks the totals already carry) withholds every delta and
+per-platform movement when either window is partial and names the window, the contributors and the through date; the
+boundary still blanks `reasons`. `LiveKpiBoard` states it in one line. LiveReportComparabilityTest 2/2 (a real
+credential → connection → account chain, an active Meta external campaign so Meta is EXPECTED, a success run whose
+window_end is ten days short), live suites 21, larastan clean; liveComparison.test 3/3; reports Vitest green.
+Row added IMPLEMENTED_NOT_VERIFIED. Full backend suites run concurrently on `mediabuying_test_rmfmt` earlier today
+produced QueryException storms (575 «failed») — collisions, not findings; the clean run is repeated alone.
