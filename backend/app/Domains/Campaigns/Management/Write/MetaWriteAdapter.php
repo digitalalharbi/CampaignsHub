@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Campaigns\Management\Write;
 
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Support\Carbon;
 
 /**
@@ -21,19 +22,26 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
     protected const SUPPORT = [
         'campaign' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'bid_strategy' => true,
-            'archive' => true, 'delete' => true, 'duplicate' => true,
+            'archive' => true, 'delete' => true, 'duplicate' => true, 'create_ad_set' => true,
         ],
         'ad_set' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'schedule' => true,
             'bid_strategy' => true, 'archive' => true, 'delete' => true, 'duplicate' => true,
+            'targeting' => true, 'placements' => true, 'create_ad' => true,
         ],
         'ad' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'archive' => true, 'delete' => true, 'duplicate' => true,
             'budget' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'schedule' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'bid_strategy' => WriteRefusal::PROVIDER_UNSUPPORTED,
+            'creative' => true,
+            // The landing URL lives in the creative, and a Meta creative cannot be edited — bind another one instead.
+            'destination' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
     ];
+
+    /** Placement fields Meta keeps inside `targeting`; cleared together so «automatic» really is automatic. */
+    private const PLACEMENT_KEYS = ['publisher_platforms', 'facebook_positions', 'instagram_positions', 'audience_network_positions', 'messenger_positions'];
 
     private const STRATEGIES = ['LOWEST_COST_WITHOUT_CAP', 'LOWEST_COST_WITH_BID_CAP', 'COST_CAP'];
 
@@ -62,6 +70,16 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
         return null;
     }
 
+    public function optimizationGoals(): array
+    {
+        return ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'OFFSITE_CONVERSIONS', 'LEAD_GENERATION', 'REACH', 'IMPRESSIONS', 'THRUPLAY'];
+    }
+
+    public function placementFamilies(): array
+    {
+        return ['facebook', 'instagram', 'audience_network', 'messenger'];
+    }
+
     public function perform(ApiAdvertisingConnector $connector, WriteTarget $target, WriteAction $action, array $input): WriteOutcome
     {
         $node = $target->externalId;
@@ -75,6 +93,76 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
             $id = $body['copied_campaign_id'] ?? $body['copied_adset_id'] ?? $body['copied_ad_id'] ?? null;
 
             return $this->verdict($copy, [], is_scalar($id) ? (string) $id : null);
+        }
+
+        if ($action === WriteAction::CreateAdSet) {
+            $response = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/adsets', array_filter([
+                'name' => (string) $input['name'],
+                'campaign_id' => $node,
+                'status' => 'PAUSED',
+                'billing_event' => 'IMPRESSIONS',
+                'optimization_goal' => (string) $input['optimization_goal'],
+                'daily_budget' => isset($input['daily_budget']) ? $this->minorUnits((float) $input['daily_budget'], $target->currency) : null,
+                'targeting' => ['geo_locations' => ['countries' => array_values((array) $input['countries'])]],
+                'start_time' => isset($input['starts_at']) ? Carbon::parse((string) $input['starts_at'])->toIso8601String() : null,
+            ], static fn ($v) => $v !== null), idempotent: false);
+            $id = ($response->json() ?? [])['id'] ?? null;
+
+            return $this->verdict($response, [], is_scalar($id) ? (string) $id : null);
+        }
+
+        if ($action === WriteAction::CreateAd) {
+            $response = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/ads', [
+                'name' => (string) $input['name'],
+                'adset_id' => $node,
+                'creative' => ['creative_id' => (string) $input['creative_external_id']],
+                'status' => 'PAUSED',
+            ], idempotent: false);
+            $id = ($response->json() ?? [])['id'] ?? null;
+
+            return $this->verdict($response, [], is_scalar($id) ? (string) $id : null);
+        }
+
+        if ($action === WriteAction::Targeting || $action === WriteAction::Placements) {
+            // Meta replaces `targeting` WHOLE, so it is read first: a write of three keys would erase interests and audiences.
+            $read = $this->send($connector, 'GET', $node, ['fields' => 'targeting']);
+            if (! PlatformHttp::succeeded($read)) {
+                return $this->verdict($read);
+            }
+            $targeting = (array) (($read->json() ?? [])['targeting'] ?? []);
+
+            if ($action === WriteAction::Targeting) {
+                $targeting['geo_locations'] = ['countries' => array_values((array) $input['countries'])];
+                $targeting['age_min'] = (int) ($input['age_min'] ?? 18);
+                $targeting['age_max'] = (int) ($input['age_max'] ?? 65);
+                $genders = (string) ($input['genders'] ?? 'all');
+                if ($genders === 'all') {
+                    unset($targeting['genders']);
+                } else {
+                    $targeting['genders'] = [$genders === 'male' ? 1 : 2];
+                }
+                $mirror = ['targeting' => $this->targetingMirror($input)];
+            } else {
+                foreach (self::PLACEMENT_KEYS as $key) {
+                    unset($targeting[$key]);
+                }
+                $automatic = ($input['mode'] ?? 'automatic') === 'automatic';
+                if (! $automatic) {
+                    $targeting['publisher_platforms'] = array_values((array) $input['platforms']);
+                }
+                $mirror = ['targeting' => ['placement_config' => $automatic ? 'automatic' : 'custom', 'placements' => $automatic ? [] : array_values((array) $input['platforms'])]];
+            }
+
+            return $this->verdict($this->send($connector, 'POST', $node, ['targeting' => $targeting]), $mirror);
+        }
+
+        if ($action === WriteAction::Creative) {
+            return $this->verdict($this->send($connector, 'POST', $node, ['creative' => ['creative_id' => (string) $input['creative_external_id']]]), ['creative_external_id' => (string) $input['creative_external_id']]);
+        }
+
+        if ($action === WriteAction::Destination) {
+            // Never reached through the service, which refuses it first; stated here so the adapter cannot be misused either.
+            return WriteOutcome::refused('Meta keeps the landing URL in the creative, which cannot be edited — bind another creative.');
         }
 
         [$fields, $mirror] = match ($action) {
@@ -105,7 +193,7 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
 
     public function create(ApiAdvertisingConnector $connector, CreateCampaignCommand $command): WriteOutcome
     {
-        $account = str_starts_with($command->accountExternalId, 'act_') ? $command->accountExternalId : 'act_'.$command->accountExternalId;
+        $account = $this->account($command->accountExternalId);
 
         $response = $this->send($connector, 'POST', "{$account}/campaigns", array_filter([
             'name' => $command->name,
@@ -118,5 +206,10 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
         $id = ($response->json() ?? [])['id'] ?? null;
 
         return $this->verdict($response, [], is_scalar($id) ? (string) $id : null);
+    }
+
+    private function account(string $id): string
+    {
+        return str_starts_with($id, 'act_') ? $id : 'act_'.$id;
     }
 }

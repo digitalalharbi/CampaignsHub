@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Management\Write\WriteLevel;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Http\Controllers\Controller;
@@ -100,6 +101,12 @@ final class CampaignWriteController extends Controller
             WriteAction::Budget => $this->budget($request, $adapter?->budgetKinds($level) ?? []),
             WriteAction::Schedule => $this->schedule($request),
             WriteAction::BidStrategy => $this->strategy($request, $adapter?->bidStrategies($level) ?? []),
+            WriteAction::CreateAdSet => $this->adSet($request, $provider, $adapter?->optimizationGoals() ?? []),
+            WriteAction::CreateAd => $request->validate(['name' => ['required', 'string', 'min:1', 'max:250']]) + $this->creative($request, $provider),
+            WriteAction::Creative => $this->creative($request, $provider),
+            WriteAction::Targeting => $this->targeting($request),
+            WriteAction::Placements => $this->placements($request, $adapter?->placementFamilies() ?? []),
+            WriteAction::Destination => $request->validate(['url' => ['required', 'url:https', 'max:2048']]),
             default => [],
         };
     }
@@ -145,6 +152,64 @@ final class CampaignWriteController extends Controller
             'bid_amount' => ['nullable', 'numeric', 'gt:0', 'max:10000000'],
         ]);
         abort_if(in_array($data['strategy'], self::CAP_STRATEGIES, true) && ($data['bid_amount'] ?? null) === null, 422, 'This strategy needs a bid amount.');
+
+        return array_filter($data, static fn ($v) => $v !== null);
+    }
+
+    /**
+     * @param  list<string>  $goals
+     * @return array<string, mixed>
+     */
+    private function adSet(Request $request, ?string $provider, array $goals): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'min:1', 'max:250'],
+            'optimization_goal' => $goals === [] ? ['prohibited'] : ['required', 'string', Rule::in($goals)],
+            'daily_budget' => ['nullable', 'numeric', 'gt:0', 'max:100000000'],
+            'countries' => $provider === 'google' ? ['prohibited'] : ['required', 'array', 'min:1', 'max:25'],
+            'countries.*' => ['string', 'regex:/^[A-Z]{2}$/'],
+            'bid_amount' => $provider === 'google' ? ['required', 'numeric', 'gt:0', 'max:10000000'] : ['nullable', 'numeric', 'gt:0'],
+            'starts_at' => ['nullable', 'date'],
+        ]);
+
+        return array_filter($data, static fn ($v) => $v !== null);
+    }
+
+    /** @return array<string, mixed> the provider's own id for a creative this project holds */
+    private function creative(Request $request, ?string $provider): array
+    {
+        $data = $request->validate(['creative_id' => ['required', 'string', 'max:64']]);
+        $external = ExternalCreative::query()->where('provider', $provider)->whereKey($data['creative_id'])->value('external_creative_id');
+        abort_if($external === null || $external === '', 422, 'That creative is not one of this project\'s on this platform.');
+
+        return ['creative_external_id' => (string) $external];
+    }
+
+    /** @return array<string, mixed> */
+    private function targeting(Request $request): array
+    {
+        $data = $request->validate([
+            'countries' => ['required', 'array', 'min:1', 'max:25'],
+            'countries.*' => ['string', 'regex:/^[A-Z]{2}$/'],
+            'age_min' => ['nullable', 'integer', 'min:13', 'max:65'],
+            'age_max' => ['nullable', 'integer', 'min:13', 'max:65', 'gte:age_min'],
+            'genders' => ['nullable', Rule::in(['all', 'male', 'female'])],
+        ]);
+
+        return array_filter($data, static fn ($v) => $v !== null);
+    }
+
+    /**
+     * @param  list<string>  $families
+     * @return array<string, mixed>
+     */
+    private function placements(Request $request, array $families): array
+    {
+        $data = $request->validate([
+            'mode' => ['required', Rule::in(['automatic', 'custom'])],
+            'platforms' => ['required_if:mode,custom', 'array', 'min:1'],
+            'platforms.*' => ['string', Rule::in($families)],
+        ]);
 
         return array_filter($data, static fn ($v) => $v !== null);
     }

@@ -51,6 +51,9 @@ final class WriteAdapterRegistry
             return $adapter->createRefusal() === null ? 'implemented' : (string) $adapter->createRefusal();
         }
         if ($capability === 'ad_set_management') {
+            if ($adapter->refusal(WriteLevel::Campaign, WriteAction::CreateAdSet) === null) {
+                return 'implemented';
+            }
             foreach (WriteAction::cases() as $action) {
                 if ($adapter->refusal(WriteLevel::AdSet, $action) === null) {
                     return 'implemented';

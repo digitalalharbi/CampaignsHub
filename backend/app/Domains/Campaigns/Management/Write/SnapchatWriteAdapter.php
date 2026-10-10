@@ -26,17 +26,21 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
     protected const SUPPORT = [
         'campaign' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'schedule' => true, 'delete' => true,
+            'create_ad_set' => true,
             'bid_strategy' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
         'ad_set' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'schedule' => true, 'bid_strategy' => true, 'delete' => true,
+            'targeting' => true, 'create_ad' => true,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
         'ad' => [
-            'pause' => true, 'resume' => true, 'rename' => true, 'delete' => true,
+            'pause' => true, 'resume' => true, 'rename' => true, 'delete' => true, 'creative' => true,
+            // The swipe-up URL is part of the creative on Snapchat; bind another creative to change it.
+            'destination' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'budget' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'schedule' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'bid_strategy' => WriteRefusal::PROVIDER_UNSUPPORTED,
@@ -80,12 +84,48 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
         return null;
     }
 
+    public function optimizationGoals(): array
+    {
+        return ['IMPRESSIONS', 'SWIPES', 'VIDEO_VIEWS', 'PIXEL_PURCHASE', 'PIXEL_SIGNUP'];
+    }
+
     public function perform(ApiAdvertisingConnector $connector, WriteTarget $target, WriteAction $action, array $input): WriteOutcome
     {
         [$path, $responseKey, $entityKey] = self::SHAPE[$target->level->value];
 
         if ($action === WriteAction::Delete) {
             return $this->itemVerdict($this->send($connector, 'DELETE', "{$path}/{$target->externalId}"), $responseKey, $this->statusMirror($action));
+        }
+
+        if ($action === WriteAction::CreateAdSet) {
+            $response = $this->send($connector, 'POST', "campaigns/{$target->externalId}/adsquads", ['adsquads' => [array_filter([
+                'campaign_id' => $target->externalId,
+                'name' => (string) $input['name'],
+                'type' => 'SNAP_ADS',
+                'placement_v2' => ['config' => 'AUTOMATIC'],
+                'optimization_goal' => (string) $input['optimization_goal'],
+                'bid_strategy' => 'AUTO_BID',
+                'daily_budget_micro' => isset($input['daily_budget']) ? $this->micros((float) $input['daily_budget']) : null,
+                'targeting' => ['geos' => array_map(static fn (string $c): array => ['country_code' => strtolower($c)], array_values((array) $input['countries']))],
+                'status' => 'PAUSED',
+                'start_time' => Carbon::parse((string) ($input['starts_at'] ?? 'now'))->toIso8601String(),
+            ], static fn ($v) => $v !== null)]], idempotent: false);
+            $id = ($response->json() ?? [])['adsquads'][0]['adsquad']['id'] ?? null;
+
+            return $this->itemVerdict($response, 'adsquads', [], is_scalar($id) ? (string) $id : null);
+        }
+
+        if ($action === WriteAction::CreateAd) {
+            $response = $this->send($connector, 'POST', "adsquads/{$target->externalId}/ads", ['ads' => [[
+                'ad_squad_id' => $target->externalId,
+                'creative_id' => (string) $input['creative_external_id'],
+                'name' => (string) $input['name'],
+                'type' => 'SNAP_AD',
+                'status' => 'PAUSED',
+            ]]], idempotent: false);
+            $id = ($response->json() ?? [])['ads'][0]['ad']['id'] ?? null;
+
+            return $this->itemVerdict($response, 'ads', [], is_scalar($id) ? (string) $id : null);
         }
 
         $read = $this->send($connector, 'GET', "{$path}/{$target->externalId}");
@@ -100,7 +140,7 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
             unset($entity[$field]);
         }
 
-        [$changes, $mirror] = $this->changes($target->level, $action, $input);
+        [$changes, $mirror] = $this->changes($target->level, $action, $input, $entity);
 
         return $this->itemVerdict(
             $this->send($connector, 'PUT', $this->parentPath($target, $entity), [$responseKey => [array_merge($entity, $changes)]]),
@@ -125,9 +165,29 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
         return $this->itemVerdict($response, 'campaigns', [], is_scalar($id) ? (string) $id : null);
     }
 
-    /** @return array{0: array<string, mixed>, 1: array<string, mixed>} */
-    private function changes(WriteLevel $level, WriteAction $action, array $input): array
+    /**
+     * @param  array<string, mixed>  $entity  the entity as Snapchat holds it now
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+     */
+    private function changes(WriteLevel $level, WriteAction $action, array $input, array $entity): array
     {
+        if ($action === WriteAction::Targeting) {
+            // Only geos and demographics are replaced; every other targeting key Snapchat holds is kept.
+            $targeting = (array) ($entity['targeting'] ?? []);
+            $targeting['geos'] = array_map(static fn (string $c): array => ['country_code' => strtolower($c)], array_values((array) $input['countries']));
+            $genders = (string) ($input['genders'] ?? 'all');
+            $targeting['demographics'] = [array_filter([
+                'min_age' => isset($input['age_min']) ? (string) $input['age_min'] : null,
+                'max_age' => isset($input['age_max']) ? (string) $input['age_max'] : null,
+                'gender' => $genders === 'all' ? null : strtoupper($genders),
+            ], static fn ($v) => $v !== null)];
+
+            return [['targeting' => $targeting], ['targeting' => $this->targetingMirror($input)]];
+        }
+        if ($action === WriteAction::Creative) {
+            return [['creative_id' => (string) $input['creative_external_id']], ['creative_external_id' => (string) $input['creative_external_id']]];
+        }
+
         return match ($action) {
             WriteAction::Pause => [['status' => 'PAUSED'], $this->statusMirror($action)],
             WriteAction::Resume => [['status' => 'ACTIVE'], $this->statusMirror($action)],

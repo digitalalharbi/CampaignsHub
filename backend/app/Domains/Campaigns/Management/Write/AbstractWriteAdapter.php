@@ -42,6 +42,31 @@ abstract class AbstractWriteAdapter implements ProviderWriteAdapter
         return [];
     }
 
+    public function optimizationGoals(): array
+    {
+        return [];
+    }
+
+    public function placementFamilies(): array
+    {
+        return [];
+    }
+
+    /**
+     * The normalised targeting the mirror keeps (`countries`, `age`, `genders`), from a validated input.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    protected function targetingMirror(array $input): array
+    {
+        return array_filter([
+            'countries' => $input['countries'] ?? null,
+            'age' => isset($input['age_min']) || isset($input['age_max']) ? (($input['age_min'] ?? 13).'-'.($input['age_max'] ?? 65)) : null,
+            'genders' => $input['genders'] ?? null,
+        ], static fn ($v) => $v !== null);
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @param  array<string, string>  $headers

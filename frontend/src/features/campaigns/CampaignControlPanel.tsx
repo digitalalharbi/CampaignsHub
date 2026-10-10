@@ -18,8 +18,9 @@ import { useUi } from '@/stores/ui'
 import { campaignStatusLabel, campaignStatusTone, providerLabel } from './labels'
 import { useCampaignActivity } from './metrics'
 import {
-  ACTION_LABELS, NEEDS_AMOUNT, STATE_LABELS, createOnPlatform, objectiveName, performWrite, removalConsequence,
-  strategyName, useWriteOptions, type ActionState, type WriteActionKey, type WriteEntity, type WriteResult,
+  ACTION_LABELS, LEVEL_ACTIONS, NEEDS_AMOUNT, STATE_LABELS, createOnPlatform, familyName, goalName, objectiveName, parseCountries,
+  performWrite, removalConsequence, strategyName, useWriteOptions,
+  type ActionState, type CreativeOption, type WriteActionKey, type WriteEntity, type WriteResult,
 } from './providerWrites'
 
 /**
@@ -37,7 +38,6 @@ type Dialog =
 
 type Banner = { tone: 'success' | 'danger' | 'info'; text: string } | null
 
-const SECONDARY: Array<Exclude<WriteActionKey, 'pause' | 'resume'>> = ['rename', 'budget', 'schedule', 'bid_strategy', 'duplicate', 'archive', 'delete']
 const INACTIVE = new Set(['archived', 'deleted', 'removed'])
 
 export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { campaign: UnifiedCampaign; projectId: string; onOpenHistory?: () => void }) {
@@ -207,6 +207,7 @@ export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { c
         <ActionDialog
           entity={dialog.entity}
           action={dialog.action}
+          creatives={options.data?.creatives?.[dialog.entity.provider] ?? []}
           ar={ar}
           busy={write.isPending}
           onClose={() => setDialog(null)}
@@ -241,10 +242,11 @@ function EntityRow({ entity, ar, busy, onQuick, onOpen, prominent = false, compa
   const status = entity.status ?? ''
   const inactive = INACTIVE.has(status)
   const quick: 'pause' | 'resume' | null = inactive ? null : status === 'paused' ? 'resume' : 'pause'
-  const offered = SECONDARY.filter((a) => entity.actions[a] === 'available' && !(inactive && a !== 'duplicate'))
-  const withheld = (quick ? [quick, ...SECONDARY] : SECONDARY)
+  const secondary = LEVEL_ACTIONS[entity.level] as Array<Exclude<WriteActionKey, 'pause' | 'resume'>>
+  const offered = secondary.filter((a) => entity.actions[a] === 'available' && !(inactive && a !== 'duplicate'))
+  const withheld = (quick ? [quick, ...secondary] : secondary)
     .filter((a) => entity.actions[a] !== 'available' && entity.actions[a] !== 'provider_unsupported')
-  const forbidden = SECONDARY.filter((a) => entity.actions[a] === 'provider_unsupported')
+  const forbidden = secondary.filter((a) => entity.actions[a] === 'provider_unsupported')
   const budget = entity.daily_budget !== null
     ? `${money(entity.daily_budget, entity.currency ?? '')} ${ar ? 'يوميًا' : 'daily'}`
     : entity.lifetime_budget !== null ? `${money(entity.lifetime_budget, entity.currency ?? '')} ${ar ? 'إجمالًا' : 'lifetime'}` : null
@@ -269,6 +271,8 @@ function EntityRow({ entity, ar, busy, onQuick, onOpen, prominent = false, compa
               <span dir="ltr">{entity.external_id}</span>
               {budget && <span> · <span dir="ltr">{budget}</span></span>}
               {entity.bid_strategy && <span> · {strategyName(entity.bid_strategy.toUpperCase(), ar)}</span>}
+              {entity.targeting?.countries && entity.targeting.countries.length > 0 && <span> · <span dir="ltr">{entity.targeting.countries.join(', ')}</span></span>}
+              {entity.targeting?.age && <span> · <span dir="ltr">{entity.targeting.age}</span></span>}
             </p>
           )}
         </div>
@@ -329,9 +333,10 @@ function groupByReason(actions: WriteActionKey[], entity: WriteEntity): Record<s
   return out
 }
 
-function ActionDialog({ entity, action, ar, busy, onClose, onSubmit }: {
+function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }: {
   entity: WriteEntity
   action: Exclude<WriteActionKey, 'pause' | 'resume'>
+  creatives: CreativeOption[]
   ar: boolean
   busy: boolean
   onClose: () => void
@@ -346,15 +351,44 @@ function ActionDialog({ entity, action, ar, busy, onClose, onSubmit }: {
   const [strategy, setStrategy] = useState(entity.bid_strategy && entity.bid_strategies.includes(entity.bid_strategy) ? entity.bid_strategy : (entity.bid_strategies[0] ?? ''))
   const [bid, setBid] = useState('')
   const [understood, setUnderstood] = useState(false)
+  const [childName, setChildName] = useState('')
+  const [goal, setGoal] = useState(entity.optimization_goals[0] ?? '')
+  const [childBudget, setChildBudget] = useState('')
+  const [countryText, setCountryText] = useState((entity.targeting?.countries ?? []).join(', '))
+  const [ageMin, setAgeMin] = useState(entity.targeting?.age?.split('-')[0] ?? '18')
+  const [ageMax, setAgeMax] = useState(entity.targeting?.age?.split('-')[1] ?? '65')
+  const [genders, setGenders] = useState(entity.targeting?.genders ?? 'all')
+  const [placementMode, setPlacementMode] = useState<'automatic' | 'custom'>(entity.targeting?.placement_config === 'custom' ? 'custom' : 'automatic')
+  const [families, setFamilies] = useState<string[]>(entity.targeting?.placements?.filter((p) => entity.placement_families.includes(p)) ?? [])
+  const [creativeId, setCreativeId] = useState(creatives[0]?.id ?? '')
+  const [url, setUrl] = useState(entity.destination_url ?? '')
 
+  const countries = parseCountries(countryText)
+  const google = entity.provider === 'google'
   const destructive = action === 'archive' || action === 'delete'
-  const valid = action === 'rename' ? name.trim().length > 0
+  const valid = action === 'create_ad_set' ? childName.trim() !== '' && (google ? Number(bid) > 0 : (countries.length > 0 && goal !== ''))
+    : action === 'create_ad' ? childName.trim() !== '' && creativeId !== ''
+      : action === 'targeting' ? countries.length > 0 && Number(ageMin) >= 13 && Number(ageMax) >= Number(ageMin) && Number(ageMax) <= 65
+        : action === 'placements' ? (placementMode === 'automatic' || families.length > 0)
+          : action === 'creative' ? creativeId !== ''
+            : action === 'destination' ? /^https:\/\/\S+$/.test(url)
+              : action === 'rename' ? name.trim().length > 0
     : action === 'budget' ? Number(amount) > 0
       : action === 'schedule' ? (startsAt !== '' || endsAt !== '')
         : action === 'bid_strategy' ? strategy !== '' && (!NEEDS_AMOUNT.has(strategy) || Number(bid) > 0)
           : destructive ? understood : true
 
   const submit = () => {
+    if (action === 'create_ad_set') {
+      return onSubmit(google
+        ? { name: childName.trim(), bid_amount: Number(bid) }
+        : { name: childName.trim(), optimization_goal: goal, countries, ...(Number(childBudget) > 0 ? { daily_budget: Number(childBudget) } : {}) })
+    }
+    if (action === 'create_ad') return onSubmit({ name: childName.trim(), creative_id: creativeId })
+    if (action === 'targeting') return onSubmit({ countries, age_min: Number(ageMin), age_max: Number(ageMax), genders })
+    if (action === 'placements') return onSubmit(placementMode === 'automatic' ? { mode: 'automatic' } : { mode: 'custom', platforms: families })
+    if (action === 'creative') return onSubmit({ creative_id: creativeId })
+    if (action === 'destination') return onSubmit({ url })
     if (action === 'rename') return onSubmit({ name: name.trim() })
     if (action === 'budget') return onSubmit({ [kind === 'daily' ? 'daily_budget' : 'lifetime_budget']: Number(amount) })
     if (action === 'schedule') return onSubmit({ ...(startsAt ? { starts_at: startsAt } : {}), ...(endsAt ? { ends_at: endsAt } : {}) })
@@ -413,6 +447,93 @@ function ActionDialog({ entity, action, ar, busy, onClose, onSubmit }: {
               </label>
             )}
           </>
+        )}
+        {(action === 'create_ad_set' || action === 'create_ad') && (
+          <label className="block">
+            <span className="text-text-secondary">{ar ? 'الاسم' : 'Name'}</span>
+            <Input data-testid="control-input-child-name" value={childName} onChange={(e) => setChildName(e.target.value)} maxLength={250} />
+          </label>
+        )}
+        {action === 'create_ad_set' && !google && (
+          <>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'هدف التحسين' : 'Optimisation goal'}</span>
+              <Select data-testid="control-input-goal" value={goal} onChange={(e) => setGoal(e.target.value)} options={entity.optimization_goals.map((g) => ({ value: g, label: goalName(g, ar) }))} />
+            </label>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'الدول (رموز من حرفين)' : 'Countries (two-letter codes)'}</span>
+              <Input data-testid="control-input-countries" dir="ltr" value={countryText} onChange={(e) => setCountryText(e.target.value)} placeholder="SA, AE" />
+            </label>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'ميزانية يومية (اختيارية)' : 'Daily budget (optional)'} {entity.currency ? <span dir="ltr">({entity.currency})</span> : null}</span>
+              <Input data-testid="control-input-child-budget" type="number" min="0" step="0.01" dir="ltr" value={childBudget} onChange={(e) => setChildBudget(e.target.value)} />
+            </label>
+          </>
+        )}
+        {action === 'create_ad_set' && google && (
+          <label className="block">
+            <span className="text-text-secondary">{ar ? 'أقصى تكلفة للنقرة' : 'Max CPC bid'} {entity.currency ? <span dir="ltr">({entity.currency})</span> : null}</span>
+            <Input data-testid="control-input-bid" type="number" min="0" step="0.01" dir="ltr" value={bid} onChange={(e) => setBid(e.target.value)} />
+          </label>
+        )}
+        {action === 'create_ad_set' && <p className="text-xs text-text-muted">{ar ? 'تُنشأ موقوفة؛ لا تصرف شيئًا حتى تشغّلها.' : 'Created paused; it spends nothing until you resume it.'}</p>}
+        {(action === 'create_ad' || action === 'creative') && (
+          creatives.length === 0
+            ? <p data-testid="control-no-creatives" className="rounded-xl border border-dashed border-border px-3 py-2 text-text-secondary">{ar ? 'لا محتوى لهذا المشروع على هذه المنصة بمعرّف منصة بعد.' : 'This project has no creative with a platform id on this platform yet.'}</p>
+            : (
+              <ul data-testid="control-creative-picker" className="max-h-64 space-y-1.5 overflow-y-auto">
+                {creatives.map((c) => (
+                  <li key={c.id}>
+                    <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${creativeId === c.id ? 'border-brand-500' : 'border-border'}`}>
+                      <input type="radio" name="creative" checked={creativeId === c.id} onChange={() => setCreativeId(c.id)} className="accent-brand-600" />
+                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-10 shrink-0 rounded-md bg-surface-secondary" />}
+                      <span className="min-w-0 truncate text-text-primary">{c.name ?? c.id}</span>
+                      {c.format && <Badge tone="neutral">{c.format}</Badge>}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )
+        )}
+        {action === 'targeting' && (
+          <>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'الدول (رموز من حرفين)' : 'Countries (two-letter codes)'}</span>
+              <Input data-testid="control-input-countries" dir="ltr" value={countryText} onChange={(e) => setCountryText(e.target.value)} placeholder="SA, AE" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block"><span className="text-text-secondary">{ar ? 'من عمر' : 'Age from'}</span><Input data-testid="control-input-age-min" type="number" min="13" max="65" dir="ltr" value={ageMin} onChange={(e) => setAgeMin(e.target.value)} /></label>
+              <label className="block"><span className="text-text-secondary">{ar ? 'إلى عمر' : 'Age to'}</span><Input data-testid="control-input-age-max" type="number" min="13" max="65" dir="ltr" value={ageMax} onChange={(e) => setAgeMax(e.target.value)} /></label>
+            </div>
+            <Select data-testid="control-input-genders" value={genders} onChange={(e) => setGenders(e.target.value)} options={[
+              { value: 'all', label: ar ? 'الجميع' : 'Everyone' }, { value: 'male', label: ar ? 'رجال' : 'Men' }, { value: 'female', label: ar ? 'نساء' : 'Women' },
+            ]} />
+            <p className="text-xs text-text-muted">{ar ? 'تُستبدل الدول والعمر والجنس فقط؛ تبقى الاهتمامات والجماهير كما هي على المنصة.' : 'Only countries, age and gender are replaced; interests and audiences stay as the platform holds them.'}</p>
+          </>
+        )}
+        {action === 'placements' && (
+          <>
+            <Select data-testid="control-input-placement-mode" value={placementMode} onChange={(e) => setPlacementMode(e.target.value as 'automatic' | 'custom')} options={[
+              { value: 'automatic', label: ar ? 'تلقائية (توصي بها المنصة)' : 'Automatic (platform recommended)' },
+              { value: 'custom', label: ar ? 'أختارها بنفسي' : 'I choose' },
+            ]} />
+            {placementMode === 'custom' && (
+              <div className="flex flex-wrap gap-3" data-testid="control-input-families">
+                {entity.placement_families.map((f) => (
+                  <label key={f} className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={families.includes(f)} onChange={(e) => setFamilies((cur) => e.target.checked ? [...cur, f] : cur.filter((x) => x !== f))} className="h-4 w-4 accent-brand-600" />
+                    <span>{familyName(f, ar)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {action === 'destination' && (
+          <label className="block">
+            <span className="text-text-secondary">{ar ? 'رابط الوجهة (https)' : 'Landing URL (https)'}</span>
+            <Input data-testid="control-input-url" type="url" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
+          </label>
         )}
         {action === 'duplicate' && (
           <p className="text-text-secondary">{ar ? 'تُنشئ ميتا نسخة كاملة موقوفة؛ لا تصرف شيئًا حتى تشغّلها.' : 'Meta makes a full copy, paused; it spends nothing until you resume it.'}</p>
