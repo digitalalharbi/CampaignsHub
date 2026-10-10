@@ -36,7 +36,17 @@ function headlineKeys(objective: string | null): string[] {
   return layoutFor(canonical ?? 'all').primary
 }
 
-function reading(key: string, row: Record<string, unknown>, ar: boolean): CampaignHeadline | null {
+/*
+ * CAMPAIGNS-MONEY-CURRENCY-001 — the reporting currency travels with the row to the reader.
+ *
+ * `readMetric` has taken a currency since MONEY-USD-001, and every money figure on the KPI cards
+ * carries one; these helpers never passed it, so the table and the cards printed «17.4K» for spend,
+ * «115.55» for cost per result and «238K» for revenue beside a budget that said «16.7K SAR». A bare
+ * magnitude beside a labelled one is the same money rule broken: the reader cannot tell what 17.4K
+ * is of. The currency is the summary's (the window's reporting currency), null when it cannot be
+ * named — and then the figure stays bare, which `money()` already does on purpose.
+ */
+function reading(key: string, row: Record<string, unknown>, ar: boolean, currency: string | null = null): CampaignHeadline | null {
   const spec = SPECS[key]
   if (spec === undefined) return null
 
@@ -53,7 +63,7 @@ function reading(key: string, row: Record<string, unknown>, ar: boolean): Campai
   return {
     key,
     label: ar ? spec.label.ar : spec.label.en,
-    reading: readMetric(key, spec, row as Record<string, number | null>, { [key]: map?.[key] === true }),
+    reading: readMetric(key, spec, row as Record<string, number | null>, { [key]: map?.[key] === true }, currency),
   }
 }
 
@@ -61,12 +71,13 @@ export function campaignHeadline(
   objective: string | null,
   row: Record<string, unknown> | undefined,
   ar: boolean,
+  currency: string | null = null,
 ): CampaignHeadline | null {
   if (row === undefined) return null
 
   const key = headlineKeys(objective)[0]
 
-  return key === undefined ? null : reading(key, row, ar)
+  return key === undefined ? null : reading(key, row, ar, currency)
 }
 
 /**
@@ -85,12 +96,13 @@ export function campaignEfficiency(
   objective: string | null,
   row: Record<string, unknown> | undefined,
   ar: boolean,
+  currency: string | null = null,
 ): CampaignHeadline | null {
   if (row === undefined) return null
 
   const key = headlineKeys(objective).find((k) => SPECS[k]?.invertGood === true)
 
-  return key === undefined ? null : reading(key, row, ar)
+  return key === undefined ? null : reading(key, row, ar, currency)
 }
 
 /**
@@ -109,12 +121,13 @@ export function campaignReturn(
   objective: string | null,
   row: Record<string, unknown> | undefined,
   ar: boolean,
+  currency: string | null = null,
 ): CampaignHeadline | null {
   if (row === undefined) return null
 
   const key = headlineKeys(objective).find((k) => k === 'roas' || k === 'revenue')
 
-  return key === undefined ? null : reading(key, row, ar)
+  return key === undefined ? null : reading(key, row, ar, currency)
 }
 
 /**
@@ -125,8 +138,8 @@ export function campaignReturn(
  * the objective layout. It still goes through `reading()`, so a withheld or never-reported spend
  * says so instead of printing a coalesced zero beside a real one.
  */
-export function campaignSpendReading(row: Record<string, unknown> | undefined, ar: boolean): CampaignHeadline['reading'] | null {
+export function campaignSpendReading(row: Record<string, unknown> | undefined, ar: boolean, currency: string | null = null): CampaignHeadline['reading'] | null {
   if (row === undefined) return null
 
-  return reading('spend', row, ar)?.reading ?? null
+  return reading('spend', row, ar, currency)?.reading ?? null
 }

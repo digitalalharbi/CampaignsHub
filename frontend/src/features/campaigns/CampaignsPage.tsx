@@ -274,6 +274,8 @@ export function CampaignsPage() {
   /* The provisional window: figures in flight, or held over from an answer asked without them. */
   const listProvisional = metricsPending || (metricsKnown && campaignsQuery.data?.judged === false)
   const summary = useSummary(projectId, range)
+  /* CAMPAIGNS-MONEY-CURRENCY-001 — the window's reporting currency, for every money reading on a row. */
+  const reportingCurrency = summary.data?.currency ?? null
 
   /*
    * WHICH project, and HOW CURRENT — the two head facts this page could not answer.
@@ -510,8 +512,8 @@ export function CampaignsPage() {
 
     for (const c of visibleCampaigns) {
       const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
-      const spendReading = campaignSpendReading(m, ar)
-      const cost = campaignEfficiency(c.objective, m, ar)
+      const spendReading = campaignSpendReading(m, ar, reportingCurrency)
+      const cost = campaignEfficiency(c.objective, m, ar, reportingCurrency)
 
       /*
        * The READING decides whether there is a figure; the ROW supplies it.
@@ -1312,10 +1314,10 @@ export function CampaignsPage() {
                       <span className="ms-auto flex items-center gap-3 text-xs text-text-secondary">
                         <span className="inline-flex items-baseline gap-1">
                           <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
-                          <MetricCell reading={campaignSpendReading(metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)} locale={locale} />
+                          <MetricCell reading={campaignSpendReading(metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)} locale={locale} />
                         </span>
                         {(() => {
-                          const head = campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)
+                          const head = campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)
 
                           return head === null ? null : (
                             <span className="inline-flex items-baseline gap-1">
@@ -1360,8 +1362,8 @@ export function CampaignsPage() {
                   c={c}
                   locale={locale}
                   limits={spendLimits.data}
-                  headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
-                  efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
+                  headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)}
+                  efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)}
                   state={campaignState(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined)}
                   /*
                     Freshness from the SHARED relevance rule — the same one the lifecycle view and the
@@ -1444,9 +1446,9 @@ export function CampaignsPage() {
                           is judged on what it sold and an awareness one on who it reached, and a
                           column that printed «conversions» for both would price the wrong thing.
                         */}
-                        <td className="p-3 text-center"><MetricCell reading={campaignSpendReading(m, ar)} locale={locale} /></td>
-                        <td className="p-3 text-center"><MetricCell reading={campaignHeadline(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
-                        <td className="p-3 text-center"><MetricCell reading={campaignEfficiency(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        <td className="p-3 text-center"><MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} /></td>
+                        <td className="p-3 text-center"><MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} /></td>
+                        <td className="p-3 text-center"><MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} /></td>
                         {/*
                           * An objective with no return figure gets an EMPTY cell, not «—».
                           *
@@ -1459,7 +1461,7 @@ export function CampaignsPage() {
                           */}
                         <td className="p-3 text-center">
                           {(() => {
-                            const ret = campaignReturn(c.objective, m, ar)
+                            const ret = campaignReturn(c.objective, m, ar, reportingCurrency)
 
                             return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} />
                           })()}
