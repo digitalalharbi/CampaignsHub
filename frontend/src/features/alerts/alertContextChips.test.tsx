@@ -15,7 +15,7 @@ vi.mock('./api', async (orig) => {
   return { ...actual, listAlertRules: vi.fn(), createAlertRule: vi.fn(), listAlertEvents: vi.fn() }
 })
 vi.mock('@/features/notifications/api', () => ({ listDeliveries: vi.fn() }))
-vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]) }))
 
 import { listAlertEvents, listAlertRules } from './api'
 import { listDeliveries } from '@/features/notifications/api'
