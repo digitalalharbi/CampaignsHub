@@ -32,6 +32,51 @@ final class CampaignActivityController extends Controller
         'campaign.external_unlinked' => 'فك ربط حملة خارجية',
     ];
 
+    /**
+     * CAMPAIGN-VIEWS-001 — the project's change history: every audited campaign event across the
+     * project, newest first, each naming its campaign. The per-campaign timeline below answers «what
+     * happened to this one»; this answers «what changed in this project», which is the view the
+     * Campaigns surface was missing.
+     */
+    public function project(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        $campaigns = UnifiedCampaign::query()->get(['id', 'name', 'budget_currency'])->keyBy(fn (UnifiedCampaign $c) => (string) $c->id);
+        $externalToCampaign = ExternalCampaign::query()
+            ->whereIn('unified_campaign_id', $campaigns->keys()->all())
+            ->pluck('unified_campaign_id', 'id');
+        $entityIds = array_merge($campaigns->keys()->all(), array_map('strval', $externalToCampaign->keys()->all()));
+        $limit = min(200, max(1, (int) $request->integer('limit', 100)));
+        $logs = $entityIds === [] ? collect() : AuditLog::query()
+            ->whereIn('entity_id', $entityIds)
+            ->where('action', 'like', 'campaign.%')
+            ->latest('created_at')
+            ->limit($limit)
+            ->get();
+        $userNames = User::query()
+            ->whereIn('id', $logs->pluck('user_id')->filter()->unique()->all())
+            ->pluck('name', 'id');
+        $events = $logs->map(function (AuditLog $log) use ($campaigns, $externalToCampaign, $userNames): array {
+            $campaignId = (string) ($externalToCampaign[$log->entity_id] ?? $log->entity_id);
+            $campaign = $campaigns[$campaignId] ?? null;
+
+            return [
+                'id' => $log->id,
+                'action' => $log->action,
+                'label' => self::LABELS[$log->action] ?? $log->action,
+                'actor' => $log->user_id ? ($userNames[$log->user_id] ?? 'مستخدم') : 'النظام',
+                'at' => $log->created_at?->toIso8601String(),
+                'before' => $log->before,
+                'after' => $log->after,
+                'campaign_id' => $campaignId,
+                'campaign_name' => $campaign?->name,
+                'budget_currency' => $campaign?->budget_currency,
+            ];
+        })->values();
+
+        return ApiResponse::success($events, 'Project campaign activity.');
+    }
+
     public function index(Request $request, string $project, string $campaign): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
