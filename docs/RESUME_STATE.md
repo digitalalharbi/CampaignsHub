@@ -1011,3 +1011,14 @@ Twin at 1366 and 390: chooser with 5 cards, overflow 0, click lands on the campa
 Row PROJECT-FIRST-VISIT-001 added IMPLEMENTED_NOT_VERIFIED. Next visible gaps noted on the twin: reports list shows raw
 tokens for non-seeded reports (`type live/performance`, `status ready` — labels missing), dashboard mostly «لا أرقام
 مقاسة» for the stale demo window.
+
+## Addendum — 2026-10-10, REPORT-COVERAGE-001 on `ch-rmfmt` (`feat/report-coverage`, stacked on #644)
+
+The client's live report carried a trend pill on every KPI from `totals` against `previous` and read neither window's
+coverage. `LiveReportService::comparison()` (from the coverage blocks the totals already carry) withholds every delta and
+per-platform movement when either window is partial and names the window, the contributors and the through date; the
+boundary still blanks `reasons`. `LiveKpiBoard` states it in one line. LiveReportComparabilityTest 2/2 (a real
+credential → connection → account chain, an active Meta external campaign so Meta is EXPECTED, a success run whose
+window_end is ten days short), live suites 21, larastan clean; liveComparison.test 3/3; reports Vitest green.
+Row added IMPLEMENTED_NOT_VERIFIED. Full backend suites run concurrently on `mediabuying_test_rmfmt` earlier today
+produced QueryException storms (575 «failed») — collisions, not findings; the clean run is repeated alone.
