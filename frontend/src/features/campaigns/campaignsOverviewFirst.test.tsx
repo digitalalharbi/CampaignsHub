@@ -61,7 +61,8 @@ describe('the campaigns workspace', () => {
 
     const ids = [...document.querySelectorAll('[data-testid^="view-"]')].map((b) => b.getAttribute('data-testid'))
 
-    expect(ids).toEqual(['view-overview', 'view-table', 'view-cards', 'view-compare', 'view-attention'])
+    // CAMPAIGN-VIEWS-001 added the change history, last: it is read after the work, not during it.
+    expect(ids).toEqual(['view-overview', 'view-table', 'view-cards', 'view-compare', 'view-attention', 'view-history'])
   })
 
   /**

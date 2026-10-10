@@ -43,9 +43,15 @@ describe('the band a campaign is read in', () => {
     expect(campaignBand(row({ campaign_id: 'b', spend: 100 }), END)).toBe('spending')
   })
 
-  it('keeps a recently paused campaign above one that ended long ago', () => {
+  /*
+   * CAMPAIGN-VIEWS-001 changed the second half of this: a paused record is «paused» whatever its
+   * age, because the operator who paused it is the one asking where it went. What still ends is a
+   * campaign whose record says so, or one that went quiet without ever being paused.
+   */
+  it('keeps a paused campaign paused whatever its age, and ends a quiet one that was never paused', () => {
     expect(campaignBand(row({ campaign_id: 'a', status: 'paused', last_active_on: '2026-09-01' }), END)).toBe('paused')
-    expect(campaignBand(row({ campaign_id: 'b', status: 'paused', last_active_on: '2026-01-01' }), END)).toBe('ended')
+    expect(campaignBand(row({ campaign_id: 'b', status: 'paused', last_active_on: '2026-01-01' }), END)).toBe('paused')
+    expect(campaignBand(row({ campaign_id: 'c', status: 'completed', last_active_on: '2026-01-01' }), END)).toBe('ended')
   })
 
   it('treats a campaign that never ran as history rather than as something to restart', () => {
@@ -105,7 +111,45 @@ describe('the portfolio in reading order', () => {
       spending: 1,
       weak: 1,
       paused: 1,
+      scheduled: 0,
+      drafts: 0,
       ended: 1,
     })
+  })
+})
+
+/*
+ * CAMPAIGN-VIEWS-001 — record states are their own bands.
+ */
+describe('record-state bands', () => {
+  const end = '2026-10-10'
+  const base = { campaign_id: 'c', spend: null, last_active_on: null, needs_attention: false }
+
+  it('files a draft under drafts, never under ended', () => {
+    expect(campaignBand({ ...base, status: 'draft' }, end)).toBe('drafts')
+  })
+
+  it('files a scheduled status, or a future start, under scheduled', () => {
+    expect(campaignBand({ ...base, status: 'scheduled' }, end)).toBe('scheduled')
+    expect(campaignBand({ ...base, status: 'active', starts_on: '2026-11-01' }, end)).toBe('scheduled')
+    expect(campaignBand({ ...base, status: 'completed', starts_on: '2026-11-01' }, end)).toBe('ended')
+  })
+
+  it('keeps a long-paused campaign paused — it is the record\'s state, not a reading of the window', () => {
+    expect(campaignBand({ ...base, status: 'paused', last_active_on: '2026-07-01' }, end)).toBe('paused')
+  })
+
+  it('files a record by its own state even when a flag was raised; the flag still outranks a running campaign', () => {
+    expect(campaignBand({ ...base, status: 'draft', needs_attention: true }, end)).toBe('drafts')
+    expect(campaignBand({ ...base, status: 'active', starts_on: '2026-11-01', needs_attention: true }, end)).toBe('scheduled')
+    expect(campaignBand({ ...base, status: 'paused', needs_attention: true }, end)).toBe('paused')
+    expect(campaignBand({ ...base, status: 'active', needs_attention: true }, end)).toBe('attention')
+  })
+
+  it('counts every band, including the two new ones at zero', () => {
+    const counts = bandCounts([{ ...base, status: 'draft' }, { ...base, status: 'scheduled' }], end)
+    expect(counts.drafts).toBe(1)
+    expect(counts.scheduled).toBe(1)
+    expect(counts.ended).toBe(0)
   })
 })

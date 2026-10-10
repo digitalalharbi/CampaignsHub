@@ -1050,3 +1050,13 @@ Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. 
 Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
 loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
 backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.
+## Addendum — 2026-10-10, CAMPAIGN-VIEWS-001 on `ch-brand` (`feat/campaign-views`, from `6cdbda83`)
+
+Owner priority 2. CAMPAIGN-MGMT-SURFACE-001's own closing claim named the gap: Drafts · Scheduled · Paused · Change
+History did not exist on the Campaigns surface, and a draft was filed under «منتهية». Backend: a project-level
+`campaign-activity` route (events across the project, each naming its campaign). Frontend: record states are their own
+bands and precede the window's reading; every chip narrows the list through a `band` URL param while the counts stay
+whole, with «المعروض: … · عرض الكل» on the list; a «سجل التغييرات» view. Backend 2 new + route guard, larastan clean;
+Vitest +5 +3, campaigns suites 241; chromium gate 12 passed (the spec creates its own draft through the API, so the
+count and the history row cannot be seed leftovers). br-web at 1366: «مجدولة 1 · مسودات 3 · منتهية 2» and the history
+button. Row added IMPLEMENTED_NOT_VERIFIED.

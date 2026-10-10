@@ -78,6 +78,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::get('campaigns/{campaign}/related', [RelatedEntitiesController::class, 'campaign'])->middleware('project.can:campaigns.view')->name('related');
         Route::get('campaigns/{campaign}/creatives', [CampaignCreativesController::class, 'index'])->middleware('project.can:campaigns.view')->name('creatives');
         Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->middleware('project.can:campaigns.view')->name('activity');
+        // CAMPAIGN-VIEWS-001 — the project's change history across its campaigns.
+        Route::get('campaign-activity', [CampaignActivityController::class, 'project'])->middleware('project.can:campaigns.view')->name('campaign-activity');
         Route::get('campaigns/{campaign}/alerts', [CampaignAlertsController::class, 'index'])->middleware('project.can:campaigns.view')->name('alerts');
         Route::get('campaigns/{campaign}/reports', [CampaignReportsController::class, 'index'])->middleware('project.can:campaigns.view')->name('reports');
         Route::get('recommendations', [CampaignAnnotationController::class, 'projectIndex'])->middleware('project.can:campaigns.view')->name('recommendations.index');
