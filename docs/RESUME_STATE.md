@@ -1026,3 +1026,8 @@ Spend limits the enforcement note and truthful empty list. Checklist rows `/app/
 38021032434), bundle `index-Ba19s46A.js` carries `campaign-write-control` / `write-capability` / `activity-change-`,
 health 200 ×3 → the two campaign-management rows flipped VERIFIED on the #640 branch (rebased onto main; its first rebase
 replayed two B6 docs commits that #638 had already squashed — `--onto origin/main aeb2b3c7`). #641 (first visit) in CI.
+
+**Lane, 2026-10-10 ~10:40.** #641 merged (main `e2f3b29f`), deployed (run 38034774671), bundle `index-CmSAZPMZ.js` carries
+`project-chooser` / `project-choice-`, health 200 ×3 → PROJECT-FIRST-VISIT-001 VERIFIED (this branch). #642 rebased
+`--onto origin/main 46adb176`. #646 green but dirty after #641 — rebased again; #645's webkit rerun likewise moot after
+the base moved. Every merge dirties the other PRs through the shared docs, so the lane is one CI cycle per merge.
