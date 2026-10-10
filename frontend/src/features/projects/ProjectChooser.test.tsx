@@ -36,7 +36,7 @@ describe('ProjectChooser', () => {
       project('p-new', 'c2', 'Launch', '2026-10-09T00:00:00Z', 7),
       project('p-none', 'c1', 'Quiet', null, 0),
     ] as never)
-    renderWithProviders(<ProjectChooser purpose="campaigns" />, { locale: 'ar' })
+    renderWithProviders(<ProjectChooser purpose="campaigns" />, { locale: 'ar', route: '/agency/campaigns' })
 
     const chooser = await screen.findByTestId('project-chooser')
     const order = [...chooser.querySelectorAll('[data-testid^="project-choice-"]')].map((b) => b.getAttribute('data-testid'))
@@ -54,16 +54,29 @@ describe('ProjectChooser', () => {
   it('chooses the only reachable project for the reader without asking', async () => {
     vi.mocked(listClientWorkspaces).mockResolvedValue([client('c1', 'Acme')] as never)
     vi.mocked(listProjects).mockResolvedValue([project('p1', 'c1', 'Solo', null)] as never)
-    renderWithProviders(<ProjectChooser purpose="analytics" />, { locale: 'en' })
+    renderWithProviders(<ProjectChooser purpose="analytics" />, { locale: 'en', route: '/agency/analytics' })
 
     await waitFor(() => expect(useProject.getState().currentProjectId).toBe('p1'))
     expect(useAgencyClient.getState().currentClientId).toBe('c1')
   })
 
+  /*
+   * The advertiser portal has no clients to name and no right to ask: `/client-workspaces` is
+   * agency-scoped and answered 403, which the console-cleanliness gate counts as an error.
+   */
+  it('never asks for client workspaces outside the agency portal, and still lists the projects', async () => {
+    vi.mocked(listClientWorkspaces).mockResolvedValue([] as never)
+    vi.mocked(listProjects).mockResolvedValue([project('p1', 'c1', 'Growth', null), project('p2', 'c1', 'Retention', null)] as never)
+    renderWithProviders(<ProjectChooser purpose="campaigns" />, { locale: 'en', route: '/app/campaigns' })
+    expect(await screen.findByTestId('project-choice-p1')).toBeInTheDocument()
+    expect(screen.getByTestId('project-choice-p2')).toBeInTheDocument()
+    expect(listClientWorkspaces).not.toHaveBeenCalled()
+  })
+
   it('says honestly when the reader can reach no project at all', async () => {
     vi.mocked(listClientWorkspaces).mockResolvedValue([] as never)
     vi.mocked(listProjects).mockResolvedValue([] as never)
-    renderWithProviders(<ProjectChooser purpose="reports" />, { locale: 'ar' })
+    renderWithProviders(<ProjectChooser purpose="reports" />, { locale: 'ar', route: '/agency/reports' })
 
     expect(await screen.findByTestId('project-chooser-empty')).toBeTruthy()
     expect(useProject.getState().currentProjectId).toBeNull()
