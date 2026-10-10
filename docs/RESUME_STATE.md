@@ -1097,3 +1097,13 @@ branch) is rebased when its turn comes.
 carries `report-comparison-withheld`, health 200 ×3 (one transient 000 right after the deploy, as seen before) →
 REPORT-SNAPSHOT-COMPARABILITY-001 VERIFIED (this branch). #645 and #648 rebased onto `74178283` and in CI; #649
 (CAMPAIGN-VIEWS-001) open and waiting its rebase.
+## Addendum — 2026-10-10, CAMPAIGN-VIEWS-001 on `ch-brand` (`feat/campaign-views`, from `6cdbda83`)
+
+Owner priority 2. CAMPAIGN-MGMT-SURFACE-001's own closing claim named the gap: Drafts · Scheduled · Paused · Change
+History did not exist on the Campaigns surface, and a draft was filed under «منتهية». Backend: a project-level
+`campaign-activity` route (events across the project, each naming its campaign). Frontend: record states are their own
+bands and precede the window's reading; every chip narrows the list through a `band` URL param while the counts stay
+whole, with «المعروض: … · عرض الكل» on the list; a «سجل التغييرات» view. Backend 2 new + route guard, larastan clean;
+Vitest +5 +3, campaigns suites 241; chromium gate 12 passed (the spec creates its own draft through the API, so the
+count and the history row cannot be seed leftovers). br-web at 1366: «مجدولة 1 · مسودات 3 · منتهية 2» and the history
+button. Row added IMPLEMENTED_NOT_VERIFIED.

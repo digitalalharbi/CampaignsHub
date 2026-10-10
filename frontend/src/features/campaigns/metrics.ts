@@ -30,6 +30,20 @@ export const useCampaignBudget = (p: string | null, c: string | null, r: Range) 
 export const useCampaignFunnel = (p: string | null, c: string | null, r: Range) =>
   useCampaignMetric<FunnelStage[]>('funnel', p, c, r)
 
+/** CAMPAIGN-VIEWS-001 — one event of the project's change history, naming its campaign. */
+export interface ProjectCampaignActivityEvent extends CampaignActivityEvent {
+  campaign_id: string
+  campaign_name: string | null
+  budget_currency: string | null
+}
+
+export const useProjectCampaignActivity = (projectId: string | null) =>
+  useQuery({
+    queryKey: ['projects', projectId, 'campaign-activity'],
+    queryFn: () => getData<ProjectCampaignActivityEvent[]>(`/projects/${projectId}/campaign-activity`),
+    enabled: Boolean(projectId),
+  })
+
 export interface CampaignActivityEvent {
   id: string
   action: string

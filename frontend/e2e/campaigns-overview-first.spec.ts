@@ -53,7 +53,7 @@ test.describe('the campaigns workspace', () => {
       (nodes) => nodes.map((n) => n.getAttribute('data-testid')),
     )
 
-    expect(ids).toEqual(['view-overview', 'view-table', 'view-cards', 'view-compare', 'view-attention'])
+    expect(ids).toEqual(['view-overview', 'view-table', 'view-cards', 'view-compare', 'view-attention', 'view-history'])
   })
 
   /** Arabic, right to left, with the counts in Latin digits beside their own band. */
