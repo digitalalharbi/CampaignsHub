@@ -1011,3 +1011,18 @@ Twin at 1366 and 390: chooser with 5 cards, overflow 0, click lands on the campa
 Row PROJECT-FIRST-VISIT-001 added IMPLEMENTED_NOT_VERIFIED. Next visible gaps noted on the twin: reports list shows raw
 tokens for non-seeded reports (`type live/performance`, `status ready` — labels missing), dashboard mostly «لا أرقام
 مقاسة» for the stale demo window.
+
+## Addendum — 2026-10-10, AGENCY-DECISION-SURFACES-001 on `ch-font` (`feat/agency-decision-surfaces`, stacked on `feat/first-visit-project` / #641)
+
+Second visible gap from the 13-surface walk: `/agency/recommendations` and `/agency/spend-limits` did not exist — the
+agency operator had no Recommendations and no Budgets page, while the API accepted agency operators on both routes.
+Mounted the same two pages under `/agency` (not copies), added the rail entries under Reports & files, pinned the two
+leaves in `navGrouping.test.ts`'s deliberate-additions list, and gave both pages the `ProjectChooser` when no project is
+chosen (Spend limits used to say «no limits yet» over a query it had not run). Vitest: `agencyDecisionSurfaces.test.tsx`
+3/3; layouts + recommendations + budget + projects + app suites 264 passed (the first attempt mocked ONE project, which
+the chooser auto-selects — two now). Twin as agency owner: Recommendations renders the action centre for Q3 Launch,
+Spend limits the enforcement note and truthful empty list. Checklist rows `/app/recommendations` and
+`/app/spend-limits` → IMPROVED. Row added IMPLEMENTED_NOT_VERIFIED. #639 merged (main `8e1a5a44`), deployed (run
+38021032434), bundle `index-Ba19s46A.js` carries `campaign-write-control` / `write-capability` / `activity-change-`,
+health 200 ×3 → the two campaign-management rows flipped VERIFIED on the #640 branch (rebased onto main; its first rebase
+replayed two B6 docs commits that #638 had already squashed — `--onto origin/main aeb2b3c7`). #641 (first visit) in CI.
