@@ -1040,3 +1040,13 @@ stamp, while the snapshot path already let the rows win. `LiveReportService::bui
 (one basis → that unit; two → none; no money rows → the stamp), the attention block is withheld with no unit, and
 `LiveSharedReport` formats in the payload's unit. Backend 3 new + 46 related, larastan clean; Vitest 2 new, live
 suites 76. Row added IMPLEMENTED_NOT_VERIFIED. Independent of the coverage stack (#643 → #644 → #645).
+
+## Addendum — 2026-10-10, REPORT-SNAPSHOT-COMPARABILITY-001 on `ch-brand` (`feat/report-snapshot-comparability`, from `a96b3fa8`)
+
+The snapshot generator froze a delta on every KPI against the previous window and read neither window's coverage.
+`ReportGenerator::comparison()` (same rule as the live page) withholds every delta when either window is partial and
+freezes `comparison` into the report data; the executive summary states it in one sentence; the cards carry no pill.
+Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. Row added IMPLEMENTED_NOT_VERIFIED.
+Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
+loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
+backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.
