@@ -1087,3 +1087,8 @@ IMPLEMENTED_NOT_VERIFIED. Targeted runs on ch-brand now use `mediabuying_test_pa
 **Browser proof, 2026-10-10 ~09:05 (br-web 5261, agency owner, Q3 Launch):** the Budget tab prints «حتى 2026-09-27»
 beside every projected figure on the platform and campaign rows (20 matches), where the same window had paced to
 today before. Full backend suite re-running alone on `mediabuying_test_brand` for this branch; full Vitest in flight.
+
+**Lane, 2026-10-10 ~12:40.** #646 merged (main `6cdbda83`) and deployed; Production serves `index-Dw969BLs.js`, health
+200 ×3 → REPORT-CURRENCY-TRUTH-001 VERIFIED (this branch; the change carries no bundle marker, the deploy is the
+evidence, the live-link observation stays operational). #645 and #647 rebased onto `6cdbda83` and in CI; #648 (this
+branch) is rebased when its turn comes.
