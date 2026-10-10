@@ -38,6 +38,10 @@ export type Coverage = {
   withheld_contributors?: string[]
   unsupported_contributors?: string[]
   excluded_contributors?: string[]
+  /** Reported, but not through the end of the window (CAMPAIGN-KPI-COVERAGE-001). */
+  partial_contributors?: string[]
+  /** Contributor → the last date its figures cover, for the partial and stale ones. */
+  reported_through?: Record<string, string>
   reasons?: Record<string, string>
 }
 
@@ -50,16 +54,19 @@ export type Coverage = {
  * statement, and a louder one. A surface that must distinguish «proven complete» from «never said»
  * should ask `isStated()`.
  */
-export function readCoverage(totals: Record<string, unknown> | undefined, key?: string): Coverage {
-  const named = key ? (totals?.[`${key}_coverage`] as Coverage | undefined) : undefined
-  const generic = totals?.['coverage'] as Coverage | undefined
+export function readCoverage(totals: object | undefined, key?: string): Coverage {
+  // Typed payloads (MetricTotals and friends) have no index signature; the block is read by name.
+  const t = totals as Record<string, unknown> | undefined
+  const named = key ? (t?.[`${key}_coverage`] as Coverage | undefined) : undefined
+  const generic = t?.['coverage'] as Coverage | undefined
 
   return named ?? generic ?? { state: 'complete' }
 }
 
 /** Whether the backend actually stated coverage, as opposed to this defaulting to complete. */
-export function isStated(totals: Record<string, unknown> | undefined, key?: string): boolean {
-  return Boolean((key ? totals?.[`${key}_coverage`] : undefined) ?? totals?.['coverage'])
+export function isStated(totals: object | undefined, key?: string): boolean {
+  const t = totals as Record<string, unknown> | undefined
+  return Boolean((key ? t?.[`${key}_coverage`] : undefined) ?? t?.['coverage'])
 }
 
 /** Whether this figure may be presented as the complete answer to its question. */
@@ -76,7 +83,32 @@ export function isComplete(coverage: Coverage): boolean {
  * survives the screenshot.
  */
 export function allowsDerived(coverage: Coverage): boolean {
-  return isComplete(coverage)
+  return isComplete(coverage) || truncatedOnly(coverage)
+}
+
+/**
+ * Whether the ONLY thing wrong with this coverage is that every missing contributor stopped short
+ * of the window's end — reported, but not through the last day.
+ *
+ * That is a different defect from a missing contributor. A total over Meta-through-the-27th is the
+ * true total for the days through the 27th, and the CPA over those days is the true CPA for those
+ * days; what is wrong is the window label, not the arithmetic. A total missing Snapchat altogether is
+ * a different quantity, and a ratio over it is a different ratio. The first may be read with the
+ * covered date stated; the second may not be derived from at all.
+ */
+export function truncatedOnly(coverage: Coverage): boolean {
+  const excluded = coverage.excluded_contributors ?? []
+  const partial = new Set(coverage.partial_contributors ?? [])
+  return excluded.length > 0 && excluded.every((c) => partial.has(c))
+}
+
+/**
+ * The last date every partial contributor reported through — one date when they agree, null when
+ * they do not or when nothing is partial. The date the KPI block can say «through» about.
+ */
+export function reportedThrough(coverage: Coverage): string | null {
+  const dates = new Set((coverage.partial_contributors ?? []).map((c) => coverage.reported_through?.[c]).filter((d): d is string => Boolean(d)))
+  return dates.size === 1 ? [...dates][0] : null
 }
 
 /**
@@ -86,17 +118,27 @@ export function allowsDerived(coverage: Coverage): boolean {
  * Meta, and that its sync failed, can decide whether to re-authorise, wait, or read the number anyway.
  * A reader told only that something is missing can do none of those.
  */
-export function coverageNote(coverage: Coverage, ar: boolean): string | null {
+export function coverageNote(coverage: Coverage, ar: boolean, label: (contributor: string) => string = (c) => c): string | null {
   if (isComplete(coverage)) return null
 
   const parts: string[] = []
   const add = (list: string[] | undefined, arWord: string, enWord: string) => {
-    if (list && list.length > 0) parts.push(`${list.join('، ')} ${ar ? arWord : enWord}`)
+    if (list && list.length > 0) parts.push(`${list.map(label).join('، ')} ${ar ? arWord : enWord}`)
   }
 
   add(coverage.failed_contributors, 'تعذّرت مزامنتها', 'failed to sync')
   add(coverage.stale_contributors, 'لم تُزامن حتى نهاية الفترة', 'is not synced through the end of this period')
   add(coverage.withheld_contributors, 'بلا سعر صرف', 'has no exchange rate')
+  /*
+   * Reported, but not through the end: name the date, because «through the 27th» is something a
+   * reader can act on (wait, or read it as the 27th's figure) and «incomplete» is not.
+   */
+  for (const c of coverage.partial_contributors ?? []) {
+    const through = coverage.reported_through?.[c]
+    parts.push(through
+      ? (ar ? `${label(c)} أبلغت حتى ${through} فقط` : `${label(c)} reported through ${through} only`)
+      : (ar ? `${label(c)} لم تُبلّغ حتى نهاية الفترة` : `${label(c)} did not report through the end of this period`))
+  }
 
   if (parts.length === 0) {
     // Partial for a reason this build does not have wording for. Say that, rather than inventing one.

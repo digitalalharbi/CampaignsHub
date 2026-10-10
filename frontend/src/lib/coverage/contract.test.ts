@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowsDerived, coverageNote, isComplete, isStated, readCoverage, type Coverage } from './contract'
+import { allowsDerived, coverageNote, isComplete, isStated, readCoverage, reportedThrough, truncatedOnly, type Coverage } from './contract'
 
 /**
  * AGGREGATION-TRUTH-001 on the client — the frontend reads truth and never reconstructs it.
@@ -62,5 +62,44 @@ describe('reading coverage', () => {
 
     expect(note).not.toBeNull()
     expect(note).toContain('does not include every contributor')
+  })
+})
+
+/*
+ * CAMPAIGN-KPI-COVERAGE-001 — a contributor that reported, but not through the end of the window.
+ */
+describe('a window every contributor reported through the same earlier date', () => {
+  const truncated: Coverage = {
+    state: 'partial',
+    expected_contributors: ['meta'],
+    included_contributors: [],
+    excluded_contributors: ['meta'],
+    partial_contributors: ['meta'],
+    reported_through: { meta: '2026-09-27' },
+    reasons: { meta: 'Reported through 2026-09-27; this window ends 2026-10-10.' },
+  }
+
+  it('is incomplete, but its ratios are the ratios for the covered days', () => {
+    expect(isComplete(truncated)).toBe(false)
+    expect(truncatedOnly(truncated)).toBe(true)
+    expect(allowsDerived(truncated)).toBe(true)
+    expect(reportedThrough(truncated)).toBe('2026-09-27')
+  })
+
+  it('loses that allowance the moment a contributor is missing outright', () => {
+    const mixed: Coverage = { ...truncated, excluded_contributors: ['meta', 'snapchat'], stale_contributors: ['snapchat'] }
+    expect(truncatedOnly(mixed)).toBe(false)
+    expect(allowsDerived(mixed)).toBe(false)
+  })
+
+  it('names the contributor and the date, in the reader\'s words for the contributor', () => {
+    expect(coverageNote(truncated, true, (c) => (c === 'meta' ? 'ميتا' : c))).toBe('هذا الرقم غير مكتمل: ميتا أبلغت حتى 2026-09-27 فقط.')
+    expect(coverageNote(truncated, false, (c) => (c === 'meta' ? 'Meta' : c))).toBe('This figure is incomplete: Meta reported through 2026-09-27 only.')
+  })
+
+  it('has no single date to state when the partial contributors disagree', () => {
+    const two: Coverage = { ...truncated, excluded_contributors: ['meta', 'tiktok'], partial_contributors: ['meta', 'tiktok'], reported_through: { meta: '2026-09-27', tiktok: '2026-09-30' } }
+    expect(reportedThrough(two)).toBeNull()
+    expect(truncatedOnly(two)).toBe(true)
   })
 })

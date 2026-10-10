@@ -960,3 +960,15 @@ seeder recounts (65 orders → redemptions 65, source platform). Evidence: Influ
 AttributionReconciliationTest 12/12 with ranks re-pinned, attribution/store-sync/share suites 101 passed; panel Vitest
 29/29; tsc clean; live on the br-web preview (:5261, store project, quality tab, 1366×768): «عبر أكواد المؤثرين: 24
 طلبات · 12,960 SAR · الأكواد: SARA20 (24)», 24 ledger rows reading «مؤثر · SARA20», overflow 0. Pushes after B6.
+
+## Addendum — 2026-10-10, CAMPAIGN-KPI-COVERAGE-001 on `ch-rmfmt` (`feat/campaign-kpi-coverage`, from `8e1a5a44`)
+
+Third visible gap from the surface walk, a data-truth one: the campaign detail printed thirty-day KPIs with «+7 %»
+while the summary's own `coverage` said Meta reported through 2026-09-27 — and no surface read `coverage` at all
+(`lib/coverage/contract.ts` had tests and no importer). Backend payload gains `partial_contributors` and
+`reported_through`; `CampaignKpis` states the covered date and who stopped short, withholds the delta unless both windows
+are complete, derives ratios only where the contract allows (truncated-only keeps them; a missing contributor refuses
+them); the executive summary follows. Backend 4 new + 77 related passed, larastan clean; Vitest contract +4, KPI 3/3,
+both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
+Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
+surfaces) stacked on #641.
