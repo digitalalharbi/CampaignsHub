@@ -990,3 +990,9 @@ changeDiagnosis.test +2; live on rm-web: the withheld line present, «+21.3%» a
 on this branch). #643 rebased onto `16e1944c` (docs conflicts only), #644 restacked; #641 reopened to trigger CI on its
 chooser fix (`d46f7cd3`). Next candidate gap: shared/client REPORTS printing period figures without the coverage the
 summary states.
+
+**Lane, 2026-10-10 ~09:00.** #643 merged (main `a96b3fa8`), deployed (run 38027415583), bundle `index-BCPSkMXq.js`
+carries `campaign-kpi-coverage` / `partial_contributors` / `reported_through`, health 200 ×3 → CAMPAIGN-KPI-COVERAGE-001
+VERIFIED (this branch). #644 retargeted to `main` and restacked (`--onto origin/main 7bf8405b`), #645 restacked on it.
+Full backend suite alone on `mediabuying_test_rmfmt` for the coverage stack: 4,612 passed, 1 skipped. #646
+(REPORT-CURRENCY-TRUTH-001) open against main; live link on br-web reads «45.9K SAR», no «USD».
