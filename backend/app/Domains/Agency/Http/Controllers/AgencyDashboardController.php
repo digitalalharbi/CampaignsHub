@@ -74,11 +74,12 @@ final class AgencyDashboardController extends Controller
     private function campaignSummary(array $clientIds): array
     {
         if ($clientIds === []) {
-            return ['total' => 0, 'active' => 0, 'paused' => 0, 'by_objective' => []];
+            return ['total' => 0, 'active' => 0, 'paused' => 0, 'by_objective' => [], 'paused_by_project' => []];
         }
 
         // Campaigns carry the client directly, so the scoped set applies without going via projects.
-        $base = UnifiedCampaign::query()->whereIn('client_workspace_id', $clientIds);
+        // Qualified: the per-project rung below joins `projects`, which carries the same column.
+        $base = UnifiedCampaign::query()->whereIn('unified_campaigns.client_workspace_id', $clientIds);
 
         return [
             'total' => (clone $base)->count(),
@@ -87,6 +88,27 @@ final class AgencyDashboardController extends Controller
             // Objective-aware, because comparing awareness with sales in one number is misleading.
             'by_objective' => (clone $base)->selectRaw('objective, count(*) as c')
                 ->groupBy('objective')->pluck('c', 'objective')->all(),
+            /*
+             * DASHBOARD-DRILLDOWN-001 — the PROJECT rung under «paused campaigns».
+             *
+             * The campaigns surface is project-scoped by design (the server refuses an «every
+             * project» list), while this count spans every client the operator reaches. A single
+             * link from the count to that surface therefore lands on a chooser, or on one project's
+             * share of a number that was counted across all of them. Naming each project here lets
+             * the dashboard offer a link per project whose count means the same thing on arrival.
+             */
+            'paused_by_project' => (clone $base)
+                ->join('projects', 'projects.id', '=', 'unified_campaigns.project_id')
+                ->where('unified_campaigns.status', 'paused')
+                ->selectRaw('projects.id as project_id, projects.name as project_name, count(*) as paused')
+                ->groupBy('projects.id', 'projects.name')
+                ->orderByDesc('paused')->orderBy('projects.name')
+                ->toBase()->get()
+                ->map(fn (object $row): array => [
+                    'project_id' => (string) $row->project_id,
+                    'project_name' => (string) $row->project_name,
+                    'paused' => (int) $row->paused,
+                ])->values()->all(),
         ];
     }
 

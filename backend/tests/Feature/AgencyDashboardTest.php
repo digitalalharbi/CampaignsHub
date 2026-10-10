@@ -132,6 +132,38 @@ final class AgencyDashboardTest extends TestCase
             ->assertJsonPath('data.scope.client_count', 1);
     }
 
+    /**
+     * DASHBOARD-DRILLDOWN-001 — «paused campaigns» names the projects holding them, most first.
+     *
+     * The campaigns surface is project-scoped, so a count spanning clients needs a project rung
+     * before it can be opened as the thing it counted.
+     */
+    public function test_paused_campaigns_are_named_per_project(): void
+    {
+        $c = $this->client('Paused');
+        $busy = $this->campaign($c, 'sales', 'paused');
+        UnifiedCampaign::create([
+            'tenant_id' => $this->agency->id,
+            'client_workspace_id' => $c->id,
+            'project_id' => $busy->project_id,
+            'name' => 'C '.uniqid(),
+            'objective' => 'sales',
+            'status' => 'paused',
+        ]);
+        $this->campaign($c, 'awareness', 'paused');
+        $this->campaign($c, 'traffic');
+
+        $user = $this->operator('paused@test.dev', ['clients.view', ClientScopeResolver::ALL_CLIENTS]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/agency/dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.campaigns.paused', 3)
+            ->assertJsonCount(2, 'data.campaigns.paused_by_project')
+            ->assertJsonPath('data.campaigns.paused_by_project.0.project_id', (string) $busy->project_id)
+            ->assertJsonPath('data.campaigns.paused_by_project.0.paused', 2)
+            ->assertJsonPath('data.campaigns.paused_by_project.1.paused', 1);
+    }
+
     /** Objective-aware, because one blended number across objectives means nothing. */
     public function test_campaigns_are_broken_down_by_objective(): void
     {
