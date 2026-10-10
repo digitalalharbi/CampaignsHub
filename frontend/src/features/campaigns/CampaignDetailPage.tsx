@@ -58,11 +58,12 @@ import { useUi } from '@/stores/ui'
 import { CampaignAudienceTab, CampaignEventsTab, CampaignSyncLogTab } from './CampaignDepthTabs'
 import { CampaignStructureTab } from './CampaignStructureTab'
 import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
+import { CampaignWriteControl } from './CampaignWriteControl'
 import { useProject } from '@/stores/project'
 
 const TAB_KEYS = [
   'overview', 'performance', 'platforms', 'structure', 'creatives', 'audience', 'events', 'budget',
-  'funnel', 'sync', 'notes', 'alerts', 'reports', 'activity',
+  'funnel', 'sync', 'notes', 'alerts', 'reports', 'activity', 'settings',
 ] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
@@ -467,6 +468,11 @@ export function CampaignDetailPage() {
       {tab === 'sync' && (
         <TabPanel>
           <CampaignSyncLogTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'settings' && (
+        <TabPanel>
+          <CampaignWriteControl projectId={projectId} />
         </TabPanel>
       )}
       {tab === 'notes' && (

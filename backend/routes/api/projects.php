@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
@@ -152,6 +153,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * figures, the other deliberately does not.
      */
     Route::get('metrics/campaign-options', [MetricsController::class, 'campaignOptions'])->name('metrics.campaign-options');
+    /*
+     * CAMPAIGN-MGMT-DOMAIN-001 — the write-capability registry, read before any surface draws a
+     * control. Project-scoped because the answer is per reader and per provider the project uses.
+     */
+    Route::get('campaign-management/capabilities', [CampaignManagementController::class, 'capabilities'])->middleware('project.can:campaigns.view')->name('campaign-management.capabilities');
     /*
      * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
      *
