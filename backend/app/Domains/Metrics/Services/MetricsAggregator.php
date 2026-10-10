@@ -2048,12 +2048,33 @@ final class MetricsAggregator
          * So the set is the union: anything with a budget, or anything that spent. A campaign with
          * neither is still not a row, because there is nothing to say about it.
          */
+        $project = app(ProjectContext::class);
+        $tenant = app(TenantContext::class);
         $budgeted = DB::table('unified_campaigns')
             /*
              * The same project bound the spend query above carries. Without it this would reach every
              * project in the tenant, and a budget view for one client would total another's.
              */
             ->when($this->projectIds !== null && $this->projectIds !== [], fn ($q) => $q->whereIn('project_id', $this->projectIds))
+            /*
+             * CAMPAIGN-BUDGET-TRUTH-001 — the SINGLE-project read is bounded the same way its spend is.
+             *
+             * `DB::table` bypasses `ProjectScope`, which is what bounds the spend query above through
+             * `DailyMetric`. With no explicit project list this reached every budgeted campaign in the
+             * table: on the preview, one project's campaigns table summed 795K SAR of budget, 490K of
+             * it on seven campaigns of five other projects across four other clients — rows that then
+             * showed as «nothing measured in this window» because their spend is, correctly, not this
+             * project's. The bound is the active project; an across-projects read keeps the tenant's;
+             * a read that can state neither names nothing, because an unstatable scope is not «all».
+             */
+            ->when(
+                ($this->projectIds === null || $this->projectIds === []) && ! $this->acrossProjects,
+                fn ($q) => $project->hasProject() ? $q->where('project_id', $project->projectId()) : $q->whereRaw('1 = 0'),
+            )
+            ->when($tenant->hasTenant(), fn ($q) => $q->where('tenant_id', $tenant->tenantId()))
+            ->when($this->campaignId !== null, fn ($q) => $q->where('id', $this->campaignId))
+            ->when($this->campaignIds !== null && $this->campaignIds !== [], fn ($q) => $q->whereIn('id', $this->campaignIds))
+            ->whereNull('deleted_at')
             ->where('total_budget', '>', 0)
             ->pluck('id')
             ->map(static fn (mixed $id): string => (string) $id);
