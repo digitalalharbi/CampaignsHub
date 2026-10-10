@@ -133,6 +133,23 @@ describe('what it refuses to show', () => {
   })
 
   /** An over-budget limit shows the overspend rather than clamping it out of sight. */
+  /*
+   * BUDGET-PACING-COVERAGE-001 — a pace measured through an earlier day than today says so, with the
+   * day; a pace measured through today says nothing.
+   */
+  it('says through which day the pace was measured when the data stops before today', async () => {
+    route([reading({ paced_through: '2026-08-10', elapsed_days: 10, pace: 1.0, projected_period_spend: 13_950 })])
+    renderWithProviders(<SpendLimitsPage />, { locale: 'ar' })
+    expect((await screen.findByTestId('spend-limit-l1-paced-through')).textContent).toContain('حتى 2026-08-10')
+  })
+
+  it('says nothing about the day when the pace runs to today', async () => {
+    route([reading({ paced_through: null })])
+    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    await screen.findByTestId('spend-limit-l1-projection')
+    expect(screen.queryByTestId('spend-limit-l1-paced-through')).not.toBeInTheDocument()
+  })
+
   it('shows the overspend as a negative remaining', async () => {
     route([reading({ consumed: 11_200, remaining: -1_200, utilisation: 1.12, state: 'over' })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })

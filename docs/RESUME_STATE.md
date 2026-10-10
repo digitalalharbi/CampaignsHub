@@ -972,3 +972,13 @@ them); the executive summary follows. Backend 4 new + 77 related passed, larasta
 both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
 Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
 surfaces) stacked on #641.
+
+## Addendum — 2026-10-10, BUDGET-PACING-COVERAGE-001 on `ch-brand` (`feat/budget-pacing-coverage`, from `a96b3fa8`)
+
+Pacing divided spend by the days elapsed to TODAY whatever the window's coverage, so a platform that stopped reporting
+read as under-spending. `MetricsAggregator::pacedThrough()` (one partial through-date → that day), both pacing methods
+and `SpendLimitGovernor::read()` pace through it and emit `paced_through`; the Budget tab prints «حتى <day>» beside the
+projection, the spend-limit card states it in a sentence. BudgetPacingCoverageTest 4/4 (hand-checkable figures),
+pacing/governance suites 80, larastan clean; SpendLimitsPage.test +2, budget Vitest green. Row added
+IMPLEMENTED_NOT_VERIFIED. Targeted runs on ch-brand now use `mediabuying_test_pacing` while the full suite holds
+`mediabuying_test_brand` — one suite per database.

@@ -281,6 +281,8 @@ export interface AccountBudgetRow {
   /** >1 means this account reaches its ceiling before the window ends, at the current rate. */
   pace: number | null
   projected_spend: number
+  /** BUDGET-PACING-COVERAGE-001 — the day the pace is measured through when it is not today; null means today. */
+  paced_through?: string | null
   campaigns: number
   /** How many of them stated a ceiling, so a partial cap cannot be read as a total. */
   capped_campaigns: number
@@ -306,6 +308,8 @@ export interface BudgetRow {
   consumed_pct: number | null
   pace: number | null
   projected_spend: number | null
+  /** BUDGET-PACING-COVERAGE-001 — the day the pace is measured through when it is not today; null means today. */
+  paced_through?: string | null
   /**
    * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
    * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
@@ -957,6 +961,8 @@ export interface PlatformBudgetRow {
   consumed_pct: number | null
   pace: number | null
   projected_spend: number | null
+  /** BUDGET-PACING-COVERAGE-001 — the day the pace is measured through when it is not today; null means today. */
+  paced_through?: string | null
   /** What should have been spent by today — the figure `pace` divides by. Null wherever pacing is refused. */
   expected_to_date: number | null
   /** Spend over the days elapsed, for multiplying by the days that remain. */

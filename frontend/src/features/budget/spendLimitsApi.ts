@@ -23,6 +23,8 @@ export interface SpendLimitReading {
   currency: string
   period: { from: string; to: string; days: number }
   elapsed_days: number
+  /** BUDGET-PACING-COVERAGE-001 — the day the pace is measured through when it is not today; null means today. */
+  paced_through?: string | null
   /** Null where the spend has no single figure — withheld, partial or in another currency. */
   consumed: number | null
   consumed_currency: string | null
