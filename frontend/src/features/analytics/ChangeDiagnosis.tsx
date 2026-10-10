@@ -408,6 +408,7 @@ export function ChangeDiagnosis({
   title,
   subtitle,
   series = [],
+  comparable = true,
 }: {
   data: DriversPayload | undefined
   currency: string | null
@@ -423,6 +424,12 @@ export function ChangeDiagnosis({
   /** The question this instance answers — «who moved it» by platform, by objective, by campaign. */
   title?: string
   subtitle?: string
+  /**
+   * ANALYTICS-COVERAGE-COMPARABILITY-001 — whether the two windows may be compared at all. False
+   * withholds the decomposition and the period-over-period signals; the anomaly timeline stays,
+   * because a day is measured against the days before it inside the same window.
+   */
+  comparable?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -512,7 +519,15 @@ export function ChangeDiagnosis({
         */}
         {subtitle !== undefined && <p className="mb-2 text-xs text-text-muted">{subtitle}</p>}
 
-        {rows.length > 0 && (
+        {!comparable && (
+          <p data-testid="change-withheld" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
+            {ar
+              ? 'تحليل التغيّر محجوب: لا يُقارَن ما قيس جزئيًا بما قيس كاملًا. الأيام الخارجة عن سلوك الفترة أدناه تبقى صالحة لأنها تُقاس داخل الفترة نفسها.'
+              : 'The change analysis is withheld: a partly measured window is not compared with a whole one. The days below that departed from the period\'s own behaviour still stand, because each is measured inside the same window.'}
+          </p>
+        )}
+
+        {comparable && rows.length > 0 && (
           <p className="mb-3 text-sm text-text-secondary">
             {metricLabel(lead.metric, ar)}{' '}
             {/*
@@ -542,11 +557,13 @@ export function ChangeDiagnosis({
           </p>
         )}
 
-        <Decomposed d={lead} currency={currency} />
+        {comparable && <Decomposed d={lead} currency={currency} />}
       </div>
 
       {/* SQUARE — the focused signals. One number each, and each one a different question. */}
       <div className="grid grid-cols-2 gap-3">
+        {comparable && (
+        <>
         <Signal
           testid="signal-biggest-mover"
           label={ar ? 'الأكبر تحريكًا' : 'Biggest mover'}
@@ -570,7 +587,8 @@ export function ChangeDiagnosis({
               : everythingMovedTogether(lead.by, ar)
           }
         />
-
+        </>
+        )}
         <Signal
           testid="signal-anomalies"
           label={ar ? 'أيام تستدعي التحقيق' : 'Days worth investigating'}
@@ -579,6 +597,7 @@ export function ChangeDiagnosis({
           note={timeline.reason ? reasonText(timeline.reason, ar) : null}
         />
 
+        {comparable && (
         <Signal
           testid="signal-unmeasurable"
           label={ar ? 'خارج القياس' : 'Outside measurement'}
@@ -591,6 +610,7 @@ export function ChangeDiagnosis({
                 : 'Every figure is comparable.'
           }
         />
+        )}
       </div>
 
       {/*
