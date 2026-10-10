@@ -7,6 +7,9 @@ import { listAlertEvents, type AlertEvent } from '@/features/alerts/api'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { DataFreshness } from '@/components/ui/PageIntro'
 import { PeriodLabel } from '@/components/patterns/Status'
+import { FilterChips } from '@/components/ui/FilterBar'
+import { useUrlNumber } from '@/features/analytics/filterUrlState'
+import { lastNDays } from '@/features/analytics/api'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/States'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
@@ -41,7 +44,17 @@ const STALE_AFTER_HOURS = 36
 
 const SEVERITY_ORDER: Record<AlertEvent['severity'], number> = { critical: 0, warning: 1, info: 2 }
 
-const useOverview = () => useQuery({ queryKey: ['agency', 'overview'], queryFn: () => fetchAgencyOverview(), retry: false })
+/**
+ * The window is part of the ADDRESS (`?days=7|30|90`), as on Analytics, so a reload, Back and a
+ * shared link show the same figures; the three components read the same key and share one cached read.
+ */
+function useOverview() {
+  const [days, setDays] = useUrlNumber('days', 30)
+  const range = useMemo(() => lastNDays(days), [days])
+  const query = useQuery({ queryKey: ['agency', 'overview', days], queryFn: () => fetchAgencyOverview(range), retry: false })
+
+  return { ...query, days, setDays }
+}
 
 function alertPath(a: AlertEvent): string {
   if (a.entity_type?.endsWith('UnifiedCampaign') && a.entity_id && a.project_id) return `/agency/campaigns/${a.project_id}/${a.entity_id}`
@@ -100,6 +113,17 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   return (
     <section data-testid="agency-headline" className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+        <FilterChips
+          label={ar ? 'الفترة' : 'Period'}
+          value={String(overview.days)}
+          testid="agency-days"
+          options={[
+            { value: '7', label: ar ? '7 أيام' : '7 days' },
+            { value: '30', label: ar ? '30 يوم' : '30 days' },
+            { value: '90', label: ar ? '90 يوم' : '90 days' },
+          ]}
+          onChange={(v) => overview.setDays(Number(v))}
+        />
         <PeriodLabel from={d.period.from} to={d.period.to} testId="agency-period" />
         <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
         {currency === null && current !== undefined && (

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyHeadline'
 import type { AgencyOverview } from './api'
 import type { AlertEvent } from '@/features/alerts/api'
@@ -14,6 +14,7 @@ import { listAlertEvents } from '@/features/alerts/api'
  * DASHBOARD-FIRST-SCREEN-001 — the first screen states money, results, cost and movement under the
  * money and coverage contracts, and opens the surface that answers each in depth.
  */
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1
 const PROVIDERS = ['meta', 'google']
 const complete = { state: 'complete', expected_contributors: PROVIDERS, included_contributors: PROVIDERS, excluded_contributors: [], partial_contributors: [], reported_through: {} }
 const truncated = { state: 'partial', expected_contributors: PROVIDERS, included_contributors: [], excluded_contributors: PROVIDERS, partial_contributors: PROVIDERS, reported_through: { meta: '2026-09-27', google: '2026-09-27' } }
@@ -100,6 +101,18 @@ describe('the agency headline', () => {
     const links = within(list).getAllByRole('link').filter((l) => l.getAttribute('data-testid')?.startsWith('agency-alert-'))
     expect(links.map((l) => l.getAttribute('data-testid'))).toEqual(['agency-alert-a2', 'agency-alert-a3', 'agency-alert-a1'])
     expect(links[0]).toHaveAttribute('href', '/agency/campaigns/p1/c1')
+  })
+
+  it('lets the operator choose the window, and asks the server for exactly that window', async () => {
+    vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
+    renderWithProviders(<AgencyHeadline ar={false} />, { route: '/agency/dashboard', locale: 'en' })
+    await screen.findByTestId('agency-kpi-spend')
+    const first = vi.mocked(fetchAgencyOverview).mock.calls[0]![0] as { from: string; to: string }
+    expect(daysBetween(first.from, first.to)).toBe(30)
+    fireEvent.click(screen.getByRole('button', { name: '7 days' }))
+    await waitFor(() => expect(vi.mocked(fetchAgencyOverview).mock.calls.length).toBeGreaterThan(1))
+    const last = vi.mocked(fetchAgencyOverview).mock.calls.at(-1)![0] as { from: string; to: string }
+    expect(daysBetween(last.from, last.to)).toBe(7)
   })
 
   it('says there is nothing to read when the operator reaches no project', async () => {
