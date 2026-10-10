@@ -54,7 +54,13 @@ export function ProjectChooser({ purpose }: { purpose: 'campaigns' | 'analytics'
   }, [clients.data, projects.data])
 
   const choose = (p: Row) => {
-    setCurrentClientId(p.client_workspace_id)
+    /*
+     * The client is set only where the reader holds that client. A viewer scoped to projects alone
+     * reaches no client workspace; handing the switcher a client id it cannot find made its effect
+     * clear BOTH selections, which put the chooser back, which chose again — a loop the chromium
+     * gate caught as a project select with no options (campaigns-roles, client viewer).
+     */
+    if ((clients.data ?? []).some((c) => c.id === p.client_workspace_id)) setCurrentClientId(p.client_workspace_id)
     setCurrentProjectId(p.id)
   }
 
