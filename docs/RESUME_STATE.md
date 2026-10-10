@@ -1061,3 +1061,10 @@ credential → connection → account chain, an active Meta external campaign so
 window_end is ten days short), live suites 21, larastan clean; liveComparison.test 3/3; reports Vitest green.
 Row added IMPLEMENTED_NOT_VERIFIED. Full backend suites run concurrently on `mediabuying_test_rmfmt` earlier today
 produced QueryException storms (575 «failed») — collisions, not findings; the clean run is repeated alone.
+
+**Lane, 2026-10-10 ~09:40.** #644 merged (main `e264fac5`), deployed (run 38030927272), bundle `index-BSBlcGmt.js` carries
+`no-comparison-period` / `change-withheld` / the truncation sentence, health 200 ×3 → ANALYTICS-COVERAGE-COMPARABILITY-001
+VERIFIED (this branch). #645 retargeted to main and rebased `--onto origin/main f6a7550d`; its earlier webkit failure was
+the browser-broke signature (`#root 0 children, document complete` + «WebKit encountered an internal error» on the
+bundle request) on /agency/tasks, which passed its eight first-viewport cases in the same run. Pacing branch full
+backend suite alone: 4,614 passed, 1 skipped; full Vitest 3,409.
