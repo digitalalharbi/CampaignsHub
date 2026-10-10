@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { usePortalBase } from '@/app/portalPath'
 import { FolderKanban } from 'lucide-react'
 import { listClientWorkspaces, listProjects, type Project } from './api'
 import { useProject } from '@/stores/project'
@@ -28,7 +29,14 @@ export function ProjectChooser({ purpose }: { purpose: 'campaigns' | 'analytics'
   const ar = useUi((s) => s.locale) === 'ar'
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()
-  const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces })
+  /*
+   * `/client-workspaces` is agency-scoped and answers 403 to an advertiser. The advertiser portal
+   * mounts this for one render before its switcher picks a project, and that one render fired the
+   * request — a 403 in the console on every first visit (the chromium and webkit gates caught it in
+   * campaigns-responsive.spec.ts). Client names are asked for only where there are clients to name.
+   */
+  const agency = usePortalBase() === '/agency'
+  const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agency })
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
 
   const rows: Row[] = useMemo(() => {
