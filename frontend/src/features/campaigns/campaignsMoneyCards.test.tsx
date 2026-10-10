@@ -43,11 +43,11 @@ function campaign(id: string, name: string, status: string): UnifiedCampaign {
   }
 }
 
-function route(totals: Record<string, unknown>, previousRows: boolean) {
+function route(totals: Record<string, unknown>, previousRows: boolean, previous: Record<string, unknown> = totals) {
   vi.mocked(getData).mockImplementation((path: string) => {
     if (path.includes('/metrics/summary')) {
       return Promise.resolve({
-        current: totals, previous: totals, delta: { conversions: null, cpa: null, roas: null },
+        current: totals, previous, delta: { conversions: null, cpa: null, roas: null },
         reported: {}, commerce: null, currency: 'SAR', rows_in_scope: true,
         previous_rows_in_scope: previousRows,
         previous_range: { from: '2026-06-27', to: '2026-07-26' },
@@ -98,6 +98,22 @@ describe('the Campaigns summary row', () => {
    */
   it('renders no change pill at all when there is no previous period', async () => {
     route(WITHHELD, false)
+    renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
+
+    await screen.findByText('40.48 USD')
+
+    expect(screen.queryByLabelText(/Change/i)).not.toBeInTheDocument()
+  })
+
+  /*
+   * ANALYTICS-COVERAGE-COMPARABILITY-001 — a previous period that exists is not enough: the
+   * current window's platform reported through its seventeenth day, so a pill would compare
+   * seventeen days with thirty.
+   */
+  it('renders no change pill when the current window is only partly covered', async () => {
+    const complete = { state: 'complete', expected_contributors: ['snapchat'], included_contributors: ['snapchat'], excluded_contributors: [] }
+    const truncated = { state: 'partial', expected_contributors: ['snapchat'], included_contributors: [], excluded_contributors: ['snapchat'], partial_contributors: ['snapchat'], reported_through: { snapchat: '2026-07-10' } }
+    route({ ...WITHHELD, coverage: truncated }, true, { ...WITHHELD, coverage: complete })
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
     await screen.findByText('40.48 USD')
