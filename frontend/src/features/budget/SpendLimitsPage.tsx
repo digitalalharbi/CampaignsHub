@@ -339,6 +339,14 @@ function LimitCard({
         </p>
       )}
 
+      {/* BUDGET-PACING-COVERAGE-001 — the pace is measured through the last day the data runs to, when that is earlier than today. */}
+      {limit.paced_through && (
+        <p data-testid={`spend-limit-${limit.id}-paced-through`} className="mt-2 text-xs text-text-secondary">
+          {ar
+            ? `السرعة محسوبة حتى ${limit.paced_through} — آخر يوم وصلت بياناته — لا حتى اليوم.`
+            : `The pace is measured through ${limit.paced_through} — the last day with data — not through today.`}
+        </p>
+      )}
       <p data-testid={`spend-limit-${limit.id}-projection`} className="mt-2 text-xs text-text-muted">
         {limit.projected_exhaustion.date !== null
           ? (ar

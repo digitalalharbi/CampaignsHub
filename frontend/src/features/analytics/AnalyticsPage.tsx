@@ -1717,7 +1717,13 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
               ),
             r.projected_spend === null
               ? <span key="pr" className="text-text-muted" title={basisNote}>—</span>
-              : money(r.projected_spend, r.spent_currency ?? undefined),
+              : (
+                /* BUDGET-PACING-COVERAGE-001 — a pace measured through an earlier day says so beside the figure. */
+                <span key="pr" dir="ltr" data-testid={r.paced_through ? `paced-through-${r.campaign_id}` : undefined}>
+                  {money(r.projected_spend, r.spent_currency ?? undefined)}
+                  {r.paced_through && <span className="ms-1 text-[11px] text-text-muted">{ar ? `حتى ${r.paced_through}` : `through ${r.paced_through}`}</span>}
+                </span>
+              ),
           ]
         })}
         values={rows.map((r) => [
@@ -3873,7 +3879,10 @@ function PlatformBudgets({ projectId, range, filters }: TabProps) {
           <span key="pa" dir="ltr" className={r.pace !== null && r.pace > 1 ? 'font-semibold text-danger' : undefined}>
             {r.pace === null ? '—' : `${ratio(r.pace)}`}
           </span>,
-          <span key="pr" dir="ltr">{r.projected_spend === null ? '—' : money(r.projected_spend, r.budget_currency ?? undefined)}</span>,
+          <span key="pr" dir="ltr">
+            {r.projected_spend === null ? '—' : money(r.projected_spend, r.budget_currency ?? undefined)}
+            {r.paced_through && <span className="ms-1 text-[11px] text-text-muted">{ar ? `حتى ${r.paced_through}` : `through ${r.paced_through}`}</span>}
+          </span>,
           /* Signed, so one column carries both directions and an overrun reads as one. */
           <span key="ou" dir="ltr" className={typeof r.over_under === 'number' && r.over_under > 0 ? 'font-semibold text-danger' : undefined}>
             {r.over_under === null || r.over_under === undefined
