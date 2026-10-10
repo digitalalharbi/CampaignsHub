@@ -1153,3 +1153,14 @@ overview does. Vitest 3 + 1, analytics suites 600; live on rm-web. Row PLATFORM-
 IMPLEMENTED_NOT_VERIFIED (its last clause). Note for the demo seed: every demo project's metric rows carry account ids
 that are not in `external_accounts`, so the panel reads «حساب غير مسجَّل في التطبيق» on demo data — a fact about the
 seed, stated rather than hidden.
+
+## Addendum — 2026-10-11, DASHBOARD-FIRST-SCREEN-001 on `ch-brand` (`feat/agency-dashboard-first-screen`, from `293f1f90`)
+
+Owner directive 2026-10-11 (product acceptance): one complete surface, visibly transformed. The agency dashboard
+was chosen over Campaigns because its first screen counted things and said nothing about money, results, trend,
+platforms, freshness or alerts until three charts down. A new `/agency/overview` endpoint (the dashboard's own
+client ceiling; cross-project aggregator reads with tenant scope kept) feeds a rebuilt first screen: period and
+freshness, four KPIs under the money and coverage contracts, attention beside the top open alerts, then trend and
+platform comparison; counts moved below. Proven on the preview at desktop and mobile; row added
+IMPLEMENTED_NOT_VERIFIED. Lane: every earlier PR (#645–#656) merged and VERIFIED; #657 (chart currency) in CI;
+this surface's PR opens when #657 lands.

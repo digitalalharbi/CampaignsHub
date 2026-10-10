@@ -5,7 +5,7 @@ import { AgencyDashboardPage } from './AgencyDashboardPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
 import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
 
-vi.mock('./api', () => ({ fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn() }))
+vi.mock('./api', () => ({ fetchAgencyOverview: vi.fn(() => Promise.resolve({ scope: { client_count: 0, project_count: 0, is_restricted: false }, period: { from: '2026-09-11', to: '2026-10-10' }, previous_period: { from: '2026-08-12', to: '2026-09-10' }, currency: null, current: null, previous: null, by_provider: [], timeseries: [], freshness: { last_synced_at: null } })),  fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn() }))
 vi.mock('@/features/clients/api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), listClients: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }) }))
 vi.mock('@/features/requests/internalApi', async (orig) => ({ ...(await orig<Record<string, unknown>>()), listRequests: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }) }))
 import { fetchAgencyDashboard, fetchClientBudgets, type ClientBudgetRow } from './api'
