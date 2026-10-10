@@ -996,3 +996,14 @@ carries `campaign-kpi-coverage` / `partial_contributors` / `reported_through`, h
 VERIFIED (this branch). #644 retargeted to `main` and restacked (`--onto origin/main 7bf8405b`), #645 restacked on it.
 Full backend suite alone on `mediabuying_test_rmfmt` for the coverage stack: 4,612 passed, 1 skipped. #646
 (REPORT-CURRENCY-TRUTH-001) open against main; live link on br-web reads «45.9K SAR», no «USD».
+
+## Addendum — 2026-10-10, REPORT-COVERAGE-001 on `ch-rmfmt` (`feat/report-coverage`, stacked on #644)
+
+The client's live report carried a trend pill on every KPI from `totals` against `previous` and read neither window's
+coverage. `LiveReportService::comparison()` (from the coverage blocks the totals already carry) withholds every delta and
+per-platform movement when either window is partial and names the window, the contributors and the through date; the
+boundary still blanks `reasons`. `LiveKpiBoard` states it in one line. LiveReportComparabilityTest 2/2 (a real
+credential → connection → account chain, an active Meta external campaign so Meta is EXPECTED, a success run whose
+window_end is ten days short), live suites 21, larastan clean; liveComparison.test 3/3; reports Vitest green.
+Row added IMPLEMENTED_NOT_VERIFIED. Full backend suites run concurrently on `mediabuying_test_rmfmt` earlier today
+produced QueryException storms (575 «failed») — collisions, not findings; the clean run is repeated alone.
