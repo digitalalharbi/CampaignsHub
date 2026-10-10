@@ -351,6 +351,25 @@ describe('CreativePulseSection', () => {
   })
 
   /** One ad is not announced as a count — «Ad (1)» is noise where «Ad» is the whole truth. */
+  /**
+   * CONTENT-SCOPE-TRUTH-001 — a collection and a catalog are named, not both called «other».
+   * The agency dashboard listed two «أخرى» rows in its spend split for exactly these two kinds.
+   */
+  it('names every kind in the spend split through the one label module', async () => {
+    mocked.mockResolvedValue({
+      ...pulse(),
+      spend_by_kind: [
+        { kind: 'video', spend: 2000, share: 0.5, creatives: 2, spend_not_reported: 0 },
+        { kind: 'collection', spend: 1200, share: 0.3, creatives: 1, spend_not_reported: 0 },
+        { kind: 'catalog', spend: 800, share: 0.2, creatives: 1, spend_not_reported: 0 },
+      ],
+    })
+    render()
+    expect(await screen.findByText('Collection')).toBeInTheDocument()
+    expect(screen.getByText('Catalog')).toBeInTheDocument()
+    expect(screen.queryByText('Other')).not.toBeInTheDocument()
+  })
+
   it('does not count a single ad', async () => {
     mocked.mockResolvedValue(withAds([
       { id: 'a1', external_id: 'ad-1', name: 'Ad one', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },

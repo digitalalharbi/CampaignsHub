@@ -34,6 +34,8 @@ export function ContentSummary({
   figures,
   formats,
   creativesRead,
+  creativesInScope = null,
+  scopeName = null,
   currency,
   locale,
   loading = false,
@@ -42,7 +44,19 @@ export function ContentSummary({
   /** The four headline figures, already formatted by the page that owns the money contract. */
   figures: { key: string; label: string; value: string }[]
   formats: FormatRow[] | undefined
+  /** How many creatives the FORMAT read covered — the current project's, because that endpoint is project-bound. */
   creativesRead: number | null
+  /**
+   * CONTENT-SCOPE-TRUTH-001 — how many creatives the FIGURES cover, which is the library's own scope.
+   *
+   * The count beside the heading was `creativesRead`, the project's 60, while the money beside it was
+   * the library's — every client the operator reaches, 127 creatives, 564K SAR. A count from one scope
+   * printed beside money from another reads as «60 creatives spent 564K». The heading now counts what
+   * the figures count; the format mix, which really is the project's, says so where the two differ.
+   */
+  creativesInScope?: number | null
+  /** What the format read is scoped to, for the sentence that names it. */
+  scopeName?: string | null
   currency: string | null
   locale: Locale
   /**
@@ -72,6 +86,10 @@ export function ContentSummary({
 }) {
   const ar = locale === 'ar'
   const mix = formatMix(formats)
+  const headlineCount = creativesInScope ?? creativesRead
+  /* The mix is the project's; when the figures above span more than the project, the mix says whose it is. */
+  const mixScoped = creativesRead !== null && creativesInScope !== null && creativesRead !== creativesInScope
+  const mixSpend = (formats ?? []).reduce((a, f) => a + (f.spend ?? 0), 0)
 
   /*
    * While the request is in flight the block holds its own shape and says nothing about the figures.
@@ -117,9 +135,9 @@ export function ContentSummary({
     <section data-testid="content-summary" className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-bold text-text-primary">{ar ? 'أداء المحتوى' : 'Content performance'}</h2>
-        {creativesRead !== null && creativesRead > 0 && (
+        {headlineCount !== null && headlineCount > 0 && (
           <span data-testid="content-summary-count" className="text-[11px] text-text-secondary">
-            {countedCreatives(creativesRead, locale)}
+            {countedCreatives(headlineCount, locale)}
           </span>
         )}
       </div>
@@ -190,6 +208,13 @@ export function ContentSummary({
               A format whose money could not be added is NAMED beside the bar rather than folded into
               it, so a reader can see the bar does not account for everything.
             */}
+            {mixScoped && (
+              <span data-testid="content-summary-mix-scope" className="text-[10px] text-text-muted">
+                {ar
+                  ? `يخص ${scopeName ?? 'المشروع الحالي'} فقط — ${countedCreatives(creativesRead, locale)}${currency ? ` · ${Math.round(mixSpend).toLocaleString('en-US')} ${currency}` : ''}؛ الأرقام أعلاه تشمل ${countedCreatives(creativesInScope, locale)}`
+                  : `${scopeName ?? 'The current project'} only — ${countedCreatives(creativesRead, locale)}${currency ? ` · ${Math.round(mixSpend).toLocaleString('en-US')} ${currency}` : ''}; the figures above span ${countedCreatives(creativesInScope, locale)}`}
+              </span>
+            )}
             {mix.withheld.length > 0 && (
               <span data-testid="content-summary-mix-withheld" className="text-[10px] text-warning">
                 {ar

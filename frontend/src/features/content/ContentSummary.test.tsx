@@ -106,6 +106,39 @@ describe('the content summary holds its shape in every state', () => {
    * judgement needs the formats to have arrived: returning null while they are still in flight is
    * the 77px again, with the whole block rather than the mix.
    */
+  /**
+   * CONTENT-SCOPE-TRUTH-001 — the count beside the heading shares the figures' scope, and the mix,
+   * which is the project's, says so where the two differ.
+   */
+  it('counts what the figures count, and names the mix’s narrower scope', () => {
+    renderSummary({
+      figures: [{ key: 'spend', label: 'Spend', value: '564K SAR' }],
+      formats: [{ format: 'video', value: 0.03, spend: 121305, creatives: 30 }, { format: 'image', value: 0.02, spend: 60690, creatives: 15 }],
+      creativesRead: 60,
+      creativesInScope: 127,
+      scopeName: 'Demo Store',
+      currency: 'SAR',
+      locale: 'en',
+    })
+    expect(screen.getByTestId('content-summary-count')).toHaveTextContent('127 creatives')
+    const scope = screen.getByTestId('content-summary-mix-scope')
+    expect(scope).toHaveTextContent('Demo Store only — 60 creatives · 181,995 SAR')
+    expect(scope).toHaveTextContent('span 127 creatives')
+  })
+
+  it('says nothing about scope when the mix and the figures cover the same creatives', () => {
+    renderSummary({
+      figures: [{ key: 'spend', label: 'Spend', value: '221K SAR' }],
+      formats: [{ format: 'video', value: 0.03, spend: 121305, creatives: 30 }],
+      creativesRead: 60,
+      creativesInScope: 60,
+      currency: 'SAR',
+      locale: 'en',
+    })
+    expect(screen.getByTestId('content-summary-count')).toHaveTextContent('60 creatives')
+    expect(screen.queryByTestId('content-summary-mix-scope')).not.toBeInTheDocument()
+  })
+
   it('is absent when there is nothing to summarise, and not before', () => {
     const { container, unmount } = renderSummary({ figures: [], formats: undefined, formatsPending: true })
     expect(screen.getByTestId('content-summary')).toBeInTheDocument()

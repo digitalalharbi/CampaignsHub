@@ -863,6 +863,8 @@ export function CreativesPage() {
         figures={summaryFigures}
         formats={intelligence.data?.by_format.formats}
         creativesRead={intelligence.data?.creatives_read ?? null}
+        creativesInScope={(data?.totals as { creatives?: number } | null | undefined)?.creatives ?? null}
+        scopeName={projectName}
         loading={libraryQuery.isPending}
         formatsPending={intelligence.isPending}
         currency={data?.currency ?? null}
