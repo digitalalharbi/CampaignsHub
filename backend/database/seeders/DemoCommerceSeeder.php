@@ -10,6 +10,8 @@ use App\Domains\Commerce\Models\CommerceCustomer;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
 use App\Domains\Commerce\Models\CommerceProduct;
+use App\Domains\Commerce\Services\OrderAttributionResolver;
+use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -111,6 +113,14 @@ final class DemoCommerceSeeder extends Seeder
             ->get(['id', 'provider', 'name', 'unified_campaign_id']);
 
         $this->orders($tenant, $project, $store, $products, $campaigns);
+
+        // ATTR-EVIDENCE-INFLUENCER-COUPON-001 — the demo creator's code reads its redemptions from the demo
+        // store's own orders, the way a real import does (recounted, never incremented).
+        $resolver = app(OrderAttributionResolver::class);
+        InfluencerTrackingAsset::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)->where('kind', 'discount_code')->where('is_active', true)
+            ->get()
+            ->each(fn (InfluencerTrackingAsset $asset) => $resolver->recountRedemptions($asset));
         $this->carts($tenant, $project, $store);
 
         app(TenantContext::class)->forget();
@@ -378,7 +388,13 @@ final class DemoCommerceSeeder extends Seeder
             ];
         }
 
-        // 8–9: nothing usable. `none` — never «direct», never «organic», never the only campaign running.
+        // 8: a creator's discount code and nothing else — ATTR-EVIDENCE-INFLUENCER-COUPON-001. Evidence
+        // of its own rank: the order lands on the creator's collaboration, not on a platform.
+        if ($case === 8) {
+            return ['columns' => ['coupon_code' => 'SARA20'], 'campaign' => null, 'method' => 'influencer_coupon'];
+        }
+
+        // 9: nothing usable. `none` — never «direct», never «organic», never the only campaign running.
         return ['columns' => [], 'campaign' => null, 'method' => 'none'];
     }
 

@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Influencers\Models\Influencer;
 use App\Domains\Influencers\Models\InfluencerCollaboration;
+use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -117,6 +118,15 @@ final class DemoInfluencersSeeder extends Seeder
                 'internal_notes' => 'Demo record. Not a real agreement.',
             ],
         );
+
+        // ATTR-EVIDENCE-INFLUENCER-COUPON-001 — the demo creator holds one discount code, so the demo
+        // store's coupon orders have a code to land on. Idempotent on (collaboration, code).
+        if ($title === 'Ramadan lifestyle push') {
+            InfluencerTrackingAsset::firstOrCreate(
+                ['tenant_id' => $tenant->id, 'collaboration_id' => $collaboration->getKey(), 'code' => 'SARA20'],
+                ['kind' => 'discount_code', 'discount_type' => 'percent', 'discount_value' => 20, 'redemptions_source' => 'awaiting_credentials', 'is_active' => true],
+            );
+        }
 
         if ($collaboration->deliverables()->exists()) {
             return;

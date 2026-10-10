@@ -539,6 +539,26 @@ describe('the platform-reported vs store-confirmed comparison', () => {
       expect(within(block).getByTestId('reconciliation-row-meta').textContent).not.toMatch(/\b0\b/)
     })
 
+    /** ATTR-EVIDENCE-INFLUENCER-COUPON-001 — the creator-code layer reads on its own line, and the ledger names the code. */
+    it('states the orders placed on creator codes as their own layer and names the code on the ledger row', async () => {
+      render(payload({
+        reconciliation: reconciliation({
+          influencer: { orders: 2, revenue: 450, currency: 'SAR', codes: [{ code: 'SARA20', orders: 2, revenue: 450 }] },
+          ledger: {
+            total: 1, truncated: false, cap: 200,
+            rows: [{ reference: 'REF-9', placed_at: '2026-10-01', platform: null, campaign: null, method: 'influencer_coupon', evidence_rank: 4, coupon: 'SARA20', revenue: 225, refunded: 0, currency: 'SAR' }],
+          },
+        }),
+      }), 'ar')
+
+      const line = await screen.findByTestId('reconciliation-influencer')
+      expect(line).toHaveTextContent('عبر أكواد المؤثرين')
+      expect(line).toHaveTextContent('2')
+      expect(line).toHaveTextContent('450 SAR')
+      expect(line).toHaveTextContent('SARA20 (2)')
+      expect(screen.getByTestId('ledger-coupon-REF-9')).toHaveTextContent('مؤثر · SARA20')
+    })
+
     it('says the ledger is capped when it is', async () => {
       render(payload({ reconciliation: reconciliation({ ledger: { total: 205, truncated: true, cap: 200, rows: [] } }) }))
       expect(await screen.findByTestId('reconciliation-ledger-cap')).toHaveTextContent('200')

@@ -527,6 +527,8 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
     refunded: ar ? 'مُسترد' : 'Refunded',
     unattributed: ar ? 'غير مُسند' : 'Unattributed',
     conflict: ar ? 'إشارات متعارضة' : 'Conflicting signals',
+    influencer: ar ? 'عبر أكواد المؤثرين' : 'Through creator codes',
+    codes: ar ? 'الأكواد' : 'Codes',
     orders: ar ? 'طلبات' : 'orders',
   }
 
@@ -534,6 +536,7 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
     utm_campaign_id: { ar: 'معرّف الحملة من المنصة', en: 'Campaign id from the platform' },
     utm_campaign_name: { ar: 'اسم الحملة', en: 'Campaign name' },
     click_id_platform_only: { ar: 'معرّف نقرة — المنصة فقط', en: 'Click id — platform only' },
+    influencer_coupon: { ar: 'كود خصم مؤثر', en: 'Creator discount code' },
     utm_source_platform_only: { ar: 'مصدر UTM — المنصة فقط', en: 'UTM source — platform only' },
     conflict: { ar: 'إشارات متعارضة', en: 'Conflicting signals' },
     none: { ar: 'غير مُسند', en: 'Unattributed' },
@@ -611,6 +614,13 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
           )}
         </p>
       )}
+      {data.available && data.influencer && data.influencer.orders > 0 && (
+        <p data-testid="reconciliation-influencer" className="mt-1 text-xs text-text-secondary">
+          {t.influencer}: <span className="tnum" dir="ltr">{num(data.influencer.orders)}</span> {t.orders}
+          {' · '}<span className="tnum" dir="ltr">{moneyExact(data.influencer.revenue, data.influencer.currency ?? data.measurement?.currency ?? undefined)}</span>
+          {' · '}{t.codes}: {data.influencer.codes.map((c) => `${c.code} (${num(c.orders)})`).join(' · ')}
+        </p>
+      )}
 
       {data.ledger && (
         <div data-testid="reconciliation-ledger" className="mt-3 min-w-0">
@@ -641,14 +651,14 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
             const rows = data.ledger.rows.map((r) => [
               <span key="ref" data-testid={`ledger-row-${r.reference}`} className="font-semibold text-text-primary">{r.reference}</span>,
               <span key="date" className="text-text-secondary">{r.placed_at ?? '—'}</span>,
-              <span key="platform" className="text-text-secondary">{r.platform === null ? '—' : providerLabel(r.platform, locale)}</span>,
+              <span key="platform" className="text-text-secondary">{r.coupon ? <span data-testid={`ledger-coupon-${r.reference}`}>{(ar ? 'مؤثر · ' : 'Creator · ') + r.coupon}</span> : r.platform === null ? '—' : providerLabel(r.platform, locale)}</span>,
               ...(withCampaign ? [<span key="campaign" className="text-text-secondary">{r.campaign ?? '—'}</span>] : []),
               <span key="evidence" className="text-text-secondary">{ar ? (evidence[r.method]?.ar ?? r.method) : (evidence[r.method]?.en ?? r.method)}</span>,
               <span key="revenue" className="text-text-primary">{r.revenue === null ? '—' : moneyExact(r.revenue, r.currency ?? undefined)}</span>,
               <span key="refunded" className="text-text-secondary">{r.refunded === null ? '—' : moneyExact(r.refunded, r.currency ?? undefined)}</span>,
             ])
             const values: SortValues[] = data.ledger.rows.map((r) => [
-              r.reference, r.placed_at, r.platform === null ? null : providerLabel(r.platform, locale),
+              r.reference, r.placed_at, r.coupon ? (ar ? 'مؤثر · ' : 'Creator · ') + r.coupon : r.platform === null ? null : providerLabel(r.platform, locale),
               ...(withCampaign ? [r.campaign ?? null] : []),
               r.evidence_rank, r.revenue, r.refunded,
             ])
