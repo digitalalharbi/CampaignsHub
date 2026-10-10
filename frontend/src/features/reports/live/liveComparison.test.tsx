@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import { LiveKpiBoard } from './LiveKpis'
 import { useLiveMetricReader } from './liveMetrics'
@@ -44,6 +44,8 @@ describe('the live KPI board and its previous period', () => {
     expect(line.textContent).toContain('هذه الفترة مغطاة حتى 2026-09-27 فقط')
     expect(line.textContent).toContain('ميتا')
     expect(screen.queryByText('18%')).not.toBeInTheDocument()
+    // No dash pill either: the comparison is withheld, not «unchanged».
+    expect(within(screen.getByTestId('live-kpis')).queryAllByText('—')).toHaveLength(0)
   })
 
   it('says so in English when the PREVIOUS period is the incomplete one', () => {
