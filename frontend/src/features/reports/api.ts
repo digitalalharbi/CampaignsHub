@@ -63,6 +63,8 @@ export interface ReportDetail extends ReportRow {
     currency: string
     kpis: Record<string, number | null>
     delta: Record<string, number | null>
+    /** REPORT-SNAPSHOT-COMPARABILITY-001 — why every delta is null when it is: which window stopped short, who, through when. */
+    comparison?: { comparable: boolean; window: 'current' | 'previous' | null; contributors: string[]; through: string | null }
     platforms: Array<Record<string, unknown>>
     campaigns: Array<Record<string, unknown>>
     funnel: Array<Record<string, unknown>>

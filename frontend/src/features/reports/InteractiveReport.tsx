@@ -83,6 +83,8 @@ export interface ReportData {
   objective?: string
   kpis: Record<string, number | null>
   delta?: Record<string, number | null>
+  /** REPORT-SNAPSHOT-COMPARABILITY-001 — why every delta is null when it is. */
+  comparison?: { comparable: boolean; window: 'current' | 'previous' | null; contributors: string[]; through: string | null }
   /**
    * §14.6 — the metrics this report leads with, chosen by the objective at generation time.
    *
@@ -808,9 +810,22 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
   */
   const cards = reportMetrics(data)
   const trend = trendSeries(data.objective)
+  const cmp = data.comparison
+  const who = (cmp?.contributors ?? []).map((c) => plat(String(c))).join('، ')
   return (
     <div>
       <Title sub="نظرة سريعة على أداء الحملة خلال الفترة">الملخص التنفيذي</Title>
+      {/*
+        REPORT-SNAPSHOT-COMPARABILITY-001 — the cards below carry no change pill when the two windows are
+        unlike, and this says why in one sentence: which window stopped short, who stopped, through when.
+      */}
+      {cmp && !cmp.comparable && (
+        <p data-testid="report-comparison-withheld" className="mb-3 rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
+          {cmp.through
+            ? `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} مغطاة حتى ${cmp.through} فقط (${who} لم تُبلّغ بعدها)، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`
+            : `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} غير مكتملة (${who})، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`}
+        </p>
+      )}
       {/*
         `items-stretch` is what makes the row a row: every card fills the tallest cell, and `Kpi`
         pins its sparkline to the bottom, so the six lines share one baseline instead of floating at
