@@ -575,6 +575,16 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
+            /*
+             * AGENCY-DECISION-SURFACES-001 — the two decision pages existed only under `/app`.
+             *
+             * An agency operator running media for five clients had no Recommendations and no Spend
+             * limits: `/agency/recommendations` answered the not-found page while the API accepted
+             * agency operators on both routes. MOUNTED, not copied — the same pages, which already
+             * resolve their own portal for every link they draw.
+             */
+            { path: 'recommendations', element: <RecommendationsPage /> },
+            { path: 'spend-limits', element: <SpendLimitsPage /> },
             { path: 'tasks', element: <TasksPage /> },
           { path: 'short-links', element: <ShortLinksPage /> },
             { path: 'files', element: <FilesLibraryPage /> },
