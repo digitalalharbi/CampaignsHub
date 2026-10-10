@@ -1,3 +1,4 @@
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { money } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 
@@ -46,6 +47,10 @@ export function CampaignSecondaryStrip({
     spentCurrency: string | null
     currencyCount: number
     known: boolean
+    /** CAMPAIGN-BUDGET-TRUTH-001 — campaigns with nothing measured in the window (an absence, not a zero). */
+    unmeasured?: number
+    /** Campaigns whose spend is partial or mixed-currency — no single figure. */
+    unreadable?: number
   }
   currency: string | null
   paused: number
@@ -61,7 +66,7 @@ export function CampaignSecondaryStrip({
     : budget.currencyCount > 1
       ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
       : budget.spent === null
-        ? (ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency')
+        ? spendRefusal(budget.unmeasured ?? 0, budget.unreadable ?? 0, ar)
         : null
 
   const budgetValue = !budget.known
@@ -112,6 +117,30 @@ export function CampaignSecondaryStrip({
       )}
     </div>
   )
+}
+
+/**
+ * CAMPAIGN-BUDGET-TRUTH-001 — the reason the strip has no spend total, in the words that apply.
+ *
+ * «partial or multi-currency» was the one sentence for every refusal, and on a project where every
+ * row is in one currency and none is partial it named a cause that was not there. A campaign with
+ * nothing measured in the window is an absence (not a zero, not a partial figure): it is counted
+ * and named, and the sentence about partial or mixed money is kept for the rows it describes.
+ */
+function spendRefusal(unmeasured: number, unreadable: number, ar: boolean): string {
+  const locale = ar ? 'ar' : 'en'
+  if (unmeasured > 0 && unreadable === 0) {
+    return ar
+      ? `المصروف غير مجموع — ${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة في هذه الفترة`
+      : `Spend not summed — ${countedCampaigns(unmeasured, locale)} with nothing measured in this period`
+  }
+  if (unmeasured > 0) {
+    return ar
+      ? `المصروف غير متاح — ${countedCampaigns(unreadable, locale)} بمبالغ جزئية أو بعملات متعددة، و${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة`
+      : `Spend unavailable — ${countedCampaigns(unreadable, locale)} partial or multi-currency, ${countedCampaigns(unmeasured, locale)} with nothing measured`
+  }
+
+  return ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency'
 }
 
 function Cell({ label, value, note, testid }: { label: string; value: string; note?: string | null; testid?: string }) {
