@@ -25,7 +25,9 @@ import { fmtDateTime } from '@/lib/datetime'
  */
 type Row = Project & { client_name: string; synced_at: string | null; campaigns: number | null; platforms: number }
 
-export function ProjectChooser({ purpose }: { purpose: 'campaigns' | 'analytics' | 'reports' }) {
+export type ProjectChooserPurpose = 'campaigns' | 'analytics' | 'reports' | 'recommendations' | 'spend-limits'
+
+export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()
@@ -75,6 +77,8 @@ export function ProjectChooser({ purpose }: { purpose: 'campaigns' | 'analytics'
     campaigns: { ar: 'لعرض حملاته', en: 'to see its campaigns' },
     analytics: { ar: 'لعرض تحليلاته', en: 'to see its analytics' },
     reports: { ar: 'لعرض تقاريره وإنشاء رابط لحظي للعميل', en: 'to see its reports and create a live client link' },
+    recommendations: { ar: 'لعرض ما يستحق التنفيذ في حملاته', en: 'to see what its campaigns need done' },
+    'spend-limits': { ar: 'لعرض حدود إنفاقه وضبطها', en: 'to see and set its spend limits' },
   }[purpose]
 
   if (clients.isLoading || projects.isLoading) {
