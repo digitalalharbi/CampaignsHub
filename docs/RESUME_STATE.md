@@ -1050,3 +1050,27 @@ Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. 
 Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
 loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
 backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.
+
+## Addendum — 2026-10-10, REPORT-COVERAGE-001 on `ch-rmfmt` (`feat/report-coverage`, stacked on #644)
+
+The client's live report carried a trend pill on every KPI from `totals` against `previous` and read neither window's
+coverage. `LiveReportService::comparison()` (from the coverage blocks the totals already carry) withholds every delta and
+per-platform movement when either window is partial and names the window, the contributors and the through date; the
+boundary still blanks `reasons`. `LiveKpiBoard` states it in one line. LiveReportComparabilityTest 2/2 (a real
+credential → connection → account chain, an active Meta external campaign so Meta is EXPECTED, a success run whose
+window_end is ten days short), live suites 21, larastan clean; liveComparison.test 3/3; reports Vitest green.
+Row added IMPLEMENTED_NOT_VERIFIED. Full backend suites run concurrently on `mediabuying_test_rmfmt` earlier today
+produced QueryException storms (575 «failed») — collisions, not findings; the clean run is repeated alone.
+
+**Lane, 2026-10-10 ~09:40.** #644 merged (main `e264fac5`), deployed (run 38030927272), bundle `index-BSBlcGmt.js` carries
+`no-comparison-period` / `change-withheld` / the truncation sentence, health 200 ×3 → ANALYTICS-COVERAGE-COMPARABILITY-001
+VERIFIED (this branch). #645 retargeted to main and rebased `--onto origin/main f6a7550d`; its earlier webkit failure was
+the browser-broke signature (`#root 0 children, document complete` + «WebKit encountered an internal error» on the
+bundle request) on /agency/tasks, which passed its eight first-viewport cases in the same run. Pacing branch full
+backend suite alone: 4,614 passed, 1 skipped; full Vitest 3,409.
+
+**Lane, 2026-10-10 ~11:45.** #642 merged (main `892fb696`), deployed (run 38038404601), bundle `index-DdwcuQrn.js` routes
+`/agency/recommendations` and `/agency/spend-limits`, health 200 ×3 → AGENCY-DECISION-SURFACES-001 VERIFIED (this
+branch). #645 and #646 rebased onto `892fb696` and in CI; #646's previous webkit failure was a blank document (no
+accessibility tree, no shell `main`) on cross-product-consistency, which chromium and firefox passed. #647 and #648
+wait their turn; each merge dirties the rest through the shared docs.
