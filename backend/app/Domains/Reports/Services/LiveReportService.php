@@ -310,7 +310,7 @@ final class LiveReportService
      * @param  string  $currency  the report's own currency; every figure here is already normalised to it
      * @return array<string, mixed>
      */
-    public function build(ReportShare $share, array $requested, string $currency = ReportingCurrency::DEFAULT): array
+    public function build(ReportShare $share, array $requested, ?string $currency = ReportingCurrency::DEFAULT): array
     {
         $scope = $this->ceiling($share);
         $applied = $this->intersect($scope, $requested);
@@ -342,6 +342,17 @@ final class LiveReportService
         $to = Carbon::parse($applied['to']);
 
         $engine = $this->scopedEngine($share, $scope, $applied['providers']);
+        /*
+         * REPORT-CURRENCY-TRUTH-001 — the rows win, on the live page as on the snapshot.
+         *
+         * `ReportGenerator` already labels a snapshot with the currency its rows are normalised to
+         * (`currencyBasis()`), and `ReportCurrencyBasisTest` holds it to that. The live page took the
+         * report row's stamp instead — `ReportingCurrency::DEFAULT`, written by both report-creating
+         * controllers — and printed «45.9K USD» over figures the same payload's budget block said were
+         * 45.9K SAR. One basis → that currency; several → none is stated; no rows → the stamp stands.
+         */
+        $basis = $engine->currencyBasis($from, $to);
+        $currency = $basis['bases'] === 0 ? $currency : $basis['currency'];
 
         /*
          * The ceiling's OTHER axes (§14.5) — accounts, objectives, marketing paths, ad sets and ads.
@@ -595,7 +606,11 @@ final class LiveReportService
              * platform on the SAME bounds as the objective split above. Built only when the section is
              * published; cut to what a client may read before this method returns.
              */
-            'attention' => $this->attention->published(Report::withoutGlobalScopes()->find($share->report_id))
+            /*
+             * REPORT-CURRENCY-TRUTH-001 — a scope held in two currencies has no unit to write a money
+             * sentence in, so the attention block is withheld rather than labelled with the stamp.
+             */
+            'attention' => $currency !== null && $this->attention->published(Report::withoutGlobalScopes()->find($share->report_id))
                 ? $this->attention->items(new ObjectivePerformanceFigures(new ObjectivePerformance(
                     projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
                     campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,

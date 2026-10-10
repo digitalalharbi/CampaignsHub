@@ -1031,3 +1031,12 @@ replayed two B6 docs commits that #638 had already squashed — `--onto origin/m
 `project-chooser` / `project-choice-`, health 200 ×3 → PROJECT-FIRST-VISIT-001 VERIFIED (this branch). #642 rebased
 `--onto origin/main 46adb176`. #646 green but dirty after #641 — rebased again; #645's webkit rerun likewise moot after
 the base moved. Every merge dirties the other PRs through the shared docs, so the lane is one CI cycle per merge.
+
+## Addendum — 2026-10-10, REPORT-CURRENCY-TRUTH-001 on `ch-brand` (`feat/report-currency-truth`, from `16e1944c`)
+
+Proving REPORT-COVERAGE-001 on a live link of Q3 Launch showed «45.9K USD» in the KPI and «45.9K SAR» in the budget
+block for the same spend: the live path labelled SAR-normalised rows with the report row's `ReportingCurrency::DEFAULT`
+stamp, while the snapshot path already let the rows win. `LiveReportService::build()` now applies `currencyBasis()`
+(one basis → that unit; two → none; no money rows → the stamp), the attention block is withheld with no unit, and
+`LiveSharedReport` formats in the payload's unit. Backend 3 new + 46 related, larastan clean; Vitest 2 new, live
+suites 76. Row added IMPLEMENTED_NOT_VERIFIED. Independent of the coverage stack (#643 → #644 → #645).
