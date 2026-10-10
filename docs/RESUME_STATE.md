@@ -1144,3 +1144,12 @@ the page gates the comparison on the money contract and the coverage contract, o
 `moneyExact`. Preview proof on 5261 recorded on the row. Lane: #645 and #648 merged and VERIFIED this
 session; #649 (campaign views) rebased with the pacing flip, CI running; #651 (dashboard drill-down,
 extended with the project rung) green but dirty behind #649; #650 dirty.
+## Addendum — 2026-10-10, ACCOUNT-CONTRIBUTION (PLATFORM-DECISION-ANALYTICS-001's last clause) on `ch-rmfmt` (`feat/account-contribution`, from `74178283`)
+
+Owner priority 3 (Analytics). The Platforms tab now says who carries each platform's spend — each ad account's share of
+its platform's stated spend, withheld accounts named without a share, unknown ids said as such — and its tab-level
+«ما الذي تغيّر» blocks (platforms, campaigns, objectives, accounts) withhold the comparison between unlike windows as the
+overview does. Vitest 3 + 1, analytics suites 600; live on rm-web. Row PLATFORM-DECISION-ANALYTICS-001 →
+IMPLEMENTED_NOT_VERIFIED (its last clause). Note for the demo seed: every demo project's metric rows carry account ids
+that are not in `external_accounts`, so the panel reads «حساب غير مسجَّل في التطبيق» on demo data — a fact about the
+seed, stated rather than hidden.
