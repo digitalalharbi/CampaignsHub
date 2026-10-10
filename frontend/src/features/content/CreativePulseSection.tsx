@@ -1,3 +1,4 @@
+import { creativeKindLabel } from './creativeKind'
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { TransposedMetricTable } from '@/components/ui/MetricTable'
 import { useMemo, useState, type ReactNode } from 'react'
@@ -183,8 +184,14 @@ const COPY = {
   },
 }
 
-const KIND_LABEL = (kind: string, t: (typeof COPY)['ar']) =>
-  kind === 'image' ? t.image : kind === 'video' ? t.video : kind === 'carousel' ? t.carousel : t.other
+/*
+ * CONTENT-SCOPE-TRUTH-001 — one label module for a creative's kind, not a fourth copy of three words.
+ *
+ * This mapped image, video and carousel and called everything else «أخرى», so the agency dashboard's
+ * spend split listed «أخرى 17,792 SAR» and «أخرى 12,856 SAR» as two rows with one name — a
+ * collection and a catalog, which `creativeKind.ts` has had words for all along.
+ */
+const KIND_LABEL = (kind: string, ar: boolean) => creativeKindLabel(kind, ar)
 
 /** Latin digits in both languages, per the product's standing rule. */
 const num = (n: number | null | undefined) =>
@@ -427,7 +434,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.kinds?.[0] ?? ''}
               onChange={(v) => narrow('kinds', v)}
-              options={data.filters.kinds.map((k) => ({ value: k.key, label: KIND_LABEL(k.key, t) }))}
+              options={data.filters.kinds.map((k) => ({ value: k.key, label: KIND_LABEL(k.key, ar) }))}
             />
           )}
         </div>
@@ -952,7 +959,7 @@ function SpendSplit({ rows, currency, t, ar, drill }: { rows: SpendByKind[]; cur
           <li key={row.kind}>
             <Link to={drill({ kinds: [row.kind] })} className="block rounded-xl p-1 transition-colors hover:bg-surface-secondary">
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-text">{KIND_LABEL(row.kind, t)}</span>
+                <span className="text-text">{KIND_LABEL(row.kind, ar)}</span>
                 <span className="text-text-muted">
                   {money(row, currency, ar)} · {row.share === null ? '—' : percent(row.share)}
                 </span>
@@ -1150,7 +1157,7 @@ function AppliedLine({
     ...(query.providers ?? []).map((p) => `${t.platform}: ${providerLabel(p, locale)}`),
     ...(query.objectives ?? []).map((o) => `${t.objective}: ${objectiveLabel(o, locale)}`),
     ...(query.paths ?? []).map((p) => `${t.path}: ${marketingPathLabel(p, locale)}`),
-    ...(query.kinds ?? []).map((k) => `${t.kind}: ${KIND_LABEL(k, t)}`),
+    ...(query.kinds ?? []).map((k) => `${t.kind}: ${KIND_LABEL(k, locale === 'ar')}`),
     ...named(query.campaign_ids, options.campaigns).map((n) => `${t.campaign}: ${n}`),
   ]
 
