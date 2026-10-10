@@ -395,7 +395,7 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
             ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend share unavailable — partial or multi-currency'}</div>
             : platformDonut.data.length
               ? <>
-                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} />
+                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} currency={platformDonutRank?.currency ?? cur} />
                   {platformDonut.dropped > 0 && <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? `${platformDonut.dropped} منصة غير مُدرجة — مبالغ جزئية أو بعملات متعددة` : `${platformDonut.dropped} platform(s) not included — partial or multi-currency`}</p>}
                 </>
               : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">{ar ? 'لا بيانات منصات' : 'No platform data'}</div>}
@@ -505,7 +505,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
             ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة</div>
             : platformAlloc.data.length
               ? <>
-                  <PlatformDonutChart data={platformAlloc.data} centerLabel="الإنفاق" centerValue={compact(platformAlloc.data.reduce((a, b) => a + b.value, 0))} height={190} />
+                  <PlatformDonutChart data={platformAlloc.data} centerLabel="الإنفاق" centerValue={compact(platformAlloc.data.reduce((a, b) => a + b.value, 0))} height={190} currency={summary.data?.currency ?? ''} />
                   {platformAlloc.dropped > 0 && <p className="mt-1 text-center text-[11px] text-text-muted">{`${platformAlloc.dropped} منصة غير مُدرجة — مبالغ جزئية أو بعملات متعددة`}</p>}
                 </>
               : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات منصات</div>}

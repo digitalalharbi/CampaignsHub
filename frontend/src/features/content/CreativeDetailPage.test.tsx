@@ -204,6 +204,24 @@ describe('CreativeDetailPage', () => {
    * makes it the most confident possible way to be wrong: it states that the platform does not send
    * spend, about a creative whose spend the platform did send.
    */
+  /**
+   * CHART-CURRENCY-DEFAULT-001 — a payload that names no currency gets bare figures, not dollars.
+   * The page fell back to the canonical constant (USD) for a product whose converted money is in the
+   * project's reporting currency, so a creative with no stated currency printed its spend as USD.
+   */
+  it('prints no unit at all when the payload names no currency — never a guessed one', async () => {
+    mocked.mockResolvedValue({ ...detail({ headline_metrics: ['spend', 'impressions'] }), currency: null } as never)
+
+    render()
+
+    const figures = await screen.findByText('Spend')
+    const block = figures.closest('div') as HTMLElement
+
+    expect(within(block).queryByText(/USD/)).not.toBeInTheDocument()
+    expect(within(block).queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(within(block).getByText(/1,000|1\.0K|1K/)).toBeInTheDocument()
+  })
+
   it('shows a withheld spend as the amount the platform reported, not as «Not provided»', async () => {
     mocked.mockResolvedValue(detail({
       metrics: metrics({
