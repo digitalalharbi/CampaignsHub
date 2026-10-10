@@ -1,3 +1,4 @@
+import type { BudgetRow } from '@/features/analytics/api'
 import { alertCategory, type AlertCategory } from '@/features/alerts/alertTaxonomy'
 import type { AlertEvent } from '@/features/alerts/api'
 import type { Recommendation, RecommendationPriority } from './api'
@@ -36,6 +37,8 @@ export type ActionCategory = AlertCategory | 'creative'
 export type ActionItem =
   | { id: string; kind: 'alert'; severity: ActionSeverity; category: ActionCategory; alert: AlertEvent }
   | { id: string; kind: 'budget'; severity: ActionSeverity; category: 'budget'; limit: SpendLimitReading }
+  /** RECOMMENDATIONS-CAMPAIGN-PACE-001 — a campaign past its budget, or spending so fast it will be. */
+  | { id: string; kind: 'campaign_pace'; severity: ActionSeverity; category: 'budget'; row: BudgetRow; reason: CampaignPaceReason }
   | { id: string; kind: 'creative'; severity: ActionSeverity; category: 'creative'; creative: CreativeCard; fatigue?: FatigueAlert | null }
   /*
    * RECOMMENDATIONS-VISUAL-001 — `CreativePulse` already ranks the creatives that moved, above its own
@@ -77,9 +80,36 @@ function fromLimitState(state: SpendLimitReading['state']): ActionSeverity | nul
   return null
 }
 
+export type CampaignPaceReason = 'over_budget' | 'pace_overrun'
+
+/**
+ * RECOMMENDATIONS-CAMPAIGN-PACE-001 — what a budget pacing row says needs a decision, or null.
+ *
+ * The board examined alerts, spend limits and creative performance, and said «nothing needs a
+ * decision» on a project whose campaign detail page said «over budget» in red: a campaign's own
+ * budget only reached this page through an alert, and an alert only fires where a rule is enabled.
+ * The pacing rows are the same figures the Budget tab draws, so the verdict is read from them
+ * directly, under the same rules that page applies to money:
+ *   - only a COMPARABLE row (one spend figure in the budget's currency, measured in the window);
+ *   - only an ACTIVE campaign — a paused one is a decision already taken;
+ *   - over budget when the measured spend has reached the budget;
+ *   - an overrun when the pace is well past plan AND the projection lands past the budget — the
+ *     pace alone can read high on day two of a thirty-day plan.
+ */
+export function campaignPaceVerdict(row: BudgetRow): CampaignPaceReason | null {
+  if (row.pacing_basis !== 'comparable' || row.status !== 'active') return null
+  if (row.spent === null || !(row.budget > 0)) return null
+  if (row.spent >= row.budget) return 'over_budget'
+  if (row.pace !== null && row.pace >= 1.2 && row.projected_spend !== null && row.projected_spend > row.budget * 1.05) return 'pace_overrun'
+
+  return null
+}
+
 export function buildActionCentre(input: {
   alerts?: AlertEvent[]
   limits?: SpendLimitReading[]
+  /** The project's budget pacing rows — the Budget tab's own figures. */
+  pacing?: BudgetRow[]
   fatigued?: CreativeCard[]
   /** Fatigued AND still spending — `fatigue.alerts`, carrying the spend the pulse measured. */
   fatigueAlerts?: FatigueAlert[]
@@ -109,6 +139,13 @@ export function buildActionCentre(input: {
     if (severity === null) continue
 
     items.push({ id: `budget:${limit.id}`, kind: 'budget', severity, category: 'budget', limit })
+  }
+
+  for (const row of input.pacing ?? []) {
+    const reason = campaignPaceVerdict(row)
+    if (reason === null) continue
+
+    items.push({ id: `pace:${row.campaign_id}`, kind: 'campaign_pace', severity: reason === 'over_budget' ? 'critical' : 'warning', category: 'budget', row, reason })
   }
 
   const spending = new Map((input.fatigueAlerts ?? []).map((a) => [a.creative.id, a]))

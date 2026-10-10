@@ -16,6 +16,8 @@ const HEADLINES: Record<string, Pair> = {
   cpl_increase: { ar: 'ارتفعت تكلفة العميل المحتمل', en: 'Cost per lead rose' },
   no_results: { ar: 'إنفاق بلا نتائج', en: 'Spending with no results' },
   budget_risk: { ar: 'الميزانية تقترب من النفاد', en: 'Budget close to exhausted' },
+  campaign_over_budget: { ar: 'الحملة تجاوزت ميزانيتها', en: 'Campaign is over its budget' },
+  campaign_pace_overrun: { ar: 'الحملة تصرف أسرع من خطتها', en: 'Campaign is spending faster than planned' },
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'An unusual day' },
   sync_failure: { ar: 'فشلت مزامنة البيانات', en: 'Data sync failed' },
   token_expiry: { ar: 'صلاحية الربط تنتهي قريبًا', en: 'Connection authorisation expiring' },
