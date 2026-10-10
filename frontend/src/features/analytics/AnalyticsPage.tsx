@@ -1124,7 +1124,7 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
                 <span className="text-xs text-text-muted">
                   {pl.accounts.length === 1
                     ? (ar ? 'حساب واحد يحمل كل الإنفاق' : 'One account carries all the spend')
-                    : (ar ? `${pl.accounts.length} حسابات` : `${pl.accounts.length} accounts`)}
+                    : countedAccounts(pl.accounts.length, ar ? 'ar' : 'en')}
                   {pl.withheld > 0 && (ar ? ` · ${pl.withheld} بلا حصة — إنفاق بلا سعر صرف` : ` · ${pl.withheld} without a share — spend with no exchange rate`)}
                 </span>
               </div>
