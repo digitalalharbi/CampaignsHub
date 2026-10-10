@@ -20,6 +20,8 @@ const HEADLINES: Record<string, Pair> = {
   campaign_pace_overrun: { ar: 'الحملة تصرف أسرع من خطتها', en: 'Campaign is spending faster than planned' },
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'An unusual day' },
   sync_failure: { ar: 'فشلت مزامنة البيانات', en: 'Data sync failed' },
+  sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
+  sla_warning: { ar: 'تحذير مستوى الخدمة', en: 'Service-level warning' },
   token_expiry: { ar: 'صلاحية الربط تنتهي قريبًا', en: 'Connection authorisation expiring' },
   lead_unassigned: { ar: 'عملاء محتملون بلا مسؤول', en: 'Leads with no owner' },
   lead_no_contact: { ar: 'عملاء محتملون لم يُتواصل معهم', en: 'Leads not contacted' },

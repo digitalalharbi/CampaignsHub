@@ -5,8 +5,9 @@ import type { AgencyDashboard } from './api'
 import { renderWithProviders } from '@/test/utils'
 
 /* The client-budget rung is its own query on this page — stubbed empty so it renders nothing here. */
-vi.mock('./api', () => ({ fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn(() => Promise.resolve([])) }))
+vi.mock('./api', () => ({ fetchAgencyOverview: vi.fn(() => Promise.resolve({ scope: { client_count: 0, project_count: 0, is_restricted: false }, period: { from: '2026-09-11', to: '2026-10-10' }, previous_period: { from: '2026-08-12', to: '2026-09-10' }, currency: null, current: null, previous: null, by_provider: [], timeseries: [], freshness: { last_synced_at: null } })),  fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn(() => Promise.resolve([])) }))
 
+vi.mock('@/features/alerts/api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), listAlertEvents: vi.fn(() => Promise.resolve({ events: [], total: 0, counts: { open: 0, snoozed: 0, resolved: 0, open_critical: 0 } })) }))
 import { fetchAgencyDashboard } from './api'
 
 function payload(over: Partial<AgencyDashboard> = {}): AgencyDashboard {

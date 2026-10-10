@@ -14,6 +14,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { clients as countedClients } from '@/lib/counted'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyHeadline'
 import type { LibraryQuery } from '@/features/content/api'
 
 /**
@@ -300,46 +301,9 @@ export function AgencyDashboardPage() {
         </span>
       </div>
 
-      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
+      {/* DASHBOARD-FIRST-SCREEN-001 — money, results, cost, movement, platforms, freshness and alerts come first. */}
       <div className="mb-4">
-      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
-        <Metric
-          to="/agency/clients"
-          label={ar ? 'العملاء' : 'Clients'}
-          value={d.clients.total}
-          hint={ar ? `${num(d.clients.active)} نشط` : `${num(d.clients.active)} active`}
-          icon={Building2}
-          tone="brand"
-        />
-        <Metric
-          to="/agency/projects"
-          label={ar ? 'المشاريع' : 'Projects'}
-          value={d.projects.total}
-          hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`}
-          icon={FolderKanban}
-          tone="info"
-        />
-        <Metric
-          to="/agency/campaigns"
-          label={ar ? 'الحملات' : 'Campaigns'}
-          value={d.campaigns.total}
-          hint={ar
-            ? `${num(d.campaigns.active)} نشطة · ${num(d.campaigns.paused)} موقوفة`
-            : `${num(d.campaigns.active)} active · ${num(d.campaigns.paused)} paused`}
-          icon={Megaphone}
-          tone="success"
-        />
-        <Metric
-          to="/agency/requests"
-          label={ar ? 'طلبات مفتوحة' : 'Open requests'}
-          value={d.requests.open}
-          hint={ar
-            ? `${num(d.requests.awaiting_client)} بانتظار العميل`
-            : `${num(d.requests.awaiting_client)} awaiting the client`}
-          icon={Inbox}
-          tone="warning"
-        />
-      </StatGrid>
+        <AgencyHeadline ar={ar} />
       </div>
 
       {/*
@@ -381,9 +345,54 @@ export function AgencyDashboardPage() {
             <PausedCampaignsRow campaigns={d.campaigns} ar={ar} />
           </ul>
         </section>
-        <div>
-          <ClientPace rows={budgets.data ?? []} ar={ar} />
-        </div>
+        <AgencyAlerts ar={ar} />
+      </div>
+      <div className="mt-4">
+        <AgencyTrendAndPlatforms ar={ar} />
+      </div>
+      <div className="mt-4">
+        <ClientPace rows={budgets.data ?? []} ar={ar} />
+      </div>
+      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
+      <div className="mb-4 mt-4">
+      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
+        <Metric
+          to="/agency/clients"
+          label={ar ? 'العملاء' : 'Clients'}
+          value={d.clients.total}
+          hint={ar ? `${num(d.clients.active)} نشط` : `${num(d.clients.active)} active`}
+          icon={Building2}
+          tone="brand"
+        />
+        <Metric
+          to="/agency/projects"
+          label={ar ? 'المشاريع' : 'Projects'}
+          value={d.projects.total}
+          hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`}
+          icon={FolderKanban}
+          tone="info"
+        />
+        <Metric
+          to="/agency/campaigns"
+          label={ar ? 'الحملات' : 'Campaigns'}
+          value={d.campaigns.total}
+          hint={ar
+            ? `${num(d.campaigns.active)} نشطة · ${num(d.campaigns.paused)} موقوفة`
+            : `${num(d.campaigns.active)} active · ${num(d.campaigns.paused)} paused`}
+          icon={Megaphone}
+          tone="success"
+        />
+        <Metric
+          to="/agency/requests"
+          label={ar ? 'طلبات مفتوحة' : 'Open requests'}
+          value={d.requests.open}
+          hint={ar
+            ? `${num(d.requests.awaiting_client)} بانتظار العميل`
+            : `${num(d.requests.awaiting_client)} awaiting the client`}
+          icon={Inbox}
+          tone="warning"
+        />
+      </StatGrid>
       </div>
       <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
       {/*
