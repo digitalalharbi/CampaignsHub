@@ -1050,3 +1050,13 @@ Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. 
 Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
 loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
 backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.
+
+## Addendum — 2026-10-10, DASHBOARD-DRILLDOWN-001 on `ch-brand` (`feat/dashboard-drilldown`, from `74178283`)
+
+Owner priority 1. The agency dashboard's «ما يحتاج انتباهك» rows linked to whole surfaces; now each lands on exactly what
+it counts (`?status=needs_attention` / `?status=onboarding` on the clients portfolio, `?status=client_review` on the
+requests board — the dashboard's own definition of «awaiting the client» — and the Paused view of the campaigns
+surface), and the two target pages seed their first filter from the URL. Vitest 3 new, suites 153. Row added
+IMPLEMENTED_NOT_VERIFIED. Session restart note: the scratchpad (resolvers, flip tool, templates, PR bodies) and the
+preview servers were lost with the previous session and were recreated; #650 (account contribution) opened after the
+restart and took one guard fix (counted nouns through `lib/counted`).

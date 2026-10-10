@@ -355,26 +355,30 @@ export function AgencyDashboardPage() {
             {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
           </h2>
           <ul className="mt-4 space-y-2.5 text-sm">
+            {/*
+              DASHBOARD-DRILLDOWN-001 — each row lands on exactly what it counts, not on the surface
+              that happens to contain it: the count is a question, and the page it opens is the answer.
+            */}
             <AttentionRow
-              to="/agency/clients"
+              to="/agency/clients?status=needs_attention"
               label={ar ? 'عملاء يحتاجون متابعة' : 'Clients needing attention'}
               value={d.clients.needs_attention}
               ar={ar}
             />
             <AttentionRow
-              to="/agency/clients"
+              to="/agency/clients?status=onboarding"
               label={ar ? 'عملاء قيد التهيئة' : 'Clients onboarding'}
               value={d.clients.onboarding}
               ar={ar}
             />
             <AttentionRow
-              to="/agency/requests"
+              to="/agency/requests?status=client_review"
               label={ar ? 'طلبات بانتظار رد العميل' : 'Requests awaiting the client'}
               value={d.requests.awaiting_client}
               ar={ar}
             />
             <AttentionRow
-              to="/agency/campaigns"
+              to="/agency/campaigns?view=table&lifecycle=all&band=paused"
               label={ar ? 'حملات موقوفة' : 'Paused campaigns'}
               value={d.campaigns.paused}
               ar={ar}

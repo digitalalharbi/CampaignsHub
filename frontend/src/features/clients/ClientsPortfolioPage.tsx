@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, LayoutGrid, Table2, Users } from 'lucide-react'
 import { getTaxonomy, listClients, type ClientCard, type ClientFilters } from './api'
@@ -38,7 +38,13 @@ export function ClientsPortfolioPage() {
   const t = useT()
   const lang = useUi((s) => s.locale)
   const [view, setView] = useState<'cards' | 'table'>(() => (localStorage.getItem('clients_view') as 'cards' | 'table') || 'cards')
-  const [filters, setFilters] = useState<ClientFilters>({ page: 1 })
+  /*
+   * DASHBOARD-DRILLDOWN-001 — a link may name the first filter. The agency dashboard's «clients
+   * needing attention» opens this page with `?status=needs_attention`; without reading it here the
+   * row would land on every client and the count it carried would mean nothing on arrival.
+   */
+  const [params] = useSearchParams()
+  const [filters, setFilters] = useState<ClientFilters>(() => ({ page: 1, ...(params.get('status') ? { status: params.get('status') as string } : {}) }))
   const [search, setSearch] = useState('')
 
   useEffect(() => { localStorage.setItem('clients_view', view) }, [view])
