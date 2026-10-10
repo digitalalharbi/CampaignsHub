@@ -129,8 +129,7 @@ final class LiveOperatingView
             default => isset($schedules[$command]['next_run_at']) ? Carbon::parse((string) $schedules[$command]['next_run_at']) : null,
         };
 
-        $definition = ProviderCatalogue::has($provider) ? ProviderCatalogue::get($provider) : null;
-        $webhooks = $definition?->webhooks ?? WebhookSupport::PollingOnly;
+        $webhooks = ProviderCatalogue::has($provider) ? ProviderCatalogue::get($provider)->webhooks : WebhookSupport::PollingOnly;
 
         return [
             'kind' => $kind,
