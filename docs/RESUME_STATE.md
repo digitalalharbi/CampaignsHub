@@ -972,3 +972,13 @@ them); the executive summary follows. Backend 4 new + 77 related passed, larasta
 both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
 Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
 surfaces) stacked on #641.
+
+## Addendum — 2026-10-10, REPORT-SNAPSHOT-COMPARABILITY-001 on `ch-brand` (`feat/report-snapshot-comparability`, from `a96b3fa8`)
+
+The snapshot generator froze a delta on every KPI against the previous window and read neither window's coverage.
+`ReportGenerator::comparison()` (same rule as the live page) withholds every delta when either window is partial and
+freezes `comparison` into the report data; the executive summary states it in one sentence; the cards carry no pill.
+Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. Row added IMPLEMENTED_NOT_VERIFIED.
+Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
+loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
+backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.

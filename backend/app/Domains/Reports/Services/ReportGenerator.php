@@ -114,10 +114,21 @@ final class ReportGenerator
         $prevTo = $from->copy()->subDay();
         $prevFrom = $prevTo->copy()->subDays($len - 1);
         $previous = $agg->totals($prevFrom, $prevTo);
+        /*
+         * REPORT-SNAPSHOT-COMPARABILITY-001 — two windows compare only when both are whole.
+         *
+         * The snapshot carried a delta on every KPI against the previous window and read neither
+         * window's `coverage`: a platform that had reported through the 27th of a window ending on
+         * the 10th froze «+18 %» into a document a client keeps. The same rule as the live page
+         * (`LiveReportService::comparison()`): where either window is partial every delta is null and
+         * `comparison` names which window stopped short, who stopped and through which date — the
+         * date, never the operator's reason, which the client boundary blanks downstream.
+         */
+        $comparison = self::comparison($totals, $previous);
         $delta = [];
         foreach ($totals as $k => $v) {
             $p = $previous[$k] ?? null;
-            $delta[$k] = is_numeric($v) && is_numeric($p) && $p != 0 ? round(($v - $p) / abs($p), 4) : null;
+            $delta[$k] = $comparison['comparable'] && is_numeric($v) && is_numeric($p) && $p != 0 ? round(((float) $v - (float) $p) / abs((float) $p), 4) : null;
         }
 
         $platforms = $agg->byProvider($from, $to);
@@ -197,6 +208,7 @@ final class ReportGenerator
             'kpis' => $totals,
             'previous' => $previous,
             'delta' => $delta,
+            'comparison' => $comparison,
             /*
              * Which base metrics any platform actually SENT over this window.
              *
@@ -919,6 +931,35 @@ final class ReportGenerator
     }
 
     /** A few plain-language findings derived from the numbers (not fabricated). */
+    /**
+     * Whether `totals` and `previous` may be compared, and — when they may not — which window stopped
+     * short, who stopped, and through which date (REPORT-SNAPSHOT-COMPARABILITY-001).
+     *
+     * @param  array<string, mixed>  $totals
+     * @param  array<string, mixed>  $previous
+     * @return array{comparable: bool, window: string|null, contributors: list<string>, through: string|null}
+     */
+    public static function comparison(array $totals, array $previous): array
+    {
+        $state = static fn (array $t): string => (string) ($t['coverage']['state'] ?? 'complete');
+        $partial = $state($totals) === 'partial' ? 'current' : ($state($previous) === 'partial' ? 'previous' : null);
+        if ($partial === null) {
+            return ['comparable' => true, 'window' => null, 'contributors' => [], 'through' => null];
+        }
+        $block = $partial === 'current' ? ($totals['coverage'] ?? []) : ($previous['coverage'] ?? []);
+        $dates = array_values(array_unique(array_filter(array_map(
+            static fn (string $c): ?string => $block['reported_through'][$c] ?? null,
+            (array) ($block['partial_contributors'] ?? []),
+        ))));
+
+        return [
+            'comparable' => false,
+            'window' => $partial,
+            'contributors' => array_values((array) ($block['excluded_contributors'] ?? [])),
+            'through' => count($dates) === 1 ? $dates[0] : null,
+        ];
+    }
+
     private function executiveSummary(ReportObjectiveLens $lens, array $t, array $delta, array $platforms, array $campaigns, string $currency): array
     {
         $out = [];
