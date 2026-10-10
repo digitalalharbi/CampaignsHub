@@ -467,6 +467,7 @@ export function DashboardOverview(d: OverviewData) {
           loading={drivers.isPending}
           error={drivers.isError}
           subtitle={d.unlikeNote ?? undefined}
+          comparable={d.comparable}
           // The same series the graph below this block draws, so a marked day sits on the curve the
           // reader is already looking at rather than on a second one fetched for the purpose.
           series={points}
@@ -669,6 +670,7 @@ export function AnalyticsOverview(d: OverviewData) {
         loading={drivers.isPending}
         error={drivers.isError}
         subtitle={d.unlikeNote ?? undefined}
+        comparable={d.comparable}
         series={points}
       />
     </div>
