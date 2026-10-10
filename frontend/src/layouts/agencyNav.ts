@@ -1,8 +1,7 @@
 import {
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users,
-} from 'lucide-react'
+  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users, Lightbulb, Wallet } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -125,6 +124,13 @@ export const agencyNavGroups: readonly NavGroup[] = [
        */
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
+      /*
+       * AGENCY-DECISION-SURFACES-001 — what to DO about the figures above, and the caps they run
+       * against. Both pages existed only on the advertiser portal; the agency operator, who runs
+       * more media than any advertiser, had neither.
+       */
+      { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
+      { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
     ],
   },
