@@ -18,7 +18,7 @@ vi.mock('./api', () => ({
   listExternalCampaigns: vi.fn(),
   listLinkSuggestions: vi.fn(),
 }))
-vi.mock('@/features/projects/api', () => ({ listUsers: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listUsers: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]) }))
 
 // The command-center tabs fire their own metrics/activity/alerts/reports/creatives queries. This unit
 // test only exercises the header + platforms; stub the metrics hooks so no unmocked request is issued

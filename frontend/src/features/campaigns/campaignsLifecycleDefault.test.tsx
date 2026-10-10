@@ -13,7 +13,7 @@ import { useProject } from '@/stores/project'
  * running now, and the answer was somewhere in the list.
  */
 vi.mock('./api', () => ({ listCampaigns: vi.fn(), createCampaign: vi.fn(), updateCampaign: vi.fn() }))
-vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listUsers: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]), listUsers: vi.fn() }))
 
 const metrics = vi.hoisted(() => ({ value: undefined as unknown }))
 
