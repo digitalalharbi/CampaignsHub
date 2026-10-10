@@ -18,7 +18,7 @@ import { api, getData } from '@/lib/api/client'
  */
 const campaign = { id: 'u1', project_id: 'p1', name: 'Spring', objective: 'sales', status: 'active', total_budget: 1000, budget_currency: 'SAR' } as unknown as UnifiedCampaign
 
-const all = (state: string) => ({ pause: state, resume: state, rename: state, budget: state, schedule: state, bid_strategy: state, archive: state, delete: state, duplicate: state }) as WriteEntity['actions']
+const all = (state: string) => ({ pause: state, resume: state, rename: state, budget: state, schedule: state, bid_strategy: state, archive: state, delete: state, duplicate: state, create_ad_set: state, create_ad: state, targeting: state, placements: state, creative: state, destination: state }) as WriteEntity['actions']
 
 const entity = (over: Partial<WriteEntity> = {}): WriteEntity => ({
   id: 'e1', level: 'campaign', parent_id: null, provider: 'google', external_id: '9001', name: 'Spring — Search', status: 'active',
@@ -26,6 +26,7 @@ const entity = (over: Partial<WriteEntity> = {}): WriteEntity => ({
   account: { id: 'a1', name: 'Store Ads', external_id: '1234567890' },
   actions: { ...all('available'), archive: 'provider_unsupported', duplicate: 'provider_unsupported', schedule: 'not_implemented' },
   budget_kinds: ['daily'], bid_strategies: ['MANUAL_CPC', 'MAXIMIZE_CONVERSIONS'],
+  optimization_goals: [], placement_families: [], targeting: null, destination_url: null,
   ...over,
 })
 
@@ -123,5 +124,45 @@ describe('the campaign control panel', () => {
     const none = screen.getByTestId('control-create-none')
     expect(none).toHaveTextContent('No ad account is selected for this project')
     expect(within(none).getByRole('link')).toHaveAttribute('href', '/agency/projects/p1/integrations')
+  })
+
+  it('edits an ad set’s targeting with parsed country codes and the age range', async () => {
+    serve({ entities: [entity(), entity({ id: 's1', level: 'ad_set', parent_id: 'e1', provider: 'meta', name: 'KSA set', targeting: { countries: ['SA'], age: '25-44' }, placement_families: ['facebook', 'instagram'] })], create: [] })
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { ok: true } } } as never)
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-targeting-s1'))
+    expect(screen.getByTestId('control-input-countries')).toHaveValue('SA')
+    fireEvent.change(screen.getByTestId('control-input-countries'), { target: { value: 'sa, ae ,kw, xyz' } })
+    fireEvent.click(screen.getByTestId('control-dialog-submit'))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.any(String), { level: 'ad_set', entity_id: 's1', action: 'targeting', countries: ['SA', 'AE', 'KW'], age_min: 25, age_max: 44, genders: 'all' }, expect.anything()))
+  })
+
+  it('creates an ad bound to a creative picked from the project’s own', async () => {
+    serve({
+      entities: [entity(), entity({ id: 's1', level: 'ad_set', parent_id: 'e1', provider: 'meta', name: 'KSA set' })],
+      create: [],
+      creatives: { meta: [{ id: 'cr1', name: 'Hero video', format: 'video', thumbnail_url: null }, { id: 'cr2', name: 'Promo image', format: 'image', thumbnail_url: null }] },
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { ok: true, new_external_id: '7700' } } } as never)
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-create_ad-s1'))
+    fireEvent.change(screen.getByTestId('control-input-child-name'), { target: { value: 'Promo — KSA' } })
+    fireEvent.click(within(screen.getByTestId('control-creative-picker')).getByText('Promo image'))
+    fireEvent.click(screen.getByTestId('control-dialog-submit'))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.any(String), { level: 'ad_set', entity_id: 's1', action: 'create_ad', name: 'Promo — KSA', creative_id: 'cr2' }, expect.anything()))
+  })
+
+  it('offers an action only on the rung it belongs to', async () => {
+    serve({ entities: [entity(), entity({ id: 'a1', level: 'ad', parent_id: null, name: 'Loose ad' })], create: [] })
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    expect(await screen.findByTestId('control-create_ad_set-e1')).toBeInTheDocument()
+    expect(screen.queryByTestId('control-create_ad-e1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('control-budget-a1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('control-destination-a1')).toBeInTheDocument()
   })
 })

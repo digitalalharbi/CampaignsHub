@@ -11,6 +11,7 @@ import { api, getData } from '@/lib/api/client'
  */
 export type WriteLevel = 'campaign' | 'ad_set' | 'ad'
 export type WriteActionKey = 'pause' | 'resume' | 'rename' | 'budget' | 'schedule' | 'bid_strategy' | 'archive' | 'delete' | 'duplicate'
+  | 'create_ad_set' | 'create_ad' | 'targeting' | 'placements' | 'creative' | 'destination'
 export type ActionState =
   | 'available' | 'provider_unsupported' | 'not_implemented' | 'awaiting_credentials'
   | 'not_connected' | 'account_not_selected' | 'no_permission' | 'demo'
@@ -31,6 +32,17 @@ export interface WriteEntity {
   actions: Record<WriteActionKey, ActionState>
   budget_kinds: Array<'daily' | 'lifetime'>
   bid_strategies: string[]
+  optimization_goals: string[]
+  placement_families: string[]
+  targeting: { countries?: string[]; age?: string; genders?: string; placements?: string[]; placement_config?: string } | null
+  destination_url: string | null
+}
+
+export interface CreativeOption {
+  id: string
+  name: string | null
+  format: string | null
+  thumbnail_url: string | null
 }
 
 export interface CreateAccountOption {
@@ -46,6 +58,15 @@ export interface CreateAccountOption {
 export interface WriteOptions {
   entities: WriteEntity[]
   create: CreateAccountOption[]
+  /** Per platform: the project's creatives with a platform id, for binding an ad. */
+  creatives?: Record<string, CreativeOption[]>
+}
+
+/** Which actions belong to which rung — anything else is not offered there at all, not «unsupported». */
+export const LEVEL_ACTIONS: Record<WriteLevel, WriteActionKey[]> = {
+  campaign: ['rename', 'budget', 'schedule', 'bid_strategy', 'create_ad_set', 'duplicate', 'archive', 'delete'],
+  ad_set: ['rename', 'budget', 'schedule', 'bid_strategy', 'targeting', 'placements', 'create_ad', 'duplicate', 'archive', 'delete'],
+  ad: ['rename', 'creative', 'destination', 'duplicate', 'archive', 'delete'],
 }
 
 export interface WriteResult {
@@ -113,6 +134,12 @@ export const ACTION_LABELS: Record<WriteActionKey, { ar: string; en: string }> =
   duplicate: { ar: 'نسخ', en: 'Duplicate' },
   archive: { ar: 'أرشفة', en: 'Archive' },
   delete: { ar: 'حذف', en: 'Delete' },
+  create_ad_set: { ar: 'مجموعة جديدة', en: 'New ad set' },
+  create_ad: { ar: 'إعلان جديد', en: 'New ad' },
+  targeting: { ar: 'الاستهداف', en: 'Targeting' },
+  placements: { ar: 'المواضع', en: 'Placements' },
+  creative: { ar: 'تغيير المحتوى', en: 'Change creative' },
+  destination: { ar: 'رابط الوجهة', en: 'Landing URL' },
 }
 
 /** The provider's own consequence of a removal, said before it happens. */
@@ -176,3 +203,33 @@ export const strategyName = (key: string, ar: boolean) => STRATEGIES[key]?.[ar ?
 
 /** Strategies that are a cap and therefore need an amount. */
 export const NEEDS_AMOUNT = new Set(['LOWEST_COST_WITH_BID_CAP', 'COST_CAP', 'LOWEST_COST_WITH_MAX_BID', 'TARGET_COST', 'BID_TYPE_CUSTOM'])
+
+const GOALS: Record<string, { ar: string; en: string }> = {
+  LINK_CLICKS: { ar: 'نقرات الرابط', en: 'Link clicks' },
+  LANDING_PAGE_VIEWS: { ar: 'زيارات صفحة الهبوط', en: 'Landing page views' },
+  OFFSITE_CONVERSIONS: { ar: 'التحويلات', en: 'Conversions' },
+  LEAD_GENERATION: { ar: 'العملاء المحتملون', en: 'Leads' },
+  REACH: { ar: 'الوصول', en: 'Reach' },
+  IMPRESSIONS: { ar: 'مرات الظهور', en: 'Impressions' },
+  THRUPLAY: { ar: 'مشاهدات كاملة', en: 'ThruPlays' },
+  SWIPES: { ar: 'السحب للأعلى', en: 'Swipe-ups' },
+  VIDEO_VIEWS: { ar: 'مشاهدات الفيديو', en: 'Video views' },
+  PIXEL_PURCHASE: { ar: 'شراء (البكسل)', en: 'Purchases (pixel)' },
+  PIXEL_SIGNUP: { ar: 'تسجيل (البكسل)', en: 'Sign-ups (pixel)' },
+}
+
+export const goalName = (key: string, ar: boolean) => GOALS[key]?.[ar ? 'ar' : 'en'] ?? key
+
+const FAMILIES: Record<string, { ar: string; en: string }> = {
+  facebook: { ar: 'فيسبوك', en: 'Facebook' },
+  instagram: { ar: 'إنستغرام', en: 'Instagram' },
+  audience_network: { ar: 'شبكة الجمهور', en: 'Audience Network' },
+  messenger: { ar: 'ماسنجر', en: 'Messenger' },
+}
+
+export const familyName = (key: string, ar: boolean) => FAMILIES[key]?.[ar ? 'ar' : 'en'] ?? key
+
+/** «SA, ae ,KW» → ['SA','AE','KW'] — two-letter codes only; anything else is dropped and the form says so. */
+export function parseCountries(text: string): string[] {
+  return Array.from(new Set(text.split(/[\s,،]+/).map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c))))
+}

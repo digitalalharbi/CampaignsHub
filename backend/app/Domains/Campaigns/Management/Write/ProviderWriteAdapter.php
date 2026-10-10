@@ -30,6 +30,12 @@ interface ProviderWriteAdapter
     /** @return list<string> the provider's own objective names a campaign can be CREATED with */
     public function objectives(): array;
 
+    /** @return list<string> the provider's own optimisation goals an ad set can be CREATED with (empty when none is chosen) */
+    public function optimizationGoals(): array;
+
+    /** @return list<string> placement families this platform lets an ad set choose (empty when not offered) */
+    public function placementFamilies(): array;
+
     /** Null when campaign creation is supported; otherwise a `WriteRefusal` constant. */
     public function createRefusal(): ?string;
 

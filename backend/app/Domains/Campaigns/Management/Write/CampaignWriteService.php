@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -43,8 +44,8 @@ final class CampaignWriteService
     /** Columns a confirmed write may touch on each mirror. Anything else in an outcome is ignored. */
     private const MIRRORED = [
         ExternalCampaign::class => ['status', 'name', 'daily_budget', 'lifetime_budget', 'starts_at', 'ends_at'],
-        ExternalAdSet::class => ['status', 'name', 'daily_budget', 'lifetime_budget', 'starts_at', 'ends_at', 'bid_strategy'],
-        ExternalAd::class => ['status', 'name'],
+        ExternalAdSet::class => ['status', 'name', 'daily_budget', 'lifetime_budget', 'starts_at', 'ends_at', 'bid_strategy', 'targeting'],
+        ExternalAd::class => ['status', 'name', 'destination_url', 'creative_id'],
     ];
 
     public function __construct(
@@ -80,7 +81,7 @@ final class CampaignWriteService
             $entities[] = $this->describe($user, WriteLevel::Ad, $a, $parent, $parent ? ($accounts[$parent->external_account_id] ?? null) : null, $selected, $a->external_ad_set_id);
         }
 
-        return ['entities' => $entities, 'create' => $this->createOptions($user, $projectId)];
+        return ['entities' => $entities, 'create' => $this->createOptions($user, $projectId), 'creatives' => $this->creatives($externals->pluck('provider')->unique()->values()->all())];
     }
 
     /**
@@ -112,11 +113,15 @@ final class CampaignWriteService
         $original = $entity->only(self::MIRRORED[$entity::class]);
         $outcome = $adapter->perform($connector, $target, $action, $input);
 
-        $mirror = array_intersect_key($outcome->mirror, array_flip(self::MIRRORED[$entity::class]));
+        $mirror = $this->mirrorFrom($entity, $outcome->mirror);
         // What the change replaced — only the fields it touched, so the history reads «from → to».
         $before = array_intersect_key($original, $mirror);
         if ($outcome->ok && $mirror !== []) {
             $entity->forceFill($mirror)->save();
+        }
+        $child = null;
+        if ($outcome->ok && $action->createsChild() && $outcome->newExternalId !== null) {
+            $child = $this->mirrorChild($campaign, $projectId, $entity, $action, $outcome->newExternalId, $input);
         }
 
         $this->record($campaign, $outcome, [
@@ -130,6 +135,7 @@ final class CampaignWriteService
                 'ok' => true, 'level' => $level->value, 'action' => $action->value, 'provider' => $entity->provider,
                 'entity_id' => (string) $entity->getKey(), 'mirror' => $mirror,
                 'new_external_id' => $outcome->newExternalId, 'request_id' => $outcome->requestId,
+                'child_id' => $child !== null ? (string) $child->getKey() : null,
             ]]
             : ['status' => $outcome->httpStatus, 'body' => ['ok' => false, 'refusal' => 'provider_refused', 'message' => $outcome->message, 'request_id' => $outcome->requestId]];
     }
@@ -206,6 +212,73 @@ final class CampaignWriteService
                 'request_id' => $outcome->requestId,
             ]]
             : ['status' => $outcome->httpStatus, 'body' => ['ok' => false, 'refusal' => 'provider_refused', 'message' => $outcome->message, 'request_id' => $outcome->requestId]];
+    }
+
+    /**
+     * The confirmed changes, in the mirror's own columns: targeting is MERGED into what the mirror holds
+     * (the adapter changed only some keys), and a provider creative id becomes the local creative row.
+     *
+     * @param  array<string, mixed>  $confirmed
+     * @return array<string, mixed>
+     */
+    private function mirrorFrom(Model $entity, array $confirmed): array
+    {
+        if (isset($confirmed['targeting']) && is_array($confirmed['targeting'])) {
+            $confirmed['targeting'] = array_merge((array) ($entity->getAttribute('targeting') ?? []), $confirmed['targeting']);
+        }
+        if (isset($confirmed['creative_external_id'])) {
+            $local = ExternalCreative::query()
+                ->where('provider', $entity->getAttribute('provider'))
+                ->where('external_creative_id', (string) $confirmed['creative_external_id'])
+                ->value('id');
+            unset($confirmed['creative_external_id']);
+            if ($local !== null) {
+                $confirmed['creative_id'] = (string) $local;
+            }
+        }
+
+        return array_intersect_key($confirmed, array_flip(self::MIRRORED[$entity::class]));
+    }
+
+    /**
+     * The new child the platform confirmed, mirrored PAUSED under its parent so it appears at once —
+     * the next structure sync then reads it as the platform holds it.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function mirrorChild(UnifiedCampaign $campaign, string $projectId, Model $parent, WriteAction $action, string $externalId, array $input): Model
+    {
+        if ($action === WriteAction::CreateAdSet) {
+            return ExternalAdSet::query()->create([
+                'tenant_id' => $campaign->tenant_id,
+                'project_id' => $projectId,
+                'external_campaign_id' => $parent->getKey(),
+                'unified_campaign_id' => $campaign->id,
+                'provider' => $parent->getAttribute('provider'),
+                'external_id' => $externalId,
+                'name' => (string) $input['name'],
+                'status' => 'paused',
+                'optimization_goal' => $input['optimization_goal'] ?? null,
+                'daily_budget' => $input['daily_budget'] ?? null,
+                'currency' => $parent->getAttribute('currency'),
+                'targeting' => isset($input['countries']) ? ['countries' => array_values((array) $input['countries'])] : null,
+            ]);
+        }
+
+        return ExternalAd::query()->create([
+            'tenant_id' => $campaign->tenant_id,
+            'project_id' => $projectId,
+            'external_ad_set_id' => $parent->getKey(),
+            'external_campaign_id' => $parent->getAttribute('external_campaign_id'),
+            'unified_campaign_id' => $campaign->id,
+            'provider' => $parent->getAttribute('provider'),
+            'external_id' => $externalId,
+            'name' => (string) $input['name'],
+            'status' => 'paused',
+            'creative_id' => isset($input['creative_external_id'])
+                ? ExternalCreative::query()->where('provider', $parent->getAttribute('provider'))->where('external_creative_id', (string) $input['creative_external_id'])->value('id')
+                : null,
+        ]);
     }
 
     /** @return array{0: ExternalCampaign|ExternalAdSet|ExternalAd, 1: ?ExternalCampaign, 2: ?string} */
@@ -337,7 +410,34 @@ final class CampaignWriteService
             'actions' => $actions,
             'budget_kinds' => $adapter?->budgetKinds($level) ?? [],
             'bid_strategies' => $adapter?->bidStrategies($level) ?? [],
+            'optimization_goals' => $level === WriteLevel::Campaign ? ($adapter?->optimizationGoals() ?? []) : [],
+            'placement_families' => $level === WriteLevel::AdSet ? ($adapter?->placementFamilies() ?? []) : [],
+            'targeting' => $level === WriteLevel::AdSet ? $entity->getAttribute('targeting') : null,
+            'destination_url' => $level === WriteLevel::Ad ? $entity->getAttribute('destination_url') : null,
         ];
+    }
+
+    /**
+     * The creatives an ad can be bound to, per platform: this project's own, with a platform id.
+     *
+     * @param  list<string>  $providers
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function creatives(array $providers): array
+    {
+        $out = [];
+        foreach ($providers as $provider) {
+            $out[$provider] = ExternalCreative::query()
+                ->where('provider', $provider)
+                ->whereNotNull('external_creative_id')
+                ->orderByDesc('last_active_at')
+                ->limit(60)
+                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id'])
+                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => $c->thumbnail_url])
+                ->values()->all();
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */

@@ -21,6 +21,7 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
     protected const SUPPORT = [
         'campaign' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'bid_strategy' => true, 'delete' => true,
+            'create_ad_set' => true,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
@@ -29,6 +30,8 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
             'budget' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
+            // A Search ad group has no placements to choose; it serves on Google Search by definition.
+            'placements' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
         'ad' => [
             'pause' => true, 'resume' => true, 'delete' => true,
@@ -37,6 +40,9 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
             'bid_strategy' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
+            // A Google ad IS its assets; there is no separate creative to bind.
+            'creative' => WriteRefusal::PROVIDER_UNSUPPORTED,
+            'destination' => true,
         ],
     ];
 
@@ -81,6 +87,25 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
 
         if ($action === WriteAction::Budget) {
             return $this->budget($connector, $customer, $target, (float) $input['daily_budget'], $headers);
+        }
+
+        if ($action === WriteAction::CreateAdSet) {
+            $response = $this->send($connector, 'POST', "customers/{$customer}/adGroups:mutate", ['operations' => [['create' => [
+                'name' => (string) $input['name'],
+                'campaign' => "customers/{$customer}/campaigns/{$target->externalId}",
+                'status' => 'PAUSED',
+                'type' => 'SEARCH_STANDARD',
+                'cpcBidMicros' => (string) $this->micros((float) $input['bid_amount']),
+            ]]]], idempotent: false, headers: $headers);
+            $resource = (string) (($response->json() ?? [])['results'][0]['resourceName'] ?? '');
+
+            return $this->verdict($response, [], $resource !== '' ? substr($resource, (int) strrpos($resource, '/') + 1) : null);
+        }
+
+        if ($action === WriteAction::Destination) {
+            return $this->verdict($this->send($connector, 'POST', "customers/{$customer}/ads:mutate", [
+                'operations' => [['update' => ['resourceName' => "customers/{$customer}/ads/{$target->externalId}", 'finalUrls' => [(string) $input['url']]], 'updateMask' => 'final_urls']],
+            ], headers: $headers), ['destination_url' => (string) $input['url']]);
         }
 
         if ($action === WriteAction::Delete) {
