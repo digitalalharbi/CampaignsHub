@@ -133,8 +133,8 @@ import { accounts as countedAccounts, countedAr, countedEn, days as countedDays 
 import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
-import { EmptyState } from '@/components/ui/States'
 import { useProject } from '@/stores/project'
+import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
@@ -729,12 +729,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         thing the sentence asks for is on screen beside it.
       */}
       {currentProjectId === null ? (
-        <EmptyState
-          title={ar ? 'اختر مشروعًا' : 'Select a project'}
-          description={ar
-            ? 'أرقام كل مشروع مستقلة — اختر مشروعًا من الأعلى لعرض تحليلاته.'
-            : 'Each project has its own figures — pick one above to see its analytics.'}
-        />
+        <ProjectChooser purpose="analytics" />
       ) : (
         <>
         {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
