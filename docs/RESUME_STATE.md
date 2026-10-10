@@ -980,3 +980,13 @@ The Analytics overview for the same lagging project still printed «+18 %» per 
 `windowsUnlikeNote` in the coverage contract; the overview and the Campaigns summary row withhold every pill unless both
 windows are whole, the banner names the truncation, the change decomposition carries the sentence as its subtitle.
 Contract +5, overview 2/2, campaigns row +1, injection-proved; tsc/lint clean. Row added IMPLEMENTED_NOT_VERIFIED.
+
+**Same unit, second step (2026-10-10 ~08:00).** «ما الذي تغيّر» carried the unlike-windows sentence as a subtitle and
+still printed «+21.3 %», the drivers and «كل الأرقام قابلة للمقارنة» beneath it. `ChangeDiagnosis` takes `comparable`;
+false withholds the headline change, the decomposition and the period signals and says why, the anomaly days stay.
+changeDiagnosis.test +2; live on rm-web: the withheld line present, «+21.3%» and «كل الأرقام قابلة للمقارنة» absent,
+«أيام تستدعي التحقيق» kept. #640 merged (main `16e1944c`), deployed, bundle `index-D-QQtAb7.js` carries
+`reconciliation-influencer` / `influencer_coupon`, health 200 ×3 → ATTR-EVIDENCE-INFLUENCER-COUPON-001 VERIFIED (flipped
+on this branch). #643 rebased onto `16e1944c` (docs conflicts only), #644 restacked; #641 reopened to trigger CI on its
+chooser fix (`d46f7cd3`). Next candidate gap: shared/client REPORTS printing period figures without the coverage the
+summary states.
