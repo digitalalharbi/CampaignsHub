@@ -83,8 +83,14 @@ const IMPACT: Record<ImpactKind, Pair & { basisAr: string; basisEn: string }> = 
   spend_without_results: { ar: 'إنفاق دون نتيجة مُقاسة', en: 'Spend with no measured result', basisAr: 'الإنفاق في نافذة التنبيه مع صفر تحويلات مُبلَّغ عنها', basisEn: 'Spend in the alert window with zero reported conversions' },
   spend_on_fatigued: { ar: 'إنفاق على محتوى مُرهق', en: 'Spend on a fatigued creative', basisAr: 'إنفاق هذا المحتوى في الفترة كما قاسه ملخص المحتوى', basisEn: 'This creative’s spend in the period, as the content pulse measured it' },
 }
-export const impactLabel = (k: ImpactKind, ar: boolean) => pick(IMPACT[k], ar, k)
-export const impactBasis = (k: ImpactKind, ar: boolean) => (ar ? IMPACT[k].basisAr : IMPACT[k].basisEn)
+/* The same two impacts measured against a campaign's BUDGET rather than a spend limit. */
+const IMPACT_AGAINST_BUDGET: Partial<Record<ImpactKind, Pair & { basisAr: string; basisEn: string }>> = {
+  overspend: { ar: 'تجاوز الميزانية بمقدار', en: 'Over the budget by', basisAr: 'الإنفاق المُقاس ناقص ميزانية الحملة، بعملة الميزانية', basisEn: 'Measured spend minus the campaign budget, in the budget’s currency' },
+  projected_overrun: { ar: 'تجاوز متوقّع للميزانية بمقدار', en: 'Projected budget overrun', basisAr: 'بوتيرة الصرف الحالية حتى نهاية فترة الحملة', basisEn: 'At the current pace to the end of the campaign’s period' },
+}
+const impactCopy = (k: ImpactKind, against?: 'limit' | 'budget') => (against === 'budget' ? IMPACT_AGAINST_BUDGET[k] : undefined) ?? IMPACT[k]
+export const impactLabel = (k: ImpactKind, ar: boolean, against?: 'limit' | 'budget') => pick(impactCopy(k, against), ar, k)
+export const impactBasis = (k: ImpactKind, ar: boolean, against?: 'limit' | 'budget') => (ar ? impactCopy(k, against).basisAr : impactCopy(k, against).basisEn)
 
 const FACTS: Record<FindingFactKey, Pair> = {
   provider: { ar: 'المنصة', en: 'Platform' },

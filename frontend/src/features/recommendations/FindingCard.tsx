@@ -91,10 +91,10 @@ export function FindingCard({ finding, projectId, ar, currency }: { finding: Fin
       {f.impact && (
         <div className="rounded-xl bg-surface-secondary px-3 py-2" data-testid="finding-impact">
           <p className="flex flex-wrap items-baseline gap-2 text-sm">
-            <span className="text-text-secondary">{impactLabel(f.impact.kind, ar)}</span>
+            <span className="text-text-secondary">{impactLabel(f.impact.kind, ar, f.impact.against)}</span>
             <span className="text-base font-extrabold text-text-primary"><Num>{moneyExact(f.impact.amount, f.impact.currency)}</Num></span>
           </p>
-          <p className="text-[11px] text-text-muted">{impactBasis(f.impact.kind, ar)}</p>
+          <p className="text-[11px] text-text-muted">{impactBasis(f.impact.kind, ar, f.impact.against)}</p>
         </div>
       )}
 
