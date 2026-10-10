@@ -1074,3 +1074,12 @@ backend suite alone: 4,614 passed, 1 skipped; full Vitest 3,409.
 branch). #645 and #646 rebased onto `892fb696` and in CI; #646's previous webkit failure was a blank document (no
 accessibility tree, no shell `main`) on cross-product-consistency, which chromium and firefox passed. #647 and #648
 wait their turn; each merge dirties the rest through the shared docs.
+## Addendum — 2026-10-10, DASHBOARD-DRILLDOWN-001 on `ch-brand` (`feat/dashboard-drilldown`, from `74178283`)
+
+Owner priority 1. The agency dashboard's «ما يحتاج انتباهك» rows linked to whole surfaces; now each lands on exactly what
+it counts (`?status=needs_attention` / `?status=onboarding` on the clients portfolio, `?status=client_review` on the
+requests board — the dashboard's own definition of «awaiting the client» — and the Paused view of the campaigns
+surface), and the two target pages seed their first filter from the URL. Vitest 3 new, suites 153. Row added
+IMPLEMENTED_NOT_VERIFIED. Session restart note: the scratchpad (resolvers, flip tool, templates, PR bodies) and the
+preview servers were lost with the previous session and were recreated; #650 (account contribution) opened after the
+restart and took one guard fix (counted nouns through `lib/counted`).

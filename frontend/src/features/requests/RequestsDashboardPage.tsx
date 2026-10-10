@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-react'
 import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestBreakdown, type RequestFilters, type RequestRow } from './internalApi'
@@ -31,7 +31,9 @@ type View = 'table' | 'kanban' | 'cards'
 export function RequestsDashboardPage() {
   const t = useT()
   const qc = useQueryClient()
-  const [filters, setFilters] = useState<RequestFilters>({ page: 1, per_page: 100 })
+  /* DASHBOARD-DRILLDOWN-001 — «requests awaiting the client» arrives as `?status=client_review`. */
+  const [params] = useSearchParams()
+  const [filters, setFilters] = useState<RequestFilters>(() => ({ page: 1, per_page: 100, ...(params.get('status') ? { status: params.get('status') as string } : {}) }))
   const [search, setSearch] = useState('')
   const [view, setView] = useState<View>(() => (localStorage.getItem(VIEW_KEY) as View) || 'table')
   const query = useQuery({ queryKey: ['app', 'requests', filters], queryFn: () => listRequests(filters) })
