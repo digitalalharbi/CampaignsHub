@@ -6,6 +6,7 @@ use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Metrics\Http\Controllers\SpendLimitController;
@@ -220,6 +221,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-005: Platform-Reported vs Store-Confirmed, the attribution window each figure
     // was collected under, and what may be summed — the platforms' claims never are.
     Route::get('metrics/attribution', [MetricsController::class, 'attribution'])->name('metrics.attribution');
+    // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
+    Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
     /*

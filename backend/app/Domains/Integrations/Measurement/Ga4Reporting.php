@@ -163,4 +163,57 @@ final class Ga4Reporting
             ? substr($compact, 0, 4).'-'.substr($compact, 4, 2).'-'.substr($compact, 6, 2)
             : $compact;
     }
+
+    /**
+     * GA4-ANALYTICS-PRODUCT-001 — one breakdown, per day, as the property reports it.
+     *
+     * @return list<array{date: string, d1: string, d2: string, values: array<string, float>}>
+     */
+    public function breakdownRows(ProviderConnection $connection, string $propertyId, Carbon $from, Carbon $to, string $breakdown): array
+    {
+        $dimensions = Ga4Breakdowns::DIMENSIONS[$breakdown] ?? null;
+        if ($dimensions === null) {
+            return [];
+        }
+        $metrics = Ga4Breakdowns::metricsFor($breakdown);
+
+        $tokens = $this->vault->fresh($connection);
+        $response = PlatformHttp::client('ga4')
+            ->withToken($tokens->accessToken)
+            ->post(self::DATA_API.'/properties/'.$propertyId.':runReport', [
+                'dateRanges' => [['startDate' => $from->toDateString(), 'endDate' => $to->toDateString()]],
+                'dimensions' => array_map(static fn (string $d): array => ['name' => $d], ['date', ...$dimensions]),
+                'metrics' => array_map(static fn (string $m): array => ['name' => $m], array_keys($metrics)),
+                'limit' => self::ROW_LIMIT,
+            ]);
+
+        if ($response->failed()) {
+            throw new Ga4ReportFailed(PlatformHttp::reason($response));
+        }
+
+        $headers = array_map(static fn (array $h): ?string => $metrics[(string) ($h['name'] ?? '')] ?? null, $response->json('metricHeaders') ?? []);
+        $out = [];
+        foreach ($response->json('rows') ?? [] as $row) {
+            $dims = array_map(static fn (array $d): string => (string) ($d['value'] ?? ''), $row['dimensionValues'] ?? []);
+            $date = $dims[0] ?? '';
+            if ($date === '') {
+                continue;
+            }
+            $values = [];
+            foreach ($row['metricValues'] ?? [] as $i => $cell) {
+                $key = $headers[$i] ?? null;
+                if ($key !== null && isset($cell['value']) && is_numeric($cell['value'])) {
+                    $values[$key] = (float) $cell['value'];
+                }
+            }
+            $out[] = [
+                'date' => substr($date, 0, 4).'-'.substr($date, 4, 2).'-'.substr($date, 6, 2),
+                'd1' => mb_substr($dims[1] ?? '', 0, 512),
+                'd2' => mb_substr($dims[2] ?? '', 0, 512),
+                'values' => $values,
+            ];
+        }
+
+        return $out;
+    }
 }

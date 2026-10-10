@@ -157,14 +157,17 @@ export function AttributionPanel({
                   ar ? 'أكّده المتجر' : 'Store-Confirmed',
                   ar ? 'الفرق' : 'Difference',
                   ar ? 'نافذة الإسناد' : 'Attribution window',
+                  // GA4-ANALYTICS-PRODUCT-001 — the third layer, beside the other two and never merged into them.
+                  ar ? 'قاسه الموقع (GA4)' : 'Site-Measured (GA4)',
                 ]}
-                rows={platforms.map((p) => claimCells(p, ar, locale))}
+                rows={platforms.map((p) => [...claimCells(p, ar, locale), ga4Cell(p, ar)])}
                 values={platforms.map((p): SortValues => [
                   providerLabel(p.provider, locale),
                   p.platform_reported_orders,
                   p.store_confirmed_orders,
                   p.difference,
                   p.attribution.window_known ? (p.attribution.click_through_days ?? null) : null,
+                  p.ga4_purchases ?? null,
                 ])}
                 initialSort={{ column: 3, dir: 'desc' }}
               />
@@ -320,6 +323,22 @@ export function AttributionPanel({
  *
  * @return list of five cells, positionally matched to the header
  */
+/** GA4's purchases in this platform's paid visits — «no GA4 property», never a zero, when nobody measured. */
+function ga4Cell(claim: PlatformClaim, ar: boolean): ReactNode {
+  if (claim.ga4_purchases == null) {
+    return <span key="ga4" className="text-text-muted">{ar ? 'لا خاصية GA4' : 'No GA4 property'}</span>
+  }
+
+  return (
+    <Pair
+      key="ga4"
+      primary={num(claim.ga4_purchases)}
+      secondary={`${num(claim.ga4_sessions ?? 0)} ${ar ? 'جلسة' : 'sessions'}`}
+      unit={ar ? 'شراء' : 'purchases'}
+    />
+  )
+}
+
 function claimCells(claim: PlatformClaim, ar: boolean, locale: Locale): ReactNode[] {
   const a = claim.attribution
 

@@ -159,6 +159,22 @@ final class Ga4PropertySync
 
         $written = $this->store($account, $projectId, $settings, $rows);
 
+        /*
+         * GA4-ANALYTICS-PRODUCT-001 — the breakdowns ride on the same run. One failing breakdown is
+         * NAMED in the run's meta and does not fail the daily figures, which are already stored and
+         * true; a breakdown that never arrived is shown as absent, not as zero.
+         */
+        $breakdownsFailed = [];
+        $breakdownRows = 0;
+        foreach (array_keys(Ga4Breakdowns::DIMENSIONS) as $breakdown) {
+            try {
+                $breakdownRows += $this->storeBreakdown($account, $projectId, $settings, $breakdown,
+                    $this->reporting->breakdownRows($connection, (string) $account->external_id, $from, $to, $breakdown));
+            } catch (Ga4ReportFailed $e) {
+                $breakdownsFailed[$breakdown] = ProviderErrorText::forStorage($e->getMessage());
+            }
+        }
+
         $account->forceFill(['last_synced_at' => Carbon::now(), 'last_sync_error_category' => null])->save();
 
         /*
@@ -180,6 +196,9 @@ final class Ga4PropertySync
                 'from' => $from->toDateString(),
                 'to' => $to->toDateString(),
                 'days' => count($rows),
+                // The run's `records` stay the DAILY figures (their contract); breakdown rows are counted here.
+                'breakdown_rows' => $breakdownRows,
+                'breakdowns_failed' => $breakdownsFailed,
             ],
         );
 
@@ -274,6 +293,41 @@ final class Ga4PropertySync
                 $chunk,
                 ['external_account_id', 'metric_date', 'metric_key'],
                 ['value', 'currency', 'timezone', 'project_id', 'property_id', 'updated_at'],
+            );
+        }
+
+        return count($payload);
+    }
+
+    /**
+     * @param  array{timezone: string, currency: ?string}  $settings
+     * @param  list<array{date: string, d1: string, d2: string, values: array<string, float>}>  $rows
+     */
+    private function storeBreakdown(ExternalAccount $account, string $projectId, array $settings, string $breakdown, array $rows): int
+    {
+        $now = Carbon::now();
+        $payload = array_map(static fn (array $row): array => [
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $account->tenant_id,
+            'project_id' => $projectId,
+            'external_account_id' => $account->getKey(),
+            'property_id' => (string) $account->external_id,
+            'metric_date' => $row['date'],
+            'breakdown' => $breakdown,
+            'dimension_1' => $row['d1'],
+            'dimension_2' => $row['d2'],
+            'metrics' => json_encode($row['values'], JSON_THROW_ON_ERROR),
+            'currency' => array_key_exists('revenue', $row['values']) ? $settings['currency'] : null,
+            'timezone' => $settings['timezone'],
+            'created_at' => $now,
+            'updated_at' => $now,
+        ], $rows);
+
+        foreach (array_chunk($payload, 500) as $chunk) {
+            DB::table('measurement_dimension_rows')->upsert(
+                $chunk,
+                ['external_account_id', 'metric_date', 'breakdown', 'dimension_1', 'dimension_2'],
+                ['metrics', 'currency', 'timezone', 'project_id', 'property_id', 'updated_at'],
             );
         }
 

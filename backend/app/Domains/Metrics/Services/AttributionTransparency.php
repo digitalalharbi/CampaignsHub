@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Services\ProjectOrders;
 use App\Domains\Commerce\Services\ProjectStores;
+use App\Domains\Integrations\Measurement\Ga4SiteAnalytics;
 use App\Domains\Integrations\Measurement\MeasurementDailyMetric;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -93,6 +94,7 @@ final class AttributionTransparency
         private readonly ProjectOrders $projectOrders,
         private readonly ProjectStores $projectStores,
         private readonly ReportingTimezone $timezones,
+        private readonly Ga4SiteAnalytics $site,
     ) {}
 
     /**
@@ -118,10 +120,20 @@ final class AttributionTransparency
         $platformRows = $this->platformRows($projectId, $window['from_date'], $window['to_date'], $providers);
         $storeByPlatform = $hasStore ? $this->storeOrdersByPlatform($loaded['orders']) : [];
 
+        /*
+         * GA4-ANALYTICS-PRODUCT-001 — the third layer, beside the other two and never merged into them.
+         *
+         * GA4's view of each platform's PAID visits (session medium paid, session source the
+         * platform): its sessions, the purchases GA4 counted in them, their revenue. Null when no
+         * GA4 property is selected for the project, exactly like a missing store — nobody checked.
+         */
+        $ga4 = $this->site->paidByPlatform($tenantId, $projectId, Carbon::parse($window['from_date']), Carbon::parse($window['to_date']));
+
         $platforms = [];
 
         foreach ($platformRows as $provider => $row) {
             $confirmed = $storeByPlatform[$provider] ?? null;
+            $measured = $ga4 === null ? null : ($ga4[$provider] ?? ['sessions' => 0.0, 'purchases' => 0.0, 'revenue' => 0.0, 'currency' => null]);
 
             $platforms[] = [
                 'provider' => $provider,
@@ -136,6 +148,10 @@ final class AttributionTransparency
                     : null,
                 'attribution' => $this->attributionOf($row['windows']),
                 'currency' => $row['currency'],
+                'ga4_sessions' => $measured === null ? null : round($measured['sessions'], 2),
+                'ga4_purchases' => $measured === null ? null : round($measured['purchases'], 2),
+                'ga4_revenue' => $measured === null ? null : round($measured['revenue'], 2),
+                'ga4_currency' => $measured['currency'] ?? null,
             ];
         }
 
@@ -153,6 +169,14 @@ final class AttributionTransparency
             'models' => $this->models($projectId, $window['from_date'], $window['to_date']),
             'unattributed' => $this->unattributed($hasStore, $loaded['orders']),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
+            'measurement' => [
+                'label_ar' => 'ما قاسه الموقع (GA4)',
+                'label_en' => 'Site-Measured (GA4)',
+                'available' => $ga4 !== null,
+                'basis_ar' => 'زيارات مدفوعة كما سجّلها GA4: الوسيط مدفوع والمصدر هو المنصة. لا يُجمع مع ما أبلغت به المنصات ولا مع ما أكده المتجر.',
+                'basis_en' => 'Paid visits as GA4 recorded them: a paid medium with the platform as source. Never added to what the platforms reported or to what the store confirmed.',
+                'other_paid' => $ga4['other_paid'] ?? null,
+            ],
         ];
     }
 
