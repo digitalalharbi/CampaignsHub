@@ -14,6 +14,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { clients as countedClients } from '@/lib/counted'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyHeadline'
 import type { LibraryQuery } from '@/features/content/api'
 
 /**
@@ -300,8 +301,60 @@ export function AgencyDashboardPage() {
         </span>
       </div>
 
-      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
+      {/* DASHBOARD-FIRST-SCREEN-001 — money, results, cost, movement, platforms, freshness and alerts come first. */}
       <div className="mb-4">
+        <AgencyHeadline ar={ar} />
+      </div>
+
+      {/*
+        Owner directive 2026-10-09 §11, and the standing feature-first rule: the Dashboard's one
+        question is «what needs attention now?», so the answer comes before anything that merely
+        describes the estate. The attention block and the client pace — the operational signals —
+        open the page; the client-mix bar, the objective chart and the creative section follow.
+        The page used to draw two charts first and put the attention block at the fold, with the
+        money signals three thousand pixels down behind the creative section.
+      */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="font-heading text-lg font-extrabold text-text-primary">
+            {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
+          </h2>
+          <ul className="mt-4 space-y-2.5 text-sm">
+            {/*
+              DASHBOARD-DRILLDOWN-001 — each row lands on exactly what it counts, not on the surface
+              that happens to contain it: the count is a question, and the page it opens is the answer.
+            */}
+            <AttentionRow
+              to="/agency/clients?status=needs_attention"
+              label={ar ? 'عملاء يحتاجون متابعة' : 'Clients needing attention'}
+              value={d.clients.needs_attention}
+              ar={ar}
+            />
+            <AttentionRow
+              to="/agency/clients?status=onboarding"
+              label={ar ? 'عملاء قيد التهيئة' : 'Clients onboarding'}
+              value={d.clients.onboarding}
+              ar={ar}
+            />
+            <AttentionRow
+              to="/agency/requests?status=client_review"
+              label={ar ? 'طلبات بانتظار رد العميل' : 'Requests awaiting the client'}
+              value={d.requests.awaiting_client}
+              ar={ar}
+            />
+            <PausedCampaignsRow campaigns={d.campaigns} ar={ar} />
+          </ul>
+        </section>
+        <AgencyAlerts ar={ar} />
+      </div>
+      <div className="mt-4">
+        <AgencyTrendAndPlatforms ar={ar} />
+      </div>
+      <div className="mt-4">
+        <ClientPace rows={budgets.data ?? []} ar={ar} />
+      </div>
+      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
+      <div className="mb-4 mt-4">
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <Metric
           to="/agency/clients"
@@ -340,50 +393,6 @@ export function AgencyDashboardPage() {
           tone="warning"
         />
       </StatGrid>
-      </div>
-
-      {/*
-        Owner directive 2026-10-09 §11, and the standing feature-first rule: the Dashboard's one
-        question is «what needs attention now?», so the answer comes before anything that merely
-        describes the estate. The attention block and the client pace — the operational signals —
-        open the page; the client-mix bar, the objective chart and the creative section follow.
-        The page used to draw two charts first and put the attention block at the fold, with the
-        money signals three thousand pixels down behind the creative section.
-      */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="font-heading text-lg font-extrabold text-text-primary">
-            {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
-          </h2>
-          <ul className="mt-4 space-y-2.5 text-sm">
-            {/*
-              DASHBOARD-DRILLDOWN-001 — each row lands on exactly what it counts, not on the surface
-              that happens to contain it: the count is a question, and the page it opens is the answer.
-            */}
-            <AttentionRow
-              to="/agency/clients?status=needs_attention"
-              label={ar ? 'عملاء يحتاجون متابعة' : 'Clients needing attention'}
-              value={d.clients.needs_attention}
-              ar={ar}
-            />
-            <AttentionRow
-              to="/agency/clients?status=onboarding"
-              label={ar ? 'عملاء قيد التهيئة' : 'Clients onboarding'}
-              value={d.clients.onboarding}
-              ar={ar}
-            />
-            <AttentionRow
-              to="/agency/requests?status=client_review"
-              label={ar ? 'طلبات بانتظار رد العميل' : 'Requests awaiting the client'}
-              value={d.requests.awaiting_client}
-              ar={ar}
-            />
-            <PausedCampaignsRow campaigns={d.campaigns} ar={ar} />
-          </ul>
-        </section>
-        <div>
-          <ClientPace rows={budgets.data ?? []} ar={ar} />
-        </div>
       </div>
       <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
       {/*

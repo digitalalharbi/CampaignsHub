@@ -29,7 +29,7 @@ const WIDTHS = [
 
 /** Route → the testids of blocks that must be at least partly inside the first viewport (desktop). */
 const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; firstScreen: string[] }> = [
-  { path: '/agency/dashboard', firstScreen: ['agency-intro', 'agency-attention'] },
+  { path: '/agency/dashboard', firstScreen: ['agency-intro', 'agency-headline', 'agency-attention'] },
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
   /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
      answers each page's question, and the filter block that scopes it. */

@@ -138,3 +138,28 @@ export interface ProjectBudgetRow {
 }
 
 export const fetchClientBudgets = () => getData<ClientBudgetRow[]>('/agency/client-budgets')
+
+/**
+ * DASHBOARD-FIRST-SCREEN-001 — what the reachable clients spent and got, as the aggregator states it.
+ *
+ * `current` / `previous` are `MetricsAggregator::totals()` rows (money truth and coverage included);
+ * `currency` is the window's basis — null when the rows mix currencies or there are none, and then
+ * every money figure prints bare. `current` is null when the operator reaches no project at all.
+ */
+export interface AgencyOverview {
+  scope: { client_count: number; project_count: number; is_restricted: boolean }
+  period: { from: string; to: string }
+  previous_period: { from: string; to: string }
+  currency: string | null
+  current: Record<string, unknown> | null
+  previous: Record<string, unknown> | null
+  by_provider: Array<Record<string, unknown> & { provider: string }>
+  timeseries: Array<Record<string, unknown> & { date: string }>
+  freshness: { last_synced_at: string | null }
+}
+
+export function fetchAgencyOverview(range?: { from: string; to: string }): Promise<AgencyOverview> {
+  const qs = range ? `?from=${range.from}&to=${range.to}` : ''
+
+  return getData<AgencyOverview>(`/agency/overview${qs}`)
+}

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Agency\Http\Controllers\AgencyDashboardController;
+use App\Domains\Agency\Http\Controllers\AgencyOverviewController;
 use App\Domains\Agency\Http\Controllers\AgencyTeamController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])
     ->prefix('agency')->name('agency.')
     ->group(function (): void {
         Route::get('/dashboard', AgencyDashboardController::class)->name('dashboard');
+        Route::get('/overview', AgencyOverviewController::class)->name('overview');
 
         // Team & client scopes. Three verbs rather than one save, because "add a client" and
         // "redefine what this person can see" are different decisions and must stay different calls.

@@ -4,7 +4,7 @@ import { AgencyDashboardPage } from './AgencyDashboardPage'
 import { renderWithProviders } from '@/test/utils'
 import type { AgencyDashboard, ClientBudgetRow } from './api'
 
-vi.mock('./api', () => ({ fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn() }))
+vi.mock('./api', () => ({ fetchAgencyOverview: vi.fn(() => Promise.resolve({ scope: { client_count: 0, project_count: 0, is_restricted: false }, period: { from: '2026-09-11', to: '2026-10-10' }, previous_period: { from: '2026-08-12', to: '2026-09-10' }, currency: null, current: null, previous: null, by_provider: [], timeseries: [], freshness: { last_synced_at: null } })),  fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn() }))
 vi.mock('@/features/content/CreativePulseSection', () => ({ CreativePulseSection: () => null }))
 
 import { fetchAgencyDashboard, fetchClientBudgets } from './api'
