@@ -1050,3 +1050,13 @@ Backend 2 new + 26 related, larastan clean; Vitest 2 new, reports suites green. 
 Lane: #641/#642 rebased onto `a96b3fa8` after the chooser's client-guard fix (a project-scoped viewer was chased in a
 loop by the switcher — chromium gate, campaigns-roles); #646 rebased; all five runs queued on saturated runners. Full
 backend suite alone for the currency branch on `mediabuying_test_brand`: 4,609 passed, 1 skipped.
+
+## Addendum — 2026-10-10, BUDGET-PACING-COVERAGE-001 on `ch-brand` (`feat/budget-pacing-coverage`, from `a96b3fa8`)
+
+Pacing divided spend by the days elapsed to TODAY whatever the window's coverage, so a platform that stopped reporting
+read as under-spending. `MetricsAggregator::pacedThrough()` (one partial through-date → that day), both pacing methods
+and `SpendLimitGovernor::read()` pace through it and emit `paced_through`; the Budget tab prints «حتى <day>» beside the
+projection, the spend-limit card states it in a sentence. BudgetPacingCoverageTest 4/4 (hand-checkable figures),
+pacing/governance suites 80, larastan clean; SpendLimitsPage.test +2, budget Vitest green. Row added
+IMPLEMENTED_NOT_VERIFIED. Targeted runs on ch-brand now use `mediabuying_test_pacing` while the full suite holds
+`mediabuying_test_brand` — one suite per database.

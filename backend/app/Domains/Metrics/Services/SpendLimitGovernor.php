@@ -97,7 +97,10 @@ final class SpendLimitGovernor
          * the problem.
          */
         $periodDays = (int) max(1, $from->diffInDays($to) + 1);
-        $elapsedDays = $today->lt($from) ? 0 : (int) max(1, $from->diffInDays($today->copy()->min($to)) + 1);
+        // BUDGET-PACING-COVERAGE-001 — «elapsed» ends where the measurement ends, when that is earlier than today.
+        $pacedThrough = $this->scoped($limit)->pacedThrough($from, $to, $today);
+        $elapsedEnd = $pacedThrough !== null ? Carbon::parse($pacedThrough) : $today->copy()->min($to);
+        $elapsedDays = $today->lt($from) ? 0 : (int) max(1, $from->diffInDays($elapsedEnd) + 1);
         $elapsedFraction = min(1.0, $elapsedDays / $periodDays);
 
         $utilisation = $comparable ? $consumed / $limit->amount : null;
@@ -117,6 +120,7 @@ final class SpendLimitGovernor
             'currency' => $limit->currency,
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $periodDays],
             'elapsed_days' => $elapsedDays,
+            'paced_through' => $pacedThrough,
             'consumed' => $consumed !== null ? round($consumed, 2) : null,
             'consumed_currency' => $currency,
             'remaining' => $remaining !== null ? round($remaining, 2) : null,
@@ -139,18 +143,22 @@ final class SpendLimitGovernor
      * The four money-truth figures come back from the aggregator exactly as every other surface reads
      * them; `MoneyScope` turns them into «there is one figure» or «there is not».
      */
-    private function spend(SpendLimit $limit, Carbon $from, Carbon $to): MoneyScope
+    /** The aggregator narrowed to exactly what this limit governs. */
+    private function scoped(SpendLimit $limit): MetricsAggregator
     {
         $metrics = $this->metrics->forProjects([$limit->project_id]);
 
-        $metrics = match ($limit->scope) {
+        return match ($limit->scope) {
             SpendLimitScope::Project => $metrics,
             SpendLimitScope::Platform => $metrics->forProviders([(string) $limit->scope_id]),
             SpendLimitScope::Account => $metrics->forAccounts([(string) $limit->scope_id]),
             SpendLimitScope::Campaign => $metrics->forCampaign((string) $limit->scope_id),
         };
+    }
 
-        $totals = $metrics->totals($from, $to);
+    private function spend(SpendLimit $limit, Carbon $from, Carbon $to): MoneyScope
+    {
+        $totals = $this->scoped($limit)->totals($from, $to);
 
         // The same five arguments `platformMoney()` and `budgetPacing()` pass — the currency pair is
         // `money_original_*`, which is what `totals()` actually emits.
