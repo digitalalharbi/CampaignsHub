@@ -434,7 +434,63 @@ export interface DuplicatedShop {
   names: string[]
 }
 
+/** ATTRIBUTION-RECONCILIATION-001 — a ROAS always says what it was counted on. */
+export interface BasedRoas {
+  basis: 'platform_reported' | 'reconciled' | 'store_confirmed'
+  value: number | null
+}
+
+export interface ReconciledPlatform {
+  provider: string
+  spend: number | null
+  platform_reported_orders: number
+  platform_reported_revenue: number | null
+  /** Null, never 0, when there is no ledger to reconcile against. */
+  reconciled_orders: number | null
+  reconciled_revenue: number | null
+  overclaim_orders: number | null
+  roas: { platform_reported: BasedRoas; reconciled: BasedRoas }
+}
+
+export interface LedgerRow {
+  reference: string
+  placed_at: string | null
+  platform: string | null
+  /** Absent on a client link — CLIENT-REPORT-ENTITY-BOUNDARY-001. */
+  campaign?: string | null
+  method: string
+  evidence_rank: number
+  revenue: number | null
+  refunded: number | null
+  currency: string | null
+}
+
+export interface Reconciliation {
+  available: boolean
+  unavailable_reason: string | null
+  note_ar: string
+  note_en: string
+  layers: Record<'platform_reported' | 'measurement' | 'commerce' | 'reconciled', { ar: string; en: string }>
+  measurement: {
+    available: boolean
+    basis: 'measurement'
+    unavailable_reason: string | null
+    note_ar: string
+    note_en: string
+    transactions: number | null
+    revenue: number | null
+    currency: string | null
+  }
+  /** Business ROAS — the whole ledger's net revenue over the whole spend; the one basis no claim touches. */
+  business_roas?: { basis: 'store_confirmed'; value: number | null; revenue: number | null; spend: number | null }
+  platforms: ReconciledPlatform[]
+  unattributed: { orders: number; revenue: number } | null
+  conflict: { orders: number; revenue: number } | null
+  ledger: { total: number; truncated: boolean; cap: number; rows: LedgerRow[] } | null
+}
+
 export interface Attribution {
+  reconciliation?: Reconciliation
   /** ANALYTICS-FILTER-TRUTH-001 — the campaign axis is declined here, and the response says so. */
   filter_scope?: FilterScope
   period: Range

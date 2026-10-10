@@ -35,6 +35,56 @@ const claim = (over: Partial<PlatformClaim> = {}): PlatformClaim => ({
   ...over,
 })
 
+
+/** ATTRIBUTION-RECONCILIATION-001 — two platforms claim 40 each; the ledger holds 35, placed 30 + 5. */
+const reconciliation = (over: Partial<NonNullable<Attribution['reconciliation']>> = {}): NonNullable<Attribution['reconciliation']> => ({
+  available: true,
+  unavailable_reason: null,
+  note_ar: 'كل طلب في الدفتر يُوضع مرة واحدة.',
+  note_en: 'Each ledger order is placed once.',
+  layers: {
+    platform_reported: { ar: 'ما أبلغت به المنصات', en: 'Platform-reported' },
+    measurement: { ar: 'القياس (GA4)', en: 'Measurement (GA4)' },
+    commerce: { ar: 'ما أكّده المتجر', en: 'Commerce truth' },
+    reconciled: { ar: 'المُسوّى', en: 'Reconciled' },
+  },
+  measurement: {
+    available: false,
+    basis: 'measurement',
+    unavailable_reason: 'no_measurement_rows',
+    note_ar: 'لم تُقرأ أي أرقام قياس لهذه الفترة.',
+    note_en: 'No measurement figures were read for this period.',
+    transactions: null,
+    revenue: null,
+    currency: null,
+  },
+  platforms: [
+    {
+      provider: 'meta', spend: 1000, platform_reported_orders: 40, platform_reported_revenue: 4000,
+      reconciled_orders: 30, reconciled_revenue: 2700, overclaim_orders: 10,
+      roas: { platform_reported: { basis: 'platform_reported', value: 4 }, reconciled: { basis: 'reconciled', value: 2.7 } },
+    },
+    {
+      provider: 'snapchat', spend: 500, platform_reported_orders: 40, platform_reported_revenue: 2000,
+      reconciled_orders: 5, reconciled_revenue: 450, overclaim_orders: 35,
+      roas: { platform_reported: { basis: 'platform_reported', value: 4 }, reconciled: { basis: 'reconciled', value: 0.9 } },
+    },
+  ],
+  business_roas: { basis: 'store_confirmed', value: 2.1, revenue: 3150, spend: 1500 },
+  unattributed: { orders: 0, revenue: 0 },
+  conflict: { orders: 0, revenue: 0 },
+  ledger: {
+    total: 35,
+    truncated: false,
+    cap: 200,
+    rows: [
+      { reference: 'ORD-1', placed_at: '2026-07-10', platform: 'meta', campaign: 'Ramadan', method: 'utm_campaign_id', evidence_rank: 1, revenue: 300, refunded: 0, currency: 'SAR' },
+      { reference: 'ORD-2', placed_at: '2026-07-11', platform: 'snapchat', campaign: null, method: 'click_id_platform_only', evidence_rank: 3, revenue: 90, refunded: 10, currency: 'SAR' },
+      { reference: 'ORD-3', placed_at: '2026-07-12', platform: null, campaign: null, method: 'none', evidence_rank: 6, revenue: 50, refunded: 0, currency: 'SAR' },
+    ],
+  },
+  ...over,
+})
 const payload = (over: Partial<Attribution> = {}): Attribution => ({
   period: { from: '2026-07-07', to: '2026-08-05' },
   platform_reported: {
@@ -98,6 +148,7 @@ const payload = (over: Partial<Attribution> = {}): Attribution => ({
     comparable_platforms: 2,
   },
   models: [{ model: 'unset', is_set: false, campaigns: 3, campaign_names: ['A'], windows: ['default'] }],
+  reconciliation: reconciliation(),
   unattributed: {
     available: true,
     orders: 0,
@@ -429,5 +480,69 @@ describe('the platform-reported vs store-confirmed comparison', () => {
     )
 
     expect(screen.getByTestId('attribution')).toHaveTextContent('Meta')
+  })
+
+  // ── ATTRIBUTION-RECONCILIATION-001 ────────────────────────────────────────────────────────
+  describe('the reconciled layer', () => {
+    it('sets each platform\'s claim beside what the ledger placed on it, and never adds the platforms up', async () => {
+      render(payload())
+      const block = await screen.findByTestId('reconciliation')
+      expect(within(block).getByTestId('reconciliation-row-meta')).toHaveTextContent('40')
+      expect(within(block).getByTestId('reconciliation-row-meta')).toHaveTextContent('30')
+      expect(within(block).getByTestId('reconciliation-row-snapchat')).toHaveTextContent('35')
+      expect(block.textContent).not.toMatch(/\b80\b/)
+      expect(block.textContent).not.toMatch(/\b35 orders reconciled\b/)
+    })
+
+    it('names the basis on every ROAS it draws', async () => {
+      render(payload())
+      const row = await screen.findByTestId('reconciliation-row-meta')
+      expect(within(row).getByTestId('roas-platform_reported-meta')).toHaveTextContent('4')
+      expect(within(row).getByTestId('roas-reconciled-meta')).toHaveTextContent('2.7')
+      expect(within(row).getByTestId('roas-platform_reported-meta')).toHaveTextContent(/platform/i)
+      expect(within(row).getByTestId('roas-reconciled-meta')).toHaveTextContent(/reconciled/i)
+      /* The third basis is the business's, on the block: the ledger over all spend. */
+      expect(screen.getByTestId('reconciliation-business-roas')).toHaveTextContent('2.1')
+      expect(screen.getByTestId('reconciliation-business-roas')).toHaveTextContent(/business/i)
+    })
+
+    it('lists the ledger by evidence, with the merchant reference and an evidence badge', async () => {
+      render(payload())
+      const ledger = await screen.findByTestId('reconciliation-ledger')
+      const refs = within(ledger).getAllByTestId(/^ledger-row-/).map((r) => r.getAttribute('data-testid'))
+      expect(refs).toEqual(['ledger-row-ORD-1', 'ledger-row-ORD-2', 'ledger-row-ORD-3'])
+      const rowOf = (ref: string) => within(ledger).getByTestId(`ledger-row-${ref}`).closest('tr')!
+      expect(rowOf('ORD-3')).toHaveTextContent(/unattributed/i)
+      expect(rowOf('ORD-1')).toHaveTextContent('Ramadan')
+    })
+
+    it('states the measurement layer as absent rather than drawing a zero', async () => {
+      render(payload())
+      const m = await screen.findByTestId('reconciliation-measurement')
+      expect(m).toHaveTextContent(/No measurement figures/)
+      expect(m.textContent).not.toMatch(/\b0\b/)
+    })
+
+    it('draws the measurement figures when they were read, on their own line', async () => {
+      render(payload({ reconciliation: reconciliation({ measurement: { available: true, basis: 'measurement', unavailable_reason: null, note_ar: 'x', note_en: 'What GA4 counted.', transactions: 7, revenue: 1234.5, currency: 'SAR' } }) }))
+      const m = await screen.findByTestId('reconciliation-measurement')
+      expect(m).toHaveTextContent('7')
+      // `moneyExact` keeps cents only under 1,000 — the product's rule, so 1,234.5 reads as 1,235.
+      expect(m).toHaveTextContent('1,235 SAR')
+    })
+
+    it('says the reconciled layer is unavailable without a store, not zero', async () => {
+      render(payload({ reconciliation: reconciliation({ available: false, unavailable_reason: 'no_store_connected', ledger: null, unattributed: null, conflict: null, platforms: [{ provider: 'meta', spend: 1000, platform_reported_orders: 40, platform_reported_revenue: 4000, reconciled_orders: null, reconciled_revenue: null, overclaim_orders: null, roas: { platform_reported: { basis: 'platform_reported', value: 4 }, reconciled: { basis: 'reconciled', value: null } } }] }) }))
+      const block = await screen.findByTestId('reconciliation')
+      expect(within(block).getByTestId('reconciliation-unavailable')).toBeInTheDocument()
+      expect(within(block).queryByTestId('reconciliation-ledger')).toBeNull()
+      expect(within(block).getByTestId('reconciliation-row-meta').textContent).not.toMatch(/\b0\b/)
+    })
+
+    it('says the ledger is capped when it is', async () => {
+      render(payload({ reconciliation: reconciliation({ ledger: { total: 205, truncated: true, cap: 200, rows: [] } }) }))
+      expect(await screen.findByTestId('reconciliation-ledger-cap')).toHaveTextContent('200')
+      expect(screen.getByTestId('reconciliation-ledger-cap')).toHaveTextContent('205')
+    })
   })
 })

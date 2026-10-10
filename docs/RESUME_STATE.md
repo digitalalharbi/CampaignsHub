@@ -908,3 +908,20 @@ Queued behind ch-req (#631), ch-rmfmt, ch-brand and ch-budget in the single lane
 **#631 fix (on ch-req, pushed `09bf8ac9`):** `DemoIntegrationsSeeder` targets the store project by name
 (`DemoAnalyticsSeeder::STORE_PROJECT`); the most-campaigns rule had re-pointed the whole integration chain at the
 Scale project, emptying the store project's Ads table on all three gate browsers. `DemoIntegrationsSeederTargetTest` (4).
+
+## Addendum — 2026-10-09, B6 Attribution Reconciliation on `ch-brand` (`feat/attribution-reconciliation`, from `8cda29cb`)
+
+The directive's only authorised new capability, built as an extension of `AttributionTransparency` (never a
+parallel engine): `reconciliation` on the same payload — four layers named, the ledger placed by strongest
+evidence (campaign id → name → click id → UTM source), overclaim per platform, no cross-platform total, GA4
+its own layer, ROAS per basis. Client links strip campaign identity (`ShareService::withoutCampaignIdentity`)
+and null `reconciled_revenue`/`refunded` under `hide_revenue`. Panel section under the overlap block.
+Backend 11 + 2 new cases, panel +7, all fail-first; transparency suites 52; analytics vitest 591; tsc/lint
+clean. Matrix row ATTRIBUTION-RECONCILIATION-001 added (IMPLEMENTED_NOT_VERIFIED until deployed). Queued
+after ch-budget (#634) and ch-font in the single lane.
+
+**B6 after the rebase onto `a471af9b` (#634), 2026-10-10 00:1x.** Conflicts were docs only (matrix rows by the per-row
+resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full backend suite alone on its own database:
+4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
+`mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
+gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
