@@ -1083,3 +1083,7 @@ projection, the spend-limit card states it in a sentence. BudgetPacingCoverageTe
 pacing/governance suites 80, larastan clean; SpendLimitsPage.test +2, budget Vitest green. Row added
 IMPLEMENTED_NOT_VERIFIED. Targeted runs on ch-brand now use `mediabuying_test_pacing` while the full suite holds
 `mediabuying_test_brand` — one suite per database.
+
+**Browser proof, 2026-10-10 ~09:05 (br-web 5261, agency owner, Q3 Launch):** the Budget tab prints «حتى 2026-09-27»
+beside every projected figure on the platform and campaign rows (20 matches), where the same window had paced to
+today before. Full backend suite re-running alone on `mediabuying_test_brand` for this branch; full Vitest in flight.
