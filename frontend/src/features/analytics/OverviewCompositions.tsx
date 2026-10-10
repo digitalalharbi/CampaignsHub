@@ -1,3 +1,5 @@
+import { comparableWindows, windowsUnlikeNote } from '@/lib/coverage/contract'
+import { providerLabel } from '@/features/campaigns/labels'
 import { useMemo } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { MetricStrip } from '@/components/ui/MetricStrip'
@@ -87,7 +89,13 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
    * not move. When the comparison window is empty the pills are not rendered at all and the page
    * says why once, above the strip.
    */
-  const comparable = s.data?.previous_rows_in_scope !== false
+  /*
+   * ANALYTICS-COVERAGE-COMPARABILITY-001 — and only when BOTH windows are whole. A current window
+   * whose platform reported through its seventeenth day, set against a complete previous one,
+   * printed «+18 %» on every card and «كل الأرقام قابلة للمقارنة» beneath them.
+   */
+  const comparable = comparableWindows(s.data)
+  const unlikeNote = windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en'))
 
   /*
    * ANALYTICS-AS-DASHBOARD-001 — the headline row is chosen BY the objective.
@@ -147,7 +155,7 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
     block scoped to this period must be able to SAY which period, and re-deriving it from the
     filters would be a second answer to «which window is this».
   */
-  return { ar, s, ts, objective, reportingCurrency, points, series, chartCurrency, comparable, drivers, strip, vm, campaigns, platformRows, projectId, range }
+  return { ar, s, ts, objective, reportingCurrency, points, series, chartCurrency, comparable, unlikeNote, drivers, strip, vm, campaigns, platformRows, projectId, range }
 }
 
 export type OverviewData = ReturnType<typeof useOverviewData>
@@ -263,7 +271,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
 export function DashboardOverview(d: OverviewData) {
   /* `projectId` and `range` left the destructure with the format verdict that used them — see
      CONTENT-FORMAT-ROAS-REMOVED-001. They stay on `OverviewData` because other compositions read them. */
-  const { ar, s, ts, series, chartCurrency, comparable, drivers, vm, points, objective, reportingCurrency } = d
+  const { ar, s, ts, series, chartCurrency, comparable, unlikeNote, drivers, vm, points, objective, reportingCurrency } = d
 
   return (
     <div className="space-y-4" data-testid="dashboard-overview" data-composition="dashboard">
@@ -273,9 +281,7 @@ export function DashboardOverview(d: OverviewData) {
             className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
           >
             <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
-            {ar
-              ? `الفترة السابقة (${s.data.previous_range.from} → ${s.data.previous_range.to}) لا تحتوي أي بيانات، فلا يوجد شيء تُقاس عليه هذه الفترة.`
-              : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
+            {unlikeNote}
           </p>
         )}
 
@@ -460,6 +466,7 @@ export function DashboardOverview(d: OverviewData) {
           currency={reportingCurrency}
           loading={drivers.isPending}
           error={drivers.isError}
+          subtitle={d.unlikeNote ?? undefined}
           // The same series the graph below this block draws, so a marked day sits on the curve the
           // reader is already looking at rather than on a second one fetched for the purpose.
           series={points}
@@ -508,7 +515,7 @@ export function DashboardOverview(d: OverviewData) {
  * the door into it.
  */
 export function AnalyticsOverview(d: OverviewData) {
-  const { ar, s, ts, series, chartCurrency, comparable, drivers, strip, vm, points } = d
+  const { ar, s, ts, series, chartCurrency, comparable, unlikeNote, drivers, strip, vm, points } = d
 
   return (
     <div className="space-y-4" data-testid="analytics-overview" data-composition="analytics">
@@ -579,9 +586,7 @@ export function AnalyticsOverview(d: OverviewData) {
             className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
           >
             <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
-            {ar
-              ? `الفترة السابقة (${s.data.previous_range.from} → ${s.data.previous_range.to}) لا تحتوي أي بيانات، فلا يوجد شيء تُقاس عليه هذه الفترة.`
-              : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
+            {unlikeNote}
           </p>
         )}
 
@@ -663,6 +668,7 @@ export function AnalyticsOverview(d: OverviewData) {
         currency={d.reportingCurrency ?? 'SAR'}
         loading={drivers.isPending}
         error={drivers.isError}
+        subtitle={d.unlikeNote ?? undefined}
         series={points}
       />
     </div>

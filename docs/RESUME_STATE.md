@@ -972,3 +972,11 @@ them); the executive summary follows. Backend 4 new + 77 related passed, larasta
 both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
 Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
 surfaces) stacked on #641.
+
+## Addendum — 2026-10-10, ANALYTICS-COVERAGE-COMPARABILITY-001 on `ch-rmfmt` (`feat/analytics-coverage-comparability`, stacked on #643)
+
+The Analytics overview for the same lagging project still printed «+18 %» per card, «+21.3 %» in «ما الذي تغيّر» and
+«كل الأرقام قابلة للمقارنة» while its head said «البيانات متأخرة · 2026-09-27». `comparableWindows` /
+`windowsUnlikeNote` in the coverage contract; the overview and the Campaigns summary row withhold every pill unless both
+windows are whole, the banner names the truncation, the change decomposition carries the sentence as its subtitle.
+Contract +5, overview 2/2, campaigns row +1, injection-proved; tsc/lint clean. Row added IMPLEMENTED_NOT_VERIFIED.

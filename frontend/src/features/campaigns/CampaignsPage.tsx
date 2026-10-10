@@ -1,3 +1,4 @@
+import { comparableWindows } from '@/lib/coverage/contract'
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
@@ -682,7 +683,8 @@ export function CampaignsPage() {
    * `undefined` removes the pill; `null` renders the «— —» that made a missing comparison window
    * look like a flat month. Same reading the board uses, from the same field.
    */
-  const comparable = summary.data?.previous_rows_in_scope !== false
+  // ANALYTICS-COVERAGE-COMPARABILITY-001 — and both windows whole, not merely populated.
+  const comparable = comparableWindows(summary.data)
   const cmp = (v: number | null | undefined) => (comparable ? v ?? null : undefined)
 
   /*
