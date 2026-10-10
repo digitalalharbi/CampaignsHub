@@ -28,7 +28,7 @@ import type { UnifiedCampaign } from './types'
  * days on this transient — the slowest engine is the one that looks while the count is still wrong.
  */
 vi.mock('./api', () => ({ listCampaigns: vi.fn(), createCampaign: vi.fn(), updateCampaign: vi.fn() }))
-vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listUsers: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]), listUsers: vi.fn() }))
 
 const metrics = vi.hoisted(() => ({ value: undefined as unknown }))
 
