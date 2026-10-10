@@ -1107,3 +1107,27 @@ whole, with «المعروض: … · عرض الكل» on the list; a «سجل �
 Vitest +5 +3, campaigns suites 241; chromium gate 12 passed (the spec creates its own draft through the API, so the
 count and the history row cannot be seed leftovers). br-web at 1366: «مجدولة 1 · مسودات 3 · منتهية 2» and the history
 button. Row added IMPLEMENTED_NOT_VERIFIED.
+## Addendum — 2026-10-10, DASHBOARD-DRILLDOWN-001 on `ch-brand` (`feat/dashboard-drilldown`, from `74178283`)
+
+Owner priority 1. The agency dashboard's «ما يحتاج انتباهك» rows linked to whole surfaces; now each lands on exactly what
+it counts (`?status=needs_attention` / `?status=onboarding` on the clients portfolio, `?status=client_review` on the
+requests board — the dashboard's own definition of «awaiting the client» — and the Paused view of the campaigns
+surface), and the two target pages seed their first filter from the URL. Vitest 3 new, suites 153. Row added
+IMPLEMENTED_NOT_VERIFIED. Session restart note: the scratchpad (resolvers, flip tool, templates, PR bodies) and the
+preview servers were lost with the previous session and were recreated; #650 (account contribution) opened after the
+restart and took one guard fix (counted nouns through `lib/counted`).
+
+### Same day, later — the project rung (`feat/dashboard-drilldown`, second commit)
+
+The campaigns surface is project-scoped by design, so the paused count — which spans every client
+the operator reaches — could only open as a chooser or as one project's share of a cross-client
+number. The dashboard API now names each project holding paused campaigns (`paused_by_project`,
+most first); one project makes the row that project's Paused view, several list each project beneath
+the row with its own count and link. `?project=<id>` is honoured on arrival by `useProjectFromUrl`
+(chosen within reach only, client set where held, key cleaned from the address). The client-mix
+legend links each state to the portfolio filtered on the same column the count used; a project
+budget row links to that project's campaigns table; the portfolio chip names the status through
+`optionLabel`. Preview proof on 5261: «حملات موقوفة 3» → «متجر تجريبي — Demo 2 · Q3 Launch — Demo 1»;
+the first opened Demo Store's 17 campaigns with the band keys kept in the address. Local chromium
+gate over the four dashboard specs: 243 passed, 1 skipped. Row extended, still IMPLEMENTED_NOT_VERIFIED
+until the served bundle carries `paused_by_project`.
