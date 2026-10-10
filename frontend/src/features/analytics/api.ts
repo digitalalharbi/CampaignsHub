@@ -502,7 +502,47 @@ export interface Reconciliation {
   ledger: { total: number; truncated: boolean; cap: number; rows: LedgerRow[] } | null
 }
 
+/** ATTRIBUTION-MODELS-001 — one channel under each whole-order model; revenue is null on a link that hides it. */
+export interface ModelCredit {
+  orders: number
+  revenue: number | null
+}
+
+export interface ModelChannel {
+  channel: string
+  kind: 'platform' | 'influencer' | 'unattributed'
+  last_touch: ModelCredit
+  first_touch: ModelCredit
+  assisted: ModelCredit
+  evidence: { click_id: number; utm: number; coupon: number }
+  platform_claimed_orders: number | null
+  claim_includes_view_through: boolean | null
+  claim_click_through_days: number | null
+  claim_view_through_days: number | null
+  ga4_purchases: number | null
+}
+
+export interface ModelComparison {
+  available: boolean
+  unavailable_reason: string | null
+  basis_ar: string
+  basis_en: string
+  lookback_days?: number
+  currency?: string | null
+  channels: ModelChannel[]
+  paths: {
+    distinct: number
+    cap: number
+    max_length: number
+    multi_touch_orders: number
+    rows: { steps: string[]; truncated: boolean; orders: number; revenue: number | null }[]
+  } | null
+  coverage: { orders: number; orders_with_customer: number; share_with_customer: number | null; revenue_withheld_orders: number } | null
+}
+
 export interface Attribution {
+  /** ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the store's evidence. */
+  model_comparison?: ModelComparison
   reconciliation?: Reconciliation
   /** ANALYTICS-FILTER-TRUTH-001 — the campaign axis is declined here, and the response says so. */
   filter_scope?: FilterScope

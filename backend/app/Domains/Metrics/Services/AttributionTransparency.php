@@ -95,6 +95,7 @@ final class AttributionTransparency
         private readonly ProjectStores $projectStores,
         private readonly ReportingTimezone $timezones,
         private readonly Ga4SiteAnalytics $site,
+        private readonly AttributionModelComparison $modelComparison,
     ) {}
 
     /**
@@ -168,6 +169,8 @@ final class AttributionTransparency
             'dedup' => $this->dedup($hasStore, $platforms, $loaded),
             'models' => $this->models($projectId, $window['from_date'], $window['to_date']),
             'unattributed' => $this->unattributed($hasStore, $loaded['orders']),
+            // ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the same evidence the reconciliation reads.
+            'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
             'measurement' => [
                 'label_ar' => 'ما قاسه الموقع (GA4)',
@@ -583,15 +586,13 @@ final class AttributionTransparency
 
         foreach ($live as $order) {
             $campaign = $order->external_campaign_id === null ? null : $campaigns->get((string) $order->external_campaign_id);
-            $method = (string) ($order->attribution_method ?: 'none');
-            $raw = $campaign !== null ? $campaign->provider : $order->click_id_provider;
-            if ($raw === null && $order->utm_source !== null && $method === 'utm_source_platform_only') {
-                $raw = $order->utm_source;
-            }
-            $platform = $raw === null ? null : AdPlatforms::canonical((string) $raw);
+            // ATTRIBUTION-MODELS-001 — the same reading the model comparison uses, so «last touch» and «reconciled» cannot drift.
+            $touch = OrderTouch::of($order, $campaign);
+            $method = $touch['method'];
+            $platform = $touch['platform'];
             $revenue = $order->netRevenue() ?? 0.0;
             $rank = self::EVIDENCE_RANK[$method] ?? 7;
-            $viaCoupon = $method === 'influencer_coupon';
+            $viaCoupon = $touch['via_coupon'];
 
             if ($viaCoupon) {
                 // ATTR-EVIDENCE-INFLUENCER-COUPON-001 — placed on the creator's code, its own layer: not a platform, not unattributed.
