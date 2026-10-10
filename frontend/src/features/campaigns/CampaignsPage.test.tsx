@@ -11,7 +11,7 @@ vi.mock('./api', () => ({
   updateCampaign: vi.fn(),
 }))
 vi.mock('@/features/projects/api', () => ({
-  listProjects: vi.fn(),
+  listProjects: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]),
   listUsers: vi.fn(),
 }))
 

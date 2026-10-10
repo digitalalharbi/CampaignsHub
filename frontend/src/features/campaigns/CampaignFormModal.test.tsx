@@ -5,7 +5,7 @@ import type { UnifiedCampaign } from './types'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 vi.mock('./api', () => ({ createCampaign: vi.fn(), updateCampaign: vi.fn() }))
-vi.mock('@/features/projects/api', () => ({ listUsers: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listUsers: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]) }))
 
 import { createCampaign, updateCampaign } from './api'
 import { listUsers } from '@/features/projects/api'

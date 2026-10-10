@@ -16,7 +16,7 @@ import type { UnifiedCampaign } from './types'
  * wearing a word instead of a number.
  */
 vi.mock('./api', () => ({ listCampaigns: vi.fn(), createCampaign: vi.fn(), updateCampaign: vi.fn() }))
-vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listUsers: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listClientWorkspaces: vi.fn().mockResolvedValue([]), listUsers: vi.fn() }))
 
 const metrics = vi.hoisted(() => ({ value: undefined as unknown }))
 

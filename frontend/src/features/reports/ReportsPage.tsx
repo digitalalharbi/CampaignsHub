@@ -53,6 +53,7 @@ import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
 import { AttentionDecisionsPanel } from './AttentionDecisionsPanel'
 import { useProject } from '@/stores/project'
+import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 
@@ -328,9 +329,9 @@ export function ReportsPage() {
       />
 
       {!currentProjectId && (
-        <p data-testid="reports-need-project" className="rounded-2xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
-          {ar ? 'اختر مشروعًا من الأعلى لعرض تقاريره وإنشاء رابط لحظي للعميل.' : 'Choose a project above to see its reports and create a live client link.'}
-        </p>
+        <div data-testid="reports-need-project">
+          <ProjectChooser purpose="reports" />
+        </div>
       )}
 
       {/* Section switcher — the documents themselves vs the schedules that produce them. */}
