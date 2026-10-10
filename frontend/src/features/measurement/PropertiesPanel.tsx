@@ -6,6 +6,7 @@ import {
   type MeasurementProperty, type MeasurementProvider, type MeasurementState,
 } from './api'
 import { bindAccount, listClientWorkspaces, listProjects } from '@/features/projects/api'
+import { projectOptionLabels } from '@/features/projects/projectOptionLabels'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
@@ -219,6 +220,8 @@ export function PropertiesPanel() {
   const providers = query.data ?? []
   const actionError = [authorize, select, sync].map((m) => (m.isError ? toApiError(m.error) : null)).find((e) => e !== null) ?? null
   const projectChoices = projects.data ?? []
+  /* ANALYTICS-PROJECT-IDENTITY-001 — a project two clients share a name for says whose it is. */
+  const projectLabels = projectOptionLabels(projectChoices, clients.data)
   const clientChoices = clients.data ?? []
 
   return (
@@ -271,7 +274,7 @@ export function PropertiesPanel() {
               className="mt-1 block w-full max-w-48 rounded-xl border border-border bg-surface px-3 py-2 sm:max-w-none"
             >
               <option value="">{ar ? 'اختر مشروعًا' : 'Choose a project'}</option>
-              {projectChoices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectChoices.map((p) => <option key={p.id} value={p.id}>{projectLabels.get(p.id) ?? p.name}</option>)}
             </select>
           </label>
         )}
