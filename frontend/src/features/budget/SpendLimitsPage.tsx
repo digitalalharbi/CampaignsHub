@@ -3,6 +3,7 @@ import { useUi, type Locale } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
 import { Panel } from '@/features/analytics/components'
 import { EmptyState } from '@/components/ui/States'
+import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { money, moneyExact, num, percent } from '@/features/analytics/format'
@@ -106,6 +107,25 @@ export function SpendLimitsPage() {
    * and `unknown` is one of them rather than folded into «ok», because a limit whose spend could not
    * be compared is not a limit anybody has been told they are within.
    */
+  /*
+   * PROJECT-FIRST-VISIT-001 — a limit belongs to a project, and with none chosen the page used to
+   * say «no limits yet» over a query it had not run. The choice is on the page now.
+   */
+  if (!projectId) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageIntro
+          testid="spend-limits-intro"
+          title={ar ? 'حدود الإنفاق' : 'Spend limits'}
+          purpose={ar
+            ? 'حدود تضعها مساحة العمل لنفسها عبر المنصات — للمراقبة والتنبيه، لا للإيقاف.'
+            : 'Limits this workspace sets for itself across platforms — for watching and warning, never for stopping.'}
+        />
+        <ProjectChooser purpose="spend-limits" />
+      </div>
+    )
+  }
+
   const counts = {
     total: limits.length,
     ok: limits.filter((l) => l.state === 'ok').length,
