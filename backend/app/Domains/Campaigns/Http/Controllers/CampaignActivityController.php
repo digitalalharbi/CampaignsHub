@@ -30,6 +30,9 @@ final class CampaignActivityController extends Controller
         'campaign.archived' => 'أرشفة الحملة',
         'campaign.external_linked' => 'ربط حملة خارجية',
         'campaign.external_unlinked' => 'فك ربط حملة خارجية',
+        'campaign.provider_write' => 'تغيير نُفِّذ على المنصة',
+        'campaign.provider_write_refused' => 'رفضت المنصة التغيير',
+        'campaign.provider_created' => 'أُنشئت الحملة على المنصة',
     ];
 
     /**

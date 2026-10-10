@@ -60,10 +60,11 @@ import { CampaignAudienceTab, CampaignEventsTab, CampaignSyncLogTab } from './Ca
 import { CampaignStructureTab } from './CampaignStructureTab'
 import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
 import { CampaignWriteControl } from './CampaignWriteControl'
+import { CampaignControlPanel } from './CampaignControlPanel'
 import { useProject } from '@/stores/project'
 
 const TAB_KEYS = [
-  'overview', 'performance', 'platforms', 'structure', 'creatives', 'audience', 'events', 'budget',
+  'overview', 'control', 'performance', 'platforms', 'structure', 'creatives', 'audience', 'events', 'budget',
   'funnel', 'sync', 'notes', 'alerts', 'reports', 'activity', 'settings',
 ] as const
 type TabKey = (typeof TAB_KEYS)[number]
@@ -469,6 +470,12 @@ export function CampaignDetailPage() {
       {tab === 'sync' && (
         <TabPanel>
           <CampaignSyncLogTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {/* CAMPAIGN-MGMT-WRITE-001 — the platform entities, operated from here. */}
+      {tab === 'control' && (
+        <TabPanel>
+          <CampaignControlPanel campaign={c} projectId={projectId} onOpenHistory={() => setTab('activity')} />
         </TabPanel>
       )}
       {tab === 'settings' && (

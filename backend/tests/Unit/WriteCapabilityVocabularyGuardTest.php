@@ -44,6 +44,7 @@ final class WriteCapabilityVocabularyGuardTest extends TestCase
             WriteCapabilityRegistry::IMPLEMENTED_NOT_VERIFIED,
             WriteCapabilityRegistry::AWAITING_CREDENTIALS,
             WriteCapabilityRegistry::VERIFIED,
+            WriteCapabilityRegistry::PROVIDER_UNSUPPORTED,
         ], $keys[1]);
 
         preg_match("/type WriteStatus = (.*)\n/", $this->source(), $t);

@@ -61,15 +61,36 @@ final class CampaignWriteCapabilityGateTest extends TestCase
         return $user;
     }
 
-    public function test_every_provider_and_every_capability_is_declared_and_today_none_is_implemented(): void
+    /**
+     * CAMPAIGN-MGMT-WRITE-001 — the registry states what the ADAPTERS do, and nothing they do not.
+     *
+     * Without platform app credentials on this installation an implemented write is AWAITING them;
+     * no platform's objective can change after creation, so that cell is PROVIDER_UNSUPPORTED for the
+     * four written platforms; X, LinkedIn and OpenAI carry no adapter and stay NOT_IMPLEMENTED; and
+     * VERIFIED is never derived — it needs a Production round-trip on record.
+     */
+    public function test_every_cell_is_declared_and_states_exactly_what_the_adapters_do(): void
     {
         $entries = WriteCapabilityRegistry::entries();
-
-        $this->assertCount(count(AdPlatforms::ORDER) * count(WriteCapabilityRegistry::CAPABILITIES), $entries);
+        $by = [];
         foreach ($entries as $entry) {
-            $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $entry['status'], "{$entry['provider']}/{$entry['capability']} claims a write the code cannot perform");
+            $by[$entry['provider'].'/'.$entry['capability']] = $entry['status'];
             $this->assertStringStartsWith('campaigns.', $entry['permission']);
             $this->assertTrue(Permission::where('key', $entry['permission'])->exists(), "{$entry['permission']} is not a seeded permission");
+            $this->assertNotSame(WriteCapabilityRegistry::VERIFIED, $entry['status'], "{$entry['provider']}/{$entry['capability']} claims VERIFIED without a Production round-trip");
+        }
+        $this->assertCount(count(AdPlatforms::ORDER) * count(WriteCapabilityRegistry::CAPABILITIES), $entries);
+
+        foreach (['meta', 'google', 'snapchat', 'tiktok'] as $provider) {
+            $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by["{$provider}/pause_resume"], "{$provider} pauses through its adapter once its app is configured");
+            $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by["{$provider}/create_campaign"]);
+            $this->assertSame(WriteCapabilityRegistry::PROVIDER_UNSUPPORTED, $by["{$provider}/objective"]);
+            $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $by["{$provider}/targeting"], 'targeting is not written yet');
+        }
+        $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['meta/duplicate']);
+        $this->assertSame(WriteCapabilityRegistry::PROVIDER_UNSUPPORTED, $by['google/duplicate'], 'Google Ads has no copy endpoint');
+        foreach (['linkedin', 'openai_ads'] as $provider) {
+            $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $by["{$provider}/pause_resume"]);
         }
     }
 
@@ -137,6 +158,7 @@ final class CampaignWriteCapabilityGateTest extends TestCase
             WriteCapabilityRegistry::IMPLEMENTED_NOT_VERIFIED,
             WriteCapabilityRegistry::AWAITING_CREDENTIALS,
             WriteCapabilityRegistry::VERIFIED,
+            WriteCapabilityRegistry::PROVIDER_UNSUPPORTED,
         ], $data['statuses']);
         $this->assertStringContainsString('Production write round-trip', $data['rule_en']);
         $this->assertStringContainsString('جولة كتابة حقيقية', $data['rule_ar']);
@@ -149,7 +171,7 @@ final class CampaignWriteCapabilityGateTest extends TestCase
         $pause = collect($meta['capabilities'])->firstWhere('capability', 'pause_resume');
         $this->assertSame('campaigns.pause', $pause['permission']);
         $this->assertTrue($pause['permitted'], 'the reader holds campaigns.pause');
-        $this->assertFalse($pause['allowed'], 'held permission + unimplemented write = no action');
+        $this->assertFalse($pause['allowed'], 'held permission + a write awaiting its platform credentials = no action');
         $budget = collect($meta['capabilities'])->firstWhere('capability', 'budget_change');
         $this->assertFalse($budget['permitted']);
         $this->assertFalse($budget['allowed']);
