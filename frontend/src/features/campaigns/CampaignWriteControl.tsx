@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/Badge'
+import { Num } from '@/components/ui/Num'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { platformLabel } from '@/lib/platforms'
@@ -73,15 +74,15 @@ export function CampaignWriteControl({ projectId }: { projectId: string }) {
         <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <div className="min-w-0 rounded-lg border border-border p-2" data-testid="write-control-implemented">
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'قدرات منفَّذة' : 'Implemented'}</dt>
-            <dd className="mt-0.5 text-sm font-semibold tabular-nums text-text-primary" dir="ltr">{implemented}</dd>
+            <dd className="mt-0.5 text-sm font-semibold text-text-primary"><Num>{implemented}</Num></dd>
           </div>
           <div className="min-w-0 rounded-lg border border-border p-2" data-testid="write-control-verified">
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'موثَّقة على الإنتاج' : 'Verified in Production'}</dt>
-            <dd className="mt-0.5 text-sm font-semibold tabular-nums text-text-primary" dir="ltr">{verified}</dd>
+            <dd className="mt-0.5 text-sm font-semibold text-text-primary"><Num>{verified}</Num></dd>
           </div>
           <div className="min-w-0 rounded-lg border border-border p-2" data-testid="write-control-allowed">
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'متاحة لك الآن' : 'Available to you now'}</dt>
-            <dd className="mt-0.5 text-sm font-semibold tabular-nums text-text-primary" dir="ltr">{allowed}</dd>
+            <dd className="mt-0.5 text-sm font-semibold text-text-primary"><Num>{allowed}</Num></dd>
           </div>
         </dl>
         {implemented === 0 && (
