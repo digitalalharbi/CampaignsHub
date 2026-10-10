@@ -23,6 +23,7 @@ import { compact, money, moneyExact, num, percent, ratio } from './format'
 import { readMetricValue } from '@/lib/metricValue'
 import { funnelStageLabel } from './metricLabels'
 import { useUi } from '@/stores/ui'
+import { Link } from 'react-router-dom'
 
 /**
  * Shared chart design system for dashboard + analytics + reports. One tooltip/legend/color/typography
@@ -618,6 +619,14 @@ export function StatusMixBar({
      * colour chosen for one is a colour that means nothing, and those take a `tone`.
      */
     fill?: string
+    /**
+     * DASHBOARD-DRILLDOWN-001 — where this band's members are listed, when somewhere lists them.
+     *
+     * A composition says «18 of 24 are active»; the question it raises is «which 18». A band that
+     * can answer carries the address of the list filtered to exactly its members, and its legend
+     * entry becomes the link. The bar itself stays a drawing — a 4% sliver is no click target.
+     */
+    to?: string
   }>
   /** The whole these bands divide. Never the sum of the bands — see the note above. */
   total: number
@@ -668,7 +677,7 @@ export function StatusMixBar({
   const segments = [
     ...bands.filter((b) => b.count > 0),
     ...(residual > 0
-      ? [{ key: 'residual', label: residualLabel ?? (ar ? 'أخرى' : 'Other'), count: residual, tone: 'neutral' as MixTone, fill: undefined }]
+      ? [{ key: 'residual', label: residualLabel ?? (ar ? 'أخرى' : 'Other'), count: residual, tone: 'neutral' as MixTone, fill: undefined, to: undefined }]
       : []),
   ]
 
@@ -696,7 +705,13 @@ export function StatusMixBar({
         {segments.map((s) => (
           <li key={s.key} className="flex items-center gap-1.5 text-sm">
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.fill ?? MIX_FILL[s.tone]}`} aria-hidden />
-            <span className="text-text-secondary">{s.label}</span>
+            {s.to ? (
+              <Link to={s.to} className="text-text-secondary underline decoration-dotted underline-offset-4 hover:text-brand-600">
+                {s.label}
+              </Link>
+            ) : (
+              <span className="text-text-secondary">{s.label}</span>
+            )}
             <span className="tnum font-bold text-text-primary" dir="ltr">{format(s.count)}</span>
             <span className="tnum text-xs text-text-muted" dir="ltr">{pct(s.count)}</span>
           </li>

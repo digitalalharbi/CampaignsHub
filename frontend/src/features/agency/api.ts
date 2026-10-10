@@ -25,6 +25,14 @@ export interface AgencyDashboard {
     paused: number
     /** Objective → count. Empty when the agency has no campaigns; never sample data. */
     by_objective: Record<string, number>
+    /**
+     * DASHBOARD-DRILLDOWN-001 — which projects hold the paused campaigns, most first.
+     *
+     * The campaigns surface is project-scoped, so the paused count (which spans clients) can only be
+     * opened AS what it counted one project at a time. Optional because a dashboard served before
+     * this field existed must still render.
+     */
+    paused_by_project?: Array<{ project_id: string; project_name: string; paused: number }>
   }
   requests: { open: number; awaiting_client: number }
 }
