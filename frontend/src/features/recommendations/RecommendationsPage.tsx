@@ -14,6 +14,7 @@ import { listAlertEvents } from '@/features/alerts/api'
 import { useSpendLimits } from '@/features/budget/spendLimitsApi'
 import { getCreativePulse } from '@/features/content/pulse'
 import { EmptyState } from '@/components/ui/States'
+import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSelect } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { listProjects } from '@/features/projects/api'
@@ -165,7 +166,8 @@ export function RecommendationsPage() {
     return (
       <div className="space-y-6">
         <PageIntro title={t.title} purpose={t.purpose} />
-        <EmptyState title={t.noProject} description={t.noProjectBody} />
+        {/* PROJECT-FIRST-VISIT-001 — the choice is on the page, not behind the switcher. */}
+        <ProjectChooser purpose="recommendations" />
       </div>
     )
   }
