@@ -70,7 +70,15 @@ const AXIS = { stroke: 'var(--text-muted)', fontSize: 12 }
 const GRID = <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 
 type FmtKind = 'money' | 'num' | 'percent' | 'ratio' | 'compact'
-const fmt = (kind: FmtKind, currency = 'SAR') => (v: number | null) => {
+/*
+ * CHART-CURRENCY-DEFAULT-001 — a chart is handed its currency; it never decides one.
+ *
+ * Every money formatter here defaulted to «SAR», so a caller that passed nothing drew a riyal label
+ * on whatever it was plotting — the rule MONEY-USD-001 wrote for the formatters, broken one layer
+ * up. The default is now the EMPTY currency, which `money()` prints as a bare figure: incomplete,
+ * and reading as incomplete, rather than a unit nobody stated.
+ */
+const fmt = (kind: FmtKind, currency = '') => (v: number | null) => {
   switch (kind) {
     case 'money':
       return money(v, currency)
@@ -91,7 +99,7 @@ export function MetricLineChart({
   data,
   series,
   height = 288,
-  currency = 'SAR',
+  currency = '',
   rightAxisFor,
 }: {
   data: Array<Record<string, unknown>>
@@ -173,7 +181,7 @@ export function spendRevenueSeriesNames(ar: boolean): { spend: string; revenue: 
     : { spend: 'Spend', revenue: 'Revenue' }
 }
 
-export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: { data: Array<Record<string, unknown>>; height?: number; currency?: string }) {
+export function SpendRevenueAreaChart({ data, height = 288, currency = '' }: { data: Array<Record<string, unknown>>; height?: number; currency?: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const series = spendRevenueSeriesNames(ar)
 
@@ -217,7 +225,7 @@ export function PlatformDonutChart({
   height = 260,
   centerLabel,
   centerValue,
-  currency = 'SAR',
+  currency = '',
   colorBy = 'platform',
 }: {
   /** `key` is the platform's stored key, for its colour; `name` is what the reader sees. */
@@ -266,7 +274,7 @@ export function RankingBarChart({
   height = 264,
   horizontal = false,
   colorByPlatform = false,
-  currency = 'SAR',
+  currency = '',
 }: {
   data: Array<Record<string, unknown>>
   bars: Array<{ key: string; name: string; color?: string; kind?: FmtKind }>
@@ -339,7 +347,7 @@ function countRead(value: number | null | undefined): { text: string; exact: str
   return { text: read.text, exact: read.exact }
 }
 
-export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
+export function ConversionFunnelChart({ stages, currency = '', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
   return (
