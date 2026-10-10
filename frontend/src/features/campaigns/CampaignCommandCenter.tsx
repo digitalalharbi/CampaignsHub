@@ -44,6 +44,7 @@ import { AdPoster } from '@/features/content/AdPoster'
 import type { Locale } from '@/stores/ui'
 import { StatCard } from '@/components/ui/StatCard'
 import { Num } from '@/components/ui/Num'
+import { allowsDerived, coverageNote, isComplete, readCoverage, reportedThrough, truncatedOnly } from '@/lib/coverage/contract'
 
 type Sparkable = keyof MetricTotals
 
@@ -121,10 +122,42 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const perf = useCampaignPerformance(projectId, campaign.id, range)
 
   const k = summary.data?.current
-  const d = summary.data?.delta ?? {}
   const budget = campaign.total_budget ?? null
-  const convRate = k && k.clicks > 0 ? k.conversions / k.clicks : null
   const cur = campaign.budget_currency || 'SAR'
+  const locale = useUi((u) => u.locale)
+  const ar = locale === 'ar'
+
+  /*
+   * CAMPAIGN-KPI-COVERAGE-001 — the window the figures actually cover, stated beside them.
+   *
+   * The summary carries `coverage` on both periods and this block read neither: a campaign whose
+   * platform had reported through the 27th printed thirty-day KPIs with a «+7 %» against the
+   * previous period, and nothing on screen said the 7 % compared seventeen days with thirty. Three
+   * consequences, each the contract's own rule:
+   *   - the note names who stopped short and through when (`coverageNote`);
+   *   - the previous-period delta is withheld unless BOTH windows are complete — a trend between two
+   *     unlike windows is not a trend;
+   *   - a ratio is derived only where the contract allows: a consistently truncated window keeps its
+   *     ratios (they are the ratios for the covered days), a window missing a contributor does not.
+   */
+  const coverage = readCoverage(k)
+  const previousCoverage = readCoverage(summary.data?.previous)
+  const likeForLike = isComplete(coverage) && isComplete(previousCoverage)
+  const d: Partial<Record<string, number | null>> = likeForLike ? (summary.data?.delta ?? {}) : {}
+  const derived = allowsDerived(coverage)
+  const through = reportedThrough(coverage)
+  const stoppedShort = (coverage.partial_contributors ?? []).map((c) => providerLabel(c, locale)).join(ar ? '، ' : ', ')
+  /*
+   * One sentence, not two saying the same date: where every missing contributor merely stopped
+   * short on one date, the lead names the date and who stopped; the contract's generic note is
+   * kept for the cases it was written for (failed, stale, withheld), where it adds a reason.
+   */
+  const note = !isComplete(coverage)
+    ? (through && truncatedOnly(coverage)
+      ? (ar ? `الأرقام أدناه حتى ${through} فقط: ${stoppedShort} لم تُبلّغ بعدها.` : `The figures below run through ${through} only: ${stoppedShort} did not report after it.`)
+      : coverageNote(coverage, ar, (c) => providerLabel(c, locale)))
+    : null
+  const convRate = derived && k && k.clicks > 0 ? k.conversions / k.clicks : null
 
   // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
@@ -150,14 +183,23 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   if (summary.isLoading) return <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
 
   return (
+    <div>
+    {note && (
+      <p data-testid="campaign-kpi-coverage" className="mb-3 rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
+        {note}
+        {!likeForLike && (ar
+          ? ' المقارنة بالفترة السابقة محجوبة: الفترتان غير متكافئتين.'
+          : ' The comparison with the previous period is withheld: the two windows are not alike.')}
+      </p>
+    )}
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
       <KpiCard label="المصروف" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
       <KpiCard label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} sub={utilization != null ? `استهلاك ${percent(utilization, 0)}` : undefined} />
       <KpiCard label="النتائج" value={num(k?.conversions)} delta={d.conversions} deltaKey="conversions" spark={sparks(perf.data, 'conversions')} />
-      <KpiCard label={costLabel(campaign.objective)} value={rowCostPer(k, 'cpa', 'conversions', cur)} delta={spendRead.withheld ? null : d.cpa} deltaKey="cpa" spark={spendRead.withheld ? undefined : sparks(perf.data, 'cpa')} />
+      <KpiCard label={costLabel(campaign.objective)} value={derived ? rowCostPer(k, 'cpa', 'conversions', cur) : '—'} delta={spendRead.withheld ? null : d.cpa} deltaKey="cpa" spark={spendRead.withheld || !derived ? undefined : sparks(perf.data, 'cpa')} />
       <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />
-      <KpiCard label="ROAS" value={roasRead.value === null ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' ? sparks(perf.data, 'roas') : undefined} />
+      <KpiCard label="ROAS" value={roasRead.value === null || !derived ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' && derived ? sparks(perf.data, 'roas') : undefined} />
       {/*
         * AGGREGATION-TRUTH-001 — `percent()` and `num()` already return «—» for a figure the
         * aggregator did not state, and every call on this screen passed `x ?? 0` first. A CTR that
@@ -167,13 +209,14 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
         * inside one row: spend, CPA, ROAS and «المساهمة» refuse correctly, and the cells between them
         * claimed zero.
         */}
-      <KpiCard label="CTR" value={percent(k?.ctr)} delta={d.ctr} deltaKey="ctr" spark={sparks(perf.data, 'ctr')} />
-      <KpiCard label="CPC" value={rowCostPer(k, 'cpc', 'clicks', cur)} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
+      <KpiCard label="CTR" value={derived ? percent(k?.ctr) : '—'} delta={d.ctr} deltaKey="ctr" spark={derived ? sparks(perf.data, 'ctr') : undefined} />
+      <KpiCard label="CPC" value={derived ? rowCostPer(k, 'cpc', 'clicks', cur) : '—'} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
       {/* CPM divides by impressions per THOUSAND. The factor lives here, visible, rather than in a
           generic reader — and rather than as a field name no payload carries. */}
-      <KpiCard label="CPM" value={rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, cur)} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
+      <KpiCard label="CPM" value={derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, cur) : '—'} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
       <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />
       <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" />
+    </div>
     </div>
   )
 }
@@ -194,7 +237,8 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
     const spendVsBudget = spendInBudgetCurrency(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR', summary.data?.currency ?? null)
     const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
     return {
-      topResult: k ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : '—',
+      // CAMPAIGN-KPI-COVERAGE-001 — a ratio only where the window's coverage allows one.
+      topResult: k ? (allowsDerived(readCoverage(k)) ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : `${num(k.conversions)} نتيجة`) : '—',
       bestPlatform: byRoas[0] ? `${providerLabel(byRoas[0].provider, locale)} (${ratio(byRoas[0].roas)})` : '—',
       opportunity: byRoas[0] ? `توسيع ${providerLabel(byRoas[0].provider, locale)} — أعلى عائد` : '—',
       risk: util != null && util > 0.95 ? 'الميزانية شارفت على النفاد' : (k && k.conversions === 0 ? 'لا نتائج في الفترة' : 'ضمن الحدود'),

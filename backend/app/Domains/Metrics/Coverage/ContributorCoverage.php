@@ -82,6 +82,8 @@ final class ContributorCoverage
 
         $states = [];
         $reasons = [];
+        /** @var array<string, string> $through contributor → last covered date (Y-m-d) */
+        $through = [];
 
         foreach ($expected as $provider => $lifecycle) {
             if (! $lifecycle['active']) {
@@ -128,6 +130,7 @@ final class ContributorCoverage
                         $covered->toDateString(),
                         $to->toDateString(),
                     );
+                    $through[$provider] = $covered->toDateString();
                 }
 
                 continue;
@@ -155,6 +158,7 @@ final class ContributorCoverage
                     $covered->toDateString(),
                     $to->toDateString(),
                 );
+                $through[$provider] = $covered->toDateString();
 
                 continue;
             }
@@ -168,7 +172,7 @@ final class ContributorCoverage
             $states[$provider] = ContributionState::NoActivity;
         }
 
-        return new AggregateCoverage($states, $reasons);
+        return new AggregateCoverage($states, $reasons, $through);
     }
 
     /**

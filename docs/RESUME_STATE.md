@@ -947,3 +947,15 @@ session): a PATCH of the demo campaign's budget and priority produced «تعدي
 The §A surface tabs the Owner named (Create · Drafts · Scheduled · Paused · Change History as views) remain PARTIAL: the
 read half exists (overview views, detail tabs incl. Settings and Activity/Change history); the write half waits on the
 registry admitting a provider write.
+
+## Addendum — 2026-10-10, CAMPAIGN-KPI-COVERAGE-001 on `ch-rmfmt` (`feat/campaign-kpi-coverage`, from `8e1a5a44`)
+
+Third visible gap from the surface walk, a data-truth one: the campaign detail printed thirty-day KPIs with «+7 %»
+while the summary's own `coverage` said Meta reported through 2026-09-27 — and no surface read `coverage` at all
+(`lib/coverage/contract.ts` had tests and no importer). Backend payload gains `partial_contributors` and
+`reported_through`; `CampaignKpis` states the covered date and who stopped short, withholds the delta unless both windows
+are complete, derives ratios only where the contract allows (truncated-only keeps them; a missing contributor refuses
+them); the executive summary follows. Backend 4 new + 77 related passed, larastan clean; Vitest contract +4, KPI 3/3,
+both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
+Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
+surfaces) stacked on #641.
