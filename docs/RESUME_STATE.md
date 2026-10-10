@@ -972,3 +972,12 @@ them); the executive summary follows. Backend 4 new + 77 related passed, larasta
 both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
 Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
 surfaces) stacked on #641.
+
+## Addendum — 2026-10-10, REPORT-CURRENCY-TRUTH-001 on `ch-brand` (`feat/report-currency-truth`, from `16e1944c`)
+
+Proving REPORT-COVERAGE-001 on a live link of Q3 Launch showed «45.9K USD» in the KPI and «45.9K SAR» in the budget
+block for the same spend: the live path labelled SAR-normalised rows with the report row's `ReportingCurrency::DEFAULT`
+stamp, while the snapshot path already let the rows win. `LiveReportService::build()` now applies `currencyBasis()`
+(one basis → that unit; two → none; no money rows → the stamp), the attention block is withheld with no unit, and
+`LiveSharedReport` formats in the payload's unit. Backend 3 new + 46 related, larastan clean; Vitest 2 new, live
+suites 76. Row added IMPLEMENTED_NOT_VERIFIED. Independent of the coverage stack (#643 → #644 → #645).
