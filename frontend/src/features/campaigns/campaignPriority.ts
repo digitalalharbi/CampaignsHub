@@ -26,12 +26,23 @@ import { campaignRelevance, type RelevanceRow } from './campaignRelevance'
  * troubled campaigns the more urgent. Then by name, so the order is stable across renders rather
  * than left to the array's arrival order — a list that reshuffles on refresh cannot be scanned.
  */
-export type CampaignBand = 'attention' | 'spending' | 'weak' | 'paused' | 'ended'
+/*
+ * CAMPAIGN-VIEWS-001 — two record-state bands beside the measurement bands.
+ *
+ * A draft and a campaign scheduled for a future start have no figures to be measured by, and the
+ * measurement rule filed both under «ended» — the one word that is false for a campaign that has
+ * not begun. They are their own answers: «drafts» is what still needs writing, «scheduled» is what
+ * is about to run. «paused» is likewise the record's own state now, whatever its age: a campaign
+ * paused forty days ago is paused, not ended, and the operator who paused it is the one asking.
+ */
+export type CampaignBand = 'attention' | 'spending' | 'weak' | 'paused' | 'scheduled' | 'drafts' | 'ended'
 
-export const CAMPAIGN_BAND_ORDER: CampaignBand[] = ['attention', 'spending', 'weak', 'paused', 'ended']
+export const CAMPAIGN_BAND_ORDER: CampaignBand[] = ['attention', 'spending', 'weak', 'paused', 'scheduled', 'drafts', 'ended']
 
 export interface PriorityRow extends RelevanceRow {
   name?: string | null
+  /** The planned first day, where the record states one — a future date is «scheduled». */
+  starts_on?: string | null
   /** Whether this campaign raised something a person can act on — alerts, pacing, a broken link. */
   needs_attention?: boolean | null
   /**
@@ -54,6 +65,17 @@ export const PAUSED_RECENTLY_DAYS = 30
  * band whether or not it is also spending, because that is the one a reader must not have to find.
  */
 export function campaignBand(row: PriorityRow, windowEnd: string): CampaignBand {
+  /*
+   * The record's own state is decided before the window's reading. A draft or a scheduled campaign
+   * has no figures by definition, and «budgeted, no delivery» is its nature, not a finding; a paused
+   * campaign is paused because somebody paused it, and the Paused view is where they look for it.
+   * The attention VIEW still lists a flagged paused campaign (a paused one still spending is a real
+   * finding) — the band is where the record is filed, not whether a flag was raised on it.
+   */
+  if (row.status === 'draft') return 'drafts'
+  if (row.status === 'scheduled') return 'scheduled'
+  if (row.status === 'paused') return 'paused'
+  if (row.starts_on && Date.parse(row.starts_on) > Date.parse(windowEnd) && row.status !== 'completed' && row.status !== 'archived') return 'scheduled'
   if (row.needs_attention === true) {
     return 'attention'
   }
@@ -94,7 +116,7 @@ export function byPriority<T extends PriorityRow>(rows: T[], windowEnd: string):
 
 /** How many campaigns sit in each band — the portfolio's shape, for the classification strip. */
 export function bandCounts(rows: PriorityRow[], windowEnd: string): Record<CampaignBand, number> {
-  const counts: Record<CampaignBand, number> = { attention: 0, spending: 0, weak: 0, paused: 0, ended: 0 }
+  const counts: Record<CampaignBand, number> = { attention: 0, spending: 0, weak: 0, paused: 0, scheduled: 0, drafts: 0, ended: 0 }
 
   for (const row of rows) {
     counts[campaignBand(row, windowEnd)] += 1

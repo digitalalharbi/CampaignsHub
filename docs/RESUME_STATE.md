@@ -1040,3 +1040,14 @@ stamp, while the snapshot path already let the rows win. `LiveReportService::bui
 (one basis → that unit; two → none; no money rows → the stamp), the attention block is withheld with no unit, and
 `LiveSharedReport` formats in the payload's unit. Backend 3 new + 46 related, larastan clean; Vitest 2 new, live
 suites 76. Row added IMPLEMENTED_NOT_VERIFIED. Independent of the coverage stack (#643 → #644 → #645).
+
+## Addendum — 2026-10-10, CAMPAIGN-VIEWS-001 on `ch-brand` (`feat/campaign-views`, from `6cdbda83`)
+
+Owner priority 2. CAMPAIGN-MGMT-SURFACE-001's own closing claim named the gap: Drafts · Scheduled · Paused · Change
+History did not exist on the Campaigns surface, and a draft was filed under «منتهية». Backend: a project-level
+`campaign-activity` route (events across the project, each naming its campaign). Frontend: record states are their own
+bands and precede the window's reading; every chip narrows the list through a `band` URL param while the counts stay
+whole, with «المعروض: … · عرض الكل» on the list; a «سجل التغييرات» view. Backend 2 new + route guard, larastan clean;
+Vitest +5 +3, campaigns suites 241; chromium gate 12 passed (the spec creates its own draft through the API, so the
+count and the history row cannot be seed leftovers). br-web at 1366: «مجدولة 1 · مسودات 3 · منتهية 2» and the history
+button. Row added IMPLEMENTED_NOT_VERIFIED.

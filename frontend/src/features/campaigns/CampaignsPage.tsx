@@ -9,7 +9,7 @@ import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
+import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
 import { listCampaigns } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
 import { CampaignComparison } from './CampaignComparison'
@@ -23,7 +23,8 @@ import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
 import { useSpendLimits, type SpendLimitsPage } from '@/features/budget/spendLimitsApi'
-import { bandCounts, byPriority, type CampaignBand } from './campaignPriority'
+import { bandCounts, byPriority, campaignBand, type CampaignBand } from './campaignPriority'
+import { ProjectChangeHistory } from './ProjectChangeHistory'
 import { movers } from './campaignMovers'
 import { objectiveMix } from './objectiveMix'
 import { campaignState } from './campaignState'
@@ -62,7 +63,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 /** The five ways to look at a project's campaigns (CAMPAIGN-010). */
-type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention'
+type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention' | 'history'
 
 /**
  * CAMPAIGNS-OVERVIEW-FIRST-001 — the order the owner asked for, and the reason it is an order at all.
@@ -86,7 +87,10 @@ const BANDS: Array<{ id: CampaignBand; ar: string; en: string }> = [
   { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention' },
   { id: 'spending', ar: 'نشطة وتنفق', en: 'Active and spending' },
   { id: 'weak', ar: 'نشطة وضعيفة', en: 'Active but weak' },
-  { id: 'paused', ar: 'متوقفة مؤخرًا', en: 'Paused recently' },
+  { id: 'paused', ar: 'متوقفة', en: 'Paused' },
+  // CAMPAIGN-VIEWS-001 — record states beside the measurement bands; each chip narrows the table.
+  { id: 'scheduled', ar: 'مجدولة', en: 'Scheduled' },
+  { id: 'drafts', ar: 'مسودات', en: 'Drafts' },
   { id: 'ended', ar: 'منتهية', en: 'Ended' },
 ]
 
@@ -109,6 +113,8 @@ const VIEWS: Array<{ id: ViewMode; ar: string; en: string; icon: typeof LayoutGr
    * thing neither the card nor the band can say.
    */
   { id: 'attention', ar: 'الأسباب', en: 'Reasons', icon: TriangleAlert },
+  // CAMPAIGN-VIEWS-001 — the project's change history across its campaigns.
+  { id: 'history', ar: 'سجل التغييرات', en: 'Change history', icon: History },
 ]
 
 export function CampaignsPage() {
@@ -152,6 +158,8 @@ export function CampaignsPage() {
    * first, and that is a product decision, not a consequence of where the state was kept.
    */
   const [view, setView] = useUrlState('view', 'overview') as [ViewMode, (v: string) => void]
+  /* CAMPAIGN-VIEWS-001 — a band chip narrows the table to its band; empty means every band. */
+  const [band] = useUrlState('band', '') as [CampaignBand | '', (v: string) => void]
   /* For the handlers that change the view AND a filter together — see the band button below. */
   const writeUrl = useUrlWriter()
   const [compareIds, setCompareIds] = useState<string[]>([])
@@ -651,6 +659,14 @@ export function CampaignsPage() {
     () => bandCounts(orderedCampaigns, range.to),
     [orderedCampaigns, range.to],
   )
+  /*
+   * CAMPAIGN-VIEWS-001 — the chip narrows the list to its band; the counts above stay over the
+   * whole set, so the strip keeps saying what the project holds while the table shows the band.
+   */
+  const shownCampaigns = useMemo(
+    () => (band === '' ? orderedCampaigns : orderedCampaigns.filter((c) => campaignBand(c, range.to) === band)),
+    [orderedCampaigns, band, range.to],
+  )
 
   const toggleCompare = (id: string) =>
     setCompareIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 5 ? prev : [...prev, id]))
@@ -889,14 +905,18 @@ export function CampaignsPage() {
                   calls into that trap, and the overview spec caught it on all three browsers — the
                   band opened the list and the view stayed where it was.
                 */
+                aria-pressed={band === b.id}
                 onClick={() => writeUrl({
                   view: { value: 'table', fallback: 'overview' },
                   lifecycle: { value: 'all', fallback: 'active' },
+                  band: { value: band === b.id ? '' : b.id, fallback: '' },
                 })}
                 className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-                  b.id === 'attention' && bands[b.id] > 0
-                    ? 'border-warning/40 bg-warning/10 text-text-primary'
-                    : 'border-border bg-surface text-text-secondary hover:border-brand-400'
+                  band === b.id
+                    ? 'border-brand-500 bg-brand-500/10 text-text-primary'
+                    : b.id === 'attention' && bands[b.id] > 0
+                      ? 'border-warning/40 bg-warning/10 text-text-primary'
+                      : 'border-border bg-surface text-text-secondary hover:border-brand-400'
                 }`}
               >
                 <span className="font-semibold">{ar ? b.ar : b.en}</span>
@@ -1114,6 +1134,8 @@ export function CampaignsPage() {
             </button>
           )}
         </>
+      ) : view === 'history' ? (
+        <ProjectChangeHistory projectId={projectId} />
       ) : view === 'compare' ? (
         <CampaignComparison
           projectId={projectId}
@@ -1182,6 +1204,27 @@ export function CampaignsPage() {
               </p>
             )}
           </div>
+
+          {/*
+            CAMPAIGN-VIEWS-001 — the band the list is narrowed to, named, with its way out. The strip
+            of chips lives on the overview; once a chip has opened the list the reader must still see
+            what narrowed it and be able to widen it again without going back.
+          */}
+          {band !== '' && view !== 'attention' && (
+            <div data-testid="campaigns-band-active" className="flex items-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-sm text-text-primary">
+              <span>{ar ? 'المعروض:' : 'Showing:'}</span>
+              <span className="font-semibold">{(() => { const b = BANDS.find((x) => x.id === band); return b ? (ar ? b.ar : b.en) : band })()}</span>
+              <span className="tnum" dir="ltr">{shownCampaigns.length}</span>
+              <button
+                type="button"
+                data-testid="campaigns-band-clear"
+                onClick={() => writeUrl({ band: { value: '', fallback: '' } })}
+                className="ms-auto rounded-lg border border-border px-2 py-0.5 text-xs text-text-secondary hover:border-brand-400"
+              >
+                {ar ? 'عرض الكل' : 'Show all'}
+              </button>
+            </div>
+          )}
 
           {/* Campaign list */}
           {campaignsQuery.isLoading || (listProvisional && view !== 'attention') ? (
@@ -1296,7 +1339,7 @@ export function CampaignsPage() {
             />
           ) : view === 'cards' ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {orderedCampaigns.map((c) => (
+              {shownCampaigns.map((c) => (
                 <CampaignCard
                   key={c.id}
                   c={c}
@@ -1362,7 +1405,7 @@ export function CampaignsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orderedCampaigns.map((c) => {
+                  {shownCampaigns.map((c) => {
                     const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
 
                     return (
