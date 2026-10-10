@@ -39,6 +39,17 @@ final class CampaignMetricsController extends Controller
         $agg = $this->agg->forCampaign($id);
         $current = $agg->totals($from, $to);
         $previous = $agg->totals($prevFrom, $prevTo);
+        /*
+         * CAMPAIGN-BUDGET-TRUTH-001 — the unit `current`'s converted money is in, stated in the body.
+         *
+         * The project summary carries `currency` beside its totals and every money surface reads it;
+         * this endpoint carried a hard-coded «SAR» in `meta` and nothing in `data`. The campaign page
+         * reads `data.currency`, found nothing, and therefore refused every budget comparison: a
+         * campaign that had spent 17,448 SAR of a 16,667 SAR budget printed «المتبقي —» and «أكبر
+         * خطر: ضمن الحدود». The same rule as the project summary: the currency when the rows agree on
+         * one, null when there are no money rows or more than one basis — never a market's default.
+         */
+        $currency = $agg->currencyBasis($from, $to)['currency'];
 
         $deltas = [];
         foreach ($current as $k => $v) {
@@ -47,9 +58,9 @@ final class CampaignMetricsController extends Controller
         }
 
         return ApiResponse::success(
-            ['current' => $current, 'previous' => $previous, 'delta' => $deltas],
+            ['current' => $current, 'previous' => $previous, 'delta' => $deltas, 'currency' => $currency],
             'Campaign metrics summary.',
-            meta: $this->meta($from, $to),
+            meta: ['currency' => $currency] + $this->meta($from, $to),
         );
     }
 

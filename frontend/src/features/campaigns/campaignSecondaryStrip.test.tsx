@@ -91,6 +91,28 @@ describe('the campaigns secondary strip', () => {
   })
 
   /**
+   * CAMPAIGN-BUDGET-TRUTH-001 — the refusal names its actual cause. Seven campaigns with nothing
+   * measured in the window are an absence, and «partial or multi-currency» described rows that were
+   * not there.
+   */
+  it('names unmeasured campaigns as the reason, not partial or mixed money', () => {
+    render(
+      <CampaignSecondaryStrip
+        totals={totals()}
+        budget={{ ...budget, spent: null, unmeasured: 7, unreadable: 0 }}
+        currency="SAR"
+        paused={0}
+        ar={false}
+      />,
+    )
+
+    const text = screen.getByTestId('campaigns-budget-total').textContent ?? ''
+
+    expect(text).toContain('7 campaigns with nothing measured')
+    expect(text).not.toContain('multi-currency')
+  })
+
+  /**
    * An unreported result is «—», and a reported zero is `0`. The two are different claims and the
    * strip must not collapse them — a cost per nothing is not a cost of nothing.
    */
