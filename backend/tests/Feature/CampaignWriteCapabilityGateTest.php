@@ -85,8 +85,12 @@ final class CampaignWriteCapabilityGateTest extends TestCase
             $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by["{$provider}/pause_resume"], "{$provider} pauses through its adapter once its app is configured");
             $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by["{$provider}/create_campaign"]);
             $this->assertSame(WriteCapabilityRegistry::PROVIDER_UNSUPPORTED, $by["{$provider}/objective"]);
-            $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $by["{$provider}/targeting"], 'targeting is not written yet');
         }
+        // Targeting is written where the adapter reads, merges and writes it back; elsewhere it is not built, and says so.
+        $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['meta/targeting']);
+        $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['snapchat/targeting']);
+        $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $by['google/targeting'], 'Google Ads targeting lives in criteria resources this layer does not write');
+        $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $by['tiktok/targeting']);
         $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['meta/duplicate']);
         $this->assertSame(WriteCapabilityRegistry::PROVIDER_UNSUPPORTED, $by['google/duplicate'], 'Google Ads has no copy endpoint');
         foreach (['linkedin', 'openai_ads'] as $provider) {
