@@ -26,7 +26,17 @@ describe('analytics with no project chosen', () => {
   beforeEach(() => {
     signInWith(['campaigns.view'])
     useProject.getState().setCurrentProjectId(null)
-    vi.mocked(getData).mockResolvedValue({} as never)
+    // PROJECT-FIRST-VISIT-001 — the page now draws the reachable projects on the page; the lists come
+    // from the same client, everything else stays empty.
+    vi.mocked(getData).mockImplementation(async (url: string) => {
+      if (url.includes('saved-views')) return [] as never
+      if (url.startsWith('/client-workspaces')) return [{ id: 'c1', name: 'Acme', mode: 'managed', status: 'active' }] as never
+      if (url.startsWith('/projects')) return [
+        { id: 'p1', client_workspace_id: 'c1', name: 'Ramadan', status: 'active', setup_completion: 100, account_manager_id: null, created_at: null },
+        { id: 'p2', client_workspace_id: 'c1', name: 'Launch', status: 'active', setup_completion: 100, account_manager_id: null, created_at: null },
+      ] as never
+      return {} as never
+    })
   })
 
   afterEach(() => {
@@ -37,7 +47,9 @@ describe('analytics with no project chosen', () => {
   it('asks for a project instead of blaming the period', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
-    expect(await screen.findByText('Select a project')).toBeInTheDocument()
+    expect(await screen.findByTestId('project-chooser')).toBeInTheDocument()
+    expect(screen.getByText('Choose a project')).toBeInTheDocument()
+    expect(screen.getByTestId('project-choice-p1')).toBeInTheDocument()
     expect(screen.queryByText(/No data for this period/i)).not.toBeInTheDocument()
   })
 
@@ -49,7 +61,7 @@ describe('analytics with no project chosen', () => {
   it('keeps the project selector on screen beside the sentence', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
-    await screen.findByText('Select a project')
+    await screen.findByTestId('project-chooser')
 
     expect(screen.getByText('No project')).toBeInTheDocument()
   })

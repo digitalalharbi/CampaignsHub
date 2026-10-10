@@ -925,3 +925,18 @@ resolver, RESUME_STATE by union); MatrixStatusVocabularyTest 19/19. The full bac
 4,589 passed, 1 skipped (27,708 assertions) — the earlier «12 failed» run was tainted by a second suite sharing
 `mediabuying_test` (PlatformPaymentSettingsTest passes 12/12 alone). attribution-reconciliation.spec.ts on the chromium
 gate after the rebase: 8 passed, exit 0. Waits its lane turn after #635 and the ledger PR.
+
+## Addendum — 2026-10-10, PROJECT-FIRST-VISIT-001 on `ch-font` (`feat/first-visit-project`, from `9841a472`)
+
+The Owner browsed Production and reported too little visible product progress. Walked the 13 surfaces on a local twin of
+the deployed commit (the Owner's Chrome holds no campaignshub.io session, and demo credentials are never typed on
+Production): seven surfaces answer their purpose; Campaigns, Analytics and Reports dead-ended on «اختر مشروعًا» for a
+multi-client operator because the agency switcher deliberately auto-selects nothing. The choice now lives on the page:
+`ProjectChooser` lists every reachable project under its client with campaign count and last-reported date, one click
+sets client + project through the store the switcher reads. Vitest 3 + adapted 1 (campaigns + reports suites 508 passed),
+`project-first-visit.spec.ts` on the chromium gate 12 passed with `campaigns.spec.ts` (first run failed 2: it ran as the
+advertiser, whose portal auto-selects its single project — the spec now runs as the agency owner on `/agency/*`).
+Twin at 1366 and 390: chooser with 5 cards, overflow 0, click lands on the campaigns surface and the sidebar follows.
+Row PROJECT-FIRST-VISIT-001 added IMPLEMENTED_NOT_VERIFIED. Next visible gaps noted on the twin: reports list shows raw
+tokens for non-seeded reports (`type live/performance`, `status ready` — labels missing), dashboard mostly «لا أرقام
+مقاسة» for the stale demo window.
