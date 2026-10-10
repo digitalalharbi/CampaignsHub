@@ -58,6 +58,15 @@ const AGENCY_BEFORE = [
   '/agency/short-links',
   '/agency/integrations',
   /*
+   * ADDED by AGENCY-DECISION-SURFACES-001, deliberately.
+   *
+   * Recommendations and Spend limits were advertiser-only pages; `/agency/recommendations` answered
+   * the not-found page while the API accepted agency operators on both routes. The same pages are
+   * mounted under `/agency` and the rail says so.
+   */
+  '/agency/recommendations',
+  '/agency/spend-limits',
+  /*
    * ADDED by PORTFOLIO-SCOPE-001 §36, deliberately.
    *
    * «جميع المشاريع» is an agency-level scope, and an agency is the reader it was built for: how many
