@@ -81,7 +81,9 @@ import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { DashboardContextStrip } from './DashboardContextStrip'
 import { PeriodLabel } from '@/components/patterns/Status'
-import { listProjects } from '@/features/projects/api'
+import { listClientWorkspaces, listProjects } from '@/features/projects/api'
+import { usePortalBase } from '@/app/portalPath'
+import { projectOptionLabels } from '@/features/projects/projectOptionLabels'
 import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
 import {
   CANONICAL_OBJECTIVE_KEYS,
@@ -363,6 +365,14 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
 
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
+  /*
+   * ANALYTICS-PROJECT-IDENTITY-001 — the selector listed «Q3 Launch — Demo» three times for three
+   * clients. Client names are asked for only in the agency portal (`/client-workspaces` answers 403
+   * to an advertiser) and used only where a project name repeats.
+   */
+  const agencyPortal = usePortalBase() === '/agency'
+  const clientsQuery = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agencyPortal, retry: false })
+  const projectLabels = useMemo(() => projectOptionLabels(projects, clientsQuery.data), [projects, clientsQuery.data])
 
   /*
    * ANALYTICS-OBJECTIVE-SYSTEM-001 — one control, and it sends RAW objectives.
@@ -610,7 +620,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           testid={`${surface}-project`}
           options={[
             ...(currentProjectId ? [] : [{ value: '', label: ar ? 'لا مشروع' : 'No project' }]),
-            ...projects.map((pr) => ({ value: pr.id, label: pr.name })),
+            ...projects.map((pr) => ({ value: pr.id, label: projectLabels.get(pr.id) ?? pr.name })),
           ]}
           onChange={setCurrentProjectId}
         />
