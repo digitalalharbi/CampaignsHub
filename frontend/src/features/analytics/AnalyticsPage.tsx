@@ -142,6 +142,7 @@ import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
+import { SiteAnalyticsTab } from './SiteAnalyticsTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { usePortalPath } from '@/app/portalPath'
@@ -213,6 +214,8 @@ const TAB_GROUPS = [
     tabs: [
       { id: 'funnel', ar: 'القمع', en: 'Funnel' },
       { id: 'store', ar: 'المتجر', en: 'Store' },
+      // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platforms.
+      { id: 'site', ar: 'الموقع (GA4)', en: 'Site (GA4)' },
     ],
   },
   {
@@ -754,6 +757,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
+        {tab === 'site' && <SiteAnalyticsTab projectId={currentProjectId} range={range} />}
         {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
         </>
