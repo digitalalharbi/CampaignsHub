@@ -70,6 +70,11 @@ export interface FindingImpact {
   kind: ImpactKind
   amount: number
   currency: string
+  /**
+   * RECOMMENDATIONS-CAMPAIGN-PACE-001 — what the amount was measured against. An overspend reads
+   * «over the limit» for a spend limit and «over the budget» for a campaign; the copy picks by this.
+   */
+  against?: 'limit' | 'budget'
 }
 
 export type FindingAction =
@@ -340,8 +345,8 @@ export function toFinding(item: ActionItem, ctx: FindingContext): Finding | null
       trend: { campaignId: r.campaign_id, metric: 'spend', kind: 'money' },
       consumption: r.consumed_pct,
       impact: item.reason === 'over_budget'
-        ? (over !== null && over > 0 && currency ? { kind: 'overspend', amount: over, currency } : null)
-        : (projectedOver !== null && projectedOver > 0 && currency ? { kind: 'projected_overrun', amount: projectedOver, currency } : null),
+        ? (over !== null && over > 0 && currency ? { kind: 'overspend', amount: over, currency, against: 'budget' } : null)
+        : (projectedOver !== null && projectedOver > 0 && currency ? { kind: 'projected_overrun', amount: projectedOver, currency, against: 'budget' } : null),
       evidence: { ...evidence, path: `${evidence.path}${evidence.path.includes('?') ? '&' : '?'}tab=budget` },
     }
   } else if (item.kind === 'budget') {

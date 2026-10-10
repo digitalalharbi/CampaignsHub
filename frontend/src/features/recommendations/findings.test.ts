@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildActionCentre } from './actionCenter'
 import { buildFindings, hasEvidence, relativeChange, toFinding, type FindingContext } from './findings'
+import { impactLabel } from './findingCopy'
 import type { AlertEvent } from '@/features/alerts/api'
 import type { SpendLimitReading } from '@/features/budget/spendLimitsApi'
 import type { BudgetRow } from '@/features/analytics/api'
@@ -57,8 +58,11 @@ describe('a campaign budget pacing row', () => {
     expect(f.severity).toBe('critical')
     expect(f.nature).toBe('problem')
     expect(f.subject).toMatchObject({ type: 'campaign', id: 'c1', name: 'Riyadh launch' })
-    expect(f.impact).toMatchObject({ kind: 'overspend', currency: 'SAR' })
+    expect(f.impact).toMatchObject({ kind: 'overspend', currency: 'SAR', against: 'budget' })
     expect(f.impact!.amount).toBeCloseTo(782.08, 1)
+    // Measured against a budget, the copy says budget — not the spend limit's «الحدّ».
+    expect(impactLabel('overspend', true, 'budget')).toBe('تجاوز الميزانية بمقدار')
+    expect(impactLabel('overspend', true)).toBe('تجاوز الحدّ بمقدار')
     expect(f.facts).toEqual([{ key: 'pace', value: 1.848 }])
     expect(f.consumption).toBeCloseTo(1.0469, 3)
     expect(f.evidence.path).toContain('tab=budget')
@@ -69,7 +73,7 @@ describe('a campaign budget pacing row', () => {
     expect(f.code).toBe('campaign_pace_overrun')
     expect(f.severity).toBe('warning')
     expect(f.nature).toBe('risk')
-    expect(f.impact).toMatchObject({ kind: 'projected_overrun', currency: 'SAR' })
+    expect(f.impact).toMatchObject({ kind: 'projected_overrun', currency: 'SAR', against: 'budget' })
     expect(f.impact!.amount).toBeCloseTo(4333.33, 1)
   })
 
