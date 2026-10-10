@@ -157,7 +157,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * CAMPAIGN-MGMT-DOMAIN-001 — the write-capability registry, read before any surface draws a
      * control. Project-scoped because the answer is per reader and per provider the project uses.
      */
-    Route::get('campaign-management/capabilities', [CampaignManagementController::class, 'capabilities'])->name('campaign-management.capabilities');
+    Route::get('campaign-management/capabilities', [CampaignManagementController::class, 'capabilities'])->middleware('project.can:campaigns.view')->name('campaign-management.capabilities');
     /*
      * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
      *
