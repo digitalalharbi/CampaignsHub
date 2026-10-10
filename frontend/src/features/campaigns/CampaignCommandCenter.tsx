@@ -70,6 +70,58 @@ function spendInBudgetCurrency(
   return spendComparableAmount(totals, 'spend', reportingCurrency, budgetCurrency)
 }
 
+/**
+ * CAMPAIGN-BUDGET-TRUTH-001 — the spend a budget may be compared with, or null.
+ *
+ * Two gates, both already this page's rules elsewhere on it. The money contract: one figure in the
+ * budget's own currency (`spendInBudgetCurrency`). The coverage contract: a window missing a
+ * contributor has no spend total to subtract from a budget, while a consistently truncated window
+ * holds the real spend of its covered days (`allowsDerived`, the gate the KPI ratios pass). «المتبقي»
+ * and «استهلاك» passed only the first, so a window with one platform missing paced the budget
+ * against the other three and called the result the campaign's remaining money.
+ */
+function budgetComparableSpend(
+  totals: MoneyTotals | undefined,
+  budgetCurrency: string,
+  reportingCurrency: string | null,
+): number | null {
+  if (totals === undefined || !allowsDerived(readCoverage(totals, 'spend'))) return null
+
+  return spendInBudgetCurrency(totals, budgetCurrency, reportingCurrency)
+}
+
+/**
+ * CAMPAIGN-BUDGET-TRUTH-001 — what the budget's state is, said in the order that matters.
+ *
+ * «ضمن الحدود» was the fallthrough for an unknown utilisation as well as for a known good one — a
+ * campaign already past its budget, with no comparable spend figure, was told it was within limits.
+ * The unknown case is named as unknown; an overrun is named as an overrun before «almost exhausted»
+ * can claim it; and «no results» keeps its place before the all-clear.
+ */
+function budgetRisk(
+  util: number | null,
+  budget: number | null,
+  conversions: number | null | undefined,
+  ar: boolean,
+  forecastOver = false,
+): { text: string; tone?: 'danger' | 'warning' } {
+  if (budget === null) return { text: ar ? 'لا ميزانية محددة' : 'No budget set' }
+  if (util !== null && util >= 1) return { text: ar ? 'تجاوزت الميزانية' : 'Over budget', tone: 'danger' }
+  if (util !== null && util > 0.95) return { text: ar ? 'الميزانية شارفت على النفاد' : 'Budget almost exhausted', tone: 'danger' }
+  if (forecastOver) return { text: ar ? 'تجاوز متوقع' : 'Overrun forecast', tone: 'warning' }
+  if (conversions === 0) return { text: ar ? 'لا نتائج في الفترة' : 'No results in the period', tone: 'warning' }
+  if (util === null) return { text: ar ? 'غير متاح — لا رقم مصروف يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
+
+  return { text: ar ? 'ضمن الحدود' : 'Within limits' }
+}
+
+/** A remaining figure, with an overrun shown as what it is rather than as a minus sign the eye skips. */
+function remainingText(remaining: number | null, cur: string): string {
+  if (remaining === null) return '—'
+
+  return remaining < 0 ? `−${money(-remaining, cur)}` : money(remaining, cur)
+}
+
 function deltaTone(key: Sparkable, delta: number | null | undefined): 'up' | 'down' | 'flat' {
   const t = trend(delta)
   // For cost metrics lower is better, so invert the visual sentiment.
@@ -162,9 +214,17 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
   // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
-  const spendVsBudget = spendInBudgetCurrency(k, cur, summary.data?.currency ?? null)
+  const spendVsBudget = budgetComparableSpend(k, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const utilization = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
+  /* CAMPAIGN-BUDGET-TRUTH-001 — a «—» beside a stated budget says why, and an overrun says so. */
+  const remainingSub = remaining !== null && remaining < 0 && utilization !== null
+    ? `تجاوزت الميزانية · استهلاك ${percent(utilization, 0)}`
+    : utilization != null
+      ? `استهلاك ${percent(utilization, 0)}`
+      : budget != null
+        ? 'بلا رقم مصروف يُقارن بالميزانية'
+        : undefined
 
   /*
    * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
@@ -195,7 +255,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
       <KpiCard label="المصروف" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
-      <KpiCard label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} sub={utilization != null ? `استهلاك ${percent(utilization, 0)}` : undefined} />
+      <KpiCard label="المتبقي" value={remainingText(remaining, cur)} sub={remainingSub} />
       <KpiCard label="النتائج" value={num(k?.conversions)} delta={d.conversions} deltaKey="conversions" spark={sparks(perf.data, 'conversions')} />
       <KpiCard label={costLabel(campaign.objective)} value={derived ? rowCostPer(k, 'cpa', 'conversions', cur) : '—'} delta={spendRead.withheld ? null : d.cpa} deltaKey="cpa" spark={spendRead.withheld || !derived ? undefined : sparks(perf.data, 'cpa')} />
       <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />
@@ -234,14 +294,14 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
     // PARTIAL-WITHHELD-001 — budget risk must not read a partial/withheld spend as a low utilization.
     // No single spend figure in the budget currency ⇒ util is null and the «almost exhausted» claim
     // simply cannot fire, rather than firing wrong or staying silent because a subset looked small.
-    const spendVsBudget = spendInBudgetCurrency(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR', summary.data?.currency ?? null)
+    const spendVsBudget = budgetComparableSpend(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR', summary.data?.currency ?? null)
     const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
     return {
       // CAMPAIGN-KPI-COVERAGE-001 — a ratio only where the window's coverage allows one.
       topResult: k ? (allowsDerived(readCoverage(k)) ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : `${num(k.conversions)} نتيجة`) : '—',
       bestPlatform: byRoas[0] ? `${providerLabel(byRoas[0].provider, locale)} (${ratio(byRoas[0].roas)})` : '—',
       opportunity: byRoas[0] ? `توسيع ${providerLabel(byRoas[0].provider, locale)} — أعلى عائد` : '—',
-      risk: util != null && util > 0.95 ? 'الميزانية شارفت على النفاد' : (k && k.conversions === 0 ? 'لا نتائج في الفترة' : 'ضمن الحدود'),
+      risk: budgetRisk(util, budget, k?.conversions, locale === 'ar').text,
       nextStep: byRoas[0] ? `إعادة توزيع الميزانية نحو ${providerLabel(byRoas[0].provider, locale)}` : 'مراجعة الاستهداف',
     }
   }, [summary.data, platforms.data, campaign.total_budget, campaign.budget_currency, locale])
@@ -364,7 +424,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   // PARTIAL-WITHHELD-001 — DISPLAY the spend through the contract (partial ⇒ «—», withheld ⇒ its own
   // currency), and do the budget MATH only from a single spend figure in the budget currency.
   const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, cur)
-  const spendVsBudget = spendInBudgetCurrency(summary.data?.current, cur, summary.data?.currency ?? null)
+  const spendVsBudget = budgetComparableSpend(summary.data?.current, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
   // PARTIAL-WITHHELD-001 (d/f) — planned-vs-actual trend plots effective money in one currency, or «—».
@@ -427,13 +487,16 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <Fact label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
         <Fact label="المصروف" value={spendRead.text} />
-        <Fact label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} />
+        <Fact label="المتبقي" value={remainingText(remaining, cur)} tone={remaining !== null && remaining < 0 ? 'danger' : undefined} />
         <Fact label="أيام منقضية" value={pacing ? String(pacing.elapsed) : '—'} />
         <Fact label="أيام متبقية" value={pacing ? String(pacing.remainingDays) : '—'} />
         <Fact label="السرعة الحالية/المطلوبة" value={pacing ? `${pacing.currentPace != null ? money(pacing.currentPace, cur) : '—'} / ${money(pacing.requiredPace, cur)}` : '—'} />
         <Fact label="توقع نهاية الحملة" value={pacing && pacing.forecast != null ? money(pacing.forecast, cur) : '—'} tone={pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'danger' : undefined} />
-        {/* PARTIAL-WITHHELD-001 — budget risk cannot be judged without a real spend figure. */}
-        <Fact label="خطر الميزانية" value={util != null && util > 0.95 ? 'مرتفع' : pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'تجاوز متوقع' : util != null || (pacing && pacing.forecast != null) ? 'ضمن الحدود' : 'غير متاح'} tone={util != null && util > 0.95 ? 'danger' : undefined} />
+        {/* PARTIAL-WITHHELD-001 / CAMPAIGN-BUDGET-TRUTH-001 — judged only from a comparable spend figure, and an overrun is named. */}
+        {(() => {
+          const risk = budgetRisk(util, budget, summary.data?.current?.conversions, locale === 'ar', Boolean(pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05))
+          return <Fact label="خطر الميزانية" value={risk.text} tone={risk.tone} />
+        })()}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -548,11 +611,11 @@ export function CampaignActivityTab({ campaign, projectId, limit }: { campaign: 
   )
 }
 
-function Fact({ label, value, tone }: { label: string; value: string; tone?: 'danger' }) {
+function Fact({ label, value, tone }: { label: string; value: string; tone?: 'danger' | 'warning' }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-border bg-surface p-3">
       <span className="text-[11px] uppercase tracking-wide text-text-muted">{label}</span>
-      <span className={`text-sm font-bold ${tone === 'danger' ? 'text-danger' : 'text-text-primary'}`}>{value}</span>
+      <span className={`text-sm font-bold ${tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-text-primary'}`}>{value}</span>
     </div>
   )
 }

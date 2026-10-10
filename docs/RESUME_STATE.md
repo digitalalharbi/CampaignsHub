@@ -1131,3 +1131,16 @@ budget row links to that project's campaigns table; the portfolio chip names the
 the first opened Demo Store's 17 campaigns with the band keys kept in the address. Local chromium
 gate over the four dashboard specs: 243 passed, 1 skipped. Row extended, still IMPLEMENTED_NOT_VERIFIED
 until the served bundle carries `paused_by_project`.
+
+## Addendum — 2026-10-10, CAMPAIGN-BUDGET-TRUTH-001 on `ch-brand` (`feat/campaign-budget-truth`, from `a2026bcd`)
+
+Owner priority 2, found while surveying Campaign Detail after the dashboard drill-down shipped: a campaign
+that had spent 17.4K SAR of a 16.7K SAR budget printed «المتبقي —» and «أكبر خطر: ضمن الحدود». Two causes.
+The campaign summary carried its currency only in the envelope's meta (hard-coded «SAR») and nothing in
+`data`, so `spendInBudgetCurrency` refused every comparison; and the refusal fell through to the all-clear.
+Backend now states `data.currency` from `currencyBasis` (null when no money rows or several bases);
+the page gates the comparison on the money contract and the coverage contract, orders the verdict
+(`budgetRisk`), prints an overrun as an overrun with its utilisation, and prints the header budget through
+`moneyExact`. Preview proof on 5261 recorded on the row. Lane: #645 and #648 merged and VERIFIED this
+session; #649 (campaign views) rebased with the pacing flip, CI running; #651 (dashboard drill-down,
+extended with the project rung) green but dirty behind #649; #650 dirty.

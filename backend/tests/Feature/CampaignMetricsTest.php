@@ -83,13 +83,13 @@ final class CampaignMetricsTest extends TestCase
         $this->seedMetrics($this->campA2->id, spend: 500, conv: 4, rev: 1500);
     }
 
-    private function seedMetrics(string $campaignId, float $spend, float $conv, float $rev): void
+    private function seedMetrics(string $campaignId, float $spend, float $conv, float $rev, ?string $currency = null): void
     {
         $uid = fn (string $s) => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, $s.$campaignId);
         $m = fn (string $k, float $v) => new NormalizedMetric(
             tenantId: $this->tenant->id, projectId: $this->projectA->id, externalAccountId: $uid('acc'),
             externalCampaignId: $uid('camp'), provider: 'meta', metricKey: $k, metricDate: Carbon::parse('2026-06-15'),
-            value: $v, unifiedCampaignId: $campaignId,
+            value: $v, unifiedCampaignId: $campaignId, projectCurrency: $currency,
         );
         app(UpsertDailyMetrics::class)->handle([
             $m('impressions', 10000), $m('clicks', 200), $m('conversions', $conv), $m('spend', $spend), $m('revenue', $rev),
@@ -99,6 +99,26 @@ final class CampaignMetricsTest extends TestCase
     private function url(Project $p, string $campaignId, string $section = 'summary'): string
     {
         return "/api/v1/projects/{$p->id}/campaigns/{$campaignId}/{$section}?from=2026-06-01&to=2026-06-30";
+    }
+
+    /**
+     * CAMPAIGN-BUDGET-TRUTH-001 — the summary names the currency its converted money is in, in the
+     * body the page reads, and names nothing when the window holds no money rows.
+     */
+    public function test_the_summary_states_its_currency_in_the_body(): void
+    {
+        $this->actingAs($this->owner, 'sanctum');
+        $this->seedMetrics($this->campA1->id, 1000, 10, 5000, 'SAR');
+
+        $this->getJson($this->url($this->projectA, $this->campA1->id))
+            ->assertOk()
+            ->assertJsonPath('data.currency', 'SAR')
+            ->assertJsonPath('meta.currency', 'SAR');
+
+        // The sibling holds no money rows in this window: no unit is named, none is guessed.
+        $this->getJson($this->url($this->projectA, $this->campA2->id))
+            ->assertOk()
+            ->assertJsonPath('data.currency', null);
     }
 
     public function test_each_campaign_summary_is_scoped_to_itself(): void
