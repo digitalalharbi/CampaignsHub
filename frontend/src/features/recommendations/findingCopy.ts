@@ -16,6 +16,8 @@ const HEADLINES: Record<string, Pair> = {
   cpl_increase: { ar: 'ارتفعت تكلفة العميل المحتمل', en: 'Cost per lead rose' },
   no_results: { ar: 'إنفاق بلا نتائج', en: 'Spending with no results' },
   budget_risk: { ar: 'الميزانية تقترب من النفاد', en: 'Budget close to exhausted' },
+  campaign_over_budget: { ar: 'الحملة تجاوزت ميزانيتها', en: 'Campaign is over its budget' },
+  campaign_pace_overrun: { ar: 'الحملة تصرف أسرع من خطتها', en: 'Campaign is spending faster than planned' },
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'An unusual day' },
   sync_failure: { ar: 'فشلت مزامنة البيانات', en: 'Data sync failed' },
   token_expiry: { ar: 'صلاحية الربط تنتهي قريبًا', en: 'Connection authorisation expiring' },
@@ -81,8 +83,14 @@ const IMPACT: Record<ImpactKind, Pair & { basisAr: string; basisEn: string }> = 
   spend_without_results: { ar: 'إنفاق دون نتيجة مُقاسة', en: 'Spend with no measured result', basisAr: 'الإنفاق في نافذة التنبيه مع صفر تحويلات مُبلَّغ عنها', basisEn: 'Spend in the alert window with zero reported conversions' },
   spend_on_fatigued: { ar: 'إنفاق على محتوى مُرهق', en: 'Spend on a fatigued creative', basisAr: 'إنفاق هذا المحتوى في الفترة كما قاسه ملخص المحتوى', basisEn: 'This creative’s spend in the period, as the content pulse measured it' },
 }
-export const impactLabel = (k: ImpactKind, ar: boolean) => pick(IMPACT[k], ar, k)
-export const impactBasis = (k: ImpactKind, ar: boolean) => (ar ? IMPACT[k].basisAr : IMPACT[k].basisEn)
+/* The same two impacts measured against a campaign's BUDGET rather than a spend limit. */
+const IMPACT_AGAINST_BUDGET: Partial<Record<ImpactKind, Pair & { basisAr: string; basisEn: string }>> = {
+  overspend: { ar: 'تجاوز الميزانية بمقدار', en: 'Over the budget by', basisAr: 'الإنفاق المُقاس ناقص ميزانية الحملة، بعملة الميزانية', basisEn: 'Measured spend minus the campaign budget, in the budget’s currency' },
+  projected_overrun: { ar: 'تجاوز متوقّع للميزانية بمقدار', en: 'Projected budget overrun', basisAr: 'بوتيرة الصرف الحالية حتى نهاية فترة الحملة', basisEn: 'At the current pace to the end of the campaign’s period' },
+}
+const impactCopy = (k: ImpactKind, against?: 'limit' | 'budget') => (against === 'budget' ? IMPACT_AGAINST_BUDGET[k] : undefined) ?? IMPACT[k]
+export const impactLabel = (k: ImpactKind, ar: boolean, against?: 'limit' | 'budget') => pick(impactCopy(k, against), ar, k)
+export const impactBasis = (k: ImpactKind, ar: boolean, against?: 'limit' | 'budget') => (ar ? impactCopy(k, against).basisAr : impactCopy(k, against).basisEn)
 
 const FACTS: Record<FindingFactKey, Pair> = {
   provider: { ar: 'المنصة', en: 'Platform' },

@@ -70,6 +70,11 @@ export interface FindingImpact {
   kind: ImpactKind
   amount: number
   currency: string
+  /**
+   * RECOMMENDATIONS-CAMPAIGN-PACE-001 — what the amount was measured against. An overspend reads
+   * «over the limit» for a spend limit and «over the budget» for a campaign; the copy picks by this.
+   */
+  against?: 'limit' | 'budget'
 }
 
 export type FindingAction =
@@ -317,6 +322,33 @@ export function toFinding(item: ActionItem, ctx: FindingContext): Finding | null
 
   if (item.kind === 'alert') {
     body = fromAlert(item, ctx)
+  } else if (item.kind === 'campaign_pace') {
+    /*
+     * RECOMMENDATIONS-CAMPAIGN-PACE-001 — the row's own figures, in the budget's own currency.
+     * The row is comparable by construction (see `campaignPaceVerdict`), so spent and projected are
+     * single figures in `budget_currency`; the impact is stated only where that currency is known.
+     */
+    const r = item.row
+    const currency = r.budget_currency
+    const over = r.spent !== null ? r.spent - r.budget : null
+    const projectedOver = r.projected_spend !== null ? r.projected_spend - r.budget : null
+    const named = campaignSubject(r.campaign_id, ctx)
+    const evidence = campaignEvidence(r.campaign_id, ctx)
+    body = {
+      code: item.reason === 'over_budget' ? 'campaign_over_budget' : 'campaign_pace_overrun',
+      subject: { ...named, name: named.name ?? r.campaign_name },
+      nature: item.reason === 'over_budget' ? 'problem' : 'risk',
+      action: 'review_budget',
+      kpis: [kpi('spend', null, r.spent, currency), kpi('projected_spend', null, r.projected_spend, currency)],
+      /* Utilisation is the ring (`consumption`), not a fact line — the line printed «1» for 105%. */
+      facts: r.pace !== null ? [{ key: 'pace' as const, value: r.pace }] : [],
+      trend: { campaignId: r.campaign_id, metric: 'spend', kind: 'money' },
+      consumption: r.consumed_pct,
+      impact: item.reason === 'over_budget'
+        ? (over !== null && over > 0 && currency ? { kind: 'overspend', amount: over, currency, against: 'budget' } : null)
+        : (projectedOver !== null && projectedOver > 0 && currency ? { kind: 'projected_overrun', amount: projectedOver, currency, against: 'budget' } : null),
+      evidence: { ...evidence, path: `${evidence.path}${evidence.path.includes('?') ? '&' : '?'}tab=budget` },
+    }
   } else if (item.kind === 'budget') {
     const l = item.limit
     /* Consumption in the LIMIT's currency only. A spend in another currency cannot be set against it. */
@@ -401,9 +433,12 @@ export function buildFindings(items: ActionItem[], ctx: FindingContext): Finding
    * and the projection the alert froze at the moment it fired.
    */
   const limits = new Set(items.filter((i) => i.kind === 'budget').map((i) => (i as Extract<ActionItem, { kind: 'budget' }>).limit.id))
+  /* The same rule for a campaign's budget: the pacing row outranks the budget_risk alert it would duplicate. */
+  const paced = new Set(items.filter((i) => i.kind === 'campaign_pace').map((i) => (i as Extract<ActionItem, { kind: 'campaign_pace' }>).row.campaign_id))
 
   return items
     .filter((i) => !(i.kind === 'alert' && i.alert.entity_type?.endsWith('SpendLimit') && i.alert.entity_id !== null && limits.has(i.alert.entity_id)))
+    .filter((i) => !(i.kind === 'alert' && i.alert.type === 'budget_risk' && i.alert.entity_type?.endsWith('UnifiedCampaign') && i.alert.entity_id !== null && paced.has(i.alert.entity_id)))
     .map((i) => toFinding(i, ctx))
     .filter((f): f is Finding => f !== null)
 }
