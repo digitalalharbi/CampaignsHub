@@ -64,9 +64,16 @@ final class WriteCapabilityRegistry
      * provider-side reference of the Production write that verified the capability, and it is
      * REQUIRED for VERIFIED — the registry refuses to report a verified capability without it.
      *
-     * @var array<string, array<string, array{status: string, evidence: ?string}>>
+     * A method rather than a constant: an empty constant is `array{}` to static analysis, which then
+     * refuses every offset read on it — and the day the first write is admitted, this is where it is
+     * declared, with its evidence beside it.
+     *
+     * @return array<string, array<string, array{status: string, evidence: ?string}>>
      */
-    private const IMPLEMENTED = [];
+    private static function declared(): array
+    {
+        return [];
+    }
 
     /**
      * Every provider × every capability, with its status and the permission that gates it.
@@ -78,7 +85,7 @@ final class WriteCapabilityRegistry
         $out = [];
         foreach (AdPlatforms::ORDER as $provider) {
             foreach (self::CAPABILITIES as $capability => $permission) {
-                $out[] = self::entry($provider, $capability, $permission, self::IMPLEMENTED[$provider][$capability] ?? null);
+                $out[] = self::entry($provider, $capability, $permission, self::declared()[$provider][$capability] ?? null);
             }
         }
 
@@ -97,7 +104,8 @@ final class WriteCapabilityRegistry
         if ($permission === null) {
             return false;
         }
-        $entry = self::entry(AdPlatforms::canonical($provider), $capability, $permission, self::IMPLEMENTED[AdPlatforms::canonical($provider)][$capability] ?? null);
+        $canonical = AdPlatforms::canonical($provider);
+        $entry = self::entry($canonical, $capability, $permission, self::declared()[$canonical][$capability] ?? null);
 
         return in_array($entry['status'], [self::IMPLEMENTED_NOT_VERIFIED, self::VERIFIED], true) && (bool) $hasPermission($permission);
     }
