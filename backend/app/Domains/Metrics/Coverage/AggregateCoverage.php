@@ -32,9 +32,14 @@ final readonly class AggregateCoverage
      * @param  array<string, ContributionState>  $contributors  provider (or account) → its state
      * @param  array<string, string>  $reasons  contributor → human-readable evidence for its state
      */
+    /**
+     * @param  array<string, string>  $reportedThrough  contributor → the last date its figures cover
+     *                                                  (Y-m-d), for the Partial and Stale states only
+     */
     public function __construct(
         public array $contributors = [],
         public array $reasons = [],
+        public array $reportedThrough = [],
     ) {}
 
     /** Nothing was expected and nothing is missing — the shape for an unbounded, fully-synced scope. */
@@ -59,6 +64,16 @@ final readonly class AggregateCoverage
     public function inactive(): array
     {
         return $this->keysWhere(fn (ContributionState $s) => $s === ContributionState::Inactive);
+    }
+
+    /**
+     * Reported, but not through the end of the window — the figures are real for the days they
+     * cover and silent after that. A ratio over such a window is the ratio for the covered days,
+     * which is why the frontend may still derive from a total whose only degradation is this one.
+     */
+    public function partial(): array
+    {
+        return $this->keysWhere(fn (ContributionState $s) => $s === ContributionState::Partial);
     }
 
     public function stale(): array
@@ -125,6 +140,14 @@ final readonly class AggregateCoverage
             'withheld_contributors' => $this->withheld(),
             'unsupported_contributors' => $this->unsupported(),
             'excluded_contributors' => $this->degraded(),
+            /*
+             * CAMPAIGN-KPI-COVERAGE-001 — the two facts a reader needs to decide whether to read the
+             * number anyway: WHO stopped short, and WHEN. `reasons` carries the sentence, and the
+             * client boundary blanks sentences; a date is a fact about the client's own money and
+             * survives it, so the client report can still say «through the 27th».
+             */
+            'partial_contributors' => $this->partial(),
+            'reported_through' => $this->reportedThrough,
             'reasons' => $this->reasons,
         ];
     }
