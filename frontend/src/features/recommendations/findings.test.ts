@@ -3,6 +3,7 @@ import { buildActionCentre } from './actionCenter'
 import { buildFindings, hasEvidence, relativeChange, toFinding, type FindingContext } from './findings'
 import type { AlertEvent } from '@/features/alerts/api'
 import type { SpendLimitReading } from '@/features/budget/spendLimitsApi'
+import type { BudgetRow } from '@/features/analytics/api'
 
 /**
  * RECOMMENDATIONS-VISUAL-001 — the rules a finding card stands on.
@@ -36,6 +37,53 @@ const limit = (over: Partial<SpendLimitReading> = {}): SpendLimitReading => ({
 })
 
 const one = (items: Parameters<typeof buildActionCentre>[0]) => buildFindings(buildActionCentre(items), ctx)
+
+/** A comparable budget pacing row for campaign c1 — the Budget tab's own figures. */
+const paced = (over: Partial<BudgetRow> = {}): BudgetRow => ({
+  campaign_id: 'c1', campaign_name: 'Google Search — Brand', status: 'active',
+  budget: 16666.67, budget_currency: 'SAR', spent: 17448.75, spent_currency: 'SAR', spend_withheld: false,
+  spend_state: 'complete_converted', remaining: -782.08, consumed_pct: 1.0469, pace: 1.848, projected_spend: 30791.91,
+  paced_through: '2026-09-27', pacing_basis: 'comparable', ...over,
+} as unknown as BudgetRow)
+
+/**
+ * RECOMMENDATIONS-CAMPAIGN-PACE-001 — a campaign's own budget reaches the board without an alert rule.
+ * The board said «nothing needs a decision» on a project whose campaign page said «over budget».
+ */
+describe('a campaign budget pacing row', () => {
+  it('over its budget is a critical problem, with the overspend in the budget’s currency and the Budget tab as evidence', () => {
+    const [f] = one({ pacing: [paced()] })
+    expect(f.code).toBe('campaign_over_budget')
+    expect(f.severity).toBe('critical')
+    expect(f.nature).toBe('problem')
+    expect(f.subject).toMatchObject({ type: 'campaign', id: 'c1', name: 'Riyadh launch' })
+    expect(f.impact).toMatchObject({ kind: 'overspend', currency: 'SAR' })
+    expect(f.impact!.amount).toBeCloseTo(782.08, 1)
+    expect(f.facts).toEqual([{ key: 'pace', value: 1.848 }])
+    expect(f.consumption).toBeCloseTo(1.0469, 3)
+    expect(f.evidence.path).toContain('tab=budget')
+  })
+
+  it('pacing well past plan with a projection past the budget is a risk, stated as the projected overrun', () => {
+    const [f] = one({ pacing: [paced({ spent: 9000, remaining: 7666.67, consumed_pct: 0.54, pace: 1.3, projected_spend: 21000 })] })
+    expect(f.code).toBe('campaign_pace_overrun')
+    expect(f.severity).toBe('warning')
+    expect(f.nature).toBe('risk')
+    expect(f.impact).toMatchObject({ kind: 'projected_overrun', currency: 'SAR' })
+    expect(f.impact!.amount).toBeCloseTo(4333.33, 1)
+  })
+
+  it('says nothing for a row that is not comparable, a paused campaign, or an ordinary pace', () => {
+    expect(one({ pacing: [paced({ pacing_basis: 'partial', spent: null })] })).toEqual([])
+    expect(one({ pacing: [paced({ status: 'paused' })] })).toEqual([])
+    expect(one({ pacing: [paced({ spent: 9000, consumed_pct: 0.54, pace: 1.05, projected_spend: 17000 })] })).toEqual([])
+  })
+
+  it('outranks the budget_risk alert raised for the same campaign — one fact, one card', () => {
+    const found = one({ pacing: [paced()], alerts: [alert({ type: 'budget_risk', context: { spend: 17448.75, ratio: 1.05 } })] })
+    expect(found.map((f) => f.code)).toEqual(['campaign_over_budget'])
+  })
+})
 
 describe('a finding is only drawn when something measured stands behind it', () => {
   it('drops an alert whose context carries no figure', () => {

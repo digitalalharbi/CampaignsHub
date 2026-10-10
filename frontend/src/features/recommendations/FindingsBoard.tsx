@@ -17,7 +17,7 @@ import { natureLabel, severityLabel } from './findingCopy'
  * queue with every source read says so plainly, and names what was checked. Only the fourth state —
  * findings — draws cards.
  */
-export type SourceKey = 'alerts' | 'limits' | 'creatives'
+export type SourceKey = 'alerts' | 'limits' | 'pacing' | 'creatives'
 
 export function FindingsBoard({
   findings,
@@ -68,12 +68,12 @@ export function FindingsBoard({
           <Skeleton className="h-56" />
         </div>
       ) : findings.length === 0 ? (
-        failed.length === 3 ? null : (
+        failed.length === 4 ? null : (
           <div className="rounded-2xl border border-dashed border-border bg-surface p-5 text-center" data-testid="action-center-empty">
             <p className="text-sm font-bold text-text-primary">{ar ? 'لا شيء يحتاج قرارًا الآن' : 'Nothing needs a decision right now'}</p>
             <p className="mt-1 text-xs text-text-secondary">
               {ar ? 'فُحصت: ' : 'Checked: '}
-              {(['alerts', 'limits', 'creatives'] as SourceKey[]).filter((s) => !failed.includes(s)).map((s) => SOURCE[s][ar ? 'ar' : 'en']).join(ar ? '، ' : ', ')}
+              {(['alerts', 'limits', 'pacing', 'creatives'] as SourceKey[]).filter((s) => !failed.includes(s)).map((s) => SOURCE[s][ar ? 'ar' : 'en']).join(ar ? '، ' : ', ')}
             </p>
           </div>
         )
@@ -127,5 +127,6 @@ export function FindingsBoard({
 const SOURCE: Record<SourceKey, { ar: string; en: string }> = {
   alerts: { ar: 'التنبيهات', en: 'alerts' },
   limits: { ar: 'حدود الإنفاق', en: 'spend limits' },
+  pacing: { ar: 'ميزانيات الحملات ووتيرتها', en: 'campaign budgets and pace' },
   creatives: { ar: 'أداء المحتوى', en: 'creative performance' },
 }

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { buildActionCentre } from './actionCenter'
 import { FindingsBoard, type SourceKey } from './FindingsBoard'
 import { buildFindings } from './findings'
-import { lastNDays, useCampaigns, useSummary } from '@/features/analytics/api'
+import { lastNDays, useBudget, useCampaigns, useSummary } from '@/features/analytics/api'
 import { usePortalPath } from '@/app/portalPath'
 import { listAlertEvents } from '@/features/alerts/api'
 import { useSpendLimits } from '@/features/budget/spendLimitsApi'
@@ -123,13 +123,17 @@ export function RecommendationsPage() {
    */
   const window14 = useMemo(() => lastNDays(14), [])
   const summary = useSummary(currentProjectId ?? null, window14)
-  const campaigns = useCampaigns(currentProjectId ?? null, useMemo(() => lastNDays(30), []))
+  const window30 = useMemo(() => lastNDays(30), [])
+  const campaigns = useCampaigns(currentProjectId ?? null, window30)
+  /* RECOMMENDATIONS-CAMPAIGN-PACE-001 — the Budget tab's own pacing rows, read for the verdicts above. */
+  const pacing = useBudget(currentProjectId ?? null, window30)
 
   const findings = useMemo(
     () => buildFindings(
       buildActionCentre({
         alerts: alerts.data?.events,
         limits: limits.data?.limits,
+        pacing: pacing.data,
         fatigued: pulse.data?.fatigue?.fatigued?.items,
         fatigueAlerts: pulse.data?.fatigue?.alerts?.items,
         rising: pulse.data?.fastest_growing?.items,
@@ -142,15 +146,16 @@ export function RecommendationsPage() {
         campaigns: new Map((campaigns.data ?? []).map((c) => [c.campaign_id, { name: c.campaign_name, provider: c.provider }])),
       },
     ),
-    [alerts.data, limits.data, pulse.data, summary.data, campaigns.data, currentProjectId],
+    [alerts.data, limits.data, pacing.data, pulse.data, summary.data, campaigns.data, currentProjectId],
   )
 
   const failed: SourceKey[] = [
     ...(alerts.isError ? ['alerts' as const] : []),
     ...(limits.isError ? ['limits' as const] : []),
+    ...(pacing.isError ? ['pacing' as const] : []),
     ...(pulse.isError ? ['creatives' as const] : []),
   ]
-  const signalsLoading = alerts.isLoading || limits.isLoading || pulse.isLoading
+  const signalsLoading = alerts.isLoading || limits.isLoading || pacing.isLoading || pulse.isLoading
 
   /** How many are waiting on somebody, by urgency — the reason to open this page at all. */
   const counts = useMemo(() => {
