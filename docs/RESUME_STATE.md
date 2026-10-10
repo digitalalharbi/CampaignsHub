@@ -972,3 +972,27 @@ them); the executive summary follows. Backend 4 new + 77 related passed, larasta
 both injection-proved; tsc/lint clean. Live on rm-web (5231) as the agency owner. Row added IMPLEMENTED_NOT_VERIFIED.
 Lane: #640 (rebased, two campaign-management rows VERIFIED) and #641 (first visit) in CI; #642 (agency decision
 surfaces) stacked on #641.
+
+## Addendum — 2026-10-10, ANALYTICS-COVERAGE-COMPARABILITY-001 on `ch-rmfmt` (`feat/analytics-coverage-comparability`, stacked on #643)
+
+The Analytics overview for the same lagging project still printed «+18 %» per card, «+21.3 %» in «ما الذي تغيّر» and
+«كل الأرقام قابلة للمقارنة» while its head said «البيانات متأخرة · 2026-09-27». `comparableWindows` /
+`windowsUnlikeNote` in the coverage contract; the overview and the Campaigns summary row withhold every pill unless both
+windows are whole, the banner names the truncation, the change decomposition carries the sentence as its subtitle.
+Contract +5, overview 2/2, campaigns row +1, injection-proved; tsc/lint clean. Row added IMPLEMENTED_NOT_VERIFIED.
+
+**Same unit, second step (2026-10-10 ~08:00).** «ما الذي تغيّر» carried the unlike-windows sentence as a subtitle and
+still printed «+21.3 %», the drivers and «كل الأرقام قابلة للمقارنة» beneath it. `ChangeDiagnosis` takes `comparable`;
+false withholds the headline change, the decomposition and the period signals and says why, the anomaly days stay.
+changeDiagnosis.test +2; live on rm-web: the withheld line present, «+21.3%» and «كل الأرقام قابلة للمقارنة» absent,
+«أيام تستدعي التحقيق» kept. #640 merged (main `16e1944c`), deployed, bundle `index-D-QQtAb7.js` carries
+`reconciliation-influencer` / `influencer_coupon`, health 200 ×3 → ATTR-EVIDENCE-INFLUENCER-COUPON-001 VERIFIED (flipped
+on this branch). #643 rebased onto `16e1944c` (docs conflicts only), #644 restacked; #641 reopened to trigger CI on its
+chooser fix (`d46f7cd3`). Next candidate gap: shared/client REPORTS printing period figures without the coverage the
+summary states.
+
+**Lane, 2026-10-10 ~09:00.** #643 merged (main `a96b3fa8`), deployed (run 38027415583), bundle `index-BCPSkMXq.js`
+carries `campaign-kpi-coverage` / `partial_contributors` / `reported_through`, health 200 ×3 → CAMPAIGN-KPI-COVERAGE-001
+VERIFIED (this branch). #644 retargeted to `main` and restacked (`--onto origin/main 7bf8405b`), #645 restacked on it.
+Full backend suite alone on `mediabuying_test_rmfmt` for the coverage stack: 4,612 passed, 1 skipped. #646
+(REPORT-CURRENCY-TRUTH-001) open against main; live link on br-web reads «45.9K SAR», no «USD».

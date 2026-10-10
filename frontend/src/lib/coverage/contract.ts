@@ -151,3 +151,48 @@ export function coverageNote(coverage: Coverage, ar: boolean, label: (contributo
     ? `هذا الرقم غير مكتمل: ${parts.join('؛ ')}.`
     : `This figure is incomplete: ${parts.join('; ')}.`
 }
+
+/**
+ * ANALYTICS-COVERAGE-COMPARABILITY-001 — whether a previous-period comparison may be stated at all.
+ *
+ * Two windows compare only when both are whole: the previous one holds rows (`previous_rows_in_scope`,
+ * CAMP-COMPARE-001) AND neither window is partial. A thirty-day window whose platform reported
+ * through its seventeenth day, set against a complete thirty-day window before it, yields a delta
+ * that compares seventeen days with thirty — printed as «+18 %», it reads as growth.
+ */
+export function comparableWindows(summary: { previous_rows_in_scope?: boolean; current?: object; previous?: object } | undefined): boolean {
+  if (!summary) return true
+  if (summary.previous_rows_in_scope === false) return false
+  return isComplete(readCoverage(summary.current)) && isComplete(readCoverage(summary.previous))
+}
+
+/** Why the comparison is withheld, when it is — or null when the windows compare. */
+export function windowsUnlikeNote(
+  summary: { previous_rows_in_scope?: boolean; previous_range?: { from: string; to: string }; current?: object; previous?: object } | undefined,
+  ar: boolean,
+  label: (contributor: string) => string = (c) => c,
+): string | null {
+  if (!summary || comparableWindows(summary)) return null
+  if (summary.previous_rows_in_scope === false) {
+    const r = summary.previous_range
+    const span = r ? `(${r.from} → ${r.to}) ` : ''
+    return ar
+      ? `الفترة السابقة ${span}لا تحتوي أي بيانات، فلا يوجد شيء تُقاس عليه هذه الفترة.`
+      : `The previous period ${span}holds no data, so there is nothing for this one to be measured against.`
+  }
+  const current = readCoverage(summary.current)
+  const previous = readCoverage(summary.previous)
+  const which = !isComplete(current) ? current : previous
+  const through = reportedThrough(which)
+  const partial = which.partial_contributors ?? []
+  const who = (partial.length > 0 ? partial : which.excluded_contributors ?? []).map(label).join(ar ? '، ' : ', ')
+  const side = !isComplete(current) ? (ar ? 'هذه الفترة' : 'This period') : (ar ? 'الفترة السابقة' : 'The previous period')
+  if (through) {
+    return ar
+      ? `${side} مغطاة حتى ${through} فقط (${who} لم تُبلّغ بعدها)، فالفترتان غير متكافئتين ولا تُقاس إحداهما على الأخرى.`
+      : `${side} is covered through ${through} only (${who} did not report after it), so the two windows are not alike and neither is measured against the other.`
+  }
+  return ar
+    ? `${side} غير مكتملة (${who})، فالفترتان غير متكافئتين ولا تُقاس إحداهما على الأخرى.`
+    : `${side} is incomplete (${who}), so the two windows are not alike and neither is measured against the other.`
+}

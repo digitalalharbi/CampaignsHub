@@ -306,3 +306,31 @@ describe('a driver figure is compacted, and its exact value is reachable', () =>
     expect(screen.queryByText('48,000'), 'money was drawn at full width').toBeNull()
   })
 })
+
+/*
+ * ANALYTICS-COVERAGE-COMPARABILITY-001 — two windows that are not alike are not decomposed.
+ */
+describe('when the two windows may not be compared', () => {
+  it('withholds the decomposition and the period signals, keeps the anomaly days, and says why', () => {
+    renderWithProviders(
+      <ChangeDiagnosis
+        data={payload({ timeline: { points: [{ date: '2026-08-27', metric: 'clicks', value: 3360, baseline: 2720, direction: 'up' }] as never, reason: null, days: 30 } })}
+        currency="SAR"
+        comparable={false}
+      />,
+      { locale: 'en' },
+    )
+    expect(screen.getByTestId('change-withheld')).toHaveTextContent('withheld')
+    expect(screen.queryByTestId('drivers-spend')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('signal-biggest-mover')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('signal-unmeasurable')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Every figure is comparable/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('signal-anomalies')).toBeInTheDocument()
+  })
+
+  it('decomposes as before when nothing says otherwise', () => {
+    render(payload())
+    expect(screen.getByTestId('drivers-spend')).toBeInTheDocument()
+    expect(screen.queryByTestId('change-withheld')).not.toBeInTheDocument()
+  })
+})

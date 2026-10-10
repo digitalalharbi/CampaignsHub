@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowsDerived, coverageNote, isComplete, isStated, readCoverage, reportedThrough, truncatedOnly, type Coverage } from './contract'
+import { allowsDerived, comparableWindows, coverageNote, isComplete, isStated, readCoverage, reportedThrough, truncatedOnly, windowsUnlikeNote, type Coverage } from './contract'
 
 /**
  * AGGREGATION-TRUTH-001 on the client — the frontend reads truth and never reconstructs it.
@@ -101,5 +101,44 @@ describe('a window every contributor reported through the same earlier date', ()
     const two: Coverage = { ...truncated, excluded_contributors: ['meta', 'tiktok'], partial_contributors: ['meta', 'tiktok'], reported_through: { meta: '2026-09-27', tiktok: '2026-09-30' } }
     expect(reportedThrough(two)).toBeNull()
     expect(truncatedOnly(two)).toBe(true)
+  })
+})
+
+/*
+ * ANALYTICS-COVERAGE-COMPARABILITY-001 — two windows compare only when both are whole.
+ */
+describe('whether two windows may be compared', () => {
+  const complete: Coverage = { state: 'complete', expected_contributors: ['meta'], included_contributors: ['meta'] }
+  const truncated: Coverage = {
+    state: 'partial', expected_contributors: ['meta'], excluded_contributors: ['meta'],
+    partial_contributors: ['meta'], reported_through: { meta: '2026-09-27' },
+  }
+
+  it('compares two complete, populated windows', () => {
+    expect(comparableWindows({ previous_rows_in_scope: true, current: { coverage: complete }, previous: { coverage: complete } })).toBe(true)
+    expect(windowsUnlikeNote({ previous_rows_in_scope: true, current: { coverage: complete }, previous: { coverage: complete } }, true)).toBeNull()
+  })
+
+  it('refuses when the previous window holds no rows, and says so with its dates', () => {
+    const s = { previous_rows_in_scope: false, previous_range: { from: '2026-08-12', to: '2026-09-10' }, current: { coverage: complete }, previous: { coverage: complete } }
+    expect(comparableWindows(s)).toBe(false)
+    expect(windowsUnlikeNote(s, false)).toBe('The previous period (2026-08-12 → 2026-09-10) holds no data, so there is nothing for this one to be measured against.')
+  })
+
+  it('refuses when the current window is truncated, naming who stopped and through when', () => {
+    const s = { previous_rows_in_scope: true, current: { coverage: truncated }, previous: { coverage: complete } }
+    expect(comparableWindows(s)).toBe(false)
+    expect(windowsUnlikeNote(s, true, (c) => (c === 'meta' ? 'ميتا' : c)))
+      .toBe('هذه الفترة مغطاة حتى 2026-09-27 فقط (ميتا لم تُبلّغ بعدها)، فالفترتان غير متكافئتين ولا تُقاس إحداهما على الأخرى.')
+  })
+
+  it('refuses when the PREVIOUS window is the incomplete one', () => {
+    const s = { previous_rows_in_scope: true, current: { coverage: complete }, previous: { coverage: { ...truncated, partial_contributors: [], stale_contributors: ['meta'] } } }
+    expect(comparableWindows(s)).toBe(false)
+    expect(windowsUnlikeNote(s, false)).toMatch(/^The previous period is incomplete \(meta\)/)
+  })
+
+  it('treats a summary that states no coverage as comparable (the backend said nothing was missing)', () => {
+    expect(comparableWindows({ previous_rows_in_scope: true, current: {}, previous: {} })).toBe(true)
   })
 })
