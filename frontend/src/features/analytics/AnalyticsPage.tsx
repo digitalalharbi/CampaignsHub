@@ -95,6 +95,8 @@ import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { CampaignQuickPreview } from './CampaignQuickPreview'
 import { bestByRoas, worstByRoas } from './campaignRoasPanels'
 import { providerLabel } from '@/features/campaigns/labels'
+import { accountContribution } from './accountContribution'
+import { comparableWindows, windowsUnlikeNote } from '@/lib/coverage/contract'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
 /**
@@ -1059,6 +1061,17 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
   const platformDrivers = useDrivers(projectId, range, 'provider', 'spend', filters)
   /* The same rows the data-quality tab reads — the comparison is made here, so the gaps are said here. */
   const freshness = useFreshness(projectId, range, filters)
+  /*
+   * PLATFORM-DECISION-ANALYTICS-001 — account contribution, the clause this tab never answered:
+   * «Snapchat spent 18.8K» is not an answer when two accounts run on Snapchat. The same account
+   * rows the Accounts tab lists, regrouped under their platform with each account's share of the
+   * platform's STATED spend; a withheld account is named and given no share, never a zero.
+   */
+  const accounts = useAccounts(projectId, range, filters)
+  const contribution = useMemo(
+    () => accountContribution(accounts.data ?? [], summary.data?.currency ?? null),
+    [accounts.data, summary.data?.currency],
+  )
 
   return (
     <div className="space-y-4">
@@ -1084,6 +1097,8 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
         loading={platformDrivers.isPending}
         error={platformDrivers.isError}
         title={ar ? 'ما الذي تغيّر بين المنصات' : 'What moved between the platforms'}
+        comparable={comparableWindows(summary.data)}
+        subtitle={windowsUnlikeNote(summary.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
 
       <PlatformPaths
@@ -1094,6 +1109,45 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
         error={byPath.isError}
         ar={ar}
       />
+      <Panel
+        title={ar ? 'من يحمل إنفاق كل منصة' : 'Who carries each platform’s spend'}
+        description={ar ? 'حصة كل حساب إعلاني من إنفاق منصته المُثبت في الفترة' : 'Each ad account’s share of its platform’s stated spend in the period'}
+        loading={accounts.isLoading}
+        error={accounts.isError}
+        empty={!accounts.isLoading && contribution.length === 0}
+      >
+        <div data-testid="platform-account-contribution" className="space-y-3">
+          {contribution.map((pl) => (
+            <div key={pl.provider} data-testid={`account-contribution-${pl.provider}`} className="rounded-xl border border-border bg-surface p-3">
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-text-primary">{providerLabel(pl.provider, ar ? 'ar' : 'en')}</span>
+                <span className="text-xs text-text-muted">
+                  {pl.accounts.length === 1
+                    ? (ar ? 'حساب واحد يحمل كل الإنفاق' : 'One account carries all the spend')
+                    : (ar ? `${pl.accounts.length} حسابات` : `${pl.accounts.length} accounts`)}
+                  {pl.withheld > 0 && (ar ? ` · ${pl.withheld} بلا حصة — إنفاق بلا سعر صرف` : ` · ${pl.withheld} without a share — spend with no exchange rate`)}
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {pl.accounts.map((a, i) => (
+                  <li key={a.account_id ?? `removed-${i}`} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-sm">
+                    <div className="min-w-0">
+                      {/* An id the app no longer recognises is not the same absence as no id at all; both are said as what they are, never as a name. */}
+                      <div className="truncate text-text-primary">{a.account_name ?? (a.account_id === null ? (ar ? 'بلا حساب محدد' : 'No account stated') : (ar ? 'حساب غير مسجَّل في التطبيق' : 'Account not registered in the app'))}</div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.round((a.share ?? 0) * 100)}%` }} />
+                      </div>
+                    </div>
+                    <span className="tnum text-text-secondary" dir="ltr">{a.spend === null ? '—' : money(a.spend, summary.data?.currency ?? undefined)}</span>
+                    <span className="tnum w-12 text-end font-semibold text-text-primary" dir="ltr">{a.share === null ? '—' : percent(a.share, 0)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
       <Panel title={ar ? 'مقارنة المنصات' : 'Platform comparison'} description={ar ? 'الإنفاق مقابل ROAS لكل منصة' : 'Spend against ROAS, per platform'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
@@ -1236,6 +1290,8 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         loading={drivers.isPending}
         error={drivers.isError}
         title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
+        comparable={comparableWindows(s.data)}
+        subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
 
       {/*
@@ -3455,6 +3511,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         loading={drivers.isPending}
         error={drivers.isError}
         title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
+        comparable={comparableWindows(s.data)}
+        subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
 
       <Panel
@@ -3825,6 +3883,8 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
         loading={drivers.isPending}
         error={drivers.isError}
         title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
+        comparable={comparableWindows(s.data)}
+        subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
 
       <Panel
