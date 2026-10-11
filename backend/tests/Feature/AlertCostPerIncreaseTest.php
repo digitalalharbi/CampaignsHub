@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -111,6 +112,11 @@ final class AlertCostPerIncreaseTest extends TestCase
         $this->converted($c, 'conversions', 4, 3);
 
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('cpa_increase')));
+
+        // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window are stated, not implied.
+        $event = AlertEvent::query()->sole();
+        $this->assertStringContainsString('the last 7 days against the 7 before; this rule fires at a 25% rise.', (string) $event->context['message']);
+        $this->assertSame(7, $event->context['window_days']);
     }
 
     public function test_cpa_increase_stays_quiet_when_the_rise_is_below_the_threshold(): void

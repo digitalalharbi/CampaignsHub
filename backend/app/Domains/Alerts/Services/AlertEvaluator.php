@@ -463,6 +463,12 @@ final class AlertEvaluator
         })->all();
     }
 
+    /** The window and the threshold a deterioration was judged on, in one sentence. */
+    private function deteriorationBasis(int $days, float $pct, string $direction): string
+    {
+        return 'the last '.$days.' days against the '.$days.' before; this rule fires at a '.rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.').'% '.$direction.'.';
+    }
+
     private function lastRead(mixed $at): string
     {
         return $at === null ? 'No read has succeeded yet.' : 'Last successful read: '.Carbon::parse($at)->toDateTimeString().' UTC.';
@@ -732,7 +738,7 @@ final class AlertEvaluator
 
         UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, &$out) {
+            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, $days, &$out) {
                 $cur = $this->campaignRoas((string) $c->id, $curFrom, $now);
                 $prev = $this->campaignRoas((string) $c->id, $prevFrom, $prevTo);
                 if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
@@ -741,8 +747,9 @@ final class AlertEvaluator
                         'entity_id' => (string) $c->id,
                         'project_id' => (string) $c->project_id,
                         'title' => 'ROAS dropped',
-                        'message' => $c->name.' ROAS fell from '.round($prev, 2).' to '.round($cur, 2).'.',
-                        'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4)],
+                        // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window, stated.
+                        'message' => $c->name.' ROAS fell from '.round($prev, 2).' to '.round($cur, 2).' — '.$this->deteriorationBasis($days, $pct, 'drop'),
+                        'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days],
                     ];
                 }
             });
@@ -1080,7 +1087,7 @@ final class AlertEvaluator
 
         UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, $key, $resultKey, $label, &$out) {
+            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, $days, $key, $resultKey, $label, &$out) {
                 $cur = $this->totalsFor((string) $c->id, $curFrom, $now);
                 $prev = $this->totalsFor((string) $c->id, $prevFrom, $prevTo);
 
@@ -1130,8 +1137,10 @@ final class AlertEvaluator
                     'project_id' => (string) $c->project_id,
                     'title' => $label.' increased',
                     'message' => $c->name.' '.$label.' rose from '.round($was, 2).' to '.round($now_, 2)
-                        .' ('.round($rise).'% up) on '.(int) ($cur[$resultKey] ?? 0).' '.$resultKey.'.',
+                        .' ('.round($rise).'% up) on '.(int) ($cur[$resultKey] ?? 0).' '.$resultKey.' — '.$this->deteriorationBasis($days, $pct, 'rise'),
                     'context' => [
+                        'threshold_pct' => $pct,
+                        'window_days' => $days,
                         $key.'_current' => round($now_, 4),
                         $key.'_previous' => round($was, 4),
                         'rise_pct' => round($rise, 2),
