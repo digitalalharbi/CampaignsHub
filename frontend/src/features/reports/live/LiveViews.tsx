@@ -3,12 +3,11 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
-import { money, rowMoney } from '@/features/analytics/format'
+import { rowMoney } from '@/features/analytics/format'
 import { canonicalPlatform } from '@/lib/platforms'
 import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
-import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import type { LivePayload } from '../api'
 import { AttentionBlocks } from '../AttentionBlocks'
 import { ClientAttention } from '../ClientAttention'
@@ -18,6 +17,7 @@ import { ReportAdsSection, type ReportAd } from '../ReportAdsSection'
 import { ObjectiveAnalyticsSection } from '../ObjectiveAnalyticsSection'
 import { asContent, ContentTile } from './LiveContent'
 import { kpiKeysFor, LiveKpiBoard, LiveScopeCounts } from './LiveKpis'
+import { ExecutiveSummary } from './ExecutiveSummary'
 import {
   FunnelSection,
   ObjectiveLeaders,
@@ -123,73 +123,7 @@ function ContentStrip({
   )
 }
 
-/**
- * Results per platform as a bar list — counts only, no money, so no currency decision to get wrong.
- *
- * Drawn as markup rather than a Recharts horizontal bar: under `dir="rtl"` that chart dropped its
- * category labels and drew one bar, and a comparison whose rows cannot be told apart is not one.
- */
-function PlatformResultsBars({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  if (!sectionOn(payload, 'platform_comparison')) return null
-  const rows = (payload.platforms ?? [])
-    .filter((p) => p.conversions !== null && p.conversions !== undefined)
-    .map((p) => ({ key: canonicalPlatform(p.provider), results: Number(p.conversions) }))
-    .sort((a, b) => b.results - a.results)
 
-  if (rows.length < 2) return null
-  const top = Math.max(...rows.map((r) => r.results), 1)
-
-  return (
-    <ChartCard title={ar ? 'النتائج حسب المنصة' : 'Results by platform'}>
-      <ul data-testid="live-summary-platform-results" className="flex flex-col gap-3">
-        {rows.map((r) => (
-          <li key={r.key} data-testid={`live-summary-results-${r.key}`} className="grid grid-cols-[6.5rem_1fr_auto] items-center gap-3">
-            <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-text-primary">
-              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: platformColor(r.key) }} aria-hidden />
-              {providerLabel(r.key, ar ? 'ar' : 'en')}
-            </span>
-            <span className="h-3 overflow-hidden rounded-full bg-surface-secondary">
-              <span className="block h-full rounded-full" style={{ width: `${Math.max(2, (r.results / top) * 100)}%`, background: platformColor(r.key) }} />
-            </span>
-            <span className="tnum text-sm font-extrabold text-text-primary"><Num>{r.results.toLocaleString('en-US')}</Num></span>
-          </li>
-        ))}
-      </ul>
-    </ChartCard>
-  )
-}
-
-/**
- * High-level budget consumption — the one budget figure a summary needs, as a ring.
- *
- * `portfolioBudget` is the same arithmetic the dashboard's pacing and the campaigns overview use: only
- * comparable rows are added, and two budget currencies refuse a total rather than summing across
- * them. No ring is drawn when there is nothing honest to draw.
- */
-function BudgetRing({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  const rows = (payload.budget ?? []).filter((r) => r.budget !== null && r.budget > 0)
-  const total = portfolioBudget(rows)
-  if (total.budget === null || total.spent === null || total.budget <= 0) return null
-  const share = total.spent / total.budget
-
-  return (
-    <ChartCard title={ar ? 'ما صُرف من الميزانية' : 'Budget used'}>
-      <div data-testid="live-summary-budget" className="flex flex-wrap items-center justify-center gap-5 py-1">
-        <ProgressRing value={share} size={124} tone={share > 1 ? 'danger' : 'brand'} />
-        <dl className="grid gap-2 text-sm">
-          <div>
-            <dt className="text-xs text-text-muted">{ar ? 'المصروف' : 'Spent'}</dt>
-            <dd className="tnum font-extrabold text-text-primary"><Num>{money(total.spent, total.currency ?? payload.currency)}</Num></dd>
-          </div>
-          <div>
-            <dt className="text-xs text-text-muted">{ar ? 'الميزانية' : 'Budget'}</dt>
-            <dd className="tnum font-extrabold text-text-primary"><Num>{money(total.budget, total.currency ?? payload.currency)}</Num></dd>
-          </div>
-        </dl>
-      </div>
-    </ChartCard>
-  )
-}
 
 /**
  * Direct against blended is worth a card only where the two DIFFER — where no spend sits outside the
@@ -220,45 +154,23 @@ function LiveAttention({ payload, ar, onOpenContent }: { payload: LivePayload; a
 
 export function SummaryView({ payload, reader, currency, locale, onOpenContent }: Common) {
   const ar = locale === 'ar'
-  const top = (payload.ads ?? []).slice(0, 3)
-  const showSplit = splitDiffers(payload)
 
+  /*
+   * REPORT-EXECUTIVE-SUMMARY-001 — the summary a shared link opens on is an executive dashboard:
+   * KPI → trend → where the money went → platforms side by side → objectives → funnel → best
+   * content → budget and data health → recommendations as action cards. The direct/blended guard
+   * (REPORT-OBJECTIVE-004) stays under the KPIs wherever the two figures differ.
+   */
   return (
-    <div data-testid="live-mode-summary" className="flex flex-col gap-5">
-      <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} heroOnly />
-      <LiveScopeCounts payload={payload} ar={ar} />
-      {/*
-        REPORT-OBJECTIVE-004 — the summary keeps direct against blended wherever the two DIFFER: it is
-        the forwarded document, where a blended cost per order does the most damage. Where no spend sits
-        outside the sales path the two are one figure, and printing it twice is padding. It comes before
-        «where» for the reason CLIENT-FACING-PRESENTATION-001 gives: «at what cost» is asked first.
-      */}
-      {showSplit && <ObjectiveSplit payload={payload} ar={ar} reader={reader} />}
-      <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
-      <PlatformResultsBars payload={payload} ar={ar} />
-      {sectionOn(payload, 'content_performance') && (
-        <ContentStrip
-          title={ar ? 'أفضل المحتوى' : 'Best content'}
-          items={top}
-          testid="live-summary-top-content"
-          columns={3}
-          currency={currency}
-          locale={locale}
-          onOpen={onOpenContent}
-          ranked
-        />
-      )}
-      {sectionOn(payload, 'budget_pacing') && <BudgetRing payload={payload} ar={ar} />}
-      {/*
-        GA4-INTEGRATION-001 — the summary carries it too, and that is not duplication.
-
-        The summary is the view a shared link OPENS on and the one that gets forwarded; a section
-        that appeared only in the dashboard would be invisible to most of the people the report is
-        for. Before the insights, after the money — context for the campaigns, never a verdict.
-      */}
-      {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
-      {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
-    </div>
+    <ExecutiveSummary
+      payload={payload}
+      reader={reader}
+      currency={currency}
+      locale={locale}
+      onOpenContent={onOpenContent}
+      sectionOn={(key) => sectionOn(payload, key)}
+      afterKpis={splitDiffers(payload) ? <ObjectiveSplit payload={payload} ar={ar} reader={reader} /> : null}
+    />
   )
 }
 

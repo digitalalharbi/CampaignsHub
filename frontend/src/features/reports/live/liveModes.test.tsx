@@ -86,12 +86,50 @@ describe('a link shared as an executive summary', () => {
 
     expect(within(summary).getByTestId('live-kpis')).toBeInTheDocument()
     expect(within(summary).queryByTestId('live-kpis-secondary')).not.toBeInTheDocument()
-    expect(within(summary).getByTestId('live-summary-platform-results')).toBeInTheDocument()
-    expect(within(summary).getByTestId('live-summary-budget')).toBeInTheDocument()
-    expect(within(summary).getByTestId('live-summary-top-content')).toBeInTheDocument()
+    // REPORT-EXECUTIVE-SUMMARY-001 — KPI → trend → spend split → platforms → objectives → content → health → actions.
+    for (const block of ['exec-trend', 'exec-spend-split', 'exec-platforms', 'exec-best-content', 'exec-health']) {
+      expect(within(summary).getByTestId(block), block).toBeInTheDocument()
+    }
     for (const table of ['live-platform-comparison', 'live-detail-tables', 'live-funnel', 'live-attention']) {
       expect(within(summary).queryByTestId(table), table).not.toBeInTheDocument()
     }
+  })
+})
+
+describe('the executive summary (REPORT-EXECUTIVE-SUMMARY-001)', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('counts the campaigns that ran with their movement, narrows the best content by platform, and ends on action cards', async () => {
+    vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => ({
+      status: 200,
+      envelope: { data: {
+        ...payloadFor(opts.providers),
+        delivering_campaigns: { current: 6, previous: 4 },
+        attention: [{
+          key: 'a1', code: 'cost_up', severity: 'warning', nature: 'problem', family: 'cost', family_label_ar: '', family_label_en: '',
+          platform: 'meta', kpis: [], action: 'review_cost_drivers',
+          impact: { kind: 'extra_cost_vs_previous_rate', amount: 120, currency: 'SAR' },
+          evidence: { platform: 'meta', content: [{ name: 'Best on meta', content_key: 'key-best-meta' }] },
+        }],
+      } },
+    }) as never)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
+
+    const count = await screen.findByTestId('exec-kpi-count')
+    expect(count).toHaveTextContent('6')
+    expect(count).toHaveTextContent('50')
+
+    const best = screen.getByTestId('exec-best-content')
+    expect(best).toHaveTextContent('Best on meta')
+    expect(best).toHaveTextContent('Best on snapchat')
+    fireEvent.click(screen.getByTestId('exec-platform-snapchat'))
+    await waitFor(() => expect(screen.getByTestId('exec-best-content')).not.toHaveTextContent('Best on meta'))
+    expect(screen.getByTestId('exec-best-content')).toHaveTextContent('Best on snapchat')
+
+    const card = screen.getByTestId('exec-action-a1')
+    expect(within(card).getByTestId('exec-action-impact')).toHaveTextContent('120')
+    const actions = screen.getByTestId('exec-actions')
+    expect(screen.getByTestId('exec-health').compareDocumentPosition(actions) & 4, 'the recommendations close the summary').toBeTruthy()
   })
 })
 

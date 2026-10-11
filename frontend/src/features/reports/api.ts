@@ -326,6 +326,8 @@ export interface LivePayload {
    * and through which date — the client is told the date, never the operator's reason.
    */
   comparison?: { comparable: boolean; window: 'current' | 'previous' | null; contributors: string[]; through: string | null }
+  /** REPORT-EXECUTIVE-SUMMARY-001 — campaigns that spent, as a COUNT; `previous` null where the windows do not compare. */
+  delivering_campaigns?: { current: number; previous: number | null }
   timeseries: Array<Record<string, unknown>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   /**
