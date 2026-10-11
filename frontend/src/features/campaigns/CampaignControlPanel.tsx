@@ -1,3 +1,4 @@
+import { mediaFitClass } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -486,7 +487,7 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
                   <li key={c.id}>
                     <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${creativeId === c.id ? 'border-brand-500' : 'border-border'}`}>
                       <input type="radio" name="creative" checked={creativeId === c.id} onChange={() => setCreativeId(c.id)} className="accent-brand-600" />
-                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-10 shrink-0 rounded-md bg-surface-secondary" />}
+                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className={`h-10 w-10 shrink-0 rounded-md ${mediaFitClass(null, null, 'thumb')}`} /> : <span className="h-10 w-10 shrink-0 rounded-md bg-surface-secondary" />}
                       <span className="min-w-0 truncate text-text-primary">{c.name ?? c.id}</span>
                       {c.format && <Badge tone="neutral">{c.format}</Badge>}
                     </label>
