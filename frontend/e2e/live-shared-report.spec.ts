@@ -250,9 +250,13 @@ const SIX_QUESTIONS = [
   'live-kpis',
   'live-objective-split',
   'live-platform-comparison',
-  'live-summary-platform-results',
-  'live-summary-budget',
+  // REPORT-EXECUTIVE-SUMMARY-001 — the summary's own blocks: where the money went, the platforms
+  // side by side, budget and data health, then the recommendations as action cards.
+  'exec-spend-split',
+  'exec-platforms',
+  'exec-health',
   'live-attention',
+  'exec-actions',
 ] as const
 
 /** Both live products: the seeded detailed link, and the same link minted as an executive summary. */

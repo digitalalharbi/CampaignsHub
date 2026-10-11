@@ -183,11 +183,11 @@ describe('a live link and the form it was shared as', () => {
 
     expect(screen.getByTestId('live-kpis')).toBeInTheDocument()
     /*
-     * The platform summary is a visual in the summary product — results per platform as bars — and
-     * the sortable comparison TABLE is the dashboard's. A summary that carried the table would be the
-     * dashboard again with fewer blocks, which is row 96.
+     * REPORT-EXECUTIVE-SUMMARY-001 — the summary is now an executive dashboard (Owner, 2026-10-12): it
+     * compares the platforms side by side in its own compact block. The dashboard's full comparison
+     * table with its drawers stays the detailed form's.
      */
-    expect(screen.getByTestId('live-summary-platform-results')).toBeInTheDocument()
+    expect(screen.getByTestId('exec-platforms')).toBeInTheDocument()
     expect(screen.queryByTestId('live-platform-comparison')).not.toBeInTheDocument()
     // This fixture spends 1,000 outside the sales path, so direct and blended differ and both are shown.
     expect(screen.getByTestId('live-objective-split')).toBeInTheDocument()

@@ -11,6 +11,10 @@ import { describe, expect, it } from 'vitest'
  * Two uses are allowed and removed before the check, each for a stated reason: the platform-label
  * helper happens to live under `features/campaigns/`, and the request carries `campaigns: []` because
  * the server's ceiling is expressed in campaign ids that the reader neither sets nor sees.
+ *
+ * A third, REPORT-EXECUTIVE-SUMMARY-001: the executive summary states HOW MANY campaigns delivered —
+ * a number, never a name. Every line that touches it uses the `campaignCount` identifier, and the
+ * second case below holds that no such line reads a name or opens anything.
  */
 const TREE: Record<string, string> = import.meta.glob(
   ['/src/features/reports/live/*.ts', '/src/features/reports/live/*.tsx', '/src/features/reports/LiveSharedReport.tsx'],
@@ -24,6 +28,7 @@ function clientCode(source: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
     .replace(/^import .*$/gm, '')
     .replace(/campaigns: \[\],/g, '')
+    .replace(/^.*\bcampaignCount\w*.*$/gm, '')
 }
 
 describe('the live client link', () => {
@@ -43,5 +48,13 @@ describe('the live client link', () => {
     )
 
     expect(offenders, 'campaign identity or a campaign drilldown reached the client link:\n  ' + offenders.join('\n  ')).toEqual([])
+  })
+
+  it('lets the campaign count through as a number only', () => {
+    const counted = files.flatMap(([path, source]) =>
+      source.split('\n').filter((line) => /\bcampaignCount\w*/.test(line)).map((line) => `${path}: ${line.trim()}`),
+    )
+    expect(counted.length, 'the count is still there to guard').toBeGreaterThan(0)
+    expect(counted.filter((line) => /\.name\b|onClick|href|navigate|Link\b/.test(line)), 'a campaign count line names or opens something').toEqual([])
   })
 })

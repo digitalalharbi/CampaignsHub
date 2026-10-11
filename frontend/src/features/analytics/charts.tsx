@@ -227,6 +227,7 @@ export function PlatformDonutChart({
   centerValue,
   currency = '',
   colorBy = 'platform',
+  legend = true,
 }: {
   /** `key` is the platform's stored key, for its colour; `name` is what the reader sees. */
   data: Array<{ name: string; value: number; key?: string }>
@@ -235,6 +236,8 @@ export function PlatformDonutChart({
   centerValue?: string
   currency?: string
   colorBy?: 'platform' | 'series'
+  /** Off where the surface draws its own legend — the executive summary's legend is interactive. */
+  legend?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const total = data.reduce((a, b) => a + b.value, 0)
@@ -253,7 +256,7 @@ export function PlatformDonutChart({
             {rows.map((r, i) => <Cell key={r.name} fill={color(r.name, i)} />)}
           </Pie>
           <Tooltip {...tooltipProps} formatter={(v: number) => `${money(v, currency)} · ${percent(v / (total || 1), 1)}`} />
-          <Legend wrapperStyle={{ fontSize: 13 }} />
+          {legend && <Legend wrapperStyle={{ fontSize: 13 }} />}
         </PieChart>
       </ResponsiveContainer>
       {(centerValue || centerLabel) && (

@@ -51,22 +51,9 @@ export function LiveKpiBoard({
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
 
-  const cmp = payload.comparison
-  const providerName = (c: string) => providerLabel(c, ar ? 'ar' : 'en')
-
   return (
     <div className="flex flex-col gap-3">
-      {cmp && !cmp.comparable && (
-        <p data-testid="live-comparison-withheld" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
-          {cmp.through
-            ? (ar
-              ? `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} مغطاة حتى ${cmp.through} فقط (${cmp.contributors.map(providerName).join('، ')} لم تُبلّغ بعدها)، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`
-              : `${cmp.window === 'previous' ? 'The previous period' : 'This period'} is covered through ${cmp.through} only (${cmp.contributors.map(providerName).join(', ')} did not report after it), so it is not compared with the ${cmp.window === 'previous' ? 'current' : 'previous'} period.`)
-            : (ar
-              ? `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} غير مكتملة (${cmp.contributors.map(providerName).join('، ')})، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`
-              : `${cmp.window === 'previous' ? 'The previous period' : 'This period'} is incomplete (${cmp.contributors.map(providerName).join(', ')}), so it is not compared with the ${cmp.window === 'previous' ? 'current' : 'previous'} period.`)}
-        </p>
-      )}
+      <ComparisonWithheld payload={payload} ar={ar} />
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" data-testid="live-kpis">
         {hero.map((key) => {
           const meta = reader.meta[key]
@@ -137,5 +124,24 @@ export function LiveScopeCounts({ payload, ar }: { payload: LivePayload; ar: boo
         </span>
       ))}
     </div>
+  )
+}
+
+/** REPORT-COVERAGE-001 — why the period comparison is withheld, said once above the figures it would have moved. */
+export function ComparisonWithheld({ payload, ar }: { payload: LivePayload; ar: boolean }) {
+  const cmp = payload.comparison
+  const providerName = (c: string) => providerLabel(c, ar ? 'ar' : 'en')
+  if (!cmp || cmp.comparable) return null
+
+  return (
+        <p data-testid="live-comparison-withheld" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
+          {cmp.through
+            ? (ar
+              ? `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} مغطاة حتى ${cmp.through} فقط (${cmp.contributors.map(providerName).join('، ')} لم تُبلّغ بعدها)، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`
+              : `${cmp.window === 'previous' ? 'The previous period' : 'This period'} is covered through ${cmp.through} only (${cmp.contributors.map(providerName).join(', ')} did not report after it), so it is not compared with the ${cmp.window === 'previous' ? 'current' : 'previous'} period.`)
+            : (ar
+              ? `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} غير مكتملة (${cmp.contributors.map(providerName).join('، ')})، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`
+              : `${cmp.window === 'previous' ? 'The previous period' : 'This period'} is incomplete (${cmp.contributors.map(providerName).join(', ')}), so it is not compared with the ${cmp.window === 'previous' ? 'current' : 'previous'} period.`)}
+        </p>
   )
 }
