@@ -89,7 +89,7 @@ final class CampaignWriteCapabilityGateTest extends TestCase
         // Targeting is written where the adapter reads, merges and writes it back; elsewhere it is not built, and says so.
         $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['meta/targeting']);
         $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['snapchat/targeting']);
-        $this->assertSame(WriteCapabilityRegistry::NOT_IMPLEMENTED, $by['google/targeting'], 'Google Ads targeting lives in criteria resources this layer does not write');
+        $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['google/targeting'], 'Google Ads targeting is written as campaign and ad group criteria');
         $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['tiktok/targeting'], 'TikTok targeting is written through its location lookup');
         $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['snapchat/placements']);
         $this->assertSame(WriteCapabilityRegistry::AWAITING_CREDENTIALS, $by['tiktok/placements']);

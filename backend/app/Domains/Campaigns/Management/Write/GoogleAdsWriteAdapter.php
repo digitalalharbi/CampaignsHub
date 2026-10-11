@@ -29,6 +29,8 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
             'pause' => true, 'resume' => true, 'rename' => true, 'delete' => true,
             // A responsive search ad: its headlines, descriptions and landing URL ARE the ad.
             'create_ad' => true,
+            // Countries live on the CAMPAIGN in Google Ads, age and gender on the ad group; both are replaced in one atomic mutate.
+            'targeting' => true,
             'budget' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
@@ -102,6 +104,10 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
             $resource = (string) (($response->json() ?? [])['results'][0]['resourceName'] ?? '');
 
             return $this->verdict($response, [], $resource !== '' ? substr($resource, (int) strrpos($resource, '/') + 1) : null);
+        }
+
+        if ($action === WriteAction::Targeting) {
+            return $this->targeting($connector, $customer, $target, $input, $headers);
         }
 
         if ($action === WriteAction::CreateAd) {
@@ -213,6 +219,109 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
         return $this->verdict($this->send($connector, 'POST', "customers/{$customer}/campaignBudgets:mutate", [
             'operations' => [['update' => ['resourceName' => $budgetName, 'amountMicros' => (string) $this->micros($amount)], 'updateMask' => 'amount_micros']],
         ], headers: $headers), ['daily_budget' => $amount]);
+    }
+
+    /** Google's age ranges as [criterion type, from, to]. */
+    private const AGE_RANGES = [
+        ['AGE_RANGE_18_24', 18, 24], ['AGE_RANGE_25_34', 25, 34], ['AGE_RANGE_35_44', 35, 44],
+        ['AGE_RANGE_45_54', 45, 54], ['AGE_RANGE_55_64', 55, 64], ['AGE_RANGE_65_UP', 65, 120],
+    ];
+
+    /**
+     * Ad group targeting, the way Google Ads holds it.
+     *
+     * Countries are LOCATION criteria on the campaign, so they apply to every ad group in it — the
+     * dialog says so before anything is sent. Age and gender are ad group criteria: what is outside
+     * the chosen range is EXCLUDED (a negative criterion), and «undetermined» is never excluded.
+     * Country codes become geo target constants by asking Google; a code Google does not list is
+     * refused by name. Everything is replaced in one `googleAds:mutate`, which Google applies
+     * atomically: the old criteria are removed and the new ones created, or nothing changes.
+     *
+     * @param  array<string, mixed>  $input
+     * @param  array<string, string>  $headers
+     */
+    private function targeting(ApiAdvertisingConnector $connector, string $customer, WriteTarget $target, array $input, array $headers): WriteOutcome
+    {
+        $campaignId = (int) $target->parentExternalId;
+        $adGroupId = (int) $target->externalId;
+        if ($campaignId === 0) {
+            return WriteOutcome::refused('The ad group\'s campaign is not known here, so its countries cannot be set.');
+        }
+
+        $codes = array_values(array_unique(array_map(static fn ($c): string => strtoupper((string) $c), (array) $input['countries'])));
+        $geo = $this->send($connector, 'POST', "customers/{$customer}/googleAds:search", [
+            'query' => "SELECT geo_target_constant.resource_name, geo_target_constant.country_code FROM geo_target_constant WHERE geo_target_constant.target_type = 'Country' AND geo_target_constant.status = 'ENABLED' AND geo_target_constant.country_code IN ('".implode("','", $codes)."')",
+        ], headers: $headers);
+        if (! PlatformHttp::succeeded($geo)) {
+            return $this->verdict($geo);
+        }
+        $constants = [];
+        foreach ((array) (($geo->json() ?? [])['results'] ?? []) as $row) {
+            $code = strtoupper((string) ($row['geoTargetConstant']['countryCode'] ?? ''));
+            $name = (string) ($row['geoTargetConstant']['resourceName'] ?? '');
+            if ($code !== '' && $name !== '') {
+                $constants[$code] ??= $name;
+            }
+        }
+        $missing = array_values(array_diff($codes, array_keys($constants)));
+        if ($missing !== []) {
+            return WriteOutcome::refused('Google Ads does not list these countries: '.implode(', ', $missing).'.');
+        }
+
+        $existing = $this->send($connector, 'POST', "customers/{$customer}/googleAds:search", [
+            'query' => "SELECT campaign_criterion.resource_name FROM campaign_criterion WHERE campaign.id = {$campaignId} AND campaign_criterion.type = 'LOCATION' AND campaign_criterion.negative = FALSE",
+        ], headers: $headers);
+        if (! PlatformHttp::succeeded($existing)) {
+            return $this->verdict($existing);
+        }
+        $demographics = $this->send($connector, 'POST', "customers/{$customer}/googleAds:search", [
+            'query' => "SELECT ad_group_criterion.resource_name FROM ad_group_criterion WHERE ad_group.id = {$adGroupId} AND ad_group_criterion.type IN ('AGE_RANGE', 'GENDER')",
+        ], headers: $headers);
+        if (! PlatformHttp::succeeded($demographics)) {
+            return $this->verdict($demographics);
+        }
+
+        $operations = [];
+        foreach ((array) (($existing->json() ?? [])['results'] ?? []) as $row) {
+            $operations[] = ['campaignCriterionOperation' => ['remove' => (string) ($row['campaignCriterion']['resourceName'] ?? '')]];
+        }
+        foreach ($codes as $code) {
+            $operations[] = ['campaignCriterionOperation' => ['create' => [
+                'campaign' => "customers/{$customer}/campaigns/{$campaignId}",
+                'location' => ['geoTargetConstant' => $constants[$code]],
+            ]]];
+        }
+        foreach ((array) (($demographics->json() ?? [])['results'] ?? []) as $row) {
+            $operations[] = ['adGroupCriterionOperation' => ['remove' => (string) ($row['adGroupCriterion']['resourceName'] ?? '')]];
+        }
+        $adGroup = "customers/{$customer}/adGroups/{$adGroupId}";
+        $min = (int) ($input['age_min'] ?? 18);
+        $max = (int) ($input['age_max'] ?? 65);
+        $kept = [];
+        foreach (self::AGE_RANGES as [$type, $from, $to]) {
+            $inside = $from >= $min && ($max >= 65 || $to <= $max);
+            if ($inside) {
+                $kept[] = [$from, $to];
+            } else {
+                $operations[] = ['adGroupCriterionOperation' => ['create' => ['adGroup' => $adGroup, 'negative' => true, 'ageRange' => ['type' => $type]]]];
+            }
+        }
+        if ($kept === []) {
+            return WriteOutcome::refused('Google targets age in fixed ranges (18-24, 25-34, 35-44, 45-54, 55-64, 65+); no range lies inside the one chosen.');
+        }
+        $genders = (string) ($input['genders'] ?? 'all');
+        if ($genders !== 'all') {
+            $operations[] = ['adGroupCriterionOperation' => ['create' => ['adGroup' => $adGroup, 'negative' => true, 'gender' => ['type' => $genders === 'male' ? 'FEMALE' : 'MALE']]]];
+        }
+
+        $mirror = $this->targetingMirror($input);
+        $mirror['age'] = $kept[0][0].'-'.min(65, $kept[count($kept) - 1][1]);
+        $mirror['countries_scope'] = 'campaign';
+
+        return $this->verdict(
+            $this->send($connector, 'POST', "customers/{$customer}/googleAds:mutate", ['mutateOperations' => $operations], idempotent: false, headers: $headers),
+            ['targeting' => $mirror],
+        );
     }
 
     /** @return array{0: array<string, mixed>, 1: string, 2: array<string, mixed>} */
