@@ -2,6 +2,33 @@
 
 _Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
 
+## What landed on 2026-10-11 (Owner directives 6 and 7)
+
+One merge lane, each PR verified on the served bundle before the next was rebased.
+
+| PR | Unit | Production evidence | Status |
+|---|---|---|---|
+| #658 | Agency dashboard first screen: spend, results, CPA, ROAS with deltas, coverage, alerts, trend, platform comparison | `index-DwPitsHD.js` carries `agency-headline`, `agency-compared-with`; `/agency/overview` 401 unauthenticated | VERIFIED (on-screen figures need a session) |
+| #659 | Campaign management write layer: Meta, Google Ads, Snapchat, TikTok adapters; seven gates in order; audit of every write and refusal; «التحكم على المنصات» tab | `index-DsXRp7iK.js` carries `control-create`, `write-control-where`; `…/provider-writes` 401 | BLOCKED_EXTERNAL_CREDENTIALS for the live round trip |
+| #660 | Snapchat placements, TikTok ad groups, targeting and placements, Google search ads | `index-DWqeb0hT.js` carries `control-input-headlines`, `control-tiktok-age-bands` | BLOCKED_EXTERNAL_CREDENTIALS |
+| #661 | GA4 site-analytics product: seven daily breakdowns, the «الموقع (GA4)» tab, a GA4 column beside platform claims | `index-bV79-3JB.js` carries `site-funnel`, `site-paid`; `…/measurement/analytics` 401; migration ran on deploy | BLOCKED_EXTERNAL_CREDENTIALS for live figures |
+| #662 | Attribution model comparison: first touch, last touch, assists, evidence, conversion paths, on one shared `OrderTouch` reading | `index-_np_GZbE.js` carries `attribution-models`, `attribution-paths` | VERIFIED |
+| #663 | Google ad group targeting and TikTok ads, the last two campaign writes | in the lane | — |
+
+### Defects the guards caught on the way
+
+- A creative on an ad account deselected for the project could be offered and bound by the new write
+  controller (a 200 before the fix). `BoundAccountVisibilitySourceGuardTest` caught the reader in CI;
+  all three reads now apply `BoundAccountVisibility`, with a fail-first regression test.
+- A hard-coded `object-cover` on the creative picker; `oneMediaPolicy.test.ts` caught it.
+- The write-control E2E spec still asserted that nothing was implemented; it now derives its counts
+  from the page.
+
+### What stays outside the code
+
+Every provider write and every GA4 figure waits on the platforms' app credentials. Nothing here is
+marked VERIFIED that needed a live round trip.
+
 ## What landed on 2026-10-09, and where the internal work stops
 
 Three units, in the order the Owner set.
