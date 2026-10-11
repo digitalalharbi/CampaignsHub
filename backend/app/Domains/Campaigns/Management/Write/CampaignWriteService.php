@@ -227,7 +227,7 @@ final class CampaignWriteService
             $confirmed['targeting'] = array_merge((array) ($entity->getAttribute('targeting') ?? []), $confirmed['targeting']);
         }
         if (isset($confirmed['creative_external_id'])) {
-            $local = ExternalCreative::query()
+            $local = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')
                 ->where('provider', $entity->getAttribute('provider'))
                 ->where('external_creative_id', (string) $confirmed['creative_external_id'])
                 ->value('id');
@@ -276,7 +276,7 @@ final class CampaignWriteService
             'name' => (string) $input['name'],
             'status' => 'paused',
             'creative_id' => isset($input['creative_external_id'])
-                ? ExternalCreative::query()->where('provider', $parent->getAttribute('provider'))->where('external_creative_id', (string) $input['creative_external_id'])->value('id')
+                ? BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')->where('provider', $parent->getAttribute('provider'))->where('external_creative_id', (string) $input['creative_external_id'])->value('id')
                 : null,
         ]);
     }
@@ -427,7 +427,8 @@ final class CampaignWriteService
     {
         $out = [];
         foreach ($providers as $provider) {
-            $out[$provider] = ExternalCreative::query()
+            // The picker offers only creatives whose account is selected for this project.
+            $out[$provider] = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')
                 ->where('provider', $provider)
                 ->whereNotNull('external_creative_id')
                 ->orderByDesc('last_active_at')

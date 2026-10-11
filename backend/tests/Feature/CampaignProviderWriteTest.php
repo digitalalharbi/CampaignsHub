@@ -339,6 +339,31 @@ final class CampaignProviderWriteTest extends TestCase
         Http::assertNothingSent();
     }
 
+    /** ACCOUNT-SCOPE-ISOLATION-001 — a creative on an account deselected for this project is neither offered nor bound. */
+    public function test_a_creative_on_an_account_deselected_for_the_project_cannot_be_bound(): void
+    {
+        $this->configure('meta');
+        [, , $adSet] = $this->tree('meta', 'act_5');
+        $other = $this->account('meta', 'act_9');
+        ProjectIntegrationBinding::query()->where('external_account_id', $other->id)->update(['is_active' => false]);
+        $hidden = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $other->id, 'provider' => 'meta',
+            'external_creative_id' => 'cr-hidden', 'name' => 'Hidden', 'format' => 'image', 'status' => 'active',
+        ]);
+        Http::fake();
+
+        $this->write('ad_set', $adSet->id, 'create_ad', ['name' => 'X', 'creative_id' => $hidden->id])->assertStatus(422);
+        Http::assertNothingSent();
+
+        $visible = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $adSet->external_account_id, 'provider' => 'meta',
+            'external_creative_id' => 'cr-visible', 'name' => 'Visible', 'format' => 'image', 'status' => 'active',
+        ]);
+        $offered = collect($this->actingAs($this->owner, 'sanctum')->getJson($this->url('provider-writes'))->assertOk()->json('data.creatives.meta'))->pluck('id')->all();
+        $this->assertContains((string) $visible->id, $offered, 'the picker is read at all — a selected account\'s creative is offered');
+        $this->assertNotContains((string) $hidden->id, $offered);
+    }
+
     public function test_google_changes_an_ad_s_landing_url_on_the_ad_itself(): void
     {
         $this->configure('google');

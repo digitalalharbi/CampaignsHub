@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -179,7 +180,9 @@ final class CampaignWriteController extends Controller
     private function creative(Request $request, ?string $provider): array
     {
         $data = $request->validate(['creative_id' => ['required', 'string', 'max:64']]);
-        $external = ExternalCreative::query()->where('provider', $provider)->whereKey($data['creative_id'])->value('external_creative_id');
+        // ACCOUNT-SCOPE-ISOLATION-001 — only a creative whose account is selected for this project can be bound.
+        $external = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')
+            ->where('provider', $provider)->whereKey($data['creative_id'])->value('external_creative_id');
         abort_if($external === null || $external === '', 422, 'That creative is not one of this project\'s on this platform.');
 
         return ['creative_external_id' => (string) $external];
