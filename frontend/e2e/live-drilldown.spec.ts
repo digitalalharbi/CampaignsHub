@@ -13,7 +13,7 @@ import { API_HEADERS, AUTH } from './helpers'
 const TOKEN = 'demo-live-report-token'
 
 async function openAndCloseDrilldowns(page: Page) {
-  await page.goto(`/r/${TOKEN}`)
+  await page.goto(`/r/${TOKEN}?view=dashboard`)
   await expect(page.getByTestId('live-mode-dashboard')).toBeVisible({ timeout: 30000 })
 
   const open = page.locator('[data-testid^="live-platform-open-"]').first()

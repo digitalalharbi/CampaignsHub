@@ -137,12 +137,15 @@ describe('a detailed link', () => {
   beforeEach(answerByProvider)
   afterEach(() => vi.clearAllMocks())
 
-  it('opens on the dashboard and offers four modes, none of them campaigns', async () => {
+  it('opens on the executive summary and offers four modes, none of them campaigns', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
 
-    await screen.findByTestId('live-mode-dashboard')
+    // REPORT-EXECUTIVE-SUMMARY-001 — every live link opens on the executive dashboard.
+    await screen.findByTestId('live-mode-summary')
     const tabs = within(screen.getByTestId('live-modes')).getAllByRole('tab').map((t) => t.getAttribute('data-testid'))
     expect(tabs).toEqual(['live-mode-tab-summary', 'live-mode-tab-dashboard', 'live-mode-tab-platforms', 'live-mode-tab-content'])
+    fireEvent.click(screen.getByTestId('live-mode-tab-dashboard'))
+    await screen.findByTestId('live-mode-dashboard')
     expect(screen.getByTestId('live-weakest-content')).toBeInTheDocument()
   })
 
@@ -151,7 +154,7 @@ describe('a detailed link', () => {
    * y=1383, two screens down, under the objective split, the comparison table and the leaders.
    */
   it('draws the charts before the platform table and the leaders', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     const charts = await screen.findByTestId('live-platforms')
     const table = screen.getByTestId('live-platform-comparison')
@@ -168,14 +171,14 @@ describe('a detailed link', () => {
 
       return { status: 200, envelope: { data } } as never
     })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     await screen.findByTestId('live-mode-dashboard')
     expect(screen.queryByTestId('live-objective-split'), 'one figure printed twice under two names').not.toBeInTheDocument()
   })
 
   it('states the strongest and weakest platform per objective as figures, not a sentence', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     const strongest = await screen.findByTestId('live-leaders-conversion-strongest')
     expect(strongest).toHaveTextContent('Meta')
@@ -227,7 +230,7 @@ describe('a cut list on the live dashboard', () => {
 
       return { status: 200, envelope: { data } } as never
     })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
 
     const note = await screen.findByTestId('report-ads-of-sales')
     expect(note).toHaveTextContent('2 of 60')
@@ -279,7 +282,7 @@ describe('the states a reader must never see collapsed', () => {
 
   it('shows a skeleton while pending and never the failure sentence', async () => {
     vi.mocked(fetchLiveShared).mockReturnValue(new Promise(() => {}) as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     expect(await screen.findByTestId('live-skeleton')).toBeInTheDocument()
     expect(screen.queryByTestId('live-failed')).not.toBeInTheDocument()
@@ -287,7 +290,7 @@ describe('the states a reader must never see collapsed', () => {
 
   it('shows the refusal when the request fails, never a skeleton that waits forever', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 404, envelope: { message: 'The link is not valid.' } } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     expect(await screen.findByTestId('live-failed')).toHaveTextContent('The link is not valid.')
     expect(screen.queryByTestId('live-skeleton')).not.toBeInTheDocument()
@@ -295,7 +298,7 @@ describe('the states a reader must never see collapsed', () => {
 
   it('keeps the figures on screen when a refresh fails, and says so', async () => {
     answerByProvider()
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
     await screen.findByTestId('live-mode-dashboard')
 
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 500, envelope: {} } as never)
@@ -320,7 +323,7 @@ describe('a link left open stays live', () => {
     answerByProvider()
     visibility('visible')
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
     await screen.findByTestId('live-mode-dashboard')
     const opened = vi.mocked(fetchLiveShared).mock.calls.length
 

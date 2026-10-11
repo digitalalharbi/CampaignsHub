@@ -16,22 +16,23 @@ const ready = (page: Page, testid: string) => expect(page.getByTestId(testid)).t
 const figure = (text: string) => (text.match(/[\d.,]+[KMB]?/)?.[0] ?? '')
 
 test.describe('the live client link, mode by mode', () => {
-  test('opens on the dashboard and moves between modes by address', async ({ page }) => {
+  test('opens on the executive summary and moves between modes by address', async ({ page }) => {
     await page.goto(`/r/${TOKEN}`)
-    await ready(page, 'live-mode-dashboard')
+    // REPORT-EXECUTIVE-SUMMARY-001 — every live link opens on the executive dashboard.
+    await ready(page, 'live-mode-summary')
 
     const tabs = page.getByTestId('live-modes').getByRole('tab')
     await expect(tabs).toHaveCount(4)
-
-    await page.getByTestId('live-mode-tab-summary').click()
-    await ready(page, 'live-mode-summary')
-    await expect(page).toHaveURL(/view=summary/)
-    // The summary is a shorter product, not the dashboard retitled: none of the dashboard's tables.
+    // The summary is its own product, not the dashboard retitled: none of the dashboard's tables.
     await expect(page.getByTestId('live-platform-comparison')).toHaveCount(0)
     await expect(page.getByTestId('live-detail-tables')).toHaveCount(0)
 
-    await page.goBack()
+    await page.getByTestId('live-mode-tab-dashboard').click()
     await ready(page, 'live-mode-dashboard')
+    await expect(page).toHaveURL(/view=dashboard/)
+
+    await page.goBack()
+    await ready(page, 'live-mode-summary')
   })
 
   test('a platform’s own view agrees with the whole link about that platform', async ({ page }) => {

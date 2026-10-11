@@ -73,7 +73,7 @@ describe('the spend card a client reads as an abbreviation', () => {
 
   it('reveals the exact amount behind the compact one', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: stated } } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const kpis = within(screen.getByTestId('live-kpis'))
@@ -87,7 +87,7 @@ describe('the spend card a client reads as an abbreviation', () => {
   /** The half that must not be broken to fix the first: a refused total stays refused. */
   it('reveals nothing behind a total the contract refused to state', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: refused } } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     for (const el of within(screen.getByTestId('live-kpis')).queryAllByTitle(/\d/)) {
@@ -128,7 +128,7 @@ describe('every abbreviation on the report can be opened', () => {
       },
     } as never)
 
-    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const unreachable: string[] = []
@@ -176,7 +176,7 @@ describe('the cost per order in the direct-vs-blended split', () => {
       },
     } as never)
 
-    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const direct = within(screen.getByTestId('live-objective-direct'))

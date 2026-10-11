@@ -10,7 +10,7 @@ describe('the live link modes', () => {
   })
 
   it('opens a detailed link on the dashboard and honours a mode it offers', () => {
-    expect(readMode(null, 'detailed')).toBe('dashboard')
+    expect(readMode(null, 'detailed')).toBe('summary')
     expect(readMode('platforms', 'detailed')).toBe('platforms')
     expect(readMode('content', 'detailed')).toBe('content')
     expect(readMode('summary', 'detailed')).toBe('summary')
@@ -18,7 +18,7 @@ describe('the live link modes', () => {
 
   it('offers no campaign mode, whatever the address asks for', () => {
     expect(modesFor('detailed') as string[]).not.toContain('campaigns')
-    expect(readMode('campaigns', 'detailed')).toBe('dashboard')
+    expect(readMode('campaigns', 'detailed')).toBe('summary')
   })
 
   it('lets only the platform and content modes choose their own platform', () => {

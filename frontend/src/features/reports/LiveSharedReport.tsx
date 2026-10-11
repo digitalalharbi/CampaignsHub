@@ -84,7 +84,7 @@ export function LiveSharedReport({
   const navigate = useCallback((next: LiveMode, platform?: string | null) => {
     setSearch((prev) => {
       const params = new URLSearchParams(prev)
-      if (next === (form === 'executive_summary' ? 'summary' : 'dashboard')) params.delete('view')
+      if (next === 'summary') params.delete('view')
       else params.set('view', next)
       if (platform) params.set('platform', platform)
       else params.delete('platform')

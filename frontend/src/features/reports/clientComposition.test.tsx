@@ -75,7 +75,7 @@ describe('the order a client reads a live report in', () => {
    * order is asserted separately below, over the blocks the summary actually has.
    */
   it('answers «at what cost» before «where»', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const kpis = await screen.findByTestId('live-kpis')

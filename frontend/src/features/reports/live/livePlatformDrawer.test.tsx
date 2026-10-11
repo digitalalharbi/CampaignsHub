@@ -94,7 +94,7 @@ describe('the platform drill-down', () => {
   afterEach(() => vi.clearAllMocks())
 
   it('opens from the comparison row and closes back to the dashboard', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('live-platform-open-meta'))
     const drawer = await screen.findByTestId('live-platform-drawer')
@@ -115,7 +115,7 @@ describe('the platform drill-down', () => {
   })
 
   it('Escape closes the content dialog first, then the drawer', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('live-platform-open-meta'))
     const drawer = await screen.findByTestId('live-platform-drawer')
@@ -134,7 +134,7 @@ describe('the platform drill-down', () => {
 
   it('offers nothing to open where the link switched the breakdown off', async () => {
     answer({ platform_drilldown: false, content_drilldown: true })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
 
     await screen.findByTestId('live-platform-comparison')
     expect(screen.queryByTestId('live-platform-open-meta')).not.toBeInTheDocument()

@@ -20,7 +20,7 @@ test.use({ storageState: { cookies: [], origins: [] } })
 for (const width of [390, 1440] as const) {
   test(`${width}px: the content table is a client-link surface, holds the same rows, and does not widen the page`, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 })
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20_000 })
 
     const toCards = page.getByTestId('report-content-view-cards')

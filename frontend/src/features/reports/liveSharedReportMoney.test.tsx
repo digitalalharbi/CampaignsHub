@@ -57,7 +57,7 @@ describe('a live shared report over a partially-withheld spend', () => {
   afterEach(() => vi.clearAllMocks())
 
   it('refuses a single spend figure for a partial scope, and prints neither half', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     /*
@@ -91,7 +91,7 @@ describe('a live shared report over a partially-withheld spend', () => {
         },
       },
     } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" />, { route: '/r/tok?view=dashboard', locale: 'en' })
 
     expect(await screen.findByText(/1 platform\(s\) not included/)).toBeInTheDocument()
     // The refusal of the WHOLE chart is what this replaces — snapchat's 900 is perfectly knowable.
