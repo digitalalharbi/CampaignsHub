@@ -8,7 +8,8 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Select } from '@/components/ui/Select'
 import { StatCard } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
-import { days as countedDays } from '@/lib/counted'
+import { days as countedDays, minutes as countedMinutes } from '@/lib/counted'
+import { Num } from '@/components/ui/Num'
 import { usePortalBase } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -69,9 +70,9 @@ export function ExecutiveOpsPage() {
 
   const attentionText = (kind: string, n: number): string => {
     const t: Record<string, { ar: string; en: string }> = {
-      unassigned_leads: { ar: `${count(n)} عميل محتمل بلا مسؤول`, en: `${count(n)} leads have no owner` },
-      overdue_follow_up: { ar: `${count(n)} متابعة تجاوزت موعدها`, en: `${count(n)} follow-ups are past their date` },
-      never_contacted: { ar: `${count(n)} عميل محتمل لم يُتواصل معه`, en: `${count(n)} leads were never contacted` },
+      unassigned_leads: { ar: `عملاء محتملون بلا مسؤول: ${count(n)}`, en: `Leads with no owner: ${count(n)}` },
+      overdue_follow_up: { ar: `متابعات تجاوزت موعدها: ${count(n)}`, en: `Follow-ups past their date: ${count(n)}` },
+      never_contacted: { ar: `عملاء محتملون لم يُتواصل معهم: ${count(n)}`, en: `Leads never contacted: ${count(n)}` },
       spend_not_comparable: { ar: 'الإنفاق لا يمكن ذكره، فلا تُحسب تكلفة العميل', en: 'The spend cannot be stated, so no cost per lead is computed' },
     }
     return t[kind]?.[ar ? 'ar' : 'en'] ?? kind
@@ -211,13 +212,13 @@ export function ExecutiveOpsPage() {
                   {
                     k: 'first_response',
                     l: ar ? 'وسيط أول رد' : 'Median first response',
-                    v: d.team.first_response.median_minutes === null ? '—' : ar ? `${count(d.team.first_response.median_minutes)} دقيقة` : `${count(d.team.first_response.median_minutes)} min`,
+                    v: d.team.first_response.median_minutes === null ? '—' : countedMinutes(d.team.first_response.median_minutes, ar ? 'ar' : 'en'),
                   },
                   { k: 'overdue', l: ar ? 'متابعات متأخرة' : 'Overdue follow-ups', v: count(d.team.overdue) },
                 ].map((x) => (
                   <div key={x.k} data-testid={`executive-team-${x.k}`} className="min-w-0">
                     <dt className="text-text-muted text-xs">{x.l}</dt>
-                    <dd className="tnum font-semibold text-text-primary" dir="ltr">{x.v}</dd>
+                    <dd className="tnum font-semibold text-text-primary"><Num>{x.v}</Num></dd>
                   </div>
                 ))}
               </dl>
