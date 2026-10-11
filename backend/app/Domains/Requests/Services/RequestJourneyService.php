@@ -35,7 +35,21 @@ final class RequestJourneyService
     /** The request's current journey stage (defaults to Draft when never set). */
     public function currentStage(ExternalRequest $request): RequestStage
     {
-        return RequestStage::tryFrom((string) ($request->journey_stage ?? '')) ?? RequestStage::Draft;
+        $written = RequestStage::tryFrom((string) ($request->journey_stage ?? ''));
+
+        if ($written !== null) {
+            return $written;
+        }
+
+        /*
+         * REQ-JOURNEY-FALLBACK-001 — never written is not «draft».
+         *
+         * A null journey column means the journey has not written yet, not that the request is a draft:
+         * the request may have moved through the status workflow on its own. The status is the fact,
+         * so the stage is read from it; Draft remains the answer only for a status the journey cannot
+         * place.
+         */
+        return RequestStage::fromStatusKey($request->status?->key) ?? RequestStage::Draft;
     }
 
     /**

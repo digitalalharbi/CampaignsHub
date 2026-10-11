@@ -536,7 +536,8 @@ final class ClientPortalController
         return response()->json(['data' => [
             'reference' => $req->reference,
             'stage' => $stage->value,
-            'stage_label' => $stage->label(),
+            // REQ-DETAIL-LABELS-001 — the reader's language, not the enum's English.
+            'stage_label' => $stage->labelFor((string) app()->getLocale()),
             'progress' => $this->progress($req->status->key),
             'is_terminal' => $stage->isTerminal(),
             'client_actions' => $this->clientActionsFor($stage),
