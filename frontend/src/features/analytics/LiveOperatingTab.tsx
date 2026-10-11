@@ -7,6 +7,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { platformLabel } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { useLiveView, type LiveSource, type SchedulerRow } from './liveView'
+import { days as countedDays } from '@/lib/counted'
 
 /**
  * LIVE-OPERATING-VIEW-001 — the consolidated live operating view.
@@ -58,7 +59,7 @@ function mechanisms(s: LiveSource, ar: boolean): string {
   const parts: string[] = []
   if (s.mechanisms.scheduled) parts.push(cadence(s.mechanisms.scheduled.expression, ar))
   if ('window_days' in s.mechanisms.incremental) {
-    parts.push(ar ? `تزايدي: آخر ${s.mechanisms.incremental.window_days} أيام` : `Incremental: last ${s.mechanisms.incremental.window_days} days`)
+    parts.push(ar ? `تزايدي: آخر ${countedDays(s.mechanisms.incremental.window_days, 'ar')}` : `Incremental: last ${countedDays(s.mechanisms.incremental.window_days, 'en')}`)
   } else {
     parts.push(ar ? 'تزايدي بمؤشّر المتجر' : 'Incremental by store cursor')
   }
@@ -91,8 +92,8 @@ export function LiveOperatingTab({ projectId }: { projectId: string | null }) {
         <span className="text-xs text-text-muted">
           {ar ? 'حتى' : 'As of'} <span dir="ltr" className="tabular-nums">{fmtDateTime(v.as_of)}</span>
           {' · '}
-          {ar ? `نافذة ${v.window_days} أيام` : `${v.window_days}-day window`}
-          {v.verdict.missing_days > 0 && <> · <span data-testid="live-missing-days">{ar ? `${v.verdict.missing_days} أيام ناقصة` : `${v.verdict.missing_days} missing days`}</span></>}
+          {ar ? `نافذة ${countedDays(v.window_days, 'ar')}` : `${v.window_days}-day window`}
+          {v.verdict.missing_days > 0 && <> · <span data-testid="live-missing-days">{ar ? `أيام ناقصة: ${v.verdict.missing_days}` : `Missing days: ${v.verdict.missing_days}`}</span></>}
         </span>
       </div>
 
