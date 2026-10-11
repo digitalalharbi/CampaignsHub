@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { Textarea } from '@/components/ui/Textarea'
 import { Select } from '@/components/ui/Select'
 import { DateField } from '@/components/ui/DateField'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -363,12 +364,20 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
   const [families, setFamilies] = useState<string[]>(entity.targeting?.placements?.filter((p) => entity.placement_families.includes(p)) ?? [])
   const [creativeId, setCreativeId] = useState(creatives[0]?.id ?? '')
   const [url, setUrl] = useState(entity.destination_url ?? '')
+  const [headlineText, setHeadlineText] = useState('')
+  const [descriptionText, setDescriptionText] = useState('')
 
   const countries = parseCountries(countryText)
   const google = entity.provider === 'google'
+  // A Google responsive search ad: one line per headline (3–15, ≤30 characters) and per description (2–4, ≤90).
+  const lines = (text: string) => Array.from(new Set(text.split('\n').map((l) => l.trim()).filter((l) => l !== '')))
+  const headlines = lines(headlineText)
+  const descriptions = lines(descriptionText)
+  const searchAdValid = headlines.length >= 3 && headlines.length <= 15 && headlines.every((h) => h.length <= 30)
+    && descriptions.length >= 2 && descriptions.length <= 4 && descriptions.every((d) => d.length <= 90) && /^https:\/\/\S+$/.test(url)
   const destructive = action === 'archive' || action === 'delete'
   const valid = action === 'create_ad_set' ? childName.trim() !== '' && (google ? Number(bid) > 0 : (countries.length > 0 && goal !== ''))
-    : action === 'create_ad' ? childName.trim() !== '' && creativeId !== ''
+    : action === 'create_ad' ? childName.trim() !== '' && (google ? searchAdValid : creativeId !== '')
       : action === 'targeting' ? countries.length > 0 && Number(ageMin) >= 13 && Number(ageMax) >= Number(ageMin) && Number(ageMax) <= 65
         : action === 'placements' ? (placementMode === 'automatic' || families.length > 0)
           : action === 'creative' ? creativeId !== ''
@@ -385,7 +394,11 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
         ? { name: childName.trim(), bid_amount: Number(bid) }
         : { name: childName.trim(), optimization_goal: goal, countries, ...(Number(childBudget) > 0 ? { daily_budget: Number(childBudget) } : {}) })
     }
-    if (action === 'create_ad') return onSubmit({ name: childName.trim(), creative_id: creativeId })
+    if (action === 'create_ad') {
+      return onSubmit(google
+        ? { name: childName.trim(), headlines, descriptions, url }
+        : { name: childName.trim(), creative_id: creativeId })
+    }
     if (action === 'targeting') return onSubmit({ countries, age_min: Number(ageMin), age_max: Number(ageMax), genders })
     if (action === 'placements') return onSubmit(placementMode === 'automatic' ? { mode: 'automatic' } : { mode: 'custom', platforms: families })
     if (action === 'creative') return onSubmit({ creative_id: creativeId })
@@ -478,7 +491,26 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
           </label>
         )}
         {action === 'create_ad_set' && <p className="text-xs text-text-muted">{ar ? 'تُنشأ موقوفة؛ لا تصرف شيئًا حتى تشغّلها.' : 'Created paused; it spends nothing until you resume it.'}</p>}
-        {(action === 'create_ad' || action === 'creative') && (
+        {action === 'create_ad' && google && (
+          <>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'العناوين — سطر لكل عنوان (3 إلى 15، حتى 30 حرفًا)' : 'Headlines, one per line (3 to 15, up to 30 characters)'}</span>
+              <Textarea data-testid="control-input-headlines" rows={4} value={headlineText} onChange={(e) => setHeadlineText(e.target.value)} />
+              <span data-testid="control-headlines-count" className={`text-xs ${headlines.some((h) => h.length > 30) ? 'text-danger' : 'text-text-muted'}`}>{ar ? `${headlines.length} عنوان` : `${headlines.length} headlines`}{headlines.some((h) => h.length > 30) ? (ar ? ' · أحدها أطول من 30 حرفًا' : ' · one is longer than 30 characters') : ''}</span>
+            </label>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'الأوصاف — سطر لكل وصف (2 إلى 4، حتى 90 حرفًا)' : 'Descriptions, one per line (2 to 4, up to 90 characters)'}</span>
+              <Textarea data-testid="control-input-descriptions" rows={3} value={descriptionText} onChange={(e) => setDescriptionText(e.target.value)} />
+              <span className={`text-xs ${descriptions.some((d) => d.length > 90) ? 'text-danger' : 'text-text-muted'}`}>{ar ? `${descriptions.length} وصف` : `${descriptions.length} descriptions`}{descriptions.some((d) => d.length > 90) ? (ar ? ' · أحدها أطول من 90 حرفًا' : ' · one is longer than 90 characters') : ''}</span>
+            </label>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'رابط الوجهة (https)' : 'Landing URL (https)'}</span>
+              <Input data-testid="control-input-url" type="url" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
+            </label>
+            <p className="text-xs text-text-muted">{ar ? 'يُنشأ موقوفًا؛ إعلان Google هو عناوينه وأوصافه ورابطه.' : 'Created paused; a Google ad is its headlines, descriptions and URL.'}</p>
+          </>
+        )}
+        {((action === 'create_ad' && !google) || action === 'creative') && (
           creatives.length === 0
             ? <p data-testid="control-no-creatives" className="rounded-xl border border-dashed border-border px-3 py-2 text-text-secondary">{ar ? 'لا محتوى لهذا المشروع على هذه المنصة بمعرّف منصة بعد.' : 'This project has no creative with a platform id on this platform yet.'}</p>
             : (

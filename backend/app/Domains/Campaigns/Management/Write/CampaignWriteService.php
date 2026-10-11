@@ -275,6 +275,7 @@ final class CampaignWriteService
             'external_id' => $externalId,
             'name' => (string) $input['name'],
             'status' => 'paused',
+            'destination_url' => isset($input['url']) ? (string) $input['url'] : null,
             'creative_id' => isset($input['creative_external_id'])
                 ? ExternalCreative::query()->where('provider', $parent->getAttribute('provider'))->where('external_creative_id', (string) $input['creative_external_id'])->value('id')
                 : null,

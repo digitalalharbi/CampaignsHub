@@ -27,6 +27,8 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
         ],
         'ad_set' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'delete' => true,
+            // A responsive search ad: its headlines, descriptions and landing URL ARE the ad.
+            'create_ad' => true,
             'budget' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
@@ -100,6 +102,25 @@ final class GoogleAdsWriteAdapter extends AbstractWriteAdapter
             $resource = (string) (($response->json() ?? [])['results'][0]['resourceName'] ?? '');
 
             return $this->verdict($response, [], $resource !== '' ? substr($resource, (int) strrpos($resource, '/') + 1) : null);
+        }
+
+        if ($action === WriteAction::CreateAd) {
+            $response = $this->send($connector, 'POST', "customers/{$customer}/adGroupAds:mutate", ['operations' => [['create' => [
+                'adGroup' => "customers/{$customer}/adGroups/{$target->externalId}",
+                'status' => 'PAUSED',
+                'ad' => [
+                    'finalUrls' => [(string) $input['url']],
+                    'responsiveSearchAd' => [
+                        'headlines' => array_map(static fn (string $t): array => ['text' => $t], array_values((array) $input['headlines'])),
+                        'descriptions' => array_map(static fn (string $t): array => ['text' => $t], array_values((array) $input['descriptions'])),
+                    ],
+                ],
+            ]]]], idempotent: false, headers: $headers);
+            // customers/{c}/adGroupAds/{adGroupId}~{adId} — the ad's own id is after the tilde.
+            $resource = (string) (($response->json() ?? [])['results'][0]['resourceName'] ?? '');
+            $adId = str_contains($resource, '~') ? substr($resource, (int) strrpos($resource, '~') + 1) : null;
+
+            return $this->verdict($response, [], $adId);
         }
 
         if ($action === WriteAction::Destination) {

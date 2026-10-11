@@ -364,6 +364,34 @@ final class CampaignProviderWriteTest extends TestCase
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), 'adGroups:mutate') && $r['operations'][0]['create']['type'] === 'SEARCH_STANDARD' && $r['operations'][0]['create']['cpcBidMicros'] === '2500000');
     }
 
+    public function test_google_creates_a_paused_responsive_search_ad_within_google_s_limits(): void
+    {
+        $this->configure('google');
+        [, , $adGroup] = $this->tree('google', '1234567890');
+        Http::fake(['googleads.googleapis.com/*' => Http::response(['results' => [['resourceName' => "customers/1234567890/adGroupAds/{$adGroup->external_id}~777"]]])]);
+
+        // Two headlines is below Google's floor of three: refused before any call.
+        $this->write('ad_set', $adGroup->id, 'create_ad', ['name' => 'RSA', 'headlines' => ['A', 'B'], 'descriptions' => ['D1', 'D2'], 'url' => 'https://shop.example'])->assertStatus(422);
+        Http::assertNothingSent();
+
+        $this->write('ad_set', $adGroup->id, 'create_ad', [
+            'name' => 'RSA', 'headlines' => ['Winter sale', 'Free delivery', 'Riyadh in 24h'], 'descriptions' => ['Hoodies from 99 SAR.', 'Order today.'], 'url' => 'https://shop.example/sale',
+        ])->assertOk()->assertJsonPath('data.new_external_id', '777');
+
+        Http::assertSent(function (Request $r) use ($adGroup): bool {
+            $op = $r['operations'][0]['create'] ?? [];
+
+            return str_ends_with($r->url(), 'adGroupAds:mutate') && $op['status'] === 'PAUSED'
+                && $op['adGroup'] === "customers/1234567890/adGroups/{$adGroup->external_id}"
+                && $op['ad']['finalUrls'] === ['https://shop.example/sale']
+                && $op['ad']['responsiveSearchAd']['headlines'][2] === ['text' => 'Riyadh in 24h']
+                && count($op['ad']['responsiveSearchAd']['descriptions']) === 2;
+        });
+        $ad = ExternalAd::query()->where('external_id', '777')->sole();
+        $this->assertSame('paused', $ad->status);
+        $this->assertSame('https://shop.example/sale', $ad->destination_url);
+    }
+
     public function test_snapchat_targeting_replaces_geos_and_demographics_and_keeps_the_rest(): void
     {
         $this->configure('snapchat');

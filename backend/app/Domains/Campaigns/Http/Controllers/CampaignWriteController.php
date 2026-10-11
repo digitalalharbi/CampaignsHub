@@ -102,7 +102,8 @@ final class CampaignWriteController extends Controller
             WriteAction::Schedule => $this->schedule($request),
             WriteAction::BidStrategy => $this->strategy($request, $adapter?->bidStrategies($level) ?? []),
             WriteAction::CreateAdSet => $this->adSet($request, $provider, $adapter?->optimizationGoals() ?? []),
-            WriteAction::CreateAd => $request->validate(['name' => ['required', 'string', 'min:1', 'max:250']]) + $this->creative($request, $provider),
+            WriteAction::CreateAd => $request->validate(['name' => ['required', 'string', 'min:1', 'max:250']])
+                + ($provider === 'google' ? $this->searchAd($request) : $this->creative($request, $provider)),
             WriteAction::Creative => $this->creative($request, $provider),
             WriteAction::Targeting => $this->targeting($request),
             WriteAction::Placements => $this->placements($request, $adapter?->placementFamilies() ?? []),
@@ -183,6 +184,25 @@ final class CampaignWriteController extends Controller
         abort_if($external === null || $external === '', 422, 'That creative is not one of this project\'s on this platform.');
 
         return ['creative_external_id' => (string) $external];
+    }
+
+    /**
+     * A Google responsive search ad, within Google's own limits: 3 to 15 headlines of up to 30
+     * characters, 2 to 4 descriptions of up to 90, and an https landing URL.
+     *
+     * @return array<string, mixed>
+     */
+    private function searchAd(Request $request): array
+    {
+        $data = $request->validate([
+            'headlines' => ['required', 'array', 'min:3', 'max:15'],
+            'headlines.*' => ['required', 'string', 'distinct', 'max:30'],
+            'descriptions' => ['required', 'array', 'min:2', 'max:4'],
+            'descriptions.*' => ['required', 'string', 'distinct', 'max:90'],
+            'url' => ['required', 'url:https', 'max:2048'],
+        ]);
+
+        return ['headlines' => array_values($data['headlines']), 'descriptions' => array_values($data['descriptions']), 'url' => (string) $data['url']];
     }
 
     /** @return array<string, mixed> */
