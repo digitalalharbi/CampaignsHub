@@ -185,6 +185,15 @@ describe('the campaign control panel', () => {
     }, expect.anything()))
   })
 
+  it('warns that Google countries change the whole campaign before targeting is sent', async () => {
+    serve({ entities: [entity(), entity({ id: 'g2', level: 'ad_set', parent_id: 'e1', provider: 'google', name: 'Brand terms' })], create: [] })
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-targeting-g2'))
+    expect(screen.getByTestId('control-google-targeting-scope')).toHaveTextContent('every ad group in it changes')
+    expect(screen.queryByTestId('control-tiktok-age-bands')).not.toBeInTheDocument()
+  })
+
   it('creates an ad bound to a creative picked from the project’s own', async () => {
     serve({
       entities: [entity(), entity({ id: 's1', level: 'ad_set', parent_id: 'e1', provider: 'meta', name: 'KSA set' })],

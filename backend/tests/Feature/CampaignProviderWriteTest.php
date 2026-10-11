@@ -417,6 +417,61 @@ final class CampaignProviderWriteTest extends TestCase
         $this->assertSame('https://shop.example/sale', $ad->destination_url);
     }
 
+    public function test_google_targeting_replaces_campaign_countries_and_excludes_ages_and_gender_in_one_atomic_mutate(): void
+    {
+        $this->configure('google');
+        [, $campaign, $adGroup] = $this->tree('google', '1234567890');
+        Http::fake(function (Request $r) use ($campaign, $adGroup) {
+            $q = (string) ($r['query'] ?? '');
+            if (str_contains($q, 'FROM geo_target_constant')) {
+                return Http::response(['results' => [
+                    ['geoTargetConstant' => ['resourceName' => 'geoTargetConstants/2682', 'countryCode' => 'SA']],
+                    ['geoTargetConstant' => ['resourceName' => 'geoTargetConstants/2784', 'countryCode' => 'AE']],
+                ]]);
+            }
+            if (str_contains($q, 'FROM campaign_criterion')) {
+                return Http::response(['results' => [['campaignCriterion' => ['resourceName' => "customers/1234567890/campaignCriteria/{$campaign->external_id}~1"]]]]);
+            }
+            if (str_contains($q, 'FROM ad_group_criterion')) {
+                return Http::response(['results' => [['adGroupCriterion' => ['resourceName' => "customers/1234567890/adGroupCriteria/{$adGroup->external_id}~9"]]]]);
+            }
+
+            return Http::response(['mutateOperationResponses' => []]);
+        });
+
+        $this->write('ad_set', $adGroup->id, 'targeting', ['countries' => ['SA', 'AE'], 'age_min' => 25, 'age_max' => 44, 'genders' => 'female'])->assertOk();
+
+        Http::assertSent(function (Request $r) use ($campaign): bool {
+            if (! str_ends_with($r->url(), 'googleAds:mutate')) {
+                return false;
+            }
+            $ops = $r['mutateOperations'];
+            $removes = array_values(array_filter($ops, static fn (array $o): bool => isset($o['campaignCriterionOperation']['remove']) || isset($o['adGroupCriterionOperation']['remove'])));
+            $locations = array_values(array_filter($ops, static fn (array $o): bool => isset($o['campaignCriterionOperation']['create'])));
+            $ages = array_values(array_filter($ops, static fn (array $o): bool => isset($o['adGroupCriterionOperation']['create']['ageRange'])));
+            $gender = array_values(array_filter($ops, static fn (array $o): bool => isset($o['adGroupCriterionOperation']['create']['gender'])));
+
+            return count($removes) === 2
+                && $locations[0]['campaignCriterionOperation']['create'] === ['campaign' => "customers/1234567890/campaigns/{$campaign->external_id}", 'location' => ['geoTargetConstant' => 'geoTargetConstants/2682']]
+                && count($locations) === 2
+                && array_map(static fn (array $o): string => $o['adGroupCriterionOperation']['create']['ageRange']['type'], $ages) === ['AGE_RANGE_18_24', 'AGE_RANGE_45_54', 'AGE_RANGE_55_64', 'AGE_RANGE_65_UP']
+                && $ages[0]['adGroupCriterionOperation']['create']['negative'] === true
+                && $gender[0]['adGroupCriterionOperation']['create']['gender']['type'] === 'MALE';
+        });
+        $this->assertSame('25-44', $adGroup->fresh()->targeting['age'] ?? null);
+    }
+
+    public function test_google_refuses_a_country_it_does_not_list_and_changes_nothing(): void
+    {
+        $this->configure('google');
+        [, , $adGroup] = $this->tree('google', '1234567890');
+        Http::fake(['googleads.googleapis.com/*' => Http::response(['results' => [['geoTargetConstant' => ['resourceName' => 'geoTargetConstants/2682', 'countryCode' => 'SA']]]])]);
+
+        $this->write('ad_set', $adGroup->id, 'targeting', ['countries' => ['SA', 'XK']])->assertStatus(422)->assertJsonPath('data.ok', false);
+
+        Http::assertNotSent(fn (Request $r) => str_ends_with($r->url(), 'googleAds:mutate'));
+    }
+
     public function test_snapchat_targeting_replaces_geos_and_demographics_and_keeps_the_rest(): void
     {
         $this->configure('snapchat');
@@ -443,14 +498,14 @@ final class CampaignProviderWriteTest extends TestCase
     public function test_what_a_platform_keeps_in_the_creative_is_refused_on_the_ad(): void
     {
         $this->configure('meta');
-        $this->configure('google');
+        $this->configure('tiktok');
         [, , , $metaAd] = $this->tree('meta', 'act_5');
-        [, , $googleGroup] = $this->tree('google', '1234567890');
+        [, , , $tiktokAd] = $this->tree('tiktok', '7000001');
         Http::fake();
 
         $this->write('ad', $metaAd->id, 'destination', ['url' => 'https://x.example'])->assertStatus(409)->assertJsonPath('data.refusal', 'provider_unsupported');
-        // Google keeps targeting in criteria resources this layer does not write: not built, and said so.
-        $this->write('ad_set', $googleGroup->id, 'targeting', ['countries' => ['SA']])->assertStatus(409)->assertJsonPath('data.refusal', 'not_implemented');
+        // Renaming a TikTok ad re-sends its whole creative set, which this layer does not do: not built, and said so.
+        $this->write('ad', $tiktokAd->id, 'rename', ['name' => 'New name'])->assertStatus(409)->assertJsonPath('data.refusal', 'not_implemented');
         Http::assertNothingSent();
     }
 
