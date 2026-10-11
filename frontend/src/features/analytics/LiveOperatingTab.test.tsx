@@ -10,6 +10,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
 }))
 
 import { getData } from '@/lib/api/client'
+import { fmtDateTime } from '@/lib/datetime'
 
 function source(over: Partial<LiveSource> = {}): LiveSource {
   return {
@@ -52,9 +53,10 @@ describe('LiveOperatingTab', () => {
 
     expect(screen.getByTestId('live-source-meta').textContent).toBe('ميتا')
     // 20:00 succeeded; 20:30 was only the latest attempt — the row shows the success.
-    expect(screen.getByTestId('live-success-meta').textContent).toContain('20:00')
-    expect(screen.getByTestId('live-success-meta').textContent).not.toContain('20:30')
-    expect(screen.getByTestId('live-next-sync-meta').textContent).toContain('21:00')
+    // Compared through the same formatter, so the assertion holds in any runner's timezone.
+    expect(screen.getByTestId('live-success-meta').textContent).toContain(fmtDateTime('2026-10-09T20:00:00+03:00'))
+    expect(screen.getByTestId('live-success-meta').textContent).not.toContain(fmtDateTime('2026-10-09T20:30:00+03:00'))
+    expect(screen.getByTestId('live-next-sync-meta').textContent).toContain(fmtDateTime('2026-10-09T21:00:00+03:00').slice(-5))
     expect(screen.getByTestId('live-mechanisms-meta').textContent).toBe('كل 30 دقيقة · تزايدي: آخر 7 أيام · يدوي متاح · Webhooks مدعومة')
   })
 
