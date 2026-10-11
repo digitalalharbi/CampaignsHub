@@ -36,7 +36,7 @@ interface SitePayload {
   trend?: Array<{ date: string; sessions: number; engaged_sessions: number; purchases: number; revenue: number }>
   funnel?: Array<{ stage: string; count: number | null; step_rate: number | null; exceeds_previous: boolean }>
   paid?: { available: boolean; sessions?: number; purchases?: number; revenue?: number; session_share?: number | null; purchase_share?: number | null; revenue_share?: number | null; platforms?: Array<{ platform: string; sessions: number; purchases: number; revenue: number }> }
-  breakdowns?: Record<'source_medium' | 'campaign' | 'landing_page' | 'device' | 'country' | 'user_type', Table | null>
+  breakdowns?: Partial<Record<'source_medium' | 'campaign' | 'landing_page' | 'campaign_landing' | 'device' | 'country' | 'user_type', Table | null>>
   events?: { rows: Array<{ event: string; event_count: number; key_events: number; is_key_event: boolean }>; more: number } | null
 }
 
@@ -161,6 +161,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
         <BreakdownCard testId="site-source-medium" title={ar ? 'المصدر / الوسيط' : 'Source / medium'} table={d.breakdowns?.source_medium ?? null} ar={ar} cur={cur} name={(r) => `${r.dimension_1} / ${r.dimension_2 ?? ''}`} />
         <BreakdownCard testId="site-campaign" title={ar ? 'الحملات (UTM)' : 'Campaigns (UTM)'} table={d.breakdowns?.campaign ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
         <BreakdownCard testId="site-landing-page" title={ar ? 'صفحات الهبوط' : 'Landing pages'} table={d.breakdowns?.landing_page ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
+        <BreakdownCard testId="site-campaign-landing" title={ar ? 'الحملة ← صفحة الهبوط ← الشراء' : 'Campaign → landing page → purchase'} table={d.breakdowns?.campaign_landing ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
         <BreakdownCard testId="site-country" title={ar ? 'الدول' : 'Countries'} table={d.breakdowns?.country ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
         <BreakdownCard testId="site-device" title={ar ? 'الأجهزة' : 'Devices'} table={d.breakdowns?.device ?? null} ar={ar} cur={cur} name={(r) => label(DEVICE, r.dimension_1)} />
         <BreakdownCard testId="site-user-type" title={ar ? 'جديد مقابل عائد' : 'New vs returning'} table={d.breakdowns?.user_type ?? null} ar={ar} cur={cur} name={(r) => label(USER_TYPE, r.dimension_1)} />

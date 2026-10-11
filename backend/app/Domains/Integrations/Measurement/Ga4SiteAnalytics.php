@@ -93,6 +93,7 @@ final class Ga4SiteAnalytics
                 'source_medium' => $this->table($by['source_medium'] ?? null),
                 'campaign' => $this->table($by['campaign'] ?? null),
                 'landing_page' => $this->table($by['landing_page'] ?? null),
+                'campaign_landing' => $this->table($by['campaign_landing'] ?? null),
                 'device' => $this->table($by['device'] ?? null),
                 'country' => $this->table($by['country'] ?? null),
                 'user_type' => $this->table($by['user_type'] ?? null),
