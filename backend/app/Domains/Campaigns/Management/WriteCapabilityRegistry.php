@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Management;
 
+use App\Domains\Campaigns\Management\Write\WriteAdapterRegistry;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Support\AdPlatforms;
 
 /**
@@ -39,6 +41,14 @@ final class WriteCapabilityRegistry
 
     public const VERIFIED = 'verified';
 
+    /**
+     * CAMPAIGN-MGMT-WRITE-001 — the PLATFORM does not allow this (Google has no copy endpoint; no
+     * platform lets an objective change after creation). Distinct from NOT_IMPLEMENTED, which is a
+     * fact about CampaignsHub: the interface must never send an operator to a platform's own screen
+     * for something the platform forbids, nor tell them the platform forbids what we simply lack.
+     */
+    public const PROVIDER_UNSUPPORTED = 'provider_unsupported';
+
     /** The write capabilities the Owner named, each with the tenant permission that gates it. */
     public const CAPABILITIES = [
         'create_campaign' => 'campaigns.create',
@@ -55,6 +65,8 @@ final class WriteCapabilityRegistry
         'placements' => 'campaigns.update',
         'publish' => 'campaigns.launch',
         'duplicate' => 'campaigns.create',
+        // CAMPAIGN-MGMT-WRITE-001 — archive or delete, in the provider's own semantics; confirmed in the interface.
+        'remove' => 'campaigns.update',
     ];
 
     /**
@@ -72,7 +84,41 @@ final class WriteCapabilityRegistry
      */
     private static function declared(): array
     {
-        return [];
+        /*
+         * CAMPAIGN-MGMT-WRITE-001 — derived from the adapters, never typed by hand.
+         *
+         * A capability is IMPLEMENTED_NOT_VERIFIED when the provider's adapter performs at least one
+         * action it governs, and AWAITING_CREDENTIALS while the platform's own app credentials are
+         * missing on this installation (no write can reach the platform without them). VERIFIED is
+         * not derivable: it needs a Production round-trip on record, which no adapter can claim.
+         */
+        $adapters = app(WriteAdapterRegistry::class);
+        $out = [];
+        foreach ($adapters->all() as $provider => $adapter) {
+            $configured = self::platformConfigured($provider);
+            foreach (array_keys(self::CAPABILITIES) as $capability) {
+                $state = $adapters->capabilityState($provider, $capability);
+                $out[$provider][$capability] = [
+                    'status' => match ($state) {
+                        'implemented' => $configured ? self::IMPLEMENTED_NOT_VERIFIED : self::AWAITING_CREDENTIALS,
+                        'provider_unsupported' => self::PROVIDER_UNSUPPORTED,
+                        default => self::NOT_IMPLEMENTED,
+                    },
+                    'evidence' => null,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    private static function platformConfigured(string $provider): bool
+    {
+        try {
+            return PlatformCredentials::for($provider)->isConfigured();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**

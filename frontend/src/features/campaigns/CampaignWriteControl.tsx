@@ -33,6 +33,7 @@ const tone: Record<WriteStatus, 'neutral' | 'warning' | 'info' | 'success'> = {
   implemented_not_verified: 'warning',
   awaiting_credentials: 'info',
   verified: 'success',
+  provider_unsupported: 'neutral',
 }
 
 /**
@@ -62,7 +63,7 @@ export function CampaignWriteControl({ projectId }: { projectId: string }) {
   }
 
   const data = caps.data
-  const implemented = data.providers.flatMap((p) => p.capabilities).filter((c) => c.status !== 'not_implemented').length
+  const implemented = data.providers.flatMap((p) => p.capabilities).filter((c) => c.status !== 'not_implemented' && c.status !== 'provider_unsupported').length
   const verified = data.providers.flatMap((p) => p.capabilities).filter((c) => c.status === 'verified').length
   const allowed = data.providers.flatMap((p) => p.capabilities).filter((c) => c.allowed).length
 
@@ -90,6 +91,13 @@ export function CampaignWriteControl({ projectId }: { projectId: string }) {
             {ar
               ? 'لا توجد اليوم أي قدرة كتابة منفَّذة على أي منصة؛ الإدارة من هنا للقراءة والمتابعة فقط حتى تُنفَّذ كل قدرة وتُوثَّق.'
               : 'No provider write capability is implemented today; management here is read-and-monitor only until each capability is implemented and verified.'}
+          </p>
+        )}
+        {implemented > 0 && allowed === 0 && (
+          <p className="mt-3 text-xs text-text-muted" data-testid="write-control-where">
+            {ar
+              ? 'تعمل هذه القدرات من تبويب «التحكم على المنصات» بعد ضبط بيانات اعتماد تطبيق كل منصة؛ حتى ذلك الحين لا تُرسل أي كتابة.'
+              : 'These writes run from the «Platform control» tab once each platform’s app credentials are configured; until then nothing is sent.'}
           </p>
         )}
       </div>

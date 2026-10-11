@@ -41,6 +41,7 @@ final class CampaignManagementController extends Controller
                 WriteCapabilityRegistry::IMPLEMENTED_NOT_VERIFIED,
                 WriteCapabilityRegistry::AWAITING_CREDENTIALS,
                 WriteCapabilityRegistry::VERIFIED,
+                WriteCapabilityRegistry::PROVIDER_UNSUPPORTED,
             ],
             'rule_ar' => 'لا يُعرض أي إجراء كتابة لمنصة ما لم تكن القدرة نفسها منفَّذة ومقيَّدة بصلاحية؛ وتُعدّ موثَّقة فقط بعد جولة كتابة حقيقية على الإنتاج.',
             'rule_en' => 'No write action is shown for a provider unless that exact capability is implemented and permission-gated; it is verified only after a real Production write round-trip.',

@@ -9,7 +9,7 @@ import { getData } from '@/lib/api/client'
  * interface never decides it, it asks. `allowed` is the server's answer for THIS reader — implemented
  * (not merely declared) AND permitted — and {@link ProviderWriteGate} draws nothing without it.
  */
-export type WriteStatus = 'not_implemented' | 'implemented_not_verified' | 'awaiting_credentials' | 'verified'
+export type WriteStatus = 'not_implemented' | 'implemented_not_verified' | 'awaiting_credentials' | 'verified' | 'provider_unsupported'
 
 export interface WriteCapability {
   provider: string
@@ -49,6 +49,7 @@ export const WRITE_STATUS_LABELS: Record<WriteStatus, { ar: string; en: string }
   implemented_not_verified: { ar: 'منفَّذ — غير موثَّق', en: 'Implemented, not verified' },
   awaiting_credentials: { ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials' },
   verified: { ar: 'موثَّق على الإنتاج', en: 'Verified in Production' },
+  provider_unsupported: { ar: 'لا تسمح به المنصة', en: 'The platform does not allow it' },
 }
 
 export const CAPABILITY_LABELS: Record<string, { ar: string; en: string }> = {
@@ -66,4 +67,5 @@ export const CAPABILITY_LABELS: Record<string, { ar: string; en: string }> = {
   placements: { ar: 'المواضع', en: 'Placements' },
   publish: { ar: 'النشر', en: 'Publish' },
   duplicate: { ar: 'التكرار', en: 'Duplicate' },
+  remove: { ar: 'الأرشفة / الحذف', en: 'Archive / delete' },
 }
