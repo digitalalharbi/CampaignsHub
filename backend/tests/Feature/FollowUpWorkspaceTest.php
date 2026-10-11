@@ -6,9 +6,14 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
@@ -249,6 +254,44 @@ final class FollowUpWorkspaceTest extends TestCase
          */
         $this->assertNull($body['cost_per_lead']['amount']);
         $this->assertSame('no_spend', $body['cost_per_lead']['reason']);
+    }
+
+    /** The spend names its currency, read the way the dashboard reads it, so a cost per lead is never a bare number. */
+    public function test_the_executive_view_names_the_currency_of_the_spend_and_the_cost_per_lead(): void
+    {
+        $this->lead(LeadStage::Contacted, contactedAfterMinutes: 20);
+        $this->lead(LeadStage::Qualified);
+        $connection = app(TokenVault::class)->open(
+            tenantId: $this->project->tenant_id, provider: 'meta',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)),
+            connectionName: 'meta-'.uniqid(),
+        );
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->project->tenant_id, 'provider_connection_id' => $connection->getKey(),
+            'provider' => 'meta', 'account_type' => 'ad_account', 'external_id' => 'act_'.uniqid(),
+            'name' => 'Ads', 'currency' => 'SAR', 'status' => 'active',
+        ]);
+        $campaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->project->tenant_id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(), 'provider' => 'meta',
+            'external_id' => 'c-'.uniqid(), 'name' => 'Leads', 'status' => 'active',
+        ]);
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->project->tenant_id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(), 'external_campaign_id' => $campaign->getKey(), 'provider' => 'meta', 'metric_key' => 'spend',
+            'metric_date' => Carbon::today()->subDay()->toDateString(), 'value' => 300,
+            'project_currency' => 'SAR', 'attribution_window' => 'default', 'source_type' => 'api',
+        ]);
+
+        $body = $this->actingAs($this->member(ProjectRole::SALES_MANAGER), 'sanctum')
+            ->getJson('/api/v1/leads/executive?project_id='.$this->project->id)
+            ->assertOk()
+            ->json('data');
+
+        $this->assertEquals(300, $body['spend']['amount']);
+        $this->assertSame('SAR', $body['spend']['currency'], 'a spend without its currency is a bare number');
+        $this->assertEquals(150, $body['cost_per_lead']['amount']);
+        $this->assertSame('SAR', $body['cost_per_lead']['currency']);
     }
 
     /** And it is scoped like everything else: an agent sees their own leads here too. */
