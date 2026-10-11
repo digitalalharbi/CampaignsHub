@@ -33,7 +33,7 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
         ],
         'ad_set' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'schedule' => true, 'bid_strategy' => true, 'delete' => true,
-            'targeting' => true, 'create_ad' => true,
+            'targeting' => true, 'create_ad' => true, 'placements' => true,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
@@ -84,6 +84,19 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
         return null;
     }
 
+    /**
+     * Snapchat's placement positions (`placement_v2.snapchat_positions`), as Snap documents them.
+     * Two of them cannot stand alone: Spotlight interstitials, and Chat Feed.
+     */
+    private const POSITIONS = ['interstitial_user', 'interstitial_content', 'interstitial_spotlight', 'instream', 'public_stories_instream', 'chat_feed', 'feed', 'camera'];
+
+    private const NOT_ALONE = ['interstitial_spotlight', 'chat_feed'];
+
+    public function placementFamilies(): array
+    {
+        return self::POSITIONS;
+    }
+
     public function optimizationGoals(): array
     {
         return ['IMPRESSIONS', 'SWIPES', 'VIDEO_VIEWS', 'PIXEL_PURCHASE', 'PIXEL_SIGNUP'];
@@ -126,6 +139,11 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
             $id = ($response->json() ?? [])['ads'][0]['ad']['id'] ?? null;
 
             return $this->itemVerdict($response, 'ads', [], is_scalar($id) ? (string) $id : null);
+        }
+
+        if ($action === WriteAction::Placements && ($input['mode'] ?? 'automatic') === 'custom'
+            && array_diff(array_values((array) $input['platforms']), self::NOT_ALONE) === []) {
+            return WriteOutcome::refused('Snapchat does not run Spotlight interstitials or Chat Feed on their own; choose at least one other position with them.');
         }
 
         $read = $this->send($connector, 'GET', "{$path}/{$target->externalId}");
@@ -183,6 +201,21 @@ final class SnapchatWriteAdapter extends AbstractWriteAdapter
             ], static fn ($v) => $v !== null)];
 
             return [['targeting' => $targeting], ['targeting' => $this->targetingMirror($input)]];
+        }
+        if ($action === WriteAction::Placements) {
+            $automatic = ($input['mode'] ?? 'automatic') === 'automatic';
+            $positions = $automatic ? [] : array_values((array) $input['platforms']);
+            $current = (array) ($entity['placement_v2'] ?? []);
+            // AUTOMATIC takes no other property. CUSTOM keeps the content inclusions only while in-stream is still chosen.
+            $placement = $automatic ? ['config' => 'AUTOMATIC'] : array_filter([
+                'config' => 'CUSTOM',
+                'platforms' => ['SNAPCHAT'],
+                'snapchat_positions' => array_map('strtoupper', $positions),
+                'inclusion' => in_array('instream', $positions, true) ? ($current['inclusion'] ?? null) : null,
+                'exclusion' => in_array('instream', $positions, true) ? ($current['exclusion'] ?? null) : null,
+            ], static fn ($v) => $v !== null);
+
+            return [['placement_v2' => $placement], ['targeting' => ['placement_config' => $automatic ? 'automatic' : 'custom', 'placements' => $positions]]];
         }
         if ($action === WriteAction::Creative) {
             return [['creative_id' => (string) $input['creative_external_id']], ['creative_external_id' => (string) $input['creative_external_id']]];

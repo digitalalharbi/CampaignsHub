@@ -390,13 +390,14 @@ final class CampaignProviderWriteTest extends TestCase
     public function test_what_a_platform_keeps_in_the_creative_is_refused_on_the_ad(): void
     {
         $this->configure('meta');
-        $this->configure('tiktok');
+        $this->configure('google');
         [, , , $metaAd] = $this->tree('meta', 'act_5');
-        [, , $tiktokSet] = $this->tree('tiktok', '7000001');
+        [, , $googleGroup] = $this->tree('google', '1234567890');
         Http::fake();
 
         $this->write('ad', $metaAd->id, 'destination', ['url' => 'https://x.example'])->assertStatus(409)->assertJsonPath('data.refusal', 'provider_unsupported');
-        $this->write('ad_set', $tiktokSet->id, 'targeting', ['countries' => ['SA']])->assertStatus(409)->assertJsonPath('data.refusal', 'not_implemented');
+        // Google keeps targeting in criteria resources this layer does not write: not built, and said so.
+        $this->write('ad_set', $googleGroup->id, 'targeting', ['countries' => ['SA']])->assertStatus(409)->assertJsonPath('data.refusal', 'not_implemented');
         Http::assertNothingSent();
     }
 
@@ -480,6 +481,114 @@ final class CampaignProviderWriteTest extends TestCase
     }
 
     // ── Fixtures ──────────────────────────────────────────────────────────────────────────────
+
+    // ── Placements on Snapchat, and the TikTok ad group ─────────────────────────────────────────
+
+    public function test_snapchat_custom_placements_put_the_documented_positions_and_keep_in_stream_inclusions(): void
+    {
+        $this->configure('snapchat');
+        [, , $adSet] = $this->tree('snapchat', 'sc-acc');
+        Http::fake([
+            'adsapi.snapchat.com/v1/adsquads/*' => Http::response(['request_status' => 'SUCCESS', 'adsquads' => [['adsquad' => [
+                'id' => $adSet->external_id, 'campaign_id' => 'c1', 'name' => 'Set', 'status' => 'ACTIVE',
+                'placement_v2' => ['config' => 'CUSTOM', 'platforms' => ['SNAPCHAT'], 'snapchat_positions' => ['INSTREAM'], 'inclusion' => ['content_types' => ['SPORTS']]],
+            ]]]]),
+            'adsapi.snapchat.com/v1/campaigns/*' => Http::response(['request_status' => 'SUCCESS', 'adsquads' => [['sub_request_status' => 'SUCCESS']]]),
+        ]);
+
+        $this->write('ad_set', $adSet->id, 'placements', ['mode' => 'custom', 'platforms' => ['instream', 'feed', 'chat_feed']])->assertOk();
+
+        Http::assertSent(function (Request $r): bool {
+            $p = $r['adsquads'][0]['placement_v2'] ?? null;
+
+            return $r->method() === 'PUT' && is_array($p) && $p['config'] === 'CUSTOM' && $p['platforms'] === ['SNAPCHAT']
+                && $p['snapchat_positions'] === ['INSTREAM', 'FEED', 'CHAT_FEED'] && $p['inclusion'] === ['content_types' => ['SPORTS']];
+        });
+        $this->assertSame(['instream', 'feed', 'chat_feed'], $adSet->fresh()->targeting['placements'] ?? null);
+    }
+
+    public function test_snapchat_refuses_chat_feed_or_spotlight_alone_without_a_call(): void
+    {
+        $this->configure('snapchat');
+        [, , $adSet] = $this->tree('snapchat', 'sc-acc');
+        Http::fake();
+
+        $this->write('ad_set', $adSet->id, 'placements', ['mode' => 'custom', 'platforms' => ['chat_feed', 'interstitial_spotlight']])
+            ->assertStatus(422)->assertJsonPath('data.ok', false);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_tiktok_targeting_looks_up_location_ids_then_updates_bands_and_gender(): void
+    {
+        $this->configure('tiktok');
+        [, , $adSet] = $this->tree('tiktok', '7000001');
+        Http::fake($this->tiktokFakes($adSet->external_id, [['location_id' => '102358', 'region_code' => 'SA'], ['location_id' => '290557', 'region_code' => 'AE']]));
+
+        $this->write('ad_set', $adSet->id, 'targeting', ['countries' => ['SA', 'AE'], 'age_min' => 18, 'age_max' => 34, 'genders' => 'female'])->assertOk();
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'tool/region/') && str_contains($r->url(), 'objective_type=TRAFFIC') && str_contains($r->url(), 'level_range=TO_COUNTRY'));
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), 'adgroup/update/') && $r['adgroup_id'] === $adSet->external_id
+            && $r['location_ids'] === ['102358', '290557'] && $r['age_groups'] === ['AGE_18_24', 'AGE_25_34'] && $r['gender'] === 'GENDER_FEMALE');
+        $this->assertSame('18-34', $adSet->fresh()->targeting['age'] ?? null);
+    }
+
+    public function test_tiktok_refuses_a_country_it_does_not_list_and_changes_nothing(): void
+    {
+        $this->configure('tiktok');
+        [, , $adSet] = $this->tree('tiktok', '7000001');
+        Http::fake($this->tiktokFakes($adSet->external_id, [['location_id' => '102358', 'region_code' => 'SA']]));
+
+        $this->write('ad_set', $adSet->id, 'targeting', ['countries' => ['SA', 'XK']])
+            ->assertStatus(422)->assertJsonPath('data.ok', false);
+
+        Http::assertNotSent(fn (Request $r) => str_ends_with($r->url(), 'adgroup/update/'));
+    }
+
+    public function test_tiktok_creates_a_switched_off_click_ad_group_billed_per_click(): void
+    {
+        $this->configure('tiktok');
+        [, $campaign] = $this->tree('tiktok', '7000001');
+        Http::fake(array_merge(
+            ['business-api.tiktok.com/open_api/v1.3/adgroup/create/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['adgroup_id' => '1800']])],
+            $this->tiktokFakes('unused', [['location_id' => '102358', 'region_code' => 'SA']]),
+        ));
+
+        $this->write('campaign', $campaign->id, 'create_ad_set', [
+            'name' => 'KSA clicks', 'optimization_goal' => 'CLICK', 'daily_budget' => 100, 'countries' => ['SA'],
+        ])->assertOk()->assertJsonPath('data.new_external_id', '1800');
+
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), 'adgroup/create/') && $r['campaign_id'] === $campaign->external_id
+            && $r['billing_event'] === 'CPC' && $r['operation_status'] === 'DISABLE' && $r['location_ids'] === ['102358']
+            && $r['budget_mode'] === 'BUDGET_MODE_DAY' && $r['placement_type'] === 'PLACEMENT_TYPE_AUTOMATIC');
+        $this->assertSame('paused', ExternalAdSet::query()->where('external_id', '1800')->sole()->status);
+    }
+
+    public function test_tiktok_custom_placements_name_the_apps(): void
+    {
+        $this->configure('tiktok');
+        [, , $adSet] = $this->tree('tiktok', '7000001');
+        Http::fake(['business-api.tiktok.com/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => []])]);
+
+        $this->write('ad_set', $adSet->id, 'placements', ['mode' => 'custom', 'platforms' => ['tiktok', 'pangle']])->assertOk();
+
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), 'adgroup/update/') && $r['placement_type'] === 'PLACEMENT_TYPE_NORMAL'
+            && $r['placements'] === ['PLACEMENT_TIKTOK', 'PLACEMENT_PANGLE']);
+    }
+
+    /**
+     * @param  list<array<string, string>>  $regions
+     * @return array<string, mixed>
+     */
+    private function tiktokFakes(string $adGroupId, array $regions): array
+    {
+        return [
+            'business-api.tiktok.com/open_api/v1.3/adgroup/get/*' => Http::response(['code' => 0, 'data' => ['list' => [['adgroup_id' => $adGroupId, 'campaign_id' => 'tc1', 'placements' => ['PLACEMENT_TIKTOK']]]]]),
+            'business-api.tiktok.com/open_api/v1.3/campaign/get/*' => Http::response(['code' => 0, 'data' => ['list' => [['campaign_id' => 'tc1', 'objective_type' => 'TRAFFIC']]]]),
+            'business-api.tiktok.com/open_api/v1.3/tool/region/*' => Http::response(['code' => 0, 'data' => ['region_info' => $regions]]),
+            'business-api.tiktok.com/*' => Http::response(['code' => 0, 'message' => 'OK', 'request_id' => 'rq-t', 'data' => []]),
+        ];
+    }
 
     private function write(string $level, string $entityId, string $action, array $extra = [])
     {
