@@ -93,6 +93,13 @@ export function CampaignWriteControl({ projectId }: { projectId: string }) {
               : 'No provider write capability is implemented today; management here is read-and-monitor only until each capability is implemented and verified.'}
           </p>
         )}
+        {implemented > 0 && allowed === 0 && (
+          <p className="mt-3 text-xs text-text-muted" data-testid="write-control-where">
+            {ar
+              ? 'تعمل هذه القدرات من تبويب «التحكم على المنصات» بعد ضبط بيانات اعتماد تطبيق كل منصة؛ حتى ذلك الحين لا تُرسل أي كتابة.'
+              : 'These writes run from the «Platform control» tab once each platform’s app credentials are configured; until then nothing is sent.'}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
