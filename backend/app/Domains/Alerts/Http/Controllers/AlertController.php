@@ -41,7 +41,7 @@ final class AlertController extends Controller
      * cannot fire is at least visible to whoever reads the logs instead of silently reporting health.
      */
     /** The threshold keys the evaluator actually reads. Anything else is a typo, not a setting. */
-    private const THRESHOLD_KEYS = ['days', 'pct', 'ratio', 'minutes'];
+    private const THRESHOLD_KEYS = ['days', 'pct', 'ratio', 'minutes', 'hours'];
 
     private const TYPES = [
         'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results',
@@ -54,6 +54,9 @@ final class AlertController extends Controller
         // compares a figure against its own recent behaviour, so it covers the campaigns nobody
         // got round to writing a rule for, which are the ones that fail quietly.
         'metric_anomaly',
+        // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the freshness engine's
+        // verdict as an alert, and the measurement property's own sync as another.
+        'sync_outage', 'measurement_outage',
     ];
 
     /**
@@ -148,6 +151,7 @@ final class AlertController extends Controller
              * how it stops being checkable. The ceiling is a week, past which the rule is not an SLA.
              */
             'threshold.minutes' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:10080'],
+            'threshold.hours' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:720'],
             'cooldown_minutes' => ['nullable', 'integer', 'min:5', 'max:20160'],
             'channels' => ['nullable', 'array'],
             'channels.*' => ['string', 'in:in_app,email,whatsapp'],

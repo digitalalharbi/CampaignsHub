@@ -10,11 +10,13 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
+use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
@@ -59,7 +61,15 @@ final class AlertEvaluator
         'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
         // AUTOMATION-FIRST-OPERATIONS-001 — the detector that existed and was never swept.
         'metric_anomaly',
+        // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — an outage is a project
+        // whose freshness engine says `sync_failed` or `stale`, and a measurement property whose
+        // latest sync failed or whose last success is older than the threshold. Both read the
+        // product's own freshness answers; neither invents a second definition of «stale».
+        'sync_outage', 'measurement_outage',
     ];
+
+    /** The default age, in hours, after which a measurement property with no successful sync is an outage. */
+    private const MEASUREMENT_OUTAGE_HOURS = 12;
 
     /**
      * How recent an anomalous day must be for `metric_anomaly` to send anything.
@@ -103,6 +113,8 @@ final class AlertEvaluator
         'roas_drop' => 'budget_risk',
         'no_results' => 'budget_risk',
         'sync_failure' => 'sync_failed',
+        'sync_outage' => 'sync_failed',
+        'measurement_outage' => 'sync_failed',
         'token_expiry' => 'token_expiring',
         'report_failed' => 'report_failed',
         'sla_warning' => 'security',
@@ -119,7 +131,17 @@ final class AlertEvaluator
         private readonly MetricsAggregator $metrics,
         private readonly TenantContext $tenants,
         private readonly SpendLimitGovernor $limits,
+        private readonly DataFreshnessService $freshness,
+        private readonly AlertEventMailer $mailer,
     ) {}
+
+    /**
+     * EMAIL-ALERT-EVENTS-001 — what this sweep raised, refreshed or recovered, per tenant, until the
+     * mailer takes it. One bundle per person per sweep is the aggregation rule.
+     *
+     * @var list<array<string,mixed>>
+     */
+    private array $outbox = [];
 
     /** Evaluate every active rule across all tenants. Returns the number of newly raised alerts. */
     public function evaluateAll(?Carbon $now = null): int
@@ -138,6 +160,7 @@ final class AlertEvaluator
                 ->each(function (AlertRule $rule) use ($now, &$raised) {
                     $raised += $this->evaluateRule($rule, $now);
                 });
+            $this->flushMail((string) $tenantId, $now);
         }
 
         $this->tenants->setTenantId($previous);
@@ -146,11 +169,27 @@ final class AlertEvaluator
     }
 
     /** Evaluate one rule; returns newly raised alerts for it. */
+    /**
+     * Hand the sweep's outbox for one tenant to the mailer. `evaluateAll()` does this per tenant;
+     * callers that evaluate single rules call it themselves when they want the mail to go.
+     *
+     * @return array<string,int>
+     */
+    public function flushMail(string $tenantId, ?Carbon $now = null): array
+    {
+        $items = $this->outbox;
+        $this->outbox = [];
+
+        return $this->mailer->sweep($tenantId, $items, $now ?? Carbon::now());
+    }
+
     public function evaluateRule(AlertRule $rule, ?Carbon $now = null): int
     {
         $now ??= Carbon::now();
         $breaches = match ($rule->type) {
             'sync_failure' => $this->syncFailures($rule),
+            'sync_outage' => $this->syncOutages($rule, $now),
+            'measurement_outage' => $this->measurementOutages($rule, $now),
             'token_expiry' => $this->tokenExpiries($rule, $now),
             'budget_risk' => $this->budgetRisks($rule, $now),
             'no_results' => $this->noResults($rule, $now),
@@ -193,7 +232,87 @@ final class AlertEvaluator
             }
         }
 
+        $this->recoverCleared($rule, $breaches, $now);
+
         return $raised;
+    }
+
+    /**
+     * EMAIL-ALERT-RECOVERY-001 — an alert whose condition is no longer present is resolved by the sweep
+     * that found it absent, and the reader is told so.
+     *
+     * Until now an event stayed open until a person pressed «resolve», so the alerts list carried
+     * problems that had ended days earlier, and nobody was ever told «this is over». Recovery is only
+     * stated for the rule types this sweep can actually evaluate: a type the evaluator does not read
+     * (`report_failed`, `sla_warning`, an unknown type) produces an empty breach list for a different
+     * reason, and an empty list there must not resolve anything.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     */
+    private function recoverCleared(AlertRule $rule, array $breaches, Carbon $now): void
+    {
+        if (! in_array($rule->type, self::PERIODIC, true)) {
+            return;
+        }
+
+        $still = [];
+        foreach ($breaches as $b) {
+            $still[$this->dedupKey($rule, $b)] = true;
+        }
+
+        AlertEvent::query()
+            ->where('rule_id', $rule->id)
+            ->whereIn('status', ['open', 'snoozed'])
+            ->get()
+            ->each(function (AlertEvent $event) use ($still, $rule, $now): void {
+                if (isset($still[$event->dedup_key])) {
+                    return;
+                }
+                $this->recover($rule, $event, $now);
+            });
+    }
+
+    private function recover(AlertRule $rule, AlertEvent $event, Carbon $now): void
+    {
+        $title = (string) ($event->context['title'] ?? $rule->name);
+        $titleAr = (string) ($event->context['title_ar'] ?? $title);
+        $context = (array) $event->context;
+        $context['recovered_at'] = $now->toIso8601String();
+
+        $this->resolve($event, $now);
+        $event->forceFill(['context' => $context])->save();
+
+        $this->notifications->dispatch([
+            'tenant_id' => $rule->tenant_id,
+            'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
+            'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'severity' => 'info',
+            'title' => 'Recovered: '.$title,
+            'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
+            'title_ar' => 'تعافى: '.$titleAr,
+            'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
+            'source' => 'alerts',
+            'entity_type' => $event->entity_type,
+            'entity_id' => $event->entity_id,
+            'action_url' => '/alerts',
+            // The alert itself was notified on this type+entity minutes ago; its recovery is a different
+            // message, not a repeat of it, so it carries its own key past the dispatcher's dedup window.
+            'dedup_extra' => 'recovered:'.$event->id,
+        ]);
+
+        $this->post($rule, $event, [
+            'title' => 'Recovered: '.$title,
+            'title_ar' => 'تعافى: '.$titleAr,
+            'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
+            'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
+            'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
+            'context' => [],
+        ], 'info', $now, recovered: true);
+    }
+
+    private function dedupKey(AlertRule $rule, array $b): string
+    {
+        return hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '']));
     }
 
     /**
@@ -204,7 +323,7 @@ final class AlertEvaluator
      */
     private function raise(AlertRule $rule, array $b, Carbon $now): bool
     {
-        $dedupKey = hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '']));
+        $dedupKey = $this->dedupKey($rule, $b);
         $cooldownUntil = fn (AlertEvent $e) => ($e->last_triggered_at ?? $e->created_at)
             ->copy()->addMinutes($rule->cooldown_minutes);
 
@@ -228,6 +347,7 @@ final class AlertEvaluator
                 'status' => 'open',
             ])->save();
             $this->notify($rule, $b);
+            $this->post($rule, $active, $b, $rule->severity, $now);
 
             return false;
         }
@@ -242,7 +362,7 @@ final class AlertEvaluator
         $notification = $this->notify($rule, $b);
         $taskId = $rule->create_task ? $this->openTask($rule, $b) : null;
 
-        AlertEvent::create([
+        $event = AlertEvent::create([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
             'rule_id' => $rule->id,
@@ -258,11 +378,29 @@ final class AlertEvaluator
             'task_id' => $taskId,
             'last_triggered_at' => $now,
         ]);
+        $this->post($rule, $event, $b, $rule->severity, $now);
 
         return true;
     }
 
     /** Raise the notification through the shared dispatcher; returns the notification id (or null if deduped). */
+    /** Put one event on the sweep's outbox for the mailer. */
+    private function post(AlertRule $rule, AlertEvent $event, array $b, string $severity, Carbon $now, bool $recovered = false): void
+    {
+        $this->outbox[] = [
+            'event_id' => (string) $event->id,
+            'notification_type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'severity' => $severity,
+            'title' => (string) $b['title'],
+            'title_ar' => $b['context']['title_ar'] ?? $b['title_ar'] ?? null,
+            'detail' => (string) $b['message'],
+            'detail_ar' => $b['context']['message_ar'] ?? $b['message_ar'] ?? null,
+            'project_id' => $b['project_id'] ?? $rule->project_id,
+            'project_name' => isset($b['project_id']) ? (Project::query()->whereKey($b['project_id'])->value('name') ?? '') : '',
+            'triggered_at' => ($recovered ? 'recovered:' : '').$now->toIso8601String(),
+        ];
+    }
+
     private function notify(AlertRule $rule, array $b): ?string
     {
         $n = $this->notifications->dispatch([
@@ -346,6 +484,131 @@ final class AlertEvaluator
     }
 
     /** @return list<array<string,mixed>> */
+    /**
+     * EMAIL-ALERT-SYNC-OUTAGE-001 — a project whose sources, taken together, are failed or stale.
+     *
+     * The verdict is {@see DataFreshnessService::state()} over the last seven days — the same answer
+     * the analytics header, the digest and the live operating view give — so an outage alert can
+     * never disagree with the page the reader opens next.
+     */
+    private function syncOutages(AlertRule $rule, Carbon $now): array
+    {
+        $tenantId = (string) $rule->tenant_id;
+        $projectIds = DB::table('project_integration_bindings')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
+            ->distinct()
+            ->pluck('project_id')
+            ->map(static fn (mixed $id): string => (string) $id)
+            ->all();
+
+        $from = $now->copy()->subDays(6)->startOfDay();
+        $to = $now->copy()->endOfDay();
+        $out = [];
+
+        foreach ($projectIds as $projectId) {
+            $state = $this->freshness->state($tenantId, [$projectId], $from, $to, null, $now);
+            /*
+             * The SOURCE states decide, not the roll-up alone: the roll-up ranks «partial» (days with no
+             * row in the window) above «stale», so a project whose only platform stopped answering four
+             * days ago reads `partial` as a whole while its source reads `stale`. Both are an outage to
+             * the reader; a source still awaiting its first successful read is not — that is credentials.
+             */
+            $troubled = array_values(array_filter(
+                $state['sources'],
+                static fn (array $s): bool => in_array($s['state'], ['failed', 'stale'], true),
+            ));
+            if ($troubled === []) {
+                continue;
+            }
+            $failed = array_filter($troubled, static fn (array $s): bool => $s['state'] === 'failed') !== [];
+            $names = implode(', ', array_map(static fn (array $s): string => (string) $s['provider'], $troubled));
+
+            $out[] = [
+                'entity_type' => Project::class,
+                'entity_id' => $projectId,
+                'project_id' => $projectId,
+                'title' => $failed ? 'Data sync outage' : 'Data is stale',
+                'message' => ($failed
+                    ? 'The latest sync failed for: '.$names.'.'
+                    : 'No fresh figures from: '.$names.'.')
+                    .($state['last_sync_at'] ? ' Last figures dated '.$state['last_sync_at'].'.' : ' No figures have ever arrived.'),
+                'context' => [
+                    // The reader's language, beside the English the rest of the engine carries.
+                    'title_ar' => $failed ? 'انقطاع مزامنة البيانات' : 'البيانات متأخرة',
+                    'message_ar' => ($failed
+                        ? 'فشلت آخر مزامنة لـ: '.$names.'.'
+                        : 'لا أرقام حديثة من: '.$names.'.')
+                        .($state['last_sync_at'] ? ' آخر أرقام بتاريخ '.$state['last_sync_at'].'.' : ' لم تصل أي أرقام بعد.'),
+                    'state' => $state['state'],
+                    'last_sync_at' => $state['last_sync_at'],
+                    'missing_days' => $state['missing_days'],
+                    'sources' => array_map(static fn (array $s): array => [
+                        'provider' => $s['provider'], 'kind' => $s['kind'], 'state' => $s['state'], 'data_as_of' => $s['data_as_of'],
+                    ], $troubled),
+                ],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — a measurement property (GA4) whose latest sync failed, or
+     * whose last successful sync is older than the threshold while syncs keep being attempted.
+     *
+     * Measurement is never an ad platform (GA4 is its own ProviderKind), so it never appears in
+     * `metric_sync_runs`; its runs are `integration_sync_runs` of type `measurement`.
+     */
+    private function measurementOutages(AlertRule $rule, Carbon $now): array
+    {
+        $hours = (int) ($rule->threshold['hours'] ?? self::MEASUREMENT_OUTAGE_HOURS);
+        $cutoff = $now->copy()->subHours($hours);
+
+        $runs = IntegrationSyncRun::query()
+            ->where('type', 'measurement')
+            ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
+            ->orderByDesc('started_at')
+            ->get(['id', 'project_id', 'provider_connection_id', 'status', 'error', 'started_at', 'finished_at'])
+            ->groupBy(fn (IntegrationSyncRun $r) => (string) $r->provider_connection_id);
+
+        $out = [];
+        foreach ($runs as $connectionId => $group) {
+            $latest = $group->first();
+            $lastSuccess = $group->first(fn (IntegrationSyncRun $r) => $r->status === 'success' || $r->status === 'no_data');
+            $failedNow = $latest->status === 'failed';
+            $tooOld = $lastSuccess === null || ($lastSuccess->finished_at !== null && $lastSuccess->finished_at->lessThan($cutoff));
+
+            if (! $failedNow && ! $tooOld) {
+                continue;
+            }
+
+            $out[] = [
+                'entity_type' => ProviderConnection::class,
+                'entity_id' => (string) $connectionId,
+                'project_id' => $latest->project_id ? (string) $latest->project_id : null,
+                'title' => $failedNow ? 'Measurement sync failed' : 'Measurement data is stale',
+                'message' => $failedNow
+                    ? 'The latest GA4 sync failed'.($latest->error ? ': '.$latest->error : '.')
+                    : 'No successful GA4 sync in the last '.$hours.' hours'.($lastSuccess?->finished_at ? ' (last success '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
+                'context' => [
+                    'title_ar' => $failedNow ? 'فشلت مزامنة القياس' : 'بيانات القياس متأخرة',
+                    'message_ar' => $failedNow
+                        ? 'فشلت آخر مزامنة لـ GA4'.($latest->error ? ': '.$latest->error : '.')
+                        : 'لا مزامنة ناجحة لـ GA4 خلال آخر '.$hours.' ساعة'.($lastSuccess?->finished_at ? ' (آخر نجاح '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
+                    'provider' => 'ga4',
+                    'sync_run_id' => (string) $latest->id,
+                    'error' => $latest->error,
+                    'last_success_at' => $lastSuccess?->finished_at?->toIso8601String(),
+                    'threshold_hours' => $hours,
+                ],
+            ];
+        }
+
+        return $out;
+    }
+
     private function tokenExpiries(AlertRule $rule, Carbon $now): array
     {
         $days = (int) ($rule->threshold['days'] ?? 7);
