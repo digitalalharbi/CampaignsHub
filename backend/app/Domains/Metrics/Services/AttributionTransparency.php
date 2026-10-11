@@ -96,6 +96,7 @@ final class AttributionTransparency
         private readonly ReportingTimezone $timezones,
         private readonly Ga4SiteAnalytics $site,
         private readonly AttributionModelComparison $modelComparison,
+        private readonly AttributionDisagreement $disagreement,
     ) {}
 
     /**
@@ -170,6 +171,8 @@ final class AttributionTransparency
             'models' => $this->models($projectId, $window['from_date'], $window['to_date']),
             'unattributed' => $this->unattributed($hasStore, $loaded['orders']),
             // ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the same evidence the reconciliation reads.
+            // CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the same claim-versus-store pair, split across the window.
+            'disagreement' => $this->disagreement->build($hasStore, $projectId, $window['from_date'], $window['to_date'], $loaded['orders'], $providers),
             'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
             'measurement' => [
