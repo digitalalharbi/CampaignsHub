@@ -472,6 +472,57 @@ final class CampaignProviderWriteTest extends TestCase
         Http::assertNotSent(fn (Request $r) => str_ends_with($r->url(), 'googleAds:mutate'));
     }
 
+    public function test_tiktok_creates_a_switched_off_ad_under_the_identity_that_already_ran_the_video(): void
+    {
+        $this->configure('tiktok');
+        [$account, , $adGroup, $sourceAd] = $this->tree('tiktok', '7000001');
+        $video = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id, 'provider' => 'tiktok',
+            'external_creative_id' => 'v-100', 'name' => 'Hoodie video', 'format' => 'video', 'status' => 'active',
+        ]);
+        $sourceAd->update(['creative_id' => $video->id]);
+        Http::fake([
+            'business-api.tiktok.com/open_api/v1.3/ad/get/*' => Http::response(['code' => 0, 'data' => ['list' => [[
+                'ad_id' => $sourceAd->external_id, 'identity_type' => 'CUSTOMIZED_USER', 'identity_id' => 'id-77', 'video_id' => 'v-100', 'image_ids' => ['cover-1'],
+            ]]]]),
+            'business-api.tiktok.com/open_api/v1.3/ad/create/*' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['1900']]]),
+        ]);
+
+        $this->write('ad_set', $adGroup->id, 'create_ad', [
+            'name' => 'Hoodie — shop', 'creative_id' => $video->id, 'ad_text' => 'Winter hoodies, delivered in Riyadh', 'call_to_action' => 'SHOP_NOW', 'url' => 'https://shop.example/hoodies',
+        ])->assertOk()->assertJsonPath('data.new_external_id', '1900');
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'ad/get/') && str_contains(urldecode($r->url()), '"ad_ids":["'.$sourceAd->external_id.'"]'));
+        Http::assertSent(function (Request $r) use ($adGroup): bool {
+            $c = $r['creatives'][0] ?? [];
+
+            return str_ends_with($r->url(), 'ad/create/') && $r['adgroup_id'] === $adGroup->external_id
+                && $c['identity_type'] === 'CUSTOMIZED_USER' && $c['identity_id'] === 'id-77' && $c['ad_format'] === 'SINGLE_VIDEO'
+                && $c['video_id'] === 'v-100' && $c['image_ids'] === ['cover-1'] && $c['call_to_action'] === 'SHOP_NOW'
+                && $c['landing_page_url'] === 'https://shop.example/hoodies' && $c['operation_status'] === 'DISABLE';
+        });
+        $ad = ExternalAd::query()->where('external_id', '1900')->sole();
+        $this->assertSame('paused', $ad->status);
+        $this->assertSame((string) $video->id, (string) $ad->creative_id);
+    }
+
+    public function test_tiktok_refuses_a_video_no_synced_ad_has_run_without_a_call(): void
+    {
+        $this->configure('tiktok');
+        [$account, , $adGroup] = $this->tree('tiktok', '7000001');
+        $orphan = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id, 'provider' => 'tiktok',
+            'external_creative_id' => 'v-200', 'name' => 'Unused', 'format' => 'video', 'status' => 'active',
+        ]);
+        Http::fake();
+
+        $this->write('ad_set', $adGroup->id, 'create_ad', [
+            'name' => 'X', 'creative_id' => $orphan->id, 'ad_text' => 'Text', 'call_to_action' => 'LEARN_MORE', 'url' => 'https://shop.example',
+        ])->assertStatus(422);
+
+        Http::assertNothingSent();
+    }
+
     public function test_snapchat_targeting_replaces_geos_and_demographics_and_keeps_the_rest(): void
     {
         $this->configure('snapchat');

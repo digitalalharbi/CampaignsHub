@@ -194,6 +194,29 @@ describe('the campaign control panel', () => {
     expect(screen.queryByTestId('control-tiktok-age-bands')).not.toBeInTheDocument()
   })
 
+  it('creates a TikTok ad from a project video with its text, call to action and landing page', async () => {
+    serve({
+      entities: [entity(), entity({ id: 't1', level: 'ad_set', parent_id: 'e1', provider: 'tiktok', name: 'TT set' })],
+      create: [],
+      creatives: { tiktok: [{ id: 'cr-1', name: 'Hoodie video', format: 'video', thumbnail_url: null }] },
+    } as WriteOptions)
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { ok: true, new_external_id: '1900' } } } as never)
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-create_ad-t1'))
+    expect(screen.getByTestId('control-tiktok-identity')).toHaveTextContent('already ran this video')
+    fireEvent.change(screen.getByTestId('control-input-child-name'), { target: { value: 'Hoodie — shop' } })
+    expect(screen.getByTestId('control-dialog-submit')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('control-input-ad-text'), { target: { value: 'Winter hoodies' } })
+    fireEvent.change(screen.getByTestId('control-input-cta'), { target: { value: 'SHOP_NOW' } })
+    fireEvent.change(screen.getByTestId('control-input-url'), { target: { value: 'https://shop.example/hoodies' } })
+    fireEvent.click(screen.getByTestId('control-dialog-submit'))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.any(String), {
+      level: 'ad_set', entity_id: 't1', action: 'create_ad', name: 'Hoodie — shop', creative_id: 'cr-1', ad_text: 'Winter hoodies', call_to_action: 'SHOP_NOW', url: 'https://shop.example/hoodies',
+    }, expect.anything()))
+  })
+
   it('creates an ad bound to a creative picked from the project’s own', async () => {
     serve({
       entities: [entity(), entity({ id: 's1', level: 'ad_set', parent_id: 'e1', provider: 'meta', name: 'KSA set' })],

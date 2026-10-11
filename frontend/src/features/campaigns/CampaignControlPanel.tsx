@@ -42,6 +42,18 @@ type Banner = { tone: 'success' | 'danger' | 'info'; text: string } | null
 
 const INACTIVE = new Set(['archived', 'deleted', 'removed'])
 
+/** TikTok's calls to action offered for a web ad, as TikTok names them. */
+const TIKTOK_CALLS = [
+  { value: 'LEARN_MORE', ar: 'اعرف المزيد', en: 'Learn more' },
+  { value: 'SHOP_NOW', ar: 'تسوّق الآن', en: 'Shop now' },
+  { value: 'ORDER_NOW', ar: 'اطلب الآن', en: 'Order now' },
+  { value: 'SIGN_UP', ar: 'سجّل', en: 'Sign up' },
+  { value: 'CONTACT_US', ar: 'تواصل معنا', en: 'Contact us' },
+  { value: 'BOOK_NOW', ar: 'احجز الآن', en: 'Book now' },
+  { value: 'APPLY_NOW', ar: 'قدّم الآن', en: 'Apply now' },
+  { value: 'VISIT_STORE', ar: 'زر المتجر', en: 'Visit store' },
+]
+
 export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { campaign: UnifiedCampaign; projectId: string; onOpenHistory?: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const locale = ar ? 'ar' : 'en'
@@ -366,9 +378,12 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
   const [url, setUrl] = useState(entity.destination_url ?? '')
   const [headlineText, setHeadlineText] = useState('')
   const [descriptionText, setDescriptionText] = useState('')
+  const [adText, setAdText] = useState('')
+  const [callToAction, setCallToAction] = useState('LEARN_MORE')
 
   const countries = parseCountries(countryText)
   const google = entity.provider === 'google'
+  const tiktok = entity.provider === 'tiktok'
   // A Google responsive search ad: one line per headline (3–15, ≤30 characters) and per description (2–4, ≤90).
   const lines = (text: string) => Array.from(new Set(text.split('\n').map((l) => l.trim()).filter((l) => l !== '')))
   const headlines = lines(headlineText)
@@ -377,7 +392,9 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
     && descriptions.length >= 2 && descriptions.length <= 4 && descriptions.every((d) => d.length <= 90) && /^https:\/\/\S+$/.test(url)
   const destructive = action === 'archive' || action === 'delete'
   const valid = action === 'create_ad_set' ? childName.trim() !== '' && (google ? Number(bid) > 0 : (countries.length > 0 && goal !== ''))
-    : action === 'create_ad' ? childName.trim() !== '' && (google ? searchAdValid : creativeId !== '')
+    : action === 'create_ad' ? childName.trim() !== '' && (google ? searchAdValid
+      : tiktok ? creativeId !== '' && adText.trim() !== '' && adText.trim().length <= 100 && /^https:\/\/\S+$/.test(url)
+        : creativeId !== '')
       : action === 'targeting' ? countries.length > 0 && Number(ageMin) >= 13 && Number(ageMax) >= Number(ageMin) && Number(ageMax) <= 65
         : action === 'placements' ? (placementMode === 'automatic' || families.length > 0)
           : action === 'creative' ? creativeId !== ''
@@ -397,7 +414,9 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
     if (action === 'create_ad') {
       return onSubmit(google
         ? { name: childName.trim(), headlines, descriptions, url }
-        : { name: childName.trim(), creative_id: creativeId })
+        : tiktok
+          ? { name: childName.trim(), creative_id: creativeId, ad_text: adText.trim(), call_to_action: callToAction, url }
+          : { name: childName.trim(), creative_id: creativeId })
     }
     if (action === 'targeting') return onSubmit({ countries, age_min: Number(ageMin), age_max: Number(ageMax), genders })
     if (action === 'placements') return onSubmit(placementMode === 'automatic' ? { mode: 'automatic' } : { mode: 'custom', platforms: families })
@@ -508,6 +527,20 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
               <Input data-testid="control-input-url" type="url" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
             </label>
             <p className="text-xs text-text-muted">{ar ? 'يُنشأ موقوفًا؛ إعلان Google هو عناوينه وأوصافه ورابطه.' : 'Created paused; a Google ad is its headlines, descriptions and URL.'}</p>
+          </>
+        )}
+        {action === 'create_ad' && tiktok && (
+          <>
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'نص الإعلان (حتى 100 حرف)' : 'Ad text (up to 100 characters)'}</span>
+              <Input data-testid="control-input-ad-text" value={adText} onChange={(e) => setAdText(e.target.value)} maxLength={100} />
+            </label>
+            <Select data-testid="control-input-cta" value={callToAction} onChange={(e) => setCallToAction(e.target.value)} options={TIKTOK_CALLS.map((c) => ({ value: c.value, label: ar ? c.ar : c.en }))} />
+            <label className="block">
+              <span className="text-text-secondary">{ar ? 'رابط الوجهة (https)' : 'Landing URL (https)'}</span>
+              <Input data-testid="control-input-url" type="url" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
+            </label>
+            <p data-testid="control-tiktok-identity" className="text-xs text-text-muted">{ar ? 'يُنشر الإعلان بالهوية التي نشرت هذا الفيديو من قبل على تيك توك، ويُنشأ موقوفًا.' : 'The ad is published under the identity that already ran this video on TikTok, and starts switched off.'}</p>
           </>
         )}
         {((action === 'create_ad' && !google) || action === 'creative') && (
