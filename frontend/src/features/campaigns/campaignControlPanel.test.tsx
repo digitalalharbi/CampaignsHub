@@ -163,6 +163,28 @@ describe('the campaign control panel', () => {
     expect(screen.getByTestId('control-tiktok-age-bands')).toHaveTextContent('fixed bands')
   })
 
+  it('creates a Google search ad from its headlines, descriptions and URL, within Google’s limits', async () => {
+    serve({ entities: [entity(), entity({ id: 'g1', level: 'ad_set', parent_id: 'e1', provider: 'google', name: 'Brand terms' })], create: [] })
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { ok: true, new_external_id: '777' } } } as never)
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-create_ad-g1'))
+    expect(screen.queryByTestId('control-creative-picker')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('control-input-child-name'), { target: { value: 'RSA' } })
+    fireEvent.change(screen.getByTestId('control-input-headlines'), { target: { value: 'Winter sale\nFree delivery' } })
+    fireEvent.change(screen.getByTestId('control-input-descriptions'), { target: { value: 'Hoodies from 99 SAR.\nOrder today.' } })
+    fireEvent.change(screen.getByTestId('control-input-url'), { target: { value: 'https://shop.example/sale' } })
+    expect(screen.getByTestId('control-dialog-submit')).toBeDisabled()
+
+    fireEvent.change(screen.getByTestId('control-input-headlines'), { target: { value: 'Winter sale\nFree delivery\nRiyadh in 24h' } })
+    fireEvent.click(screen.getByTestId('control-dialog-submit'))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.any(String), {
+      level: 'ad_set', entity_id: 'g1', action: 'create_ad', name: 'RSA',
+      headlines: ['Winter sale', 'Free delivery', 'Riyadh in 24h'], descriptions: ['Hoodies from 99 SAR.', 'Order today.'], url: 'https://shop.example/sale',
+    }, expect.anything()))
+  })
+
   it('creates an ad bound to a creative picked from the project’s own', async () => {
     serve({
       entities: [entity(), entity({ id: 's1', level: 'ad_set', parent_id: 'e1', provider: 'meta', name: 'KSA set' })],
