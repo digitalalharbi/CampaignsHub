@@ -83,14 +83,17 @@ final class Ga4SiteAnalyticsTest extends TestCase
             && in_array('ecommercePurchases', array_column($r['metrics'], 'name'), true));
         Http::assertSent(fn (Request $r) => str_contains($r->url(), ':runReport') && array_column($r['dimensions'], 'name') === ['date', 'eventName']
             && array_column($r['metrics'], 'name') === ['eventCount', 'keyEvents']);
-        $this->assertSame(7, DB::table('measurement_dimension_rows')->count());
+        // GA4-CAMPAIGN-LANDING-PATH-001 — the campaign → landing page path is asked in GA4's own names.
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), ':runReport') && array_column($r['dimensions'], 'name') === ['date', 'sessionCampaignName', 'landingPage']
+            && in_array('ecommercePurchases', array_column($r['metrics'], 'name'), true));
+        $this->assertSame(8, DB::table('measurement_dimension_rows')->count());
         $row = DB::table('measurement_dimension_rows')->where('breakdown', 'source_medium')->first();
         $this->assertSame('sessionSource-value', $row->dimension_1);
         $this->assertSame('sessionMedium-value', $row->dimension_2);
         $this->assertSame(3.0, (float) json_decode($row->metrics, true)['purchases']);
         $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->sole();
         $this->assertSame(1, (int) $run->records, 'records stay the daily figures');
-        $this->assertSame(7, $run->meta['breakdown_rows']);
+        $this->assertSame(8, $run->meta['breakdown_rows']);
     }
 
     public function test_a_failing_breakdown_is_named_and_the_daily_figures_still_land(): void
@@ -126,6 +129,10 @@ final class Ga4SiteAnalyticsTest extends TestCase
             ['(direct)', '(none)', ['sessions' => 150, 'purchases' => 3, 'revenue' => 400]],
         ]);
         $this->rows($property, 'event', [['purchase', '', ['event_count' => 30, 'key_events' => 30]], ['page_view', '', ['event_count' => 4000, 'key_events' => 0]]]);
+        $this->rows($property, 'campaign_landing', [
+            ['national_day_sale', '/sale/national-day', ['sessions' => 250, 'engaged_sessions' => 150, 'key_events' => 12, 'purchases' => 8, 'revenue' => 1700]],
+            ['brand_search', '/', ['sessions' => 120, 'engaged_sessions' => 70, 'key_events' => 5, 'purchases' => 3, 'revenue' => 600]],
+        ]);
 
         $out = $this->actingAs($this->owner, 'sanctum')
             ->getJson("/api/v1/projects/{$this->project->id}/measurement/analytics?from=2026-10-01&to=2026-10-10")
@@ -140,6 +147,9 @@ final class Ga4SiteAnalyticsTest extends TestCase
         $this->assertSame(['meta', 'google'], array_column($out['paid']['platforms'], 'platform'));
         $this->assertSame('facebook', $out['breakdowns']['source_medium']['rows'][1]['dimension_1']);
         $this->assertNull($out['breakdowns']['landing_page'], 'a breakdown never returned is absent, not empty');
+        $path = $out['breakdowns']['campaign_landing']['rows'][0];
+        $this->assertSame(['national_day_sale', '/sale/national-day'], [$path['dimension_1'], $path['dimension_2']], 'the campaign and the page it landed on, on one row');
+        $this->assertEquals(8, $path['purchases']);
         $this->assertTrue($out['events']['rows'][1]['is_key_event']);
     }
 

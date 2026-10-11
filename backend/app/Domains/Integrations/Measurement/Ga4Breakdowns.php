@@ -23,6 +23,9 @@ final class Ga4Breakdowns
         'country' => ['country'],
         'user_type' => ['newVsReturning'],
         'event' => ['eventName'],
+        // The path a paid visit takes: which campaign brought the session to which landing page, and
+        // what those sessions went on to do (engagement, key events, cart, checkout, purchase, revenue).
+        'campaign_landing' => ['sessionCampaignName', 'landingPage'],
     ];
 
     /** GA4 metric → stored key, for every session breakdown */
