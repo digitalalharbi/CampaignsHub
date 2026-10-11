@@ -405,6 +405,7 @@ const dictionary = {
     tab_events: 'الأحداث',
     tab_sync: 'سجل المزامنة',
     tab_structure: 'المجموعات والإعلانات',
+    tab_control: 'التحكم على المنصات',
     /* LAUNCH-SUCCESS-001 — the words of the launch moment. Short by design: the screen's job is to
      * confirm, not to explain. «جزئياً» is a separate sentence from success, never a softer version
      * of it. */
@@ -858,6 +859,7 @@ const dictionary = {
     tab_events: 'Events',
     tab_sync: 'Sync log',
     tab_structure: 'Ad sets & ads',
+    tab_control: 'Platform control',
     launch_ok_title: 'Your campaign is live',
     launch_partial_title: 'Live — with one thing left',
     launch_partial_note: 'One or more platforms have not started yet',
