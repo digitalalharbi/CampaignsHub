@@ -173,6 +173,15 @@ final class LiveReportAccountCeilingTest extends TestCase
         $this->assertSame(100.0, (float) $spend, 'The platform table already had the ceiling; if this fails the ceiling itself broke.');
     }
 
+    /** REPORT-EXECUTIVE-SUMMARY-001 — the summary's campaign count stops at the same ceiling, and names nobody. */
+    public function test_the_delivering_campaign_count_honours_the_account_ceiling_and_carries_no_names(): void
+    {
+        $res = $this->getJson("/api/v1/reports/shared/{$this->link()}/live")->assertOk();
+
+        $this->assertSame(1, $res->json('data.delivering_campaigns.current'), 'the campaign on the other account is outside the link');
+        $this->assertStringNotContainsString('Inside the ceiling', json_encode($res->json('data.delivering_campaigns'), JSON_THROW_ON_ERROR));
+    }
+
     public function test_the_objective_split_honours_the_same_ceiling(): void
     {
         $res = $this->getJson("/api/v1/reports/shared/{$this->link()}/live")->assertOk();

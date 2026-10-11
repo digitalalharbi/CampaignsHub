@@ -17,7 +17,7 @@ test.use({ storageState: { cookies: [], origins: [] } })
 
 test.describe('a client opens their live report', () => {
   test('the figures render, from real seeded metrics', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
 
     const report = page.getByTestId('live-report')
     await expect(report).toBeVisible({ timeout: 20000 })
@@ -36,7 +36,7 @@ test.describe('a client opens their live report', () => {
    * the page had navigated, which is the thing being ruled out.
    */
   test('changing the period updates the figures without reloading the page', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
     /*
@@ -69,7 +69,7 @@ test.describe('a client opens their live report', () => {
   })
 
   test('narrowing to one platform changes the figures', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
     // The headline figures, for the same reason as the period test above: the composition changed,
@@ -100,7 +100,7 @@ test.describe('a client opens their live report', () => {
    * on the day it says something else.
    */
   test('the page names a platform missing from the figures, and says nothing when none is', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
     const notice = page.getByTestId('live-freshness')
@@ -135,7 +135,7 @@ test.describe('a client opens their live report', () => {
    */
   test('the client’s link carries no direct-against-blended split by default', async ({ page }) => {
     const live = page.waitForResponse((r) => /\/reports\/shared\/[^/]+\/live(\?|$)/.test(r.url()) && r.ok())
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
     const payload = (await (await live).json()).data
     await expect(page.getByTestId('live-kpis')).toBeVisible({ timeout: 20000 })
 
@@ -145,7 +145,7 @@ test.describe('a client opens their live report', () => {
   })
 
   test('the link is marked as demo data rather than passing seeded figures off as real', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
     await expect(page.getByText('Demo').first()).toBeVisible({ timeout: 20000 })
   })
 })
@@ -192,7 +192,7 @@ test.describe('the link cannot be talked into showing more', () => {
  */
 test.describe('what the report says needs attention', () => {
   test('the budget figures sit under their own headers, in both directions', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
 
     const attention = page.getByTestId('live-attention')
     await expect(attention, 'the budget block never rendered').toBeVisible({ timeout: 20000 })
@@ -250,14 +250,18 @@ const SIX_QUESTIONS = [
   'live-kpis',
   'live-objective-split',
   'live-platform-comparison',
-  'live-summary-platform-results',
-  'live-summary-budget',
+  // REPORT-EXECUTIVE-SUMMARY-001 — the summary's own blocks: where the money went, the platforms
+  // side by side, budget and data health, then the recommendations as action cards.
+  'exec-spend-split',
+  'exec-platforms',
+  'exec-health',
   'live-attention',
+  'exec-actions',
 ] as const
 
 /** Both live products: the seeded detailed link, and the same link minted as an executive summary. */
 const LIVE_FORMS = [
-  { form: 'detailed', url: URL, mode: 'dashboard' },
+  { form: 'detailed', url: URL, mode: 'summary' },
   { form: 'summary', url: '/reports/share/demo-live-summary-token', mode: 'summary' },
 ] as const
 
@@ -322,7 +326,7 @@ test.describe('the live report holds together at both widths, in both directions
  */
 test.describe('the live dashboard compares its platforms', () => {
   test('a row per reporting platform, with the figures the page already shows', async ({ page }) => {
-    await page.goto(URL)
+    await page.goto(`${URL}?view=dashboard`)
 
     const table = page.getByTestId('live-platform-comparison')
     await expect(table).toBeVisible({ timeout: 20000 })

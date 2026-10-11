@@ -86,12 +86,50 @@ describe('a link shared as an executive summary', () => {
 
     expect(within(summary).getByTestId('live-kpis')).toBeInTheDocument()
     expect(within(summary).queryByTestId('live-kpis-secondary')).not.toBeInTheDocument()
-    expect(within(summary).getByTestId('live-summary-platform-results')).toBeInTheDocument()
-    expect(within(summary).getByTestId('live-summary-budget')).toBeInTheDocument()
-    expect(within(summary).getByTestId('live-summary-top-content')).toBeInTheDocument()
+    // REPORT-EXECUTIVE-SUMMARY-001 — KPI → trend → spend split → platforms → objectives → content → health → actions.
+    for (const block of ['exec-trend', 'exec-spend-split', 'exec-platforms', 'exec-best-content', 'exec-health']) {
+      expect(within(summary).getByTestId(block), block).toBeInTheDocument()
+    }
     for (const table of ['live-platform-comparison', 'live-detail-tables', 'live-funnel', 'live-attention']) {
       expect(within(summary).queryByTestId(table), table).not.toBeInTheDocument()
     }
+  })
+})
+
+describe('the executive summary (REPORT-EXECUTIVE-SUMMARY-001)', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('counts the campaigns that ran with their movement, narrows the best content by platform, and ends on action cards', async () => {
+    vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => ({
+      status: 200,
+      envelope: { data: {
+        ...payloadFor(opts.providers),
+        delivering_campaigns: { current: 6, previous: 4 },
+        attention: [{
+          key: 'a1', code: 'cost_up', severity: 'warning', nature: 'problem', family: 'cost', family_label_ar: '', family_label_en: '',
+          platform: 'meta', kpis: [], action: 'review_cost_drivers',
+          impact: { kind: 'extra_cost_vs_previous_rate', amount: 120, currency: 'SAR' },
+          evidence: { platform: 'meta', content: [{ name: 'Best on meta', content_key: 'key-best-meta' }] },
+        }],
+      } },
+    }) as never)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
+
+    const count = await screen.findByTestId('exec-kpi-count')
+    expect(count).toHaveTextContent('6')
+    expect(count).toHaveTextContent('50')
+
+    const best = screen.getByTestId('exec-best-content')
+    expect(best).toHaveTextContent('Best on meta')
+    expect(best).toHaveTextContent('Best on snapchat')
+    fireEvent.click(screen.getByTestId('exec-platform-snapchat'))
+    await waitFor(() => expect(screen.getByTestId('exec-best-content')).not.toHaveTextContent('Best on meta'))
+    expect(screen.getByTestId('exec-best-content')).toHaveTextContent('Best on snapchat')
+
+    const card = screen.getByTestId('exec-action-a1')
+    expect(within(card).getByTestId('exec-action-impact')).toHaveTextContent('120')
+    const actions = screen.getByTestId('exec-actions')
+    expect(screen.getByTestId('exec-health').compareDocumentPosition(actions) & 4, 'the recommendations close the summary').toBeTruthy()
   })
 })
 
@@ -99,12 +137,15 @@ describe('a detailed link', () => {
   beforeEach(answerByProvider)
   afterEach(() => vi.clearAllMocks())
 
-  it('opens on the dashboard and offers four modes, none of them campaigns', async () => {
+  it('opens on the executive summary and offers four modes, none of them campaigns', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
 
-    await screen.findByTestId('live-mode-dashboard')
+    // REPORT-EXECUTIVE-SUMMARY-001 — every live link opens on the executive dashboard.
+    await screen.findByTestId('live-mode-summary')
     const tabs = within(screen.getByTestId('live-modes')).getAllByRole('tab').map((t) => t.getAttribute('data-testid'))
     expect(tabs).toEqual(['live-mode-tab-summary', 'live-mode-tab-dashboard', 'live-mode-tab-platforms', 'live-mode-tab-content'])
+    fireEvent.click(screen.getByTestId('live-mode-tab-dashboard'))
+    await screen.findByTestId('live-mode-dashboard')
     expect(screen.getByTestId('live-weakest-content')).toBeInTheDocument()
   })
 
@@ -113,7 +154,7 @@ describe('a detailed link', () => {
    * y=1383, two screens down, under the objective split, the comparison table and the leaders.
    */
   it('draws the charts before the platform table and the leaders', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     const charts = await screen.findByTestId('live-platforms')
     const table = screen.getByTestId('live-platform-comparison')
@@ -130,14 +171,14 @@ describe('a detailed link', () => {
 
       return { status: 200, envelope: { data } } as never
     })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     await screen.findByTestId('live-mode-dashboard')
     expect(screen.queryByTestId('live-objective-split'), 'one figure printed twice under two names').not.toBeInTheDocument()
   })
 
   it('states the strongest and weakest platform per objective as figures, not a sentence', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     const strongest = await screen.findByTestId('live-leaders-conversion-strongest')
     expect(strongest).toHaveTextContent('Meta')
@@ -189,7 +230,7 @@ describe('a cut list on the live dashboard', () => {
 
       return { status: 200, envelope: { data } } as never
     })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
 
     const note = await screen.findByTestId('report-ads-of-sales')
     expect(note).toHaveTextContent('2 of 60')
@@ -241,7 +282,7 @@ describe('the states a reader must never see collapsed', () => {
 
   it('shows a skeleton while pending and never the failure sentence', async () => {
     vi.mocked(fetchLiveShared).mockReturnValue(new Promise(() => {}) as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     expect(await screen.findByTestId('live-skeleton')).toBeInTheDocument()
     expect(screen.queryByTestId('live-failed')).not.toBeInTheDocument()
@@ -249,7 +290,7 @@ describe('the states a reader must never see collapsed', () => {
 
   it('shows the refusal when the request fails, never a skeleton that waits forever', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 404, envelope: { message: 'The link is not valid.' } } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     expect(await screen.findByTestId('live-failed')).toHaveTextContent('The link is not valid.')
     expect(screen.queryByTestId('live-skeleton')).not.toBeInTheDocument()
@@ -257,7 +298,7 @@ describe('the states a reader must never see collapsed', () => {
 
   it('keeps the figures on screen when a refresh fails, and says so', async () => {
     answerByProvider()
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
     await screen.findByTestId('live-mode-dashboard')
 
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 500, envelope: {} } as never)
@@ -282,7 +323,7 @@ describe('a link left open stays live', () => {
     answerByProvider()
     visibility('visible')
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
     await screen.findByTestId('live-mode-dashboard')
     const opened = vi.mocked(fetchLiveShared).mock.calls.length
 

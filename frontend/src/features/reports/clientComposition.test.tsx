@@ -75,7 +75,7 @@ describe('the order a client reads a live report in', () => {
    * order is asserted separately below, over the blocks the summary actually has.
    */
   it('answers «at what cost» before «where»', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const kpis = await screen.findByTestId('live-kpis')
@@ -107,7 +107,8 @@ describe('the order a client reads a live report in', () => {
 
     const kpis = await screen.findByTestId('live-kpis')
     const objective = await screen.findByTestId('live-objective-split')
-    const platforms = await screen.findByTestId('live-platforms')
+    // REPORT-EXECUTIVE-SUMMARY-001 — the summary's «where the money went» block.
+    const platforms = await screen.findByTestId('exec-spend-split')
 
     expect(positionOf(kpis, objective) & 4, 'the objective split must follow the KPI cards').toBeTruthy()
     expect(positionOf(objective, platforms) & 4, 'platforms must follow the objective split').toBeTruthy()

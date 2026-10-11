@@ -32,7 +32,8 @@ export function modesFor(form: LiveForm): LiveMode[] {
 export function readMode(raw: string | null | undefined, form: LiveForm): LiveMode {
   const asked = modesFor(form).find((m) => m === raw)
 
-  return asked ?? (form === 'executive_summary' ? 'summary' : 'dashboard')
+  // REPORT-EXECUTIVE-SUMMARY-001 — every live link opens on the executive summary; the detailed form keeps its other views one tab away.
+  return asked ?? 'summary'
 }
 
 /** Views that read the whole link rather than the client's platform chips — they pick a platform themselves. */

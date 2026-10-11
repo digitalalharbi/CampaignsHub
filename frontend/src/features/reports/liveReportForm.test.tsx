@@ -183,11 +183,11 @@ describe('a live link and the form it was shared as', () => {
 
     expect(screen.getByTestId('live-kpis')).toBeInTheDocument()
     /*
-     * The platform summary is a visual in the summary product — results per platform as bars — and
-     * the sortable comparison TABLE is the dashboard's. A summary that carried the table would be the
-     * dashboard again with fewer blocks, which is row 96.
+     * REPORT-EXECUTIVE-SUMMARY-001 — the summary is now an executive dashboard (Owner, 2026-10-12): it
+     * compares the platforms side by side in its own compact block. The dashboard's full comparison
+     * table with its drawers stays the detailed form's.
      */
-    expect(screen.getByTestId('live-summary-platform-results')).toBeInTheDocument()
+    expect(screen.getByTestId('exec-platforms')).toBeInTheDocument()
     expect(screen.queryByTestId('live-platform-comparison')).not.toBeInTheDocument()
     // This fixture spends 1,000 outside the sales path, so direct and blended differ and both are shown.
     expect(screen.getByTestId('live-objective-split')).toBeInTheDocument()
@@ -201,7 +201,7 @@ describe('a live link and the form it was shared as', () => {
    * a client is entitled to find it.
    */
   it('renders every platform for the detailed form', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const tables = await screen.findByTestId('live-detail-tables')
@@ -223,7 +223,7 @@ describe('a live link and the form it was shared as', () => {
    * their money is actually judged on and one they can act on.
    */
   it('never renders the campaign or ad-set rungs to a client', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
     await screen.findByTestId('live-detail-tables')
 
@@ -235,7 +235,7 @@ describe('a live link and the form it was shared as', () => {
 
   /** What replaces them: every objective, with the cost per result each one is judged on. */
   it('renders every objective the money was spent on', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const objectives = within(await screen.findByTestId('live-detail-objectives'))
@@ -253,7 +253,7 @@ describe('a live link and the form it was shared as', () => {
    * a brand path on a sales metric. Printing a number would be inventing one.
    */
   it('states a cost per result only where the objective has one', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const objectives = within(await screen.findByTestId('live-detail-objectives'))
@@ -267,7 +267,7 @@ describe('a live link and the form it was shared as', () => {
 
   /** Sortable, like every other analytical table in the product — it IS the same table. */
   it('lets the reader order the detail by any column', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const platforms = within(await screen.findByTestId('live-platform-comparison'))
@@ -299,7 +299,7 @@ describe('a live link and the form it was shared as', () => {
       },
     } as never)
 
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const platforms = within(await screen.findByTestId('live-platform-comparison'))
@@ -327,7 +327,7 @@ describe('a live link and the form it was shared as', () => {
       envelope: { data: { ...PAYLOAD, campaigns: [], platforms: [] } },
     } as never)
 
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const platforms = within(await screen.findByTestId('live-platform-comparison'))
@@ -349,7 +349,7 @@ describe('a live link and the form it was shared as', () => {
       },
     } as never)
 
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     expect(within(await screen.findByTestId('live-platform-comparison')).getByText(/No rows in this period/)).toBeInTheDocument()
@@ -362,7 +362,7 @@ describe('a live link and the form it was shared as', () => {
       envelope: { data: { ...PAYLOAD, objective_performance: { ...OBJECTIVE_PERFORMANCE, paths: [] } } },
     } as never)
 
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     expect(within(await screen.findByTestId('live-detail-objectives')).getByText(/Nothing was spent on any objective/))
@@ -377,7 +377,7 @@ describe('a live link and the form it was shared as', () => {
    * link there is nobody to ask for it.
    */
   it('lets a client reach the exact figure behind an abbreviated one', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
 
     const platforms = within(await screen.findByTestId('live-platform-comparison'))
