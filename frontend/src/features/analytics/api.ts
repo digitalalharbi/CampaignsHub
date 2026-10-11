@@ -540,7 +540,30 @@ export interface ModelComparison {
   coverage: { orders: number; orders_with_customer: number; share_with_customer: number | null; revenue_withheld_orders: number } | null
 }
 
+/** CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — one platform's claim against the store, per period. */
+export interface DisagreementPoint {
+  from: string
+  to: string
+  claimed: number
+  confirmed: number
+  gap: number
+  /** Null where the store confirmed nothing in the period: a gap without a ratio. */
+  ratio: number | null
+}
+
+export interface AttributionDisagreement {
+  available: boolean
+  unavailable_reason: string | null
+  note_ar: string
+  note_en: string
+  grain: 'day' | 'week' | null
+  periods: { from: string; to: string }[]
+  platforms: { provider: string; claimed: number; confirmed: number; widest_gap: DisagreementPoint | null; points: DisagreementPoint[] }[]
+}
+
 export interface Attribution {
+  /** CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the claim-versus-store pair, split across the window. */
+  disagreement?: AttributionDisagreement
   /** ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the store's evidence. */
   model_comparison?: ModelComparison
   reconciliation?: Reconciliation

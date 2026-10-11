@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Panel } from './components'
 import { AttributionModels } from './AttributionModels'
+import { AttributionDisagreementView } from './AttributionDisagreementView'
 import { money, moneyExact, num, percent } from './format'
 import type { Attribution, PlatformClaim, Reconciliation as ReconciliationData } from './api'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
@@ -212,6 +213,7 @@ export function AttributionPanel({
          */}
         <Overlap overlap={data?.overlap} ar={ar} />
         <Reconciliation data={data?.reconciliation} ar={ar} />
+        <AttributionDisagreementView data={data?.disagreement} ar={ar} />
         <AttributionModels data={data?.model_comparison} ar={ar} />
 
         {/* ── Store-Confirmed ───────────────────────────────────────────────────────────── */}
