@@ -206,6 +206,7 @@ export const NEEDS_AMOUNT = new Set(['LOWEST_COST_WITH_BID_CAP', 'COST_CAP', 'LO
 
 const GOALS: Record<string, { ar: string; en: string }> = {
   LINK_CLICKS: { ar: 'نقرات الرابط', en: 'Link clicks' },
+  CLICK: { ar: 'النقرات', en: 'Clicks' },
   LANDING_PAGE_VIEWS: { ar: 'زيارات صفحة الهبوط', en: 'Landing page views' },
   OFFSITE_CONVERSIONS: { ar: 'التحويلات', en: 'Conversions' },
   LEAD_GENERATION: { ar: 'العملاء المحتملون', en: 'Leads' },
@@ -225,6 +226,19 @@ const FAMILIES: Record<string, { ar: string; en: string }> = {
   instagram: { ar: 'إنستغرام', en: 'Instagram' },
   audience_network: { ar: 'شبكة الجمهور', en: 'Audience Network' },
   messenger: { ar: 'ماسنجر', en: 'Messenger' },
+  // Snapchat positions (placement_v2.snapchat_positions).
+  interstitial_user: { ar: 'بين قصص المستخدمين', en: 'Between friends’ Stories' },
+  interstitial_content: { ar: 'بين المحتوى', en: 'Between content' },
+  interstitial_spotlight: { ar: 'بين مقاطع Spotlight', en: 'Between Spotlight videos' },
+  instream: { ar: 'داخل المحتوى', en: 'In-stream' },
+  public_stories_instream: { ar: 'داخل القصص العامة', en: 'In public Stories' },
+  chat_feed: { ar: 'موجز المحادثات', en: 'Chat Feed' },
+  feed: { ar: 'الموجز', en: 'Feed' },
+  camera: { ar: 'الكاميرا', en: 'Camera' },
+  // TikTok apps.
+  tiktok: { ar: 'تيك توك', en: 'TikTok' },
+  pangle: { ar: 'Pangle', en: 'Pangle' },
+  global_app_bundle: { ar: 'حزمة التطبيقات العالمية', en: 'Global App Bundle' },
 }
 
 export const familyName = (key: string, ar: boolean) => FAMILIES[key]?.[ar ? 'ar' : 'en'] ?? key

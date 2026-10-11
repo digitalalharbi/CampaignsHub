@@ -510,6 +510,9 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
               { value: 'all', label: ar ? 'الجميع' : 'Everyone' }, { value: 'male', label: ar ? 'رجال' : 'Men' }, { value: 'female', label: ar ? 'نساء' : 'Women' },
             ]} />
             <p className="text-xs text-text-muted">{ar ? 'تُستبدل الدول والعمر والجنس فقط؛ تبقى الاهتمامات والجماهير كما هي على المنصة.' : 'Only countries, age and gender are replaced; interests and audiences stay as the platform holds them.'}</p>
+            {entity.provider === 'tiktok' && (
+              <p data-testid="control-tiktok-age-bands" className="text-xs text-text-muted">{ar ? 'تيك توك تستهدف العمر بفئات ثابتة (13-17، 18-24، 25-34، 35-44، 45-54، 55+)؛ تُختار الفئات الواقعة داخل المدى.' : 'TikTok targets age in fixed bands (13-17, 18-24, 25-34, 35-44, 45-54, 55+); the bands inside the range are chosen.'}</p>
+            )}
           </>
         )}
         {action === 'placements' && (

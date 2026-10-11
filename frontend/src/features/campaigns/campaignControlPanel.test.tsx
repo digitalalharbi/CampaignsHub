@@ -139,6 +139,30 @@ describe('the campaign control panel', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.any(String), { level: 'ad_set', entity_id: 's1', action: 'targeting', countries: ['SA', 'AE', 'KW'], age_min: 25, age_max: 44, genders: 'all' }, expect.anything()))
   })
 
+  it('offers Snapchat’s own placement positions by name and sends the chosen ones', async () => {
+    serve({ entities: [entity(), entity({ id: 's2', level: 'ad_set', parent_id: 'e1', provider: 'snapchat', name: 'Snap set', placement_families: ['interstitial_user', 'feed', 'chat_feed'] })], create: [] })
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { ok: true } } } as never)
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-placements-s2'))
+    fireEvent.change(screen.getByTestId('control-input-placement-mode'), { target: { value: 'custom' } })
+    const families = screen.getByTestId('control-input-families')
+    expect(families).toHaveTextContent('Chat Feed')
+    fireEvent.click(within(families).getByLabelText('Feed'))
+    fireEvent.click(within(families).getByLabelText('Chat Feed'))
+    fireEvent.click(screen.getByTestId('control-dialog-submit'))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.any(String), { level: 'ad_set', entity_id: 's2', action: 'placements', mode: 'custom', platforms: ['feed', 'chat_feed'] }, expect.anything()))
+  })
+
+  it('tells a TikTok targeting edit that age comes in fixed bands', async () => {
+    serve({ entities: [entity(), entity({ id: 's3', level: 'ad_set', parent_id: 'e1', provider: 'tiktok', name: 'TT set' })], create: [] })
+    renderWithProviders(<CampaignControlPanel campaign={campaign} projectId="p1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('control-targeting-s3'))
+    expect(screen.getByTestId('control-tiktok-age-bands')).toHaveTextContent('fixed bands')
+  })
+
   it('creates an ad bound to a creative picked from the project’s own', async () => {
     serve({
       entities: [entity(), entity({ id: 's1', level: 'ad_set', parent_id: 'e1', provider: 'meta', name: 'KSA set' })],
