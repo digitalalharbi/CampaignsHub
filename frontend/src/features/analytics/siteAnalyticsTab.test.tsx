@@ -26,7 +26,7 @@ describe('the site analytics tab', () => {
       trend: [{ date: '2026-10-05', sessions: 1000, engaged_sessions: 560, purchases: 30, revenue: 5500 }],
       funnel: [{ stage: 'sessions', count: 1000, step_rate: null, exceeds_previous: false }, { stage: 'purchases', count: 30, step_rate: 0.03, exceeds_previous: false }],
       paid: { available: true, sessions: 500, purchases: 17, revenue: 3400, session_share: 0.5, purchase_share: 0.567, revenue_share: 0.618, platforms: [{ platform: 'meta', sessions: 300, purchases: 9, revenue: 1800 }, { platform: 'google', sessions: 200, purchases: 8, revenue: 1600 }] },
-      breakdowns: { source_medium: { rows: [{ dimension_1: 'facebook', dimension_2: 'paid_social', sessions: 300, purchases: 9, revenue: 1800, engagement_rate: 0.5, conversion_rate: 0.03 }], more: 0 }, campaign: null, landing_page: null, device: null, country: null, user_type: null },
+      breakdowns: { source_medium: { rows: [{ dimension_1: 'facebook', dimension_2: 'paid_social', sessions: 300, purchases: 9, revenue: 1800, engagement_rate: 0.5, conversion_rate: 0.03 }], more: 0 }, campaign: null, landing_page: null, campaign_landing: { rows: [{ dimension_1: 'national_day_sale', dimension_2: '/sale/national-day', sessions: 250, purchases: 8, revenue: 1700, engagement_rate: 0.6, conversion_rate: 0.032 }], more: 0 }, device: null, country: null, user_type: null },
       events: { rows: [{ event: 'purchase', event_count: 30, key_events: 30, is_key_event: true }], more: 0 },
     })
     renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
@@ -40,6 +40,11 @@ describe('the site analytics tab', () => {
     expect(within(paid).getAllByText('Meta').length).toBeGreaterThan(0)
     expect(screen.getByTestId('site-source-medium')).toHaveTextContent('facebook / paid_social')
     expect(screen.getByTestId('site-landing-page-absent')).toBeInTheDocument()
+    // GA4-CAMPAIGN-LANDING-PATH-001 — the campaign and the page it landed on, then what those sessions bought.
+    const path = screen.getByTestId('site-campaign-landing')
+    expect(path).toHaveTextContent('national_day_sale')
+    expect(path).toHaveTextContent('/sale/national-day')
+    expect(path).toHaveTextContent('1.7K SAR')
     expect(screen.getByTestId('site-events')).toHaveTextContent('purchase')
   })
 })
