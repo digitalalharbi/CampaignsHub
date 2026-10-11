@@ -145,6 +145,25 @@ describe('AlertsPage — the queue counts what exists, not what fitted', () => {
     expect(card('snoozed')).toContain('3')
   })
 
+  it('marks an alert that closed itself as recovered, apart from one a person resolved', async () => {
+    vi.mocked(listAlertEvents).mockResolvedValue({
+      events: [
+        { ...event('rec', 'resolved', 'warning'), context: { resolution: 'recovered', title: 'Data sync failed' } },
+        event('man', 'resolved', 'warning'),
+      ],
+      total: 2,
+      counts: { open: 0, snoozed: 0, resolved: 2, open_critical: 0 },
+    })
+
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+
+    await waitFor(() => expect(screen.getByTestId('alert-summary-resolved').textContent).toContain('2'))
+    const chips = screen.getAllByRole('button').filter((b) => /^Resolved/.test(b.textContent ?? ''))
+    fireEvent.click(chips[0])
+    expect(await screen.findByTestId('alert-recovered-rec')).toHaveTextContent('Recovered on its own')
+    expect(screen.queryByTestId('alert-recovered-man')).toBeNull()
+  })
+
   it('says the list is capped, and which end was cut', async () => {
     vi.mocked(listAlertEvents).mockResolvedValue({
       events: [event('a', 'open', 'critical')],

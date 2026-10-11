@@ -10,7 +10,9 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
@@ -79,6 +81,23 @@ final class AlertEvaluator
      * prevent. The floor leaves it able to answer instead of quietly answering nothing.
      */
     private const ANOMALY_MIN_WINDOW_DAYS = 14;
+
+    /**
+     * EMAIL-ALERT-RECOVERY-001 / EMAIL-NOISE-SUPPRESSION-001 — the types whose detector proves health.
+     *
+     * For these, a breach that is no longer found is POSITIVE evidence that the problem cleared: the
+     * latest sync run of that source did not fail, the token was renewed, the lead got an owner or a
+     * call. Their open event is closed as recovered and the reader is told once, so an operator who was
+     * told it broke is told it was fixed, and the thread ends.
+     *
+     * The performance thresholds are deliberately NOT here. Their detectors return nothing when there
+     * is nothing to measure — a day with no data is not a recovered CPA — so closing on silence would
+     * announce a recovery nobody measured.
+     */
+    /** A run that read the source, whatever it found: a day with no data was still a successful read. */
+    private const READ_OK = ['success', 'no_data', 'partial_mapping'];
+
+    public const RECOVERABLE = ['sync_failure', 'token_expiry', 'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue'];
 
     /** Raised by the thing that failed, not by a sweep — a report failing is an event, not a threshold. */
     public const EVENT_DRIVEN = ['report_failed'];
@@ -193,7 +212,57 @@ final class AlertEvaluator
             }
         }
 
+        if (in_array($rule->type, self::RECOVERABLE, true)) {
+            $this->recover($rule, $breaches, $now);
+        }
+
         return $raised;
+    }
+
+    /**
+     * Close, as recovered, every open event of this rule whose breach the detector no longer finds,
+     * and tell the reader once. A snoozed event recovers too: the snooze silenced a problem that has
+     * now gone, and leaving it to wake into an alert about nothing would be the storm in reverse.
+     *
+     * @param  list<array<string, mixed>>  $breaches
+     */
+    private function recover(AlertRule $rule, array $breaches, Carbon $now): void
+    {
+        $still = array_map(
+            static fn (array $b): string => hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? ''])),
+            $breaches,
+        );
+
+        AlertEvent::query()
+            ->where('rule_id', $rule->id)
+            ->whereIn('status', ['open', 'snoozed'])
+            ->when($still !== [], static fn ($q) => $q->whereNotIn('dedup_key', $still))
+            ->get()
+            ->each(function (AlertEvent $event) use ($rule, $now): void {
+                $context = (array) ($event->context ?? []);
+                $title = (string) ($context['title'] ?? $rule->name);
+                $event->forceFill([
+                    'status' => 'resolved',
+                    'resolved_at' => $now,
+                    'snoozed_until' => null,
+                    'context' => array_merge($context, ['resolution' => 'recovered', 'recovered_at' => $now->toIso8601String()]),
+                ])->save();
+
+                $this->notifications->dispatch([
+                    'tenant_id' => $rule->tenant_id,
+                    'project_id' => $event->project_id,
+                    'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+                    'severity' => 'info',
+                    'title' => 'Recovered: '.$title,
+                    'message' => 'The condition behind «'.$title.'» no longer holds as of '.$now->toDateTimeString().' UTC. The alert is closed; a new one opens only if it happens again.',
+                    'source' => 'alerts',
+                    'entity_type' => $event->entity_type,
+                    'entity_id' => $event->entity_id,
+                    'action_url' => '/alerts',
+                    // A recovery is not a repeat of the alert it closes; its own key keeps the dispatcher from collapsing the two.
+                    'dedup_extra' => 'recovered:'.$event->id,
+                ]);
+            });
     }
 
     /**
@@ -335,14 +404,81 @@ final class AlertEvaluator
             ->where('status', 'failed')
             ->get();
 
-        return $latest->map(fn (MetricSyncRun $r) => [
-            'entity_type' => ProviderConnection::class,
-            'entity_id' => (string) $r->connection_id,
-            'project_id' => $r->project_id ? (string) $r->project_id : null,
-            'title' => 'Data sync failed',
-            'message' => 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.'),
-            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->error],
-        ])->all();
+        $quiet = $this->quietPeriod($rule);
+        $ads = $latest->map(function (MetricSyncRun $r) use ($quiet) {
+            $last = MetricSyncRun::query()->where('connection_id', $r->connection_id)->whereIn('status', self::READ_OK)
+                ->latest('started_at')->value('started_at');
+
+            return [
+                'entity_type' => ProviderConnection::class,
+                'entity_id' => (string) $r->connection_id,
+                'project_id' => $r->project_id ? (string) $r->project_id : null,
+                'title' => 'Data sync failed',
+                'message' => 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.').' '.$this->lastRead($last).' '.$quiet,
+                'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->error, 'last_success_at' => $this->iso($last)],
+            ];
+        })->all();
+
+        return [...$ads, ...$this->sourceOutages($rule)];
+    }
+
+    /**
+     * EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — a GA4 property or a store that stopped syncing.
+     *
+     * Their runs live in `integration_sync_runs` (type `measurement` or `commerce`), not in the ad
+     * platforms' `metric_sync_runs`, so the ad-platform sweep above never saw them: a store that
+     * stopped answering broke every confirmed-order figure in silence. The latest run per connection
+     * and type is read; a failed one is an outage, named with the last read that succeeded. An
+     * unselected source (`awaiting_assignment`) is not an outage and is never reported as one.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function sourceOutages(AlertRule $rule): array
+    {
+        $quiet = $this->quietPeriod($rule);
+        $latest = IntegrationSyncRun::query()
+            ->whereIn('id', function ($q) {
+                $q->selectRaw('DISTINCT ON (provider_connection_id, type) id')
+                    ->from('integration_sync_runs')
+                    ->whereIn('type', ['measurement', 'commerce'])
+                    ->whereNotNull('provider_connection_id')
+                    ->orderByRaw('provider_connection_id, type, started_at DESC NULLS LAST, created_at DESC');
+            })
+            ->where('status', SyncRunStatus::Failed->value)
+            ->get();
+
+        return $latest->map(function (IntegrationSyncRun $r) use ($quiet) {
+            $last = IntegrationSyncRun::query()->where('provider_connection_id', $r->provider_connection_id)->where('type', $r->type)
+                ->whereIn('status', self::READ_OK)->latest('started_at')->value('started_at');
+            $what = $r->type === 'measurement' ? 'Site measurement (GA4)' : 'Store';
+
+            return [
+                'entity_type' => ProviderConnection::class,
+                'entity_id' => (string) $r->provider_connection_id,
+                'project_id' => $r->project_id ? (string) $r->project_id : null,
+                'title' => $what.' sync failed',
+                'message' => $what.' stopped syncing'.($r->error ? ': '.$r->error : '.').' '.$this->lastRead($last).' '.$quiet,
+                'context' => ['source' => $r->type, 'sync_run_id' => (string) $r->id, 'error' => $r->error, 'last_success_at' => $this->iso($last)],
+            ];
+        })->all();
+    }
+
+    private function lastRead(mixed $at): string
+    {
+        return $at === null ? 'No read has succeeded yet.' : 'Last successful read: '.Carbon::parse($at)->toDateTimeString().' UTC.';
+    }
+
+    private function iso(mixed $at): ?string
+    {
+        return $at === null ? null : Carbon::parse($at)->toIso8601String();
+    }
+
+    /** EMAIL-NOISE-SUPPRESSION-001 — the quiet period, stated in the alert itself. */
+    private function quietPeriod(AlertRule $rule): string
+    {
+        $hours = round($rule->cooldown_minutes / 60, 1);
+
+        return 'While it continues, this alert does not repeat for '.($hours == (int) $hours ? (int) $hours : $hours).' h.';
     }
 
     /** @return list<array<string,mixed>> */

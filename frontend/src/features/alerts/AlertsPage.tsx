@@ -441,6 +441,16 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     <span data-testid={`alert-scope-${e.id}`} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-muted">
                       {e.project_id === null ? c.account_wide : (projectName(e.project_id) ?? c.project)}
                     </span>
+                    {/*
+                      EMAIL-ALERT-RECOVERY-001 — closed by the evidence, not by a person: the source
+                      read again, the token was renewed, the lead got an owner. Said apart from a
+                      manual «resolve» so nobody thinks a colleague dismissed it.
+                    */}
+                    {e.status === 'resolved' && e.context?.resolution === 'recovered' && (
+                      <span data-testid={`alert-recovered-${e.id}`} className="rounded-full bg-[var(--positive-background)] px-2 py-0.5 text-[11px] font-semibold text-success">
+                        {locale === 'ar' ? 'تعافى تلقائيًا' : 'Recovered on its own'}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-text-secondary">{messageFor(e, locale)}</p>
                   <ContextChips e={e} c={c} />

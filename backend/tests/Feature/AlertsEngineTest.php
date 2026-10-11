@@ -115,6 +115,77 @@ final class AlertsEngineTest extends TestCase
         $this->assertSame(1, AlertEvent::where('rule_id', $rule->id)->count());
     }
 
+    /** EMAIL-ALERT-RECOVERY-001 — a later successful read closes the thread and says so, once. */
+    public function test_a_sync_failure_recovers_when_a_later_read_succeeds_and_tells_the_reader_once(): void
+    {
+        $conn = $this->failedSync();
+        $rule = $this->rule('sync_failure');
+        $evaluator = app(AlertEvaluator::class);
+        $evaluator->evaluateRule($rule);
+        $event = AlertEvent::where('rule_id', $rule->id)->sole();
+        $this->assertStringContainsString('No read has succeeded yet.', (string) $event->context['message']);
+        $this->assertStringContainsString('does not repeat for 12 h', (string) $event->context['message'], 'the quiet period is stated');
+
+        DB::table('metric_sync_runs')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'connection_id' => $conn, 'provider' => 'meta', 'status' => 'success',
+            'window_start' => Carbon::now()->subDay()->toDateString(), 'window_end' => Carbon::now()->toDateString(),
+            'started_at' => Carbon::now(), 'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+        ]);
+        $evaluator->evaluateRule($rule);
+
+        $event->refresh();
+        $this->assertSame('resolved', $event->status);
+        $this->assertSame('recovered', $event->context['resolution']);
+        $this->assertSame(1, AppNotification::where('title', 'like', 'Recovered:%')->count());
+
+        $evaluator->evaluateRule($rule);
+        $this->assertSame(1, AppNotification::where('title', 'like', 'Recovered:%')->count(), 'a recovery is told once');
+    }
+
+    /** A performance alert is never «recovered» by silence: no data is not a measured recovery. */
+    public function test_a_performance_alert_stays_open_when_its_data_goes_quiet(): void
+    {
+        $c = $this->campaign();
+        $this->metric($c, 'spend', 500);
+        $this->metric($c, 'conversions', 0);
+        $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+        app(AlertEvaluator::class)->evaluateRule($rule);
+        DB::table('daily_metrics')->delete();
+
+        app(AlertEvaluator::class)->evaluateRule($rule);
+
+        $this->assertSame('open', AlertEvent::where('rule_id', $rule->id)->sole()->status);
+        $this->assertSame(0, AppNotification::where('title', 'like', 'Recovered:%')->count());
+    }
+
+    /** EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — a GA4 property or a store that stopped syncing, with its last good read. */
+    public function test_a_measurement_or_store_outage_is_raised_with_its_last_successful_read(): void
+    {
+        $ga4 = (string) Str::uuid();
+        $store = (string) Str::uuid();
+        $unselected = (string) Str::uuid();
+        $run = fn (string $conn, string $type, string $status, int $minutesAgo) => DB::table('integration_sync_runs')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'provider_connection_id' => $conn, 'type' => $type, 'status' => $status, 'error' => $status === 'failed' ? 'quota exceeded' : null,
+            'started_at' => Carbon::now()->subMinutes($minutesAgo), 'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+        ]);
+        $run($ga4, 'measurement', 'success', 600);
+        $run($ga4, 'measurement', 'failed', 5);
+        $run($store, 'commerce', 'failed', 5);
+        $run($unselected, 'measurement', 'awaiting_assignment', 5);
+        $rule = $this->rule('sync_failure');
+
+        $this->assertSame(2, app(AlertEvaluator::class)->evaluateRule($rule));
+
+        $titles = AlertEvent::where('rule_id', $rule->id)->get()->map(fn (AlertEvent $e) => $e->context['title'])->sort()->values()->all();
+        $this->assertSame(['Site measurement (GA4) sync failed', 'Store sync failed'], $titles);
+        $ga4Event = AlertEvent::where('rule_id', $rule->id)->where('entity_id', $ga4)->sole();
+        $this->assertStringContainsString('Last successful read:', (string) $ga4Event->context['message']);
+        $this->assertNotNull($ga4Event->context['last_success_at']);
+        $this->assertSame(0, AlertEvent::where('entity_id', $unselected)->count(), 'an unselected source is not an outage');
+    }
+
     public function test_no_results_raises_and_opens_a_task_when_configured(): void
     {
         $c = $this->campaign();
