@@ -104,7 +104,11 @@ final class CampaignWriteController extends Controller
             WriteAction::BidStrategy => $this->strategy($request, $adapter?->bidStrategies($level) ?? []),
             WriteAction::CreateAdSet => $this->adSet($request, $provider, $adapter?->optimizationGoals() ?? []),
             WriteAction::CreateAd => $request->validate(['name' => ['required', 'string', 'min:1', 'max:250']])
-                + ($provider === 'google' ? $this->searchAd($request) : $this->creative($request, $provider)),
+                + match ($provider) {
+                    'google' => $this->searchAd($request),
+                    'tiktok' => $this->tiktokAd($request),
+                    default => $this->creative($request, $provider),
+                },
             WriteAction::Creative => $this->creative($request, $provider),
             WriteAction::Targeting => $this->targeting($request),
             WriteAction::Placements => $this->placements($request, $adapter?->placementFamilies() ?? []),
@@ -187,6 +191,32 @@ final class CampaignWriteController extends Controller
         abort_if($external === null || $external === '', 422, 'That creative is not one of this project\'s on this platform.');
 
         return ['creative_external_id' => (string) $external];
+    }
+
+    /** TikTok's calls to action offered for a web ad. */
+    private const TIKTOK_CALLS = ['LEARN_MORE', 'SHOP_NOW', 'ORDER_NOW', 'SIGN_UP', 'CONTACT_US', 'BOOK_NOW', 'APPLY_NOW', 'VISIT_STORE'];
+
+    /**
+     * A TikTok ad: one of the project's TikTok videos, its text, call to action and landing page,
+     * and the synced ad that already ran that video — whose identity TikTok is asked for at write time.
+     *
+     * @return array<string, mixed>
+     */
+    private function tiktokAd(Request $request): array
+    {
+        $data = $request->validate([
+            'creative_id' => ['required', 'string', 'max:64'],
+            'ad_text' => ['required', 'string', 'min:1', 'max:100'],
+            'call_to_action' => ['required', Rule::in(self::TIKTOK_CALLS)],
+            'url' => ['required', 'url:https', 'max:2048'],
+        ]);
+        $creative = $this->creative($request, 'tiktok');
+        $source = BoundAccountVisibility::applyThroughCampaign(ExternalAd::query(), 'external_ads.external_campaign_id', 'external_ads.project_id')
+            ->where('provider', 'tiktok')->where('creative_id', $data['creative_id'])
+            ->orderByDesc('last_synced_at')->value('external_id');
+        abort_if($source === null || $source === '', 422, 'TikTok publishes an ad under an identity. No synced TikTok ad has run this video, so its identity is not known here.');
+
+        return $creative + ['ad_text' => (string) $data['ad_text'], 'call_to_action' => (string) $data['call_to_action'], 'url' => (string) $data['url'], 'source_ad_external_id' => (string) $source];
     }
 
     /**

@@ -24,9 +24,13 @@ use Illuminate\Support\Carbon;
  * Age is targeted in TikTok's fixed bands; a range is honoured by the bands that lie inside it.
  *
  * An ad group is created here for the two goals whose billing TikTok fixes without a pixel or an
- * app: CLICK (billed per click) and REACH (billed per thousand). It is created switched off. Ad
- * creation needs an identity and an uploaded video, which this layer does not hold, so it stays
- * not implemented and says so.
+ * app: CLICK (billed per click) and REACH (billed per thousand). It is created switched off.
+ *
+ * An ad is created from a video TikTok already holds for this advertiser — the project's TikTok
+ * creatives ARE those video ids — and published under the identity that already published that
+ * video: the source ad is read from TikTok at write time for its identity and its cover, never
+ * guessed and never stored. The new ad carries its own text, call to action and landing page, and
+ * starts switched off.
  */
 final class TikTokWriteAdapter extends AbstractWriteAdapter
 {
@@ -41,7 +45,7 @@ final class TikTokWriteAdapter extends AbstractWriteAdapter
         ],
         'ad_set' => [
             'pause' => true, 'resume' => true, 'rename' => true, 'budget' => true, 'schedule' => true, 'bid_strategy' => true, 'delete' => true,
-            'targeting' => true, 'placements' => true,
+            'targeting' => true, 'placements' => true, 'create_ad' => true,
             'archive' => WriteRefusal::PROVIDER_UNSUPPORTED,
             'duplicate' => WriteRefusal::PROVIDER_UNSUPPORTED,
         ],
@@ -134,6 +138,10 @@ final class TikTokWriteAdapter extends AbstractWriteAdapter
             return $this->targeting($connector, $target, $input);
         }
 
+        if ($action === WriteAction::CreateAd) {
+            return $this->createAd($connector, $target, $input);
+        }
+
         if ($action === WriteAction::Placements) {
             $automatic = ($input['mode'] ?? 'automatic') === 'automatic';
             $families = $automatic ? [] : array_values((array) $input['platforms']);
@@ -212,6 +220,49 @@ final class TikTokWriteAdapter extends AbstractWriteAdapter
             'operation_status' => 'DISABLE',
         ], static fn ($v) => $v !== null), idempotent: false);
         $id = ($response->json() ?? [])['data']['adgroup_id'] ?? null;
+
+        return $this->verdict($response, [], is_scalar($id) ? (string) $id : null);
+    }
+
+    /** @param  array<string, mixed>  $input */
+    private function createAd(ApiAdvertisingConnector $connector, WriteTarget $target, array $input): WriteOutcome
+    {
+        $source = (string) ($input['source_ad_external_id'] ?? '');
+        $read = $this->send($connector, 'GET', 'ad/get/', [
+            'advertiser_id' => $target->accountExternalId,
+            'filtering' => json_encode(['ad_ids' => [$source]], JSON_THROW_ON_ERROR),
+        ]);
+        if (! PlatformHttp::succeeded($read)) {
+            return $this->verdict($read);
+        }
+        $ad = (array) ((($read->json() ?? [])['data']['list'][0]) ?? []);
+        $identity = (string) ($ad['identity_id'] ?? '');
+        $identityType = (string) ($ad['identity_type'] ?? '');
+        if ($identity === '' || $identityType === '') {
+            return WriteOutcome::refused('TikTok returned no identity for the ad that ran this video, so the new ad has no one to publish it.');
+        }
+        $video = (string) $input['creative_external_id'];
+        $isVideo = ($ad['video_id'] ?? null) !== null && (string) $ad['video_id'] === $video;
+
+        $response = $this->send($connector, 'POST', 'ad/create/', [
+            'advertiser_id' => $target->accountExternalId,
+            'adgroup_id' => $target->externalId,
+            'creatives' => [array_filter([
+                'ad_name' => (string) $input['name'],
+                'identity_type' => $identityType,
+                'identity_id' => $identity,
+                'ad_format' => $isVideo ? 'SINGLE_VIDEO' : 'SINGLE_IMAGE',
+                'video_id' => $isVideo ? $video : null,
+                // A video's cover is the source ad's own; an image ad is the image itself.
+                'image_ids' => $isVideo ? (array_values(array_filter((array) ($ad['image_ids'] ?? []), 'is_string')) ?: null) : [$video],
+                'ad_text' => (string) $input['ad_text'],
+                'call_to_action' => (string) $input['call_to_action'],
+                'landing_page_url' => (string) $input['url'],
+                'operation_status' => 'DISABLE',
+            ], static fn ($v) => $v !== null)],
+        ], idempotent: false);
+        $data = (array) (($response->json() ?? [])['data'] ?? []);
+        $id = $data['ad_ids'][0] ?? $data['creatives'][0]['ad_id'] ?? $data['ad_id'] ?? null;
 
         return $this->verdict($response, [], is_scalar($id) ? (string) $id : null);
     }
