@@ -158,3 +158,53 @@ export async function fetchFollowUpWorkspace(params: {
 
   return getData<FollowUpWorkspaceResult>(`/leads/workspace${query ? `?${query}` : ''}`)
 }
+
+/**
+ * EXECUTIVE-OPS-DASHBOARD-001 — the money, the leads and the team in one answer.
+ *
+ * `GET /leads/executive` joins the metrics aggregator's spend to `FollowUpWorkspace` and derives one
+ * figure of its own, the cost per lead. A money figure the contract will not state arrives as
+ * `amount: null` with its reason, and stays a reason all the way to the screen.
+ */
+export interface ExecutiveMoney {
+  amount: number | null
+  currency: string | null
+  /** absent · withheld · partial · mixed_currency · no_leads · no_spend */
+  reason: string | null
+}
+
+export interface ExecutiveOperationsResult {
+  window: { from: string; to: string }
+  spend: ExecutiveMoney
+  leads: {
+    received: number
+    unassigned: number
+    contacted: number
+    not_contacted: number
+    qualified: number
+    appointments: number
+    won: number
+    lost: number
+    invalid: number
+  }
+  team: {
+    contact_rate: number | null
+    qualification_rate: number | null
+    appointment_rate: number | null
+    win_rate: number | null
+    first_response: { median_minutes: number | null; measured: number; of: number }
+    overdue: number
+    overdue_scope: string
+  }
+  cost_per_lead: ExecutiveMoney
+  cost_per_qualified_lead: ExecutiveMoney
+  attention: { kind: 'unassigned_leads' | 'overdue_follow_up' | 'never_contacted' | 'spend_not_comparable' | string; domain: string; count: number }[]
+}
+
+export async function fetchExecutiveOperations(params: { from?: string; to?: string; project_id?: string }): Promise<ExecutiveOperationsResult> {
+  const query = new URLSearchParams(
+    Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1] !== ''),
+  ).toString()
+
+  return getData<ExecutiveOperationsResult>(`/leads/executive${query ? `?${query}` : ''}`)
+}

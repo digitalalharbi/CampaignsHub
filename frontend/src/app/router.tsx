@@ -11,6 +11,7 @@ import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
 import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
+import { ExecutiveOpsPage } from '@/features/crm/ExecutiveOpsPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
@@ -472,6 +473,8 @@ export const router = createBrowserRouter(withErrorBoundary([
            * is where a reader asking «what is overdue» already is.
            */
           { path: 'leads/workspace', element: <FollowUpWorkspacePage /> },
+          // EXECUTIVE-OPS-DASHBOARD-001 — spend, leads and follow-up joined; reached from the leads screen.
+          { path: 'leads/executive', element: <ExecutiveOpsPage /> },
         ],
         }],
       },

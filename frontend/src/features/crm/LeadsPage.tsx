@@ -273,6 +273,9 @@ export function LeadsPage() {
           >
             {locale === 'ar' ? 'المتابعة' : 'Follow-up'}
           </Link>
+          <Link to="/app/leads/executive" className="text-accent text-sm hover:underline" data-testid="leads-executive-link">
+            {locale === 'ar' ? 'اللوحة التنفيذية' : 'Executive view'}
+          </Link>
           {canCreate && (
             <Button onClick={() => setModalOpen(true)}>
               <Plus size={15} /> {t('add_lead')}

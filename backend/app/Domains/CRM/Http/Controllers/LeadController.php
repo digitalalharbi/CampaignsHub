@@ -510,9 +510,17 @@ final class LeadController extends Controller
          * second opinion, and the first time the two disagreed a manager would have no way to tell
          * which screen was lying.
          */
-        $spend = $projectId === null
-            ? []
-            : $metrics->forProjects([$projectId])->totals($from->startOfDay(), $to->endOfDay());
+        $spend = [];
+        if ($projectId !== null) {
+            $agg = $metrics->forProjects([$projectId]);
+            $spend = $agg->totals($from->startOfDay(), $to->endOfDay());
+            /*
+             * The totals carry no currency of their own; the basis is read the way the dashboard
+             * reads it — named when every row agrees, null when they mix — so a spend and the cost
+             * per lead divided from it are never bare numbers.
+             */
+            $spend['currency'] = $agg->currencyBasis($from->startOfDay(), $to->endOfDay())['currency'];
+        }
 
         return ApiResponse::success($executive->build($work, $spend), 'Executive operations.');
     }
