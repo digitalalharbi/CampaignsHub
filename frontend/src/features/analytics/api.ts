@@ -429,6 +429,11 @@ export interface PlatformClaim {
   ratio: number | null
   attribution: AttributionWindowBasis
   currency: string | null
+  /** GA4-ANALYTICS-PRODUCT-001 — GA4's view of this platform's PAID visits; null when no GA4 property is selected. */
+  ga4_sessions?: number | null
+  ga4_purchases?: number | null
+  ga4_revenue?: number | null
+  ga4_currency?: string | null
 }
 
 export interface DuplicatedShop {
