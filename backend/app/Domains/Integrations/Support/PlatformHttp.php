@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Support;
 
+use App\Domains\Integrations\Providers\Snapchat\SnapchatVocabulary;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Request;
@@ -166,7 +167,16 @@ final class PlatformHttp
             return 'HTTP '.$response->status().': '.mb_substr(trim($response->body()), 0, 200);
         }
 
-        return implode(' · ', array_merge([$sentence], self::identifiers($body, $error)));
+        /*
+         * SNAP-OCT26-E9001 — a code the product knows is explained, never shown bare. The provider's
+         * own sentence stays, and the explanation and the retry rule come first because they are what
+         * the operator acts on.
+         */
+        $code = $body['error_code'] ?? $error['code'] ?? $body['code'] ?? null;
+        $explained = is_string($code) ? SnapchatVocabulary::explainError($code) : null;
+        $lead = $explained === null ? [] : [$explained['message_en'].' Retry: '.$explained['retry'].'.'];
+
+        return implode(' · ', array_merge($lead, [$sentence], self::identifiers($body, $error)));
     }
 
     /**

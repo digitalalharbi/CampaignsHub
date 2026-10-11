@@ -84,6 +84,11 @@ final class DemoCreativesSeeder extends Seeder
                         'source_type' => 'estimated',
                         'is_demo' => true,
                         'last_synced_at' => now(),
+                        // SNAP-OCT26-AI-MEDIA-DECLARATION — one demo Snapchat creative carries the declaration the
+                        // platform would send; the others carry none, and read «not declared», never «not AI».
+                        'raw' => $provider === 'snapchat' && $i === 0
+                            ? ['is_demo' => true, 'ai_content_source' => 'USER_AI_GEN']
+                            : ['is_demo' => true],
                     ],
                 );
 
