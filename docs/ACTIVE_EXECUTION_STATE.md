@@ -13,7 +13,8 @@ One merge lane, each PR verified on the served bundle before the next was rebase
 | #660 | Snapchat placements, TikTok ad groups, targeting and placements, Google search ads | `index-DWqeb0hT.js` carries `control-input-headlines`, `control-tiktok-age-bands` | BLOCKED_EXTERNAL_CREDENTIALS |
 | #661 | GA4 site-analytics product: seven daily breakdowns, the «الموقع (GA4)» tab, a GA4 column beside platform claims | `index-bV79-3JB.js` carries `site-funnel`, `site-paid`; `…/measurement/analytics` 401; migration ran on deploy | BLOCKED_EXTERNAL_CREDENTIALS for live figures |
 | #662 | Attribution model comparison: first touch, last touch, assists, evidence, conversion paths, on one shared `OrderTouch` reading | `index-_np_GZbE.js` carries `attribution-models`, `attribution-paths` | VERIFIED |
-| #663 | Google ad group targeting and TikTok ads, the last two campaign writes | in the lane | — |
+| #663 | Google ad group targeting and TikTok ads, the last two campaign writes | `index--iFcVDeR.js` carries `control-google-targeting-scope`, `control-tiktok-identity` | BLOCKED_EXTERNAL_CREDENTIALS |
+| this PR | GA4 campaign → landing page → purchase path | — | — |
 
 ### Defects the guards caught on the way
 
