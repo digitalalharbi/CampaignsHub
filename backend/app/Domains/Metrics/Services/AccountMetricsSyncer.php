@@ -609,7 +609,7 @@ final class AccountMetricsSyncer
         $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
-        $squadFailure ??= $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted']);
+        $squadFailure ??= $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted'], $squadResult['unkeyed'], $squadRows);
 
         $adThrown = null;
         $adRows = $this->grain(
@@ -650,7 +650,7 @@ final class AccountMetricsSyncer
         $adResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
         );
-        $adFailure ??= $this->nothingPlaced('ad', count($adRows), $adResult['upserted']);
+        $adFailure ??= $this->nothingPlaced('ad', count($adRows), $adResult['upserted'], $adResult['unkeyed'], $adRows);
 
         /*
          * Record WHY the grains are empty, when they are.
@@ -673,8 +673,10 @@ final class AccountMetricsSyncer
                 'entity_parents_asked' => $campaigns->count(),
                 'entity_ad_sets_fetched' => count($squadRows),
                 'entity_ad_sets_skipped' => $squadResult['skipped'],
+                'entity_ad_sets_unkeyed' => $squadResult['unkeyed'],
                 'entity_ads_fetched' => count($adRows),
                 'entity_ads_skipped' => $adResult['skipped'],
+                'entity_ads_unkeyed' => $adResult['unkeyed'],
                 'entity_failure' => $squadFailure ?? $adFailure,
                 'entity_ad_sets_failure' => $squadFailure,
                 'entity_ads_failure' => $adFailure,
@@ -720,11 +722,29 @@ final class AccountMetricsSyncer
     }
 
     /** Rows came back and none matched a discovered entity: nothing was written, and that is not a success. */
-    private function nothingPlaced(string $grain, int $fetched, int $upserted): ?string
+    /**
+     * Why a grain that answered stored nothing — and WHOSE gap it is.
+     *
+     * «None matched a discovered entity» sends an operator to the structure sweep. When every row
+     * came back with no `entity_id` at all, the structure sweep is innocent: the connector built its
+     * rows under another key and the upsert never read an id to match. That is a defect in this
+     * product, and the sentence names it so the next diagnostic reads the cause and not the symptom.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     */
+    private function nothingPlaced(string $grain, int $fetched, int $upserted, int $unkeyed = 0, array $rows = []): ?string
     {
-        return $fetched > 0 && $upserted === 0
-            ? "{$fetched} {$grain} row(s) came back and none matched a discovered {$grain}, so none was stored."
-            : null;
+        if ($fetched === 0 || $upserted > 0) {
+            return null;
+        }
+
+        if ($unkeyed === $fetched) {
+            $keys = implode(', ', array_keys($rows[0] ?? []));
+
+            return "{$fetched} {$grain} row(s) came back and none carried an entity_id — the connector does not speak the grain contract (row keys: {$keys}), so none was stored.";
+        }
+
+        return "{$fetched} {$grain} row(s) came back and none matched a discovered {$grain}, so none was stored.";
     }
 
     /**

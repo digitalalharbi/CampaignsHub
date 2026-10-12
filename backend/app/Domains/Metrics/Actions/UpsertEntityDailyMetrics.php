@@ -55,7 +55,7 @@ final class UpsertEntityDailyMetrics
      * @param  list<array<string,mixed>>  $rows  canonical rows; provider entity id in `entity_id`
      * @param  array<string,array{id:string,project_id:string,tenant_id:string,campaign_id:?string,ad_set_id:?string}>  $known
      *                                                                                                                          provider entity id => the entity the structure sweep already discovered
-     * @return array{upserted:int,skipped:int}
+     * @return array{upserted:int,skipped:int,unkeyed:int} `unkeyed` counts the skipped rows that carried no `entity_id` at all
      */
     public function execute(
         ExternalAccount $account,
@@ -65,12 +65,13 @@ final class UpsertEntityDailyMetrics
         ?string $syncRunId = null,
     ): array {
         if ($rows === []) {
-            return ['upserted' => 0, 'skipped' => 0];
+            return ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0];
         }
 
         $now = Carbon::now();
         $payload = [];
         $skipped = 0;
+        $unkeyed = 0;
 
         foreach ($rows as $row) {
             $providerId = (string) ($row['entity_id'] ?? '');
@@ -79,6 +80,16 @@ final class UpsertEntityDailyMetrics
 
             if ($entity === null || $date === '') {
                 $skipped++;
+
+                /*
+                 * A row that names NO entity is not a row that matched nothing — it is a connector
+                 * that does not speak this contract, and the two need different people. Counted apart
+                 * so the run can say which: ChatGPT Ads shipped its grain rows under another key, and
+                 * for a week the run blamed discovery for ids the upsert never read.
+                 */
+                if ($providerId === '') {
+                    $unkeyed++;
+                }
 
                 continue;
             }
@@ -146,6 +157,6 @@ final class UpsertEntityDailyMetrics
             );
         }
 
-        return ['upserted' => count($payload), 'skipped' => $skipped];
+        return ['upserted' => count($payload), 'skipped' => $skipped, 'unkeyed' => $unkeyed];
     }
 }
