@@ -82,7 +82,14 @@ final class DiagnoseSyncCommand extends Command
         $accounts = ExternalAccount::withoutGlobalScopes()
             ->when($provider !== null, fn ($q) => $q->where('provider', $provider))
             ->when($accountRef !== null, fn ($q) => $q->where(
-                fn ($w) => $w->where('id', $accountRef)->orWhere('external_id', $accountRef),
+                /*
+                 * `id` is a uuid column: comparing it with a provider's numeric id (TikTok's
+                 * `7194075886352662529`) is a Postgres error, not a miss. Only a uuid-shaped
+                 * reference is asked of `id`; everything else is the provider's own id.
+                 */
+                fn ($w) => Str::isUuid($accountRef)
+                    ? $w->where('id', $accountRef)->orWhere('external_id', $accountRef)
+                    : $w->where('external_id', $accountRef),
             ))
             /*
              * `--linked` exists because 309 discovered accounts is 308 rows of «binding=NONE» around
