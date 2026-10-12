@@ -93,7 +93,9 @@ final class AccountDiscovery
         $connection->forceFill(['last_discovery_attempted_at' => Carbon::now()])->save();
 
         try {
-            $accounts = $connector->withConnection($connection)->listAdAccounts();
+            // The BOUND connector is the one that read — and the one that holds what it could not read.
+            $connector = $connector->withConnection($connection);
+            $accounts = $connector->listAdAccounts();
         } catch (\Throwable $e) {
             $connection->forceFill([
                 'discovery_blocked_reason' => $this->classify($e),
@@ -148,7 +150,13 @@ final class AccountDiscovery
             );
         }
 
-        $accessLost = $this->markUnreachable($connection, $seen);
+        /*
+         * GADS-DISCOVERY-PARTIAL-001 — the customers this read could not open. Their accounts were not
+         * SEEN, but that is not evidence they were lost: with any customer refused, nothing is marked
+         * unreachable, and the refusals travel to the interface as warnings.
+         */
+        $warnings = method_exists($connector, 'lastDiscoveryWarnings') ? $connector->lastDiscoveryWarnings() : [];
+        $accessLost = $warnings === [] ? $this->markUnreachable($connection, $seen) : 0;
 
         $connection->forceFill([
             'last_health_check_at' => Carbon::now(),
@@ -168,6 +176,8 @@ final class AccountDiscovery
             'created' => $created,
             'named' => $named,
             'access_lost' => $accessLost,
+            'inaccessible' => count($warnings),
+            'warnings' => $warnings,
         ];
     }
 
