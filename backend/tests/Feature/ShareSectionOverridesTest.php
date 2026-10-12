@@ -219,5 +219,12 @@ final class ShareSectionOverridesTest extends TestCase
             ->assertCreated()->json('data.share_id');
 
         $this->assertSame(['content_performance', 'detailed_tables'], ReportShare::withoutGlobalScopes()->findOrFail($id)->sectionOverrides());
+
+        // CLIENT-REPORT-FRAMING-001 — a client link hides spend unless the owner chose to show it.
+        $this->assertTrue((bool) ReportShare::withoutGlobalScopes()->findOrFail($id)->hide_spend, 'a new client link showed spend by default');
+        $shown = $this->actingAs($this->operator, 'sanctum')
+            ->postJson($url, $body + ['hide_spend' => false])
+            ->assertCreated()->json('data.share_id');
+        $this->assertFalse((bool) ReportShare::withoutGlobalScopes()->findOrFail($shown)->hide_spend, 'the owner\'s choice to show spend was not kept');
     }
 }
