@@ -420,6 +420,9 @@ export async function refreshDiscoveredAccounts(connectionId: string): Promise<{
   created: number
   named: number
   access_lost: number
+  /** GADS-DISCOVERY-PARTIAL-001 — accessible customers the provider refused, each with its own reason. */
+  inaccessible?: number
+  warnings?: Array<{ customer: string; reason: string }>
 }> {
   await ensureCsrfCookie()
   return postData(`/connections/${connectionId}/refresh`)

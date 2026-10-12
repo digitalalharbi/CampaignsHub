@@ -15,6 +15,7 @@ import { platformColor } from '@/features/analytics/components'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
+import { toApiError } from '@/lib/api/client'
 
 export type DrawerTab = 'overview' | 'accounts' | 'history' | 'settings'
 
@@ -160,6 +161,8 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
               }}
               onSync={() => sync.mutate()}
               onRefresh={() => refresh.mutate()}
+              refreshed={refresh.data ?? null}
+              refreshError={refresh.isError ? toApiError(refresh.error).message : null}
               onRevoke={() => revoke.mutate()}
               onReauthorise={() => reauthorise.mutate()}
             />
@@ -384,8 +387,11 @@ function History({ connection, ar }: { connection: HubConnection; ar: boolean })
   )
 }
 
-function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReauthorise }: {
+function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReauthorise, refreshed = null, refreshError = null }: {
   ar: boolean
+  /** GADS-DISCOVERY-PARTIAL-001 — what the last refresh found, and what the provider refused. */
+  refreshed?: { discovered: number; inaccessible?: number; warnings?: Array<{ customer: string; reason: string }> } | null
+  refreshError?: string | null
   connection: HubConnection
   busy: { sync: boolean; refresh: boolean; revoke: boolean; reauthorise: boolean }
   onSync: () => void
@@ -433,6 +439,28 @@ function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReautho
             ? 'يعيد قراءة قائمة الحسابات من المزود بالمصادقة الحالية — دون المرور بشاشة الموافقة.'
             : 'Re-reads the catalogue with the authorisation you already have — no consent screen.'}
         </p>
+        {refreshed && (
+          <div data-testid="drawer-refresh-result" className="flex flex-col gap-1 rounded-lg bg-surface-secondary p-2 text-xs">
+            <span className="font-semibold text-text-primary">
+              {ar ? 'الحسابات المكتشفة' : 'Accounts discovered'}: <Num>{refreshed.discovered}</Num>
+            </span>
+            {(refreshed.warnings ?? []).length > 0 && (
+              <div data-testid="drawer-refresh-warnings" className="flex flex-col gap-1 text-warning">
+                <span>
+                  {ar
+                    ? 'حسابات لم تسمح المنصة بقراءتها (صلاحيات هذا المستخدم لا تشملها):'
+                    : 'Accounts the provider would not let this sign-in read (no access for this user):'}
+                </span>
+                {(refreshed.warnings ?? []).map((w) => (
+                  <span key={w.customer} className="break-words text-text-secondary" dir="ltr">{w.customer} — {w.reason}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {refreshError && (
+          <p data-testid="drawer-refresh-error" className="break-words text-xs text-danger">{refreshError}</p>
+        )}
 
         {!reauth && (
           <Button variant="ghost" loading={busy.sync} onClick={onSync} data-testid="drawer-sync-now">
