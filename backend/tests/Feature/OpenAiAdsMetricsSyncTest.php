@@ -189,6 +189,146 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
      * An insights row names a campaign, and a figure whose campaign this product has never heard of
      * has nowhere to hang. The sweep syncs structure before metrics for the same reason.
      */
+    /**
+     * OPENAI-ADS-INSIGHTS-001 — the Production account, end to end: Ads Manager showed, for
+     * Sep 29 – Oct 12 2026, spend $556.11, 54,693 impressions, 4,607 clicks and 9 conversions, and
+     * every sync answered «no data». The same totals, split across two campaigns, fourteen days and
+     * two pages, must land exactly — and the request must be the documented one.
+     */
+    public function test_a_backfill_lands_the_ads_manager_totals_through_the_documented_request(): void
+    {
+        $days = [];
+        for ($d = Carbon::parse('2026-09-29'); $d->lte(Carbon::parse('2026-10-12')); $d->addDay()) {
+            $days[] = $d->toDateString();
+        }
+        // 2 campaigns × 14 days = 28 rows; totals built to match Ads Manager to the cent.
+        $rows = [];
+        foreach ($days as $i => $day) {
+            foreach (['cmp_1', 'cmp_2'] as $j => $cmp) {
+                $rows[] = ['id' => "r{$i}{$j}", 'readable_time' => $day, 'campaign_id' => $cmp,
+                    'impressions' => 1953, 'clicks' => 164, 'spend' => 19.86];
+            }
+        }
+        // Adjust the last row so the sums are exactly 54,693 / 4,607 / 556.11.
+        $rows[27]['impressions'] = 54693 - 1953 * 27;
+        $rows[27]['clicks'] = 4607 - 164 * 27;
+        $rows[27]['spend'] = round(556.11 - 19.86 * 27, 2);
+
+        $asked = [];
+        Http::fake(function ($request) use ($rows, &$asked) {
+            $url = $request->url();
+            if (str_contains($url, '/conversions/insights')) {
+                $asked[] = ['POST', $url, $request->data()];
+
+                return Http::response(['object' => 'list', 'data' => [
+                    ['entity_id' => 'cmp_1', 'date' => '2026-10-01', 'conversions' => 5],
+                    ['entity_id' => 'cmp_2', 'date' => '2026-10-05', 'conversions' => 4],
+                ], 'count' => 2]);
+            }
+            if (str_contains($url, '/ad_account/insights') && ! str_contains($url, 'aggregation_level=campaign')) {
+                // The ad-group and ad grains: this fixture reports campaigns only.
+                return Http::response(['object' => 'list', 'data' => [], 'has_more' => false]);
+            }
+
+            if (str_contains($url, '/ad_account/insights')) {
+                $asked[] = ['GET', urldecode($url)];
+                $second = str_contains($url, 'after=');
+
+                return Http::response(['object' => 'list', 'data' => $second ? array_slice($rows, 20) : array_slice($rows, 0, 20),
+                    'has_more' => ! $second, 'last_id' => $second ? 'r131' : 'r91']);
+            }
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch'], ['id' => 'cmp_2', 'name' => 'Retarget']], 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'USD']);
+        });
+
+        $this->runStructureSync();
+        app()->call([new SyncAccountMetricsJob($this->account->id, '2026-09-27', '2026-10-12'), 'handle']);
+
+        // The documented request: account scope, campaign rows, daily, an inclusive date range, named fields.
+        $get = collect($asked)->firstWhere(0, 'GET')[1];
+        $this->assertStringContainsString('/ad_account/insights?', $get);
+        foreach (['aggregation_level=campaign', 'time_granularity=daily', 'fields[]=campaign.spend', 'fields[]=campaign.clicks', 'fields[]=campaign.impressions', 'fields[]=metadata.readable_time', 'time_ranges[]={"type":"date_range","since":"2026-09-27","until":"2026-10-12"}'] as $part) {
+            $this->assertStringContainsString($part, $get);
+        }
+        $this->assertStringNotContainsString('start_date', $get, 'a parameter the API does not take');
+        // The campaign read pages to the end (the ad-group and ad grains are read the same way, separately).
+        $this->assertCount(2, collect($asked)->filter(fn ($a) => $a[0] === 'GET' && str_contains($a[1], 'aggregation_level=campaign')), 'the second page was not read');
+        $post = collect($asked)->firstWhere(0, 'POST')[2];
+        $this->assertSame('campaign', $post['aggregation_level']);
+        $this->assertEqualsCanonicalizing(['cmp_1', 'cmp_2'], $post['entity_ids']);
+
+        $totals = DB::table('daily_metrics')->whereBetween('metric_date', ['2026-09-27', '2026-10-12'])
+            ->selectRaw('metric_key, SUM(value) AS total')->groupBy('metric_key')->pluck('total', 'metric_key');
+        $this->assertEqualsWithDelta(556.11, (float) $totals['spend'], 0.001);
+        $this->assertEqualsWithDelta(54693, (float) $totals['impressions'], 0.001);
+        $this->assertEqualsWithDelta(4607, (float) $totals['clicks'], 0.001);
+        $this->assertEqualsWithDelta(9, (float) $totals['conversions'], 0.001);
+        $this->assertSame('success', DB::table('metric_sync_runs')->latest('created_at')->value('status'));
+    }
+
+    /** Rows that carry no day are a response this reader does not understand — never «no data». */
+    public function test_rows_without_a_day_fail_loudly_instead_of_reading_as_no_data(): void
+    {
+        Http::fake(function ($request) {
+            $url = $request->url();
+            if (str_contains($url, '/ad_account/insights') && ! str_contains($url, 'aggregation_level=campaign')) {
+                // The ad-group and ad grains: this fixture reports campaigns only.
+                return Http::response(['object' => 'list', 'data' => [], 'has_more' => false]);
+            }
+
+            if (str_contains($url, '/ad_account/insights')) {
+                return Http::response(['object' => 'list', 'data' => [['id' => 'x', 'campaign_id' => 'cmp_1', 'impressions' => 10, 'date_start' => '2026-09-01']], 'has_more' => false]);
+            }
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'USD']);
+        });
+
+        $this->runStructureSync();
+        $this->runMetricsSync();
+
+        $run = DB::table('metric_sync_runs')->latest('created_at')->first();
+        $this->assertSame('failed', $run->status, 'an unreadable answer was stored as «no data»');
+        $this->assertStringContainsString('row keys', (string) $run->error);
+    }
+
+    /** A refused conversions read costs the conversion column only, and the run says so. */
+    public function test_a_refused_conversion_read_keeps_the_delivery_figures_and_is_partial(): void
+    {
+        Http::fake(function ($request) {
+            $url = $request->url();
+            if (str_contains($url, '/conversions/insights')) {
+                return Http::response(['error' => ['message' => 'Unsupported reporting window']], 400);
+            }
+            if (str_contains($url, '/ad_account/insights') && ! str_contains($url, 'aggregation_level=campaign')) {
+                // The ad-group and ad grains: this fixture reports campaigns only.
+                return Http::response(['object' => 'list', 'data' => [], 'has_more' => false]);
+            }
+
+            if (str_contains($url, '/ad_account/insights')) {
+                return Http::response(['object' => 'list', 'data' => [['id' => 'r', 'readable_time' => '2026-09-01', 'campaign_id' => 'cmp_1', 'impressions' => 100, 'clicks' => 5, 'spend' => 3.5]], 'has_more' => false]);
+            }
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'USD']);
+        });
+
+        $this->runStructureSync();
+        $this->runMetricsSync();
+
+        $run = DB::table('metric_sync_runs')->latest('created_at')->first();
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertStringContainsString('conversions', (string) $run->error);
+        $this->assertEqualsWithDelta(3.5, (float) DB::table('daily_metrics')->where('metric_key', 'spend')->value('value'), 0.001);
+    }
+
     private function runStructureSync(): void
     {
         app()->call([new SyncAccountStructureJob($this->account->id), 'handle']);
@@ -208,8 +348,29 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
         Http::fake(function ($request) use ($row) {
             $url = $request->url();
 
-            if (str_contains($url, '/insights')) {
-                return Http::response(['data' => [$row]]);
+            /*
+             * OPENAI-ADS-INSIGHTS-001 — the documented shapes: delivery rows from
+             * `GET /ad_account/insights` name their day `readable_time` and their campaign
+             * `campaign_id`; conversions come from `POST /conversions/insights` as `entity_id` + `date`.
+             */
+            if (str_contains($url, '/conversions/insights')) {
+                $conv = array_filter([
+                    'conversions' => $row['conversions'] ?? null,
+                    'order_created_attributed_sales' => isset($row['revenue']) ? (string) $row['revenue'] : null,
+                ], static fn ($v) => $v !== null);
+
+                return Http::response(['object' => 'list', 'data' => $conv === [] ? [] : [['entity_id' => 'cmp_1', 'date' => $row['date']] + $conv], 'count' => $conv === [] ? 0 : 1]);
+            }
+
+            if (str_contains($url, '/ad_account/insights') && ! str_contains($url, 'aggregation_level=campaign')) {
+                // The ad-group and ad grains: this fixture reports campaigns only.
+                return Http::response(['object' => 'list', 'data' => [], 'has_more' => false]);
+            }
+
+            if (str_contains($url, '/ad_account/insights')) {
+                $delivery = array_diff_key($row, array_flip(['date', 'conversions', 'revenue']));
+
+                return Http::response(['object' => 'list', 'data' => [['id' => 'r1', 'readable_time' => $row['date'], 'campaign_id' => 'cmp_1'] + $delivery], 'has_more' => false, 'last_id' => 'r1']);
             }
 
             if (str_contains($url, '/campaigns')) {
