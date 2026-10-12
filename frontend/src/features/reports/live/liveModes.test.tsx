@@ -86,10 +86,16 @@ describe('a link shared as an executive summary', () => {
 
     expect(within(summary).getByTestId('live-kpis')).toBeInTheDocument()
     expect(within(summary).queryByTestId('live-kpis-secondary')).not.toBeInTheDocument()
-    // REPORT-EXECUTIVE-SUMMARY-001 — KPI → trend → spend split → platforms → objectives → content → health → actions.
-    for (const block of ['exec-trend', 'exec-spend-split', 'exec-platforms', 'exec-best-content', 'exec-health']) {
+    // CLIENT-REPORT-FRAMING-001 — platforms → results → trend → results split → platforms → content → coverage.
+    for (const block of ['exec-platform-cards', 'exec-trend', 'exec-results-split', 'exec-platforms', 'exec-best-content', 'exec-improve-content', 'exec-health']) {
       expect(within(summary).getByTestId(block), block).toBeInTheDocument()
     }
+    // No spend, no cost and no campaign count anywhere on the client's summary.
+    for (const gone of ['exec-spend-split', 'exec-kpi-count', 'exec-health-budget', 'exec-action-impact']) {
+      expect(within(summary).queryByTestId(gone), gone).not.toBeInTheDocument()
+    }
+    // Revenue is a result and keeps its unit; nothing about what was spent is stated.
+    expect(summary).not.toHaveTextContent(/Spend|Cost per|ROAS|Budget/)
     for (const table of ['live-platform-comparison', 'live-detail-tables', 'live-funnel', 'live-attention']) {
       expect(within(summary).queryByTestId(table), table).not.toBeInTheDocument()
     }
@@ -99,38 +105,55 @@ describe('a link shared as an executive summary', () => {
 describe('the executive summary (REPORT-EXECUTIVE-SUMMARY-001)', () => {
   afterEach(() => vi.clearAllMocks())
 
-  it('counts the campaigns that ran with their movement, narrows the best content by platform, and ends on action cards', async () => {
+  it('opens on the platforms summary, narrows best and improvable content by platform, and ends on optimisation steps', async () => {
     vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => ({
       status: 200,
       envelope: { data: {
         ...payloadFor(opts.providers),
-        delivering_campaigns: { current: 6, previous: 4 },
-        attention: [{
-          key: 'a1', code: 'cost_up', severity: 'warning', nature: 'problem', family: 'cost', family_label_ar: '', family_label_en: '',
-          platform: 'meta', kpis: [], action: 'review_cost_drivers',
-          impact: { kind: 'extra_cost_vs_previous_rate', amount: 120, currency: 'SAR' },
-          evidence: { platform: 'meta', content: [{ name: 'Best on meta', content_key: 'key-best-meta' }] },
-        }],
+        attention: [
+          {
+            key: 'a1', code: 'cpc_rise', severity: 'warning', nature: 'problem', family: 'cost', family_label_ar: '', family_label_en: '',
+            platform: 'meta', kpis: [], action: 'review_cost_drivers',
+            impact: { kind: 'extra_cost_vs_previous_rate', amount: 120, currency: 'SAR' }, evidence: null,
+          },
+          {
+            key: 'a2', code: 'ctr_drop', severity: 'warning', nature: 'problem', family: 'response', family_label_ar: '', family_label_en: '',
+            platform: 'meta', kpis: [], action: 'refresh_creative', impact: null,
+            evidence: { platform: 'meta', content: [{ name: 'Best on meta', content_key: 'key-best-meta' }] },
+          },
+          {
+            key: 'a3', code: 'ctr_rise', severity: 'info', nature: 'opportunity', family: 'response', family_label_ar: '', family_label_en: '',
+            platform: 'snapchat', kpis: [], action: 'keep_what_works', impact: null, evidence: null,
+          },
+        ],
       } },
     }) as never)
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
 
-    const count = await screen.findByTestId('exec-kpi-count')
-    expect(count).toHaveTextContent('6')
-    expect(count).toHaveTextContent('50')
+    // The platforms summary leads, each platform stated by its results, never its spend.
+    const cards = await screen.findByTestId('exec-platform-cards')
+    expect(within(cards).getByTestId('exec-platform-card-all')).toHaveTextContent('50')
+    expect(within(cards).getByTestId('exec-platform-card-meta')).toHaveTextContent('40')
+    expect(cards).not.toHaveTextContent(/700|SAR/)
 
     const best = screen.getByTestId('exec-best-content')
     expect(best).toHaveTextContent('Best on meta')
     expect(best).toHaveTextContent('Best on snapchat')
-    fireEvent.click(screen.getByTestId('exec-platform-snapchat'))
+    expect(best).not.toHaveTextContent(/Spend|ROAS|SAR/)
+    expect(screen.getByTestId('exec-improve-content')).toHaveTextContent('Weak on meta')
+
+    fireEvent.click(screen.getByTestId('exec-platform-card-snapchat'))
     await waitFor(() => expect(screen.getByTestId('exec-best-content')).not.toHaveTextContent('Best on meta'))
     expect(screen.getByTestId('exec-best-content')).toHaveTextContent('Best on snapchat')
+    expect(screen.getByTestId('exec-improve-content')).not.toHaveTextContent('Weak on meta')
 
-    const card = screen.getByTestId('exec-action-a1')
-    expect(within(card).getByTestId('exec-action-impact')).toHaveTextContent('120')
-    const actions = screen.getByTestId('exec-actions')
-    expect(screen.getByTestId('exec-health').compareDocumentPosition(actions) & 4, 'the recommendations close the summary').toBeTruthy()
+    // Only delivery and response signals reach the client; what works leads, a cost signal never shows.
+    expect(screen.queryByTestId('exec-action-a1')).not.toBeInTheDocument()
+    const steps = within(screen.getByTestId('exec-actions')).getAllByRole('article').map((a) => a.getAttribute('data-testid'))
+    expect(steps).toEqual(['exec-action-a3', 'exec-action-a2'])
+    expect(screen.getByTestId('exec-health').compareDocumentPosition(screen.getByTestId('exec-actions')) & 4, 'the optimisation steps close the summary').toBeTruthy()
   })
+
 })
 
 describe('a detailed link', () => {

@@ -162,7 +162,8 @@ test.describe('the link cannot be talked into showing more', () => {
     await page.goto(`${URL}?campaigns[]=00000000-0000-0000-0000-000000000000`)
 
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
-    await expect(page.getByTestId('live-report').locator('.tnum').first()).toContainText(/SAR/)
+    // The summary opens on results (CLIENT-REPORT-FRAMING-001): a real figure, not a placeholder.
+    await expect(page.getByTestId('live-kpis').locator('.tnum').first()).toContainText(/\d/)
   })
 
   test('an unknown token is refused', async ({ page }) => {
@@ -247,12 +248,14 @@ test.describe('what the report says needs attention', () => {
  * where direct and blended agree and a literal list would fail on a link that has nothing to split.
  */
 const SIX_QUESTIONS = [
+  // CLIENT-REPORT-FRAMING-001 — the summary opens on the platforms summary, results before anything else.
+  'exec-platform-cards',
   'live-kpis',
   'live-objective-split',
   'live-platform-comparison',
-  // REPORT-EXECUTIVE-SUMMARY-001 — the summary's own blocks: where the money went, the platforms
-  // side by side, budget and data health, then the recommendations as action cards.
-  'exec-spend-split',
+  // The summary's own blocks: where the results came from, the platforms side by side, measurement
+  // coverage, then the optimisation steps. No spend block: the client's summary states no money spent.
+  'exec-results-split',
   'exec-platforms',
   'exec-health',
   'live-attention',

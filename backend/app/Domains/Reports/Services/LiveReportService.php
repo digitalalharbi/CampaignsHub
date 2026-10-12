@@ -455,16 +455,6 @@ final class LiveReportService
             'conversions_basis' => $engine->conversionsBasis($from, $to),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
-            /*
-             * REPORT-EXECUTIVE-SUMMARY-001 — the summary's «campaigns that ran», as a COUNT for this
-             * window and the one before. Comparable only where the totals are; no name travels.
-             */
-            'delivering_campaigns' => [
-                'current' => $engine->deliveringCampaignCount($from, $to),
-                'previous' => $comparison['comparable']
-                    ? $engine->deliveringCampaignCount($from->copy()->subDays((int) $from->diffInDays($to) + 1), $from->copy()->subDay())
-                    : null,
-            ],
             'timeseries' => $engine->timeseries($from, $to),
             'platforms' => $this->platformsWithMovement($engine, $from, $to, $comparison['comparable']),
             /*

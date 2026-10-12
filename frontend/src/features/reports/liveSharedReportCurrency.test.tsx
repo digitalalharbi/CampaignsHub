@@ -37,13 +37,14 @@ const payload = (currency: string | null) => ({
   is_demo: false,
 })
 
+// The client's summary states no money at all (CLIENT-REPORT-FRAMING-001); the unit is read on the dashboard.
 describe('the unit a live shared report prints its money in', () => {
   beforeEach(() => vi.clearAllMocks())
   afterEach(() => vi.clearAllMocks())
 
   it('is the payload\'s, not the report row\'s stamp', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: payload('SAR') } } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
     const kpis = within(screen.getByTestId('live-kpis'))
     expect(kpis.getByText(/45\.9K SAR/)).toBeInTheDocument()
@@ -52,7 +53,7 @@ describe('the unit a live shared report prints its money in', () => {
 
   it('prints the figure bare when the scope holds two units and the payload states none', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: payload(null) } } as never)
-    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
     const kpis = within(screen.getByTestId('live-kpis'))
     expect(kpis.queryByText(/USD|SAR/)).not.toBeInTheDocument()

@@ -641,21 +641,6 @@ final class MetricsAggregator
         ];
     }
 
-    /**
-     * REPORT-EXECUTIVE-SUMMARY-001 — how many campaigns DELIVERED in the window: spend above zero on at
-     * least one day, through this aggregator's own scope (project, accounts selected, campaigns, demo
-     * policy), so the count can never include a campaign the totals beside it exclude. A count, never
-     * a list: the client summary states how many, and no campaign identity leaves through it.
-     */
-    public function deliveringCampaignCount(Carbon $from, Carbon $to): int
-    {
-        return (int) $this->base($from, $to)
-            ->where('daily_metrics.metric_key', 'spend')
-            ->where('daily_metrics.value', '>', 0)
-            ->distinct()
-            ->count('daily_metrics.external_campaign_id');
-    }
-
     public function totals(Carbon $from, Carbon $to): array
     {
         $select = array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH);

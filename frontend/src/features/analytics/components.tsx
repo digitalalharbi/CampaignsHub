@@ -45,11 +45,15 @@ export const PLATFORM_COLORS: Record<string, string> = {
 }
 export const platformColor = (p: string) => PLATFORM_COLORS[p] ?? 'var(--brand-500)'
 
-export function TrendPill({ delta, invertGood = false }: { delta: number | null | undefined; invertGood?: boolean }) {
+/**
+ * `calm` — CLIENT-REPORT-FRAMING-001: on the client's summary a movement against the objective is
+ * still stated, with its true direction and size, but in the neutral tone rather than as an alarm.
+ */
+export function TrendPill({ delta, invertGood = false, calm = false }: { delta: number | null | undefined; invertGood?: boolean; calm?: boolean }) {
   const t: Trend = trend(delta)
   const good = t === 'flat' ? null : invertGood ? t === 'down' : t === 'up'
   const color =
-    good === null ? 'text-text-muted bg-surface-secondary' : good ? 'text-success bg-[var(--positive-background)]' : 'text-danger bg-[var(--negative-background)]'
+    good === null || (calm && !good) ? 'text-text-muted bg-surface-secondary' : good ? 'text-success bg-[var(--positive-background)]' : 'text-danger bg-[var(--negative-background)]'
   const Icon = t === 'up' ? ArrowUpRight : t === 'down' ? ArrowDownRight : Minus
   return (
     <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${color}`}>
@@ -86,6 +90,7 @@ export function KpiCard({
   spark,
   hint,
   accent = SERIES.spend,
+  calm = false,
 }: {
   label: string
   value: string
@@ -96,6 +101,7 @@ export function KpiCard({
   spark?: number[]
   hint?: string
   accent?: string
+  calm?: boolean
 }) {
   /*
    * The gradient's id is the card's own, not its label: a label with a space («Cost per result») made
@@ -109,7 +115,7 @@ export function KpiCard({
       label={<span title={hint}>{label}</span>}
       value={value}
       exact={exact}
-      trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invertGood} /> : undefined}
+      trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invertGood} calm={calm} /> : undefined}
       spark={spark && spark.length > 1 ? (
         <div className="h-9 w-full">
           <ResponsiveContainer width="100%" height="100%">
