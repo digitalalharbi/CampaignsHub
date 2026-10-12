@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Configuration;
 
+use App\Domains\Integrations\Catalogue\ProviderAuth;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
-use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -50,11 +50,27 @@ final class ProviderProbe
     public function __construct(private readonly ProviderConfigurationService $settings) {}
 
     /**
-     * @return array{passed: bool, message: string}
+     * @return array{passed: bool, message: string, outcome: string}
      */
     public function run(string $provider): array
     {
         $definition = ProviderCatalogue::get($provider);
+
+        /*
+         * PROVIDER-TEST-001 — a key-based provider has no platform credentials to test.
+         *
+         * OpenAI Ads is connected with each advertiser's own API key; the platform holds no client id
+         * or secret for it. The probe used to fall through to the OAuth token call and index
+         * `client_id` on an empty set, which the admin read as «Undefined array key "client_id"».
+         */
+        if ($definition->auth === ProviderAuth::ApiKey) {
+            return [
+                'passed' => true,
+                'outcome' => 'not_required',
+                'message' => 'No platform credentials are required: each advertiser connects with their own API key.',
+            ];
+        }
+
         $missing = $this->settings->missing($definition->key);
 
         if ($missing !== []) {
@@ -63,6 +79,7 @@ final class ProviderProbe
             // the first when the truth is the second.
             return [
                 'passed' => false,
+                'outcome' => 'failed',
                 'message' => 'Not sent: still missing '.implode(', ', $missing).'.',
             ];
         }
@@ -70,12 +87,17 @@ final class ProviderProbe
         try {
             $response = $this->probe($definition->key);
         } catch (ConnectionException $e) {
-            return ['passed' => false, 'message' => 'Could not reach the provider: '.$this->scrub($provider, $e->getMessage())];
+            return ['passed' => false, 'outcome' => 'inconclusive', 'message' => 'Could not reach the provider: '.$this->scrub($provider, $e->getMessage())];
         } catch (Throwable $e) {
-            return ['passed' => false, 'message' => $this->scrub($provider, $e->getMessage())];
+            return ['passed' => false, 'outcome' => 'failed', 'message' => $this->scrub($provider, $e->getMessage())];
         }
 
-        return $this->interpret($definition->key, $response);
+        $verdict = $this->interpret($definition->key, $response);
+
+        $outcome = $verdict['passed'] ? 'passed' : (($verdict['inconclusive'] ?? false) ? 'inconclusive' : 'failed');
+        unset($verdict['inconclusive']);
+
+        return $verdict + ['outcome' => $outcome];
     }
 
     private function probe(string $provider): Response
@@ -113,8 +135,8 @@ final class ProviderProbe
              */
             return $client->asForm()->post($tokenUrl, [
                 'grant_type' => 'client_credentials',
-                'client_id' => $values['client_id'],
-                'client_secret' => $values['client_secret'],
+                'client_id' => ($values['client_id'] ?? ''),
+                'client_secret' => ($values['client_secret'] ?? ''),
             ]);
         }
 
@@ -127,8 +149,8 @@ final class ProviderProbe
              * our credentials.
              */
             return $client->post($tokenUrl, [
-                'app_id' => $values['client_id'],
-                'secret' => $values['client_secret'],
+                'app_id' => ($values['client_id'] ?? ''),
+                'secret' => ($values['client_secret'] ?? ''),
                 'auth_code' => self::IMPOSSIBLE_CODE,
             ]);
         }
@@ -143,24 +165,28 @@ final class ProviderProbe
         // precisely why it gives the cleanest answer to this question of any of them.
         if ($provider === 'x') {
             return $client->asForm()
-                ->withBasicAuth((string) $values['client_id'], (string) $values['client_secret'])
+                ->withBasicAuth((string) ($values['client_id'] ?? ''), (string) ($values['client_secret'] ?? ''))
                 ->post($tokenUrl, $grant);
         }
 
         return $client->asForm()->post($tokenUrl, [
             ...$grant,
-            'client_id' => $values['client_id'],
-            'client_secret' => $values['client_secret'],
+            'client_id' => ($values['client_id'] ?? ''),
+            'client_secret' => ($values['client_secret'] ?? ''),
         ]);
     }
 
     /**
-     * @return array{passed: bool, message: string}
+     * @return array{passed: bool, message: string, inconclusive?: bool}
      */
     private function interpret(string $provider, Response $response): array
     {
         if ($provider === 'meta') {
             return $this->interpretMeta($response);
+        }
+
+        if ($provider === 'tiktok') {
+            return $this->interpretTikTok($response);
         }
 
         $body = strtolower($response->body());
@@ -175,7 +201,13 @@ final class ProviderProbe
             ];
         }
 
-        if ($response->status() === 401 || str_contains($body, 'invalid_client') || str_contains($body, 'unauthorized_client')) {
+        /*
+         * PROVIDER-TEST-001 — the body is read before the status. LinkedIn answers a deliberately
+         * invalid code with «Unable to retrieve access token: authorization code not found», which is
+         * its normal refusal WITH valid client credentials; wrong credentials answer `invalid_client`
+         * / «Client authentication failed». The status alone cannot tell the two apart.
+         */
+        if (str_contains($body, 'invalid_client') || str_contains($body, 'unauthorized_client') || str_contains($body, 'client authentication failed')) {
             return [
                 'passed' => false,
                 'message' => 'The provider does not recognise this client id and secret: '.$reason,
@@ -183,12 +215,11 @@ final class ProviderProbe
         }
 
         // The positive identification. Only a refusal that names the GRANT proves the app was read and
-        // accepted; anything else is ambiguous and falls through to the conservative branch below.
+        // accepted; anything else is ambiguous.
         $namesTheGrant = str_contains($body, 'invalid_grant')
             || str_contains($body, 'invalid_code')
             || str_contains($body, 'authorization code')
-            || str_contains($body, 'auth_code')
-            || str_contains($body, 'invalid_request');
+            || str_contains($body, 'auth_code');
 
         if ($namesTheGrant) {
             return [
@@ -198,28 +229,60 @@ final class ProviderProbe
             ];
         }
 
+        if ($response->status() === 401) {
+            return [
+                'passed' => false,
+                'message' => 'The provider refused the client credentials (HTTP 401): '.$reason,
+            ];
+        }
+
+        // Neither a credential error nor a grant refusal: unread, recorded as such — not a pass and
+        // not a configuration error.
         return [
             'passed' => false,
-            'message' => 'The provider\'s answer did not identify whether the app was recognised, so this is not recorded as a pass: '.$reason,
+            'inconclusive' => true,
+            'message' => 'The provider\'s answer did not say whether the app was recognised; check the credentials by connecting an account: '.$reason,
         ];
     }
 
     /**
-     * PROVCFG-META-001 — what an app access token does and does not prove.
+     * TikTok answers in its own codes (HTTP 200 with `code`), documented in «Return codes»
+     * (business-api.tiktok.com/portal/docs/return-codes-appendix/v1.3):
      *
-     * A token means the App ID and App Secret are a real pair that Meta recognises. That is the whole
-     * claim. It says nothing about `ads_read`, `ads_management` or `business_management` approval,
-     * nothing about App Review, and nothing about any ad account — those are proven only when a real
-     * person authorises and an account listing returns, which is a separate stage the product keeps
-     * separate.
+     *  - 40110 «Invalid authorization code» and 40002 «Parameter error» are what a RECOGNISED app gets
+     *    for the deliberately invalid `auth_code` — the code was read and refused, the app was not;
+     *  - 40101 «Invalid parameter values for authentication — Secret and app ID do not match»,
+     *    40113 «The app has been blocked or does not exist» and 40131 «App ID or secret is incorrect»
+     *    are the app itself being refused.
      *
-     * The token itself never leaves this method. Meta's app access token is literally
-     * «APP-ID|APP-SECRET» in its simplest form, so echoing the response into `last_test_message`
-     * would write the secret into the one column on this table that is NOT encrypted and IS rendered
-     * in a browser. Nothing from the body reaches the message on the success path — not a prefix, not
-     * a length, not a redacted form of it. There is nothing about the token a reader needs.
-     *
-     * @return array{passed: bool, message: string}
+     * @return array{passed:bool,message:string,inconclusive?:bool}
+     */
+    private function interpretTikTok(Response $response): array
+    {
+        $code = $response->json('code');
+        $reason = $this->scrub('tiktok', PlatformHttp::reason($response));
+
+        if (is_numeric($code) && in_array((int) $code, [40101, 40113, 40131], true)) {
+            return ['passed' => false, 'message' => 'TikTok does not recognise this App ID and secret: '.$reason];
+        }
+
+        if (is_numeric($code) && in_array((int) $code, [40110, 40002], true)) {
+            return [
+                'passed' => true,
+                'message' => 'TikTok recognised this app and refused the deliberately invalid authorisation code, as it should. '
+                    .'This proves the App ID and secret only — not scope approval, and not that any advertiser has granted access.',
+            ];
+        }
+
+        if (is_numeric($code) && (int) $code === 0) {
+            return ['passed' => false, 'message' => 'The endpoint accepted an invalid authorisation code, so it is not behaving as TikTok\'s token endpoint.'];
+        }
+
+        return ['passed' => false, 'inconclusive' => true, 'message' => 'TikTok\'s answer did not say whether the app was recognised: '.$reason];
+    }
+
+    /**
+     * @return array{passed: bool, message: string, inconclusive?: bool}
      */
     private function interpretMeta(Response $response): array
     {
@@ -257,6 +320,7 @@ final class ProviderProbe
         // Anything else is unread, and unread is not a pass — the direction of doubt is fixed here too.
         return [
             'passed' => false,
+            'inconclusive' => true,
             'message' => 'Meta did not answer with an app access token and did not name a credential error, so this is '
                 .'not recorded as a pass: '.$reason,
         ];
@@ -264,9 +328,8 @@ final class ProviderProbe
 
     private function tokenUrl(string $provider): string
     {
-        $file = ProviderCatalogue::get($provider)->kind === ProviderKind::Commerce
-            ? 'commerce_platforms'
-            : 'ad_platforms';
+        // Each kind reads its own configuration file — GA4 (measurement) posted to an empty URL before.
+        $file = ProviderCatalogue::get($provider)->kind->configFile();
 
         return (string) config("{$file}.platforms.{$provider}.token_url");
     }
