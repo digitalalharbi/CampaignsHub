@@ -284,6 +284,10 @@ final class ClientReportView
             }
         }
 
+        if (is_array($data['objective_leaders'] ?? null)) {
+            $data['objective_leaders'] = ClientEntityBoundary::objectiveLeaders($data['objective_leaders']);
+        }
+
         /*
          * The same boundary the live link applies — the snapshot path is a client document too.
          *

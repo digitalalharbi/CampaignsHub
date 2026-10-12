@@ -16,8 +16,8 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
  * ## The rule
  *
  *   - an item the operator HID never reaches a client;
- *   - an operator-internal item (budget shifts, bidding, retargeting) reaches a client ONLY when the
- *     operator approved that item;
+ *   - an operator-internal item (budget shifts, bidding, retargeting) never reaches a client, approved
+ *     or not — CLIENT-LIVE-LINK-SAFETY-001;
  *   - a client-safe item reaches a client unless hidden.
  *
  * Whether an item is operator-internal is read from its ACTION in `AttentionActions`, never from the
@@ -58,7 +58,13 @@ final class AttentionAudience
             if ($decision === 'hidden') {
                 continue;
             }
-            if (! AttentionActions::isClientSafe($item['action']) && $decision !== 'approved') {
+            /*
+             * CLIENT-LIVE-LINK-SAFETY-001 (Owner, 2026-10-12) — buying mechanics (bidding, retargeting,
+             * moving budget) are campaign management, never the client's: not even an operator's
+             * approval sends one to a client link. Approval still lets a client-safe item through
+             * that a rule would otherwise hold back.
+             */
+            if (! AttentionActions::isClientSafe($item['action'])) {
                 continue;
             }
 

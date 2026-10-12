@@ -217,7 +217,9 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         // The platform outside the ceiling must not be a candidate — and with it excluded there is
         // one bucket left, which the section declines to rank rather than crowning a field of one.
-        $this->assertSame(1, $conversion['campaigns'], 'A platform the link was never scoped to was ranked against the one it was.');
+        $this->assertFalse($conversion['comparable'], 'A platform the link was never scoped to was ranked against the one it was.');
+        // CLIENT-LIVE-LINK-SAFETY-001 — the client cut carries no campaign count beside the leaders.
+        $this->assertArrayNotHasKey('campaigns', $conversion);
         $this->assertNotContains('tiktok', array_map('strtolower', $named));
     }
 

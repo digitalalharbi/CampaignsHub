@@ -312,13 +312,6 @@ export function SharedCreativeSection({
             options={available.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
             all={t.all}
           />
-          <Picker
-            label={t.campaign}
-            value={filters.campaign_ids?.[0] ?? ''}
-            onChange={(v) => narrow({ campaign_ids: v ? [v] : [] })}
-            options={available.campaigns.map((c) => ({ value: c.id, label: c.name }))}
-            all={t.all}
-          />
           {/*
             CONTENT-FILTER-TRUTH-001 — the canonical five, LABELLED, and no path control beside them.
 

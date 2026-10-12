@@ -254,7 +254,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   }, [campaigns, providers, metrics, form, hideSpend, hideRevenue, allowDownload, ar])
 
   return (
-    <Modal open onClose={onClose} title={ar ? 'رابط تقرير لحظي للعميل' : 'Live client report link'} size="lg">
+    <Modal open onClose={onClose} title={ar ? 'رابط لحظي للعميل' : 'Live client link'} size="lg">
       {created ? (
         <div className="rounded-2xl border border-brand-200 bg-[var(--brand-background)] p-4" data-testid="live-link-created">
           <div className="mb-2 flex items-center gap-2 text-sm font-bold text-brand-700">

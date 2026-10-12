@@ -505,10 +505,13 @@ final class LiveReportShareTest extends TestCase
         $this->assertArrayHasKey('paths', $leaders);
         foreach ($leaders['paths'] as $path) {
             $this->assertArrayHasKey('comparable', $path);
-            if ($path['comparable'] === false) {
-                // The reason travels with the refusal rather than an empty pair of names.
-                $this->assertArrayHasKey('comparable_reason', $path);
-            }
+            /*
+             * CLIENT-LIVE-LINK-SAFETY-001 — the refusal travels as `comparable: false`; the reason was
+             * worded in campaigns («only one campaign spent») and the count beside it is campaign
+             * management, so neither reaches the client.
+             */
+            $this->assertArrayNotHasKey('comparable_reason', $path);
+            $this->assertArrayNotHasKey('campaigns', $path);
         }
     }
 
@@ -638,8 +641,13 @@ final class LiveReportShareTest extends TestCase
         $this->assertSame(100.0, (float) $res->json('data.totals.spend'));
     }
 
-    /** A narrowing that IS within the ceiling must actually narrow, or the intersection is a no-op. */
-    public function test_narrowing_inside_the_ceiling_works(): void
+    /**
+     * CLIENT-LIVE-LINK-SAFETY-001 — a client narrows by date and platform, never by campaign.
+     *
+     * The campaign ids a link is scoped to are the agency's filing. A `campaigns[]` on the request is
+     * ignored, the totals stay the link's own, and nothing echoes an id back.
+     */
+    public function test_a_client_cannot_narrow_the_link_by_campaign(): void
     {
         [, $raw] = app(ShareService::class)->create($this->report, [
             'scope' => [
@@ -655,7 +663,8 @@ final class LiveReportShareTest extends TestCase
         $this->assertSame(1099.0, (float) $all->json('data.totals.spend'));
 
         $narrowed = $this->getJson("/api/v1/reports/shared/{$raw}/live?campaigns[]={$this->shared->id}");
-        $this->assertSame(100.0, (float) $narrowed->json('data.totals.spend'));
+        $this->assertSame(1099.0, (float) $narrowed->json('data.totals.spend'));
+        $this->assertStringNotContainsString((string) $this->shared->id, (string) $narrowed->getContent());
     }
 
     public function test_a_revoked_link_stops_answering(): void
