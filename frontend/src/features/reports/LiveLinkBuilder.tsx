@@ -152,7 +152,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
-  const [hideSpend, setHideSpend] = useState(false)
+  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it.
+  const [hideSpend, setHideSpend] = useState(true)
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
   /*

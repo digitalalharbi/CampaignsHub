@@ -1113,7 +1113,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
     [detail.data],
   )
 
-  const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: false, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
+  const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: true, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
   const [live, setLive] = useState(false)
   /*
    * The FORM is a per-LINK choice, and it is not the same question as live-or-fixed (§15.12).

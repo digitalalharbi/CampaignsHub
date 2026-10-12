@@ -103,7 +103,8 @@ describe('building a live client link', () => {
     await build()
 
     fireEvent.click(screen.getByTestId('live-link-form-detailed'))
-    fireEvent.click(screen.getByTestId('live-link-hide-spend'))
+    // CLIENT-REPORT-FRAMING-001 — a new client link hides spend unless the owner chooses to show it.
+    expect(screen.getByTestId('live-link-hide-spend')).toBeChecked()
 
     const summary = screen.getByTestId('live-link-summary')
 

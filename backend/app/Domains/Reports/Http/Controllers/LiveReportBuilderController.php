@@ -388,7 +388,8 @@ final class LiveReportBuilderController extends Controller
             'password' => $data['password'] ?? null,
             'expires_at' => $data['expires_at'] ?? null,
             'allow_download' => $data['allow_download'] ?? false,
-            'hide_spend' => $data['hide_spend'] ?? false,
+            // CLIENT-REPORT-FRAMING-001 — a client link hides spend unless the owner chose to show it.
+            'hide_spend' => $data['hide_spend'] ?? true,
             'hide_revenue' => $data['hide_revenue'] ?? false,
             'form' => $data['form'] ?? null,
             'settings' => ['section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? [])))],
