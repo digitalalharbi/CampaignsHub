@@ -223,8 +223,29 @@ final class OpenAiAdsConnectorTest extends TestCase
         Http::fake(function (Request $request) use ($row) {
             $url = $request->url();
 
-            if (str_contains($url, '/insights')) {
-                return Http::response(['data' => [$row]]);
+            /*
+             * OPENAI-ADS-INSIGHTS-001 — the documented shapes: delivery rows from
+             * `GET /ad_account/insights` name their day `readable_time` and their campaign
+             * `campaign_id`; conversions come from `POST /conversions/insights` as `entity_id` + `date`.
+             */
+            if (str_contains($url, '/conversions/insights')) {
+                $conv = array_filter([
+                    'conversions' => $row['conversions'] ?? null,
+                    'order_created_attributed_sales' => isset($row['revenue']) ? (string) $row['revenue'] : null,
+                ], static fn ($v) => $v !== null);
+
+                return Http::response(['object' => 'list', 'data' => $conv === [] ? [] : [['entity_id' => 'cmp_1', 'date' => $row['date']] + $conv], 'count' => $conv === [] ? 0 : 1]);
+            }
+
+            if (str_contains($url, '/ad_account/insights') && ! str_contains($url, 'aggregation_level=campaign')) {
+                // The ad-group and ad grains: this fixture reports campaigns only.
+                return Http::response(['object' => 'list', 'data' => [], 'has_more' => false]);
+            }
+
+            if (str_contains($url, '/ad_account/insights')) {
+                $delivery = array_diff_key($row, array_flip(['date', 'conversions', 'revenue']));
+
+                return Http::response(['object' => 'list', 'data' => [['id' => 'r1', 'readable_time' => $row['date'], 'campaign_id' => 'cmp_1'] + $delivery], 'has_more' => false, 'last_id' => 'r1']);
             }
 
             if (str_contains($url, '/campaigns')) {
