@@ -51,6 +51,14 @@ use Throwable;
  */
 abstract class ApiAdvertisingConnector implements AdvertisingConnector
 {
+    /**
+     * TIKTOK-METRIC-REFUSAL-001 — metric fields the provider refused by name during this insights
+     * read and the connector left out, so the rest of the report could land. Reset on every read.
+     *
+     * @var list<string>
+     */
+    protected array $refusedMetrics = [];
+
     protected ?ProviderConnection $connection = null;
 
     /**
@@ -316,11 +324,15 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
             return $refusal;
         }
 
+        $this->refusedMetrics = [];
+
         try {
-            return SyncResult::of($this->fetchInsights($this->tokens(), $adAccountId, $from, $to));
+            $records = $this->fetchInsights($this->tokens(), $adAccountId, $from, $to);
         } catch (Throwable $e) {
             return SyncResult::failed($e->getMessage());
         }
+
+        return SyncResult::of($records, refusedMetrics: $this->refusedMetrics);
     }
 
     // ── Shared plumbing ───────────────────────────────────────────────────────────────────────

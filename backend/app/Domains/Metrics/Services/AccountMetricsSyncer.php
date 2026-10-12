@@ -420,6 +420,22 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * TIKTOK-METRIC-REFUSAL-001 — the provider refused some metric fields by name; the rest of the
+         * report landed. Partial, and it says which, so nobody reads the missing stage as «none».
+         */
+        if ($result->refusedMetrics !== []) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::PartialMapping,
+                $upserted,
+                $connector->label().' refused the metric field(s) '.implode(', ', $result->refusedMetrics).'; they were left out and the rest of the report was stored.',
+                $account,
+                $counts,
+                'metrics_refused',
+            );
+        }
+
         return $this->finish($run, SyncRunStatus::Success, $upserted, null, $account, $counts);
     }
 

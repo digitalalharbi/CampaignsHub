@@ -226,6 +226,72 @@ final class MetricsSyncPipelineTest extends TestCase
     }
 
     /**
+     * TIKTOK-METRIC-REFUSAL-001 — a TikTok report that refuses one metric by name still lands, and the
+     * run says it is partial and which field was left out (Production, 2026-10-12: 40002 on
+     * `add_to_cart` cost the account every figure). Without a refusal the same sync is `success`.
+     */
+    public function test_a_tiktok_metric_refusal_lands_the_rest_of_the_report_as_partial(): void
+    {
+        foreach (PlatformCredentials::for('tiktok')->requires() as $key) {
+            config()->set("ad_platforms.platforms.tiktok.{$key}", "test-{$key}");
+        }
+        $connection = app(TokenVault::class)->open(
+            tenantId: $this->tenant->id,
+            provider: 'tiktok',
+            tokens: new OAuthTokens('AT-secret', 'RT', Carbon::now()->addDay()),
+            connectionName: 'tiktok',
+        );
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
+            'provider' => 'tiktok', 'account_type' => 'ad_account', 'external_id' => 'adv-1',
+            'name' => 'TikTok acct', 'status' => 'active', 'timezone' => 'Asia/Riyadh',
+        ]);
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id, 'external_account_id' => $account->id,
+            'provider' => 'tiktok', 'purpose' => 'advertising', 'is_active' => true,
+        ]);
+        ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'unified_campaign_id' => $this->campaign->id, 'external_account_id' => $account->id,
+            'provider' => 'tiktok', 'external_id' => 'tt-1', 'name' => 'TT', 'status' => 'active',
+        ]);
+
+        $refuse = true;
+        Http::fake(function ($request) use (&$refuse) {
+            if (! str_contains($request->url(), 'report/integrated/get')) {
+                return Http::response(['code' => 0, 'data' => ['list' => [], 'page_info' => ['total_page' => 1]]]);
+            }
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $metrics = json_decode((string) ($query['metrics'] ?? '[]'), true);
+            if ($refuse && in_array('initiate_checkout', $metrics, true)) {
+                return Http::response(['code' => 40002, 'message' => "Invalid metric fields: ['initiate_checkout'].", 'request_id' => 'r1']);
+            }
+
+            return Http::response(['code' => 0, 'data' => [
+                'list' => [[
+                    'dimensions' => ['campaign_id' => 'tt-1', 'stat_time_day' => '2026-06-01 00:00:00'],
+                    'metrics' => ['spend' => '25.00', 'impressions' => '3000', 'clicks' => '90', 'web_event_add_to_cart' => '7'],
+                ]],
+                'page_info' => ['page' => 1, 'total_page' => 1],
+            ]]);
+        });
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+
+        $this->assertSame('partial_mapping', $run->status, 'a report with a refused field is partial, not a green tick');
+        $this->assertStringContainsString('initiate_checkout', (string) $run->error);
+        $this->assertGreaterThan(0, (int) $run->metrics_upserted, 'the rest of the report landed');
+        $stored = DailyMetric::withoutGlobalScopes()->where('unified_campaign_id', $this->campaign->id)->pluck('value', 'metric_key');
+        $this->assertEqualsWithDelta(25.0, (float) $stored['spend'], 0.001);
+        $this->assertEqualsWithDelta(7.0, (float) $stored['add_to_cart'], 0.001);
+
+        $refuse = false;
+        $again = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+        $this->assertSame('success', $again->status, 'the documented fields alone end a TikTok sync successful');
+    }
+
+    /**
      * A platform with no credentials is not CALLED, and the refusal keeps its own category.
      *
      * The run is `failed`, because §8 gives the sync six words and «awaiting credentials» is not one
