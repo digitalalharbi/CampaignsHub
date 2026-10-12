@@ -7,6 +7,8 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 /**
  * ChatGPT Ads — the OpenAI Advertiser API, `https://api.ads.openai.com/v1`.
@@ -218,31 +220,55 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
     }
 
     /**
-     * Daily campaign rows, from the campaign insights endpoint.
+     * Daily campaign rows — OPENAI-ADS-INSIGHTS-001.
      *
-     * A metric the response omits is OMITTED from the row. `UpsertDailyMetrics` and its creative
-     * sibling both skip absent keys, so the column stays null and the reader says «not reported» —
-     * which is the difference between «this campaign earned nothing» and «nobody measured it».
+     * Production, 2026-10-12: every sync of a live account answered «no data» while Ads Manager
+     * showed $556 of spend. The read asked `campaigns/{id}/insights` with `start_date`, `end_date` and
+     * `granularity` — none of which the API takes — and looked for a `date` key the rows do not have
+     * (a daily row names its day `readable_time`), so every row was skipped. Without `fields[]` the API
+     * also returns impressions only, and without paging it returns the first 20 rows.
+     *
+     * Now, as the Insights reference documents it (developers.openai.com/ads/api-reference/insights):
+     * ONE `GET /ad_account/insights` with `aggregation_level=campaign`, `time_granularity=daily`, the
+     * window as `time_ranges[]` = `{"type":"date_range","since","until"}` (inclusive `until`, read in
+     * the ad account's own timezone — the same days Ads Manager shows), the delivery fields named in
+     * `fields[]`, paged by `after`/`has_more`. Conversions are not a GET metric; they come from
+     * `POST /conversions/insights` for the same campaigns and days and are merged in.
+     *
+     * A metric the response omits is OMITTED from the row, so the reader says «not reported».
      */
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $rows = [];
 
-        foreach ($this->fetchCampaigns($tokens, $adAccountId) as $campaign) {
-            $campaignId = (string) $campaign['external_id'];
+        foreach ($this->insightRows($tokens, 'campaign', $from, $to) as $row) {
+            $campaignId = $this->stringOrNull($row, 'campaign_id');
+            $date = $this->dayOf($row);
 
-            foreach ($this->insightRows($tokens, "campaigns/{$campaignId}/insights", $from, $to) as $row) {
-                $date = $this->stringOrNull($row, 'date');
-
-                if ($date === null) {
-                    continue;
-                }
-
-                $rows[] = ['campaign_id' => $campaignId, 'date' => $date] + $this->measures($row);
+            if ($campaignId === null || $date === null) {
+                continue;
             }
+
+            $rows["{$campaignId}|{$date}"] = ['campaign_id' => $campaignId, 'date' => $date] + $this->measures($row);
         }
 
-        return $rows;
+        /*
+         * Conversions, merged by campaign and day. A refusal here costs the conversion column only:
+         * the delivery figures above are already read, and the run says which metric was left out.
+         */
+        $campaignIds = array_values(array_unique(array_map(static fn (array $r): string => $r['campaign_id'], $rows)));
+        try {
+            foreach ($this->conversionRows($tokens, $campaignIds, $from, $to) as $key => $measures) {
+                if (isset($rows[$key])) {
+                    $rows[$key] += $measures;
+                }
+            }
+        } catch (\RuntimeException $e) {
+            $this->refusedMetrics = array_values(array_unique([...$this->refusedMetrics, 'conversions']));
+            Log::warning('ChatGPT Ads conversion insights were refused; delivery figures were kept.', ['reason' => $e->getMessage()]);
+        }
+
+        return array_values($rows);
     }
 
     /** One grain of one account, for one window — STRUCT-001's ad-group and ad figures. */
@@ -257,30 +283,22 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
         $tokens = $this->tokens();
         $rows = [];
 
-        $parents = $grain === ReportsEntityGrains::AD_SET
-            ? array_map(static fn (array $g): string => (string) $g['external_id'], $this->fetchAdSets($tokens, $adAccountId))
-            : array_map(static fn (array $a): string => (string) $a['external_id'], $this->fetchAds($tokens, $adAccountId));
+        $level = $grain === ReportsEntityGrains::AD_SET ? 'ad_group' : 'ad';
 
-        $path = $grain === ReportsEntityGrains::AD_SET ? 'ad_groups' : 'ads';
+        try {
+            foreach ($this->insightRows($tokens, $level, $from, $to) as $row) {
+                $entity = $this->stringOrNull($row, "{$level}_id");
+                $date = $this->dayOf($row);
 
-        foreach ($parents as $parentId) {
-            try {
-                foreach ($this->insightRows($tokens, "{$path}/{$parentId}/insights", $from, $to) as $row) {
-                    $date = $this->stringOrNull($row, 'date');
-
-                    if ($date === null) {
-                        continue;
-                    }
-
-                    $rows[] = [
-                        'entity_external_id' => $parentId,
-                        'date' => $date,
-                    ] + $this->measures($row);
+                if ($entity === null || $date === null) {
+                    continue;
                 }
-            } catch (\Throwable $e) {
-                /* The FIRST refusal is kept: an empty grain and a refused one are different facts. */
-                $this->entityFailure ??= $e->getMessage();
+
+                $rows[] = ['entity_external_id' => $entity, 'date' => $date] + $this->measures($row);
             }
+        } catch (\Throwable $e) {
+            /* An empty grain and a refused one are different facts. */
+            $this->entityFailure = $e->getMessage();
         }
 
         return SyncResult::of($rows);
@@ -316,27 +334,156 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
         return $out;
     }
 
+    /** The delivery metrics the GET insights endpoints publish; conversions are read separately. */
+    private const DELIVERY_METRICS = ['impressions', 'clicks', 'spend'];
+
     /**
-     * An insights call, with the window the provider's own parameters name.
+     * Daily rows at one aggregation level across the whole account, every page.
+     *
+     * The query is built by hand: the API reads list parameters as `fields[]=…` repeated and refuses
+     * `time_ranges` sent any other way, which PHP's indexed `fields[0]=` form would not satisfy.
+     * Raw request parameters and the response's shape are logged (never the key, which travels in
+     * the Authorization header only).
+     *
+     * A page of rows none of which carries a day or an id is not «no data» — it is a response this
+     * reader does not understand, and it is raised as such rather than stored as an empty period.
      *
      * @return list<array<string, mixed>>
      */
-    private function insightRows(OAuthTokens $tokens, string $path, string $from, string $to): array
+    private function insightRows(OAuthTokens $tokens, string $level, string $from, string $to): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url($path), [
-                'start_date' => $from,
-                'end_date' => $to,
-                'granularity' => 'daily',
-            ]),
-            'ChatGPT Ads insights',
-        );
+        $fields = ['metadata.readable_time', "{$level}.id", ...array_map(static fn (string $m): string => "{$level}.{$m}", self::DELIVERY_METRICS)];
+        $params = [
+            'aggregation_level' => $level,
+            'time_granularity' => 'daily',
+            'limit' => '2000',
+        ];
+        $lists = [
+            'fields' => $fields,
+            'time_ranges' => [json_encode(['type' => 'date_range', 'since' => $from, 'until' => $to], JSON_THROW_ON_ERROR)],
+        ];
 
-        $rows = Arr::get($body, 'data', []);
+        $out = [];
+        $after = null;
 
-        $this->countRawInsightRows(is_array($rows) ? count($rows) : 0);
+        for ($page = 0; $page < 50; $page++) {
+            $query = self::query($params + ($after === null ? [] : ['after' => $after]), $lists);
+            $body = $this->read($this->api($tokens)->get($this->url('ad_account/insights').'?'.$query), 'ChatGPT Ads insights');
+            $data = Arr::get($body, 'data', []);
+            $data = is_array($data) ? array_values(array_filter($data, 'is_array')) : [];
 
-        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+            Log::info('ChatGPT Ads insights read.', [
+                'params' => $params + ['after' => $after, 'time_ranges' => $lists['time_ranges'], 'fields' => $fields],
+                'response_keys' => array_keys($body),
+                'row_keys' => $data === [] ? [] : array_keys($data[0]),
+                'rows' => count($data),
+                'has_more' => Arr::get($body, 'has_more'),
+            ]);
+
+            $this->countRawInsightRows(count($data));
+
+            if ($data !== [] && array_filter($data, fn (array $r): bool => $this->dayOf($r) !== null && $this->stringOrNull($r, "{$level}_id") !== null) === []) {
+                throw new \RuntimeException('ChatGPT Ads insights returned '.count($data).' row(s) with none carrying a day and a '.$level.' id; row keys: '.implode(', ', array_keys($data[0])).'. Not stored as «no data».');
+            }
+
+            array_push($out, ...$data);
+
+            $next = Arr::get($body, 'last_id');
+            if (Arr::get($body, 'has_more') !== true || ! is_string($next) || $next === '') {
+                break;
+            }
+            $after = $next;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Goal conversions and attributed sales per campaign and day, from `POST /conversions/insights`.
+     *
+     * The endpoint answers at most 2,000 rows with no cursor (HTTP 413 beyond), spans at most 365
+     * days, and needs the campaign ids — so the window is read in 90-day slices of up to 20
+     * campaigns each (≤ 1,800 rows).
+     *
+     * @param  list<string>  $campaignIds
+     * @return array<string, array<string, float>> "campaign|date" => measures
+     */
+    private function conversionRows(OAuthTokens $tokens, array $campaignIds, string $from, string $to): array
+    {
+        $out = [];
+        if ($campaignIds === []) {
+            return $out;
+        }
+
+        $start = Carbon::parse($from)->startOfDay();
+        $end = Carbon::parse($to)->startOfDay();
+
+        for ($since = $start->copy(); $since->lte($end); $since->addDays(90)) {
+            $until = $since->copy()->addDays(89)->min($end);
+
+            foreach (array_chunk($campaignIds, 20) as $ids) {
+                $body = $this->read(
+                    $this->api($tokens)->post($this->url('conversions/insights'), [
+                        'aggregation_level' => 'campaign',
+                        'time_ranges' => [json_encode(['type' => 'date_range', 'since' => $since->toDateString(), 'until' => $until->toDateString()], JSON_THROW_ON_ERROR)],
+                        'time_granularity' => 'daily',
+                        'entity_ids' => $ids,
+                    ]),
+                    'ChatGPT Ads conversion insights',
+                );
+
+                foreach ((array) Arr::get($body, 'data', []) as $row) {
+                    if (! is_array($row)) {
+                        continue;
+                    }
+                    $campaign = $this->stringOrNull($row, 'entity_id');
+                    $date = $this->dayOf($row);
+                    if ($campaign === null || $date === null) {
+                        continue;
+                    }
+                    $measures = [];
+                    if (is_numeric($row['conversions'] ?? null)) {
+                        $measures['conversions'] = (float) $row['conversions'];
+                    }
+                    // Attributed purchase value, an unrounded decimal string — null when unavailable stays absent.
+                    if (is_numeric($row['order_created_attributed_sales'] ?? null)) {
+                        $measures['revenue'] = (float) $row['order_created_attributed_sales'];
+                    }
+                    $out["{$campaign}|{$date}"] = $measures;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** The day a row covers: `date` on conversion rows, `readable_time` on delivery rows. */
+    private function dayOf(array $row): ?string
+    {
+        $day = $this->stringOrNull($row, 'date') ?? $this->stringOrNull($row, 'readable_time');
+
+        return $day !== null && preg_match('/^\d{4}-\d{2}-\d{2}/', $day) === 1 ? substr($day, 0, 10) : null;
+    }
+
+    /**
+     * A query string with list parameters repeated as `name[]=value`, as the API documents them.
+     *
+     * @param  array<string, string>  $params
+     * @param  array<string, list<string>>  $lists
+     */
+    private static function query(array $params, array $lists): string
+    {
+        $parts = [];
+        foreach ($params as $key => $value) {
+            $parts[] = rawurlencode($key).'='.rawurlencode($value);
+        }
+        foreach ($lists as $key => $values) {
+            foreach ($values as $value) {
+                $parts[] = rawurlencode($key).'[]='.rawurlencode($value);
+            }
+        }
+
+        return implode('&', $parts);
     }
 
     /**
