@@ -425,8 +425,11 @@ final class AdPlatformConnectorTest extends TestCase
                         'reach' => '65000', 'frequency' => '1.38',
                         'video_play_actions' => '54000', 'video_watched_2s' => '31000',
                         'video_watched_6s' => '17000', 'video_views_p100' => '9000',
-                        'add_to_cart' => '260', 'initiate_checkout' => '140',
-                        'complete_payment' => '12', 'total_purchase_value' => '4380.00',
+                        'web_event_add_to_cart' => '260', 'initiate_checkout' => '140',
+                        'complete_payment' => '12', 'total_complete_payment_rate' => '4380.00',
+                        // Two traps: app purchase value is not the website sales' value, and a stray
+                        // `add_to_cart` key (not a report metric) is never read as the basket stage.
+                        'total_purchase_value' => '99999.00', 'add_to_cart' => '777',
                         // The trap: five hundred optimisation events, twelve of them sales.
                         'conversion' => '500',
                         'likes' => '900', 'comments' => '40', 'shares' => '75', 'follows' => '30',
@@ -440,7 +443,7 @@ final class AdPlatformConnectorTest extends TestCase
 
         $this->assertSame('2026-08-01', $row['date'], 'the timestamp is stored as the date it names');
         $this->assertEqualsWithDelta(412.75, $row['spend'], 0.001, 'TikTok bills in the account currency, not millionths');
-        $this->assertEqualsWithDelta(4380.0, $row['revenue'], 0.001);
+        $this->assertEqualsWithDelta(4380.0, $row['revenue'], 0.001, 'revenue is the website purchases\' value, not the app\'s');
         $this->assertSame(90000.0, $row['impressions']);
         $this->assertSame(1800.0, $row['clicks']);
         $this->assertSame(65000.0, $row['reach']);
@@ -449,7 +452,8 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame(12.0, $row['purchases'], 'a purchase is a completed payment, never «a conversion»');
         $this->assertSame(500.0, $row['conversions'], 'TikTok\'s own results figure is still carried — just never as the sale');
         $this->assertSame(140.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
-        $this->assertSame(260.0, $row['add_to_cart']);
+        // TIKTOK-METRIC-REFUSAL-001 — the website add-to-cart event, documented as `web_event_add_to_cart`.
+        $this->assertSame(260.0, $row['add_to_cart'], 'the basket stage is the website add-to-cart event');
 
         // 54,000 viewers — not 54,000 plus the 31,000 and 17,000 of them who watched longer.
         $this->assertSame(54000.0, $row['video_views']);
@@ -468,6 +472,59 @@ final class AdPlatformConnectorTest extends TestCase
         foreach (['frequency', 'landing_page_views', 'engagements'] as $absent) {
             $this->assertArrayNotHasKey($absent, $row, "{$absent} is not something TikTok reports and must not be manufactured");
         }
+    }
+
+    /**
+     * TIKTOK-METRIC-REFUSAL-001 — one metric TikTok refuses must not cost the whole daily report.
+     *
+     * Production, 2026-10-12: «Invalid metric fields: ['add_to_cart'] · code 40002» — TikTok refuses
+     * the ENTIRE request for one bad name, and the account synced nothing. The refusal names the
+     * fields, so they are left out and the report is asked again; the rest of the figures arrive.
+     */
+    public function test_tiktok_leaves_out_a_refused_metric_and_keeps_the_rest_of_the_report(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $metrics = json_decode((string) ($query['metrics'] ?? '[]'), true);
+            $asked[] = $metrics;
+
+            if (in_array('initiate_checkout', $metrics, true)) {
+                return Http::response(['code' => 40002, 'message' => "Please correct the information in invalid metric fields and try again. Invalid metric fields: ['initiate_checkout'].", 'request_id' => 'r1']);
+            }
+
+            return Http::response(['code' => 0, 'data' => [
+                'list' => [[
+                    'dimensions' => ['campaign_id' => 'c1', 'stat_time_day' => '2026-08-01 00:00:00'],
+                    'metrics' => ['spend' => '50.00', 'impressions' => '1000', 'clicks' => '30', 'complete_payment' => '2'],
+                ]],
+                'page_info' => ['page' => 1, 'total_page' => 1],
+            ]]);
+        });
+
+        $row = $this->bound('tiktok')->syncInsights('adv-1', '2026-08-01', '2026-08-02')->records[0];
+
+        $this->assertCount(2, $asked, 'the report was asked again without the refused field');
+        $this->assertNotContains('initiate_checkout', $asked[1]);
+        $this->assertContains('spend', $asked[1]);
+        $this->assertNotContains('add_to_cart', $asked[0], 'the field TikTok refused in Production is not asked for');
+        $this->assertEqualsWithDelta(50.0, $row['spend'], 0.001);
+        $this->assertSame(2.0, $row['purchases']);
+        $this->assertArrayNotHasKey('checkout', $row, 'a refused stage is not reported — never a zero');
+    }
+
+    /** A refusal of a delivery figure, or of nothing it names, is still a failure — never papered over. */
+    public function test_tiktok_still_fails_when_the_refusal_names_a_delivery_figure(): void
+    {
+        $this->configure('tiktok');
+        Http::fake(['business-api.tiktok.com/*' => Http::response(['code' => 40002, 'message' => "Invalid metric fields: ['spend'].", 'request_id' => 'r2'])]);
+
+        $result = $this->bound('tiktok')->syncInsights('adv-1', '2026-08-01', '2026-08-02');
+
+        $this->assertFalse($result->success, 'a report without spend is not a report');
+        $this->assertStringContainsString('Invalid metric fields', (string) $result->message);
+        Http::assertSentCount(1);
     }
 
     /** A metric the advertiser does not report is ABSENT, so no surface can print it as a measured zero. */

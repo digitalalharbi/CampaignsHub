@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 /**
  * TikTok Marketing API (`business-api.tiktok.com/open_api/v1.3`).
@@ -37,8 +39,14 @@ final class TikTokConnector extends ApiAdvertisingConnector
      *    they sold something. `conversion` is still carried, as `conversions`, because it IS the
      *    platform's own «results» figure; what it must never be is the sale.
      *  - `checkout` ← `initiate_checkout`, its own stage. A started checkout is not a completed one.
-     *  - `add_to_cart` ← `add_to_cart`, never a content view. Looking at a product is not putting it
-     *    in a basket.
+     *  - `add_to_cart` ← **`web_event_add_to_cart`** («Adds to cart (website)»). The first real sync
+     *    (2026-10-12) asked for `add_to_cart`, which is not a report metric, and TikTok refused the
+     *    WHOLE daily report (`code 40002 — Invalid metric fields: ['add_to_cart']`). The app event
+     *    (`app_event_add_to_cart`) counts UNIQUE app adds — another event, another unit — and is not
+     *    added to it.
+     *  - `revenue` ← **`total_complete_payment_rate`** («Purchase value (website)»), the value of the
+     *    same website purchases `complete_payment` counts. `total_purchase_value` is «Purchase value
+     *    (app)»: it priced app purchases beside a website purchase count.
      *  - `video_views` ← `video_play_actions` ALONE. `video_watched_2s` and `_6s` are the same
      *    viewers measured at longer thresholds, so adding them counts one person up to three times.
      *
@@ -55,6 +63,10 @@ final class TikTokConnector extends ApiAdvertisingConnector
      * Unlike Snapchat, spend and value arrive in the advertiser's own currency rather than in
      * millionths, so there is no division at this edge.
      *
+     * Every field below is checked verbatim against «Basic report supported metrics» (v1.3,
+     * business-api.tiktok.com/portal/docs/basic-reports-supported-metrics/v1.3) and held by
+     * `TikTokMetricAllowlistTest`. The note below predates that check and is kept for its reasoning:
+     *
      * `initiate_checkout` is the one spelling not confirmed verbatim against the developer portal
      * (which renders no documentation to a fetcher). It is mapped anyway because a wrong spelling
      * FAILS SAFE by construction: TikTok returns no such key, `array_key_exists` skips it, nothing is
@@ -68,16 +80,34 @@ final class TikTokConnector extends ApiAdvertisingConnector
         'reach' => 'reach',
         'video_views' => 'video_play_actions',
         'video_completions' => 'video_views_p100',
-        'add_to_cart' => 'add_to_cart',
+        'add_to_cart' => 'web_event_add_to_cart',
         'checkout' => 'initiate_checkout',
         'purchases' => 'complete_payment',
-        'revenue' => 'total_purchase_value',
+        'revenue' => 'total_complete_payment_rate',
         'conversions' => 'conversion',
     ];
+
+    /** The figures a report is not a report without — never dropped to save a refused request. */
+    private const DELIVERY = ['spend', 'impressions', 'clicks'];
 
     protected function platform(): string
     {
         return 'tiktok';
+    }
+
+    /**
+     * The metric names a 40002 refusal lists: «Invalid metric fields: ['add_to_cart', 'x']».
+     *
+     * @return list<string>
+     */
+    private static function refusedFieldsIn(string $message): array
+    {
+        if (! preg_match('/Invalid metric fields:\s*\[([^\]]*)\]/i', $message, $m)) {
+            return [];
+        }
+        preg_match_all("/['\"]([a-z0-9_]+)['\"]/i", $m[1], $names);
+
+        return array_values(array_unique($names[1]));
     }
 
     /**
@@ -316,18 +346,48 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $reported = $this->readAll($tokens, 'report/integrated/get/', 'daily report', [
-            'advertiser_id' => $adAccountId,
-            'report_type' => 'BASIC',
-            'data_level' => 'AUCTION_CAMPAIGN',
-            // TikTok wants these as JSON strings inside the query, not repeated parameters.
-            'dimensions' => json_encode(['campaign_id', 'stat_time_day'], JSON_THROW_ON_ERROR),
-            // Asked for FROM the map, so a metric cannot be mapped here and then never requested —
-            // which reads downstream exactly like a platform that does not report it.
-            'metrics' => json_encode(array_values(array_unique(self::METRICS)), JSON_THROW_ON_ERROR),
-            'start_date' => $from,
-            'end_date' => $to,
-        ]);
+        // Asked for FROM the map, so a metric cannot be mapped here and then never requested —
+        // which reads downstream exactly like a platform that does not report it.
+        $fields = array_values(array_unique(self::METRICS));
+
+        /*
+         * TIKTOK-METRIC-REFUSAL-001 — one refused metric must not cost the whole report.
+         *
+         * TikTok refuses the entire request when ANY metric name is invalid (`code 40002`, «Invalid
+         * metric fields: ['add_to_cart']»), so a single stage it does not offer wiped out spend,
+         * impressions and results for the account. The refusal names the fields, so they are left out
+         * and the report is asked again; what was left out arrives as an absent key, which every
+         * surface states as «not reported», never as zero. Only the fields TikTok NAMED are dropped,
+         * never the delivery figures, and only a bounded number of times — any other refusal is
+         * thrown as it was, so a real failure still reads as one.
+         */
+        for ($attempt = 0; ; $attempt++) {
+            try {
+                $reported = $this->readAll($tokens, 'report/integrated/get/', 'daily report', [
+                    'advertiser_id' => $adAccountId,
+                    'report_type' => 'BASIC',
+                    'data_level' => 'AUCTION_CAMPAIGN',
+                    // TikTok wants these as JSON strings inside the query, not repeated parameters.
+                    'dimensions' => json_encode(['campaign_id', 'stat_time_day'], JSON_THROW_ON_ERROR),
+                    'metrics' => json_encode($fields, JSON_THROW_ON_ERROR),
+                    'start_date' => $from,
+                    'end_date' => $to,
+                ]);
+                break;
+            } catch (RuntimeException $e) {
+                $refused = self::refusedFieldsIn($e->getMessage());
+                $droppable = array_values(array_diff(array_intersect($refused, $fields), self::DELIVERY));
+                if ($attempt >= 1 || $droppable === []) {
+                    throw $e;
+                }
+                $fields = array_values(array_diff($fields, $droppable));
+                $this->refusedMetrics = array_values(array_unique([...$this->refusedMetrics, ...$droppable]));
+                Log::warning('TikTok refused report metrics; the report was asked again without them.', [
+                    'advertiser_id' => $adAccountId,
+                    'refused' => $droppable,
+                ]);
+            }
+        }
 
         $this->countRawInsightRows(count($reported));
 
