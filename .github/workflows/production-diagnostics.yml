@@ -80,6 +80,11 @@ on:
         type: boolean
         required: false
         default: false
+      probe_account_shape:
+        description: 'Ask the ACCOUNT LISTING and report the KEY NAMES the provider''s account body carries, and whether the connector read a currency and a timezone off it. Never values. This is how «currency NOT CAPTURED» is read off the provider''s own answer instead of being guessed at.'
+        type: boolean
+        required: false
+        default: false
       content_creative:
         description: 'Owner defect 95 — walk ONE creative from the provider rows to every Content surface (id, ours or the provider''s own). Read-only.'
         required: false
@@ -219,12 +224,13 @@ jobs:
           STRUCTURE: ${{ inputs.probe_structure && '--structure' || '' }}
           SHAPES: ${{ inputs.probe_shapes && '--shapes' || '' }}
           MEDIA: ${{ inputs.probe_media && '--media' || '' }}
+          ACCOUNT_SHAPE: ${{ inputs.probe_account_shape && '--account-shape' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: ACCOUNT,FROM,TO,STRUCTURE,MEDIA,SHAPES
+          envs: ACCOUNT,FROM,TO,STRUCTURE,MEDIA,SHAPES,ACCOUNT_SHAPE
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -241,7 +247,7 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:probe \
-                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA} ${SHAPES}
+                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA} ${SHAPES} ${ACCOUNT_SHAPE}
 
   # ── The sandbox quarantine, in its REPORTING form only ───────────────────────────────────────────
   #

@@ -50,7 +50,8 @@ final class ProbeInsightsCommand extends Command
         {--rows=3 : How many returned rows to print}
         {--structure : Ask for the CAMPAIGN structure instead of insights — identity, counts and date range}
         {--media : FETCH the first page of creative assets and report status, content type and decoded size}
-        {--shapes : Ask the ads edge and report the KEY NAMES each creative body carries, by type. Never values.}';
+        {--shapes : Ask the ads edge and report the KEY NAMES each creative body carries, by type. Never values.}
+        {--account-shape : Ask the account listing and report the KEY NAMES the provider\'s account body carries, and whether a currency and a timezone were read from it. Never values.}';
 
     protected $description = 'Read-only: ask the provider for insights over a window and print what came back. Stores nothing.';
 
@@ -118,7 +119,11 @@ final class ProbeInsightsCommand extends Command
 
         $this->line('');
         $this->line(str_repeat('=', 78));
-        $this->line('  '.($this->option('structure') ? 'STRUCTURE' : 'INSIGHTS').' PROBE — nothing is stored by this command.');
+        $this->line('  '.match (true) {
+            (bool) $this->option('account-shape') => 'ACCOUNT SHAPE',
+            (bool) $this->option('structure') => 'STRUCTURE',
+            default => 'INSIGHTS',
+        }.' PROBE — nothing is stored by this command.');
         $this->line(str_repeat('=', 78));
         $this->line(sprintf('  %s  [%s]  provider id %s', $account->name ?: '(unnamed)', $account->provider, $account->external_id));
         $this->line(sprintf(
@@ -127,6 +132,12 @@ final class ProbeInsightsCommand extends Command
             $account->timezone ?? 'NOT CAPTURED',
             $account->currency ?? 'NOT CAPTURED',
         ));
+
+        // The account LISTING's own shape — asked before the structure and insights branches because
+        // it is a question about the account row, not about anything beneath it.
+        if ($this->option('account-shape')) {
+            return $this->reportAccountShape($connector, $account);
+        }
 
         /*
          * INTEG-ACCOUNT-CHOICE-001 — «does this ad account hold the business's campaigns?»
@@ -526,6 +537,98 @@ final class ProbeInsightsCommand extends Command
 
         if ($this->option('shapes')) {
             $this->reportShapes($connector, $account);
+        }
+
+        $this->reportCalls($connector);
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * The KEY NAMES an ad-account body carries — so «currency NOT CAPTURED» can be read off the
+     * provider's own answer instead of being guessed at.
+     *
+     * ## The question this exists for
+     *
+     * The live ChatGPT Ads account reads `currency=NOT CAPTURED` on every diagnosis while its daily
+     * rows arrive in USD. `fetchAdAccounts()` reads `currency` off the account body; the body
+     * evidently names it under another key, or not at all — and nothing stored can say which.
+     * Discovery persists the normalised row and throws the body away (`AccountDiscovery` writes
+     * `currency` and `timezone`, never `raw`), the API reference is the only other place the answer
+     * lives, and a mapping written against a guessed key is the defect this tree has already paid for
+     * three times on creative shapes.
+     *
+     * ## What is printed, and what is deliberately not
+     *
+     * KEY NAMES only, two levels in, never values — an account body carries the business's name and
+     * its billing identity. Beside the shape, two yes/no facts the connector itself decides: whether
+     * the normalised row for THIS account carried a currency, and whether it carried a timezone.
+     * Those are not values either; they are the answer to «did the mapping find anything», which is
+     * the whole question. Other accounts the listing returns are counted and not named.
+     *
+     * Read-only like everything here: `listAdAccounts()` reads the stored connection, the bodies are
+     * described and thrown away, and no row is written — the stored account keeps whatever currency
+     * it had.
+     */
+    private function reportAccountShape(object $connector, ExternalAccount $account): int
+    {
+        if (! $connector instanceof ApiAdvertisingConnector) {
+            $this->error('  This connector does not go through the shared HTTP layer; its account body cannot be described.');
+
+            return self::FAILURE;
+        }
+
+        try {
+            $accounts = $connector->listAdAccounts();
+        } catch (Throwable $e) {
+            $this->line('');
+            $this->error('  The account listing threw: '.$e->getMessage());
+            $this->reportCalls($connector);
+
+            return self::SUCCESS;
+        }
+
+        $this->line('');
+        $this->line(sprintf('  accounts the listing returned : %d', count($accounts)));
+
+        $mine = null;
+        foreach ($accounts as $row) {
+            if ((string) ($row['external_id'] ?? '') === (string) $account->external_id) {
+                $mine = $row;
+                break;
+            }
+        }
+
+        if ($mine === null) {
+            $this->line('  this account among them       : no — the listing did not name the account being probed');
+        } else {
+            $this->line('  this account among them       : yes');
+            $this->line(sprintf(
+                '  currency read by the connector: %s',
+                is_string($mine['currency'] ?? null) && $mine['currency'] !== '' ? 'yes' : 'NO — the mapping found no currency on this body',
+            ));
+            $this->line(sprintf(
+                '  timezone read by the connector: %s',
+                is_string($mine['timezone'] ?? null) && $mine['timezone'] !== '' ? 'yes' : 'NO — the mapping found no timezone on this body',
+            ));
+        }
+
+        $keys = [];
+        foreach ($connector->peekRawResponses() as $body) {
+            foreach ($this->flatten((array) $body) as $key) {
+                $keys[$key] = true;
+            }
+        }
+
+        $this->line('');
+        $this->line('  ACCOUNT BODY SHAPES — key names only, never values');
+
+        if ($keys === []) {
+            $this->line('      (the listing answered with no body to describe)');
+        } else {
+            $names = array_keys($keys);
+            sort($names);
+            $this->line('      '.implode(', ', $names));
         }
 
         $this->reportCalls($connector);
