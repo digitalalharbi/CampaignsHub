@@ -638,7 +638,11 @@ export type ProviderSetupState =
 
 export interface IntegrationProvider {
   key: string
-  kind: 'advertising' | 'commerce'
+  kind: 'advertising' | 'commerce' | 'measurement'
+  /** `api_key` — connected with each advertiser's own key; no platform credentials to test. */
+  auth?: 'oauth' | 'api_key'
+  /** PROVIDER-AUTOFILL-001 — e.g. `client_id_looks_like_email`; never the value itself. */
+  warnings?: string[]
   label: string
   label_ar: string
   fields: ProviderFieldSpec[]
@@ -667,7 +671,7 @@ export interface IntegrationProvider {
   connectable: boolean
   values: ProviderFieldState[]
   last_tested_at: string | null
-  last_test_status: 'passed' | 'failed' | null
+  last_test_status: 'passed' | 'failed' | 'inconclusive' | 'not_required' | null
   last_test_message: string | null
   last_rotated_at: string | null
   configured_at: string | null
@@ -693,7 +697,7 @@ export function saveIntegrationProvider(
 
 /** A real round trip. A pass proves the client id and secret — not scopes, and not account access. */
 export function testIntegrationProvider(provider: string): Promise<
-  IntegrationProvider & { passed: boolean; message: string }
+  IntegrationProvider & { passed: boolean; outcome?: 'passed' | 'failed' | 'inconclusive' | 'not_required'; message: string }
 > {
   return postData(`/admin/settings/integrations/providers/${provider}/test`, {})
 }

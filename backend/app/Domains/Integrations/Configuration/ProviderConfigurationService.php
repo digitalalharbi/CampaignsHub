@@ -157,7 +157,7 @@ final class ProviderConfigurationService
          * be a migration nobody needs. It simply stops deciding anything, and the interface stops
          * offering a switch that does nothing.
          */
-        return $row?->last_test_status === 'passed'
+        return in_array($row?->last_test_status, ['passed', 'not_required'], true)
             ? ProviderSetupState::CredentialsVerified
             : ProviderSetupState::ReadyToConnect;
     }
@@ -197,6 +197,18 @@ final class ProviderConfigurationService
                 ],
                 $definition->fields,
             ),
+            /*
+             * PROVIDER-AUTOFILL-001 — a stored identifier that is an email address is almost always the
+             * browser's autofill. Flagged as a fact about the value, never the value itself.
+             */
+            'warnings' => array_values(array_filter([
+                collect($definition->fields)->contains(
+                    fn ($field) => ! $field->secret
+                        && in_array($field->key, ['client_id', 'app_id'], true)
+                        && is_string($values[$field->key] ?? null)
+                        && filter_var(trim((string) $values[$field->key]), FILTER_VALIDATE_EMAIL) !== false,
+                ) ? 'client_id_looks_like_email' : null,
+            ])),
             'last_tested_at' => $row?->last_tested_at?->toIso8601String(),
             'last_test_status' => $row?->last_test_status,
             'last_test_message' => $row?->last_test_message,
@@ -348,11 +360,16 @@ final class ProviderConfigurationService
      * operator only — never to a tenant — because a provider's refusal can name an app, an
      * organisation or an account belonging to somebody else's setup.
      */
-    public function recordTest(string $provider, bool $passed, string $message): void
+    /**
+     * PROVIDER-TEST-001 — `$outcome` is `passed | failed | inconclusive | not_required`. An
+     * inconclusive answer is not a configuration error; `not_required` is a key-based provider with
+     * no platform credentials to test.
+     */
+    public function recordTest(string $provider, bool $passed, string $message, ?string $outcome = null): void
     {
         $row = $this->rowOrNew(ProviderCatalogue::get($provider)->key);
         $row->last_tested_at = Carbon::now();
-        $row->last_test_status = $passed ? 'passed' : 'failed';
+        $row->last_test_status = in_array($outcome, ['passed', 'failed', 'inconclusive', 'not_required'], true) ? $outcome : ($passed ? 'passed' : 'failed');
         $row->last_test_message = mb_substr(trim($message), 0, 500);
         $row->save();
 
