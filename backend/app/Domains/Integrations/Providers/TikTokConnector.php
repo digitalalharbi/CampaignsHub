@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -190,7 +191,142 @@ final class TikTokConnector extends ApiAdvertisingConnector
             ];
         }
 
+        return $this->withAccountSettings($tokens, $accounts);
+    }
+
+    /**
+     * TIKTOK-CURRENCY-001 — the account's own currency and timezone, asked of `advertiser/info/`.
+     *
+     * `oauth2/advertiser/get/` answers with an id and a name and, in Production, nothing else, so
+     * every TikTok account was discovered with currency NULL. The normaliser then fell back to the
+     * project's reporting currency and stored a SAR account's spend as if it were USD — the figures
+     * were the right numbers in the wrong unit. Asked only for accounts that came back without a
+     * currency, so an answer that already states one costs nothing extra.
+     *
+     * Failure here never fails discovery: an account with an unknown currency is still an account.
+     *
+     * @param  list<array<string,mixed>>  $accounts
+     * @return list<array<string,mixed>>
+     */
+    private function withAccountSettings(OAuthTokens $tokens, array $accounts): array
+    {
+        $missing = array_values(array_map(
+            static fn (array $a): string => (string) $a['external_id'],
+            array_filter($accounts, static fn (array $a): bool => ($a['currency'] ?? null) === null),
+        ));
+
+        if ($missing === []) {
+            return $accounts;
+        }
+
+        try {
+            $settings = $this->advertiserSettings($tokens, $missing);
+        } catch (RuntimeException $e) {
+            Log::warning('TikTok advertiser settings could not be read; currency left unknown.', ['reason' => $e->getMessage()]);
+
+            return $accounts;
+        }
+
+        foreach ($accounts as $i => $account) {
+            $known = $settings[(string) $account['external_id']] ?? null;
+            if ($known !== null) {
+                $accounts[$i]['currency'] ??= $known['currency'];
+                $accounts[$i]['timezone'] ??= $known['timezone'];
+            }
+        }
+
         return $accounts;
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array<string, array{currency: ?string, timezone: ?string}>
+     */
+    private function advertiserSettings(OAuthTokens $tokens, array $ids): array
+    {
+        $settings = [];
+
+        // TikTok accepts at most 100 advertiser ids per call.
+        foreach (array_chunk($ids, 100) as $chunk) {
+            $body = $this->read(
+                $this->api($tokens)->get($this->url('advertiser/info/'), [
+                    'advertiser_ids' => json_encode($chunk, JSON_THROW_ON_ERROR),
+                    'fields' => json_encode(['advertiser_id', 'currency', 'timezone', 'display_timezone'], JSON_THROW_ON_ERROR),
+                ]),
+                'advertiser info',
+            );
+
+            foreach ((array) ($body['data']['list'] ?? []) as $a) {
+                if (! is_array($a) || ($a['advertiser_id'] ?? null) === null) {
+                    continue;
+                }
+
+                $currency = isset($a['currency']) && is_string($a['currency']) && $a['currency'] !== ''
+                    ? strtoupper($a['currency'])
+                    : null;
+
+                // `display_timezone` is the IANA name («Asia/Riyadh»); `timezone` is an offset label.
+                $timezone = null;
+                foreach (['display_timezone', 'timezone'] as $key) {
+                    $candidate = $a[$key] ?? null;
+                    if (is_string($candidate) && in_array($candidate, \DateTimeZone::listIdentifiers(), true)) {
+                        $timezone = $candidate;
+                        break;
+                    }
+                }
+
+                $settings[(string) $a['advertiser_id']] = ['currency' => $currency, 'timezone' => $timezone];
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
+     * The currency the account's money is in: what discovery recorded, or — for an account discovered
+     * before TIKTOK-CURRENCY-001 — asked once now and recorded, so the next sync does not ask again.
+     */
+    private function accountCurrency(OAuthTokens $tokens, string $adAccountId): ?string
+    {
+        if ($this->connection === null) {
+            return null;
+        }
+
+        $account = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $this->connection->getKey())
+            ->where('external_id', $adAccountId)
+            ->where('account_type', 'ad_account')
+            ->first();
+
+        if ($account === null) {
+            return null;
+        }
+
+        if (is_string($account->currency) && $account->currency !== '') {
+            return strtoupper($account->currency);
+        }
+
+        try {
+            $known = $this->advertiserSettings($tokens, [$adAccountId])[$adAccountId] ?? null;
+        } catch (RuntimeException $e) {
+            Log::warning('TikTok advertiser settings could not be read; currency left unknown.', [
+                'advertiser_id' => $adAccountId,
+                'reason' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($known === null || $known['currency'] === null) {
+            return null;
+        }
+
+        $account->forceFill(array_filter([
+            'currency' => $known['currency'],
+            'timezone' => ($account->timezone === null || $account->timezone === '') ? $known['timezone'] : null,
+        ], static fn ($v) => $v !== null))->save();
+
+        return $known['currency'];
     }
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
@@ -391,6 +527,9 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
         $this->countRawInsightRows(count($reported));
 
+        // TIKTOK-CURRENCY-001 — every row says what unit its money is in; the report itself does not.
+        $currency = $this->accountCurrency($tokens, $adAccountId);
+
         $rows = [];
 
         foreach ($reported as $row) {
@@ -405,7 +544,9 @@ final class TikTokConnector extends ApiAdvertisingConnector
                 continue;
             }
 
-            $mapped = [
+            $mapped = array_filter([
+                'currency' => $currency,
+            ], static fn ($v) => $v !== null) + [
                 'campaign_id' => $campaignId,
                 // `stat_time_day` is «2026-08-05 00:00:00»; the pipeline stores a date.
                 'date' => substr((string) ($dims['stat_time_day'] ?? $from), 0, 10),
