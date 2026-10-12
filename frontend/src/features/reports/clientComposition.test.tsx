@@ -95,23 +95,25 @@ describe('the order a client reads a live report in', () => {
   })
 
   /**
-   * The summary reads in the same order, over the blocks it has.
+   * The summary reads in its own order, over the blocks it has.
    *
-   * Written when the case above moved to the detailed form, so that the summary keeps an order
-   * contract of its own rather than inheriting one by assumption: a shorter document is still read
-   * «what did it cost» before «where did it go».
+   * CLIENT-REPORT-FRAMING-001 (Owner, 2026-10-12) — the summary is the platforms summary with the
+   * results around it, and it states no money: the platform cards come first, the results board under
+   * them, then where the results came from. No spend block and no direct/blended cost guard, because
+   * there is no cost on this page to guard.
    */
-  it('reads in the same order on the summary form', async () => {
+  it('reads platforms, then results, then where the results came from, on the summary form', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
+    const cards = await screen.findByTestId('exec-platform-cards')
     const kpis = await screen.findByTestId('live-kpis')
-    const objective = await screen.findByTestId('live-objective-split')
-    // REPORT-EXECUTIVE-SUMMARY-001 — the summary's «where the money went» block.
-    const platforms = await screen.findByTestId('exec-spend-split')
+    const split = await screen.findByTestId('exec-results-split')
 
-    expect(positionOf(kpis, objective) & 4, 'the objective split must follow the KPI cards').toBeTruthy()
-    expect(positionOf(objective, platforms) & 4, 'platforms must follow the objective split').toBeTruthy()
+    expect(positionOf(cards, kpis) & 4, 'the results board must follow the platform cards').toBeTruthy()
+    expect(positionOf(kpis, split) & 4, 'the results split must follow the results board').toBeTruthy()
+    expect(screen.queryByTestId('exec-spend-split')).toBeNull()
+    expect(screen.queryByTestId('live-objective-split')).toBeNull()
   })
 
   /**

@@ -177,7 +177,7 @@ describe('a live link and the form it was shared as', () => {
    * satisfied by a blank page, and the failure mode of «make the summary shorter» is trimming past
    * the decisions the document exists to deliver.
    */
-  it('still carries the headline figures, the platform summary and the objective split', async () => {
+  it('still carries the headline figures and the platform summary', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
@@ -189,8 +189,9 @@ describe('a live link and the form it was shared as', () => {
      */
     expect(screen.getByTestId('exec-platforms')).toBeInTheDocument()
     expect(screen.queryByTestId('live-platform-comparison')).not.toBeInTheDocument()
-    // This fixture spends 1,000 outside the sales path, so direct and blended differ and both are shown.
-    expect(screen.getByTestId('live-objective-split')).toBeInTheDocument()
+    // CLIENT-REPORT-FRAMING-001 — the summary states no cost, so the direct/blended cost guard is the dashboard's.
+    expect(screen.getByTestId('exec-platform-cards')).toBeInTheDocument()
+    expect(screen.queryByTestId('live-objective-split')).not.toBeInTheDocument()
   })
 
   /**

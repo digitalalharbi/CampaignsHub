@@ -583,7 +583,7 @@ function AdCard({
  * filling the ones the platform never measured with «—» is how a report teaches a client that half
  * its numbers are missing; these are the three that exist, in the order that answers «did it work».
  */
-export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): { label: string; value: string }[] {
+export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean } = {}): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = []
   const n = (v: number | null | undefined, digits = 0) =>
     v === null || v === undefined ? null : v.toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -612,7 +612,8 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): 
     return text === null ? '—' : (unit ? `${text} ${unit}` : text)
   })
 
-  if (spendReading.kind !== 'absent') {
+  // CLIENT-REPORT-FRAMING-001 — the client summary states what content achieved, never what it cost.
+  if (spendReading.kind !== 'absent' && !opts.resultsOnly) {
     out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spendText })
   }
 
@@ -657,6 +658,16 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): 
    * A return of «0.00×» is a claim that the ad returned nothing, so a zero ratio is not printed at
    * all — the same rule as before, unchanged.
    */
+  if (opts.resultsOnly) {
+    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    const impressions = n(ad.impressions)
+    if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
+    const clicks = n(ad.clicks)
+    if (clicks !== null) out.push({ label: ar ? 'النقرات' : 'Clicks', value: clicks })
+
+    return out.slice(0, 3)
+  }
+
   if (ad.roas !== null && ad.roas !== undefined && ad.roas > 0) {
     out.push({ label: ar ? 'العائد' : 'ROAS', value: `${ad.roas.toFixed(2)}×` })
   } else if (ad.cpa !== null && ad.cpa !== undefined && ad.cpa > 0) {

@@ -33,16 +33,19 @@ export function ContentTile({
   currency,
   onOpen,
   rank,
+  resultsOnly = false,
 }: {
   content: ReportAd
   locale: Locale
   currency: string | null
   onOpen?: (content: ReportAd) => void
   rank?: number
+  /** CLIENT-REPORT-FRAMING-001 — the summary's tiles state results, never spend or cost. */
+  resultsOnly?: boolean
 }) {
   const ar = locale === 'ar'
   const provider = content.provider ? canonicalPlatform(content.provider) : null
-  const figures = figuresFor(content, ar, currency)
+  const figures = figuresFor(content, ar, currency, { resultsOnly })
   const openable = onOpen !== undefined && !!content.content_key
 
   const body = (

@@ -153,13 +153,11 @@ function LiveAttention({ payload, ar, onOpenContent }: { payload: LivePayload; a
 /* ─────────────────────────────── A — Executive summary ─────────────────────────────── */
 
 export function SummaryView({ payload, reader, currency, locale, onOpenContent }: Common) {
-  const ar = locale === 'ar'
-
   /*
-   * REPORT-EXECUTIVE-SUMMARY-001 — the summary a shared link opens on is an executive dashboard:
-   * KPI → trend → where the money went → platforms side by side → objectives → funnel → best
-   * content → budget and data health → recommendations as action cards. The direct/blended guard
-   * (REPORT-OBJECTIVE-004) stays under the KPIs wherever the two figures differ.
+   * REPORT-EXECUTIVE-SUMMARY-001 / CLIENT-REPORT-FRAMING-001 — the summary a shared link opens on is
+   * the platforms summary with the results around it: platform cards → results board → results over
+   * time and by platform → platforms side by side → objectives → best content and content with room
+   * to improve → funnel and measurement coverage → optimisation steps. No spend, no campaign.
    */
   return (
     <ExecutiveSummary
@@ -169,7 +167,6 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
       locale={locale}
       onOpenContent={onOpenContent}
       sectionOn={(key) => sectionOn(payload, key)}
-      afterKpis={splitDiffers(payload) ? <ObjectiveSplit payload={payload} ar={ar} reader={reader} /> : null}
     />
   )
 }
