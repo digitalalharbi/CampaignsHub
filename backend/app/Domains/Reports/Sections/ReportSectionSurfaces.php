@@ -155,4 +155,25 @@ final class ReportSectionSurfaces
             true,
         );
     }
+
+    /**
+     * CLIENT-LIVE-LINK-SAFETY-001 — whether a link shows the section a legacy flag names, read from
+     * BOTH places an operator can switch it off: the link's own flag and the section the live-link
+     * builder unticked (`section_overrides`, resolved through the registry with the report's own
+     * settings). The drill-down endpoints read only the first, so a section the owner hid in the
+     * builder still opened in the platform drawer.
+     */
+    public function linkShows(string $flag, ReportShare $share): bool
+    {
+        if (! ($share->visibleSections()[$flag] ?? false)) {
+            return false;
+        }
+        $section = self::SHARE_FLAGS[$flag][0] ?? null;
+        if ($section === null) {
+            return true;
+        }
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report !== null && $this->operatorAllows($section, $report, $share);
+    }
 }

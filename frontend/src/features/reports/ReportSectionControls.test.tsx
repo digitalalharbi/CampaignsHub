@@ -125,7 +125,33 @@ describe('ReportSectionControls', () => {
     expect(screen.queryByTestId('section-toggle-detailed_tables')).toBeNull()
 
     fireEvent.click(screen.getByTestId('section-toggle-budget_pacing'))
-    await waitFor(() => expect(api.updateShareSections).toHaveBeenCalledWith('p1', 'r1', 'sh1', { budget_pacing: false }))
+    await waitFor(() => expect(api.updateShareSections).toHaveBeenCalledWith('p1', 'r1', 'sh1', { budget_pacing: false }, {}))
     await waitFor(() => expect(screen.getByTestId('section-toggle-budget_pacing')).toHaveAttribute('aria-checked', 'false'))
+  })
+
+  /** CLIENT-LIVE-LINK-SAFETY-001 — a link's financial figures switch off and on after it was sent. */
+  it('switches a link’s spend and revenue figures', async () => {
+    vi.mocked(api.listShares).mockResolvedValue([{ id: 'sh1', active: true, mode: 'live', created_at: '2026-09-01T00:00:00Z' }] as never)
+    const link = (hideSpend: boolean): api.ShareSectionsState => ({
+      share_id: 'sh1',
+      hide_spend: hideSpend,
+      hide_revenue: false,
+      sections: [{ key: 'kpis', title_ar: 'kpis', title_en: 'kpis', breakdown: false, state: 'shown' }],
+      resolved: [row('kpis', true, null)],
+      visible: ['kpis'],
+      availability_judged: false,
+    })
+    vi.mocked(api.getShareSections).mockResolvedValue(link(false))
+    vi.mocked(api.updateShareSections).mockResolvedValue(link(true))
+    renderWithProviders(<ReportSectionControls projectId="p1" reportId="r1" />, { locale: 'en' })
+
+    fireEvent.change(await screen.findByTestId('section-level'), { target: { value: 'sh1' } })
+    const spend = await screen.findByTestId('section-link-hide_spend')
+    expect(spend).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('section-link-hide_revenue')).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.click(spend)
+    await waitFor(() => expect(api.updateShareSections).toHaveBeenCalledWith('p1', 'r1', 'sh1', {}, { hide_spend: true }))
+    await waitFor(() => expect(screen.getByTestId('section-link-hide_spend')).toHaveAttribute('aria-checked', 'false'))
   })
 })

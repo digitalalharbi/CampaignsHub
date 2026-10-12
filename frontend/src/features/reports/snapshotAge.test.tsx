@@ -33,7 +33,7 @@ describe('a report states how current it is', () => {
   it('says a live report is live rather than quoting a generation time', () => {
     render(<InteractiveReport data={{ ...(base as object), mode: 'live', generated_at: '2026-07-01T09:00:00Z' } as never} meta={meta} />)
 
-    expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent('مباشر')
+    expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent('رابط لحظي للعميل')
   })
 
   /** A report written before this metadata existed invents no date for itself. */

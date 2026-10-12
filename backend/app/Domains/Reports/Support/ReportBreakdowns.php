@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Support;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 
 /**
  * REPORT-DRILLDOWN-001 — the OPTIONAL breakdowns a report can open on request.
@@ -82,7 +83,8 @@ final class ReportBreakdowns
         $out = [];
         foreach (self::REGISTRY as $key => $entry) {
             $wanted = is_bool($overrides[$key] ?? null) ? $overrides[$key] : ($summary ? false : self::defaultFor($key, $surface));
-            $out[$key] = $wanted && ($sections[$entry['requires']] ?? false);
+            // The parent section as the link resolves it — its own flag AND the builder's switch.
+            $out[$key] = $wanted && ($sections[$entry['requires']] ?? false) && app(ReportSectionSurfaces::class)->linkShows($entry['requires'], $share);
         }
 
         return $out;

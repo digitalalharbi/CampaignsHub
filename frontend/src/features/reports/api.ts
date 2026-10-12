@@ -886,6 +886,9 @@ export type LinkSectionState = 'shown' | 'hidden_by_link' | 'hidden_by_report'
 
 export interface ShareSectionsState {
   share_id: string
+  /** CLIENT-LIVE-LINK-SAFETY-001 — the link's financial switches, enforced on the payload. */
+  hide_spend?: boolean
+  hide_revenue?: boolean
   sections: Array<{ key: string; title_ar: string; title_en: string; breakdown: boolean; state: LinkSectionState }>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -907,5 +910,10 @@ export const reportSectionRegistry = (p: string) =>
 export const getShareSections = (p: string, reportId: string, shareId: string) =>
   getData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`)
 
-export const updateShareSections = (p: string, reportId: string, shareId: string, sections: Record<string, boolean>) =>
-  putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections })
+export const updateShareSections = (
+  p: string,
+  reportId: string,
+  shareId: string,
+  sections: Record<string, boolean>,
+  money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
+) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money })

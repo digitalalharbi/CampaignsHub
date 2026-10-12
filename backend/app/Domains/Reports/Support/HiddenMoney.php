@@ -113,6 +113,15 @@ final class HiddenMoney
             }
         }
 
+        /*
+         * A pacing row's planned budget: `budget` is not in the key list because the same word names
+         * the link's section flag (`sections.budget`), but beside `spent`/`pace` it is the money the
+         * client was not to see — the download kept it while blanking what was spent against it.
+         */
+        if (in_array('spent', $keys, true) && is_numeric($node['budget'] ?? null) && (array_key_exists('spent', $node) || array_key_exists('pace', $node) || array_key_exists('consumed_pct', $node))) {
+            $node['budget'] = null;
+        }
+
         // A figure named by its neighbour: {metric: 'cpa', value: 41.2} — an objective leader, a signal.
         if (isset($node['metric']) && is_string($node['metric']) && in_array($node['metric'], $keys, true) && array_key_exists('value', $node) && ! is_array($node['value'])) {
             $node['value'] = null;

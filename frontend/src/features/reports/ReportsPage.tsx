@@ -921,7 +921,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             {([
               { key: 'snapshot' as const, ar: 'لقطة ثابتة', en: 'Snapshot',
                 hintAr: 'أرقام محفوظة لا تتغيّر بعد الإصدار', hintEn: 'Figures frozen at issue, never move' },
-              { key: 'live' as const, ar: 'رابط حيّ', en: 'Live link',
+              { key: 'live' as const, ar: 'رابط لحظي للعميل', en: 'Live client link',
                 hintAr: 'لوحة يفلترها العميل وتتحدّث', hintEn: 'A dashboard the client filters, kept current' },
             ]).map((o) => (
               <button

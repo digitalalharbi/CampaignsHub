@@ -152,14 +152,28 @@ final class ReportSectionController extends Controller
         $settings['sections'] = $flags;
         $settings['section_overrides'] = array_values(array_intersect($this->registry->keys(), array_keys($hidden)));
         $link->settings = $settings;
+
+        /*
+         * CLIENT-LIVE-LINK-SAFETY-001 — the link's financial figures, switchable after it was sent.
+         * `hide_spend` withholds spend and everything returned from it (every cost-per, ROAS, budget
+         * pacing); `hide_revenue` withholds revenue and ROAS. Both are enforced on the payload by
+         * `HiddenMoney`, so a switch here changes what the client's page can receive, not its CSS.
+         */
+        $request->validate(['hide_spend' => ['sometimes', 'boolean'], 'hide_revenue' => ['sometimes', 'boolean']]);
+        $moneyBefore = ['hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue];
+        foreach (['hide_spend', 'hide_revenue'] as $flag) {
+            if ($request->has($flag)) {
+                $link->{$flag} = $request->boolean($flag);
+            }
+        }
         $link->save();
 
         $audit->log(
             action: 'report.shared_link_sections_updated',
             entityType: ReportShare::class,
             entityId: (string) $link->getKey(),
-            before: ['hidden' => $before],
-            after: ['hidden' => $settings['section_overrides']],
+            before: ['hidden' => $before, ...$moneyBefore],
+            after: ['hidden' => $settings['section_overrides'], 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
         );
 
         return ApiResponse::success($this->shareShape($model, $link->fresh() ?? $link), 'Link sections saved.');
@@ -185,6 +199,8 @@ final class ReportSectionController extends Controller
 
         return [
             'share_id' => (string) $link->getKey(),
+            'hide_spend' => (bool) $link->hide_spend,
+            'hide_revenue' => (bool) $link->hide_revenue,
             'sections' => array_map(fn ($section): array => [
                 'key' => $section->key,
                 'title_ar' => $section->titleAr,

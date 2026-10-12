@@ -182,7 +182,7 @@ final class AttentionFindingsTest extends TestCase
         $this->assertSame('operator', $items[0]['audience']);
     }
 
-    public function test_the_client_cut_withholds_operator_items_unless_approved_and_hidden_items_always(): void
+    public function test_the_client_cut_withholds_operator_items_even_when_approved_and_hidden_items_always(): void
     {
         $items = $this->build([
             $this->row('leads', 'meta', ['spend' => 3000, 'results' => 50]),
@@ -201,11 +201,12 @@ final class AttentionFindingsTest extends TestCase
         $this->assertArrayNotHasKey('audience', $default[0]);
         $this->assertArrayNotHasKey('decision', $default[0]);
 
+        // CLIENT-LIVE-LINK-SAFETY-001 — buying mechanics never reach a client, approved or not.
         $approved = AttentionAudience::forClient($items, [$shift => 'approved']);
-        $this->assertEqualsCanonicalizing(['cpl_rise', 'budget_shift'], array_column($approved, 'code'));
+        $this->assertSame(['cpl_rise'], array_column($approved, 'code'), 'an approval published a budget shift to a client');
 
         $hidden = AttentionAudience::forClient($items, [$shift => 'approved', $rise => 'hidden']);
-        $this->assertSame(['budget_shift'], array_column($hidden, 'code'));
+        $this->assertSame([], array_column($hidden, 'code'));
 
         // A stored item cannot declare itself client-safe: the catalogue decides by its action.
         $forged = $items;

@@ -105,7 +105,7 @@ final class SharedCreativeView
             'per_page' => $perPage,
             'total' => $total,
             'period' => ['from' => $applied['from'], 'to' => $applied['to']],
-            'applied' => $applied,
+            'applied' => self::clientApplied($applied),
             'available' => $this->available($share),
             'permissions' => $visibility->toArray(),
         ];
@@ -142,7 +142,7 @@ final class SharedCreativeView
         }
 
         return $this->redactSummary($payload, $visibility) + [
-            'applied' => $applied,
+            'applied' => self::clientApplied($applied),
             'available' => $this->available($share),
             'permissions' => $visibility->toArray(),
         ];
@@ -446,7 +446,11 @@ final class SharedCreativeView
 
         return [
             'providers' => $options['providers'],
-            'campaigns' => $options['campaigns'],
+            /*
+             * CLIENT-LIVE-LINK-SAFETY-001 — no campaign is offered to a shared link, by name or id:
+             * a client narrows by platform, objective, type and date, never by the agency's filing.
+             */
+            'campaigns' => [],
             /*
              * CONTENT-FILTER-TRUTH-001 — the canonical five, and no «المسار التسويقي» beside them.
              *
@@ -460,6 +464,20 @@ final class SharedCreativeView
             'earliest' => $ceiling['earliest'],
             'latest' => $ceiling['latest'],
         ];
+    }
+
+    /**
+     * The filters echoed back to a shared link, without the campaign ids the ceiling resolved to —
+     * the reader never chose them and the response is not where they learn what they are.
+     *
+     * @param  array<string,mixed>  $applied
+     * @return array<string,mixed>
+     */
+    private static function clientApplied(array $applied): array
+    {
+        unset($applied['campaign_ids']);
+
+        return $applied;
     }
 
     /**

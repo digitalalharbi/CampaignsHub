@@ -113,7 +113,7 @@ final class ReportStructure
          * figures» on such a link tells a client something about their business that nobody
          * checked. This reason says what is true instead.
          */
-        'not_composed_for_a_live_link' => ['ar' => 'هذا رابط مباشر يعيد حساب الأرقام عند كل فتح، ولا تُكتب فيه النتائج والتوصيات — تُكتب عند إصدار التقرير.', 'en' => 'This is a live link: it recomputes the figures on every open and composes no written analysis. Findings and recommendations are written when a report is generated.'],
+        'not_composed_for_a_live_link' => ['ar' => 'هذا رابط لحظي للعميل يعيد حساب الأرقام عند كل فتح، ولا تُكتب فيه النتائج والتوصيات — تُكتب عند إصدار التقرير.', 'en' => 'This is a live client link: it recomputes the figures on every open and composes no written analysis. Findings and recommendations are written when a report is generated.'],
         'no_finding_the_figures_support' => ['ar' => 'لا نتيجة تدعمها الأرقام في هذه الفترة.', 'en' => 'No finding is supported by the figures in this period.'],
         // The section registry's own reason code (#486) — the operator switched the section off.
         'disabled_by_operator' => ['ar' => 'هذا القسم غير منشور في هذا التقرير.', 'en' => 'This section is not published in this report.'],

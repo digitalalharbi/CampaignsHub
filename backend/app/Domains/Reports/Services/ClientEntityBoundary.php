@@ -75,6 +75,35 @@ final class ClientEntityBoundary
     }
 
     /**
+     * CLIENT-LIVE-LINK-SAFETY-001 — the per-objective leaders, client cut.
+     *
+     * The leaders name a PLATFORM, which is client-safe. What travelled beside them was not: how many
+     * campaigns spent on the path, the reason worded in campaigns («only one campaign spent»), and
+     * each leader's campaign objective and id. A client reads which platform led, on what figure.
+     *
+     * @param  array<string,mixed>|null  $leaders
+     * @return array<string,mixed>|null
+     */
+    public static function objectiveLeaders(?array $leaders): ?array
+    {
+        if ($leaders === null) {
+            return null;
+        }
+        $leaders['paths'] = array_map(static function (array $path): array {
+            unset($path['campaigns'], $path['comparable_reason']);
+            foreach (['strongest', 'weakest'] as $end) {
+                if (is_array($path[$end] ?? null)) {
+                    unset($path[$end]['id'], $path[$end]['objective']);
+                }
+            }
+
+            return $path;
+        }, array_values(array_filter($leaders['paths'] ?? [], 'is_array')));
+
+        return $leaders;
+    }
+
+    /**
      * Ad rows with our own primary keys taken out — CLIENT-REPORT-ENTITY-BOUNDARY-001.
      *
      * Found on the owner's live client link on 2026-09-07: `ads[]` and `ads_groups[].ads[]` carried
@@ -99,6 +128,8 @@ final class ClientEntityBoundary
     {
         return array_map(static function (array $ad): array {
             unset($ad['id'], $ad['campaign_id'], $ad['external_account_id'], $ad['client_display_name']);
+            /* CLIENT-LIVE-LINK-SAFETY-001 — the campaign's objective is campaign management: the content's name is the only identity. */
+            unset($ad['objective'], $ad['campaign_name'], $ad['ad_set_id'], $ad['ad_set_name']);
 
             /* A group carries its own ads, and they are the same rows with the same keys. */
             if (isset($ad['ads']) && is_array($ad['ads'])) {
@@ -142,6 +173,8 @@ final class ClientEntityBoundary
                 $row['campaign_id'],
                 $row['campaign_name'],
                 $row['ad_set_id'],
+                $row['ad_set_name'],
+                $row['objective'],
                 $row['external_account_id'],
                 $row['client_display_name'],
                 /* The platform's own ad objects — internal ids end to end, and nothing here shows them. */

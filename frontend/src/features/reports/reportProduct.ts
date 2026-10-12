@@ -24,13 +24,14 @@ const PRODUCTS: Record<`${ReportMode}:${ReportForm}`, { ar: string; en: string }
    * A live link is a product with modes now (`live/modes.ts`), so its sentence names what the reader
    * can do rather than listing contents — and it stays one line: the client came for figures.
    */
+  /* CLIENT-LIVE-LINK-SAFETY-001 — the product's name is «رابط لحظي للعميل», on both forms. */
   'live:executive_summary': {
-    ar: 'ملخص مباشر — يُحدَّث عند كل فتح.',
-    en: 'Live summary — recomputed every time it is opened.',
+    ar: 'رابط لحظي للعميل — ملخص يُحدَّث عند كل فتح.',
+    en: 'Live client link — a summary recomputed every time it is opened.',
   },
   'live:detailed': {
-    ar: 'لوحة أداء مباشرة — ملخص، أداء، منصات، ومحتوى.',
-    en: 'Live performance dashboard — summary, performance, platforms and content.',
+    ar: 'رابط لحظي للعميل — ملخص، أداء، منصات، ومحتوى.',
+    en: 'Live client link — summary, performance, platforms and content.',
   },
   'snapshot:executive_summary': {
     ar: 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.',
@@ -55,8 +56,8 @@ export function productName(mode: string, form: string, locale: Locale): string 
 
   if (mode === 'live') {
     return form === 'executive_summary'
-      ? (ar ? 'ملخص مباشر' : 'Live summary')
-      : (ar ? 'لوحة أداء مباشرة' : 'Live performance dashboard')
+      ? (ar ? 'رابط لحظي للعميل — ملخص' : 'Live client link — summary')
+      : (ar ? 'رابط لحظي للعميل — كامل' : 'Live client link — full')
   }
 
   return form === 'executive_summary'

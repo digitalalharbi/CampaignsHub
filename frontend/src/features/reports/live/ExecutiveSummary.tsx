@@ -26,7 +26,7 @@ type Reader = ReturnType<typeof useLiveMetricReader>
  * أبدًا» and campaign data is campaign management's, not the client's — content names are the only
  * entity named. So this page states RESULTS: the platforms summary first (the view the owner chose as
  * the report's main summary), the results board, the shape of the period, each platform's share of
- * the results, the objectives, the funnel, the best content and the content with room to improve, the
+ * the results, the funnel, the best content and the content with room to improve, the
  * data's coverage, and the optimisation steps.
  *
  * Every figure is the payload's, read through the same canonical readers as the rest of the report
@@ -97,15 +97,11 @@ export function ExecutiveSummary({
   currency: string
   locale: Locale
   onOpenContent: (content: ReportAd) => void
-  sectionOn: (key: 'kpis' | 'trends' | 'platform_comparison' | 'funnel' | 'content_performance' | 'recommendations' | 'objective_breakdown') => boolean
+  sectionOn: (key: 'kpis' | 'trends' | 'platform_comparison' | 'funnel' | 'content_performance' | 'recommendations') => boolean
 }) {
   const ar = locale === 'ar'
   const [platform, setPlatform] = useState<string | null>(null)
   const { result } = headlineKeys(payload, reader)
-  const objectivesShown = sectionOn('objective_breakdown') && (payload.objective_performance?.paths ?? []).some((p) => {
-    const r = PATH_RESULT[p.path]
-    return r !== undefined && Number(p[r.key] ?? 0) > 0
-  })
   const funnelShown = sectionOn('funnel') && (payload.funnel ?? []).filter((s) => s.reported).length >= 2
 
   return (
@@ -121,13 +117,8 @@ export function ExecutiveSummary({
         </div>
       )}
 
-      {(sectionOn('platform_comparison') || objectivesShown) && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {sectionOn('platform_comparison') && (
-            <PlatformComparison payload={payload} reader={reader} ar={ar} result={result} selected={platform} onSelect={setPlatform} wide={!objectivesShown} />
-          )}
-          {objectivesShown && <ObjectiveBreakdown payload={payload} ar={ar} />}
-        </div>
+      {sectionOn('platform_comparison') && (
+        <PlatformComparison payload={payload} reader={reader} ar={ar} result={result} selected={platform} onSelect={setPlatform} wide />
       )}
 
       {sectionOn('content_performance') && (
@@ -376,45 +367,6 @@ function PlatformComparison({
         </div>
       )}
       <p className="mt-2 text-[11px] text-text-muted">{ar ? 'اضغط منصة لترى محتواها أدناه.' : 'Pick a platform to see its content below.'}</p>
-    </Panel>
-  )
-}
-
-/* ─────────────────────────────── Objective breakdown ─────────────────────────────── */
-
-const PATH_RESULT: Record<string, { key: 'impressions' | 'clicks' | 'orders'; ar: string; en: string }> = {
-  awareness: { key: 'impressions', ar: 'الظهور', en: 'Impressions' },
-  traffic: { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
-  conversion: { key: 'orders', ar: 'الطلبات', en: 'Orders' },
-}
-const PATH_COLOR: Record<string, string> = { awareness: 'var(--info)', traffic: 'var(--purple)', conversion: 'var(--brand-600)' }
-
-function ObjectiveBreakdown({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  const paths = (payload.objective_performance?.paths ?? []).filter((p) => {
-    const r = PATH_RESULT[p.path]
-    return r !== undefined && Number(p[r.key] ?? 0) > 0
-  })
-
-  return (
-    <Panel title={ar ? 'ما حققه كل هدف' : 'What each objective achieved'} testid="exec-objectives" className="lg:col-span-5">
-      <ul className="grid grid-cols-1 gap-2">
-        {paths.map((p) => {
-          const r = PATH_RESULT[p.path]
-
-          return (
-            <li key={p.path} data-testid={`exec-objective-${p.path}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-surface-secondary px-3 py-2">
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PATH_COLOR[p.path] ?? 'var(--brand-500)' }} />
-                <span className="truncate text-xs font-bold text-text-primary">{ar ? p.label_ar : p.label_en}</span>
-              </span>
-              <span className="shrink-0 text-end">
-                <span className="block tnum text-sm font-extrabold text-text-primary"><Num>{num(p[r.key])}</Num></span>
-                <span className="block text-[10px] text-text-muted">{ar ? r.ar : r.en}</span>
-              </span>
-            </li>
-          )
-        })}
-      </ul>
     </Panel>
   )
 }

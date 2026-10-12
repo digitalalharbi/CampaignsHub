@@ -180,6 +180,28 @@ final class SharedReportCreativesTest extends TestCase
         $this->assertSame('conversion', $rows[0]['path']);
     }
 
+    /**
+     * CLIENT-LIVE-LINK-SAFETY-001 — a shared link is offered no campaign to narrow by, by name or id,
+     * and the filters it is answered with do not echo the campaign ids its ceiling resolved to.
+     */
+    public function test_no_campaign_name_or_id_reaches_the_shared_creatives(): void
+    {
+        $creative = $this->creative(['name' => 'Hero image']);
+        $this->figures($creative, ['spend' => 1200, 'impressions' => 60000, 'clicks' => 1800, 'conversions' => 60, 'revenue' => 9000]);
+
+        [$token] = $this->link($this->everything());
+
+        foreach (['/creatives', '/creatives/summary'] as $path) {
+            $res = $this->open($token, $path)->assertOk();
+            $this->assertSame([], $res->json('data.available.campaigns'), "{$path}: a campaign was offered to the client");
+            $this->assertArrayNotHasKey('campaign_ids', (array) $res->json('data.applied'), "{$path}: the ceiling's campaign ids were echoed");
+            foreach ([$this->awareness, $this->sales] as $campaign) {
+                $this->assertStringNotContainsString((string) $campaign->getKey(), (string) $res->getContent(), "{$path}: a campaign id travelled");
+                $this->assertStringNotContainsString((string) $campaign->name, (string) $res->getContent(), "{$path}: a campaign name travelled");
+            }
+        }
+    }
+
     /** The summary ranks inside each path, and never declares one winner across them. */
     public function test_the_summary_ranks_each_objective_on_its_own_metric(): void
     {

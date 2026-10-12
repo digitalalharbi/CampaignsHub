@@ -133,9 +133,10 @@ final class ReportAttentionSurfacesTest extends TestCase
         $report = $this->generate();
         $keys = array_column($this->operatorItems($report), 'key', 'code');
 
+        // CLIENT-LIVE-LINK-SAFETY-001 — an approval does not publish a bidding item: buying mechanics are not the client's.
         $this->decide($report, $keys['cpc_rise'], 'approved')->assertOk();
         foreach ($this->clientSurfaces($report) as $surface => $payload) {
-            $this->assertEqualsCanonicalizing(['cpl_rise', 'cpc_rise'], array_column($payload['attention'], 'code'), "{$surface}: approval did not publish the item");
+            $this->assertSame(['cpl_rise'], array_column($payload['attention'], 'code'), "{$surface}: an approval published a bidding item to a client");
         }
 
         $this->decide($report, $keys['cpl_rise'], 'hidden')->assertOk();
@@ -171,7 +172,8 @@ final class ReportAttentionSurfacesTest extends TestCase
 
         $this->decide($july, $julyKeys['cpc_rise'], 'approved')->assertOk();
 
-        $this->assertContains('cpc_rise', array_column($this->clientSurfaces($july)['shared snapshot']['attention'], 'code'));
+        // CLIENT-LIVE-LINK-SAFETY-001 — not even July's own client surfaces carry the approved bidding item.
+        $this->assertNotContains('cpc_rise', array_column($this->clientSurfaces($july)['shared snapshot']['attention'], 'code'));
         foreach ($this->clientSurfaces($august) as $surface => $payload) {
             $this->assertNotContains('cpc_rise', array_column($payload['attention'], 'code'), "{$surface}: July's approval published August's item");
         }
