@@ -1189,3 +1189,37 @@ after the grain fix deploys so the ad-group/ad rows land too; find the TikTok ac
 ≈ $9,009 USD / 33,783 SAR 30-day, missing-days warning gone). Open question, not guessed at: the ChatGPT Ads
 account currency reads NOT CAPTURED on Production — `fetchAdAccounts` reads `currency` off the account body and
 the body apparently names it otherwise or not at all; needs the API reference, not an assumption.
+
+## Addendum — 2026-10-12, the account body's own shape (`fix/probe-account-shape`, from `35fd4925`)
+
+**#682 is PROVEN in Production, not only deployed.** Merged `35fd4925`, deploy run 38283896746 success. The
+`resync-window` for ChatGPT Ads account `4cb0ebfa-dee3-472d-a754-78fd203a35b9` (2026-09-27 → 2026-10-12) ran
+dry (38284092665) then applied (38284188712); the diagnosis after it (38284845185) reads every `openai_ads`
+metrics run since the apply as `success` where the earlier ones were `partial_mapping`, «last sweep wrote 11
+ad-set row(s), 60 ad row(s) … (0 matched nothing)», hierarchy 2/2/10/10 with 0 orphans, downstream «115 rows
+across 14 days, latest 2026-10-12, spend / revenue 556.13 / 859.34 USD», 2 campaigns linked, 0 rows elsewhere.
+The Owner's Ads Manager figure is $556.11 (Sep 29 – Oct 12): two cents apart over fourteen daily figures.
+OPENAI-ADS-INSIGHTS-001 → VERIFIED on that; the per-day read beside Ads Manager stays the Owner's.
+
+**TikTok needs no backfill.** Account `e0414015-f257-4185-8801-5a68b4c25942` already carries 91 days of rows;
+the dry run 38284372643 was NOT applied, deliberately. The TikTok row's own clause — «مزامنة الآن» ending
+«ناجحة» with metrics imported, read by the Owner — is unchanged.
+
+**The currency question is now ASKABLE instead of guessed at.** The ChatGPT Ads account still reads
+`currency=NOT CAPTURED` (timezone Asia/Riyadh) while its rows arrive in USD. `fetchAdAccounts()` reads
+`currency` off the account body; discovery persists the normalised row and discards the body; OpenAI's API
+reference does not load from this container. So the honest unit is an instrument, not a mapping:
+`integrations:probe <account> --account-shape` asks the listing and prints the KEY NAMES the body carries
+(two levels in, `flatten()`), plus two yes/no facts the connector itself decides — whether the normalised row
+for THIS account carried a currency and a timezone. Never values: an account body carries the business's
+name and its billing identity, and the test asserts a `CONFIDENTIAL ACCOUNT NAME` never reaches the output.
+Read-only, like the rest of the command. The diagnostics workflow gains `probe_account_shape`.
+
+**Next, in order:** merge #681, then #678 (`update-branch` after each merge — `strict` protection), then this
+PR; deploy; dispatch `production-diagnostics.yml` with `probe_account=4cb0ebfa-dee3-472d-a754-78fd203a35b9`
+and `probe_account_shape=true`; read the key names; then either map `OpenAiAdsConnector::fetchAdAccounts` to
+the key the body actually names, or record that the body carries none and the currency has to come from the
+first insights row. Two things the same diagnosis surfaced and nobody has acted on: the two `openai_ads`
+campaigns are unclassified with the raw objective word `CLICKS` (a mapping question for `PlatformObjectiveMap`),
+and `creative_daily_metrics` holds 0 rows for the 10 `chat_card` creatives (nothing to draw, and nothing yet
+says why).
