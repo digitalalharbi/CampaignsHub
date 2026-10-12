@@ -1164,3 +1164,28 @@ freshness, four KPIs under the money and coverage contracts, attention beside th
 platform comparison; counts moved below. Proven on the preview at desktop and mobile; row added
 IMPLEMENTED_NOT_VERIFIED. Lane: every earlier PR (#645–#656) merged and VERIFIED; #657 (chart currency) in CI;
 this surface's PR opens when #657 lands.
+
+## Addendum — 2026-10-12, the ChatGPT Ads grain key (`fix/openai-adgroup-grain`, from `395caa0f`)
+
+Lane: #677 and #680 merged and deployed (runs 38274893756, 38275376098 success); #678 and #681 green on
+backend/frontend/image/chromium with firefox+webkit in flight, both `behind` main after #680 — update-branch
+then merge one at a time. Production probing (`api.campaignshub.io` health, served bundle hash) is blocked from
+this container by the proxy (`CONNECT … 403`); deploy-run status is read through `gh run list` instead.
+
+The resume diagnostic (run 38271521740) showed the ChatGPT Ads ad-group/ad grain still broken after #679: «11
+ad-set row(s) came back and none matched a discovered ad-set», «60 ad row(s) … none matched a discovered ad».
+Root cause is one key: `OpenAiAdsConnector::entityInsights` wrote `entity_external_id` where the contract and
+`UpsertEntityDailyMetrics` read `entity_id`. Fixed at the key; the upsert now counts `unkeyed` rows apart from
+undiscovered ones, the run meta carries `entity_ad_sets_unkeyed`/`entity_ads_unkeyed`, the diagnosis prints them,
+and `nothingPlaced()` names a contract breach instead of blaming discovery. Guard:
+`EntityGrainContractSourceGuardTest` over the four `ReportsEntityGrains` implementors. Local PHP here is 8.3
+and the lock needs 8.4, so the focused suites run in CI (`OpenAiAdsMetricsSyncTest`, `EntityDailyMetricsTest`,
+`EntityMetricsAreActuallySyncedTest`, `MetaEntityGrainsTest`, the new guard).
+
+Next, in order: merge #678 / #681 / this PR serially; dispatch `production-scope-cleanup.yml` `resync-window`
+for ChatGPT Ads account `4cb0ebfa-dee3-472d-a754-78fd203a35b9` 2026-09-27 → 2026-10-12 (dry run, then apply)
+after the grain fix deploys so the ad-group/ad rows land too; find the TikTok account's uuid with diagnostics
+`--provider=tiktok` and backfill its last 90 days; verify both with `--downstream` (ChatGPT ≈ $556.11; TikTok
+≈ $9,009 USD / 33,783 SAR 30-day, missing-days warning gone). Open question, not guessed at: the ChatGPT Ads
+account currency reads NOT CAPTURED on Production — `fetchAdAccounts` reads `currency` off the account body and
+the body apparently names it otherwise or not at all; needs the API reference, not an assumption.

@@ -294,7 +294,14 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
                     continue;
                 }
 
-                $rows[] = ['entity_external_id' => $entity, 'date' => $date] + $this->measures($row);
+                /*
+                 * `entity_id` is the key the contract names and the upsert reads. The first version
+                 * of this method wrote the id under a key of its own, so on Production every
+                 * ad-group and ad row «came back and matched no discovered entity» — the ids were
+                 * right and the key was not, and the message blamed discovery for a row the upsert
+                 * never looked at. `EntityGrainContractSourceGuardTest` holds the key now.
+                 */
+                $rows[] = ['entity_id' => $entity, 'date' => $date] + $this->measures($row);
             }
         } catch (\Throwable $e) {
             /* An empty grain and a refused one are different facts. */

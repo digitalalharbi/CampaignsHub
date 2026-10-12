@@ -108,7 +108,7 @@ final class EntityDailyMetricsTest extends TestCase
             $this->known('sq-1'),
         );
 
-        $this->assertSame(['upserted' => 1, 'skipped' => 0], $result);
+        $this->assertSame(['upserted' => 1, 'skipped' => 0, 'unkeyed' => 0], $result);
 
         $row = DB::table('entity_daily_metrics')->where('external_entity_id', 'sq-1')->first();
 
@@ -150,7 +150,28 @@ final class EntityDailyMetricsTest extends TestCase
             $this->known('sq-1'),
         );
 
-        $this->assertSame(['upserted' => 0, 'skipped' => 1], $result);
+        $this->assertSame(['upserted' => 0, 'skipped' => 1, 'unkeyed' => 0], $result);
+        $this->assertSame(0, DB::table('entity_daily_metrics')->count());
+    }
+
+    /**
+     * A row that names NO entity is counted apart from one that names an undiscovered entity: the
+     * first is a connector that does not speak the contract, the second is a structure sweep that has
+     * not caught up, and the run has to tell an operator which (OPENAI-ADS-INSIGHTS-001).
+     */
+    public function test_a_row_with_no_entity_id_is_counted_as_unkeyed(): void
+    {
+        $result = app(UpsertEntityDailyMetrics::class)->execute(
+            $this->account,
+            'ad_set',
+            [
+                ['entity_external_id' => 'sq-1', 'date' => '2026-08-01', 'impressions' => 10],
+                ['entity_id' => 'sq-unknown', 'date' => '2026-08-01', 'impressions' => 10],
+            ],
+            $this->known('sq-1'),
+        );
+
+        $this->assertSame(['upserted' => 0, 'skipped' => 2, 'unkeyed' => 1], $result);
         $this->assertSame(0, DB::table('entity_daily_metrics')->count());
     }
 
