@@ -43,7 +43,9 @@ test.describe('a client with a link and no account', () => {
       await expect(page.locator('body')).not.toHaveText(SESSION_COPY)
 
       // And it is the REPORT, not a shell: real figures, the platform split, the funnel, the filters.
-      await expect(report.locator('.tnum').first()).toContainText(/SAR/)
+      // The summary leads with results, never money (CLIENT-REPORT-FRAMING-001).
+      await expect(report.getByTestId('live-kpis').locator('.tnum').first()).toContainText(/\d/)
+      await expect(report.getByTestId('exec-platform-cards')).toBeVisible()
       /*
        * `live-freshness` is no longer asserted here — CLIENT-DIAGNOSTIC-SEPARATION-001.
        *

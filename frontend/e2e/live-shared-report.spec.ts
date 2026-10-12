@@ -162,7 +162,8 @@ test.describe('the link cannot be talked into showing more', () => {
     await page.goto(`${URL}?campaigns[]=00000000-0000-0000-0000-000000000000`)
 
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
-    await expect(page.getByTestId('live-report').locator('.tnum').first()).toContainText(/SAR/)
+    // The summary opens on results (CLIENT-REPORT-FRAMING-001): a real figure, not a placeholder.
+    await expect(page.getByTestId('live-kpis').locator('.tnum').first()).toContainText(/\d/)
   })
 
   test('an unknown token is refused', async ({ page }) => {
