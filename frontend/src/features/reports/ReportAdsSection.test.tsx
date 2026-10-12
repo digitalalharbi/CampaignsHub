@@ -148,7 +148,7 @@ describe('the ads section of a report', () => {
     )
 
     expect(screen.getByTestId('report-ads')).toHaveAttribute('data-state', 'absent')
-    expect(screen.getByTestId('report-ads-absent')).toHaveTextContent(/no metric this objective can be ranked on/i)
+    expect(screen.getByTestId('report-ads-absent')).toHaveTextContent(/no metric this content can be ranked on/i)
   })
 
   it('falls back to a plain reason when the generator sent none', () => {

@@ -62,7 +62,8 @@ use Illuminate\Support\Carbon;
 final class LiveReportService
 {
     /** Filters a client may narrow by. Anything else in the query string is ignored, not honoured. */
-    private const NARROWABLE = ['from', 'to', 'providers', 'campaigns'];
+    // CLIENT-LIVE-LINK-SAFETY-001 — a client narrows by date and platform only; never by campaign.
+    private const NARROWABLE = ['from', 'to', 'providers'];
 
     public function __construct(
         private readonly MetricsAggregator $metrics,
@@ -588,12 +589,12 @@ final class LiveReportService
              * it was never asked to produce. Inside a path, both ends are read on that path's own
              * metric — and where fewer than two campaigns spent there, the reason travels instead.
              */
-            'objective_leaders' => (new ObjectivePerformance(
+            'objective_leaders' => ClientEntityBoundary::objectiveLeaders((new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
                 campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
                 accountIds: $accountCeiling,
-            ))->leadersByPath($from, $to, by: 'provider'),
+            ))->leadersByPath($from, $to, by: 'provider')),
             /*
              * ATTRIB-VIS-001 — the link says which optional sections it is allowed to open.
              *
@@ -817,6 +818,11 @@ final class LiveReportService
             return null;
         }
 
+        // CLIENT-LIVE-LINK-SAFETY-001 — a platform comparison the owner hid opens no platform drawer either.
+        if (! app(ReportSectionSurfaces::class)->linkShows('platform_comparison', $share)) {
+            return null;
+        }
+
         $applied = $this->intersect($scope, $requested);
         $applied['providers'] = [$provider];
 
@@ -851,7 +857,7 @@ final class LiveReportService
             to: $to,
             hideSpend: (bool) $share->hide_spend,
             hideRevenue: (bool) $share->hide_revenue,
-            withObjectives: (bool) ($share->visibleSections()['objective_breakdown'] ?? true),
+            withObjectives: app(ReportSectionSurfaces::class)->linkShows('objective_breakdown', $share),
         ) + [
             'ads' => $content['ads'] ?? [],
             'ads_weakest' => $content['ads_weakest'] ?? [],

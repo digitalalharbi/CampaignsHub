@@ -59,7 +59,8 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   const linkKey = ['share-sections', projectId, reportId, level]
   const link = useQuery({ queryKey: linkKey, queryFn: () => getShareSections(projectId, reportId, level), enabled: level !== '' })
   const toggleLink = useMutation({
-    mutationFn: ({ section, on }: { section: string; on: boolean }) => updateShareSections(projectId, reportId, level, { [section]: on }),
+    mutationFn: ({ section, on, money }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean } }) =>
+      updateShareSections(projectId, reportId, level, section === undefined ? {} : { [section]: on ?? false }, money ?? {}),
     onSuccess: (next: ShareSectionsState) => {
       setError(null)
       qc.setQueryData(linkKey, next)
@@ -159,6 +160,33 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
           </p>
         )}
         <ul className="divide-y divide-border">{main.map(row)}</ul>
+        {/*
+          CLIENT-LIVE-LINK-SAFETY-001 — the financial figures this link shows, switchable after it was
+          sent. Enforced on the payload (`HiddenMoney`): spend takes every cost-per, ROAS and budget
+          pacing with it; revenue takes ROAS with it.
+        */}
+        {onLink && linkData && (
+          <>
+            <p className="mt-4 mb-1 text-xs font-bold text-text-muted">{ar ? 'الأرقام المالية في الرابط' : 'Financial figures on this link'}</p>
+            <ul className="divide-y divide-border" data-testid="section-link-money">
+              {([
+                ['hide_spend', ar ? 'الإنفاق والتكاليف والعائد على الإنفاق' : 'Spend, costs and return on spend'],
+                ['hide_revenue', ar ? 'الإيراد' : 'Revenue'],
+              ] as const).map(([flag, label]) => (
+                <li key={flag} className="flex items-center justify-between gap-3 py-1.5">
+                  <span className="text-sm font-semibold text-text-primary">{label}</span>
+                  <Switch
+                    id={`section-link-${flag}`}
+                    testId={`section-link-${flag}`}
+                    checked={!(linkData[flag] ?? false)}
+                    disabled={toggleLink.isPending}
+                    onCheckedChange={(on) => toggleLink.mutate({ money: { [flag]: !on } })}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <p className="mt-4 mb-1 text-xs font-bold text-text-muted">{ar ? 'تفصيلات اختيارية' : 'Optional breakdowns'}</p>
         <ul className="divide-y divide-border">{breakdowns.map(row)}</ul>
 

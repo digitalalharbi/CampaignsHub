@@ -86,12 +86,13 @@ export type ReportAd = {
 /** The reasons the generator can give, said in the reader's language. */
 const ABSENT: Record<string, { ar: string; en: string }> = {
   no_creatives_in_window: {
-    ar: 'لم تُسجَّل إعلانات على مستوى الإعلان في هذه الفترة — الأرقام أعلاه على مستوى الحملة.',
-    en: 'No ad-level rows were recorded in this window — the figures above are at campaign level.',
+    // CLIENT-LIVE-LINK-SAFETY-001 — a client document never speaks in campaigns.
+    ar: 'لم تُسجَّل أرقام على مستوى المحتوى في هذه الفترة — الأرقام أعلاه إجمالية.',
+    en: 'No content-level figures were recorded in this window — the figures above are totals.',
   },
   no_rankable_metric_for_this_objective: {
-    ar: 'لم تُبلِّغ المنصات عن مقياس يصلح لترتيب إعلانات هذا الهدف، فلا تُعرض قائمة «الأفضل».',
-    en: 'The platforms reported no metric this objective can be ranked on, so no «best» list is shown.',
+    ar: 'لم تُبلِّغ المنصات عن مقياس يصلح لترتيب هذا المحتوى، فلا تُعرض قائمة «الأفضل».',
+    en: 'The platforms reported no metric this content can be ranked on, so no «best» list is shown.',
   },
   no_ads_to_show: {
     ar: 'لا إعلانات لعرضها في هذه الفترة.',

@@ -123,6 +123,30 @@ final class ShareSectionOverridesTest extends TestCase
             ->getJson("/api/v1/projects/{$this->project->getKey()}/reports/{$report->getKey()}/sections")->json('data.visible'));
     }
 
+    /**
+     * CLIENT-LIVE-LINK-SAFETY-001 — the link's financial figures are switchable after it was sent,
+     * and the switch changes what the client's page receives, not how it is drawn.
+     */
+    public function test_a_link_hides_and_restores_its_financial_figures(): void
+    {
+        [$report, $share, $raw] = $this->reportWithLink();
+        $this->assertSame(100.0, (float) $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.kpis.spend'));
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->putJson($this->url($report, $share), ['sections' => [], 'hide_spend' => true])
+            ->assertOk()
+            ->assertJsonPath('data.hide_spend', true)
+            ->assertJsonPath('data.hide_revenue', false);
+
+        $shared = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data');
+        $this->assertNull(data_get($shared, 'kpis.spend'), 'spend reached a link that hides it');
+
+        // Only a report manager may change it, and switching it back restores the figure.
+        $this->actingAs($this->viewer, 'sanctum')->putJson($this->url($report, $share), ['hide_spend' => false])->assertForbidden();
+        $this->actingAs($this->operator, 'sanctum')->putJson($this->url($report, $share), ['hide_spend' => false])->assertOk();
+        $this->assertSame(100.0, (float) $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.kpis.spend'));
+    }
+
     public function test_a_link_cannot_show_what_the_report_hides(): void
     {
         [$report, $share, $raw] = $this->reportWithLink();

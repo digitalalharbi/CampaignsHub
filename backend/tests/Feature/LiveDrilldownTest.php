@@ -126,6 +126,16 @@ final class LiveDrilldownTest extends TestCase
             $this->assertStringNotContainsString('Meta Summer"', json_encode($payload), "the {$which} drill-down names a campaign");
             $this->assertStringNotContainsString($this->campaigns[0], json_encode($payload), "the {$which} drill-down carries a campaign id");
         }
+
+        // CLIENT-LIVE-LINK-SAFETY-001 — a content row carries its name and figures, not its campaign's objective.
+        $live = $this->live($raw);
+        foreach (['ads' => $live['ads'], 'ads_roster' => $live['ads_roster'], 'drawer' => $meta['ads'], 'content' => [$content['content'] ?? []]] as $which => $rows) {
+            foreach ($rows as $row) {
+                foreach (['objective', 'campaign_name', 'ad_set_name', 'ad_set_id'] as $key) {
+                    $this->assertArrayNotHasKey($key, (array) $row, "{$which}: a content row carries `{$key}`");
+                }
+            }
+        }
     }
 
     /**
@@ -196,6 +206,29 @@ final class LiveDrilldownTest extends TestCase
         $share->save();
         $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$key}".self::WINDOW)->assertNotFound();
         $this->assertSame([], $this->platform($raw, 'meta')['ads'], 'the drawer listed content on a link that does not show content');
+    }
+
+    /**
+     * CLIENT-LIVE-LINK-SAFETY-001 — the live-link builder's switches (`section_overrides`) close the
+     * drill-downs too. The drawer read only the older per-link flags, so content the owner unticked
+     * in the builder still listed in the platform drawer, and its objective blocks still drew.
+     */
+    public function test_the_builders_section_switches_close_the_drilldowns(): void
+    {
+        [$share, $raw] = $this->share();
+        $this->assertNotSame([], $this->platform($raw, 'meta')['ads'], 'the fixture must list content for this to mean anything');
+
+        $share->settings = ['section_overrides' => ['content_performance', 'objective_breakdown']];
+        $share->save();
+        $drawer = $this->platform($raw, 'meta');
+        $this->assertSame([], $drawer['ads'], 'the drawer listed content the owner hid in the builder');
+        $this->assertSame([], $drawer['ads_weakest']);
+        $this->assertSame([], $drawer['objectives'], 'the drawer drew objective blocks the owner hid in the builder');
+        $this->assertFalse($this->live($raw)['breakdowns'][ReportBreakdowns::CONTENT]);
+
+        $share->settings = ['section_overrides' => ['platform_comparison']];
+        $share->save();
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/platform/meta".self::WINDOW)->assertNotFound();
     }
 
     public function test_the_registry_keeps_drilldowns_off_in_pdf_and_on_in_live(): void
