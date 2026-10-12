@@ -10,11 +10,13 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Configuration\ProviderProbe;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * PROVCFG-001 — the platform operator's provider configuration, from `/admin`.
@@ -136,6 +138,25 @@ final class PlatformProviderSettingsController extends Controller
 
         $validated = $request->validate($rules);
 
+        /*
+         * PROVIDER-AUTOFILL-001 — a client id / app id that is an email address is the browser's
+         * autofill, not a provider's identifier: Chrome wrote the admin's login email into these
+         * fields and it was saved (LinkedIn's stored client id ended in the login domain). No
+         * provider in the catalogue issues an email-shaped app id, so it is refused with a sentence
+         * that says why, before it can be encrypted and forgotten.
+         */
+        foreach ($definition->fields as $field) {
+            $value = $validated[$field->key] ?? null;
+            if ($field->secret || ! is_string($value) || trim($value) === '' || ! self::isIdentifierField($field->key)) {
+                continue;
+            }
+            if (filter_var(trim($value), FILTER_VALIDATE_EMAIL) !== false || User::query()->where('email', trim($value))->exists()) {
+                throw ValidationException::withMessages([
+                    $field->key => 'This looks like an email address, not the provider\'s id — the browser most likely filled it in. Paste the id from the provider\'s developer console.',
+                ]);
+            }
+        }
+
         $before = [
             'state' => $this->settings->state($provider)->value,
             'environment' => $this->settings->environment($provider),
@@ -185,17 +206,18 @@ final class PlatformProviderSettingsController extends Controller
         $this->assertKnown($provider);
 
         $result = $this->probe->run($provider);
-        $this->settings->recordTest($provider, $result['passed'], $result['message']);
+        $this->settings->recordTest($provider, $result['passed'], $result['message'], $result['outcome'] ?? null);
 
         $this->audit->log(
             action: 'platform.integration.provider.tested',
             entityType: ProviderConfiguration::class,
             entityId: ProviderCatalogue::get($provider)->key,
-            after: ['passed' => $result['passed'], 'state' => $this->settings->state($provider)->value],
+            after: ['passed' => $result['passed'], 'outcome' => $result['outcome'] ?? null, 'state' => $this->settings->state($provider)->value],
         );
 
         return ApiResponse::success([
             'passed' => $result['passed'],
+            'outcome' => $result['outcome'] ?? ($result['passed'] ? 'passed' : 'failed'),
             'message' => $result['message'],
             ...$this->settings->summary($provider),
         ], 'Configuration tested.');
@@ -312,5 +334,11 @@ final class PlatformProviderSettingsController extends Controller
     private function assertKnown(string $provider): void
     {
         abort_unless(ProviderCatalogue::has($provider), 404);
+    }
+
+    /** Keys that hold a provider-issued identifier (client id, app id, developer token's owner id). */
+    private static function isIdentifierField(string $key): bool
+    {
+        return in_array($key, ['client_id', 'app_id'], true) || str_ends_with($key, '_client_id') || str_ends_with($key, '_app_id');
     }
 }
