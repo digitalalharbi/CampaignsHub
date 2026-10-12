@@ -127,6 +127,27 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * TikTok's structure sync died on Production on «value too long for type character
+     * varying(255)» inserting into `external_ads`: a landing page with its UTM parameters and
+     * click macros is longer than 255, and one such ad voided the whole sweep.
+     */
+    public function test_a_long_landing_page_and_long_names_are_stored_whole(): void
+    {
+        $campaign = $this->campaign('cmp-long');
+        $longName = str_repeat('اسم طويل ', 60);
+        $set = $this->adSet('sq-long', $campaign);
+        $set->forceFill(['name' => $longName])->save();
+        $ad = $this->ad('ad-long', $set, $campaign);
+        $url = 'https://shop.example/landing?'.str_repeat('utm_content=__CID_NAME__&', 40);
+        $ad->forceFill(['name' => $longName, 'destination_url' => $url])->save();
+
+        $fresh = ExternalAd::withoutGlobalScopes()->findOrFail($ad->id);
+        $this->assertSame($url, $fresh->destination_url);
+        $this->assertSame($longName, $fresh->name);
+        $this->assertGreaterThan(255, mb_strlen($url));
+    }
+
     public function test_an_ad_squad_with_no_campaign_cannot_be_stored_at_all(): void
     {
         $this->expectException(QueryException::class);
