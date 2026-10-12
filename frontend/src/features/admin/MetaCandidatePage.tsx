@@ -153,10 +153,16 @@ export function MetaCandidatePage() {
           {credentials.values.map((v) => (
             <label key={v.key} className="flex flex-col gap-1 text-sm">
               <span className="font-semibold text-text-primary">{c[v.key]}</span>
+              {/* PROVIDER-AUTOFILL-001 — no login-form name, opted out of password managers. */}
               <input
                 data-testid={`meta-candidate-input-${v.key}`}
+                name={`meta_candidate_${v.key}_ref`}
                 type={v.secret ? 'password' : 'text'}
-                autoComplete="off"
+                autoComplete={v.secret ? 'new-password' : 'off'}
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-bwignore="true"
+                data-form-type="other"
                 dir="ltr"
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
                 value={form[v.key]}

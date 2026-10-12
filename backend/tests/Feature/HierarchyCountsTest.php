@@ -112,6 +112,42 @@ final class HierarchyCountsTest extends TestCase
      * column for it would print 0 for ever whatever happened, which is the shape of reassuring lie
      * this whole ticket is about. This test is what stops that column from being added back.
      */
+    /**
+     * The command's own help offers «ours, or the provider's own id», and a numeric provider id
+     * (TikTok's `7194075886352662529`) crashed it on Production: Postgres refuses to compare a
+     * non-uuid with the `id` column, so the one form a person reads off the provider's screen
+     * was the form that could not be used.
+     */
+    public function test_an_account_can_be_named_by_its_numeric_provider_id(): void
+    {
+        $this->account->forceFill(['external_id' => '7194075886352662529'])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--account' => '7194075886352662529'])
+            ->expectsOutputToContain('provider=7194075886352662529')
+            ->assertSuccessful();
+    }
+
+    /**
+     * TikTok's structure sync died on Production on «value too long for type character
+     * varying(255)» inserting into `external_ads`: a landing page with its UTM parameters and
+     * click macros is longer than 255, and one such ad voided the whole sweep.
+     */
+    public function test_a_long_landing_page_and_long_names_are_stored_whole(): void
+    {
+        $campaign = $this->campaign('cmp-long');
+        $longName = str_repeat('اسم طويل ', 60);
+        $set = $this->adSet('sq-long', $campaign);
+        $set->forceFill(['name' => $longName])->save();
+        $ad = $this->ad('ad-long', $set, $campaign);
+        $url = 'https://shop.example/landing?'.str_repeat('utm_content=__CID_NAME__&', 40);
+        $ad->forceFill(['name' => $longName, 'destination_url' => $url])->save();
+
+        $fresh = ExternalAd::withoutGlobalScopes()->findOrFail($ad->id);
+        $this->assertSame($url, $fresh->destination_url);
+        $this->assertSame($longName, $fresh->name);
+        $this->assertGreaterThan(255, mb_strlen($url));
+    }
+
     public function test_an_ad_squad_with_no_campaign_cannot_be_stored_at_all(): void
     {
         $this->expectException(QueryException::class);

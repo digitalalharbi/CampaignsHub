@@ -228,3 +228,51 @@ describe('ProviderSettingsPage', () => {
     expect(screen.getByText('A developer token approved for Basic Access.')).toBeInTheDocument()
   })
 })
+
+/** PROVIDER-TEST-001 / PROVIDER-AUTOFILL-001 / GA4 — the setup page for every provider kind, read honestly. */
+describe('provider setup — GA4, inconclusive tests and autofill', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('lists GA4 under site measurement so its credentials can be entered', async () => {
+    vi.mocked(fetchIntegrationProviders).mockResolvedValue(listing([
+      provider(),
+      provider({ key: 'ga4', kind: 'measurement', label: 'Google Analytics 4', label_ar: 'جوجل أناليتكس 4' }),
+    ]) as never)
+    renderWithProviders(<ProviderSettingsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('provider-row-ga4')).toHaveTextContent('Google Analytics 4')
+    expect(screen.getByText('Site measurement')).toBeInTheDocument()
+  })
+
+  it('shows an inconclusive test as a warning, not as a configuration error', async () => {
+    vi.mocked(fetchIntegrationProviders).mockResolvedValue(listing([
+      provider({ state: 'ready_to_connect', missing: [], last_test_status: 'inconclusive', last_tested_at: '2026-10-12T10:00:00Z', last_test_message: 'unread' }),
+    ]) as never)
+    renderWithProviders(<ProviderSettingsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('provider-configure-google'))
+    expect(await screen.findByTestId('provider-test-inconclusive-google')).toHaveTextContent('Inconclusive')
+    expect(screen.getByTestId('provider-test-google')).toHaveAttribute('data-status', 'inconclusive')
+  })
+
+  it('flags an email-shaped stored id and keeps credential inputs out of the browser’s autofill', async () => {
+    vi.mocked(fetchIntegrationProviders).mockResolvedValue(listing([provider({ warnings: ['client_id_looks_like_email'] })]) as never)
+    renderWithProviders(<ProviderSettingsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('provider-warning-email-google')).toHaveTextContent('looks like an email')
+
+    fireEvent.click(screen.getByTestId('provider-configure-google'))
+    const id = await screen.findByTestId('provider-input-google-client_id')
+    const secret = screen.getByTestId('provider-input-google-client_secret')
+    expect(id).toHaveAttribute('autocomplete', 'off')
+    expect(id).toHaveAttribute('name', 'provider_google_client_id_ref')
+    expect(id).toHaveAttribute('data-lpignore', 'true')
+    expect(secret).toHaveAttribute('autocomplete', 'new-password')
+    expect(secret).toHaveAttribute('data-1p-ignore', 'true')
+    // Read-only until focused — a browser does not autofill a read-only field.
+    expect(id).toHaveAttribute('readonly')
+    fireEvent.focus(id)
+    await waitFor(() => expect(id).not.toHaveAttribute('readonly'))
+    expect(id.closest('form')).toBeNull()
+  })
+})

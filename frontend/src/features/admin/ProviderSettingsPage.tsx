@@ -44,7 +44,9 @@ const COPY = {
   ar: {
     title: 'مزوّدو التكامل',
     subtitle: 'إعداد تطبيقات OAuth الخاصة بالمنصة. هذه المفاتيح للنظام ولا يراها أي عميل. العملاء يربطون حساباتهم بأنفسهم من صفحة التكاملات لديهم.',
-    advertising: 'منصات الإعلانات', commerce: 'المتاجر',
+    advertising: 'منصات الإعلانات', commerce: 'المتاجر', measurement: 'قياس المواقع',
+    inconclusive: 'غير حاسم — تحقّق بربط حساب', notRequired: 'لا يحتاج بيانات اعتماد للمنصة',
+    emailId: 'المعرّف يبدو بريدًا إلكترونيًا — غالبًا ملأه المتصفح تلقائيًا. أعد إدخاله.',
     ready: 'جاهز للربط', total: 'المزوّدون', attention: 'يحتاج انتباهًا',
     configure: 'إعداد', close: 'إغلاق', save: 'حفظ', saving: 'جارٍ الحفظ…',
     test: 'اختبار الإعداد', testing: 'جارٍ الاختبار…',
@@ -77,7 +79,9 @@ const COPY = {
   en: {
     title: 'Integration providers',
     subtitle: "The platform's own OAuth apps. These keys belong to the system and no customer ever sees them — customers connect their own accounts from their integrations page.",
-    advertising: 'Advertising platforms', commerce: 'Stores',
+    advertising: 'Advertising platforms', commerce: 'Stores', measurement: 'Site measurement',
+    inconclusive: 'Inconclusive — confirm by connecting an account', notRequired: 'No platform credentials required',
+    emailId: 'This id looks like an email address — most likely filled in by the browser. Re-enter it.',
     ready: 'Ready to connect', total: 'Providers', attention: 'Needs attention',
     configure: 'Configure', close: 'Close', save: 'Save', saving: 'Saving…',
     test: 'Test configuration', testing: 'Testing…',
@@ -140,6 +144,8 @@ export function ProviderSettingsPage() {
     return [
       { kind: 'advertising' as const, label: c.advertising, items: providers.filter((p) => p.kind === 'advertising') },
       { kind: 'commerce' as const, label: c.commerce, items: providers.filter((p) => p.kind === 'commerce') },
+      // GA4 is a measurement provider, not an ad platform — and it needs its credentials entered here too.
+      { kind: 'measurement' as const, label: c.measurement, items: providers.filter((p) => p.kind === 'measurement') },
     ]
   }, [query.data, c])
 
@@ -236,6 +242,14 @@ function ProviderRow({ provider, ar, copy, onConfigure }: {
         </p>
       )}
 
+      {/* PROVIDER-AUTOFILL-001 — a stored id that looks like an email is almost always the browser's autofill. */}
+      {(provider.warnings ?? []).includes('client_id_looks_like_email') && (
+        <p data-testid={`provider-warning-email-${provider.key}`} className="flex items-start gap-1.5 rounded-lg bg-[var(--warning-background)] px-2 py-1 text-xs text-[var(--warning-foreground)]">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{copy.emailId}</span>
+        </p>
+      )}
+
       {provider.state === 'configuration_error' && provider.last_test_message && (
         <p className="flex items-start gap-1.5 text-xs text-danger">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
@@ -260,6 +274,8 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
 }) {
   const client = useQueryClient()
   const [draft, setDraft] = useState<Record<string, string>>({})
+  // The fields the admin has focused — every other credential input stays read-only, so autofill cannot write it.
+  const [editing, setEditing] = useState<string[]>([])
   // Held and sent back unchanged: the switch is gone, the stored value is not (ENV-FAKE-001).
   const [environment] = useState(provider.environment)
   const [reason, setReason] = useState('')
@@ -354,11 +370,24 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
                   </span>
                 </label>
                 <div className="flex items-center gap-1.5">
+                  {/*
+                    PROVIDER-AUTOFILL-001 — Chrome filled the admin's login email into client-id fields
+                    and the admin password into secrets, and saved them. Each input has a name no login
+                    form uses, opts out of password managers, and stays read-only until it is focused —
+                    a browser does not autofill a read-only field.
+                  */}
                   <input
                     id={`f-${field.key}`}
+                    name={`provider_${provider.key}_${field.key}_ref`}
                     data-testid={`provider-input-${provider.key}-${field.key}`}
                     type={field.secret ? 'password' : 'text'}
-                    autoComplete="off"
+                    autoComplete={field.secret ? 'new-password' : 'off'}
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
+                    data-form-type="other"
+                    readOnly={!editing.includes(field.key)}
+                    onFocus={() => setEditing((e) => (e.includes(field.key) ? e : [...e, field.key]))}
                     dir="ltr"
                     value={draft[field.key] ?? ''}
                     onChange={(e) => setDraft((d) => ({ ...d, [field.key]: e.target.value }))}
@@ -421,10 +450,16 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
               ? <CheckCircle2 size={14} className="text-[var(--positive-foreground)]" />
               : provider.last_test_status === 'failed'
                 ? <AlertTriangle size={14} className="text-danger" />
-                : <Circle size={14} className="text-text-muted" />}
+                : provider.last_test_status === 'inconclusive'
+                  ? <AlertTriangle size={14} className="text-[var(--warning-foreground)]" />
+                  : provider.last_test_status === 'not_required'
+                    ? <CheckCircle2 size={14} className="text-text-muted" />
+                    : <Circle size={14} className="text-text-muted" />}
             <span className="text-text-primary">
               {provider.last_tested_at ? `${copy.lastTested}: ${new Date(provider.last_tested_at).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB')}` : copy.neverTested}
             </span>
+            {provider.last_test_status === 'inconclusive' && <span data-testid={`provider-test-inconclusive-${provider.key}`} className="text-[var(--warning-foreground)]">{copy.inconclusive}</span>}
+            {provider.last_test_status === 'not_required' && <span className="text-text-muted">{copy.notRequired}</span>}
           </p>
           {provider.last_test_message && (
             <p className="mt-1 text-xs text-text-secondary" dir="ltr">{provider.last_test_message}</p>
