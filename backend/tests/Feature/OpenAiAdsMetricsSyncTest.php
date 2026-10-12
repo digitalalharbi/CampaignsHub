@@ -329,6 +329,74 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
         $this->assertEqualsWithDelta(3.5, (float) DB::table('daily_metrics')->where('metric_key', 'spend')->value('value'), 0.001);
     }
 
+    /**
+     * The ad-group and ad grains land against the structure the sweep discovered.
+     *
+     * Production, 2026-10-12 (diagnostics run 38271521740): «11 ad-set row(s) came back and none
+     * matched a discovered ad-set» and «60 ad row(s) came back and none matched a discovered ad» —
+     * on an account whose ad groups and ads HAD been discovered. The ids were right. The connector
+     * built its rows under `entity_external_id` while the contract and the upsert read `entity_id`,
+     * so every row resolved to nobody and the run blamed discovery for a key the upsert never read.
+     * This drives the whole chain — structure sync, then the metrics sync — and reads the stored rows.
+     */
+    public function test_ad_group_and_ad_figures_land_against_the_discovered_structure(): void
+    {
+        Http::fake(function ($request) {
+            $url = $request->url();
+            if (str_contains($url, '/conversions/insights')) {
+                return Http::response(['object' => 'list', 'data' => [], 'count' => 0]);
+            }
+            if (str_contains($url, '/ad_account/insights')) {
+                $level = str_contains($url, 'aggregation_level=ad_group') ? 'ad_group'
+                    : (str_contains($url, 'aggregation_level=campaign') ? 'campaign' : 'ad');
+                $row = ['id' => "r-{$level}", 'readable_time' => '2026-09-01', 'impressions' => 3000, 'clicks' => 90, 'spend' => 40];
+                $row += match ($level) {
+                    'campaign' => ['campaign_id' => 'cmp_1'],
+                    'ad_group' => ['ad_group_id' => 'grp_1'],
+                    default => ['ad_id' => 'ad_1'],
+                };
+
+                return Http::response(['object' => 'list', 'data' => [$row], 'has_more' => false, 'last_id' => $row['id']]);
+            }
+            if (str_contains($url, '/ad_groups')) {
+                return Http::response(['object' => 'list', 'data' => [['id' => 'grp_1', 'name' => 'Riyadh', 'campaign_id' => 'cmp_1', 'status' => 'active']], 'has_more' => false]);
+            }
+            if (str_contains($url, '/ads')) {
+                return Http::response(['object' => 'list', 'data' => [['id' => 'ad_1', 'name' => 'Hero', 'ad_group_id' => 'grp_1', 'status' => 'active']], 'has_more' => false]);
+            }
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'SAR']);
+        });
+
+        $this->runStructureSync();
+        $this->assertSame(1, DB::table('external_ad_sets')->where('external_id', 'grp_1')->count(), 'the ad group was not discovered — the fixture, not the grain, is wrong');
+        $this->assertSame(1, DB::table('external_ads')->where('external_id', 'ad_1')->count(), 'the ad was not discovered — the fixture, not the grain, is wrong');
+
+        $this->runMetricsSync();
+
+        $adSet = DB::table('entity_daily_metrics')->where('entity_type', 'ad_set')->first();
+        $this->assertNotNull($adSet, 'the ad-group row came back from the provider and was stored against nothing');
+        $this->assertSame('grp_1', $adSet->external_entity_id);
+        $this->assertEqualsWithDelta(40.0, (float) $adSet->spend_original, 0.001);
+        $this->assertSame('SAR', $adSet->original_currency);
+        $this->assertEquals(3000, (int) $adSet->impressions);
+
+        $ad = DB::table('entity_daily_metrics')->where('entity_type', 'ad')->first();
+        $this->assertNotNull($ad, 'the ad row came back from the provider and was stored against nothing');
+        $this->assertSame('ad_1', $ad->external_entity_id);
+        $this->assertEquals(90, (int) $ad->clicks);
+
+        $run = DB::table('metric_sync_runs')->latest('created_at')->first();
+        $meta = json_decode((string) $run->meta, true) ?? [];
+        $this->assertSame('success', $run->status, (string) $run->error);
+        $this->assertSame(0, (int) ($meta['entity_ad_sets_skipped'] ?? -1));
+        $this->assertSame(0, (int) ($meta['entity_ads_skipped'] ?? -1));
+        $this->assertNull($meta['entity_failure'] ?? null);
+    }
+
     private function runStructureSync(): void
     {
         app()->call([new SyncAccountStructureJob($this->account->id), 'handle']);

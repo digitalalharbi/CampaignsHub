@@ -1308,6 +1308,14 @@ final class DiagnoseSyncCommand extends Command
                 $this->line('  last sweep asked          : '.(int) ($meta['entity_parents_asked'] ?? 0).' campaign(s); came back '
                     .(int) $meta['entity_ad_sets_fetched'].' ad-set row(s) ('.(int) ($meta['entity_ad_sets_skipped'] ?? 0).' matched nothing), '
                     .(int) ($meta['entity_ads_fetched'] ?? 0).' ad row(s) ('.(int) ($meta['entity_ads_skipped'] ?? 0).' matched nothing)');
+
+                // «Matched nothing» has two causes with two owners. A row that carried no entity id at
+                // all never reached the match — the connector built it under another key — and sending
+                // an operator to the structure sweep for that is the week ChatGPT Ads cost (OPENAI-ADS-INSIGHTS-001).
+                $unkeyed = (int) ($meta['entity_ad_sets_unkeyed'] ?? 0) + (int) ($meta['entity_ads_unkeyed'] ?? 0);
+                if ($unkeyed > 0) {
+                    $this->warn('  rows with no entity_id    : '.$unkeyed.' — the connector does not speak the grain contract; discovery is not the gap');
+                }
             }
 
             foreach (['entity_ad_sets_failure' => 'ad-set grain failed', 'entity_ads_failure' => 'ad grain failed'] as $key => $label) {
