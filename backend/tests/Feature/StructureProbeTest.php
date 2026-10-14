@@ -234,9 +234,9 @@ final class StructureProbeTest extends TestCase
         $run->expectsOutputToContain('currency read by the connector: yes');
         $run->expectsOutputToContain('timezone read by the connector: yes');
         $run->expectsOutputToContain('ACCOUNT BODY SHAPES — key names only, never values');
-        // The nested key is what a mapping would be written against.
-        $run->expectsOutputToContain('data.timezone_name');
-        $run->expectsOutputToContain('data.business.name');
+        // The nested key is what a mapping would be written against. One expectation: the key names
+        // are printed on ONE line, and a written line satisfies only one `expectsOutputToContain`.
+        $run->expectsOutputToContain('data.business.name, data.currency, data.id, data.name, data.timezone_name');
         // SHAPE, never CONTENT: the account body carries the business's name and its billing identity.
         $run->doesntExpectOutputToContain('CONFIDENTIAL ACCOUNT NAME');
         $run->doesntExpectOutputToContain('CONFIDENTIAL BUSINESS');
