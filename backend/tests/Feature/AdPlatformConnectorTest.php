@@ -635,6 +635,52 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame('2026-10-01', $rows['v-1']['date']);
     }
 
+    /**
+     * META-BUSINESS-ACCOUNTS-001 — partner and client accounts arrive through the Business Manager.
+     *
+     * `me/adaccounts` lists only the accounts the person was added to; an account shared with the
+     * agency's business («Henka») never appeared. Owned and client accounts of each business are
+     * read, a duplicate of a direct account is kept once with its business as parent.
+     */
+    public function test_meta_discovers_owned_and_client_accounts_of_each_business(): void
+    {
+        $this->configure('meta');
+        $fields = ['currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1];
+        Http::fake([
+            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => [['id' => 'act_1', 'name' => 'Direct'] + $fields]]),
+            'graph.facebook.com/*/me/businesses*' => Http::response(['data' => [['id' => 'biz-1', 'name' => 'Agency BM']]]),
+            'graph.facebook.com/*/biz-1/owned_ad_accounts*' => Http::response(['data' => [['id' => 'act_1', 'name' => 'Direct'] + $fields]]),
+            'graph.facebook.com/*/biz-1/client_ad_accounts*' => Http::response(['data' => [['id' => 'act_2', 'name' => 'Henka'] + $fields]]),
+        ]);
+
+        $connector = $this->bound('meta');
+        $accounts = collect($connector->listAdAccounts())->keyBy('external_id');
+
+        $this->assertSame(['act_1', 'act_2'], $accounts->keys()->sort()->values()->all(), 'a partner account shared with the business was not discovered');
+        $this->assertSame('biz-1', $accounts['act_2']['parent_external_id']);
+        $this->assertSame('Agency BM', $accounts['act_2']['parent_name']);
+        $this->assertSame('biz-1', $accounts['act_1']['parent_external_id'], 'a direct account also owned by the business is kept once, under it');
+        $this->assertSame([], $connector->lastDiscoveryWarnings());
+    }
+
+    /** A token without business_management still lists the direct accounts, and says partner accounts need re-authorising. */
+    public function test_meta_without_business_management_keeps_direct_accounts_and_warns(): void
+    {
+        $this->configure('meta');
+        Http::fake([
+            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => [['id' => 'act_1', 'name' => 'Direct', 'account_status' => 1]]]),
+            'graph.facebook.com/*/me/businesses*' => Http::response(['error' => ['message' => '(#100) Missing Permission', 'type' => 'OAuthException', 'code' => 100]], 403),
+        ]);
+
+        $connector = $this->bound('meta');
+        $accounts = $connector->listAdAccounts();
+
+        $this->assertSame(['act_1'], array_column($accounts, 'external_id'));
+        $warning = $connector->lastDiscoveryWarnings()[0] ?? null;
+        $this->assertNotNull($warning, 'a missing business permission was silent');
+        $this->assertStringContainsString('re-authorisation that grants business_management', $warning['reason']);
+    }
+
     /** A metric the advertiser does not report is ABSENT, so no surface can print it as a measured zero. */
     public function test_tiktok_omits_a_metric_the_advertiser_never_reported_rather_than_sending_zero(): void
     {
