@@ -77,7 +77,17 @@ final class RenormaliseReportingCurrency extends Command
                 foreach ($rows as $row) {
                     $examined++;
 
-                    if (strtoupper((string) $row->project_currency) === $target) {
+                    /*
+                     * CURRENCY-HISTORY-002 — «in the target» means CONVERTED, not merely labelled.
+                     *
+                     * A row withheld for want of a rate is stamped with the target currency and a
+                     * null value. Counting it as already done meant it was never revisited, so a rate
+                     * recorded afterwards — the whole point of keeping the original — converted
+                     * nothing. A row with a value is finished; a withheld row with its original
+                     * still held is retried.
+                     */
+                    if (strtoupper((string) $row->project_currency) === $target
+                        && ($row->value !== null || $row->original_amount === null)) {
                         // Already in the reporting currency. Left exactly as it is.
                         $already++;
 
