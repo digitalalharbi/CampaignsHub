@@ -31,12 +31,17 @@ on:
           - scope-cleanup
           - resync-window
           - quarantine-sandbox
+          - discovery-refresh
       project:
         description: 'scope-cleanup: the project whose rows are being cleaned (uuid)'
         required: false
         default: ''
       account:
         description: 'scope-cleanup and resync-window: the account (uuid, ours). Not used by quarantine-sandbox.'
+        required: false
+        default: ''
+      connection:
+        description: 'discovery-refresh: the provider connection (uuid, ours) whose accounts are re-discovered, as the refresh button does'
         required: false
         default: ''
       action:
@@ -157,3 +162,28 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:quarantine-sandbox ${APPLY}
+
+  discovery:
+    if: inputs.command == 'discovery-refresh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Discovery refresh on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          CONNECTION: ${{ inputs.connection }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: CONNECTION,APPLY
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:discovery-refresh \
+                --connection="${CONNECTION}" ${APPLY}
