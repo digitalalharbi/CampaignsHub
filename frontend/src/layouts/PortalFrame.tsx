@@ -69,6 +69,13 @@ export function PortalFrame({
   railWidth = 'w-[264px]',
   /** The reading measure for content. Portals with dense tables use the wide one. */
   contentWidth = 'max-w-[1440px]',
+  /**
+   * OPS-PANEL-001 — an optional panel on the END side, desktop only.
+   *
+   * Absent (null) it takes no width at all: the panel is not hidden behind a zero-width box, it is
+   * not in the tree, so a closed panel cannot move a single pixel of the page.
+   */
+  endPanel,
   style,
   children,
 }: {
@@ -83,6 +90,7 @@ export function PortalFrame({
   moreHeader?: ReactNode
   railWidth?: string
   contentWidth?: string
+  endPanel?: ReactNode
   style?: CSSProperties
   children: ReactNode
 }) {
@@ -151,6 +159,15 @@ export function PortalFrame({
           </div>
         </main>
       </div>
+
+      {endPanel && (
+        <aside
+          data-testid="portal-end-panel"
+          className="sticky top-0 hidden h-[100dvh] w-[320px] shrink-0 flex-col overflow-y-auto border-s border-border bg-surface p-3 lg:flex"
+        >
+          {endPanel}
+        </aside>
+      )}
 
       {hasTabs && <MobileTabBar tabs={tabs!} moreGroups={moreGroups} moreHeader={moreHeader} />}
     </div>
