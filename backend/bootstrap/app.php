@@ -14,6 +14,7 @@ use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
+use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
 use App\Domains\Integrations\Console\MetaCandidateStatusCommand;
 use App\Domains\Integrations\Console\MetaSyncProbeCommand;
@@ -135,6 +136,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // separates «the account was quiet» from «the request cannot return rows for this account».
         ProbeInsightsCommand::class,
         QuarantineSandboxRowsCommand::class,
+        DiscoveryRefreshCommand::class,
         // A run whose worker vanished is closed here: `failed()` only fires when the QUEUE knows the
         // job died, so a SIGKILL or an OOM leaves the row «running» with no upper bound at all.
         CloseAbandonedSyncRunsCommand::class,
