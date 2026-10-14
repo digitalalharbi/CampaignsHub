@@ -45,7 +45,7 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
                     "$file:".($number + 1).' passes --apply, which deletes or queues. Writes belong to production-scope-cleanup.yml.',
                 );
                 $this->assertDoesNotMatchRegularExpression(
-                    '/integrations:(scope-cleanup|resync-window)/',
+                    '/integrations:(scope-cleanup|resync-window|discovery-refresh)/',
                     $line,
                     "$file:".($number + 1).' calls a writing command. Writes belong to production-scope-cleanup.yml.',
                 );
@@ -93,9 +93,9 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
 
         sort($commands);
         $this->assertSame(
-            ['integrations:quarantine-sandbox', 'integrations:resync-window', 'integrations:scope-cleanup'],
+            ['integrations:discovery-refresh', 'integrations:quarantine-sandbox', 'integrations:resync-window', 'integrations:scope-cleanup'],
             $commands,
-            'the cleanup workflow no longer runs exactly its three writing commands',
+            'the cleanup workflow no longer runs exactly its four writing commands',
         );
     }
 
