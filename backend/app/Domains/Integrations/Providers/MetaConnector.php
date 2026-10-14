@@ -342,7 +342,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
      * Meta's creative `thumbnail_url` is 64×64 unless a size is asked for, and a video creative has no
      * `image_url` at all — so every opened Meta video, and every ad built from an image hash, showed a
      * 64px thumbnail stretched across the viewer. Meta names the full assets by id: an image by its
-     * hash (`GET /act_{id}/adimages?hashes=[…]` → `url`), a video by its id (`GET /?ids=…&fields=
+     * hash (`GET /act_{id}/adimages?hashes=[…]` → `url`), a video by its id (`GET /{video_id}?fields=
      * source,picture` → the file and its poster). Both are read in batches after the ads, and a
      * refused read costs the full-size media only — the structure and the existing thumbnail stay.
      *
@@ -364,7 +364,6 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         }
 
         $images = [];
-        $files = [];
         try {
             foreach (array_chunk(array_values(array_unique($hashes)), 50) as $chunk) {
                 foreach ($this->readAll($tokens, "{$adAccountId}/adimages", 'ad images', [
@@ -376,20 +375,10 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
                     }
                 }
             }
-            foreach (array_chunk(array_values(array_unique($videos)), 50) as $chunk) {
-                $body = $this->read($this->api($tokens)->get($this->url(''), [
-                    'ids' => implode(',', $chunk),
-                    'fields' => 'source,picture',
-                ]), 'ad videos');
-                foreach ($body as $id => $video) {
-                    if (is_array($video)) {
-                        $files[(string) $id] = $video;
-                    }
-                }
-            }
         } catch (\RuntimeException $e) {
             Log::warning('Meta full-size media could not be read; thumbnails kept.', ['reason' => $e->getMessage()]);
         }
+        $files = $this->readEach($tokens, $videos, ['fields' => 'source,picture'], 'ad video');
 
         $str = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? $v : null;
 
@@ -427,6 +416,37 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
     }
 
     /**
+     * META-IDS-DEPRECATED-001 — one node, one request.
+     *
+     * Media and sized thumbnails were read in batches through `GET /?ids=a,b,c`. Production (probe run
+     * 38622993787) shows Meta now answers that with HTTP 500, code 100, «The ids query parameter is
+     * deprecated in v26.0+». The batch was caught and its absence logged, so every catalog creative
+     * kept its 64px listing thumb and every video its missing source — silently, after a sweep that
+     * reported success.
+     *
+     * Each node is read at its own path. One refused node is logged and skipped; it no longer costs
+     * the rest of the batch.
+     *
+     * @param  list<string>  $ids
+     * @param  array<string,mixed>  $query
+     * @return array<string, array<string,mixed>>
+     */
+    private function readEach(OAuthTokens $tokens, array $ids, array $query, string $what): array
+    {
+        $out = [];
+        foreach (array_values(array_unique(array_filter($ids, static fn (string $id): bool => $id !== ''))) as $id) {
+            try {
+                $body = $this->read($this->api($tokens)->get($this->url($id), $query), $what);
+                $out[$id] = $body;
+            } catch (\RuntimeException $e) {
+                Log::warning("Meta {$what} could not be read; kept what the listing gave.", ['id' => $id, 'reason' => $e->getMessage()]);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * META-CATALOG-THUMBNAILS-001 — a creative with no image hash and no video (an Advantage+ catalog
      * ad, whose picture is the product's) still had only Meta's 64×64 listing thumbnail: the media
      * probe on Production read six such creatives at 64x64 beside full-size stills. Meta sizes
@@ -448,22 +468,14 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         }
 
         $sized = [];
-        try {
-            foreach (array_chunk(array_values(array_unique($ids)), 50) as $chunk) {
-                $body = $this->read($this->api($tokens)->get($this->url(''), [
-                    'ids' => implode(',', $chunk),
-                    'fields' => 'thumbnail_url',
-                    'thumbnail_width' => 1080,
-                    'thumbnail_height' => 1080,
-                ]), 'creative thumbnails');
-                foreach ($body as $id => $creative) {
-                    if (is_array($creative) && is_string($creative['thumbnail_url'] ?? null) && $creative['thumbnail_url'] !== '') {
-                        $sized[(string) $id] = $creative['thumbnail_url'];
-                    }
-                }
+        foreach ($this->readEach($tokens, $ids, [
+            'fields' => 'thumbnail_url',
+            'thumbnail_width' => 1080,
+            'thumbnail_height' => 1080,
+        ], 'creative thumbnail') as $id => $creative) {
+            if (is_string($creative['thumbnail_url'] ?? null) && $creative['thumbnail_url'] !== '') {
+                $sized[$id] = $creative['thumbnail_url'];
             }
-        } catch (\RuntimeException $e) {
-            Log::warning('Meta sized thumbnails could not be read; listing thumbnails kept.', ['reason' => $e->getMessage()]);
         }
 
         foreach ($ads as $n => $ad) {
