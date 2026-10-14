@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -19,7 +20,7 @@ use RuntimeException;
  *
  * Awaiting credentials on this install.
  */
-final class TikTokConnector extends ApiAdvertisingConnector
+final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
 {
     /**
      * A ceiling on paging, so a wrong `total_page` cannot become an unbounded loop.
@@ -411,6 +412,93 @@ final class TikTokConnector extends ApiAdvertisingConnector
             ], static fn ($v) => $v !== null);
         }
 
+        return $this->withMedia($tokens, $adAccountId, $ads);
+    }
+
+    /**
+     * TIKTOK-CONTENT-001 — the poster and the playable file, from TikTok's Asset Library.
+     *
+     * An ad names its media by id only. `GET /file/video/ad/info/` (≤ 60 `video_ids` a call) answers
+     * `video_cover_url` and `preview_url`, temporary links valid for six hours with
+     * `preview_url_expire_time` (UTC); `GET /file/image/ad/info/` (≤ 100 `image_ids`) answers
+     * `image_url`, valid for one hour — both as TikTok's v1.3 reference documents them. The expiry is
+     * stored so the media refresh renews them instead of a card showing a dead link. A Spark Ad pulls
+     * an organic post (`tiktok_item_id`), which is not in the Asset Library: it keeps its identity,
+     * copy and figures, and no poster is invented for it.
+     *
+     * A refused media call costs the posters only, never the structure that carries them.
+     *
+     * @param  list<array<string,mixed>>  $ads
+     * @return list<array<string,mixed>>
+     */
+    private function withMedia(OAuthTokens $tokens, string $adAccountId, array $ads): array
+    {
+        $videoIds = [];
+        $imageIds = [];
+        foreach ($ads as $ad) {
+            $creative = (array) ($ad['creative'] ?? []);
+            $kind = $creative['raw']['media'] ?? null;
+            if ($kind === 'video') {
+                $videoIds[] = (string) $creative['external_id'];
+            } elseif ($kind === 'image') {
+                $imageIds[] = (string) $creative['external_id'];
+            }
+        }
+
+        $videos = [];
+        $images = [];
+        try {
+            foreach (array_chunk(array_values(array_unique($videoIds)), 60) as $chunk) {
+                $body = $this->read($this->api($tokens)->get($this->url('file/video/ad/info/'), [
+                    'advertiser_id' => $adAccountId,
+                    'video_ids' => json_encode($chunk, JSON_THROW_ON_ERROR),
+                ]), 'video info');
+                foreach ((array) ($body['data']['list'] ?? []) as $v) {
+                    if (is_array($v) && isset($v['video_id'])) {
+                        $videos[(string) $v['video_id']] = $v;
+                    }
+                }
+            }
+            foreach (array_chunk(array_values(array_unique($imageIds)), 100) as $chunk) {
+                $body = $this->read($this->api($tokens)->get($this->url('file/image/ad/info/'), [
+                    'advertiser_id' => $adAccountId,
+                    'image_ids' => json_encode($chunk, JSON_THROW_ON_ERROR),
+                ]), 'image info');
+                foreach ((array) ($body['data']['list'] ?? []) as $i) {
+                    if (is_array($i) && isset($i['image_id'])) {
+                        $images[(string) $i['image_id']] = $i;
+                    }
+                }
+            }
+        } catch (RuntimeException $e) {
+            Log::warning('TikTok media info could not be read; creatives kept without posters.', ['reason' => $e->getMessage()]);
+        }
+
+        foreach ($ads as $n => $ad) {
+            $creative = $ad['creative'] ?? null;
+            if (! is_array($creative)) {
+                continue;
+            }
+            $id = (string) $creative['external_id'];
+            if (isset($videos[$id])) {
+                $v = $videos[$id];
+                $creative += array_filter([
+                    'thumbnail_url' => is_string($v['video_cover_url'] ?? null) ? $v['video_cover_url'] : null,
+                    'video_url' => is_string($v['preview_url'] ?? null) ? $v['preview_url'] : null,
+                    'asset_expires_at' => is_string($v['preview_url_expire_time'] ?? null) ? $v['preview_url_expire_time'].' UTC' : null,
+                ], static fn ($x) => $x !== null);
+            } elseif (isset($images[$id])) {
+                $url = is_string($images[$id]['image_url'] ?? null) ? $images[$id]['image_url'] : null;
+                $creative += array_filter([
+                    'asset_url' => $url,
+                    'thumbnail_url' => $url,
+                    // «valid for an hour»: renewed by the next structure sweep.
+                    'asset_expires_at' => $url === null ? null : now()->addHour()->toIso8601String(),
+                ], static fn ($x) => $x !== null);
+            }
+            $ads[$n]['creative'] = $creative;
+        }
+
         return $ads;
     }
 
@@ -429,18 +517,37 @@ final class TikTokConnector extends ApiAdvertisingConnector
     {
         $video = isset($ad['video_id']) ? (string) $ad['video_id'] : '';
         $images = array_values(array_filter((array) ($ad['image_ids'] ?? []), 'is_string'));
+        /*
+         * TIKTOK-CONTENT-001 — a Spark Ad's `video_id` is null by TikTok's own definition: it pulls an
+         * organic post, named by `tiktok_item_id`. 1,275 of the live account's 1,449 ads carried no
+         * creative because this was not read, so their content never reached any surface.
+         */
+        $spark = isset($ad['tiktok_item_id']) ? (string) $ad['tiktok_item_id'] : '';
 
-        $id = $video !== '' ? $video : ($images[0] ?? '');
+        [$id, $media] = match (true) {
+            $video !== '' => [$video, 'video'],
+            $images !== [] => [$images[0], 'image'],
+            $spark !== '' => [$spark, 'spark'],
+            default => ['', null],
+        };
 
         if ($id === '') {
             return null;
         }
 
-        return [
+        return array_filter([
             'external_id' => $id,
             'name' => (string) ($ad['ad_name'] ?? $id),
-            'format' => $video !== '' ? 'video' : 'image',
-        ];
+            'format' => $media === 'image' ? 'image' : 'video',
+            'destination_url' => isset($ad['landing_page_url']) && is_string($ad['landing_page_url']) ? $ad['landing_page_url'] : null,
+            'raw' => array_filter([
+                'media' => $media,
+                'ad_format' => $ad['ad_format'] ?? null,
+                'ad_text' => $ad['ad_text'] ?? null,
+                'call_to_action' => $ad['call_to_action'] ?? null,
+                'tiktok_item_id' => $spark === '' ? null : $spark,
+            ], static fn ($v) => $v !== null && $v !== ''),
+        ], static fn ($v) => $v !== null);
     }
 
     /**
@@ -482,10 +589,6 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        // Asked for FROM the map, so a metric cannot be mapped here and then never requested —
-        // which reads downstream exactly like a platform that does not report it.
-        $fields = array_values(array_unique(self::METRICS));
-
         /*
          * TIKTOK-METRIC-REFUSAL-001 — one refused metric must not cost the whole report.
          *
@@ -497,33 +600,7 @@ final class TikTokConnector extends ApiAdvertisingConnector
          * never the delivery figures, and only a bounded number of times — any other refusal is
          * thrown as it was, so a real failure still reads as one.
          */
-        for ($attempt = 0; ; $attempt++) {
-            try {
-                $reported = $this->readAll($tokens, 'report/integrated/get/', 'daily report', [
-                    'advertiser_id' => $adAccountId,
-                    'report_type' => 'BASIC',
-                    'data_level' => 'AUCTION_CAMPAIGN',
-                    // TikTok wants these as JSON strings inside the query, not repeated parameters.
-                    'dimensions' => json_encode(['campaign_id', 'stat_time_day'], JSON_THROW_ON_ERROR),
-                    'metrics' => json_encode($fields, JSON_THROW_ON_ERROR),
-                    'start_date' => $from,
-                    'end_date' => $to,
-                ]);
-                break;
-            } catch (RuntimeException $e) {
-                $refused = self::refusedFieldsIn($e->getMessage());
-                $droppable = array_values(array_diff(array_intersect($refused, $fields), self::DELIVERY));
-                if ($attempt >= 1 || $droppable === []) {
-                    throw $e;
-                }
-                $fields = array_values(array_diff($fields, $droppable));
-                $this->refusedMetrics = array_values(array_unique([...$this->refusedMetrics, ...$droppable]));
-                Log::warning('TikTok refused report metrics; the report was asked again without them.', [
-                    'advertiser_id' => $adAccountId,
-                    'refused' => $droppable,
-                ]);
-            }
-        }
+        $reported = $this->report($tokens, $adAccountId, $from, $to, 'AUCTION_CAMPAIGN', 'campaign_id');
 
         $this->countRawInsightRows(count($reported));
 
@@ -578,5 +655,111 @@ final class TikTokConnector extends ApiAdvertisingConnector
         }
 
         return $rows;
+    }
+
+    /**
+     * One BASIC report at one level, with the refusal-tolerant retry (TIKTOK-METRIC-REFUSAL-001).
+     *
+     * The metrics are asked for FROM the map, so a metric cannot be mapped and then never requested —
+     * which reads downstream exactly like a platform that does not report it.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function report(OAuthTokens $tokens, string $adAccountId, string $from, string $to, string $level, string $idDimension): array
+    {
+        $fields = array_values(array_unique(self::METRICS));
+
+        for ($attempt = 0; ; $attempt++) {
+            try {
+                return $this->readAll($tokens, 'report/integrated/get/', 'daily report', [
+                    'advertiser_id' => $adAccountId,
+                    'report_type' => 'BASIC',
+                    'data_level' => $level,
+                    // TikTok wants these as JSON strings inside the query, not repeated parameters.
+                    'dimensions' => json_encode([$idDimension, 'stat_time_day'], JSON_THROW_ON_ERROR),
+                    'metrics' => json_encode($fields, JSON_THROW_ON_ERROR),
+                    'start_date' => $from,
+                    'end_date' => $to,
+                ]);
+            } catch (RuntimeException $e) {
+                $refused = self::refusedFieldsIn($e->getMessage());
+                $droppable = array_values(array_diff(array_intersect($refused, $fields), self::DELIVERY));
+                if ($attempt >= 1 || $droppable === []) {
+                    throw $e;
+                }
+                $fields = array_values(array_diff($fields, $droppable));
+                $this->refusedMetrics = array_values(array_unique([...$this->refusedMetrics, ...$droppable]));
+                Log::warning('TikTok refused report metrics; the report was asked again without them.', [
+                    'advertiser_id' => $adAccountId,
+                    'refused' => $droppable,
+                ]);
+            }
+        }
+    }
+
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        try {
+            return SyncResult::of($this->fetchCreativeInsights($this->tokens(), $adAccountId, $from, $to));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /**
+     * TIKTOK-CONTENT-001 — daily figures per CREATIVE, from the ad-level report.
+     *
+     * TikTok reports by ad (`data_level=AUCTION_AD`, `ad_id`); a creative is the video, image or
+     * Spark post the ad carries, and several ads can run one video. So each ad's day is attributed to
+     * its creative and the additive figures are summed per creative and day — the provider's creative
+     * id travels in `campaign_id`, as `ReportsCreativeInsights` defines the row. Reach counts unique
+     * people per ad and is not summed: a creative run by two ads states no reach rather than a wrong
+     * one. Without this the account wrote no creative figures at all, and every TikTok card read
+     * «no data».
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function fetchCreativeInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
+    {
+        $creativeOfAd = [];
+        foreach ($this->readAll($tokens, 'ad/get/', 'ads', ['advertiser_id' => $adAccountId]) as $a) {
+            $creative = $this->creativeOf($a);
+            if ($creative !== null && isset($a['ad_id'])) {
+                $creativeOfAd[(string) $a['ad_id']] = (string) $creative['external_id'];
+            }
+        }
+
+        $reported = $this->report($tokens, $adAccountId, $from, $to, 'AUCTION_AD', 'ad_id');
+        $currency = $this->accountCurrency($tokens, $adAccountId);
+
+        $rows = [];
+        $ads = [];
+        foreach ($reported as $row) {
+            $dims = (array) ($row['dimensions'] ?? []);
+            $metrics = (array) ($row['metrics'] ?? []);
+            $creative = $creativeOfAd[(string) ($dims['ad_id'] ?? '')] ?? null;
+            if ($creative === null) {
+                continue;
+            }
+            $date = substr((string) ($dims['stat_time_day'] ?? $from), 0, 10);
+            $key = $creative.'|'.$date;
+            $rows[$key] ??= array_filter(['currency' => $currency], static fn ($v) => $v !== null) + ['campaign_id' => $creative, 'date' => $date];
+            $ads[$key] = ($ads[$key] ?? 0) + 1;
+
+            foreach (self::METRICS as $canonical => $field) {
+                if (! array_key_exists($field, $metrics) || $metrics[$field] === null) {
+                    continue;
+                }
+                $rows[$key][$canonical] = ($rows[$key][$canonical] ?? 0.0) + (float) $metrics[$field];
+            }
+        }
+
+        foreach ($ads as $key => $count) {
+            if ($count > 1) {
+                unset($rows[$key]['reach']);
+            }
+        }
+
+        return array_values($rows);
     }
 }
