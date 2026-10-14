@@ -434,6 +434,26 @@ final class CreativeSurfaceReconciliationTest extends TestCase
     }
 
     /**
+     * META-CONTENT-MEDIA-001 — Meta writes no creative-grain rows at all. The detail page's days
+     * (trend, weekly) read only that grain, so a Meta creative whose card stated its spend opened onto
+     * «no active days». With ONLY ad-grain rows, the detail's days carry the ad figures.
+     */
+    public function test_the_detail_days_come_from_the_ad_grain_when_the_creative_grain_has_none(): void
+    {
+        $this->giveTheCreativeAdsCarryingWhatItsOwnRowsDoNot();
+        DB::table('creative_daily_metrics')->where('creative_id', $this->creative->id)->delete();
+
+        $detail = $this->detail();
+
+        $this->assertNotSame([], $detail['trend'], 'a creative reported at the ad grain opened onto no days');
+        $day = collect($detail['trend'])->firstWhere('date', Carbon::now()->subDays(3)->toDateString());
+        $this->assertNotNull($day);
+        $this->assertEqualsWithDelta(3333.33, $day['spend'], 0.01);
+        $this->assertNull($day['video_p100'], 'a figure no ad reported stays null');
+        $this->assertNotSame([], $detail['weekly'] ?? [], 'the weekly view is built from the same days');
+    }
+
+    /**
      * And the awkward figures really are awkward, or the case above proves nothing.
      *
      * If the fixture happened to produce round numbers, every surface would agree by arithmetic
