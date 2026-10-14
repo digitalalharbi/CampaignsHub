@@ -1189,3 +1189,24 @@ after the grain fix deploys so the ad-group/ad rows land too; find the TikTok ac
 ≈ $9,009 USD / 33,783 SAR 30-day, missing-days warning gone). Open question, not guessed at: the ChatGPT Ads
 account currency reads NOT CAPTURED on Production — `fetchAdAccounts` reads `currency` off the account body and
 the body apparently names it otherwise or not at all; needs the API reference, not an assumption.
+
+## Addendum — 2026-10-14, the Meta account the person's edge does not list (`fix/meta-partner-account-probe`, from `dce008b9`)
+
+Owner: ad account `628943503215859` («hanka», Hanka Company) is shared with CampaignsHub's Business Manager
+as a Partner with full control, another account shared the same way is connected and syncing, and hanka is not
+among the 17 accounts discovery lists. Read from the code before anything was probed: `MetaConnector::fetchAdAccounts`
+reads ONLY `me/adaccounts` — the PERSON's edge, the accounts they hold a role on — and nothing in the tree reads
+`me/businesses`, `owned_ad_accounts` or `client_ad_accounts`. So the working Partner-shared account is in the
+authorising person's own edge and hanka is not; which edge DOES hold hanka is a fact only Meta can state, and
+no Production instrument could ask it. `integrations:meta-probe` (the read-only `meta-access-probe.yml`) now
+reads the person's edge to its last page, then — where `business_management` is granted — every business the
+person reaches with its `owned_ad_accounts` and `client_ad_accounts`, and prints the set difference by account
+id beside what the install stores; ids only, never a business or account name. Discovery is NOT changed: a fix
+for a difference nobody has read is the speculative fix the Owner refused. `MetaSyncProbeTest` +3.
+
+Next, in order: merge #683 (lane), then this PR; deploy; dispatch `meta-access-probe.yml`; read which edge holds
+`628943503215859` and whether `business_management` is granted on the live token; then either widen discovery
+to the business edges (de-duplicated against the user edge, bound to the connection's tenant, fail-first on the
+live shape) or record exactly what the Owner must assign at Meta. Then the ChatGPT Ads account-shape probe
+(`probe_shapes=account` after #683) and the TikTok `--downstream` read. Directive C (Meta content detail media and
+metrics; TikTok creatives absent from Content) stays open on this lane and Content is not VERIFIED until both are fixed.

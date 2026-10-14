@@ -11,6 +11,7 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -45,7 +46,10 @@ final class MetaSyncProbeCommand extends Command
 {
     protected $signature = 'integrations:meta-probe {--sync : Run a real discovery and sync now, not only the read-only checks}';
 
-    protected $description = 'Ask every connected Meta account whether it still answers: token, scopes, discovery, and optionally a real sync.';
+    protected $description = 'Ask every connected Meta account whether it still answers: token, scopes, the user and business account edges, and optionally a real sync.';
+
+    /** The same ceiling `MetaConnector::readAll()` puts on a paged edge. */
+    private const MAX_PAGES = 50;
 
     /** Meta's own codes, mapped to the classification an operator acts on. */
     private const CLASSIFY = [
@@ -161,22 +165,26 @@ final class MetaSyncProbeCommand extends Command
          * The account list, which is the first call that actually exercises `ads_read`. A token can
          * be valid and a permission granted while the ad account itself is unreachable, and that is
          * the case the platform-admin page cannot see.
+         *
+         * Read to its END, exactly as `MetaConnector::fetchAdAccounts()` reads it — same edge, same
+         * fields, same page size, every `paging.next` followed. A probe that read one page of fifty
+         * would answer «17 accounts» about an estate of two hundred and the reader would conclude that
+         * discovery, which pages, was the thing dropping rows.
          */
-        $accounts = $http->get($base.'/me/adaccounts', ['fields' => 'account_id,name,account_status', 'limit' => 50]);
-        $this->line('   adaccounts    : HTTP '.$accounts->status());
+        $pages = 0;
+        $rows = $this->readEdge($http, $base.'/me/adaccounts', ['fields' => 'account_id,account_status', 'limit' => 200], 'adaccounts', $pages);
 
-        if ($accounts->failed()) {
-            $this->report($accounts);
-
+        if ($rows === null) {
             return;
         }
 
-        $rows = (array) ($accounts->json('data') ?? []);
-        $this->line('   discovered    : '.count($rows).' account(s)');
+        $this->line('   discovered    : '.count($rows).' account(s) via me/adaccounts, '.$pages.' page(s)');
 
-        foreach (array_slice($rows, 0, 10) as $row) {
-            $this->line('     · '.($row['account_id'] ?? '?').'  '.mb_substr((string) ($row['name'] ?? '—'), 0, 40).'  status='.($row['account_status'] ?? '?'));
-        }
+        $viaUser = $this->accountIds($rows);
+        $this->line('   me/adaccounts : '.($viaUser === [] ? '(none)' : implode(', ', $viaUser)));
+
+        $this->businessAssets($http, $base, $granted, $viaUser);
+        $this->storedAccounts($connection, $viaUser);
 
         if (! $this->option('sync')) {
             $this->info('   verdict       : the account answers. Re-run with --sync to write and prove fresh rows.');
@@ -185,6 +193,183 @@ final class MetaSyncProbeCommand extends Command
         }
 
         $this->forceSync($connection);
+    }
+
+    /**
+     * META-PARTNER-ACCOUNT-DISCOVERY-001 — the accounts a BUSINESS can reach that the USER's edge does not list.
+     *
+     * `me/adaccounts` is the only edge discovery reads, and it answers for the PERSON who authorised:
+     * the ad accounts that person holds a role on. An ad account another company shares with
+     * CampaignsHub's Business Manager as a Partner is reachable through the business's own edges —
+     * `{business}/client_ad_accounts` (shared in) and `{business}/owned_ad_accounts` (its own) — and
+     * reaches `me/adaccounts` only once that person is also assigned to the asset inside the
+     * business. So one Partner-shared account can appear while another, shared the same way, does not,
+     * and nothing in the user edge says why.
+     *
+     * This prints the two sets and their DIFFERENCE, as account ids only. A business id is an
+     * identifier Meta's support asks for; a business NAME is a customer's and never reaches the log.
+     * Nothing is written and nothing is decided here: discovery is left exactly as it is until a real
+     * answer says which edge holds the missing account.
+     *
+     * @param  list<string>  $granted
+     * @param  list<string>  $viaUser
+     */
+    private function businessAssets(PendingRequest $http, string $base, array $granted, array $viaUser): void
+    {
+        $this->line('   ── business assets');
+
+        if (! in_array('business_management', $granted, true)) {
+            $this->line('   businesses    : NOT ASKABLE — business_management is not granted on this token, so the business');
+            $this->line('                   edges cannot be read. An ad account reachable only through a Business Manager');
+            $this->line('                   partner assignment is invisible to this token until the person is assigned to it.');
+
+            return;
+        }
+
+        $pages = 0;
+        $businesses = $this->readEdge($http, $base.'/me/businesses', ['fields' => 'id', 'limit' => 200], 'businesses', $pages);
+
+        if ($businesses === null) {
+            return;
+        }
+
+        $this->line('   businesses    : '.count($businesses).' reachable by this person');
+
+        /** @var array<string, list<string>> $viaBusiness account id → where it was found */
+        $viaBusiness = [];
+
+        foreach ($businesses as $business) {
+            $id = (string) ($business['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+
+            foreach (['owned_ad_accounts', 'client_ad_accounts'] as $edge) {
+                $pages = 0;
+                $rows = $this->readEdge($http, $base.'/'.$id.'/'.$edge, ['fields' => 'account_id,account_status', 'limit' => 200], $edge, $pages);
+
+                if ($rows === null) {
+                    $this->line('     · business '.$id.' '.str_pad($edge, 18).': (refused — see above)');
+
+                    continue;
+                }
+
+                $ids = $this->accountIds($rows);
+                $this->line('     · business '.$id.' '.str_pad($edge, 18).': '.count($ids).' account(s)'.($ids === [] ? '' : ' — '.implode(', ', $ids)));
+
+                foreach ($rows as $row) {
+                    $accountId = (string) ($row['account_id'] ?? '');
+                    if ($accountId === '') {
+                        continue;
+                    }
+                    $viaBusiness[$accountId][] = $edge.' of business '.$id.' (account_status='.($row['account_status'] ?? '?').')';
+                }
+            }
+        }
+
+        $onlyBusiness = array_diff(array_keys($viaBusiness), $viaUser);
+        $onlyUser = array_diff($viaUser, array_keys($viaBusiness));
+
+        $this->line('   in a business, NOT in me/adaccounts : '.count($onlyBusiness).' account(s)'.($onlyBusiness === [] ? '' : ' ← discovery cannot see these'));
+
+        foreach ($onlyBusiness as $accountId) {
+            foreach ($viaBusiness[$accountId] as $where) {
+                $this->line('     · '.$accountId.'  via '.$where);
+            }
+        }
+
+        $this->line('   in me/adaccounts, NOT in a business : '.count($onlyUser).' account(s)'.($onlyUser === [] ? '' : ' — '.implode(', ', $onlyUser)));
+    }
+
+    /**
+     * What this install HOLDS for the connection, beside what Meta answers right now.
+     *
+     * The two can disagree in both directions: a row discovered under an earlier grant that the
+     * person has since lost (`access_lost_at` set), and an account Meta lists that no sweep has filed
+     * yet. Ids only.
+     *
+     * @param  list<string>  $viaUser
+     */
+    private function storedAccounts(ProviderConnection $connection, array $viaUser): void
+    {
+        $stored = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('account_type', 'ad_account')
+            ->get(['external_id', 'access_lost_at']);
+
+        $held = [];
+        $lost = [];
+
+        foreach ($stored as $account) {
+            $id = preg_replace('/^act_/', '', (string) $account->external_id) ?? '';
+            $held[] = $id;
+            if ($account->access_lost_at !== null) {
+                $lost[] = $id;
+            }
+        }
+
+        $this->line('   ── stored on this install');
+        $this->line('   stored        : '.count($held).' account(s), '.count($lost).' marked access lost'.($lost === [] ? '' : ' — '.implode(', ', $lost)));
+
+        $unfiled = array_diff($viaUser, $held);
+        $this->line('   listed by Meta, not stored yet      : '.count($unfiled).' account(s)'.($unfiled === [] ? '' : ' — '.implode(', ', $unfiled)));
+    }
+
+    /**
+     * Read one Graph edge to its end — `paging.next` followed, as discovery follows it.
+     *
+     * Returns null when the edge refused, after printing Meta's own five fields; the caller decides
+     * whether that ends the probe (the user edge) or only that line (a business edge).
+     *
+     * @param  array<string, string|int>  $query
+     * @return list<array<string,mixed>>|null
+     */
+    private function readEdge(PendingRequest $http, string $url, array $query, string $what, int &$pages): ?array
+    {
+        $rows = [];
+        $pages = 0;
+        $next = $url;
+
+        for ($page = 0; $page < self::MAX_PAGES && $next !== null; $page++) {
+            $response = $page === 0 ? $http->get($next, $query) : $http->get($next);
+            $pages++;
+
+            if ($response->failed()) {
+                $this->line('   '.str_pad($what, 14).': HTTP '.$response->status());
+                $this->report($response);
+
+                return null;
+            }
+
+            foreach ((array) ($response->json('data') ?? []) as $row) {
+                $rows[] = (array) $row;
+            }
+
+            $after = $response->json('paging.next');
+            $next = is_string($after) && $after !== '' ? $after : null;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<string>
+     */
+    private function accountIds(array $rows): array
+    {
+        $ids = [];
+
+        foreach ($rows as $row) {
+            $id = (string) ($row['account_id'] ?? '');
+            if ($id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        sort($ids);
+
+        return array_values(array_unique($ids));
     }
 
     /**

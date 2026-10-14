@@ -141,6 +141,101 @@ final class MetaSyncProbeTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * META-PARTNER-ACCOUNT-DISCOVERY-001 — an account a BUSINESS reaches that the person's edge does not list.
+     *
+     * Discovery reads `me/adaccounts` only, and that edge answers for the PERSON: the accounts they
+     * hold a role on. An ad account another company shares with the Business Manager as a Partner is
+     * reachable through `{business}/client_ad_accounts` and reaches the person's edge only once they
+     * are assigned to it inside the business. The probe has to print that difference, by id — and the
+     * business's NAME, which Meta sends on the same row, must never reach a workflow log.
+     */
+    public function test_it_names_an_account_a_business_reaches_that_the_person_does_not(): void
+    {
+        $this->connection();
+        Http::fake([
+            '*/me/permissions' => Http::response(['data' => [
+                ['permission' => 'ads_read', 'status' => 'granted'],
+                ['permission' => 'business_management', 'status' => 'granted'],
+            ]]),
+            '*/me/adaccounts*' => Http::response(['data' => [
+                ['account_id' => '1234567890', 'name' => 'Acme Ads', 'account_status' => 1],
+            ]]),
+            '*/me/businesses*' => Http::response(['data' => [
+                ['id' => '111222333444', 'name' => 'Hanka Company Secret'],
+            ]]),
+            '*/111222333444/owned_ad_accounts*' => Http::response(['data' => []]),
+            '*/111222333444/client_ad_accounts*' => Http::response(['data' => [
+                ['account_id' => '1234567890', 'name' => 'Acme Ads', 'account_status' => 1],
+                ['account_id' => '628943503215859', 'name' => 'hanka', 'account_status' => 1],
+            ]]),
+        ]);
+
+        $this->artisan('integrations:meta-probe')
+            ->expectsOutputToContain('1 reachable by this person')
+            ->expectsOutputToContain('client_ad_accounts: 2 account(s) — 1234567890, 628943503215859')
+            ->expectsOutputToContain('in a business, NOT in me/adaccounts : 1 account(s) ← discovery cannot see these')
+            ->expectsOutputToContain('628943503215859  via client_ad_accounts of business 111222333444 (account_status=1)')
+            ->expectsOutputToContain('in me/adaccounts, NOT in a business : 0 account(s)')
+            ->doesntExpectOutputToContain('Hanka Company Secret')
+            ->doesntExpectOutputToContain('hanka')
+            ->assertSuccessful();
+    }
+
+    /**
+     * Without `business_management` the business edges cannot be asked, and the probe says so rather
+     * than printing «0 businesses» — which would read as «this person belongs to none».
+     */
+    public function test_without_business_management_the_business_edges_are_not_askable(): void
+    {
+        $this->connection();
+        Http::fake([
+            '*/me/permissions' => Http::response(['data' => [
+                ['permission' => 'ads_read', 'status' => 'granted'],
+                ['permission' => 'business_management', 'status' => 'declined'],
+            ]]),
+            '*/me/adaccounts*' => Http::response(['data' => [
+                ['account_id' => '1234567890', 'name' => 'Acme Ads', 'account_status' => 1],
+            ]]),
+        ]);
+
+        $this->artisan('integrations:meta-probe')
+            ->expectsOutputToContain('NOT ASKABLE')
+            ->assertSuccessful();
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/me/businesses'));
+    }
+
+    /**
+     * The person's edge is read to its end, as discovery reads it. A probe that stopped at one page
+     * would report fewer accounts than discovery holds and send the reader after a paging defect
+     * discovery does not have.
+     */
+    public function test_the_persons_edge_is_followed_to_its_last_page(): void
+    {
+        $this->connection();
+        $base = (string) config('ad_platforms.platforms.meta.api_base');
+        Http::fake([
+            // Listed first: the SECOND page's address is the one Meta hands back in `paging.next`.
+            '*/me/adaccounts?after=*' => Http::response(['data' => [
+                ['account_id' => '2222222222', 'account_status' => 1],
+            ]]),
+            '*/me/adaccounts*' => Http::response([
+                'data' => [['account_id' => '1111111111', 'account_status' => 1]],
+                'paging' => ['next' => $base.'/me/adaccounts?after=CURSOR-NOT-PRINTED'],
+            ]),
+            '*/me/permissions' => Http::response(['data' => [
+                ['permission' => 'ads_read', 'status' => 'granted'],
+            ]]),
+        ]);
+
+        $this->artisan('integrations:meta-probe')
+            ->expectsOutputToContain('2 account(s) via me/adaccounts, 2 page(s)')
+            ->expectsOutputToContain('me/adaccounts : 1111111111, 2222222222')
+            ->doesntExpectOutputToContain('CURSOR-NOT-PRINTED')
+            ->assertSuccessful();
+    }
+
     private function connection(): ProviderConnection
     {
         return app(TokenVault::class)->open(
