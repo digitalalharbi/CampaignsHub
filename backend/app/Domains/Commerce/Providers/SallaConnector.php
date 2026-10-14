@@ -43,7 +43,9 @@ final class SallaConnector extends ApiCommerceConnector
 
         return [[
             'external_id' => (string) $store['id'],
-            'name' => (string) ($store['name'] ?? $store['id']),
+            // SALLA-SYNC-RUN-001 — a store Salla sends with an empty name (a demo store does) is named by
+            // its domain, then by its id; an empty string is not a name and left the card blank.
+            'name' => self::nameOf($store),
             'domain' => isset($store['domain']) ? (string) $store['domain'] : null,
             'currency' => isset($store['currency']) ? (string) $store['currency'] : null,
             'timezone' => isset($store['timezone']) ? (string) $store['timezone'] : null,
@@ -51,6 +53,22 @@ final class SallaConnector extends ApiCommerceConnector
             'plan' => isset($store['plan']) ? (string) $store['plan'] : null,
             'raw' => $store,
         ]];
+    }
+
+    /** @param  array<string,mixed>  $store */
+    private static function nameOf(array $store): string
+    {
+        $name = trim((string) ($store['name'] ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $host = is_string($store['domain'] ?? null) ? (string) parse_url((string) $store['domain'], PHP_URL_HOST) : '';
+        if ($host === '' && is_string($store['domain'] ?? null)) {
+            $host = trim((string) $store['domain']);
+        }
+
+        return $host !== '' ? $host : 'Salla store '.$store['id'];
     }
 
     protected function fetchProducts(string $storeId): array
