@@ -441,7 +441,8 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         $ids = [];
         foreach ($ads as $ad) {
             $c = $ad['creative'] ?? null;
-            if (is_array($c) && ! isset($c['asset_url']) && ! isset($c['video_url']) && isset($c['external_id'])) {
+            if (is_array($c) && ! isset($c['video_url']) && isset($c['external_id'])
+                && (! isset($c['asset_url']) || $this->isTemplateStill($c))) {
                 $ids[] = (string) $c['external_id'];
             }
         }
@@ -468,6 +469,10 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         foreach ($ads as $n => $ad) {
             $id = (string) (($ad['creative'] ?? [])['external_id'] ?? '');
             if ($id !== '' && isset($sized[$id])) {
+                if ($this->isTemplateStill($ads[$n]['creative'])) {
+                    // The template's own `image_url` is the 64px listing image too; Meta's render replaces it.
+                    $ads[$n]['creative']['asset_url'] = $sized[$id];
+                }
                 $ads[$n]['creative']['thumbnail_url'] = $sized[$id];
                 $expiry = AssetExpiry::fromUrl($sized[$id])?->toIso8601String();
                 if ($expiry !== null) {
@@ -477,6 +482,22 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         }
 
         return $ads;
+    }
+
+    /**
+     * META-CATALOG-ASSET-001 — a catalog (DPA) creative whose still is the template's, not a file.
+     *
+     * #692 asked for the 1080 render only when no asset had arrived, and a catalog creative DOES carry
+     * one: the template's `image_url`, which Meta serves at 64×64 like the listing thumb. Production
+     * after the sweep still probed six at 64x64. A still resolved from an image hash is a real file at
+     * full size and is never replaced.
+     *
+     * @param  array<string,mixed>  $creative
+     */
+    private function isTemplateStill(array $creative): bool
+    {
+        return ($creative['format'] ?? null) === 'catalog'
+            && (string) (((array) ($creative['raw']['media_refs'] ?? []))['image_hash'] ?? '') === '';
     }
 
     /**
