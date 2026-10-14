@@ -121,6 +121,46 @@ final class RenormaliseReportingCurrencyTest extends TestCase
         $this->assertSame('EUR', $after->original_currency);
     }
 
+    public function test_a_withheld_row_converts_once_a_rate_for_its_day_is_recorded(): void
+    {
+        // Withheld earlier: labelled in the target, no value, the original kept.
+        $id = $this->row([
+            'original_currency' => 'SAR', 'original_amount' => 3750.0, 'project_currency' => 'USD',
+            'value' => null, 'converted_amount' => null, 'exchange_rate' => null,
+        ]);
+
+        $this->artisan('metrics:renormalise-currency --apply')->assertSuccessful();
+        $this->assertNull(DB::table('daily_metrics')->find($id)->value);
+
+        $this->rate('SAR', 'USD', 0.2666);
+        $this->artisan('metrics:renormalise-currency --apply')
+            ->expectsTable(
+                ['examined', 'already in target', 'converted', 'withheld (no rate)', 'no original to use'],
+                [[1, 0, 1, 0, 0]],
+            )
+            ->assertSuccessful();
+
+        $after = DB::table('daily_metrics')->find($id);
+        $this->assertEqualsWithDelta(999.75, (float) $after->value, 0.01);
+        $this->assertEqualsWithDelta(0.2666, (float) $after->exchange_rate, 0.00001);
+        $this->assertSame('USD', $after->project_currency);
+    }
+
+    public function test_a_withheld_row_is_counted_as_withheld_not_as_done(): void
+    {
+        $this->row([
+            'original_currency' => 'SAR', 'original_amount' => 3750.0, 'project_currency' => 'USD',
+            'value' => null, 'converted_amount' => null, 'exchange_rate' => null,
+        ]);
+
+        $this->artisan('metrics:renormalise-currency')
+            ->expectsTable(
+                ['examined', 'already in target', 'converted', 'withheld (no rate)', 'no original to use'],
+                [[1, 0, 0, 1, 0]],
+            )
+            ->assertSuccessful();
+    }
+
     public function test_a_dry_run_writes_nothing(): void
     {
         $this->rate('SAR', 'USD', 0.2666);
