@@ -41,7 +41,7 @@ on:
         required: false
         default: ''
       connection:
-        description: 'discovery-refresh: the provider connection (uuid, ours) whose accounts are re-discovered, as the refresh button does'
+        description: 'discovery-refresh: the provider connection (uuid, ours) — or a provider key (meta, google, …) for every connected connection of it — re-discovered as the refresh button does'
         required: false
         default: ''
       action:
@@ -186,4 +186,4 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:discovery-refresh \
-                --connection="${CONNECTION}" ${APPLY}
+                $(case "${CONNECTION}" in *-*-*) echo "--connection=${CONNECTION}" ;; *) echo "--provider=${CONNECTION}" ;; esac) ${APPLY}
