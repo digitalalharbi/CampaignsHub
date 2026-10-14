@@ -98,6 +98,15 @@ final class ResyncWindowCommandTest extends TestCase
         Queue::assertNotPushed(SyncAccountMetricsJob::class, fn (SyncAccountMetricsJob $job): bool => $job->accountId === $this->unbound->id);
     }
 
+    /** The provider's own id — the one an operator reads in the platform's console — names the account too. */
+    public function test_the_providers_own_account_id_is_accepted(): void
+    {
+        $code = Artisan::call('integrations:resync-window', ['--account' => $this->bound->external_id, '--from' => '2026-09-01', '--to' => '2026-09-07', '--apply' => true]);
+
+        $this->assertSame(0, $code, Artisan::output());
+        Queue::assertPushed(SyncAccountMetricsJob::class, fn (SyncAccountMetricsJob $job): bool => $job->accountId === $this->bound->id && $job->from === '2026-09-01');
+    }
+
     public function test_an_account_that_is_not_selected_for_a_project_is_refused_even_with_apply(): void
     {
         $code = Artisan::call('integrations:resync-window', ['--account' => $this->unbound->id, '--from' => '2026-08-16', '--to' => '2026-09-06', '--apply' => true]);

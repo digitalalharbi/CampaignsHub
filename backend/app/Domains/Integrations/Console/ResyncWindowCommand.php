@@ -38,7 +38,7 @@ use Illuminate\Support\Facades\DB;
 final class ResyncWindowCommand extends Command
 {
     protected $signature = 'integrations:resync-window
-        {--account= : The bound account to re-fetch (required)}
+        {--account= : The bound account to re-fetch — our id or the provider\'s own (required)}
         {--from= : Window start, YYYY-MM-DD (required)}
         {--to= : Window end, YYYY-MM-DD (required)}
         {--chunk-days=7 : Days per queued job}
@@ -68,7 +68,28 @@ final class ResyncWindowCommand extends Command
             return self::FAILURE;
         }
 
+        /*
+         * Ours, or the provider's own id — the one an operator reads in the platform's console
+         * (`adacct_…`, `7194075886352662529`). A provider id that names more than one ad account is
+         * refused rather than guessed.
+         */
         $account = ExternalAccount::withoutGlobalScopes()->find($accountId);
+
+        if ($account === null) {
+            $matches = ExternalAccount::withoutGlobalScopes()
+                ->where('external_id', $accountId)
+                ->where('account_type', 'ad_account')
+                ->limit(2)
+                ->get();
+
+            if ($matches->count() > 1) {
+                $this->error('That provider id names more than one ad account — pass our account id instead.');
+
+                return self::FAILURE;
+            }
+
+            $account = $matches->first();
+        }
 
         if ($account === null) {
             $this->error('No such account.');

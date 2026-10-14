@@ -36,7 +36,7 @@ on:
         required: false
         default: ''
       account:
-        description: 'scope-cleanup and resync-window: the account (uuid, ours). Not used by quarantine-sandbox.'
+        description: 'scope-cleanup: the account (uuid, ours) · resync-window: ours or the provider''s own id. Not used by quarantine-sandbox.'
         required: false
         default: ''
       action:
