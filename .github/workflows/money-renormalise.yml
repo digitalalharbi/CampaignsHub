@@ -31,6 +31,10 @@ on:
         description: 'Rows per chunk'
         required: false
         default: '500'
+      rate_date:
+        description: 'Optional YYYY-MM-DD: first ask the configured rate source for the rates published on this date (fx:rates --date), for days a backfill reached before any rate was recorded. Nothing is invented: no source, no rate.'
+        required: false
+        default: ''
       apply:
         description: 'WRITE the conversions. Leave false to dry-run and only report.'
         type: boolean
@@ -53,12 +57,13 @@ jobs:
           PROJECT: ${{ inputs.project }}
           CHUNK: ${{ inputs.chunk }}
           APPLY: ${{ inputs.apply }}
+          RATE_DATE: ${{ inputs.rate_date }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: PROJECT,CHUNK,APPLY
+          envs: PROJECT,CHUNK,APPLY,RATE_DATE
           script: |
             set -Eeuo pipefail
 
@@ -70,6 +75,18 @@ jobs:
             cd /opt/campaignshub
             COMPOSE_FILE="deploy/docker-compose.production.yml"
             ENV_FILE="deploy/backend.production.env"
+
+            # CURRENCY-HISTORY-001 — a backfill reaches days older than the first recorded rate, and
+            # a converter that takes «the latest rate on or before the day» has nothing to take, so those
+            # rows stay withheld. The rate source is asked for one historical publication date first.
+            if [ -n "${RATE_DATE:-}" ]; then
+              case "$RATE_DATE" in
+                [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+                *) echo "rate_date must be YYYY-MM-DD"; exit 1 ;;
+              esac
+              docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+                exec -T backend php artisan fx:rates --date="${RATE_DATE}"
+            fi
 
             args=""
             # Quoted, and only ever appended as an argument — the command itself is fixed above.
