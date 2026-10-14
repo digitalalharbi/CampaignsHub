@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Jobs\SyncStoreJob;
+use App\Domains\Commerce\Models\PendingStoreInstall;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -21,8 +22,10 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -299,6 +302,111 @@ final class CommerceOAuthAndBoardTest extends TestCase
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────────
+
+    // ── SALLA-INSTALL-001 — installed from Salla's side, then claimed ───────────────────────────
+
+    private function fakeSalla(): void
+    {
+        Http::fake([
+            'accounts.salla.sa/oauth2/token' => Http::response(['access_token' => 'AT-install', 'refresh_token' => 'RT-install', 'expires_in' => 1209600]),
+            'api.salla.dev/*/store/info' => Http::response(['data' => ['id' => 793298857, 'name' => 'متجر سلة التجريبي', 'domain' => 'https://demostore.salla.sa/dev', 'currency' => 'SAR']]),
+        ]);
+    }
+
+    /** A merchant who installs from the Salla App Store arrives with Salla's code and no state of ours. */
+    public function test_a_merchant_initiated_install_is_kept_for_claiming_not_refused(): void
+    {
+        $this->configure('salla');
+        $this->fakeSalla();
+
+        $response = $this->get('/api/v1/oauth/commerce/salla/callback?code=from-salla');
+
+        $location = (string) $response->headers->get('Location');
+        $this->assertStringContainsString('/app/store-install?', $location, 'a store-initiated install was refused as invalid state');
+        $this->assertStringNotContainsString('invalid_state', $location);
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+        $claim = $query['claim'];
+
+        // Nothing is connected until a workspace claims it; the tokens wait, encrypted.
+        $this->assertSame(0, ProviderConnection::withoutGlobalScopes()->count());
+        $pending = PendingStoreInstall::query()->firstOrFail();
+        $this->assertSame('793298857', $pending->merchant_id);
+        $this->assertSame('AT-install', $pending->tokens['access_token']);
+        $this->assertStringNotContainsString('AT-install', (string) DB::table('pending_store_installs')->value('tokens'), 'tokens stored in clear');
+
+        // The claim page reads the store's name without signing in — never the tokens.
+        $this->getJson("/api/v1/commerce/store-installs/{$claim}")
+            ->assertOk()
+            ->assertJsonPath('data.store_name', 'متجر سلة التجريبي')
+            ->assertJsonMissingPath('data.tokens');
+        $this->getJson('/api/v1/commerce/store-installs/not-a-claim')->assertNotFound();
+
+        // A signed-in user claims it into their workspace: now it is a connection with its store.
+        $this->actingAs($this->operator)
+            ->postJson("/api/v1/commerce/store-installs/{$claim}/claim")
+            ->assertOk()
+            ->assertJsonPath('data.stores', 1);
+
+        $connection = ProviderConnection::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame($this->tenant->id, $connection->tenant_id);
+        $this->assertSame('متجر سلة التجريبي', ExternalAccount::withoutGlobalScopes()->where('external_id', '793298857')->value('name'));
+        $this->assertNotNull($pending->fresh()->claimed_at);
+        $this->assertSame([], $pending->fresh()->tokens, 'the claimed install keeps no copy of the tokens');
+
+        // One claim per code.
+        $this->actingAs($this->operator)->postJson("/api/v1/commerce/store-installs/{$claim}/claim")->assertStatus(410);
+    }
+
+    /** The CampaignsHub-initiated path is unchanged: a forged state still connects nothing. */
+    public function test_a_forged_state_is_still_refused_after_the_install_path_exists(): void
+    {
+        $this->configure('salla');
+        $this->fakeSalla();
+
+        $location = (string) $this->get('/api/v1/oauth/commerce/salla/callback?code=abc&state=forged')->headers->get('Location');
+
+        $this->assertStringContainsString('invalid_state', $location);
+        $this->assertSame(0, PendingStoreInstall::query()->count());
+    }
+
+    /** `app.store.authorize` renews a connected merchant's tokens; `app.uninstalled` stops the connection. */
+    public function test_salla_app_webhooks_renew_and_withdraw_the_store(): void
+    {
+        $this->configure('salla');
+        config()->set('commerce_platforms.platforms.salla.webhook_secret', 'whsec');
+        $this->fakeSalla();
+
+        $this->holdingTenant((string) $this->tenant->id);
+        $connection = app(TokenVault::class)->open(
+            tenantId: $this->tenant->id, provider: 'salla',
+            tokens: new OAuthTokens('AT-old', 'RT-old', Carbon::now()->addDay()), connectionName: 'Salla',
+        );
+        ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(),
+            'provider' => 'salla', 'account_type' => 'store', 'external_id' => '793298857', 'name' => 'متجر', 'status' => 'active',
+        ]);
+        app(TenantContext::class)->forget();
+
+        $post = function (array $body): TestResponse {
+            $raw = json_encode($body, JSON_THROW_ON_ERROR);
+
+            return $this->call('POST', '/api/v1/webhooks/commerce/salla', [], [], [], [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_SALLA_SIGNATURE' => hash_hmac('sha256', $raw, 'whsec'),
+            ], $raw);
+        };
+
+        $post(['event' => 'app.store.authorize', 'merchant' => 793298857, 'created_at' => '2026-10-14 10:00:00',
+            'data' => ['access_token' => 'AT-new', 'refresh_token' => 'RT-new', 'expires' => now()->addDays(14)->timestamp, 'scope' => 'offline_access']])->assertOk();
+        $this->assertSame('AT-new', app(TokenVault::class)->stored($connection->fresh())->accessToken, 'a reinstall did not renew the tokens');
+        $this->assertSame(0, PendingStoreInstall::query()->count(), 'a connected merchant is renewed in place, not queued as a new install');
+
+        $post(['event' => 'app.uninstalled', 'merchant' => 793298857, 'created_at' => '2026-10-14 11:00:00', 'data' => []])->assertOk();
+        $this->assertSame('revoked', $connection->fresh()->status);
+
+        // An unsigned delivery changes nothing.
+        $this->call('POST', '/api/v1/webhooks/commerce/salla', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['event' => 'app.uninstalled', 'merchant' => 1]))->assertStatus(401);
+    }
 
     private function configure(string $platform): void
     {
