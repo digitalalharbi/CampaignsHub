@@ -139,10 +139,10 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         Http::fake(function ($request) use (&$asked) {
             $url = urldecode($request->url());
-            if (str_contains($url, 'ids=431')) {
+            if (str_contains($url, '/431?')) {
                 $asked = $url;
 
-                return Http::response(['431' => ['id' => '431', 'thumbnail_url' => 'https://scontent.example/catalog-1080.jpg']]);
+                return Http::response(['id' => '431', 'thumbnail_url' => 'https://scontent.example/catalog-1080.jpg']);
             }
             if (str_contains($url, '/campaigns')) {
                 return Http::response(['data' => [['id' => '120', 'name' => 'Catalog', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES']]]);
@@ -181,8 +181,8 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         Http::fake(function ($request) {
             $url = urldecode($request->url());
-            if (str_contains($url, 'ids=432')) {
-                return Http::response(['432' => ['id' => '432', 'thumbnail_url' => 'https://scontent.example/catalog-1080.jpg']]);
+            if (str_contains($url, '/432?')) {
+                return Http::response(['id' => '432', 'thumbnail_url' => 'https://scontent.example/catalog-1080.jpg']);
             }
             if (str_contains($url, '/campaigns')) {
                 return Http::response(['data' => [['id' => '120', 'name' => 'Catalog', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES']]]);
@@ -208,6 +208,55 @@ final class AdPlatformStructureSyncTest extends TestCase
         $creative = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '432')->firstOrFail();
         $this->assertSame('https://scontent.example/catalog-1080.jpg', $creative->asset_url, 'the 64px template image stayed the card\'s still');
         $this->assertSame('https://scontent.example/catalog-1080.jpg', $creative->thumbnail_url);
+    }
+
+    /**
+     * META-IDS-DEPRECATED-001 — Meta refuses `?ids=` (Production: HTTP 500, code 100, «The ids query
+     * parameter is deprecated in v26.0+»). Each node is read at its own path, the batch form is never
+     * sent, and one refused node does not cost the others.
+     */
+    public function test_catalog_thumbnails_are_read_per_node_and_one_refusal_costs_only_itself(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake(function ($request) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'ids=')) {
+                return Http::response(['error' => ['message' => 'The ids query parameter is deprecated in v26.0+.', 'code' => 100]], 500);
+            }
+            if (str_contains($url, '/441?')) {
+                return Http::response(['error' => ['message' => 'Unsupported get request.', 'code' => 100]], 400);
+            }
+            if (str_contains($url, '/442?')) {
+                return Http::response(['id' => '442', 'thumbnail_url' => 'https://scontent.example/442-1080.jpg']);
+            }
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => '120', 'name' => 'Catalog', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES']]]);
+            }
+            if (str_contains($url, '/adsets')) {
+                return Http::response(['data' => [['id' => '220', 'campaign_id' => '120', 'name' => 'All products', 'status' => 'ACTIVE']]]);
+            }
+            if (str_contains($url, '/ads')) {
+                $ad = fn (string $ad, string $cr) => [
+                    'id' => $ad, 'adset_id' => '220', 'campaign_id' => '120', 'name' => '{{product.name}}', 'status' => 'ACTIVE',
+                    'creative' => ['id' => $cr, 'object_type' => 'SHARE', 'image_url' => "https://scontent.example/64-{$cr}.jpg",
+                        'object_story_spec' => ['template_data' => ['link' => 'https://shop.example/p/{{product.id}}']]],
+                ];
+
+                return Http::response(['data' => [$ad('341', '441'), $ad('342', '442')]]);
+            }
+
+            return Http::response(['data' => []]);
+        });
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $ok = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '442')->firstOrFail();
+        $this->assertSame('https://scontent.example/442-1080.jpg', $ok->asset_url, 'one refused node cost its neighbour the render');
+        $refused = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '441')->firstOrFail();
+        $this->assertSame('https://scontent.example/64-441.jpg', $refused->asset_url, 'a refused node keeps what the listing gave');
+        Http::assertNotSent(fn ($r) => str_contains(urldecode($r->url()), 'ids='));
     }
 
     /**
@@ -238,7 +287,7 @@ final class AdPlatformStructureSyncTest extends TestCase
                         'object_story_spec' => ['video_data' => ['video_id' => '9002', 'image_url' => 'https://scontent.example/poster-full.jpg']]],
                 ],
             ]]),
-            'graph.facebook.com/*ids=9002*' => Http::response(['9002' => ['id' => '9002', 'source' => 'https://video.example/9002.mp4', 'picture' => 'https://scontent.example/9002-pic.jpg']]),
+            'graph.facebook.com/*/9002?*' => Http::response(['id' => '9002', 'source' => 'https://video.example/9002.mp4', 'picture' => 'https://scontent.example/9002-pic.jpg']),
         ]);
 
         $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
