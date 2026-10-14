@@ -9,8 +9,11 @@ use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Commerce\Models\PendingStoreInstall;
+use App\Domains\Commerce\Providers\SallaConnector;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -242,12 +245,74 @@ final class CommerceOAuthAndBoardTest extends TestCase
             ->assertJsonPath('data.0.stores.0.name', 'متجر')
             ->assertJsonPath('data.0.stores.0.counts.orders', 0);
 
+        /*
+         * SALLA-SYNC-RUN-001 — «202, then nothing»: a store no project selects is refused with the
+         * reason, and nothing is queued into a job that would return silently.
+         */
         $this->actingAs($this->operator)
             ->postJson("/api/v1/commerce/stores/{$store->getKey()}/sync")
-            ->assertStatus(202)
-            ->assertJsonPath('data.queued', 1);
+            ->assertStatus(409)
+            ->assertJsonPath('meta.reason', 'awaiting_assignment');
+        Queue::assertNothingPushed();
 
+        $project = Project::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->firstOrFail();
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $project->client_workspace_id,
+            'project_id' => $project->id, 'external_account_id' => $store->id,
+            'provider' => 'salla', 'purpose' => 'ecommerce', 'is_active' => true,
+        ]);
+
+        $runId = $this->actingAs($this->operator)
+            ->postJson("/api/v1/commerce/stores/{$store->getKey()}/sync")
+            ->assertStatus(202)
+            ->assertJsonPath('data.queued', 1)
+            ->json('data.run_id');
+
+        // A run row exists from the moment the job is queued — the card never reads «null».
+        $this->assertSame('queued', IntegrationSyncRun::withoutGlobalScopes()->findOrFail($runId)->status);
         Queue::assertPushed(SyncStoreJob::class, 1);
+    }
+
+    /** SALLA-SYNC-RUN-001 — the queued row is the one the job moves: never a second row, never left «queued». */
+    public function test_the_queued_run_is_closed_by_the_job_whatever_happens(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+        $connection = app(TokenVault::class)->open(
+            tenantId: $this->tenant->id, provider: 'salla',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(14)), connectionName: 'Salla',
+        );
+        $store = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(),
+            'provider' => 'salla', 'account_type' => 'store', 'external_id' => 's-2',
+            'name' => 'متجر', 'currency' => 'SAR', 'status' => 'active',
+        ]);
+        $run = new IntegrationSyncRun;
+        $run->forceFill(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(), 'type' => 'commerce', 'status' => 'queued', 'started_at' => now()])->save();
+        app(TenantContext::class)->forget();
+
+        // Unassigned by the time it runs: the queued row says why.
+        app()->call([new SyncStoreJob((string) $store->id, '2026-10-01', '2026-10-14', ['run_id' => (string) $run->id]), 'handle']);
+        $this->assertSame('awaiting_assignment', $run->fresh()->status);
+        $this->assertNotNull($run->fresh()->finished_at);
+
+        // A job that exhausted its attempts closes its row as failed, with the reason.
+        $run->refresh()->forceFill(['status' => 'queued', 'finished_at' => null])->save();
+        (new SyncStoreJob((string) $store->id, '2026-10-01', '2026-10-14', ['run_id' => (string) $run->id]))->failed(new \RuntimeException('Salla answered 500'));
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertStringContainsString('Salla answered 500', (string) $run->fresh()->error);
+    }
+
+    /** SALLA-SYNC-RUN-001 — a store Salla names with an empty string is named by its domain, never left blank. */
+    public function test_a_store_salla_sends_without_a_name_is_named_by_its_domain(): void
+    {
+        $this->configure('salla');
+        Http::fake(['*store/info*' => Http::response(['data' => ['id' => 793298857, 'name' => '', 'domain' => 'https://demostore.salla.sa/dev-x', 'currency' => 'SAR']])]);
+        $connector = app(SallaConnector::class);
+
+        $method = new \ReflectionMethod($connector, 'nameOf');
+        $this->assertSame('demostore.salla.sa', $method->invoke(null, ['id' => 793298857, 'name' => '', 'domain' => 'https://demostore.salla.sa/dev-x']));
+        $this->assertSame('Salla store 793298857', $method->invoke(null, ['id' => 793298857, 'name' => ' ']));
+        $this->assertSame('متجري', $method->invoke(null, ['id' => 1, 'name' => 'متجري', 'domain' => 'https://x.test']));
     }
 
     /** A revoked authorisation is refused rather than queued into a guaranteed failure row. */
