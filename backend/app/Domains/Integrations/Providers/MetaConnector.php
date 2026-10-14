@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Meta Marketing API — Facebook and Instagram.
@@ -226,7 +227,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
 
         foreach ($this->readAll($tokens, "{$adAccountId}/ads", 'ads', [
             'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,'
-                .'creative{id,name,thumbnail_url,object_type,image_url,object_story_spec}',
+                .'creative{id,name,thumbnail_url,object_type,image_url,image_hash,video_id,object_story_spec}',
             'limit' => 500,
         ]) as $a) {
             if (($a['id'] ?? null) === null) {
@@ -247,6 +248,96 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
                 'creative' => isset($creative['id']) ? $this->creativeFrom($creative, $a) : null,
                 'raw' => (array) $a,
             ], static fn ($v) => $v !== null);
+        }
+
+        return $this->withFullSizeMedia($tokens, $adAccountId, $ads);
+    }
+
+    /**
+     * META-CONTENT-MEDIA-001 — the full-size image and the playable video, not the 64px listing thumb.
+     *
+     * Meta's creative `thumbnail_url` is 64×64 unless a size is asked for, and a video creative has no
+     * `image_url` at all — so every opened Meta video, and every ad built from an image hash, showed a
+     * 64px thumbnail stretched across the viewer. Meta names the full assets by id: an image by its
+     * hash (`GET /act_{id}/adimages?hashes=[…]` → `url`), a video by its id (`GET /?ids=…&fields=
+     * source,picture` → the file and its poster). Both are read in batches after the ads, and a
+     * refused read costs the full-size media only — the structure and the existing thumbnail stay.
+     *
+     * @param  list<array<string,mixed>>  $ads
+     * @return list<array<string,mixed>>
+     */
+    private function withFullSizeMedia(OAuthTokens $tokens, string $adAccountId, array $ads): array
+    {
+        $hashes = [];
+        $videos = [];
+        foreach ($ads as $ad) {
+            $refs = (array) (($ad['creative'] ?? [])['raw']['media_refs'] ?? []);
+            if (isset($refs['image_hash'])) {
+                $hashes[] = (string) $refs['image_hash'];
+            }
+            if (isset($refs['video_id'])) {
+                $videos[] = (string) $refs['video_id'];
+            }
+        }
+
+        $images = [];
+        $files = [];
+        try {
+            foreach (array_chunk(array_values(array_unique($hashes)), 50) as $chunk) {
+                foreach ($this->readAll($tokens, "{$adAccountId}/adimages", 'ad images', [
+                    'hashes' => json_encode($chunk, JSON_THROW_ON_ERROR),
+                    'fields' => 'hash,url,permalink_url',
+                ]) as $image) {
+                    if (isset($image['hash'])) {
+                        $images[(string) $image['hash']] = $image;
+                    }
+                }
+            }
+            foreach (array_chunk(array_values(array_unique($videos)), 50) as $chunk) {
+                $body = $this->read($this->api($tokens)->get($this->url(''), [
+                    'ids' => implode(',', $chunk),
+                    'fields' => 'source,picture',
+                ]), 'ad videos');
+                foreach ($body as $id => $video) {
+                    if (is_array($video)) {
+                        $files[(string) $id] = $video;
+                    }
+                }
+            }
+        } catch (\RuntimeException $e) {
+            Log::warning('Meta full-size media could not be read; thumbnails kept.', ['reason' => $e->getMessage()]);
+        }
+
+        $str = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? $v : null;
+
+        foreach ($ads as $n => $ad) {
+            $creative = $ad['creative'] ?? null;
+            if (! is_array($creative)) {
+                continue;
+            }
+            $refs = (array) ($creative['raw']['media_refs'] ?? []);
+            $image = $images[(string) ($refs['image_hash'] ?? '')] ?? null;
+            $video = $files[(string) ($refs['video_id'] ?? '')] ?? null;
+
+            if ($image !== null && ($url = $str($image['url'] ?? null) ?? $str($image['permalink_url'] ?? null)) !== null) {
+                $creative['asset_url'] = $url;
+                $creative['thumbnail_url'] = $url;
+            }
+            if ($video !== null) {
+                if (($source = $str($video['source'] ?? null)) !== null) {
+                    $creative['video_url'] = $source;
+                }
+                if (($picture = $str($video['picture'] ?? null)) !== null && ! isset($creative['asset_url']) && ($refs['poster'] ?? false) !== true) {
+                    $creative['thumbnail_url'] = $picture;
+                }
+            }
+            $chosen = $creative['video_url'] ?? $creative['asset_url'] ?? $creative['thumbnail_url'] ?? null;
+            $expiry = AssetExpiry::fromUrl(is_string($chosen) ? $chosen : null)?->toIso8601String();
+            if ($expiry !== null) {
+                $creative['asset_expires_at'] = $expiry;
+            }
+
+            $ads[$n]['creative'] = $creative;
         }
 
         return $ads;
@@ -307,8 +398,9 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
             'format' => $this->creativeFormat($creative['object_type'] ?? null, $spec),
             // The full-size image, then the story spec's own picture. Both are Meta's, never built here.
             'asset_url' => $str($creative['image_url'] ?? null) ?? $str($link['picture'] ?? null),
-            // A video's poster is an image Meta already chose for it; a listing thumbnail is the fallback.
-            'thumbnail_url' => $str($creative['thumbnail_url'] ?? null) ?? $str($video['image_url'] ?? null),
+            // A video's poster is an image Meta already chose for it, at full size; the creative's
+            // `thumbnail_url` is Meta's 64px listing thumb and only the fallback (META-CONTENT-MEDIA-001).
+            'thumbnail_url' => $str($video['image_url'] ?? null) ?? $str($creative['thumbnail_url'] ?? null),
             'preview_url' => $str($ad['preview_shareable_link'] ?? null),
             /*
              * AD-MEDIA-RECOVERY-001 — Meta states when its CDN grant runs out, in `oe` (hex seconds).
@@ -345,6 +437,13 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
                     ], static fn ($v) => $v !== null),
                     $children,
                 ),
+            // META-CONTENT-MEDIA-001 — what the full-size reads ask for: the image's hash, the video's id.
+            'raw' => ($refs = array_filter([
+                'image_hash' => $str($creative['image_hash'] ?? null) ?? $str($link['image_hash'] ?? null),
+                'video_id' => $str($creative['video_id'] ?? null) ?? $str($video['video_id'] ?? null),
+                // Whether Meta named a full-size poster for the video — the 64px thumb does not count.
+                'poster' => $str($video['image_url'] ?? null) === null ? null : true,
+            ], static fn ($v) => $v !== null)) === [] ? null : ['media_refs' => $refs],
         ], static fn ($v) => $v !== null);
     }
 

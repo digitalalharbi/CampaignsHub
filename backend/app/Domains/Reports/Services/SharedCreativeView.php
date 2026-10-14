@@ -937,6 +937,35 @@ final class SharedCreativeView
      */
     private function trend(string $creativeId, Carbon $from, Carbon $to, CreativeVisibility $visibility): array
     {
+        $days = $this->creativeGrainTrend($creativeId, $from, $to, $visibility);
+        if ($days !== []) {
+            return $days;
+        }
+
+        // META-CONTENT-MEDIA-001 — a creative reported only at the ad grain (Meta) has its days there.
+        return array_map(static function (array $r) use ($visibility): array {
+            $point = [
+                'date' => (string) $r['bucket'],
+                'impressions' => $r['impressions'],
+                'clicks' => $r['clicks'],
+                'conversions' => $r['conversions'],
+                'video_views' => $r['video_views'],
+                'video_p100' => null,
+                'frequency' => null,
+            ];
+            if ($visibility->spend) {
+                $point['spend'] = $r['spend'];
+            }
+            if ($visibility->revenue) {
+                $point['revenue'] = $r['revenue'];
+            }
+
+            return $point;
+        }, app(CreativeMetrics::class)->adGrainSeries($creativeId, $from, $to));
+    }
+
+    private function creativeGrainTrend(string $creativeId, Carbon $from, Carbon $to, CreativeVisibility $visibility): array
+    {
         return DB::table('creative_daily_metrics')
             ->where('creative_id', $creativeId)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])

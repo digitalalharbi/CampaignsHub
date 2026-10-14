@@ -128,6 +128,50 @@ final class AdPlatformStructureSyncTest extends TestCase
     }
 
     /**
+     * META-CONTENT-MEDIA-001 — the full-size asset, not Meta's 64px listing thumbnail.
+     *
+     * Real Meta answers carry `creative.thumbnail_url` (64×64) on every creative. Preferring it over
+     * the video's poster, and never reading the image by its hash or the video by its id, left every
+     * opened Meta video — and every hash-built image ad — showing a 64px thumbnail in the viewer.
+     */
+    public function test_meta_resolves_full_size_images_and_playable_videos(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES']]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [['id' => '220', 'campaign_id' => '120', 'name' => 'Riyadh', 'status' => 'ACTIVE']]]),
+            'graph.facebook.com/*/adimages*' => Http::response(['data' => [['hash' => 'h-abc', 'url' => 'https://scontent.example/full-from-hash.jpg', 'permalink_url' => 'https://www.facebook.com/ads/image/?d=x']]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '311', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Hash still', 'status' => 'ACTIVE',
+                    'creative' => ['id' => '411', 'object_type' => 'SHARE', 'thumbnail_url' => 'https://scontent.example/64px-a.jpg',
+                        'object_story_spec' => ['link_data' => ['image_hash' => 'h-abc', 'link' => 'https://shop.example/a']]],
+                ],
+                [
+                    'id' => '312', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Film', 'status' => 'ACTIVE',
+                    'creative' => ['id' => '412', 'object_type' => 'VIDEO', 'thumbnail_url' => 'https://scontent.example/64px-b.jpg',
+                        'object_story_spec' => ['video_data' => ['video_id' => '9002', 'image_url' => 'https://scontent.example/poster-full.jpg']]],
+                ],
+            ]]),
+            'graph.facebook.com/*ids=9002*' => Http::response(['9002' => ['id' => '9002', 'source' => 'https://video.example/9002.mp4', 'picture' => 'https://scontent.example/9002-pic.jpg']]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $still = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '411')->firstOrFail();
+        $this->assertSame('https://scontent.example/full-from-hash.jpg', $still->asset_url, 'an image ad built from a hash had no full-size image');
+        $this->assertSame('https://scontent.example/full-from-hash.jpg', $still->thumbnail_url);
+
+        $film = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '412')->firstOrFail();
+        $this->assertSame('https://scontent.example/poster-full.jpg', $film->thumbnail_url, 'the 64px listing thumb was preferred over the video poster');
+        $this->assertSame('https://video.example/9002.mp4', $film->video_url, 'the video itself was never read');
+
+        Http::assertSent(fn ($r) => str_contains(urldecode($r->url()), 'adimages') && str_contains(urldecode($r->url()), 'h-abc'));
+    }
+
+    /**
      * AD-MEDIA-RECOVERY-001 — the media, from the fields Meta actually offers.
      *
      * The ads request asked for `creative{id,name,thumbnail_url,object_type}`. Meta answered that

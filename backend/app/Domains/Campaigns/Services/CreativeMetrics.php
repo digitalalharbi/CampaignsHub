@@ -761,6 +761,55 @@ final class CreativeMetrics
      */
 
     /**
+     * META-CONTENT-MEDIA-001 — a creative's DAYS from the ad grain, for a creative the platform never
+     * reports at creative level (Meta writes no `creative_daily_metrics`). The detail page's trend,
+     * weekly view and per-campaign split read only the creative grain, so a Meta creative whose card
+     * stated its spend opened onto «no active days». Same scoping as `fromAdGrain()`; a figure no ad
+     * reported stays null rather than becoming zero.
+     *
+     * @param  'date'|'campaign'  $by
+     * @return list<array<string, mixed>>
+     */
+    public function adGrainSeries(string $creativeId, Carbon $from, Carbon $to, string $by = 'date'): array
+    {
+        $entityColumns = Schema::getColumnListing('entity_daily_metrics');
+        $wanted = ['spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views'];
+        $select = [];
+        foreach ($wanted as $column) {
+            $select[] = in_array($column, $entityColumns, true)
+                ? "SUM(entity_daily_metrics.{$column}) AS {$column}"
+                : "NULL AS {$column}";
+        }
+
+        $group = $by === 'campaign' ? 'external_campaigns.unified_campaign_id' : 'entity_daily_metrics.metric_date';
+
+        $query = DB::table('entity_daily_metrics')
+            ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
+            ->where('entity_daily_metrics.entity_type', 'ad')
+            ->where('external_ads.creative_id', $creativeId)
+            ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics'))
+            ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'entity_daily_metrics', app(ProjectContext::class)->projectId()))
+            ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()]);
+
+        if ($by === 'campaign') {
+            $query->leftJoin('external_campaigns', 'external_campaigns.id', '=', 'external_ads.external_campaign_id');
+        }
+
+        return $query->groupBy($group)
+            ->orderBy($group)
+            ->selectRaw($group.' AS bucket, '.implode(', ', $select))
+            ->get()
+            ->map(static function ($r) use ($wanted): array {
+                $row = ['bucket' => $r->bucket === null ? null : (string) $r->bucket];
+                foreach ($wanted as $column) {
+                    $row[$column] = $r->{$column} === null ? null : (float) $r->{$column};
+                }
+
+                return $row;
+            })->all();
+    }
+
+    /**
      * A creative's totals summed from the ad grain, for creatives with no rows of their own.
      *
      * The column list is deliberately the INTERSECTION of the two tables rather than everything
