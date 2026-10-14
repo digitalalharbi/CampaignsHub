@@ -7,9 +7,11 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\PlatformHttp;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Google Ads API (REST).
@@ -71,6 +73,7 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
         );
 
         $accounts = [];
+        $this->discoveryWarnings = [];
 
         foreach ((array) ($body['resourceNames'] ?? []) as $resource) {
             // "customers/1234567890" → "1234567890"
@@ -81,86 +84,142 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
             }
 
             /*
-             * GADS-ROOT-TYPE-001 — ask the root WHAT IT IS before asking what is under it.
+             * GADS-DISCOVERY-PARTIAL-001 — one customer refusing must not cost every other one.
              *
-             * Every root used to be handed to `clientsUnder()`, which queries `FROM customer_client`
-             * with `login-customer-id` set to that root. Google documents `customer_client` as the
-             * hierarchy of a MANAGER account, and a plain advertiser is not one — the old comment here
-             * asserted that a plain account «answers with its own self link», and that assumption is
-             * the defect rather than a description of it. On the owner's production connection the call
-             * answered `403 PERMISSION_DENIED` and no account was ever discovered.
-             *
-             * `ListAccessibleCustomers` cannot tell us which case a root is: it is documented to ignore
-             * `login-customer-id` entirely, which is exactly why it is the only call in this flow that
-             * still succeeded and why its success proved nothing about the calls after it.
-             *
-             * So each root is probed on its own `customer` record first, and only a manager is asked
-             * for a hierarchy.
+             * Production, 2026-10-12: `listAccessibleCustomers` answered and half the per-customer
+             * `searchStream` reads were refused with 403 PERMISSION_DENIED; the first refusal threw out
+             * of this loop and the connection discovered 0 accounts. Each accessible customer is read
+             * on its own now: a refused one is recorded with Google's error code and request id, and
+             * discovery goes on to the next.
              */
-            $root = $this->customerRecord($tokens, $entry);
-
-            if ($root === null) {
-                continue;
-            }
-
-            if (($root['manager'] ?? false) !== true) {
-                /*
-                 * A directly held advertiser IS the account. It is recorded from its own record, with
-                 * no manager above it — «an account held directly has no manager», and inventing one
-                 * would send every later campaign and metric query through a path that does not exist.
-                 */
-                $accounts[$entry] ??= [
-                    'external_id' => $entry,
-                    'name' => (string) ($root['descriptiveName'] ?? $entry),
-                    'currency' => isset($root['currencyCode']) ? (string) $root['currencyCode'] : null,
-                    'timezone' => isset($root['timeZone']) ? (string) $root['timeZone'] : null,
-                    'status' => strtoupper((string) ($root['status'] ?? 'ENABLED')) === 'ENABLED'
-                        ? 'active'
-                        : 'inactive',
-                    'parent_external_id' => null,
-                    'raw' => $root,
-                ];
-
-                continue;
-            }
-
-            foreach ($this->clientsUnder($tokens, $entry) as $client) {
-                $id = $this->plainCustomerId((string) ($client['id'] ?? ''));
-
-                // A manager is a container, not an advertiser. Recording one as an ad account is the
-                // defect this method exists to fix, so it is skipped even at level 0.
-                if ($id === '' || ($client['manager'] ?? false) === true) {
-                    continue;
-                }
-
-                /*
-                 * Keyed by id so an account reachable through two entry points is discovered ONCE.
-                 * That is a real shape — an operator with rights on both the MCC and one of its
-                 * clients — and duplicating the account would duplicate its spend on every surface.
-                 */
-                $accounts[$id] = [
-                    'external_id' => $id,
-                    'name' => (string) ($client['descriptiveName'] ?? $id),
-                    'currency' => isset($client['currencyCode']) ? (string) $client['currencyCode'] : null,
-                    'timezone' => isset($client['timeZone']) ? (string) $client['timeZone'] : null,
-                    // Reported per client. Calling every discovered row active would put a live badge
-                    // on an account the customer has already closed.
-                    'status' => strtoupper((string) ($client['status'] ?? 'ENABLED')) === 'ENABLED'
-                        ? 'active'
-                        : 'inactive',
-                    /*
-                     * GADS-MCC-001 — the manager this account is genuinely reached THROUGH, read from
-                     * the customer's own hierarchy. A `level` of 0 is the entry point's self link, and
-                     * an account held directly has no manager above it: null, rather than the
-                     * operator's own MCC id, which is what used to be written here for every tenant.
-                     */
-                    'parent_external_id' => ((int) ($client['level'] ?? 0)) > 0 ? $entry : null,
-                    'raw' => $client,
-                ];
+            try {
+                $this->discoverUnder($tokens, $entry, $accounts);
+            } catch (\RuntimeException $e) {
+                $reason = (string) ProviderErrorText::forStorage($e->getMessage());
+                $this->discoveryWarnings[] = ['customer' => $entry, 'reason' => $reason];
+                Log::warning('Google Ads discovery skipped an inaccessible customer.', ['customer' => $entry, 'reason' => $reason]);
             }
         }
 
+        // A customer refused directly but reached through a manager was discovered after all — not a warning.
+        $this->discoveryWarnings = array_values(array_filter(
+            $this->discoveryWarnings,
+            static fn (array $w): bool => ! isset($accounts[$w['customer']]),
+        ));
+
+        // Nothing readable at all: the refusal IS the answer, so it is raised rather than an empty list.
+        if ($accounts === [] && $this->discoveryWarnings !== []) {
+            throw new \RuntimeException(implode(' ; ', array_column($this->discoveryWarnings, 'reason')));
+        }
+
         return array_values($accounts);
+    }
+
+    /**
+     * GADS-DISCOVERY-PARTIAL-001 — the accessible customers the last discovery could not read, each
+     * with Google's own reason (error code, message, request id).
+     *
+     * @return list<array{customer:string,reason:string}>
+     */
+    public function lastDiscoveryWarnings(): array
+    {
+        return $this->discoveryWarnings;
+    }
+
+    /** @var list<array{customer:string,reason:string}> */
+    private array $discoveryWarnings = [];
+
+    /**
+     * The ad accounts one accessible customer leads to: itself, or — for a manager — its clients.
+     *
+     * @param  array<string,array<string,mixed>>  $accounts
+     */
+    private function discoverUnder(OAuthTokens $tokens, string $entry, array &$accounts): void
+    {
+
+        /*
+         * GADS-ROOT-TYPE-001 — ask the root WHAT IT IS before asking what is under it.
+         *
+         * Every root used to be handed to `clientsUnder()`, which queries `FROM customer_client`
+         * with `login-customer-id` set to that root. Google documents `customer_client` as the
+         * hierarchy of a MANAGER account, and a plain advertiser is not one — the old comment here
+         * asserted that a plain account «answers with its own self link», and that assumption is
+         * the defect rather than a description of it. On the owner's production connection the call
+         * answered `403 PERMISSION_DENIED` and no account was ever discovered.
+         *
+         * `ListAccessibleCustomers` cannot tell us which case a root is: it is documented to ignore
+         * `login-customer-id` entirely, which is exactly why it is the only call in this flow that
+         * still succeeded and why its success proved nothing about the calls after it.
+         *
+         * So each root is probed on its own `customer` record first, and only a manager is asked
+         * for a hierarchy.
+         */
+        $root = $this->customerRecord($tokens, $entry);
+
+        if ($root === null) {
+            return;
+        }
+
+        if (($root['manager'] ?? false) !== true) {
+            /*
+             * A directly held advertiser IS the account. It is recorded from its own record, with
+             * no manager above it — «an account held directly has no manager», and inventing one
+             * would send every later campaign and metric query through a path that does not exist.
+             */
+            $accounts[$entry] ??= [
+                'external_id' => $entry,
+                'name' => (string) ($root['descriptiveName'] ?? $entry),
+                'currency' => isset($root['currencyCode']) ? (string) $root['currencyCode'] : null,
+                'timezone' => isset($root['timeZone']) ? (string) $root['timeZone'] : null,
+                'status' => strtoupper((string) ($root['status'] ?? 'ENABLED')) === 'ENABLED'
+                    ? 'active'
+                    : 'inactive',
+                'parent_external_id' => null,
+                'raw' => $root,
+            ];
+
+            return;
+        }
+
+        // GADS-DISCOVERY-PARTIAL-001 — a cancelled, closed or suspended manager is not queried for clients.
+        if (strtoupper((string) ($root['status'] ?? 'ENABLED')) !== 'ENABLED') {
+            return;
+        }
+
+        foreach ($this->clientsUnder($tokens, $entry) as $client) {
+            $id = $this->plainCustomerId((string) ($client['id'] ?? ''));
+
+            // A manager is a container, not an advertiser. Recording one as an ad account is the
+            // defect this method exists to fix, so it is skipped even at level 0.
+            if ($id === '' || ($client['manager'] ?? false) === true) {
+                continue;
+            }
+
+            /*
+             * Keyed by id so an account reachable through two entry points is discovered ONCE.
+             * That is a real shape — an operator with rights on both the MCC and one of its
+             * clients — and duplicating the account would duplicate its spend on every surface.
+             */
+            $accounts[$id] = [
+                'external_id' => $id,
+                'name' => (string) ($client['descriptiveName'] ?? $id),
+                'currency' => isset($client['currencyCode']) ? (string) $client['currencyCode'] : null,
+                'timezone' => isset($client['timeZone']) ? (string) $client['timeZone'] : null,
+                // Reported per client. Calling every discovered row active would put a live badge
+                // on an account the customer has already closed.
+                'status' => strtoupper((string) ($client['status'] ?? 'ENABLED')) === 'ENABLED'
+                    ? 'active'
+                    : 'inactive',
+                /*
+                 * GADS-MCC-001 — the manager this account is genuinely reached THROUGH, read from
+                 * the customer's own hierarchy. A `level` of 0 is the entry point's self link, and
+                 * an account held directly has no manager above it: null, rather than the
+                 * operator's own MCC id, which is what used to be written here for every tenant.
+                 */
+                'parent_external_id' => ((int) ($client['level'] ?? 0)) > 0 ? $entry : null,
+                'raw' => $client,
+            ];
+        }
     }
 
     /**
@@ -181,10 +240,20 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
      */
     private function refusal(Response $response, string $customer): string
     {
-        /** @var array<string,mixed> $body */
+        /** @var array<mixed> $body */
         $body = $response->json() ?? [];
+        /*
+         * GADS-DISCOVERY-PARTIAL-001 — `searchStream` answers an error as a JSON ARRAY of chunks,
+         * `[{"error": {...}}]`, so reading `error` off the body found nothing: the GoogleAdsFailure
+         * codes and the request id were dropped and the reason ended at «The caller does not have
+         * permission».
+         */
+        if (is_array($body) && array_is_list($body)) {
+            $body = is_array($body[0] ?? null) ? $body[0] : [];
+        }
         /** @var array<string,mixed> $error */
         $error = is_array($body['error'] ?? null) ? $body['error'] : [];
+        $messages = [];
 
         $codes = [];
         $requestId = null;
@@ -199,6 +268,9 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
             foreach ((array) ($detail['errors'] ?? []) as $one) {
                 if (! is_array($one) || ! is_array($one['errorCode'] ?? null)) {
                     continue;
+                }
+                if (isset($one['message']) && is_string($one['message']) && $one['message'] !== '') {
+                    $messages[] = $one['message'];
                 }
 
                 /*
@@ -219,6 +291,7 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
         return implode(' | ', array_filter([
             $this->label().' refused the query',
             $codes === [] ? null : implode(', ', array_unique($codes)),
+            $messages === [] ? null : implode(' / ', array_unique($messages)),
             PlatformHttp::reason($response),
             'customer '.$customer,
             'login-customer-id '.($login ?? 'omitted'),

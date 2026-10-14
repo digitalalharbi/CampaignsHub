@@ -15,6 +15,7 @@ use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\ConnectionWizardState;
 use App\Domains\Integrations\Services\FirstSyncStatus;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -365,11 +366,26 @@ final class ConnectionWizardController extends Controller
              * A provider failure is the provider's, and saying so is the difference between somebody
              * retrying in a minute and somebody reconnecting an authorisation that was never broken.
              */
-            return ApiResponse::error(
-                'The provider could not be reached just now. Nothing was changed — try again shortly.',
-                meta: ['provider' => $connection->provider, 'reason' => mb_substr($e->getMessage(), 0, 180)],
-                status: 502,
-            );
+            /*
+             * GADS-DISCOVERY-PARTIAL-001 — a provider that ANSWERED and refused is not unreachable. Its
+             * refusal (permission, a customer not enabled, an identity with no Ads access, an unapproved
+             * project) is a 403 the operator can act on, with Google's own codes and request id; only a
+             * failure to reach the provider is a 502.
+             */
+            $reason = ProviderErrorText::forStorage($e->getMessage());
+            $refused = (bool) preg_match('/PERMISSION_DENIED|CUSTOMER_NOT_ENABLED|NOT_ADS_USER|NOT_APPROVED|ACTION_NOT_PERMITTED|refused the query|HTTP 40[13]/', $e->getMessage());
+
+            return $refused
+                ? ApiResponse::error(
+                    'The provider refused access to these accounts. Check that the signed-in Google identity has access to the Google Ads accounts (or their manager), then try again.',
+                    meta: ['provider' => $connection->provider, 'reason' => $reason, 'category' => 'permission'],
+                    status: 403,
+                )
+                : ApiResponse::error(
+                    'The provider could not be reached just now. Nothing was changed — try again shortly.',
+                    meta: ['provider' => $connection->provider, 'reason' => $reason],
+                    status: 502,
+                );
         }
 
         $audit->log(
