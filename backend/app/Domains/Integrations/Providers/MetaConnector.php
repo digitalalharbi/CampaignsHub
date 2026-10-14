@@ -423,6 +423,59 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
             $ads[$n]['creative'] = $creative;
         }
 
+        return $this->withSizedThumbnails($tokens, $ads);
+    }
+
+    /**
+     * META-CATALOG-THUMBNAILS-001 — a creative with no image hash and no video (an Advantage+ catalog
+     * ad, whose picture is the product's) still had only Meta's 64×64 listing thumbnail: the media
+     * probe on Production read six such creatives at 64x64 beside full-size stills. Meta sizes
+     * `thumbnail_url` only when the CREATIVE is read with `thumbnail_width`/`thumbnail_height`, so
+     * those creatives are read again by id, in batches, at 1080. A refused read keeps the small one.
+     *
+     * @param  list<array<string,mixed>>  $ads
+     * @return list<array<string,mixed>>
+     */
+    private function withSizedThumbnails(OAuthTokens $tokens, array $ads): array
+    {
+        $ids = [];
+        foreach ($ads as $ad) {
+            $c = $ad['creative'] ?? null;
+            if (is_array($c) && ! isset($c['asset_url']) && ! isset($c['video_url']) && isset($c['external_id'])) {
+                $ids[] = (string) $c['external_id'];
+            }
+        }
+
+        $sized = [];
+        try {
+            foreach (array_chunk(array_values(array_unique($ids)), 50) as $chunk) {
+                $body = $this->read($this->api($tokens)->get($this->url(''), [
+                    'ids' => implode(',', $chunk),
+                    'fields' => 'thumbnail_url',
+                    'thumbnail_width' => 1080,
+                    'thumbnail_height' => 1080,
+                ]), 'creative thumbnails');
+                foreach ($body as $id => $creative) {
+                    if (is_array($creative) && is_string($creative['thumbnail_url'] ?? null) && $creative['thumbnail_url'] !== '') {
+                        $sized[(string) $id] = $creative['thumbnail_url'];
+                    }
+                }
+            }
+        } catch (\RuntimeException $e) {
+            Log::warning('Meta sized thumbnails could not be read; listing thumbnails kept.', ['reason' => $e->getMessage()]);
+        }
+
+        foreach ($ads as $n => $ad) {
+            $id = (string) (($ad['creative'] ?? [])['external_id'] ?? '');
+            if ($id !== '' && isset($sized[$id])) {
+                $ads[$n]['creative']['thumbnail_url'] = $sized[$id];
+                $expiry = AssetExpiry::fromUrl($sized[$id])?->toIso8601String();
+                if ($expiry !== null) {
+                    $ads[$n]['creative']['asset_expires_at'] = $expiry;
+                }
+            }
+        }
+
         return $ads;
     }
 
