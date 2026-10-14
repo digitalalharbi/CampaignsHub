@@ -80,6 +80,15 @@ final class DiscoveryRefreshCommandTest extends TestCase
         $this->assertNotNull($this->connection->fresh()->last_discovery_attempted_at);
     }
 
+    public function test_by_provider_it_refreshes_every_connected_connection(): void
+    {
+        $this->artisan('integrations:discovery-refresh', ['--provider' => 'meta', '--apply' => true])
+            ->expectsOutputToContain((string) $this->connection->getKey())
+            ->assertSuccessful();
+
+        $this->assertSame(['act_1', 'act_628'], $this->stored());
+    }
+
     public function test_an_unknown_connection_is_refused(): void
     {
         $this->artisan('integrations:discovery-refresh', ['--connection' => '00000000-0000-0000-0000-000000000000'])

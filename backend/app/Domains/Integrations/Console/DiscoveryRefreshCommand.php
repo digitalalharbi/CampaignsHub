@@ -29,12 +29,31 @@ final class DiscoveryRefreshCommand extends Command
 {
     protected $signature = 'integrations:discovery-refresh
         {--connection= : The provider connection (uuid, ours)}
+        {--provider= : Instead: every connected connection of this provider}
         {--apply : Store what the provider lists. Without this the command only reports.}';
 
     protected $description = 'Re-run account discovery for one connection, exactly as the refresh button does.';
 
     public function handle(AdvertisingConnectorRegistry $registry, AccountDiscovery $discovery): int
     {
+        if ((string) $this->option('provider') !== '') {
+            $connections = ProviderConnection::withoutGlobalScopes()
+                ->where('provider', (string) $this->option('provider'))
+                ->where('status', 'connected')
+                ->get();
+            if ($connections->isEmpty()) {
+                $this->error('No connected connection for that provider.');
+
+                return self::FAILURE;
+            }
+            $code = self::SUCCESS;
+            foreach ($connections as $connection) {
+                $code = max($code, $this->one($connection, $registry, $discovery));
+            }
+
+            return $code;
+        }
+
         $connection = ProviderConnection::withoutGlobalScopes()->find((string) $this->option('connection'));
 
         if ($connection === null) {
@@ -42,6 +61,12 @@ final class DiscoveryRefreshCommand extends Command
 
             return self::FAILURE;
         }
+
+        return $this->one($connection, $registry, $discovery);
+    }
+
+    private function one(ProviderConnection $connection, AdvertisingConnectorRegistry $registry, AccountDiscovery $discovery): int
+    {
 
         if ($connection->status !== 'connected') {
             $this->error("The connection is {$connection->status}, so there is nothing to read. It needs reconnecting.");
