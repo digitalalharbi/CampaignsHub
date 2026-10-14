@@ -136,28 +136,111 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
         $accounts = [];
+        $this->discoveryWarnings = [];
 
         foreach ($this->readAll($tokens, 'me/adaccounts', 'ad accounts', [
-            'fields' => 'id,account_id,name,currency,timezone_name,account_status',
+            'fields' => self::ACCOUNT_FIELDS,
             'limit' => 200,
         ]) as $a) {
-            if (($a['id'] ?? null) === null) {
-                continue;
+            $row = $this->accountRow($a, null, null);
+            if ($row !== null) {
+                $accounts[$row['external_id']] = $row;
             }
-
-            $accounts[] = [
-                // `id` is already `act_<number>`, which is the form every other endpoint wants.
-                'external_id' => (string) $a['id'],
-                'name' => (string) ($a['name'] ?? $a['id']),
-                'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
-                'timezone' => isset($a['timezone_name']) ? (string) $a['timezone_name'] : null,
-                'status' => ((int) ($a['account_status'] ?? 1)) === 1 ? 'active' : 'inactive',
-                'parent_external_id' => null,
-                'raw' => (array) $a,
-            ];
         }
 
-        return $accounts;
+        /*
+         * META-BUSINESS-ACCOUNTS-001 — partner and client accounts.
+         *
+         * `me/adaccounts` lists the accounts the person was added to directly. An agency reaches most
+         * client accounts through a Business Manager instead — owned by the business, or shared with
+         * it by the client as a partner — and those never appear there (Owner: «Henka» was missing).
+         * Each business the token can see is read for its owned and client ad accounts; a duplicate of
+         * a direct account is kept once, and the business is recorded as the parent. Reading
+         * businesses needs `business_management`: a token granted without it is not an error for the
+         * direct accounts, it is a warning that partner accounts need a re-authorisation.
+         */
+        try {
+            $businesses = $this->readAll($tokens, 'me/businesses', 'businesses', ['fields' => 'id,name', 'limit' => 200]);
+        } catch (\RuntimeException $e) {
+            $this->discoveryWarnings[] = [
+                'customer' => 'business_management',
+                'reason' => 'Partner and client ad accounts need a re-authorisation that grants business_management: '.$e->getMessage(),
+            ];
+            $businesses = [];
+        }
+
+        foreach ($businesses as $business) {
+            $businessId = isset($business['id']) ? (string) $business['id'] : '';
+            if ($businessId === '') {
+                continue;
+            }
+            $businessName = isset($business['name']) ? (string) $business['name'] : null;
+
+            foreach (['owned_ad_accounts', 'client_ad_accounts'] as $edge) {
+                try {
+                    foreach ($this->readAll($tokens, "{$businessId}/{$edge}", 'business ad accounts', [
+                        'fields' => self::ACCOUNT_FIELDS,
+                        'limit' => 200,
+                    ]) as $a) {
+                        $row = $this->accountRow($a, $businessId, $businessName);
+                        if ($row === null) {
+                            continue;
+                        }
+                        $id = $row['external_id'];
+                        if (! isset($accounts[$id])) {
+                            $accounts[$id] = $row;
+                        } elseif ($accounts[$id]['parent_external_id'] === null) {
+                            // A direct account keeps its row; the business only fills in where it sits.
+                            $accounts[$id]['parent_external_id'] = $businessId;
+                            $accounts[$id]['parent_name'] = $businessName;
+                        }
+                    }
+                } catch (\RuntimeException $e) {
+                    $this->discoveryWarnings[] = ['customer' => $businessId, 'reason' => "{$edge}: ".$e->getMessage()];
+                }
+            }
+        }
+
+        return array_values($accounts);
+    }
+
+    private const ACCOUNT_FIELDS = 'id,account_id,name,currency,timezone_name,account_status';
+
+    /** @var list<array{customer:string,reason:string}> */
+    private array $discoveryWarnings = [];
+
+    /**
+     * META-BUSINESS-ACCOUNTS-001 — what the last discovery could not read (a missing permission, a
+     * business edge refused), shown beside the accounts it did find.
+     *
+     * @return list<array{customer:string,reason:string}>
+     */
+    public function lastDiscoveryWarnings(): array
+    {
+        return $this->discoveryWarnings;
+    }
+
+    /**
+     * @param  array<string,mixed>  $a
+     * @return array<string,mixed>|null
+     */
+    private function accountRow(array $a, ?string $parentId, ?string $parentName): ?array
+    {
+        if (($a['id'] ?? null) === null) {
+            return null;
+        }
+
+        return [
+            // `id` is already `act_<number>`, which is the form every other endpoint wants.
+            'external_id' => (string) $a['id'],
+            'name' => (string) ($a['name'] ?? $a['id']),
+            'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
+            'timezone' => isset($a['timezone_name']) ? (string) $a['timezone_name'] : null,
+            'status' => ((int) ($a['account_status'] ?? 1)) === 1 ? 'active' : 'inactive',
+            'parent_external_id' => $parentId,
+            'parent_name' => $parentName,
+            'raw' => (array) $a,
+        ];
     }
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
