@@ -201,6 +201,81 @@ final class StructureProbeTest extends TestCase
         $run->assertSuccessful();
     }
 
+    /**
+     * `--account-shape` — the KEY NAMES an account body carries, and whether the connector's mapping
+     * read a currency and a timezone off it.
+     *
+     * The live ChatGPT Ads account reads «currency NOT CAPTURED» on every diagnosis while its rows
+     * arrive in USD. Discovery throws the body away, so nothing stored can say which key the
+     * provider names the currency under — and the fix must not be written against a guess.
+     */
+    public function test_the_account_shape_probe_reports_the_key_names_an_account_body_carries(): void
+    {
+        Http::fake([
+            '*/me/adaccounts*' => Http::response(['data' => [[
+                'id' => 'act_374140991630974',
+                'account_id' => '374140991630974',
+                'name' => 'CONFIDENTIAL ACCOUNT NAME',
+                'currency' => 'SAR',
+                'timezone_name' => 'Asia/Riyadh',
+                'account_status' => 1,
+                'business' => ['id' => 'biz-secret', 'name' => 'CONFIDENTIAL BUSINESS'],
+            ]], 'paging' => ['cursors' => ['before' => 'cursor-secret', 'after' => 'cursor-secret-2']]], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $run = $this->artisan('integrations:probe', [
+            'account' => $this->account->external_id, '--account-shape' => true,
+        ]);
+
+        $run->expectsOutputToContain('ACCOUNT SHAPE PROBE');
+        $run->expectsOutputToContain('accounts the listing returned : 1');
+        $run->expectsOutputToContain('this account among them       : yes');
+        $run->expectsOutputToContain('currency read by the connector: yes');
+        $run->expectsOutputToContain('timezone read by the connector: yes');
+        $run->expectsOutputToContain('ACCOUNT BODY SHAPES — key names only, never values');
+        // The nested key is what a mapping would be written against. One expectation: the key names
+        // are printed on ONE line, and a written line satisfies only one `expectsOutputToContain`.
+        $run->expectsOutputToContain('data.business.name, data.currency, data.id, data.name, data.timezone_name');
+        // SHAPE, never CONTENT: the account body carries the business's name and its billing identity.
+        $run->doesntExpectOutputToContain('CONFIDENTIAL ACCOUNT NAME');
+        $run->doesntExpectOutputToContain('CONFIDENTIAL BUSINESS');
+        $run->doesntExpectOutputToContain('biz-secret');
+        $run->doesntExpectOutputToContain('cursor-secret');
+        $run->assertSuccessful();
+    }
+
+    /**
+     * The whole point of the flag: a body that names no currency is reported as «the mapping found
+     * none», which is what «NOT CAPTURED» on the stored row actually means — and the body's own key
+     * names are printed beside it so the next reader can see what it names instead.
+     */
+    public function test_the_account_shape_probe_says_when_the_mapping_found_no_currency(): void
+    {
+        Http::fake([
+            '*/me/adaccounts*' => Http::response(['data' => [[
+                'id' => 'act_374140991630974',
+                'name' => 'CONFIDENTIAL ACCOUNT NAME',
+                'billing' => ['currency_code' => 'USD'],
+                'account_status' => 1,
+            ]]], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $run = $this->artisan('integrations:probe', [
+            'account' => $this->account->external_id, '--account-shape' => true,
+        ]);
+
+        $run->expectsOutputToContain('currency read by the connector: NO — the mapping found no currency on this body');
+        $run->expectsOutputToContain('timezone read by the connector: NO — the mapping found no timezone on this body');
+        $run->expectsOutputToContain('data.billing.currency_code');
+        $run->doesntExpectOutputToContain('CONFIDENTIAL ACCOUNT NAME');
+        $run->assertSuccessful();
+
+        // Read-only: the stored row keeps whatever currency it had.
+        $this->assertSame('SAR', $this->account->fresh()->currency);
+    }
+
     /** An account with history reports its counts, its statuses and how far back it goes. */
     public function test_it_reports_the_campaign_census_and_date_range(): void
     {
