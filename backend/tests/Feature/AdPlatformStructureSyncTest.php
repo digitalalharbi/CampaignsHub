@@ -171,6 +171,46 @@ final class AdPlatformStructureSyncTest extends TestCase
     }
 
     /**
+     * META-CATALOG-ASSET-001 — a real catalog creative also carries the template's `image_url`, at
+     * 64×64. It must not stop the 1080 read, and the render replaces it as the card's still.
+     */
+    public function test_a_catalog_creative_with_a_template_image_is_still_read_at_full_width(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake(function ($request) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'ids=432')) {
+                return Http::response(['432' => ['id' => '432', 'thumbnail_url' => 'https://scontent.example/catalog-1080.jpg']]);
+            }
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => '120', 'name' => 'Catalog', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES']]]);
+            }
+            if (str_contains($url, '/adsets')) {
+                return Http::response(['data' => [['id' => '220', 'campaign_id' => '120', 'name' => 'All products', 'status' => 'ACTIVE']]]);
+            }
+            if (str_contains($url, '/ads')) {
+                return Http::response(['data' => [[
+                    'id' => '332', 'adset_id' => '220', 'campaign_id' => '120', 'name' => '{{product.name}}', 'status' => 'ACTIVE',
+                    'creative' => ['id' => '432', 'object_type' => 'SHARE',
+                        'image_url' => 'https://scontent.example/64px-template.jpg',
+                        'thumbnail_url' => 'https://scontent.example/64px-cat.jpg',
+                        'object_story_spec' => ['template_data' => ['link' => 'https://shop.example/p/{{product.id}}']]],
+                ]]]);
+            }
+
+            return Http::response(['data' => []]);
+        });
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $creative = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '432')->firstOrFail();
+        $this->assertSame('https://scontent.example/catalog-1080.jpg', $creative->asset_url, 'the 64px template image stayed the card\'s still');
+        $this->assertSame('https://scontent.example/catalog-1080.jpg', $creative->thumbnail_url);
+    }
+
+    /**
      * META-CONTENT-MEDIA-001 — the full-size asset, not Meta's 64px listing thumbnail.
      *
      * Real Meta answers carry `creative.thumbnail_url` (64×64) on every creative. Preferring it over
