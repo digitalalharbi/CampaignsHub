@@ -50,7 +50,13 @@ final class StoreSyncer
     {
         $projectId = $this->projectIdFor($store);
 
-        $run = new IntegrationSyncRun;
+        /*
+         * SALLA-SYNC-RUN-001 — the run row the request already wrote when it queued this job is the
+         * one that moves to running; a second row would leave the queued one reading «queued» forever.
+         */
+        $run = isset($meta['run_id'])
+            ? (IntegrationSyncRun::withoutGlobalScopes()->find((string) $meta['run_id']) ?? new IntegrationSyncRun)
+            : new IntegrationSyncRun;
         $run->forceFill([
             'tenant_id' => $store->tenant_id,
             'project_id' => $projectId,

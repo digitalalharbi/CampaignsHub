@@ -14,6 +14,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -125,18 +126,41 @@ final class StoreController extends Controller
             );
         }
 
+        /*
+         * SALLA-SYNC-RUN-001 — «202, then nothing» (Owner, demo store 793298857): the job returned
+         * silently for a store no project had selected, and nothing was recorded, so `last_run` stayed
+         * null forever. An unassigned store is refused here with the reason; an assigned one gets a
+         * `queued` run row NOW, which the job carries to running → success / failed.
+         */
+        if (! app(AccountAssignment::class)->isActivelyAssigned($model)) {
+            return ApiResponse::error(
+                'This store is not assigned to a project yet, so there is nothing to sync into. Assign it to a project first.',
+                meta: ['queued' => 0, 'reason' => 'awaiting_assignment'],
+                status: 409,
+            );
+        }
+
         $days = (int) $request->integer('days', 14);
         $from = Carbon::now()->subDays(max(1, min($days, 180)))->startOfDay();
+
+        $run = new IntegrationSyncRun;
+        $run->forceFill([
+            'tenant_id' => $model->tenant_id,
+            'provider_connection_id' => $model->provider_connection_id,
+            'type' => 'commerce',
+            'status' => 'queued',
+            'started_at' => Carbon::now(),
+        ])->save();
 
         SyncStoreJob::dispatch(
             (string) $model->getKey(),
             $from->toDateString(),
             Carbon::now()->endOfDay()->toDateString(),
-            ['source' => 'store_page'],
+            ['source' => 'store_page', 'run_id' => (string) $run->getKey()],
         );
 
         return ApiResponse::success(
-            ['queued' => 1, 'window_start' => $from->toDateString()],
+            ['queued' => 1, 'window_start' => $from->toDateString(), 'run_id' => (string) $run->getKey()],
             'Store sync queued.',
             status: 202,
         );

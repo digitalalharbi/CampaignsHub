@@ -6,7 +6,9 @@ namespace App\Domains\Commerce\Jobs;
 
 use App\Domains\Commerce\Services\StoreSyncer;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -76,11 +78,34 @@ final class SyncStoreJob implements ShouldBeUnique, ShouldQueue
          * authorised.
          */
         if (! $assignment->isActivelyAssigned($store)) {
+            // SALLA-SYNC-RUN-001 — the queued row says why nothing was read, instead of staying «queued».
+            $this->closeRun('awaiting_assignment', 'This store is not assigned to a project, so nothing was read. Assign it to a project, then sync.');
+
             return;
         }
 
         $tenant->setTenantId($store->tenant_id);
 
         $syncer->sync($store, Carbon::parse($this->from), Carbon::parse($this->to), $this->meta);
+    }
+
+    /** A job that exhausted its attempts closes its queued run as failed, with the reason. */
+    public function failed(\Throwable $e): void
+    {
+        $this->closeRun('failed', $e->getMessage());
+    }
+
+    private function closeRun(string $status, string $error): void
+    {
+        $runId = $this->meta['run_id'] ?? null;
+        if (! is_string($runId)) {
+            return;
+        }
+
+        IntegrationSyncRun::withoutGlobalScopes()->whereKey($runId)->whereIn('status', ['queued', 'running'])->update([
+            'status' => $status,
+            'error' => ProviderErrorText::forStorage($error),
+            'finished_at' => Carbon::now(),
+        ]);
     }
 }
