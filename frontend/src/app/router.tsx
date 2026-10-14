@@ -69,6 +69,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
+import { StoreInstallPage } from '@/features/integrations/StoreInstallPage'
 import { DrivePage } from '@/features/drive/DrivePage'
 import { ShortLinksPage } from '@/features/shortLinks/ShortLinksPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
@@ -372,6 +373,8 @@ export const router = createBrowserRouter(withErrorBoundary([
           ...requestJourneyRoutes,
           ...subscriptionsRoutes,
           { path: 'integrations', element: <IntegrationsPage /> },
+          // SALLA-INSTALL-001 — a store installed from Salla's side, claimed into this workspace.
+          { path: 'store-install', element: <StoreInstallPage /> },
           { path: 'files', element: <FilesLibraryPage /> },
           /*
            * INTEG-RUNTIME §2 — Drive is a FILE source, not one of the eight providers.

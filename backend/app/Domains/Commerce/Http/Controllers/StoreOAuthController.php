@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Commerce\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
-use App\Domains\Commerce\Providers\ApiCommerceConnector;
-use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
+use App\Domains\Commerce\Install\SallaInstalls;
+use App\Domains\Commerce\Services\StoreDiscovery;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
-use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -24,7 +23,6 @@ use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -58,7 +56,6 @@ final class StoreOAuthController extends Controller
     public function __construct(
         private readonly PlatformOAuth $oauth,
         private readonly TokenVault $vault,
-        private readonly CommerceConnectorRegistry $registry,
         private readonly ProviderConfigurationService $settings,
     ) {}
 
@@ -142,6 +139,21 @@ final class StoreOAuthController extends Controller
             return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
         }
 
+        /*
+         * SALLA-INSTALL-001 — a merchant who installs from Salla's side arrives with Salla's code and
+         * none of our state. That is how real merchants install, so it is not «invalid state»: the
+         * code is exchanged, the store kept as a pending install, and the merchant sent to claim it.
+         */
+        if ($creds->platform === 'salla' && ! $request->filled('state') && $request->filled('code')) {
+            try {
+                $claim = app(SallaInstalls::class)->fromCode((string) $request->query('code'));
+            } catch (Throwable $e) {
+                return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
+            }
+
+            return redirect()->away(Frontend::origin().'/app/store-install?'.http_build_query(['provider' => 'salla', 'claim' => $claim]));
+        }
+
         $record = AuthorizationState::claim((string) $request->query('state', ''), $creds->platform);
 
         if ($record === null) {
@@ -193,51 +205,51 @@ final class StoreOAuthController extends Controller
         return $this->back($creds->platform, 'connected', null, $discovered);
     }
 
-    /**
-     * Pull the authorised merchant's store into `external_accounts` with `account_type = 'store'`.
-     *
-     * The same table as an ad account, on purpose: it is the same fact — an external thing somebody
-     * authorised us to read, behind one connection and one encrypted credential. A parallel table
-     * would mean a second revoke path and a second place for a tenant id to be forgotten.
-     */
+    /** GET /commerce/store-installs/{claim} — what a claim page shows: the store, never its tokens. */
+    public function installPreview(string $claim): JsonResponse
+    {
+        $install = app(SallaInstalls::class)->preview($claim);
+        abort_if($install === null, 404, 'This install link has expired or was already used.');
+
+        return ApiResponse::success([
+            'provider' => $install->provider,
+            'store_name' => $install->store_name ?? $install->store_domain ?? 'Salla store '.$install->merchant_id,
+            'store_domain' => $install->store_domain,
+            'currency' => $install->store_currency,
+            'expires_at' => $install->expires_at->toIso8601String(),
+        ], 'Pending store install.');
+    }
+
+    /** POST /commerce/store-installs/{claim}/claim — a signed-in user attaches the store to their workspace. */
+    public function installClaim(Request $request, string $claim, TenantContext $tenant, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+        $validated = $request->validate(['client_workspace_id' => ['nullable', 'uuid']]);
+
+        try {
+            $result = app(SallaInstalls::class)->claim(
+                $claim,
+                (string) $tenant->tenantId(),
+                $request->user()->getKey() === null ? null : (int) $request->user()->getKey(),
+                $validated['client_workspace_id'] ?? null,
+            );
+        } catch (Throwable $e) {
+            return ApiResponse::error(ProviderErrorText::forDisplay($e->getMessage()), status: 410);
+        }
+
+        $audit->log(
+            action: 'integration.store.claimed',
+            entityType: ProviderConnection::class,
+            entityId: $result['connection_id'],
+            after: ['provider' => 'salla', 'stores' => $result['stores']],
+        );
+
+        return ApiResponse::success($result, 'Store claimed.');
+    }
+
     private function discoverStores(ProviderConnection $connection): int
     {
-        $connector = $this->registry->get($connection->provider);
-
-        if (! $connector instanceof ApiCommerceConnector) {
-            return 0;
-        }
-
-        $stores = $connector->withConnection($connection)->fetchStores();
-
-        foreach ($stores as $store) {
-            ExternalAccount::withoutGlobalScopes()->updateOrCreate(
-                [
-                    'provider_connection_id' => $connection->getKey(),
-                    'external_id' => $store['external_id'],
-                    'account_type' => 'store',
-                ],
-                [
-                    'tenant_id' => $connection->tenant_id,
-                    'client_workspace_id' => $connection->client_workspace_id,
-                    'provider' => $connection->provider,
-                    'name' => $store['name'],
-                    'currency' => $store['currency'],
-                    'timezone' => $store['timezone'],
-                    'status' => $store['status'] === '' ? 'active' : $store['status'],
-                    'metadata' => array_filter([
-                        'domain' => $store['domain'],
-                        'plan' => $store['plan'],
-                        'discovered_at' => Carbon::now()->toIso8601String(),
-                    ], static fn ($v) => $v !== null),
-                    'last_synced_at' => null, // discovered, not synced — those are different facts
-                ],
-            );
-        }
-
-        $connection->forceFill(['last_health_check_at' => Carbon::now()])->save();
-
-        return count($stores);
+        return app(StoreDiscovery::class)->discover($connection);
     }
 
     private function credentialsOr404(string $provider): PlatformCredentials

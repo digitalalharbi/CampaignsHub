@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Commerce\Install\SallaInstalls;
 use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderDefinition;
@@ -109,6 +110,18 @@ final class IntegrationWebhookController extends Controller
 
         $result = $this->ingest->record($definition->key, $raw, $payload, verified: true);
         $event = $result['event'];
+
+        /*
+         * SALLA-INSTALL-001 — Salla's app lifecycle: `app.store.authorize` hands over (or renews) a
+         * merchant's tokens, `app.uninstalled` withdraws the app. Verified above, recorded once.
+         */
+        if ($definition->key === 'salla' && ! $result['duplicate']) {
+            match ((string) ($payload['event'] ?? '')) {
+                'app.store.authorize' => app(SallaInstalls::class)->onAuthorize($payload),
+                'app.uninstalled' => app(SallaInstalls::class)->onUninstall($payload),
+                default => null,
+            };
+        }
 
         if (! $result['duplicate'] && $event->status === 'received') {
             $this->scheduleSync($event, $definition->kind, $result['accounts']);
