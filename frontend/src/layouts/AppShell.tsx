@@ -7,6 +7,7 @@ import {
   Menu,
   Moon,
   PanelLeft,
+  PanelRight,
   Search,
   Sun,
   X,
@@ -19,6 +20,7 @@ import { useAuth } from '@/stores/auth'
 import { SidebarNav } from './SidebarNav'
 import { appNavGroups } from './appNav'
 import { PortalFrame } from './PortalFrame'
+import { OpsPanel } from './OpsPanel'
 import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
@@ -116,7 +118,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 }
 
 export function AppShell() {
-  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
+  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, opsPanelOpen, toggleOpsPanel } =
     useUi()
   const nav = useAuth((s) => s.user?.account?.nav)
 
@@ -148,6 +150,7 @@ export function AppShell() {
       contentWidth="max-w-[1920px]"
       tabs={APP_TABS}
       moreGroups={moreGroups}
+      endPanel={opsPanelOpen ? <OpsPanel /> : null}
       /*
         * The project switcher lives HERE on a phone, not only in the drawer (MOBILE-APP-001).
         *
@@ -246,6 +249,16 @@ export function AppShell() {
 
           <div className="ms-auto flex items-center gap-1.5">
             <NotificationCenter />
+            {/* OPS-PANEL-001 — desktop only; on a phone the panel does not exist. */}
+            <button
+              onClick={toggleOpsPanel}
+              aria-label={locale === 'ar' ? 'لوحة التشغيل' : 'Operations panel'}
+              aria-pressed={opsPanelOpen}
+              data-testid="ops-panel-toggle"
+              className={`hidden h-9 w-9 items-center justify-center rounded-lg hover:bg-surface-hover lg:flex ${opsPanelOpen ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+            >
+              <PanelRight size={18} className="rtl:-scale-x-100" />
+            </button>
             <button
               onClick={toggleLocale}
               aria-label="Toggle language"

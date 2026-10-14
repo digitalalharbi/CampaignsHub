@@ -8,10 +8,13 @@ interface UiState {
   locale: Locale
   sidebarOpen: boolean
   sidebarCollapsed: boolean
+  /** OPS-PANEL-001 — the operational side panel. Closed by default, remembered once opened. */
+  opsPanelOpen: boolean
   toggleTheme: () => void
   toggleLocale: () => void
   setSidebarOpen: (open: boolean) => void
   toggleSidebarCollapsed: () => void
+  toggleOpsPanel: () => void
 }
 
 /** Applies theme + direction to <html> so tokens and RTL/LTR take effect globally. */
@@ -23,6 +26,7 @@ export function applyDocument(theme: Theme, locale: Locale): void {
 }
 
 const COLLAPSE_KEY = 'campaign-hub-sidebar-collapsed'
+const OPS_PANEL_KEY = 'campaign-hub-ops-panel'
 
 /*
  * Language and theme are REMEMBERED (APP-100).
@@ -88,6 +92,7 @@ export const useUi = create<UiState>((set, get) => ({
   locale: initialLocale,
   sidebarOpen: false,
   sidebarCollapsed: initialCollapsed,
+  opsPanelOpen: remembered<'1' | '0'>(OPS_PANEL_KEY, ['1', '0'], '0') === '1',
   toggleTheme: () => {
     const theme = get().theme === 'light' ? 'dark' : 'light'
     applyDocument(theme, get().locale)
@@ -105,6 +110,11 @@ export const useUi = create<UiState>((set, get) => ({
     const sidebarCollapsed = !get().sidebarCollapsed
     remember(COLLAPSE_KEY, sidebarCollapsed ? '1' : '0')
     set({ sidebarCollapsed })
+  },
+  toggleOpsPanel: () => {
+    const opsPanelOpen = !get().opsPanelOpen
+    remember(OPS_PANEL_KEY, opsPanelOpen ? '1' : '0')
+    set({ opsPanelOpen })
   },
 }))
 

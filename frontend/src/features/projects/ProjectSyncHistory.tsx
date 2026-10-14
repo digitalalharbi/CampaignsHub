@@ -23,7 +23,7 @@ import { useUi } from '@/stores/ui'
  */
 
 /** A status shows as itself when the product does not know it — never as a guess, never as blank. */
-const STATUS: Record<string, { ar: string; en: string; tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' }> = {
+export const SYNC_RUN_STATUS: Record<string, { ar: string; en: string; tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' }> = {
   success: { ar: 'نجحت', en: 'Succeeded', tone: 'success' },
   failed: { ar: 'فشلت', en: 'Failed', tone: 'danger' },
   partial_mapping: { ar: 'مطابقة جزئية', en: 'Partial mapping', tone: 'warning' },
@@ -38,8 +38,8 @@ const STATUS: Record<string, { ar: string; en: string; tone: 'success' | 'danger
   awaiting_assignment: { ar: 'بانتظار إسناد الحساب لمشروع', en: 'Awaiting project assignment', tone: 'warning' },
 }
 
-function statusLabel(status: string, ar: boolean): string {
-  const known = STATUS[status]
+export function statusLabel(status: string, ar: boolean): string {
+  const known = SYNC_RUN_STATUS[status]
 
   return known ? (ar ? known.ar : known.en) : status
 }
@@ -54,7 +54,7 @@ function stage(value: number | null, ar: boolean): { text: string; muted: boolea
 }
 
 function Run({ run, ar }: { run: SyncRun; ar: boolean }) {
-  const status = STATUS[run.status]
+  const status = SYNC_RUN_STATUS[run.status]
   const rows = [
     [ar ? 'صفوف المنصة' : 'Provider rows', stage(run.provider_rows, ar)],
     [ar ? 'صفوف مقروءة' : 'Parsed', stage(run.parsed_rows, ar)],
@@ -180,7 +180,7 @@ export function ProjectSyncHistory({ projectId }: { projectId: string }) {
         <>
           <div className="mt-3 flex flex-wrap gap-2">
             {entries.map(([status, count]) => (
-              <Badge key={status} tone={STATUS[status]?.tone ?? 'neutral'}>
+              <Badge key={status} tone={SYNC_RUN_STATUS[status]?.tone ?? 'neutral'}>
                 {statusLabel(status, ar)}: <span className="tnum">{count}</span>
               </Badge>
             ))}
