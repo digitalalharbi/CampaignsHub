@@ -125,7 +125,11 @@ final class PlatformOverviewController extends Controller
             ->groupBy('provider');
 
         $accounts = $assigned->groupBy('provider');
+        // LINKEDIN-RESULTS-001 — only the campaigns of accounts this project SELECTS: a deselected or
+        // never-assigned account's campaigns were counted as «26 discovered / 26 linked» beside one
+        // assigned LinkedIn account holding three.
         $campaignCounts = ExternalCampaign::query()
+            ->whereIn('external_account_id', $assigned->pluck('id')->all())
             ->select('provider')->selectRaw('COUNT(*) AS c, COUNT(unified_campaign_id) AS linked')
             ->groupBy('provider')->get()->keyBy('provider');
         // The last run of an account this project still selects — never a deselected account's.
