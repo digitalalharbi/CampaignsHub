@@ -790,6 +790,28 @@ final class CreativeAnalysisController extends Controller
     /** Daily figures for the trend chart — one query, ordered, no gaps invented. */
     private function trend(string $creativeId, Carbon $from, Carbon $to): array
     {
+        $days = $this->creativeGrainTrend($creativeId, $from, $to);
+
+        // META-CONTENT-MEDIA-001 — a creative reported only at the ad grain has its days there.
+        if ($days !== []) {
+            return $days;
+        }
+
+        return array_map(static fn (array $r): array => [
+            'date' => (string) $r['bucket'],
+            'spend' => $r['spend'],
+            'impressions' => $r['impressions'],
+            'clicks' => $r['clicks'],
+            'conversions' => $r['conversions'],
+            'revenue' => $r['revenue'],
+            'video_views' => $r['video_views'],
+            'video_p100' => null,
+            'frequency' => null,
+        ], $this->metrics->adGrainSeries($creativeId, $from, $to));
+    }
+
+    private function creativeGrainTrend(string $creativeId, Carbon $from, Carbon $to): array
+    {
         return DB::table('creative_daily_metrics')
             ->where('creative_id', $creativeId)
             ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)', 'creative_daily_metrics.project_id'))
@@ -849,6 +871,12 @@ final class CreativeAnalysisController extends Controller
             ->select('campaign_id')
             ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue')
             ->get();
+
+        // META-CONTENT-MEDIA-001 — no creative-grain rows: the split is read from the ad grain.
+        if ($rows->isEmpty()) {
+            $rows = collect($this->metrics->adGrainSeries((string) $creative->getKey(), $from, $to, 'campaign'))
+                ->map(static fn (array $r): object => (object) (['campaign_id' => $r['bucket']] + $r));
+        }
 
         $names = UnifiedCampaign::query()
             ->whereIn('id', $rows->pluck('campaign_id')->filter()->all())
