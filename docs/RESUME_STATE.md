@@ -1213,11 +1213,11 @@ reference does not load from this container. So the honest unit is an instrument
 (two levels in, `flatten()`), plus two yes/no facts the connector itself decides — whether the normalised row
 for THIS account carried a currency and a timezone. Never values: an account body carries the business's
 name and its billing identity, and the test asserts a `CONFIDENTIAL ACCOUNT NAME` never reaches the output.
-Read-only, like the rest of the command. The diagnostics workflow gains `probe_account_shape`.
+Read-only, like the rest of the command. The diagnostics workflow gains `probe_mode=account-shape` (the probe switches are one choice: GitHub caps a dispatch form at 25 inputs).
 
 **Next, in order:** merge #681, then #678 (`update-branch` after each merge — `strict` protection), then this
 PR; deploy; dispatch `production-diagnostics.yml` with `probe_account=4cb0ebfa-dee3-472d-a754-78fd203a35b9`
-and `probe_account_shape=true`; read the key names; then either map `OpenAiAdsConnector::fetchAdAccounts` to
+and `probe_mode=account-shape`; read the key names; then either map `OpenAiAdsConnector::fetchAdAccounts` to
 the key the body actually names, or record that the body carries none and the currency has to come from the
 first insights row. Two things the same diagnosis surfaced and nobody has acted on: the two `openai_ads`
 campaigns are unclassified with the raw objective word `CLICKS` (a mapping question for `PlatformObjectiveMap`),
