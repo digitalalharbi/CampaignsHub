@@ -185,6 +185,44 @@ final class LinkedInAnalyticsProjectionTest extends TestCase
         $this->assertSame(900.0, $rows[0]['reach']);
     }
 
+    /**
+     * LINKEDIN-RESULTS-001 — Results follow each campaign's objective, as Campaign Manager reports them.
+     *
+     * Production (Saudi Surfing Federation, Sep 15 – Oct 14): spend matched to the cent, but «Results»
+     * read 0 beside an Engagement campaign's 1,067 engagements and a Website Visits campaign's 960
+     * landing-page clicks — because results were always `externalWebsiteConversions`.
+     */
+    public function test_results_are_the_key_result_of_each_campaigns_objective(): void
+    {
+        $this->configure('linkedin');
+        $row = static fn (string $campaign) => [
+            'pivotValues' => ["urn:li:sponsoredCampaign:{$campaign}"],
+            'dateRange' => ['start' => ['year' => 2026, 'month' => 10, 'day' => 1]],
+            'impressions' => 5000, 'clicks' => 300, 'costInLocalCurrency' => '72.32',
+            'totalEngagements' => 1067, 'landingPageClicks' => 960, 'externalWebsiteConversions' => 0,
+            'oneClickLeads' => 12, 'videoViews' => 400,
+        ];
+        Http::fake([
+            'api.linkedin.com/*adCampaigns*' => Http::response(['elements' => [
+                ['id' => 1, 'name' => 'Engage', 'objectiveType' => 'ENGAGEMENT', 'status' => 'ACTIVE'],
+                ['id' => 2, 'name' => 'Visits', 'objectiveType' => 'WEBSITE_VISIT', 'status' => 'ACTIVE'],
+                ['id' => 3, 'name' => 'Leads', 'objectiveType' => 'LEAD_GENERATION', 'status' => 'ACTIVE'],
+                ['id' => 4, 'name' => 'Sales', 'objectiveType' => 'WEBSITE_CONVERSION', 'status' => 'ACTIVE'],
+            ]]),
+            'api.linkedin.com/*adAnalytics*' => Http::response(['elements' => [$row('1'), $row('2'), $row('3'), $row('4')]]),
+        ]);
+
+        $rows = collect($this->bound('linkedin')->syncInsights('558609374', '2026-10-01', '2026-10-01')->records)->keyBy('campaign_id');
+
+        $this->assertSame(1067.0, $rows['1']['conversions'], 'an Engagement campaign\'s results are its engagements');
+        $this->assertSame(960.0, $rows['2']['conversions'], 'a Website Visits campaign\'s results are its landing-page clicks');
+        $this->assertSame(12.0, $rows['3']['conversions']);
+        $this->assertSame(0.0, $rows['4']['conversions'], 'a conversion campaign keeps the conversions it reported, zero included');
+        $this->assertSame(12.0, $rows['1']['leads']);
+        $this->assertSame(1067.0, $rows['1']['engagements']);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'adAnalytics') && str_contains(urldecode($r->url()), 'oneClickLeads'));
+    }
+
     private function analyticsCall(string $from = '2026-08-01', string $to = '2026-08-02'): void
     {
         $this->configure('linkedin');

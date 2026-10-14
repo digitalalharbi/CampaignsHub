@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -152,6 +153,31 @@ final class ProjectShowsOnlyAssignedTest extends TestCase
             ->firstWhere('key', 'snapchat');
 
         $this->assertNull($platform['last_sync'], 'the project panel showed a run of an account it does not select');
+    }
+
+    /**
+     * LINKEDIN-RESULTS-001 — the platform card counts the campaigns of the accounts this project
+     * selects, not every campaign the project scope can see («26 discovered / 26 linked» beside one
+     * assigned account holding three).
+     */
+    public function test_the_platform_campaign_counts_are_the_assigned_accounts_only(): void
+    {
+        $accounts = $this->discoverMany(2);
+        $this->assign($accounts[0], $this->projectA);
+
+        foreach ([[$accounts[0], 'mine'], [$accounts[1], 'other-a'], [$accounts[1], 'other-b']] as [$account, $id]) {
+            ExternalCampaign::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+                'external_account_id' => $account->id, 'provider' => 'snapchat',
+                'external_id' => $id, 'name' => $id, 'status' => 'active',
+            ]);
+        }
+
+        $platform = collect($this->actingAs($this->operator)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/integrations/platforms")->assertOk()->json('data.platforms'))
+            ->firstWhere('key', 'snapchat');
+
+        $this->assertSame(1, $platform['discovered_campaigns'], 'campaigns of an account this project does not select were counted');
     }
 
     public function test_each_row_names_the_account_and_its_parent(): void

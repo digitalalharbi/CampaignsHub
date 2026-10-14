@@ -274,7 +274,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
         $fields = array_merge(
             ['pivotValues', 'dateRange', 'costInLocalCurrency', 'impressions', 'clicks', 'externalWebsiteConversions'],
             $days <= self::REACH_MAX_DAYS ? ['approximateMemberReach'] : [],
-            ['videoViews', 'videoCompletions', 'totalEngagements', 'landingPageClicks'],
+            ['videoViews', 'videoCompletions', 'totalEngagements', 'landingPageClicks', 'oneClickLeads'],
         );
 
         $reported = $this->readAll($tokens, 'adAnalytics', 'daily analytics', [
@@ -293,6 +293,19 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
         ]);
 
         $this->countRawInsightRows(count($reported));
+
+        /*
+         * LINKEDIN-RESULTS-001 — «Results» is the campaign's KEY RESULT, which LinkedIn chooses by the
+         * campaign's objective. The canonical `conversions` is the platform's own results figure (as
+         * TikTok's `conversion` is), and it was always `externalWebsiteConversions` — so an Engagement
+         * campaign with 1,067 engagements and a Website Visits campaign with 960 landing-page clicks
+         * both read «0 results» beside Campaign Manager's numbers. Each campaign's objective now names
+         * the field its results are read from; the other figures are stored under their own keys.
+         */
+        $objectives = [];
+        foreach ($this->fetchCampaigns($tokens, $adAccountId) as $campaign) {
+            $objectives[(string) $campaign['external_id']] = isset($campaign['objective']) ? strtoupper((string) $campaign['objective']) : null;
+        }
 
         $rows = [];
 
@@ -335,9 +348,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 'reach' => isset($row['approximateMemberReach'])
                     ? (float) $row['approximateMemberReach']
                     : null,
-                'conversions' => isset($row['externalWebsiteConversions'])
-                    ? (float) $row['externalWebsiteConversions']
-                    : null,
+                'conversions' => $this->resultOf($row, $objectives[$campaignId] ?? null),
+                'leads' => isset($row['oneClickLeads']) ? (float) $row['oneClickLeads'] : null,
                 'video_views' => isset($row['videoViews']) ? (float) $row['videoViews'] : null,
                 'video_completions' => isset($row['videoCompletions']) ? (float) $row['videoCompletions'] : null,
                 // LinkedIn publishes a single engagement total, so it is read rather than assembled
@@ -350,6 +362,30 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
     }
 
     /** `(start:(year:2026,month:8,day:1),end:(year:2026,month:8,day:5))` — LinkedIn's own spelling. */
+    /** LinkedIn objective → the analytics field Campaign Manager reports as that campaign's key result. */
+    private const RESULT_FIELD = [
+        'BRAND_AWARENESS' => 'impressions',
+        'ENGAGEMENT' => 'totalEngagements',
+        'WEBSITE_VISIT' => 'landingPageClicks',
+        'LEAD_GENERATION' => 'oneClickLeads',
+        'VIDEO_VIEW' => 'videoViews',
+        'WEBSITE_CONVERSION' => 'externalWebsiteConversions',
+    ];
+
+    /**
+     * The campaign's key result, read from the field its objective names; an objective LinkedIn has
+     * not documented here (talent, job applicants) keeps the conversion count it always had. Absent
+     * stays absent — a field LinkedIn did not send is not a result of zero.
+     *
+     * @param  array<string,mixed>  $row
+     */
+    private function resultOf(array $row, ?string $objective): ?float
+    {
+        $field = self::RESULT_FIELD[$objective ?? ''] ?? 'externalWebsiteConversions';
+
+        return isset($row[$field]) ? (float) $row[$field] : null;
+    }
+
     private function dateRange(string $from, string $to): string
     {
         $start = Carbon::parse($from);
