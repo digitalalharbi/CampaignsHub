@@ -148,6 +148,22 @@ final class HierarchyCountsTest extends TestCase
         $this->assertGreaterThan(255, mb_strlen($url));
     }
 
+    /**
+     * TIKTOK-CONTENT-001 — the CREATIVE carries the ad's name too (TikTok names it after `ad_name`), and
+     * it is written first in the same transaction: a 255-character column there rolled back the whole
+     * account's structure after the ad's own columns were widened.
+     */
+    public function test_a_creative_named_after_a_long_ad_is_stored_whole(): void
+    {
+        $campaign = $this->campaign('cmp-long-creative');
+        $creative = $this->creative('v-long', null, $campaign);
+        $longName = str_repeat('اسم إعلان تيك توك طويل ', 25);
+        $creative->forceFill(['name' => $longName])->save();
+
+        $this->assertGreaterThan(255, mb_strlen($longName));
+        $this->assertSame($longName, ExternalCreative::withoutGlobalScopes()->findOrFail($creative->id)->name);
+    }
+
     public function test_an_ad_squad_with_no_campaign_cannot_be_stored_at_all(): void
     {
         $this->expectException(QueryException::class);

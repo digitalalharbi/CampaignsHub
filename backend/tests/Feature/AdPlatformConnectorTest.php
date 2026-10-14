@@ -13,6 +13,7 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\ReportsCreativeInsights;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\PlatformHttp;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -525,6 +526,113 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertFalse($result->success, 'a report without spend is not a report');
         $this->assertStringContainsString('Invalid metric fields', (string) $result->message);
         Http::assertSentCount(1);
+    }
+
+    /**
+     * TIKTOK-CONTENT-001 — every kind of TikTok ad becomes a creative, and the Asset Library's media
+     * reaches it: a video ad (poster + playable preview + expiry), an image ad (image), a Spark Ad (an
+     * organic post — identity and copy, no invented poster), and an ad carrying no media (no creative).
+     */
+    public function test_tiktok_ads_become_creatives_with_their_media(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            $url = urldecode($request->url());
+            $asked[] = $url;
+            if (str_contains($url, 'file/video/ad/info/')) {
+                return Http::response(['code' => 0, 'data' => ['list' => [[
+                    'video_id' => 'v-1', 'video_cover_url' => 'https://p16.tiktokcdn.com/cover-v1.jpg',
+                    'preview_url' => 'https://v16.tiktokcdn.com/v1.mp4', 'preview_url_expire_time' => '2026-10-14 20:00:00',
+                ]]]]);
+            }
+            if (str_contains($url, 'file/image/ad/info/')) {
+                return Http::response(['code' => 0, 'data' => ['list' => [['image_id' => 'img-1', 'image_url' => 'https://p16.tiktokcdn.com/img-1.jpg']]]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'a1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Video ad', 'video_id' => 'v-1', 'ad_text' => 'Buy now', 'landing_page_url' => 'https://shop.test/p'],
+                ['ad_id' => 'a2', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Image ad', 'image_ids' => ['img-1']],
+                ['ad_id' => 'a3', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark ad', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001', 'identity_type' => 'TT_USER'],
+                ['ad_id' => 'a4', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Nothing attached'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $video = $ads['a1']['creative'];
+        $this->assertSame('v-1', $video['external_id']);
+        $this->assertSame('video', $video['format']);
+        $this->assertSame('https://p16.tiktokcdn.com/cover-v1.jpg', $video['thumbnail_url']);
+        $this->assertSame('https://v16.tiktokcdn.com/v1.mp4', $video['video_url']);
+        $this->assertSame('2026-10-14 20:00:00 UTC', $video['asset_expires_at']);
+        $this->assertSame('Buy now', $video['raw']['ad_text']);
+        $this->assertSame('https://shop.test/p', $video['destination_url']);
+
+        $this->assertSame('https://p16.tiktokcdn.com/img-1.jpg', $ads['a2']['creative']['asset_url']);
+        $this->assertSame('image', $ads['a2']['creative']['format']);
+
+        $spark = $ads['a3']['creative'];
+        $this->assertSame('7300000000000000001', $spark['external_id'], 'a Spark Ad is its organic post');
+        $this->assertArrayNotHasKey('thumbnail_url', $spark, 'no poster is invented for a post outside the Asset Library');
+
+        $this->assertArrayNotHasKey('creative', $ads['a4']);
+
+        // The media calls ask only for the Asset Library's own ids — never the Spark post.
+        $videoCall = collect($asked)->first(fn ($u) => str_contains($u, 'file/video/ad/info/'));
+        $this->assertStringContainsString('video_ids=["v-1"]', $videoCall);
+        $this->assertStringNotContainsString('7300000000000000001', implode(' ', array_filter($asked, fn ($u) => str_contains($u, 'file/'))));
+    }
+
+    /**
+     * TIKTOK-CONTENT-001 — creative figures from the ad-level report: two ads running one video sum
+     * into that video's day; reach (unique people per ad) is not summed; a Spark Ad's figures land on
+     * its post; an ad with no creative is not placed.
+     */
+    public function test_tiktok_creative_figures_come_from_the_ad_level_report(): void
+    {
+        $this->configure('tiktok');
+        $report = null;
+        Http::fake(function ($request) use (&$report) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'report/integrated/get/')) {
+                $report = $url;
+
+                return Http::response(['code' => 0, 'data' => ['list' => [
+                    ['dimensions' => ['ad_id' => 'a1', 'stat_time_day' => '2026-10-01 00:00:00'], 'metrics' => ['spend' => '10.50', 'impressions' => '1000', 'clicks' => '20', 'reach' => '900', 'complete_payment' => '2']],
+                    ['dimensions' => ['ad_id' => 'a2', 'stat_time_day' => '2026-10-01 00:00:00'], 'metrics' => ['spend' => '4.50', 'impressions' => '500', 'clicks' => '5', 'reach' => '450', 'complete_payment' => '1']],
+                    ['dimensions' => ['ad_id' => 'a3', 'stat_time_day' => '2026-10-01 00:00:00'], 'metrics' => ['spend' => '7.00', 'impressions' => '300', 'clicks' => '9', 'reach' => '280']],
+                    ['dimensions' => ['ad_id' => 'a4', 'stat_time_day' => '2026-10-01 00:00:00'], 'metrics' => ['spend' => '99.00', 'impressions' => '1', 'clicks' => '1']],
+                ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+            }
+            if (str_contains($url, 'advertiser/info/')) {
+                return Http::response(['code' => 0, 'data' => ['list' => [['advertiser_id' => 'adv-1', 'currency' => 'SAR', 'display_timezone' => 'Asia/Riyadh']]]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'a1', 'ad_name' => 'One', 'video_id' => 'v-1'],
+                ['ad_id' => 'a2', 'ad_name' => 'Two', 'video_id' => 'v-1'],
+                ['ad_id' => 'a3', 'ad_name' => 'Spark', 'tiktok_item_id' => '7300000000000000001'],
+                ['ad_id' => 'a4', 'ad_name' => 'Nothing'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $connector = $this->bound('tiktok');
+        $this->assertInstanceOf(ReportsCreativeInsights::class, $connector);
+        $result = $connector->syncCreativeInsights('adv-1', '2026-10-01', '2026-10-01');
+
+        $this->assertTrue($result->success, (string) $result->message);
+        $this->assertStringContainsString('data_level=AUCTION_AD', $report);
+        $this->assertStringContainsString('"ad_id"', $report);
+
+        $rows = collect($result->records)->keyBy('campaign_id');
+        $this->assertCount(2, $rows, 'the video and the Spark post — the ad with no creative is not placed');
+        $this->assertEqualsWithDelta(15.0, $rows['v-1']['spend'], 0.001);
+        $this->assertSame(1500.0, $rows['v-1']['impressions']);
+        $this->assertSame(3.0, $rows['v-1']['purchases']);
+        $this->assertArrayNotHasKey('reach', $rows['v-1'], 'reach is unique per ad and is not summed across two ads');
+        $this->assertSame(280.0, $rows['7300000000000000001']['reach']);
+        $this->assertSame('2026-10-01', $rows['v-1']['date']);
     }
 
     /** A metric the advertiser does not report is ABSENT, so no surface can print it as a measured zero. */
