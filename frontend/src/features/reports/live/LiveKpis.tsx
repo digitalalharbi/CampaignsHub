@@ -26,6 +26,32 @@ export function kpiKeysFor(payload: LivePayload, reader: Reader): string[] {
 }
 
 /**
+ * The ONE selection both the dashboard and the summary draw their KPI row from.
+ *
+ * Each slot is its own semantic key — never a positional fallback. A key with no figure drops out and
+ * the row reflows; a key that is only another key's own name (a named result and `leads` carrying the
+ * same count) is one card; and a named result reads in buyer order: spend, impressions, the result,
+ * what each cost.
+ */
+export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: string[]): string[] {
+  const t = payload.totals
+  // One underlying result is one card: `leads` carrying the same count as the result is that result.
+  const sameAsResult = (k: string) => k === 'leads' && t.leads !== null && t.leads !== undefined && t.leads === t.conversions
+  const known = keys
+    .filter((k, i) => keys.indexOf(k) === i)
+    .filter((k) => reader.meta[k] && !sameAsResult(k))
+    .filter((k) => cardHasFigure(k, reader.meta[k].format(t, payload, reader.asMoney, reader.count).text, payload))
+
+  // The primary row reads in a buyer's order whatever the objective: what it cost, who saw it,
+  // what it produced, what each result cost. Everything else keeps its own relative order.
+  const order = ['spend', 'impressions', 'conversions', 'cpa']
+  const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
+  known.sort((a, b) => rank(a) - rank(b))
+
+  return known
+}
+
+/**
  * The headline: four figures that dominate, then the rest compact. Numbers first; the period
  * comparison is the pill beside each, not a sentence under it.
  */
@@ -47,17 +73,7 @@ export function LiveKpiBoard({
   // Withheld (REPORT-COVERAGE-001): `undefined` removes the pill; a null would draw «—» beside every figure.
   const withheld = payload.comparison !== undefined && !payload.comparison.comparable
   const d: Record<string, number | null | undefined> = withheld ? {} : (payload.deltas ?? {})
-  // The same figure twice is one card: with a named result, «leads» is the result under its own name.
-  const sameAsResult = (k: string) => k === 'leads' && payload.result_kind != null && t.leads === t.conversions
-  const known = keys
-    .filter((k) => reader.meta[k] && !sameAsResult(k))
-    .filter((k) => cardHasFigure(k, reader.meta[k].format(t, payload, reader.asMoney, reader.count).text, payload))
-  // A named result reads in the order a buyer asks: what it cost, who saw it, what it produced, what each cost.
-  if (payload.result_kind != null) {
-    const order = ['spend', 'impressions', 'conversions', 'leads', 'cpa', 'cpl']
-    const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
-    known.sort((a, b) => rank(a) - rank(b))
-  }
+  const known = visibleKpiKeys(payload, reader, keys)
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
 
