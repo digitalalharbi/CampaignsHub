@@ -1543,11 +1543,11 @@ final class DiagnoseSyncCommand extends Command
                         continue;
                     }
                     $matched++;
-                    $why = $provenance->get($id);
+                    $why = $provenance->all()[$id] ?? null;
                     $this->line(sprintf(
                         '      objective source=%s platform_said=%s',
-                        (string) ($why?->objective_source ?? '—'),
-                        (string) ($why?->objective_platform_value ?? '—'),
+                        $why === null ? '—' : (string) ($why->objective_source ?? '—'),
+                        $why === null ? '—' : (string) ($why->objective_platform_value ?? '—'),
                     ));
                     $spend = (float) ($row['spend'] ?? 0);
                     $leads = (float) ($row['leads'] ?? 0);
