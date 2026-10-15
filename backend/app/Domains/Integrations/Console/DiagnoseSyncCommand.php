@@ -1521,12 +1521,18 @@ final class DiagnoseSyncCommand extends Command
                 );
                 app(ProjectContext::class)->forget();
 
-                $this->line('  campaigns of this account, as the reports read them:');
+                $this->line(sprintf(
+                    '  campaigns of this account, as the reports read them (%d unified, %d rows returned for the window):',
+                    count($unifiedIds),
+                    count($rows),
+                ));
+                $matched = 0;
                 foreach ($rows as $row) {
                     $id = (string) ($row['campaign_id'] ?? '');
                     if (! in_array($id, $unifiedIds, true)) {
                         continue;
                     }
+                    $matched++;
                     $spend = (float) ($row['spend'] ?? 0);
                     $leads = (float) ($row['leads'] ?? 0);
                     $this->line(sprintf(
@@ -1545,6 +1551,15 @@ final class DiagnoseSyncCommand extends Command
                         $leads > 0 && (int) ($row['spend_withheld_rows'] ?? 0) === 0
                             ? sprintf('  identity: %s ÷ %s = %s', number_format($spend, 2), number_format($leads, 0), number_format($spend / $leads, 2))
                             : '',
+                    ));
+                }
+                if ($matched === 0 && $rows !== []) {
+                    $first = $rows[array_key_first($rows)];
+                    $this->line(sprintf(
+                        '    (none of the %d returned rows is one of this account\'s campaigns; first row keys: %s, its campaign_id: %s)',
+                        count($rows),
+                        implode(',', array_keys($first)),
+                        (string) ($first['campaign_id'] ?? '—'),
                     ));
                 }
             }
