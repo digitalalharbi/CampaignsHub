@@ -1455,6 +1455,48 @@ final class DiagnoseSyncCommand extends Command
             $sourceCurrency !== '' ? $sourceCurrency : '(currency not recorded)',
         ));
 
+        /*
+         * DERIVED-WITHHELD-001 — the identity, read from the SAME aggregator every surface reads.
+         *
+         * A cost ratio is stated only over complete money, so with any spend row withheld CPA must be
+         * absent here, and with none it must equal spend ÷ results for this very window. Printed
+         * beside the figures it divides so a reader can check the arithmetic by eye.
+         */
+        $first = (clone $metrics)->min('metric_date');
+        if ($first !== null && $latest !== null) {
+            app(ProjectContext::class)->setProjectId((string) $projectId);
+            $totals = app(MetricsAggregator::class)->totals(
+                Carbon::parse((string) $first),
+                Carbon::parse((string) $latest),
+            );
+            app(ProjectContext::class)->forget();
+
+            $held = (int) ($totals['spend_withheld_rows'] ?? 0);
+            $results = (float) ($totals['conversions'] ?? 0);
+            $this->line(sprintf(
+                '  derived (project, %s → %s): spend_withheld_rows=%d  conversions=%s  cpa=%s  cpc=%s  cpm=%s  roas=%s',
+                $first,
+                $latest,
+                $held,
+                number_format($results, 0),
+                $totals['cpa'] === null ? 'WITHHELD' : number_format((float) $totals['cpa'], 2),
+                $totals['cpc'] === null ? 'WITHHELD' : number_format((float) $totals['cpc'], 3),
+                $totals['cpm'] === null ? 'WITHHELD' : number_format((float) $totals['cpm'], 2),
+                $totals['roas'] === null ? 'WITHHELD' : number_format((float) $totals['roas'], 3),
+            ));
+            if ($held === 0 && $results > 0 && $totals['cpa'] !== null) {
+                $this->line(sprintf(
+                    '  identity          : spend %s ÷ results %s = %s  (cpa %s)',
+                    number_format((float) $totals['spend'], 2),
+                    number_format($results, 0),
+                    number_format((float) $totals['spend'] / $results, 2),
+                    number_format((float) $totals['cpa'], 2),
+                ));
+            } elseif ($held > 0) {
+                $this->line('  identity          : not stated — spend is partly withheld, so no cost ratio is computed from it.');
+            }
+        }
+
         if ($withheld > 0) {
             $this->line(sprintf(
                 '  %d money row(s) are WITHHELD: no %s→project exchange rate exists, so the figure is '
