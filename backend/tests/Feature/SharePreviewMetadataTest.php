@@ -358,6 +358,30 @@ final class SharePreviewMetadataTest extends TestCase
     }
 
     /**
+     * SHARE-PREVIEW-MARK-001 — with no card to draw, only the CLIENT's mark may stand in as the
+     * picture. The agency's identifies the company inside the report; it is not the link's brand.
+     */
+    public function test_with_no_renderer_the_agency_mark_is_never_offered_as_the_picture(): void
+    {
+        config(['reports.chromium.enabled' => false]);
+
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'tenant',
+            null,
+            'report_logo',
+            'any',
+            UploadedFile::fake()->createWithContent('agency.png', 'agency-bytes'),
+        );
+        app(TenantContext::class)->forget();
+
+        $html = $this->preview();
+
+        $this->assertNull($this->meta($html, 'og:image'), "the agency's logo was offered as the link's picture");
+        $this->assertNull($this->metaName($html, 'twitter:image'));
+    }
+
+    /**
      * And the image route itself refuses when it cannot draw — a 404, never a placeholder.
      *
      * A crawler that asked for the picture and got a redirect to a logo, or a 200 carrying an empty

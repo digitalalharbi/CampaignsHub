@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Branding\ProductMark;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\Reports\Models\Report;
@@ -231,26 +232,22 @@ final class ShareCardRenderer
      * `DrawableImage::draws()` decides, not the stored content type. Production has already shown
      * this product real PNGs served as `multipart/form-data`, and a browser draws those fine.
      */
-    private function logoDataUri(ReportShare $share, Report $report): ?string
+    private function logoDataUri(ReportShare $share, Report $report): string
     {
         $tenantId = (string) $share->tenant_id;
 
         /*
-         * The first role whose mark is actually DRAWABLE, not the first role that has one.
+         * SHARE-PREVIEW-MARK-001 — the client's mark, or the product's, and nothing between.
          *
-         * `??` stopped at the first non-null bytes and the drawability test below then rejected them,
-         * so a client whose mark this renderer could not draw produced a card with NO mark — even
-         * though the agency had a perfectly good one sitting behind it. The fallback existed and
-         * could never run. Found by fetching a real card: the client's mark resolved to 298 bytes of
-         * SVG and the picture came back with nothing on it.
+         * Report setup holds two logos. The AGENCY's identifies the company presenting the report
+         * and belongs INSIDE it; the CLIENT's is the only custom mark a pasted link wears. This used
+         * to fall to the agency's and then to «nearest», so a client with no logo uploaded had their
+         * link previewed under the agency's brand — which the Owner ruled out. A client mark that
+         * cannot be drawn does not fall to the agency either; it falls to the product's mark.
          */
-        foreach (['client', 'agency', null] as $role) {
-            $bytes = $this->branding->logoBytes($report, $tenantId, $role);
+        $bytes = $this->branding->logoBytes($report, $tenantId, 'client');
 
-            if ($bytes === null) {
-                continue;
-            }
-
+        if ($bytes !== null) {
             $uri = self::asDataUri($bytes);
 
             if ($uri !== null) {
@@ -258,7 +255,7 @@ final class ShareCardRenderer
             }
         }
 
-        return null;
+        return ProductMark::dataUri();
     }
 
     /**
