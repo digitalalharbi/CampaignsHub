@@ -10,6 +10,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §8 — «Manage accounts» saves a DIFF, not a fresh connection.
@@ -58,6 +59,50 @@ final class ApplyAccountSelection
         string $purpose = 'advertising',
     ): array {
         $desired = array_values(array_unique($desiredAccountIds));
+
+        /*
+         * ACCOUNT-SELECTION-SCOPE-001 — a selection is THIS connection's, and only this connection's.
+         *
+         * «Manage accounts» seeds the dialog from every binding the project holds, whichever platform
+         * they came from, and sends that set back with the connection being edited. On a project that
+         * already carried a Meta account, saving a TikTok choice sent the Meta account's id too, the
+         * connection check counted one account too many, and the whole save answered
+         * «البيانات المُدخلة غير صحيحة» — with nothing saying which id or why (Owner, ReSano).
+         *
+         * An id that belongs to ANOTHER connection of this agency is not part of this decision. It is
+         * left exactly as it is — bound stays bound — and is not an error. An id that belongs to NO
+         * connection of this agency is a real mistake and is refused, naming the field and the ids.
+         */
+        $mine = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('tenant_id', $connection->tenant_id)
+            ->whereIn('id', $desired)
+            ->pluck('id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
+
+        $others = array_values(array_diff($desired, $mine));
+
+        if ($others !== []) {
+            $known = ExternalAccount::withoutGlobalScopes()
+                ->where('tenant_id', $connection->tenant_id)
+                ->whereIn('id', $others)
+                ->pluck('id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all();
+
+            $unknown = array_values(array_diff($others, $known));
+
+            if ($unknown !== []) {
+                throw ValidationException::withMessages([
+                    'external_account_ids' => [
+                        __('validation.selection_stale').' ('.count($unknown).': '.implode(', ', array_slice($unknown, 0, 5)).')',
+                    ],
+                ]);
+            }
+        }
+
+        $desired = $mine;
 
         /*
          * What this project holds from THIS connection — not from the tenant, and not from another
