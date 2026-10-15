@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Domains\Branding\ProductMark;
+use App\Domains\Branding\ProductLockup;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -176,7 +176,7 @@ final class ShareCardContentsTest extends TestCase
 
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertSame(ProductMark::dataUri(), $card['logo'], "the agency's mark stood in for a client who has none");
+        $this->assertSame(ProductLockup::dataUri($this->report->reportLocale()), $card['logo'], "the agency's mark stood in for a client who has none");
         $this->assertStringNotContainsString(base64_encode('AGENCY'), (string) $card['logo']);
     }
 
@@ -184,8 +184,8 @@ final class ShareCardContentsTest extends TestCase
     {
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertSame(ProductMark::dataUri(), $card['logo']);
-        $this->assertStringContainsString('data:image/svg+xml;base64,', $card['logo']);
+        $this->assertSame(ProductLockup::dataUri($this->report->reportLocale()), $card['logo']);
+        $this->assertStringContainsString('data:image/png;base64,', $card['logo']);
     }
 
     /**
@@ -304,7 +304,7 @@ final class ShareCardContentsTest extends TestCase
 
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertSame(ProductMark::dataUri(), $card['logo']);
+        $this->assertSame(ProductLockup::dataUri($this->report->reportLocale()), $card['logo']);
     }
 
     /**
@@ -329,42 +329,39 @@ final class ShareCardContentsTest extends TestCase
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
         // Bytes that decode as nothing are not a mark: the card wears the product's, never them.
-        $this->assertSame(ProductMark::dataUri(), $card['logo']);
+        $this->assertSame(ProductLockup::dataUri($this->report->reportLocale()), $card['logo']);
         $this->assertStringNotContainsString(base64_encode('this is not a picture'), $this->render());
     }
 
     /**
-     * A stored colour cannot rewrite the card.
-     *
-     * The accent is interpolated into a `<style>` block, and Blade's escaping is for HTML: it leaves
-     * `{`, `}` and `;` alone. A branding value of `red; } body { display: none` would have blanked the
-     * picture rather than coloured it — so the colour is validated as a hex triple or replaced.
+     * SHARE-CARD-BRAND-001 — the card is CampaignsHub's palette and nothing a stored value can change.
+     * No blue, no accent interpolated into the stylesheet.
      */
-    public function test_a_colour_that_is_not_a_colour_cannot_rewrite_the_stylesheet(): void
+    public function test_a_stored_colour_cannot_recolour_or_rewrite_the_card(): void
     {
         $this->report->forceFill(['config' => ['branding' => [
             'name' => 'Nakheel',
             'accent' => 'red; } body { display: none } .x {',
-        ]]])->save();
-
-        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
-
-        $this->assertSame('#2563eb', $card['accent'], 'an unvalidated colour reached the stylesheet');
-        $this->assertStringNotContainsString('display: none', $this->render());
-    }
-
-    /** A real brand colour is honoured, so the guard above is not simply refusing everything. */
-    public function test_a_real_brand_colour_is_honoured(): void
-    {
-        $this->report->forceFill(['config' => ['branding' => [
-            'name' => 'Nakheel',
             'colors' => ['primary' => '#B4842F'],
         ]]])->save();
 
+        $html = $this->render();
+
+        $this->assertStringNotContainsString('display: none', $html);
+        $this->assertStringNotContainsString('#b4842f', strtolower($html));
+        foreach (['#0b1a16', '#f7f5f0', '#0d8a6f', '#e8a33d'] as $brand) {
+            $this->assertStringContainsString($brand, strtolower($html));
+        }
+        $this->assertDoesNotMatchRegularExpression('/#(2563eb|3b82f6|1d4ed8|0a0f1c)|blue/i', $html, 'a non-brand blue is in the card');
+    }
+
+    /** The lockup follows the report's language: Arabic report → Arabic lockup, else English. */
+    public function test_the_footer_lockup_follows_the_report_language(): void
+    {
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertSame('#b4842f', $card['accent']);
-        $this->assertStringContainsString('#b4842f', $this->render());
+        $this->assertSame(ProductLockup::dataUri($card['lang']), $card['lockup']);
+        $this->assertNotSame(ProductLockup::dataUri('ar'), ProductLockup::dataUri('en'));
     }
 
     /**

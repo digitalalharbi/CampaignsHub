@@ -38,10 +38,12 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --ink: #0a0f1c;
-    --ink-soft: rgba(233, 238, 250, 0.62);
-    --ink-strong: #f4f7ff;
-    --accent: {{ $accent }};
+    /* SHARE-CARD-BRAND-001 — the CampaignsHub palette, and only it. */
+    --ink: #0b1a16;
+    --ink-soft: rgba(247, 245, 240, 0.68);
+    --ink-strong: #f7f5f0;
+    --green: #0d8a6f;
+    --orange: #e8a33d;
   }
 
   /*
@@ -85,27 +87,25 @@
      than the viewport, which is the one element whose overflow rules are not local. */
   .bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 
-  /* The accent, spent in one place. A wash anchored away from the reading side, so the type always
-     sits on the quiet half whichever direction the report runs in. */
+  /* Brand green wash anchored away from the reading side, and an orange hairline on the reading
+     edge — the lockup's own two colours, no gradient between unrelated hues. */
   .bg::before {
     content: '';
     position: absolute;
-    inset-inline-end: -180px;
-    inset-block-start: -220px;
+    inset-inline-end: -200px;
+    inset-block-start: -240px;
     width: 720px;
     height: 720px;
     border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 55%, transparent) 0%, transparent 68%);
+    background: radial-gradient(circle, rgba(13, 138, 111, 0.38) 0%, rgba(13, 138, 111, 0) 68%);
   }
-
-  /* A hairline of the accent along the reading edge — the same device the report header uses. */
   .bg::after {
     content: '';
     position: absolute;
     inset-block: 0;
     inset-inline-start: 0;
     width: 10px;
-    background: var(--accent);
+    background: var(--green);
   }
 
   /*
@@ -131,7 +131,7 @@
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
   }
   /* The product's own mark is drawn for a dark ground, so it sits on the card without a white panel. */
-  .logo-panel.system { background: transparent; box-shadow: none; padding: 48px; }
+  .logo-panel.system { background: transparent; box-shadow: none; padding: 0; }
   .mark { width: 100%; height: 100%; object-fit: contain; display: block; }
 
   .copy { position: relative; align-self: center; }
@@ -186,7 +186,8 @@
     position: relative;
   }
 
-  .product { font-weight: 600; color: var(--ink-strong); }
+  /* The pack lockup carries generous padding; sized up and pulled in so the mark itself reads. */
+  .lockup { height: 150px; width: auto; display: block; margin-block: -52px; margin-inline: -42px; }
 </style>
 </head>
 <body>
@@ -212,7 +213,10 @@
 
 <footer style="grid-column: 1 / -1;">
   <span>{{ $kicker }}</span>
-  <span class="product">{{ $siteName }}</span>
+  {{-- The system fallback already IS the lockup, large; repeating it in the footer would be noise. --}}
+  @if (! ($logoIsProduct ?? false))
+    <img class="lockup" src="{{ $lockup }}" alt="{{ $siteName }}">
+  @endif
 </footer>
 </body>
 </html>
