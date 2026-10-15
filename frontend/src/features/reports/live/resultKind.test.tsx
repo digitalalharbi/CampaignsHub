@@ -84,4 +84,51 @@ describe('live KPI board', () => {
     expect(heads.join('|')).not.toMatch(/الإنفاق|تكلفة/)
     expect(heads.join('|')).toMatch(/الرسائل/)
   })
+
+  const messaging = { kind: 'messaging', result: { ar: 'الرسائل', en: 'Messages' }, cost: { ar: 'تكلفة الرسالة', en: 'Cost per message' } }
+
+  it('spend enabled and available leads the row: spend, impressions, messages, cost per message', () => {
+    const payload = {
+      ...base,
+      totals: { ...base.totals, spend: 2640.18, cpa: 4.56, leads: 579, conversions: 579 },
+      result_kind: messaging,
+    } as unknown as LivePayload
+    render(<Board payload={payload} />)
+    const cards = Array.from(screen.getByTestId('live-kpis').children).map((c) => c.textContent ?? '')
+
+    expect(cards).toHaveLength(4)
+    expect(cards[0]).toMatch(/الإنفاق/)
+    expect(cards[1]).toMatch(/الظهور/)
+    expect(cards[2]).toMatch(/الرسائل/)
+    expect(cards[3]).toMatch(/تكلفة الرسالة/)
+    expect(document.body.textContent?.match(/الرسائل/g)?.length).toBe(1)
+  })
+
+  it('spend not selected by the Owner is absent and nothing takes its slot', () => {
+    const payload = {
+      ...base,
+      metrics: ['impressions', 'conversions'],
+      totals: { ...base.totals, spend: 2640.18, cpa: 4.56 },
+      result_kind: messaging,
+    } as unknown as LivePayload
+    render(<Board payload={payload} />)
+    const cards = Array.from(screen.getByTestId('live-kpis').children).map((c) => c.textContent ?? '')
+
+    expect(cards).toHaveLength(2)
+    expect(cards.join('|')).not.toMatch(/الإنفاق/)
+  })
+
+  it('a missing cost reflows the row and is never replaced by another metric', () => {
+    const payload = {
+      ...base,
+      metrics: ['spend', 'impressions', 'conversions', 'cpa'],
+      totals: { ...base.totals, spend: 2640.18, cpa: null },
+      result_kind: messaging,
+    } as unknown as LivePayload
+    render(<Board payload={payload} />)
+    const cards = Array.from(screen.getByTestId('live-kpis').children).map((c) => c.textContent ?? '')
+
+    expect(cards).toHaveLength(3)
+    expect(cards.join('|')).not.toMatch(/تكلفة|النقرات/)
+  })
 })
