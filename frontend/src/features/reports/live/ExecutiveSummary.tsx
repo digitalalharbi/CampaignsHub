@@ -219,7 +219,7 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
   // rule); with one, the selection is the truth and spend shows when it was ticked and is valid.
   const chosenInSetup = (payload.metrics?.length ?? 0) > 0
   const selected = visibleKpiKeys(payload, reader, kpiKeysFor(payload, reader)).filter((k) => chosenInSetup || !SPEND_DERIVED.has(k))
-  const extras = resultBoardKeys(payload, reader, result).filter((k) => !selected.includes(k) && !(k === 'leads' && payload.result_kind != null && t.leads === t.conversions))
+  const extras = resultBoardKeys(payload, reader, result).filter((k) => !selected.includes(k) && !(k === 'leads' && t.leads !== null && t.leads !== undefined && t.leads === t.conversions))
   const keys = [...selected, ...extras].slice(0, 8)
   const card = (key: string) => {
     const meta = reader.meta[key]

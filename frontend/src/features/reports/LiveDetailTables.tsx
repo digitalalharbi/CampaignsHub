@@ -161,8 +161,8 @@ export function LivePlatformComparison({
   }
   // A link that hides spend has no spend column and no cost column: «—» twice per row is not a table.
   const noSpend = spendHiddenByLink(payload)
-  const resultName = payload.result_kind ? (ar ? payload.result_kind.result.ar : payload.result_kind.result.en) : (ar ? 'النتائج' : 'Results')
-  const costName = payload.result_kind ? (ar ? payload.result_kind.cost.ar : payload.result_kind.cost.en) : (ar ? 'تكلفة النتيجة' : 'Cost per result')
+  const resultName = ar ? 'النتائج' : 'Results'
+  const costName = ar ? 'تكلفة النتيجة' : 'Cost per result'
   const head = [
     t.platform,
     ar ? 'الإنفاق' : 'Spend',
