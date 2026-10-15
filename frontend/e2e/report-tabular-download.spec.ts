@@ -106,12 +106,12 @@ test('export → download → the XLSX and CSV a person receives are real files 
       /*
        * REPORT-TITLE-METADATA-001 — and it is named after the REPORT, which the negative cannot say.
        *
-       * A filename of `x.xlsx` passes every «is not a uuid» check ever written. The kind is the one
-       * part that is always present — it is what makes an Arabic-titled report produce a real ASCII
-       * name rather than «.xlsx» — so it is what this asserts.
+       * A filename of `x.xlsx` passes every «is not a uuid» check ever written. REPORT-TITLE-EXACT-001:
+       * the file is named after exactly the title that was entered (ASCII-folded), so the positive
+       * half asserts that title's own words — «E2E TABULAR <stamp>» becomes `e2e-tabular-<stamp>`.
        */
       expect(disposition, `the ${format} download does not carry the report's own name`)
-        .toMatch(/(executive-summary|detailed-report)/)
+        .toMatch(/e2e-tabular-\d+/)
       expect(disposition).toContain(`.${format}`)
 
       return Buffer.from(await response.body())
