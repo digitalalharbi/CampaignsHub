@@ -319,6 +319,8 @@ export interface LivePayload {
   business_streams?: BusinessStreamRow[]
   business_streams_cover_total?: boolean
   period: { from: string; to: string; days: number }
+  /** REPORT-RESULT-KIND-001 — what ONE result is called when every campaign in scope agrees (messages / leads). */
+  result_kind?: { kind: 'messaging' | 'leads'; result: { ar: string; en: string }; cost: { ar: string; en: string } } | null
   /** REPORT-CURRENCY-TRUTH-001 — the unit the rows are normalised to; null when the scope holds two. */
   currency: string | null
   totals: Record<string, number | null>

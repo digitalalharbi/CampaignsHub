@@ -87,7 +87,7 @@ describe('a link shared as an executive summary', () => {
     expect(within(summary).getByTestId('live-kpis')).toBeInTheDocument()
     expect(within(summary).queryByTestId('live-kpis-secondary')).not.toBeInTheDocument()
     // CLIENT-REPORT-FRAMING-001 — platforms → results → trend → results split → platforms → content → coverage.
-    for (const block of ['exec-platform-cards', 'exec-trend', 'exec-results-split', 'exec-platforms', 'exec-best-content', 'exec-improve-content', 'exec-health']) {
+    for (const block of ['exec-platform-cards', 'exec-trend', 'exec-results-split', 'exec-platforms', 'exec-best-content', 'exec-improve-content']) {
       expect(within(summary).getByTestId(block), block).toBeInTheDocument()
     }
     // No spend, no cost and no campaign count anywhere on the client's summary.
@@ -151,7 +151,8 @@ describe('the executive summary (REPORT-EXECUTIVE-SUMMARY-001)', () => {
     expect(screen.queryByTestId('exec-action-a1')).not.toBeInTheDocument()
     const steps = within(screen.getByTestId('exec-actions')).getAllByRole('article').map((a) => a.getAttribute('data-testid'))
     expect(steps).toEqual(['exec-action-a3', 'exec-action-a2'])
-    expect(screen.getByTestId('exec-health').compareDocumentPosition(screen.getByTestId('exec-actions')) & 4, 'the optimisation steps close the summary').toBeTruthy()
+    // Nothing is missing, so the coverage strip is not drawn: the page states what is true, not that it is whole.
+    expect(screen.queryByTestId('exec-health')).not.toBeInTheDocument()
   })
 
 })

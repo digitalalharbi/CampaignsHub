@@ -196,3 +196,42 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [currency, ar])
 }
+
+/**
+ * REPORT-RESULT-KIND-001 — the card's name, with a specific result named by its destination.
+ *
+ * «Results» is the generic word and a client reading a WhatsApp campaign should see «Messages».
+ * Only the result and its cost are renamed; every other metric keeps its own label.
+ */
+export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload | null | undefined, ar: boolean): string {
+  const kind = payload?.result_kind
+
+  if (kind) {
+    if (key === 'conversions' || key === 'leads') return ar ? kind.result.ar : kind.result.en
+    if (key === 'cpa' || key === 'cpl') return ar ? kind.cost.ar : kind.cost.en
+  }
+
+  return ar ? meta.ar : meta.en
+}
+
+/** Money and cost-per keys: a null here is a figure the link hides or the platform did not give. */
+const MONEY_KEYS = new Set(['spend', 'revenue', 'roas', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'aov'])
+
+/**
+ * Whether a card has anything to say. A card whose reading is «—» is a hole in the grid: a spend the
+ * link hides, a cost-per over withheld money, a stage the platform never sent. The reason is the
+ * operator's, so the client's page omits the card rather than drawing an empty one.
+ */
+export function cardHasFigure(key: string, text: string, payload: LivePayload): boolean {
+  const trimmed = text.trim()
+  if (trimmed === '' || trimmed === '—') return false
+  if (MONEY_KEYS.has(key)) {
+    const v = (payload.totals ?? {})[key]
+    if (v === null || v === undefined) {
+      // A withheld amount is shown in its own currency by the money contract; anything else is hidden.
+      return /[A-Za-z]{3}|[\u0600-\u06FF]/.test(trimmed) && trimmed !== '—'
+    }
+  }
+
+  return true
+}

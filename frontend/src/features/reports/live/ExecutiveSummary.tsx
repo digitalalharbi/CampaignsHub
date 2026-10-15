@@ -14,7 +14,7 @@ import { attentionAction, attentionHeadline, type AttentionItem } from '../atten
 import { ContentTile } from './LiveContent'
 import { liveSpark } from './liveSpark'
 import { ComparisonWithheld } from './LiveKpis'
-import type { useLiveMetricReader } from './liveMetrics'
+import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -69,7 +69,7 @@ function resultBoardKeys(payload: LivePayload, reader: Reader, result: string): 
   return [result, ...carried].slice(0, 8)
 }
 
-const metricName = (reader: Reader, key: string, ar: boolean) => (reader.meta[key] ? (ar ? reader.meta[key].ar : reader.meta[key].en) : key)
+const metricName = (reader: Reader, key: string, ar: boolean, payload?: LivePayload) => (reader.meta[key] ? metricLabel(reader.meta[key], key, payload, ar) : key)
 const count = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 
 function Panel({ title, testid, children, className = '', action }: { title: string; testid: string; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
@@ -104,34 +104,49 @@ export function ExecutiveSummary({
   const { result } = headlineKeys(payload, reader)
   const funnelShown = sectionOn('funnel') && (payload.funnel ?? []).filter((s) => s.reported).length >= 2
 
+  const platformRows = (payload.platforms ?? []).filter((p) => ['impressions', 'clicks', result].some((k) => Number(p[k] ?? 0) > 0))
+  const manyPlatforms = platformRows.length > 1
+  // One platform: its card, its donut (a single 100% slice) and its table all say the same thing.
+  // The compact page states it once — in the KPI row — and spends the room on the trend and the funnel.
+  const coverageNeeded = (payload.freshness ?? []).some((f) => f.state === 'awaiting_credentials')
+  const improveShown = sectionOn('content_performance') && (payload.ads_weakest ?? []).length > 0
+
   return (
     <div data-testid="live-mode-summary" className="flex flex-col gap-4">
+      {/* The platforms summary is the Owner's chosen main view (CLIENT-REPORT-FRAMING-001): it leads. */}
       {sectionOn('platform_comparison') && <PlatformCards payload={payload} reader={reader} ar={ar} result={result} selected={platform} onSelect={setPlatform} />}
 
       {sectionOn('kpis') && <ResultsBoard payload={payload} reader={reader} ar={ar} result={result} />}
 
-      {(sectionOn('trends') || sectionOn('platform_comparison')) && (
+      {(sectionOn('trends') || sectionOn('platform_comparison') || funnelShown) && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {sectionOn('trends') && <TrendPanel payload={payload} reader={reader} ar={ar} currency={currency} result={result} wide={!sectionOn('platform_comparison')} />}
-          {sectionOn('platform_comparison') && <ResultsSplit payload={payload} reader={reader} ar={ar} result={result} wide={!sectionOn('trends')} selected={platform} onSelect={setPlatform} />}
+          {sectionOn('trends') && (
+            <TrendPanel payload={payload} reader={reader} ar={ar} currency={currency} result={result} wide={!(manyPlatforms && sectionOn('platform_comparison')) && !funnelShown} />
+          )}
+          {manyPlatforms && sectionOn('platform_comparison') && (
+            <ResultsSplit payload={payload} reader={reader} ar={ar} result={result} wide={!sectionOn('trends')} selected={platform} onSelect={setPlatform} />
+          )}
+          {!manyPlatforms && funnelShown && <FunnelPanel payload={payload} ar={ar} narrow />}
         </div>
       )}
 
-      {sectionOn('platform_comparison') && (
+      {manyPlatforms && sectionOn('platform_comparison') && (
         <PlatformComparison payload={payload} reader={reader} ar={ar} result={result} selected={platform} onSelect={setPlatform} wide />
       )}
 
       {sectionOn('content_performance') && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <ContentBlock kind="best" payload={payload} locale={locale} currency={currency} platform={platform} onClear={() => setPlatform(null)} onOpen={onOpenContent} />
-          <ContentBlock kind="improve" payload={payload} locale={locale} currency={currency} platform={platform} onClear={() => setPlatform(null)} onOpen={onOpenContent} />
+          <ContentBlock kind="best" half={improveShown} payload={payload} locale={locale} currency={currency} platform={platform} onClear={() => setPlatform(null)} onOpen={onOpenContent} />
+          <ContentBlock kind="improve" half payload={payload} locale={locale} currency={currency} platform={platform} onClear={() => setPlatform(null)} onOpen={onOpenContent} />
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {funnelShown && <FunnelPanel payload={payload} ar={ar} />}
-        <CoverageStrip payload={payload} ar={ar} wide={!funnelShown} />
-      </div>
+      {(manyPlatforms && funnelShown) || coverageNeeded ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {manyPlatforms && funnelShown && <FunnelPanel payload={payload} ar={ar} />}
+          {coverageNeeded && <CoverageStrip payload={payload} ar={ar} wide={!(manyPlatforms && funnelShown)} />}
+        </div>
+      ) : null}
 
       {sectionOn('recommendations') && <OptimisationSteps payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
@@ -144,7 +159,7 @@ function PlatformCards({ payload, reader, ar, result, selected, onSelect }: { pa
   const rows = (payload.platforms ?? []).filter((p) => ['impressions', 'clicks', result].some((k) => Number(p[k] ?? 0) > 0))
   if (rows.length === 0) return null
   const total = rows.reduce((s, p) => s + Number(p[result] ?? 0), 0)
-  const resultName = metricName(reader, result, ar)
+  const resultName = metricName(reader, result, ar, payload)
   const ctr = (p: Record<string, unknown>) => (p.ctr === null || p.ctr === undefined ? null : `${(Number(p.ctr) * 100).toFixed(2)}%`)
   const card = (key: string | null, title: string, value: number | null, impressions: number | null, rate: string | null, share: number | null, color: string) => {
     const on = selected === key
@@ -203,9 +218,10 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
     const meta = reader.meta[key]
     if (!meta) return null
     const read = meta.format(t, payload, reader.asMoney, reader.count)
+    if (!cardHasFigure(key, read.text, payload)) return null
 
     return (
-      <KpiCard key={key} label={ar ? meta.ar : meta.en} value={read.text} exact={read.exact ?? undefined} delta={d[key]} invertGood={meta.invertGood} spark={liveSpark(key, payload.timeseries)} accent="var(--purple)" calm />
+      <KpiCard key={key} label={metricLabel(meta, key, payload, ar)} value={read.text} exact={read.exact ?? undefined} delta={d[key]} invertGood={meta.invertGood} spark={liveSpark(key, payload.timeseries)} accent="var(--purple)" calm />
     )
   }
 
@@ -222,7 +238,7 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
 
 function TrendPanel({ payload, reader, ar, currency, result, wide }: { payload: LivePayload; reader: Reader; ar: boolean; currency: string; result: string; wide: boolean }) {
   const options = [
-    { key: result, name: metricName(reader, result, ar), color: 'var(--purple)', kind: 'num' as const },
+    { key: result, name: metricName(reader, result, ar, payload), color: 'var(--purple)', kind: 'num' as const },
     ...(result !== 'clicks' ? [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }] : []),
     ...(result !== 'impressions' ? [{ key: 'impressions', name: ar ? 'الظهور' : 'Impressions', color: 'var(--brand-600)', kind: 'num' as const }] : []),
   ]
@@ -265,7 +281,7 @@ function ResultsSplit({ payload, reader, ar, result, wide, selected, onSelect }:
     return value > 0 ? [{ key: canonicalPlatform(p.provider), name: providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'), value }] : []
   })
   const total = rows.reduce((s, r) => s + r.value, 0)
-  const resultName = metricName(reader, result, ar)
+  const resultName = metricName(reader, result, ar, payload)
 
   return (
     <Panel title={ar ? `من أين جاءت ${resultName}` : `Where the ${resultName.toLowerCase()} came from`} testid="exec-results-split" className={wide ? 'lg:col-span-12' : 'lg:col-span-4'}>
@@ -327,7 +343,7 @@ function PlatformComparison({
       ) : (
         <div className="min-w-0 text-xs" data-testid="exec-platform-table">
           <MetricTable
-            head={[ar ? 'المنصة' : 'Platform', metricName(reader, result, ar), ...extra.map((k) => metricName(reader, k, ar)), ar ? 'نسبة النقر' : 'CTR']}
+            head={[ar ? 'المنصة' : 'Platform', metricName(reader, result, ar, payload), ...extra.map((k) => metricName(reader, k, ar, payload)), ar ? 'نسبة النقر' : 'CTR']}
             rows={rows.map((p) => {
               const key = canonicalPlatform(p.provider)
               const value = count(p[result])
@@ -373,12 +389,12 @@ function PlatformComparison({
 
 /* ─────────────────────────────── Funnel ─────────────────────────────── */
 
-function FunnelPanel({ payload, ar }: { payload: LivePayload; ar: boolean }) {
+function FunnelPanel({ payload, ar, narrow = false }: { payload: LivePayload; ar: boolean; narrow?: boolean }) {
   // The stages without their cost: the client's funnel shows how far people went, not what each step cost.
   const stages = (payload.funnel ?? []).filter((s) => s.reported).map((s) => ({ ...s, cost_per: null }))
 
   return (
-    <div className="lg:col-span-7" data-testid="exec-funnel">
+    <div className={narrow ? 'lg:col-span-4' : 'lg:col-span-7'} data-testid="exec-funnel">
       <ChartCard title={ar ? 'من الظهور إلى النتيجة' : 'From impression to result'}>
         <ConversionFunnelChart stages={stages} ar={ar} />
       </ChartCard>
@@ -388,8 +404,8 @@ function FunnelPanel({ payload, ar }: { payload: LivePayload; ar: boolean }) {
 
 /* ─────────────────────────────── Content ─────────────────────────────── */
 
-function ContentBlock({ kind, payload, locale, currency, platform, onClear, onOpen }: {
-  kind: 'best' | 'improve'; payload: LivePayload; locale: Locale; currency: string; platform: string | null; onClear: () => void; onOpen: (c: ReportAd) => void
+function ContentBlock({ kind, half = false, payload, locale, currency, platform, onClear, onOpen }: {
+  kind: 'best' | 'improve'; half?: boolean; payload: LivePayload; locale: Locale; currency: string; platform: string | null; onClear: () => void; onOpen: (c: ReportAd) => void
 }) {
   const ar = locale === 'ar'
   const all = useMemo(() => (kind === 'best' ? payload.ads : payload.ads_weakest) ?? [], [kind, payload])
@@ -411,7 +427,7 @@ function ContentBlock({ kind, payload, locale, currency, platform, onClear, onOp
     <Panel
       title={platform === null ? title : `${title} — ${providerLabel(platform, locale)}`}
       testid={kind === 'best' ? 'exec-best-content' : 'exec-improve-content'}
-      className="lg:col-span-12"
+      className={half ? 'lg:col-span-6' : 'lg:col-span-12'}
       action={(
         <span className="flex items-center gap-2">
           {platform !== null && <button type="button" onClick={onClear} className="text-[11px] font-semibold text-accent hover:underline">{ar ? 'كل المنصات' : 'All platforms'}</button>}
@@ -429,7 +445,7 @@ function ContentBlock({ kind, payload, locale, currency, platform, onClear, onOp
             : (ar ? 'لا محتوى مرتّب لهذه المنصة في هذه الفترة' : 'No ranked content for this platform in this period')}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-3 ${half ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
           {items.map((ad, i) => (
             <ContentTile key={ad.content_key ?? `${ad.provider}-${i}`} content={ad} locale={locale} currency={currency || null} onOpen={onOpen} rank={kind === 'best' ? i + 1 : undefined} resultsOnly />
           ))}
