@@ -93,6 +93,8 @@ export interface ReportData {
    * the catalogue's layout for the objective.
    */
   metric_set?: string[]
+  /** LEAD-DESTINATION-001 — where a lead report's results happen (`whatsapp`, `direct_message`, …). */
+  lead_destination?: string | null
   /**
    * Which base metrics any connected platform actually SENT over the window.
    *
@@ -997,7 +999,7 @@ function PlatformInsights({ data, platform }: { data: ReportData; platform: stri
           <div>
             <div className="truncate font-semibold text-text-primary" title={String(creative.name ?? '')}>{String(creative.name ?? '—')}</div>
             <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-xs">
-              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported, true, data.currency ?? null).slice(0, 2).map((r) => (
+              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported, true, data.currency ?? null, data.lead_destination ?? null).slice(0, 2).map((r) => (
                 <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
               ))}
             </div>

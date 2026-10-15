@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Enums\LeadDestination;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -147,6 +149,22 @@ final class ReportGenerator
         $objective = $lens->value();
         $providerList = array_values(array_map(fn ($p) => $p['provider'], $platforms));
 
+        /*
+         * LEAD-DESTINATION-001 — where a lead report's results happen.
+         *
+         * Read from the ad sets of the campaigns that spent in this window, and stated only when
+         * they all agree. A messaging destination changes what the figures ARE: `leads` is the
+         * platform-attributed messaging result and `cpl` its cost, and the report says so rather
+         * than printing «leads» for a WhatsApp buy.
+         */
+        $destinationIds = array_values(array_filter(array_map(
+            static fn ($c): string => (string) ($c['campaign_id'] ?? ''),
+            $campaigns,
+        )));
+        $destinations = app(CampaignDestinations::class)->for($destinationIds);
+        $distinct = array_unique(array_map(static fn (LeadDestination $d): string => $d->value, $destinations));
+        $leadDestination = $objective === 'leads' && count($distinct) === 1 ? LeadDestination::from(reset($distinct)) : null;
+
         // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
         $config = $report->config;
         if (empty($config['slides'])) {
@@ -204,7 +222,12 @@ final class ReportGenerator
             'currency' => $currency,
             'objective' => $objective,
             'platform_order' => $config['platform_order'] ?? $providerList,
-            'metric_set' => $config['metric_set'] ?? $this->template->metricSet($objective),
+            'metric_set' => $leadDestination?->isMessaging() && ($config['metric_set'] ?? $this->template->metricSet('leads')) === $this->template->metricSet('leads')
+                // Spend, reach of the ad, the platform's messaging result and what one cost. Purchase
+                // and ROAS figures are not offered for a buy that cannot have a purchase.
+                ? ['spend', 'impressions', 'leads', 'cpl']
+                : ($config['metric_set'] ?? $this->template->metricSet($objective)),
+            'lead_destination' => $leadDestination?->value,
             'kpis' => $totals,
             'previous' => $previous,
             'delta' => $delta,

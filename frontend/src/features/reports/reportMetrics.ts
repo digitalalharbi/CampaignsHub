@@ -55,6 +55,26 @@ type Input = {
   previous?: Record<string, number | null>
   currency: string
   metric_set?: string[]
+  /** LEAD-DESTINATION-001 — where a lead report's results happen; null when unstated or not a lead report. */
+  lead_destination?: string | null
+}
+
+/**
+ * LEAD-DESTINATION-001 — a messaging buy's results are messages, not leads.
+ *
+ * Meta's attributed messaging result is stored as `leads` and its cost as `cpl`; the figures are
+ * right and the NAMES would be wrong for a WhatsApp or direct-message campaign. They are platform
+ * attributed messaging results — not WhatsApp Business conversation identities.
+ */
+const MESSAGING_LABEL: Record<string, { ar: string; en: string }> = {
+  leads: { ar: 'نتائج المراسلة', en: 'Messaging results' },
+  cpl: { ar: 'تكلفة نتيجة المراسلة', en: 'Cost per messaging result' },
+  conversions: { ar: 'نتائج المراسلة', en: 'Messaging results' },
+  cpa: { ar: 'تكلفة نتيجة المراسلة', en: 'Cost per messaging result' },
+}
+
+export function isMessagingDestination(destination: string | null | undefined): boolean {
+  return destination === 'whatsapp' || destination === 'direct_message'
 }
 
 /**
@@ -106,6 +126,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
    */
   const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective).primary
   const direct = data.objective_performance?.direct
+  const messaging = isMessagingDestination(data.lead_destination)
 
   return keys
     .filter((key) => SPECS[key])
@@ -118,7 +139,9 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
         key,
         label: substituted
           ? (ar ? DIRECT_LABEL[key].ar : DIRECT_LABEL[key].en)
-          : (ar ? spec.label.ar : spec.label.en),
+          : messaging && MESSAGING_LABEL[key]
+            ? (ar ? MESSAGING_LABEL[key].ar : MESSAGING_LABEL[key].en)
+            : (ar ? spec.label.ar : spec.label.en),
         // A substituted figure is a derived ratio of a NARROWER scope than `reported` describes, so
         // it is read straight: `reported` would answer a question about the wrong denominator.
         reading: substituted
@@ -181,7 +204,12 @@ export function previousReading(metric: ReportMetric, data: Input): { text: stri
  * then labelled every winner with two dashes where its return should be, which reads as a creative
  * that failed rather than one measured on something else entirely.
  */
-export function creativeChips(objective: string | undefined): string[] {
+export function creativeChips(objective: string | undefined, destination?: string | null): string[] {
+  // A messaging buy is judged on its messaging results and their cost — never on purchases or ROAS.
+  if (objective === 'leads' && isMessagingDestination(destination)) {
+    return ['leads', 'cpl', 'impressions', 'spend']
+  }
+
   switch (objective) {
     case 'awareness':
       return ['reach', 'cpm', 'impressions', 'engagements']
@@ -214,12 +242,18 @@ export function creativeReadings(
   ar = true,
   /** MONEY-USD-001 — the report's currency. Null prints the figure without a unit, never «SAR». */
   currency: string | null = null,
+  /** LEAD-DESTINATION-001 */
+  destination: string | null = null,
 ): Array<{ key: string; label: string; reading: MetricReading }> {
-  return creativeChips(objective)
+  const messaging = isMessagingDestination(destination)
+
+  return creativeChips(objective, destination)
     .filter((key) => SPECS[key])
     .map((key) => ({
       key,
-      label: ar ? SPECS[key].label.ar : SPECS[key].label.en,
+      label: messaging && MESSAGING_LABEL[key]
+        ? (ar ? MESSAGING_LABEL[key].ar : MESSAGING_LABEL[key].en)
+        : (ar ? SPECS[key].label.ar : SPECS[key].label.en),
       reading: readMetric(key, SPECS[key], row as Record<string, number | null>, reported, currency),
     }))
 }

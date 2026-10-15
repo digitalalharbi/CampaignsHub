@@ -19,7 +19,7 @@ final class ExternalAdSet extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'external_campaign_id', 'unified_campaign_id', 'provider',
-        'external_id', 'name', 'status', 'optimization_goal', 'bid_strategy', 'daily_budget',
+        'external_id', 'name', 'status', 'optimization_goal', 'bid_strategy', 'destination_type', 'daily_budget',
         'lifetime_budget', 'currency', 'targeting', 'starts_at', 'ends_at', 'source_type',
         'is_demo', 'last_synced_at',
     ];

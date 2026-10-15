@@ -88,6 +88,17 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         // this one is read rather than left null. `page_engagement` is deliberately not added to it:
         // it overlaps with post engagement and adding the two would invent interactions.
         'engagements' => ['post_engagement'],
+        /*
+         * LEAD-DESTINATION-001 — the platform's own messaging result.
+         *
+         * «Conversations started» is Meta's attributed count of people who opened a thread from the
+         * ad; it is NOT a WhatsApp Business conversation identity (that needs a WhatsApp
+         * authorisation this install does not hold). The first type Meta sent is read, never the sum
+         * of several: `total_messaging_connection` already contains the started conversations.
+         *
+         * @see \App\Domains\Campaigns\Enums\CampaignOutcome::Messaging
+         */
+        'messaging' => ['onsite_conversion.messaging_conversation_started_7d', 'onsite_conversion.total_messaging_connection'],
     ];
 
     protected function platform(): string
@@ -276,7 +287,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         $sets = [];
 
         foreach ($this->readAll($tokens, "{$adAccountId}/adsets", 'ad sets', [
-            'fields' => 'id,name,status,campaign_id,optimization_goal,bid_strategy,daily_budget,lifetime_budget,targeting,start_time,end_time',
+            'fields' => 'id,name,status,campaign_id,optimization_goal,bid_strategy,destination_type,daily_budget,lifetime_budget,targeting,start_time,end_time',
             'limit' => 500,
         ]) as $s) {
             if (($s['id'] ?? null) === null || ($s['campaign_id'] ?? null) === null) {
@@ -290,6 +301,8 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
                 'status' => strtolower((string) ($s['status'] ?? 'unknown')),
                 'optimization_goal' => isset($s['optimization_goal']) ? strtolower((string) $s['optimization_goal']) : null,
                 'bid_strategy' => isset($s['bid_strategy']) ? strtolower((string) $s['bid_strategy']) : null,
+                // LEAD-DESTINATION-001 — kept in the platform's own spelling (`WHATSAPP`, `WEBSITE`…).
+                'destination_type' => isset($s['destination_type']) && $s['destination_type'] !== '' ? strtoupper((string) $s['destination_type']) : null,
                 // Minor units of the account currency, as with campaigns.
                 'daily_budget' => isset($s['daily_budget']) ? (float) $s['daily_budget'] / 100 : null,
                 'lifetime_budget' => isset($s['lifetime_budget']) ? (float) $s['lifetime_budget'] / 100 : null,
@@ -759,6 +772,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
 
         $actions = $row['actions'] ?? null;
         $purchases = $this->pick($actions, self::ACTIONS['purchases']);
+        $messaging = $this->pick($actions, self::ACTIONS['messaging']);
 
         $mapped = [
             $idKey => $id,
@@ -782,7 +796,14 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
              * mapped apart, which is why the funnel now reads `purchases` for its Purchase stage.
              */
             'purchases' => $purchases,
-            'conversions' => $purchases,
+            /*
+             * LEAD-DESTINATION-001 — a row with no purchase and a messaging result is a messaging
+             * buy: its RESULT is the conversation, which is what Ads Manager calls «results» for it.
+             * The same number is also published as `leads`, so the purchase figures stay purchases
+             * and nothing downstream has to guess which kind of result `conversions` holds.
+             */
+            'conversions' => $purchases ?? $messaging,
+            'leads' => $messaging,
         ];
 
         foreach (['add_to_cart', 'checkout', 'landing_page_views', 'engagements'] as $canonical) {
