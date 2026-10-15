@@ -459,4 +459,31 @@ final class ShortLinkTest extends TestCase
         $this->assertTrue($data['destination_is_whatsapp']);
         $this->assertSame('redirect', $data['mode']);
     }
+
+    public function test_the_message_of_an_existing_whatsapp_link_can_be_edited_and_the_hop_follows_it(): void
+    {
+        $data = $this->createWith([])->assertCreated()->json('data');
+        $slug = $data['slug'];
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->patchJson('/api/v1/short-links/'.$data['id'], ['message' => "مرحبا 👋\nأريد التفاصيل، شكراً!"])
+            ->assertOk()
+            ->assertJsonPath('data.message', "مرحبا 👋\nأريد التفاصيل، شكراً!");
+
+        $location = $this->get('/l/'.$slug)->assertStatus(302)->headers->get('Location');
+        $this->assertStringStartsWith('https://wa.me/966500000009?text=', (string) $location);
+        parse_str((string) parse_url((string) $location, PHP_URL_QUERY), $q);
+        $this->assertSame("مرحبا 👋\nأريد التفاصيل، شكراً!", $q['text']);
+        $this->assertStringContainsString('%0A', (string) $location, 'a line break must be encoded');
+        $this->assertSame(1, ShortLink::query()->findOrFail($data['id'])->clicks, 'the click is counted before the hop');
+    }
+
+    public function test_a_non_whatsapp_link_cannot_be_given_a_message(): void
+    {
+        $id = $this->create('link', 'https://example.com/offer')->assertCreated()->json('data.id');
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->patchJson('/api/v1/short-links/'.$id, ['message' => 'hi'])
+            ->assertStatus(422);
+    }
 }

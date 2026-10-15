@@ -111,6 +111,39 @@ final class ShortLinkController extends Controller
      * inside the recorded period with no follows really was quiet, and a day before it is not
      * reported at all rather than reported as nothing.
      */
+    /**
+     * PATCH short-links/{link} — change a WhatsApp link's pre-filled message or its mode.
+     *
+     * The slug and the recipient never change: a link already sent to people must keep opening the
+     * same chat, and only the words waiting in the composer are the Owner's to edit.
+     */
+    public function update(Request $request, string $link): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.update'), 403);
+
+        $model = ShortLink::query()->findOrFail($link);
+
+        $data = $request->validate([
+            'message' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'mode' => ['sometimes', 'string', 'in:'.ShortLink::MODE_REDIRECT.','.ShortLink::MODE_LANDING],
+        ]);
+
+        if (array_key_exists('message', $data)) {
+            abort_unless($model->kind === ShortLink::KIND_WHATSAPP, 422, 'Only a WhatsApp link carries a message.');
+
+            $resolved = $this->destinations->resolve(ShortLink::KIND_WHATSAPP, (string) $model->source_value, $data['message']);
+            $model->forceFill(['destination' => $resolved['destination'], 'message' => $resolved['message']]);
+        }
+
+        if (isset($data['mode'])) {
+            $model->forceFill(['mode' => $data['mode']]);
+        }
+
+        $model->save();
+
+        return ApiResponse::success($this->shape($model->refresh()), 'Short link updated.');
+    }
+
     public function history(Request $request, string $link): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);

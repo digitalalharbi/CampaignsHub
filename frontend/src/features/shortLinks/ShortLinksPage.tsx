@@ -11,7 +11,7 @@ import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytic
 import { StatCard } from '@/components/ui/StatCard'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
-import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, type ShortLink, type ShortLinkKind } from './api'
+import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -32,6 +32,10 @@ const COPY = {
     whatsapp: 'واتساب',
     link: 'رابط',
     phone: 'رقم الجوال',
+    message: 'الرسالة الجاهزة (اختياري)',
+    message_hint: 'تظهر مكتوبة في محادثة واتساب، ولا تُرسل تلقائيًا.',
+    edit_message: 'تعديل الرسالة',
+    save_message: 'حفظ',
     url: 'الرابط',
     url_hint: 'الصق العنوان كاملاً، يبدأ بـ https://',
     submit: 'إنشاء الرابط',
@@ -65,6 +69,10 @@ const COPY = {
     whatsapp: 'WhatsApp',
     link: 'Link',
     phone: 'Phone number',
+    message: 'Ready message (optional)',
+    message_hint: 'Appears written in the WhatsApp chat; it is never sent automatically.',
+    edit_message: 'Edit message',
+    save_message: 'Save',
     url: 'Link',
     url_hint: 'Paste the full address, starting with https://',
     submit: 'Create the link',
@@ -133,6 +141,9 @@ export function ShortLinksPage() {
   const [phone, setPhone] = useState('')
   const [dial, setDial] = useState(DEFAULT_DIAL_CODE)
   const [url, setUrl] = useState('')
+  const [message, setMessage] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
   const [created, setCreated] = useState<ShortLink | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -146,6 +157,7 @@ export function ShortLinksPage() {
   const reset = () => {
     setPhone('')
     setUrl('')
+    setMessage('')
     setError(null)
   }
 
@@ -158,7 +170,7 @@ export function ShortLinksPage() {
        */
       const value = kind === 'whatsapp' ? (phoneFieldValue(phone, dial) ?? `${dial}${phone}`) : url
 
-      return createShortLink(kind, value)
+      return createShortLink(kind, value, kind === 'whatsapp' ? message.trim() : undefined)
     },
     onSuccess: (link) => {
       setCreated(link)
@@ -169,6 +181,14 @@ export function ShortLinksPage() {
     onError: (e: { response?: { data?: { errors?: Record<string, string[]>; message?: string } } }) => {
       const errors = e.response?.data?.errors
       setError(errors?.value?.[0] ?? errors?.kind?.[0] ?? e.response?.data?.message ?? null)
+    },
+  })
+
+  const saveMessage = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => updateShortLinkMessage(id, text),
+    onSuccess: () => {
+      setEditing(null)
+      void client.invalidateQueries({ queryKey: ['short-links'] })
     },
   })
 
@@ -318,6 +338,19 @@ export function ShortLinksPage() {
               </Field>
             )}
 
+            {kind === 'whatsapp' && (
+              <Field label={t.message} htmlFor="short-link-message" hint={t.message_hint}>
+                <textarea
+                  id="short-link-message"
+                  value={message}
+                  maxLength={500}
+                  rows={3}
+                  onChange={(e) => setMessage(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-surface p-2.5 text-sm"
+                />
+              </Field>
+            )}
+
             <div className="flex gap-2">
               <Button
                 onClick={() => create.mutate()}
@@ -343,6 +376,30 @@ export function ShortLinksPage() {
                   <code dir="ltr" className="text-start block truncate text-sm font-bold">{l.short_url}</code>
                   {/* What they typed — a phone number stays a phone number. */}
                   <span className="text-start block truncate text-xs text-text-muted"><Num>{l.shows}</Num></span>
+                  {l.kind === 'whatsapp' && editing === l.id ? (
+                    <div className="mt-2 flex flex-col gap-2">
+                      <textarea
+                        value={draft}
+                        maxLength={500}
+                        rows={3}
+                        onChange={(e) => setDraft(e.target.value)}
+                        data-testid={`short-link-message-${l.slug}`}
+                        className="w-full rounded-xl border border-border bg-surface p-2 text-sm"
+                      />
+                      <div className="flex gap-2">
+                        <Button onClick={() => saveMessage.mutate({ id: l.id, text: draft })} disabled={saveMessage.isPending}>{t.save_message}</Button>
+                        <Button variant="secondary" onClick={() => setEditing(null)}>{t.cancel}</Button>
+                      </div>
+                    </div>
+                  ) : l.kind === 'whatsapp' ? (
+                    <button
+                      type="button"
+                      className="mt-1 text-start text-xs font-semibold text-accent hover:underline"
+                      onClick={() => { setEditing(l.id); setDraft(l.message ?? '') }}
+                    >
+                      {l.message ? `“${l.message.slice(0, 40)}${l.message.length > 40 ? '…' : ''}”` : t.edit_message}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>
