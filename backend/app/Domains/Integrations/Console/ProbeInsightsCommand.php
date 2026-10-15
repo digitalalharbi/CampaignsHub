@@ -213,6 +213,32 @@ final class ProbeInsightsCommand extends Command
         $this->line(sprintf('  mapped_campaign_rows %d   (of %d campaigns discovered)', $mapped, $known->count()));
         $this->line(sprintf('  responses received   %d', count($bodies)));
 
+        /*
+         * PROBE-ACTION-TYPES-001 — which action NAMES the provider sent, and on how many rows.
+         * Names and counts only, never values: it is what answers «which Meta action is this
+         * campaign's result» (a click-to-WhatsApp buy sends no purchase) without reading figures.
+         */
+        $names = [];
+        foreach ($bodies as $body) {
+            foreach ((array) ($body['data'] ?? []) as $raw) {
+                foreach (['actions', 'cost_per_action_type', 'conversions'] as $family) {
+                    foreach ((array) ($raw[$family] ?? []) as $action) {
+                        $type = is_array($action) ? ($action['action_type'] ?? null) : null;
+                        if (is_string($type) && $type !== '') {
+                            $names[$family.' › '.$type] = ($names[$family.' › '.$type] ?? 0) + 1;
+                        }
+                    }
+                }
+            }
+        }
+        if ($names !== []) {
+            arsort($names);
+            $this->line('  action types the provider sent (rows carrying each):');
+            foreach (array_slice($names, 0, 40, true) as $name => $count) {
+                $this->line(sprintf('    · %-70s %d', $name, $count));
+            }
+        }
+
         foreach (array_slice($rows, 0, max(0, (int) $this->option('rows'))) as $index => $row) {
             $this->line(sprintf('  row[%d] %s', $index, json_encode($row, JSON_UNESCAPED_UNICODE) ?: ''));
         }
