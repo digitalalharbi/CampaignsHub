@@ -63,11 +63,34 @@ describe('building a live client link', () => {
   it('sends the form the operator chose, not a default', async () => {
     await build()
 
-    fireEvent.click(screen.getByTestId('live-link-form-detailed'))
+    fireEvent.click(screen.getByTestId('live-link-level-detailed'))
     fireEvent.click(screen.getByTestId('live-link-create'))
 
     await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
     expect(sent().form).toBe('detailed')
+  })
+
+  /** REPORT-DETAIL-LEVEL-001 — three levels, and the middle one is a detailed form, not a relabelled summary. */
+  it('sends the detail level, with the form the server renders it as', async () => {
+    await build()
+
+    fireEvent.click(screen.getByTestId('live-link-level-standard'))
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect(sent().detail_level).toBe('standard')
+    expect(sent().form).toBe('detailed')
+  })
+
+  it('sends the summary level as the executive form', async () => {
+    await build()
+
+    fireEvent.click(screen.getByTestId('live-link-level-summary'))
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect(sent().detail_level).toBe('summary')
+    expect(sent().form).toBe('executive_summary')
   })
 
   /** The smaller promise is the safe default: what is shown too little gets asked about; too much cannot be taken back. */
@@ -102,7 +125,7 @@ describe('building a live client link', () => {
   it('says what the client will get, including what is withheld', async () => {
     await build()
 
-    fireEvent.click(screen.getByTestId('live-link-form-detailed'))
+    fireEvent.click(screen.getByTestId('live-link-level-detailed'))
     // CLIENT-REPORT-FRAMING-001 — a new client link hides spend unless the owner chooses to show it.
     expect(screen.getByTestId('live-link-hide-spend')).toBeChecked()
 
