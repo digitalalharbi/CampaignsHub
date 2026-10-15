@@ -197,23 +197,38 @@ describe('ReportsPage — engine-fed builder', () => {
    * ever naming the consequence: an operator picked «client» and found out what that meant by
    * opening the finished report.
    */
-  it('names the sections the chosen audience implies', async () => {
+  it('offers the sections as choices that start where the level and audience put them', async () => {
     vi.mocked(listReportSections).mockResolvedValue({
       sections: [
         { key: 'kpis', title_ar: 'المؤشرات', title_en: 'KPIs', default_client: true, default_internal: true },
         { key: 'detailed_tables', title_ar: 'جداول تفصيلية', title_en: 'Detailed tables', default_client: false, default_internal: true },
       ],
     } as never)
+    vi.mocked(createReport).mockResolvedValue({} as never)
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
     fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
 
-    const preview = await screen.findByTestId('rb-section-preview')
-    // A client report carries the KPIs and not the internal-only tables.
-    expect(preview).toHaveTextContent('KPIs')
-    expect(preview).not.toHaveTextContent('Detailed tables')
-    // And it does not pretend this is the last chance to decide.
-    expect(preview).toHaveTextContent(/changed after/i)
+    const kpis = await screen.findByTestId('rb-section-kpis')
+    const tables = screen.getByTestId('rb-section-detailed_tables')
+    // The summary level starts with the KPIs on and the campaign breakdown off.
+    expect(kpis).toBeChecked()
+    expect(tables).not.toBeChecked()
+
+    // Standard switches the breakdown on; the Owner's own switch is then what is sent.
+    fireEvent.click(screen.getByTestId('rb-level-standard'))
+    expect(screen.getByTestId('rb-section-detailed_tables')).toBeChecked()
+
+    fireEvent.click(screen.getByTestId('rb-section-kpis'))
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+
+    await waitFor(() =>
+      expect(createReport).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({ section_settings: { sections: { kpis: false } }, detail_level: 'standard' }),
+      ),
+    )
   })
 
   /**

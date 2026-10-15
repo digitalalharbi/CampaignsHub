@@ -43,3 +43,21 @@ export const DETAIL_LEVELS: Array<{
 
 /** The two-valued form every existing renderer reads. */
 export const formOf = (level: DetailLevelKey): 'executive_summary' | 'detailed' => (level === 'summary' ? 'executive_summary' : 'detailed')
+
+/**
+ * The sections a level starts with, in the report-section registry's own keys. Mirrors the server's
+ * `DetailLevel::sections()` — the server is the authority, and this only lets the setup screen show
+ * the starting state before anything is sent. A section absent here keeps its own default.
+ */
+export function levelSections(level: DetailLevelKey): Record<string, boolean> {
+  const always = { kpis: true, trends: true, platform_comparison: true, content_performance: true, recommendations: true }
+
+  if (level === 'summary') {
+    return { ...always, objective_breakdown: false, detailed_tables: false, funnel: false, budget_pacing: false, advanced_segmentation: false }
+  }
+  if (level === 'standard') {
+    return { ...always, objective_breakdown: true, detailed_tables: true, funnel: false, budget_pacing: false, advanced_segmentation: false }
+  }
+
+  return { ...always, objective_breakdown: true, detailed_tables: true, funnel: true, budget_pacing: true, advanced_segmentation: true }
+}
