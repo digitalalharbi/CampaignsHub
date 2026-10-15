@@ -20,7 +20,7 @@ test.describe('the live client link an operator copies', () => {
     await page.goto('/app/reports')
     await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
 
-    await page.getByRole('button', { name: /رابط لحظي|Live client link/ }).click()
+    await page.getByRole('button', { name: /تقرير رابط|Link Report/ }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 10000 })
