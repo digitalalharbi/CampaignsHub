@@ -30,6 +30,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -367,6 +368,7 @@ final class DiagnoseSyncCommand extends Command
         }
 
         $this->reportStructureRuns($account);
+        $this->reportFailedSyncJobs();
 
         if ((bool) $this->option('payload')) {
             $this->reportPayload($account, $runs->first());
@@ -1677,6 +1679,35 @@ final class DiagnoseSyncCommand extends Command
      * structure fails, and the visible result is a project full of figures with no campaign to hang
      * them on — which is exactly the state the live account was found in.
      */
+    /**
+     * Why a metrics sync died OUTSIDE the syncer's own try — the runs left «running» for ever.
+     *
+     * A `MetricSyncRun` is created, the job throws past it, the queue retries on its 60s/300s
+     * backoff and creates another: three «running» rows per sweep, none ever finishing. The only
+     * record of the exception is `failed_jobs`. First line only and truncated, class + message,
+     * never the payload.
+     */
+    private function reportFailedSyncJobs(): void
+    {
+        if (! Schema::hasTable('failed_jobs')) {
+            return;
+        }
+
+        $rows = DB::table('failed_jobs')
+            ->where('payload', 'like', '%SyncAccountMetricsJob%')
+            ->orderByDesc('failed_at')
+            ->limit(3)
+            ->get(['failed_at', 'exception']);
+
+        $this->line('');
+        $this->line(sprintf('  Failed metrics-sync jobs (last %d):', $rows->count()));
+
+        foreach ($rows as $row) {
+            $first = strtok((string) $row->exception, "\n");
+            $this->line(sprintf('  %s  %s', $row->failed_at, mb_substr((string) $first, 0, 300)));
+        }
+    }
+
     private function reportStructureRuns(ExternalAccount $account): void
     {
         $runs = IntegrationSyncRun::withoutGlobalScopes()
