@@ -60,21 +60,78 @@ type Input = {
 }
 
 /**
- * LEAD-DESTINATION-001 — a messaging buy's results are messages, not leads.
+ * REPORT-KPI-PRESETS-001 — short, client-facing names, by what the result REALLY is.
  *
- * Meta's attributed messaging result is stored as `leads` and its cost as `cpl`; the figures are
- * right and the NAMES would be wrong for a WhatsApp or direct-message campaign. They are platform
- * attributed messaging results — not WhatsApp Business conversation identities.
+ * A messaging buy's results are messages and what one cost; a sale is an order, its value and the
+ * return. Where the real result type is known the generic «النتائج» is not used. Stored metric
+ * keys are unchanged (`leads` holds a messaging result, `cpl` its cost) — only the name differs.
  */
 const MESSAGING_LABEL: Record<string, { ar: string; en: string }> = {
-  leads: { ar: 'نتائج المراسلة', en: 'Messaging results' },
-  cpl: { ar: 'تكلفة نتيجة المراسلة', en: 'Cost per messaging result' },
-  conversions: { ar: 'نتائج المراسلة', en: 'Messaging results' },
-  cpa: { ar: 'تكلفة نتيجة المراسلة', en: 'Cost per messaging result' },
+  leads: { ar: 'الرسائل', en: 'Messages' },
+  cpl: { ar: 'تكلفة الرسالة', en: 'Cost per message' },
+  conversions: { ar: 'الرسائل', en: 'Messages' },
+  cpa: { ar: 'تكلفة الرسالة', en: 'Cost per message' },
 }
 
+const OBJECTIVE_LABEL: Record<string, Record<string, { ar: string; en: string }>> = {
+  sales: {
+    purchases: { ar: 'الطلبات', en: 'Orders' },
+    conversions: { ar: 'الطلبات', en: 'Orders' },
+    cpa: { ar: 'تكلفة الطلب', en: 'Cost per order' },
+    revenue: { ar: 'المبيعات', en: 'Sales' },
+    roas: { ar: 'العائد', en: 'Return' },
+  },
+  leads: {
+    leads: { ar: 'العملاء المحتملون', en: 'Leads' },
+    conversions: { ar: 'العملاء المحتملون', en: 'Leads' },
+    cpl: { ar: 'تكلفة العميل المحتمل', en: 'Cost per lead' },
+    cpa: { ar: 'تكلفة العميل المحتمل', en: 'Cost per lead' },
+  },
+  traffic: {
+    clicks: { ar: 'النقرات', en: 'Clicks' },
+    cpc: { ar: 'تكلفة النقرة', en: 'Cost per click' },
+    landing_page_views: { ar: 'زيارات الصفحة', en: 'Page visits' },
+  },
+  awareness: {
+    impressions: { ar: 'الظهور', en: 'Impressions' },
+    reach: { ar: 'الوصول', en: 'Reach' },
+    frequency: { ar: 'التكرار', en: 'Frequency' },
+    cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM' },
+  },
+  engagement: {
+    engagements: { ar: 'التفاعل', en: 'Engagement' },
+    engagement_rate: { ar: 'معدل التفاعل', en: 'Engagement rate' },
+    cpe: { ar: 'تكلفة التفاعل', en: 'Cost per engagement' },
+    video_views: { ar: 'المشاهدات', en: 'Views' },
+  },
+  video: {
+    video_views: { ar: 'المشاهدات', en: 'Views' },
+    video_completion_rate: { ar: 'معدل المشاهدة', en: 'View rate' },
+  },
+  app_installs: {
+    installs: { ar: 'التحميلات', en: 'Installs' },
+    cpi: { ar: 'تكلفة التحميل', en: 'Cost per install' },
+    registrations: { ar: 'التسجيلات', en: 'Registrations' },
+  },
+}
+
+/** The destinations whose result is a message the platform attributed to the ad. */
 export function isMessagingDestination(destination: string | null | undefined): boolean {
-  return destination === 'whatsapp' || destination === 'direct_message'
+  return destination === 'whatsapp' || destination === 'messenger' || destination === 'instagram_direct'
+}
+
+/** The name a metric wears in THIS report, or null to keep the catalogue's own. */
+export function reportLabel(
+  key: string,
+  objective: string | undefined,
+  destination: string | null | undefined,
+  ar: boolean,
+): string | null {
+  const entry = objective === 'leads' && isMessagingDestination(destination)
+    ? MESSAGING_LABEL[key]
+    : OBJECTIVE_LABEL[objective ?? '']?.[key]
+
+  return entry ? (ar ? entry.ar : entry.en) : null
 }
 
 /**
@@ -126,7 +183,6 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
    */
   const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective).primary
   const direct = data.objective_performance?.direct
-  const messaging = isMessagingDestination(data.lead_destination)
 
   return keys
     .filter((key) => SPECS[key])
@@ -139,9 +195,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
         key,
         label: substituted
           ? (ar ? DIRECT_LABEL[key].ar : DIRECT_LABEL[key].en)
-          : messaging && MESSAGING_LABEL[key]
-            ? (ar ? MESSAGING_LABEL[key].ar : MESSAGING_LABEL[key].en)
-            : (ar ? spec.label.ar : spec.label.en),
+          : reportLabel(key, objective, data.lead_destination, ar) ?? (ar ? spec.label.ar : spec.label.en),
         // A substituted figure is a derived ratio of a NARROWER scope than `reported` describes, so
         // it is read straight: `reported` would answer a question about the wrong denominator.
         reading: substituted
@@ -245,15 +299,11 @@ export function creativeReadings(
   /** LEAD-DESTINATION-001 */
   destination: string | null = null,
 ): Array<{ key: string; label: string; reading: MetricReading }> {
-  const messaging = isMessagingDestination(destination)
-
   return creativeChips(objective, destination)
     .filter((key) => SPECS[key])
     .map((key) => ({
       key,
-      label: messaging && MESSAGING_LABEL[key]
-        ? (ar ? MESSAGING_LABEL[key].ar : MESSAGING_LABEL[key].en)
-        : (ar ? SPECS[key].label.ar : SPECS[key].label.en),
+      label: reportLabel(key, objective, destination, ar) ?? (ar ? SPECS[key].label.ar : SPECS[key].label.en),
       reading: readMetric(key, SPECS[key], row as Record<string, number | null>, reported, currency),
     }))
 }

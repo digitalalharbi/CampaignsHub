@@ -222,11 +222,10 @@ final class ReportGenerator
             'currency' => $currency,
             'objective' => $objective,
             'platform_order' => $config['platform_order'] ?? $providerList,
-            'metric_set' => $leadDestination?->isMessaging() && ($config['metric_set'] ?? $this->template->metricSet('leads')) === $this->template->metricSet('leads')
-                // Spend, reach of the ad, the platform's messaging result and what one cost. Purchase
-                // and ROAS figures are not offered for a buy that cannot have a purchase.
-                ? ['spend', 'impressions', 'leads', 'cpl']
-                : ($config['metric_set'] ?? $this->template->metricSet($objective)),
+            // The configured set wins; otherwise the objective's preset, narrowed by the destination.
+            'metric_set' => isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
+                ? $config['metric_set']
+                : $this->template->metricSet($objective, $leadDestination?->value),
             'lead_destination' => $leadDestination?->value,
             'kpis' => $totals,
             'previous' => $previous,

@@ -111,10 +111,13 @@ const PAYLOAD = {
 
 describe('the four report products', () => {
   it('names each of the four, and never describes a live page as a snapshot', () => {
-    expect(productName('live', 'executive_summary', 'en')).toBe('Live client link — summary')
-    expect(productName('live', 'detailed', 'en')).toBe('Live client link — full')
-    expect(productName('snapshot', 'executive_summary', 'en')).toBe('Executive summary')
-    expect(productName('snapshot', 'detailed', 'en')).toBe('Detailed report')
+    // REPORT-PRODUCTS-001 — two products, two names, whatever the detail level.
+    expect(productName('live', 'executive_summary', 'en')).toBe('Link Report')
+    expect(productName('live', 'detailed', 'en')).toBe('Link Report')
+    expect(productName('snapshot', 'executive_summary', 'en')).toBe('Saved Report')
+    expect(productName('snapshot', 'detailed', 'en')).toBe('Saved Report')
+    expect(productName('live', 'detailed', 'ar')).toBe('تقرير رابط')
+    expect(productName('snapshot', 'detailed', 'ar')).toBe('تقرير محفوظ')
 
     /*
      * The exact sentence production printed over the live dashboard. A live page may not promise a
@@ -135,8 +138,8 @@ describe('the four report products', () => {
         expect(productLabel(mode, form, 'ar')).not.toContain('حمل')
       }
     }
-    expect(productLabel('live', 'executive_summary', 'ar')).toContain('رابط لحظي للعميل')
-    expect(productLabel('snapshot', 'detailed', 'ar')).toContain('تقرير تفصيلي')
+    expect(productLabel('live', 'executive_summary', 'ar')).toContain('تقرير رابط')
+    expect(productLabel('snapshot', 'detailed', 'ar')).toContain('تقرير محفوظ')
   })
 })
 

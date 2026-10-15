@@ -119,9 +119,9 @@ describe('the executive slide', () => {
   it('still leads a sales report with the return, named the way a client reads it', () => {
     render(<SlideBody slide={slide} data={sales} meta={meta} />)
 
-    // METRIC-NAMES-001 — «ROAS» is jargon to everyone outside media buying, and it is the figure a
-    // client is most likely to repeat back to somebody else.
-    expect(screen.getByText('العائد على الإنفاق')).toBeInTheDocument()
+    // METRIC-NAMES-001 — «ROAS» is jargon to everyone outside media buying. REPORT-KPI-PRESETS-001:
+    // the client-facing name on a sales report is the short «العائد».
+    expect(screen.getByText('العائد')).toBeInTheDocument()
     expect(screen.getByText('أفضل منصة (ROAS)')).toBeInTheDocument()
   })
 

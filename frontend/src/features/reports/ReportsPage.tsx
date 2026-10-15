@@ -291,7 +291,7 @@ export function ReportsPage() {
         {/*
           Two ways out of this page, and they are different things.
 
-          «رابط لحظي للعميل» is the primary action, because sharing live figures is what this product is
+          «تقرير رابط» is the primary action, because sharing live figures is what this product is
           FOR — it is a link built from a choice (campaigns, platforms, period, metrics) and needs no
           document. «تقرير جديد» still generates a saved, signed-off document, which is the right tool
           for a monthly PDF and the wrong one for «how is it going today?».
@@ -310,7 +310,7 @@ export function ReportsPage() {
             title={!currentProjectId ? (ar ? 'اختر مشروعًا أولًا' : 'Choose a project first') : undefined}
             onClick={() => setLiveOpen(true)}
           >
-            <Link2 size={18} /> {ar ? 'رابط لحظي للعميل' : 'Live client link'}
+            <Link2 size={18} /> {ar ? 'تقرير رابط' : 'Link Report'}
           </Button>
           <Button
             size="lg"
@@ -928,7 +928,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             {([
               { key: 'snapshot' as const, ar: 'لقطة ثابتة', en: 'Snapshot',
                 hintAr: 'أرقام محفوظة لا تتغيّر بعد الإصدار', hintEn: 'Figures frozen at issue, never move' },
-              { key: 'live' as const, ar: 'رابط لحظي للعميل', en: 'Live client link',
+              { key: 'live' as const, ar: 'تقرير رابط', en: 'Link Report',
                 hintAr: 'لوحة يفلترها العميل وتتحدّث', hintEn: 'A dashboard the client filters, kept current' },
             ]).map((o) => (
               <button
