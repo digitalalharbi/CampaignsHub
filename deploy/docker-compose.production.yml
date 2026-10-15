@@ -35,6 +35,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend.production.env
+    volumes:
+      - campaignshub_storage:/var/www/html/storage/app
     depends_on:
       db:
         condition: service_healthy
@@ -52,6 +54,8 @@ services:
     command: php artisan horizon
     env_file:
       - ./backend.production.env
+    volumes:
+      - campaignshub_storage:/var/www/html/storage/app
     depends_on:
       backend:
         condition: service_started
@@ -66,6 +70,8 @@ services:
     command: php artisan schedule:work
     env_file:
       - ./backend.production.env
+    volumes:
+      - campaignshub_storage:/var/www/html/storage/app
     depends_on:
       backend:
         condition: service_started
@@ -96,3 +102,7 @@ networks:
 
 volumes:
   campaignshub_pgdata:
+  # STORAGE-PERSIST-001 — everything the product writes to its own disk: brand logos, uploaded files,
+  # generated PDFs and the share-card cache. It lived in the container's filesystem, so every deploy
+  # (which recreates the container) deleted all of it.
+  campaignshub_storage:
