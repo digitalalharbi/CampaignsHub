@@ -198,20 +198,22 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
 }
 
 /**
- * REPORT-RESULT-KIND-001 — the card's name, with a specific result named by its destination.
+ * The card's name. Always the metric's OWN canonical term — «النتائج», «تكلفة النتيجة».
  *
- * «Results» is the generic word and a client reading a WhatsApp campaign should see «Messages».
- * Only the result and its cost are renamed; every other metric keeps its own label.
+ * REPORT-RESULT-KIND-001 first renamed the result card by destination («الرسائل»), and the Owner
+ * ruled that wrong: the destination decides which provider metric IS the result, internally, and
+ * never what the card is called — otherwise one campaign's messages, leads and results become three
+ * names for one number. `result_kind` stays on the payload for calculation, diagnostics and context.
  */
-export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload | null | undefined, ar: boolean): string {
+export function metricLabel(meta: MetricMeta, _key: string, _payload: LivePayload | null | undefined, ar: boolean): string {
+  return ar ? meta.ar : meta.en
+}
+
+/** What kind of result the card counts — context for a tooltip, never a replacement name. */
+export function resultContext(payload: LivePayload | null | undefined, ar: boolean): string | undefined {
   const kind = payload?.result_kind
 
-  if (kind) {
-    if (key === 'conversions' || key === 'leads') return ar ? kind.result.ar : kind.result.en
-    if (key === 'cpa' || key === 'cpl') return ar ? kind.cost.ar : kind.cost.en
-  }
-
-  return ar ? meta.ar : meta.en
+  return kind ? (ar ? kind.result.ar : kind.result.en) : undefined
 }
 
 /** Money and cost-per keys: a null here is a figure the link hides or the platform did not give. */

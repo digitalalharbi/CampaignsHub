@@ -180,7 +180,7 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
   const noSpend = spendHiddenByLink(payload)
   const split = sectionShown(payload, 'platform_comparison') && !noSpend
   if (!trend && !split) return null
-  const resultName = payload.result_kind ? (ar ? payload.result_kind.result.ar : payload.result_kind.result.en) : (ar ? 'النتائج' : 'Results')
+  const resultName = ar ? 'النتائج' : 'Results'
 
   return (
     <>

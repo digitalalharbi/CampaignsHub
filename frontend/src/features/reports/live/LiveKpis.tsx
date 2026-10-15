@@ -35,17 +35,18 @@ export function kpiKeysFor(payload: LivePayload, reader: Reader): string[] {
  */
 export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: string[]): string[] {
   const t = payload.totals
-  const sameAsResult = (k: string) => k === 'leads' && payload.result_kind != null && t.leads === t.conversions
+  // One underlying result is one card: `leads` carrying the same count as the result is that result.
+  const sameAsResult = (k: string) => k === 'leads' && t.leads !== null && t.leads !== undefined && t.leads === t.conversions
   const known = keys
     .filter((k, i) => keys.indexOf(k) === i)
     .filter((k) => reader.meta[k] && !sameAsResult(k))
     .filter((k) => cardHasFigure(k, reader.meta[k].format(t, payload, reader.asMoney, reader.count).text, payload))
 
-  if (payload.result_kind != null) {
-    const order = ['spend', 'impressions', 'conversions', 'leads', 'cpa', 'cpl']
-    const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
-    known.sort((a, b) => rank(a) - rank(b))
-  }
+  // The primary row reads in a buyer's order whatever the objective: what it cost, who saw it,
+  // what it produced, what each result cost. Everything else keeps its own relative order.
+  const order = ['spend', 'impressions', 'conversions', 'cpa']
+  const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
+  known.sort((a, b) => rank(a) - rank(b))
 
   return known
 }
