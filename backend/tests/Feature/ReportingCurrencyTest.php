@@ -392,6 +392,75 @@ final class ReportingCurrencyTest extends TestCase
         $this->assertSame('JPY', $withheld[0]['money_original_currency']);
     }
 
+    /**
+     * DERIVED-WITHHELD-001 (Owner, P0) — a cost ratio is never computed from a partial spend.
+     *
+     * Production: spend withheld for want of a SAR→USD rate, and CPA still printed ~$1. The numerator
+     * was the CONVERTED SUBSET of spend (SUM ignores NULL); the denominator was EVERY conversion.
+     * Division of two different populations is not a small error, it is a fabricated figure.
+     */
+    public function test_cpa_is_withheld_when_any_contributing_spend_is_withheld(): void
+    {
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
+
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01',
+            'spend' => 750, 'conversions' => 10, 'clicks' => 100, 'impressions' => 10000, 'leads' => 5, 'revenue' => 3000]]);
+        $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01',
+            'spend' => 5000, 'conversions' => 10, 'clicks' => 100, 'impressions' => 10000, 'leads' => 5, 'revenue' => 9000]]);
+
+        $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+
+        $this->assertSame(1, (int) $totals['spend_withheld_rows']);
+        foreach (['cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'roas'] as $key) {
+            $this->assertNull($totals[$key], "{$key} was computed from the converted subset of a partly withheld spend");
+        }
+        // Counts and ratios that involve no money stay measured.
+        $this->assertEqualsWithDelta(20.0, (float) $totals['conversions'], 0.001);
+        $this->assertEqualsWithDelta(0.01, (float) $totals['ctr'], 0.0001);
+    }
+
+    public function test_cpa_is_spend_over_results_when_every_spend_row_is_converted(): void
+    {
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
+
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01',
+            'spend' => 750, 'conversions' => 10, 'clicks' => 100, 'impressions' => 10000, 'revenue' => 3000]]);
+
+        $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+
+        $this->assertSame(0, (int) $totals['spend_withheld_rows']);
+        $spend = (float) $totals['spend'];
+        $this->assertEqualsWithDelta(200.0, $spend, 0.01);
+        $this->assertEqualsWithDelta(round($spend / 10, 2), (float) $totals['cpa'], 0.001, 'CPA is not spend ÷ results');
+        $this->assertEqualsWithDelta(round($spend / 100, 3), (float) $totals['cpc'], 0.001);
+        $this->assertEqualsWithDelta(round($spend / 10000 * 1000, 2), (float) $totals['cpm'], 0.001);
+        $this->assertEqualsWithDelta(round(800.0 / $spend, 3), (float) $totals['roas'], 0.001);
+    }
+
+    /** Mixed currencies across platforms: the platform with an unconvertible row emits no ratio, the other keeps its own. */
+    public function test_a_mixed_currency_breakdown_never_emits_a_partial_cpa(): void
+    {
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
+
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750, 'conversions' => 10]]);
+        $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01', 'spend' => 5000, 'conversions' => 10]]);
+
+        // Both accounts are `meta` here, so the breakdown is one platform holding a withheld row:
+        // the whole row is partial and must carry no cost ratio.
+        app(ProjectContext::class)->setProjectId($this->project->id);
+        $rows = app(MetricsAggregator::class)->byProvider(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+        app(ProjectContext::class)->forget();
+
+        $this->assertNotEmpty($rows);
+        foreach ($rows as $row) {
+            if ((int) ($row['spend_withheld_rows'] ?? 0) > 0) {
+                $this->assertNull($row['cpa'], 'a platform with withheld spend printed a CPA');
+                $this->assertNull($row['cpm']);
+                $this->assertNull($row['roas']);
+            }
+        }
+    }
+
     /** Once the rate exists, a re-sync replaces the withheld figure — nothing has to be re-fetched. */
     public function test_a_resync_converts_a_row_that_was_withheld(): void
     {

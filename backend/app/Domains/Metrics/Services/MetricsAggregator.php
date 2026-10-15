@@ -2460,6 +2460,21 @@ final class MetricsAggregator
         $inAppEvents = (float) ($row['in_app_events'] ?? 0);
         $engagements = (float) ($row['engagements'] ?? 0);
 
+        /*
+         * DERIVED-WITHHELD-001 — a ratio over money is stated only over COMPLETE money.
+         *
+         * `SUM(spend)` ignores a row whose conversion was withheld (no rate, so `value` is NULL), so
+         * `$spend` here is the converted SUBSET, while results, clicks and impressions are counted for
+         * every row. Dividing one population by another printed a CPA of ~$1 beside a withheld spend
+         * on Production. A cost ratio, ROAS and AOV are therefore absent — null, never zero, never a
+         * smaller-looking number — whenever a contributing row is withheld; they return by themselves
+         * once the rate exists and the rows are renormalised. Counts and money-free ratios are
+         * untouched.
+         */
+        $spendWithheld = (int) ($row['spend_withheld_rows'] ?? 0) > 0;
+        $revenueWithheld = (int) ($row['revenue_withheld_rows'] ?? 0) > 0;
+        $costOk = ! $spendWithheld;
+
         return [
             // base sums
             'impressions' => round($impr, 2),
@@ -2491,17 +2506,17 @@ final class MetricsAggregator
             'in_app_events' => round($inAppEvents, 2),
             'engagements' => round($engagements, 2),
             // derived KPIs (computed from the sums, never summed)
-            'roas' => $spend > 0 ? round($revenue / $spend, 3) : null,
-            'cpa' => $conv > 0 ? round($spend / $conv, 2) : null,
+            'roas' => $costOk && ! $revenueWithheld && $spend > 0 ? round($revenue / $spend, 3) : null,
+            'cpa' => $costOk && $conv > 0 ? round($spend / $conv, 2) : null,
             'ctr' => $impr > 0 ? round($clicks / $impr, 5) : null,
-            'cpc' => $clicks > 0 ? round($spend / $clicks, 3) : null,
-            'cpm' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,
+            'cpc' => $costOk && $clicks > 0 ? round($spend / $clicks, 3) : null,
+            'cpm' => $costOk && $impr > 0 ? round($spend / $impr * 1000, 2) : null,
             // Only over the provider's own deduplicated reach — never over a sum of reaches.
             'frequency' => $reachDeduplicated && $reach > 0 ? round($impr / $reach, 2) : null,
-            'cpl' => $leads > 0 ? round($spend / $leads, 2) : null,
-            'cpi' => $installs > 0 ? round($spend / $installs, 2) : null,
-            'cpe' => $engagements > 0 ? round($spend / $engagements, 3) : null,
-            'aov' => $purchases > 0 ? round($revenue / $purchases, 2) : null,
+            'cpl' => $costOk && $leads > 0 ? round($spend / $leads, 2) : null,
+            'cpi' => $costOk && $installs > 0 ? round($spend / $installs, 2) : null,
+            'cpe' => $costOk && $engagements > 0 ? round($spend / $engagements, 3) : null,
+            'aov' => ! $revenueWithheld && $purchases > 0 ? round($revenue / $purchases, 2) : null,
             'conversion_rate' => $clicks > 0 ? round($conv / $clicks, 5) : null,
             'engagement_rate' => $impr > 0 ? round($engagements / $impr, 5) : null,
             'video_completion_rate' => $videoViews > 0 ? round($videoCompletions / $videoViews, 5) : null,
