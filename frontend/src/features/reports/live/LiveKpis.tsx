@@ -52,6 +52,12 @@ export function LiveKpiBoard({
   const known = keys
     .filter((k) => reader.meta[k] && !sameAsResult(k))
     .filter((k) => cardHasFigure(k, reader.meta[k].format(t, payload, reader.asMoney, reader.count).text, payload))
+  // A named result reads in the order a buyer asks: what it cost, who saw it, what it produced, what each cost.
+  if (payload.result_kind != null) {
+    const order = ['spend', 'impressions', 'conversions', 'leads', 'cpa', 'cpl']
+    const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
+    known.sort((a, b) => rank(a) - rank(b))
+  }
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
 

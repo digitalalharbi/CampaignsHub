@@ -52,6 +52,20 @@ describe('live KPI board', () => {
     expect(metricLabel(meta, 'cpa', base, true)).toBe('تكلفة النتيجة')
   })
 
+  it('reads a messaging report as impressions, messages, then clicks', () => {
+    const payload = {
+      ...base,
+      totals: { ...base.totals, spend: 100, cpa: 0.5 },
+      result_kind: { kind: 'messaging', result: { ar: 'الرسائل', en: 'Messages' }, cost: { ar: 'تكلفة الرسالة', en: 'Cost per message' } },
+    } as unknown as LivePayload
+    render(<Board payload={payload} />)
+    const labels = Array.from(document.body.querySelectorAll('span, dt')).map((n) => n.textContent)
+    const at = (l: string) => labels.indexOf(l)
+
+    expect(at('الظهور')).toBeLessThan(at('الرسائل'))
+    expect(at('الرسائل')).toBeLessThan(at('النقرات'))
+  })
+
   it('a dash is not a figure, and a real zero is', () => {
     expect(cardHasFigure('spend', '—', base)).toBe(false)
     expect(cardHasFigure('conversions', '0', base)).toBe(true)
