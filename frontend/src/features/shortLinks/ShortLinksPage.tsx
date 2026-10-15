@@ -170,7 +170,9 @@ export function ShortLinksPage() {
        */
       const value = kind === 'whatsapp' ? (phoneFieldValue(phone, dial) ?? `${dial}${phone}`) : url
 
-      return createShortLink(kind, value, kind === 'whatsapp' ? message.trim() : undefined)
+      const note = kind === 'whatsapp' ? message.trim() : ''
+
+      return note === '' ? createShortLink(kind, value) : createShortLink(kind, value, note)
     },
     onSuccess: (link) => {
       setCreated(link)

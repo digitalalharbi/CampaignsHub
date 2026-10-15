@@ -40,7 +40,7 @@ final class ShortLinkDestinations
     /**
      * The destination a chosen kind and a typed value resolve to.
      *
-     * @return array{kind: string, destination: string, source_value: string}
+     * @return array{kind: string, destination: string, source_value: string, message?: string|null}
      *
      * @throws ValidationException with the field the person actually typed into
      */
