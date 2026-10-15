@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Commerce\Services\StoreFunnelService;
@@ -454,6 +457,8 @@ final class LiveReportService
              * saying different things about the same number.
              */
             'conversions_basis' => $engine->conversionsBasis($from, $to),
+            // REPORT-RESULT-KIND-001 — what ONE result is called for the campaigns in scope.
+            'result_kind' => $this->resultKind($scope, $applied['campaigns']),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             'timeseries' => $engine->timeseries($from, $to),
@@ -1120,6 +1125,61 @@ final class LiveReportService
             'to' => $to->toDateString(),
             'providers' => $this->within($requested['providers'] ?? null, $scope['providers']),
             'campaigns' => $this->within($requested['campaigns'] ?? null, $scope['campaign_ids']),
+        ];
+    }
+
+    /**
+     * REPORT-RESULT-KIND-001 — the name of one result, when every campaign in scope agrees on it.
+     *
+     * A messaging campaign's «conversions» are conversations the platform attributed to the ad, and
+     * calling them «Results» (or «Leads») on a client's page names them wrongly. The destination is
+     * stored per ad set and resolved per campaign by `CampaignDestinations`; here it is read for the
+     * campaigns this link covers. Null when no destination is stated, or the scope mixes messaging
+     * with non-messaging: nothing is guessed, and the page keeps its generic word.
+     *
+     * @param  array<string, mixed>  $scope
+     * @param  list<string>  $narrowed
+     * @return array{kind: string, result: array{ar:string,en:string}, cost: array{ar:string,en:string}}|null
+     */
+    private function resultKind(array $scope, array $narrowed): ?array
+    {
+        $projectId = (string) ($scope['project_id'] ?? '');
+
+        if ($projectId === '' || $projectId === ReportScope::IMPOSSIBLE) {
+            return null;
+        }
+
+        // Read by the share's own project id, bound to its tenant: the global scopes depend on request
+        // context this method must not rely on, and the project id is already the share's ceiling.
+        $ids = UnifiedCampaign::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->when($this->tenants->tenantId() !== null, fn ($q) => $q->where('tenant_id', $this->tenants->tenantId()))
+            ->when($narrowed !== [], fn ($q) => $q->whereIn('id', $narrowed))
+            ->when(($scope['campaign_ids'] ?? []) !== [], fn ($q) => $q->whereIn('id', (array) $scope['campaign_ids']))
+            ->pluck('id')
+            ->map(fn ($id): string => (string) $id)
+            ->all();
+
+        $destinations = app(CampaignDestinations::class)->for($ids);
+
+        if ($destinations === []) {
+            return null;
+        }
+
+        $messaging = array_filter($destinations, static fn ($d): bool => $d->isMessaging());
+        $mixed = array_filter($destinations, static fn ($d): bool => $d === LeadDestination::Mixed);
+
+        // One answer or none: a scope mixing messaging with forms keeps the generic word.
+        if ($mixed !== [] || ($messaging !== [] && count($messaging) !== count($destinations))) {
+            return null;
+        }
+
+        $first = reset($destinations);
+
+        return [
+            'kind' => $messaging !== [] ? 'messaging' : 'leads',
+            'result' => $first->resultLabel(),
+            'cost' => $first->costLabel(),
         ];
     }
 

@@ -3,7 +3,7 @@ import { liveSpark } from './liveSpark'
 import { KpiCard, TrendPill } from '@/features/analytics/components'
 import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
-import type { useLiveMetricReader } from './liveMetrics'
+import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -47,7 +47,17 @@ export function LiveKpiBoard({
   // Withheld (REPORT-COVERAGE-001): `undefined` removes the pill; a null would draw «—» beside every figure.
   const withheld = payload.comparison !== undefined && !payload.comparison.comparable
   const d: Record<string, number | null | undefined> = withheld ? {} : (payload.deltas ?? {})
-  const known = keys.filter((k) => reader.meta[k])
+  // The same figure twice is one card: with a named result, «leads» is the result under its own name.
+  const sameAsResult = (k: string) => k === 'leads' && payload.result_kind != null && t.leads === t.conversions
+  const known = keys
+    .filter((k) => reader.meta[k] && !sameAsResult(k))
+    .filter((k) => cardHasFigure(k, reader.meta[k].format(t, payload, reader.asMoney, reader.count).text, payload))
+  // A named result reads in the order a buyer asks: what it cost, who saw it, what it produced, what each cost.
+  if (payload.result_kind != null) {
+    const order = ['spend', 'impressions', 'conversions', 'leads', 'cpa', 'cpl']
+    const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
+    known.sort((a, b) => rank(a) - rank(b))
+  }
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
 
@@ -62,7 +72,7 @@ export function LiveKpiBoard({
           return (
             <KpiCard
               key={key}
-              label={ar ? meta.ar : meta.en}
+              label={metricLabel(meta, key, payload, ar)}
               value={read.text}
               exact={read.exact ?? undefined}
               delta={d[key]}
@@ -81,7 +91,7 @@ export function LiveKpiBoard({
 
             return (
               <div key={key} data-testid={`live-kpi-${key}`} className="min-w-0 rounded-xl border border-border bg-surface px-3 py-2">
-                <dt className="truncate text-[11px] font-semibold text-text-muted">{ar ? meta.ar : meta.en}</dt>
+                <dt className="truncate text-[11px] font-semibold text-text-muted">{metricLabel(meta, key, payload, ar)}</dt>
                 <dd className="mt-0.5 flex flex-wrap items-center justify-between gap-1">
                   <span className="tnum text-base font-extrabold text-text-primary" title={read.exact ?? undefined}>
                     <Num>{read.text}</Num>

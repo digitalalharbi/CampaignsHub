@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -14,6 +15,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -189,6 +191,48 @@ final class CampaignOutcomeFilterTest extends TestCase
 
         $this->assertContains('outcome', $body['data']['filter_scope']['unapplied']);
         $this->assertNotContains('outcome', $body['data']['filter_scope']['applied']);
+    }
+
+    /**
+     * REPORT-RESULT-KIND-001 — the live link names a result by its destination: chats are «الرسائل»,
+     * a form is «العملاء المحتملون», and a scope that mixes the two keeps the generic word.
+     */
+    public function test_the_live_report_names_one_result_by_the_destination_in_scope(): void
+    {
+        $chat = $this->campaign('Chats', 'leads');
+        $this->external($chat, 'leads');
+        $this->adSet($chat, 'WHATSAPP');
+        $form = $this->campaign('Forms', 'leads');
+        $this->external($form, 'leads');
+        $this->adSet($form, 'ON_AD');
+
+        $kind = new \ReflectionMethod(LiveReportService::class, 'resultKind');
+        $service = app(LiveReportService::class);
+        $scope = ['project_id' => (string) $this->project->id, 'campaign_ids' => []];
+
+        $messages = $kind->invoke($service, $scope, [(string) $chat->id]);
+        $this->assertSame('messaging', $messages['kind']);
+        $this->assertSame('الرسائل', $messages['result']['ar']);
+        $this->assertSame('تكلفة الرسالة', $messages['cost']['ar']);
+
+        $leads = $kind->invoke($service, $scope, [(string) $form->id]);
+        $this->assertSame('leads', $leads['kind']);
+        $this->assertSame('العملاء المحتملون', $leads['result']['ar']);
+
+        $this->assertNull($kind->invoke($service, $scope, []), 'a scope mixing chats and forms must not pick one word');
+    }
+
+    private function adSet(UnifiedCampaign $campaign, string $destinationType): void
+    {
+        $external = ExternalCampaign::withoutGlobalScopes()
+            ->where('unified_campaign_id', $campaign->id)->firstOrFail();
+
+        ExternalAdSet::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_campaign_id' => $external->getKey(), 'unified_campaign_id' => $campaign->id,
+            'provider' => 'meta', 'external_id' => 'as-'.uniqid(), 'name' => 'set', 'status' => 'active',
+            'destination_type' => $destinationType,
+        ]);
     }
 
     /**

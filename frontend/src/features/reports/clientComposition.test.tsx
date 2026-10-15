@@ -108,10 +108,10 @@ describe('the order a client reads a live report in', () => {
 
     const cards = await screen.findByTestId('exec-platform-cards')
     const kpis = await screen.findByTestId('live-kpis')
-    const split = await screen.findByTestId('exec-results-split')
 
     expect(positionOf(cards, kpis) & 4, 'the results board must follow the platform cards').toBeTruthy()
-    expect(positionOf(kpis, split) & 4, 'the results split must follow the results board').toBeTruthy()
+    // One platform: its share of the results is 100% and says nothing, so the compact page omits it.
+    expect(screen.queryByTestId('exec-results-split')).toBeNull()
     expect(screen.queryByTestId('exec-spend-split')).toBeNull()
     expect(screen.queryByTestId('live-objective-split')).toBeNull()
   })
