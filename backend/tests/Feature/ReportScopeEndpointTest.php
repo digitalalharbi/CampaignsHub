@@ -20,6 +20,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Models\Tenant;
@@ -28,6 +29,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 
@@ -301,6 +303,105 @@ final class ReportScopeEndpointTest extends TestCase
         $scope = ReportScope::fromArray(['destinations' => ['carrier_pigeon']]);
 
         $this->assertArrayNotHasKey('destinations', $scope->toArray());
+    }
+
+    /**
+     * REPORT-DETAIL-LEVEL-001 — «مختصر», «قياسي», «تفصيلي» each change what the report contains.
+     */
+    private function createWith(array $extra): Report
+    {
+        Queue::fake();
+
+        $id = $this->actingAs($this->operator, 'sanctum')
+            ->postJson($this->url(), array_merge([
+                'name' => 'تقرير هنكا',
+                'type' => 'executive',
+                'period_start' => '2026-07-01',
+                'period_end' => '2026-07-31',
+            ], $extra))
+            ->assertCreated()
+            ->json('data.id');
+
+        return Report::withoutGlobalScopes()->findOrFail($id);
+    }
+
+    public function test_a_summary_level_report_is_the_executive_form_without_the_deep_sections(): void
+    {
+        $report = $this->createWith(['detail_level' => 'summary']);
+
+        $this->assertSame('executive_summary', $report->form);
+        $this->assertSame('summary', $report->config['detail_level']);
+        $sections = $report->section_settings['sections'];
+        foreach (['objective_breakdown', 'detailed_tables', 'funnel', 'advanced_segmentation'] as $off) {
+            $this->assertFalse($sections[$off], "{$off} stayed on in a summary");
+        }
+        $this->assertTrue($sections['kpis']);
+        $this->assertTrue($sections['content_performance']);
+    }
+
+    public function test_a_standard_level_adds_objective_and_campaign_breakdown_but_not_the_deep_sections(): void
+    {
+        $report = $this->createWith(['detail_level' => 'standard']);
+
+        $this->assertSame('detailed', $report->form);
+        $sections = $report->section_settings['sections'];
+        $this->assertTrue($sections['objective_breakdown']);
+        $this->assertTrue($sections['detailed_tables']);
+        $this->assertFalse($sections['funnel']);
+        $this->assertFalse($sections['advanced_segmentation']);
+    }
+
+    public function test_a_detailed_level_switches_the_deep_sections_on(): void
+    {
+        $sections = $this->createWith(['detail_level' => 'detailed'])->section_settings['sections'];
+
+        foreach (['objective_breakdown', 'detailed_tables', 'funnel', 'budget_pacing', 'advanced_segmentation'] as $on) {
+            $this->assertTrue($sections[$on], "{$on} was left out of a detailed report");
+        }
+    }
+
+    public function test_the_owners_own_section_switches_win_over_the_level(): void
+    {
+        $report = $this->createWith([
+            'detail_level' => 'detailed',
+            'section_settings' => ['sections' => ['funnel' => false, 'recommendations' => false]],
+        ]);
+
+        $sections = $report->section_settings['sections'];
+        $this->assertFalse($sections['funnel']);
+        $this->assertFalse($sections['recommendations']);
+        $this->assertTrue($sections['advanced_segmentation']);
+    }
+
+    public function test_a_link_report_carries_its_level_into_the_form_and_the_sections_it_leaves_out(): void
+    {
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->postJson($this->url('/live'), [
+                'name' => 'رابط هنكا',
+                'from' => '2026-07-01',
+                'to' => '2026-07-31',
+                'detail_level' => 'summary',
+            ])
+            ->assertCreated();
+
+        $share = ReportShare::withoutGlobalScopes()->findOrFail($res->json('data.share_id'));
+        $report = Report::withoutGlobalScopes()->findOrFail($res->json('data.report_id'));
+
+        $this->assertSame('summary', $report->config['detail_level']);
+        $this->assertSame('executive_summary', $share->form);
+        $this->assertEqualsCanonicalizing(
+            ['objective_breakdown', 'detailed_tables', 'funnel', 'budget_pacing', 'advanced_segmentation'],
+            (array) ($share->settings['section_overrides'] ?? []),
+        );
+    }
+
+    public function test_an_unknown_level_is_refused(): void
+    {
+        Queue::fake();
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->postJson($this->url(), ['name' => 'X', 'type' => 'executive', 'period_start' => '2026-07-01', 'period_end' => '2026-07-31', 'detail_level' => 'exhaustive'])
+            ->assertStatus(422);
     }
 
     public function test_the_options_endpoint_offers_this_projects_own_choices(): void
