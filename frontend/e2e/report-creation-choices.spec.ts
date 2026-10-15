@@ -42,11 +42,12 @@ test.describe('report builder — the choices reach the report', () => {
     await expect(page.getByTestId('rb-identity-auto')).toHaveAttribute('aria-pressed', 'true')
 
     /* The screen says what it is about to make, before anything is created. */
-    await expect(page.getByTestId('rb-section-preview')).toContainText('Will include')
-    await expect(page.getByTestId('rb-section-preview')).toContainText('sections can be changed after it is created')
+    // REPORT-SETUP-001 — the sections are choices now, listed with the detail level beside them.
+    await expect(page.getByTestId('rb-sections')).toBeVisible()
+    await expect(page.getByTestId('rb-level-summary')).toHaveAttribute('aria-pressed', 'true')
 
     await page.getByTestId('rb-mode-live').click()
-    await page.getByTestId('rb-form-executive_summary').click()
+    await page.getByTestId('rb-level-summary').click()
     await page.getByTestId('rb-identity-agency').click()
     await page.locator('#rb-name').fill('E2E creation choices')
 
