@@ -1,4 +1,5 @@
-import { DETAIL_LEVELS, formOf, type DetailLevelKey } from './reportSetupCatalog'
+import { ReportIdentityCards } from './ReportIdentityCards'
+import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { useMemo, useState } from 'react'
@@ -850,11 +851,17 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
-  const sectionPreview = (sectionRegistry.data?.sections ?? []).filter((x) =>
-    // `defaultFor()` on the server splits internal from everyone else; an executive report is a
-    // client-shaped one, and this mirrors that rather than inventing a third answer.
-    audience === 'internal' ? x.default_internal : x.default_client,
-  )
+  /*
+   * REPORT-SETUP-001 — the sections are CHOICES here, not a description of them.
+   * Each starts where the detail level and the audience put it, and what the Owner switches is sent
+   * as `section_settings`, so the report that is generated carries exactly this set.
+   */
+  const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>({})
+  const startingSections = levelSections(level)
+  const sectionPreview = (sectionRegistry.data?.sections ?? []).map((x) => ({
+    ...x,
+    on: sectionChoice[x.key] ?? startingSections[x.key] ?? (audience === 'internal' ? x.default_internal : x.default_client),
+  }))
   const create = useMutation({
     mutationFn: () =>
       createReport(projectId, {
@@ -866,6 +873,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         mode,
         form,
         detail_level: level,
+        ...(Object.keys(sectionChoice).length === 0 ? {} : { section_settings: { sections: sectionChoice } }),
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
         audience: audience ?? 'client',
         period_start: from,
@@ -970,6 +978,12 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           </div>
         </Field>
         {/*
+          REPORT-SETUP-001 — Branding: the CLIENT's logo and the PRESENTING company's logo, set here.
+          The client's identity is the report's primary one and the only custom mark a shared link
+          wears; the company's is secondary attribution inside the report.
+        */}
+        <ReportIdentityCards projectId={projectId} ar={ar} />
+        {/*
           REPORT-CREATION-UX-001 — WHOSE report this is, said at creation.
 
           A report about a client resolves at the client layer: the client's name leads and the
@@ -1030,13 +1044,20 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           nothing.
         */}
         {sectionPreview.length > 0 && (
-          <p data-testid="rb-section-preview" className="-mt-1 text-[11px] leading-relaxed text-text-secondary">
-            {ar ? 'سيتضمّن: ' : 'Will include: '}
-            <span className="font-semibold text-text-primary">
-              {sectionPreview.map((x) => (ar ? x.title_ar : x.title_en)).join(ar ? '، ' : ', ')}
-            </span>
-            {ar ? ' — يمكن تعديل الأقسام بعد الإنشاء.' : ' — sections can be changed after it is created.'}
-          </p>
+          <fieldset data-testid="rb-sections" className="-mt-1 grid gap-1.5 rounded-xl border border-border p-3">
+            <legend className="px-1 text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير' : 'Report sections'}</legend>
+            {sectionPreview.map((x) => (
+              <label key={x.key} className="flex items-center gap-2 text-xs text-text-primary">
+                <input
+                  type="checkbox"
+                  data-testid={`rb-section-${x.key}`}
+                  checked={x.on}
+                  onChange={(e) => setSectionChoice((c) => ({ ...c, [x.key]: e.target.checked }))}
+                />
+                <span>{ar ? x.title_ar : x.title_en}</span>
+              </label>
+            ))}
+          </fieldset>
         )}
         <div data-testid="builder-audience">
         <SelectField
