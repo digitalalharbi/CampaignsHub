@@ -85,6 +85,24 @@ describe('ReportsPage — engine-fed builder', () => {
    * the dashboard a client filters, which the product sells as its own mode — could not be reached
    * from the one screen that makes reports.
    */
+  it('sends the chosen detail level and the form it renders as', async () => {
+    vi.mocked(createReport).mockResolvedValue({} as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.click(screen.getByTestId('rb-level-standard'))
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+
+    await waitFor(() =>
+      expect(createReport).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({ detail_level: 'standard', form: 'detailed', name: 'Q3 report' }),
+      ),
+    )
+  })
+
   it('offers the report mode and sends the chosen one', async () => {
     vi.mocked(createReport).mockResolvedValue({} as never)
     renderWithProviders(<ReportsPage />, { locale: 'en' })

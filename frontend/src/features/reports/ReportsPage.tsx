@@ -1,3 +1,4 @@
+import { DETAIL_LEVELS, formOf, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { useMemo, useState } from 'react'
@@ -811,7 +812,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
    * is the one somebody sends a client; the full report is what you open when the summary raises a
    * question.
    */
-  const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
+  const [level, setLevel] = useState<DetailLevelKey>('summary')
+  const form = formOf(level)
   /* Snapshot stays the default: it is what every report made before this chooser existed was. */
   const [mode, setMode] = useState<'snapshot' | 'live'>('snapshot')
   /*
@@ -863,6 +865,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         type: type ?? 'executive',
         mode,
         form,
+        detail_level: level,
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
         audience: audience ?? 'client',
         period_start: from,
@@ -947,26 +950,21 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             ))}
           </div>
         </Field>
-        <Field label={ar ? 'شكل التقرير' : 'Report form'}>
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              { key: 'executive_summary' as const, ar: 'ملخص تنفيذي', en: 'Executive summary',
-                hintAr: 'صفحات قليلة للقرار', hintEn: 'A few pages, for the decision' },
-              { key: 'detailed' as const, ar: 'تقرير تفصيلي', en: 'Detailed report',
-                hintAr: 'كل المنصات والفانل والإعلانات', hintEn: 'Every platform, funnel and ad' },
-            ]).map((o) => (
+        <Field label={ar ? 'مستوى التفصيل' : 'Detail level'}>
+          <div className="grid grid-cols-3 gap-2">
+            {DETAIL_LEVELS.map((o) => (
               <button
                 key={o.key}
                 type="button"
-                data-testid={`rb-form-${o.key}`}
-                aria-pressed={form === o.key}
-                onClick={() => setForm(o.key)}
+                data-testid={`rb-level-${o.key}`}
+                aria-pressed={level === o.key}
+                onClick={() => setLevel(o.key)}
                 className={`rounded-xl border p-3 text-start transition-colors ${
-                  form === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
+                  level === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
                 }`}
               >
                 <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
-                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.hintAr : o.hintEn}</span>
+                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.noteAr : o.noteEn}</span>
               </button>
             ))}
           </div>
