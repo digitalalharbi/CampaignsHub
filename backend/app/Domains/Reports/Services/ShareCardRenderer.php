@@ -80,7 +80,7 @@ final class ShareCardRenderer
      * changes how cards look. Without it, the first person to paste a link freezes its picture at
      * whatever the design was that week.
      */
-    private const DESIGN_VERSION = 'v1';
+    private const DESIGN_VERSION = 'v1-logo-area';
 
     public function __construct(private readonly SharedLinkBranding $branding) {}
 
@@ -182,7 +182,9 @@ final class ShareCardRenderer
             // Measured on the resolved name, not guessed per language: an agency called «مجموعة
             // النخيل للتسويق الرقمي» and one called «Acme» cannot share a type size.
             'titleSize' => Str::length($who) > 26 ? 58 : 74,
-            'logo' => $this->logoDataUri($share, $report),
+            'logo' => $logo = $this->logoDataUri($share, $report),
+            // The product's own mark is drawn for a dark ground and sits without the white panel.
+            'logoIsProduct' => $logo === ProductMark::dataUri(),
         ];
     }
 
