@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
-use App\Domains\Branding\ProductMark;
+use App\Domains\Branding\ProductLockup;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\Reports\Models\Report;
@@ -70,9 +70,6 @@ final class ShareCardRenderer
      */
     private const FONT_STACK = "'IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, sans-serif";
 
-    /** The product's own accent, for a link whose agency has configured no colour. */
-    private const DEFAULT_ACCENT = '#2563eb';
-
     /**
      * Bumped when the DRAWING changes — the layout, the script, the font stack.
      *
@@ -80,7 +77,7 @@ final class ShareCardRenderer
      * changes how cards look. Without it, the first person to paste a link freezes its picture at
      * whatever the design was that week.
      */
-    private const DESIGN_VERSION = 'v1-logo-area';
+    private const DESIGN_VERSION = 'v2-brand-identity';
 
     public function __construct(private readonly SharedLinkBranding $branding) {}
 
@@ -177,41 +174,16 @@ final class ShareCardRenderer
             'siteName' => ReportIdentity::productName($locale),
             'eyebrow' => $locale === 'ar' ? 'تقرير الأداء' : 'Performance report',
             'kicker' => $locale === 'ar' ? 'تقرير أداء الحملات المدفوعة' : 'Paid campaign performance',
-            'accent' => $this->accent($share, $report),
             'fontStack' => self::FONT_STACK,
             // Measured on the resolved name, not guessed per language: an agency called «مجموعة
             // النخيل للتسويق الرقمي» and one called «Acme» cannot share a type size.
             'titleSize' => Str::length($who) > 26 ? 58 : 74,
-            'logo' => $logo = $this->logoDataUri($share, $report),
-            // The product's own mark is drawn for a dark ground and sits without the white panel.
-            'logoIsProduct' => $logo === ProductMark::dataUri(),
+            'logo' => $logo = $this->logoDataUri($share, $report, $locale),
+            // The canonical lockup is drawn for a dark ground and sits without the white panel.
+            'logoIsProduct' => $logo === ProductLockup::dataUri($locale),
+            // SHARE-CARD-BRAND-001 — the footer signature, always the canonical lockup.
+            'lockup' => ProductLockup::dataUri($locale),
         ];
-    }
-
-    /**
-     * The brand accent as a colour this may safely interpolate into a stylesheet, or the product's.
-     *
-     * STRICTLY validated, and that is not a formality: the value lands inside a `<style>` block, and
-     * Blade's escaping is for HTML — it leaves `{`, `}` and `;` alone, so a stored value of
-     * `red; } body { display: none` would rewrite the card rather than colour it. A hex triple or
-     * nothing.
-     */
-    private function accent(ReportShare $share, Report $report): string
-    {
-        $frozen = (array) (((array) ($report->config ?? []))['branding'] ?? []);
-        $candidates = [
-            $frozen['accent'] ?? null,
-            $frozen['primary'] ?? null,
-            ((array) ($frozen['colors'] ?? []))['primary'] ?? null,
-        ];
-
-        foreach ($candidates as $candidate) {
-            if (is_string($candidate) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', trim($candidate)) === 1) {
-                return strtolower(trim($candidate));
-            }
-        }
-
-        return self::DEFAULT_ACCENT;
     }
 
     /**
@@ -234,7 +206,7 @@ final class ShareCardRenderer
      * `DrawableImage::draws()` decides, not the stored content type. Production has already shown
      * this product real PNGs served as `multipart/form-data`, and a browser draws those fine.
      */
-    private function logoDataUri(ReportShare $share, Report $report): string
+    private function logoDataUri(ReportShare $share, Report $report, string $locale): string
     {
         $tenantId = (string) $share->tenant_id;
 
@@ -257,7 +229,7 @@ final class ShareCardRenderer
             }
         }
 
-        return ProductMark::dataUri();
+        return ProductLockup::dataUri($locale);
     }
 
     /**

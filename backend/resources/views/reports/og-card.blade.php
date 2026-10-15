@@ -38,10 +38,13 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --ink: #0a0f1c;
-    --ink-soft: rgba(233, 238, 250, 0.62);
-    --ink-strong: #f4f7ff;
-    --accent: {{ $accent }};
+    /* SHARE-CARD-BRAND-001 — the CampaignsHub palette on its LIGHT ground, and only it. */
+    --ink: #ffffff;
+    --ink-soft: #3d4742;
+    --ink-strong: #0b1a16;
+    --paper: #f7f5f0;
+    --green: #0d8a6f;
+    --orange: #e8a33d;
   }
 
   /*
@@ -57,7 +60,7 @@
     /* A dedicated logo area beside the title, and the footer across both. The logo is the subject of
        a client's pasted link, so it gets a column of its own rather than a corner. */
     display: grid;
-    grid-template-columns: 440px 1fr;
+    grid-template-columns: {{ ($logoIsProduct ?? false) ? '560px' : '410px' }} 1fr;
     grid-template-rows: 1fr auto;
     column-gap: 56px;
     row-gap: 24px;
@@ -85,27 +88,25 @@
      than the viewport, which is the one element whose overflow rules are not local. */
   .bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 
-  /* The accent, spent in one place. A wash anchored away from the reading side, so the type always
-     sits on the quiet half whichever direction the report runs in. */
+  /* The orange of the lockup's dot, as a quiet corner, and a green hairline on the reading edge. */
   .bg::before {
     content: '';
     position: absolute;
-    inset-inline-end: -180px;
-    inset-block-start: -220px;
-    width: 720px;
-    height: 720px;
+    inset-inline-end: -120px;
+    inset-block-start: -120px;
+    width: 300px;
+    height: 300px;
     border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 55%, transparent) 0%, transparent 68%);
+    background: var(--orange);
+    opacity: 0.16;
   }
-
-  /* A hairline of the accent along the reading edge — the same device the report header uses. */
   .bg::after {
     content: '';
     position: absolute;
     inset-block: 0;
     inset-inline-start: 0;
     width: 10px;
-    background: var(--accent);
+    background: var(--green);
   }
 
   /*
@@ -119,8 +120,8 @@
    */
   .logo-area { position: relative; display: flex; align-items: center; justify-content: center; }
   .logo-panel {
-    width: 440px;
-    height: 440px;
+    width: 410px;
+    height: 410px;
     box-sizing: border-box;
     padding: 20px;
     border-radius: 28px;
@@ -128,11 +129,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+    border: 2px solid #e4e0d6;
+    box-shadow: 0 10px 36px rgba(11, 26, 22, 0.10);
   }
   /* The product's own mark is drawn for a dark ground, so it sits on the card without a white panel. */
-  .logo-panel.system { background: transparent; box-shadow: none; padding: 48px; }
+  /* The lockup is the subject here: no panel, as wide as the column allows. */
+  .logo-panel.system { background: transparent; box-shadow: none; border: 0; padding: 0; width: 100%; height: auto; }
   .mark { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .logo-panel.system .mark { height: auto; }
 
   .copy { position: relative; align-self: center; }
   .eyebrow {
@@ -186,7 +190,8 @@
     position: relative;
   }
 
-  .product { font-weight: 600; color: var(--ink-strong); }
+  /* The pack lockup carries generous padding; sized up and pulled in so the mark itself reads. */
+  .lockup { height: 84px; width: auto; display: block; }
 </style>
 </head>
 <body>
@@ -212,7 +217,10 @@
 
 <footer style="grid-column: 1 / -1;">
   <span>{{ $kicker }}</span>
-  <span class="product">{{ $siteName }}</span>
+  {{-- The system fallback already IS the lockup, large; repeating it in the footer would be noise. --}}
+  @if (! ($logoIsProduct ?? false))
+    <img class="lockup" src="{{ $lockup }}" alt="{{ $siteName }}">
+  @endif
 </footer>
 </body>
 </html>
