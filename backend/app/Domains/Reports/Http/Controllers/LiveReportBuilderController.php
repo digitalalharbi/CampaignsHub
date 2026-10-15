@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -92,14 +93,21 @@ final class LiveReportBuilderController extends Controller
          */
         $accounts = $this->accountsByCampaign($project);
 
+        $destinations = app(CampaignDestinations::class)->for(
+            UnifiedCampaign::query()->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all(),
+        );
+
         $campaigns = UnifiedCampaign::query()
             ->where('project_id', $project)
             ->orderBy('name')
-            ->get(['id', 'name', 'client_display_name', 'status', 'platforms'])
+            ->get(['id', 'name', 'client_display_name', 'status', 'platforms', 'objective'])
             ->map(fn (UnifiedCampaign $c): array => [
                 'id' => (string) $c->id,
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
+                // REPORT-SETUP-001 — the dependent filters of the link builder.
+                'objective' => $c->objective,
+                'destination' => isset($destinations[(string) $c->id]) ? $destinations[(string) $c->id]->value : null,
                 'last_active_on' => $activity[(string) $c->id] ?? null,
                 /*
                  * REPORT-SCOPE-SELECTION-001 — which platform each campaign ran on.

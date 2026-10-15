@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Support;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use Illuminate\Support\Carbon;
@@ -56,14 +59,14 @@ final class ReportScope
     /** The axes, in the order the picker shows them. Client and project come first: they are the frame. */
     public const AXES = [
         'client_ids', 'project_ids', 'providers', 'account_ids', 'campaign_ids',
-        'ad_set_ids', 'ad_ids', 'creative_ids', 'objectives', 'paths', 'metrics',
+        'ad_set_ids', 'ad_ids', 'creative_ids', 'objectives', 'destinations', 'paths', 'metrics',
     ];
 
     /** Axes that bound `daily_metrics` directly — every figure on the report narrows with these. */
     public const FIGURE_AXES = ['project_ids', 'providers', 'account_ids', 'campaign_ids', 'objectives', 'paths'];
 
     /** Axes that resolve UP to campaigns because no metric is stored at their grain. */
-    public const RESOLVED_AXES = ['ad_set_ids', 'ad_ids'];
+    public const RESOLVED_AXES = ['ad_set_ids', 'ad_ids', 'destinations'];
 
     /**
      * A campaign id that cannot exist, used when an intersection empties out.
@@ -84,6 +87,7 @@ final class ReportScope
      * @param  list<string>  $adIds
      * @param  list<string>  $creativeIds
      * @param  list<string>  $objectives
+     * @param  list<string>  $destinations  lead destinations (LeadDestination values); resolved to campaigns
      * @param  list<string>  $paths
      * @param  list<string>  $metrics  the metrics to SHOW, in the order chosen; empty → the layout's own set
      */
@@ -97,6 +101,7 @@ final class ReportScope
         public readonly array $adIds = [],
         public readonly array $creativeIds = [],
         public readonly array $objectives = [],
+        public readonly array $destinations = [],
         public readonly array $paths = [],
         public readonly array $metrics = [],
         public readonly ?string $from = null,
@@ -155,6 +160,7 @@ final class ReportScope
             adIds: $list('ad_ids'),
             creativeIds: $list('creative_ids'),
             objectives: array_values(array_intersect($list('objectives'), CampaignObjective::values())),
+            destinations: array_values(array_intersect($list('destinations'), LeadDestination::values())),
             paths: array_values(array_intersect($list('paths'), MarketingPath::values())),
             metrics: array_values(array_intersect($list('metrics'), MetricsAggregator::readKeys() + self::derivedMetricKeys())),
             from: $date('from'),
@@ -246,6 +252,7 @@ final class ReportScope
             adIds: $narrow($this->adIds, $ceiling->adIds),
             creativeIds: $narrow($this->creativeIds, $ceiling->creativeIds),
             objectives: $narrow($this->objectives, $ceiling->objectives),
+            destinations: $narrow($this->destinations, $ceiling->destinations),
             paths: $narrow($this->paths, $ceiling->paths),
             // Metrics are a DISPLAY choice, and the ceiling is the last word: a link told to hide
             // revenue must not show it because the reader asked nicely.
@@ -375,8 +382,10 @@ final class ReportScope
      */
     private function campaignIdsBehindAdSetsAndAds(): ?array
     {
+        $byDestination = $this->campaignIdsForDestinations();
+
         if ($this->adSetIds === [] && $this->adIds === []) {
-            return null;
+            return $byDestination;
         }
 
         $ids = [];
@@ -397,6 +406,46 @@ final class ReportScope
             static fn ($id): string => (string) $id,
             $ids,
         ))));
+
+        if ($ids === []) {
+            return [self::IMPOSSIBLE];
+        }
+
+        // A destination narrows the same campaign set the ad sets and ads resolved to.
+        if ($byDestination !== null) {
+            $both = array_values(array_intersect($ids, $byDestination));
+
+            return $both === [] ? [self::IMPOSSIBLE] : $both;
+        }
+
+        return $ids;
+    }
+
+    /**
+     * LEAD-DESTINATION-001 — the campaigns whose destination is one of the chosen, or null when the
+     * axis is unused. A destination exists on the AD SETS; it is resolved to campaigns here, the
+     * grain every figure is stored at, and `explain()` says so.
+     *
+     * @return list<string>|null
+     */
+    private function campaignIdsForDestinations(): ?array
+    {
+        if ($this->destinations === []) {
+            return null;
+        }
+
+        $unified = UnifiedCampaign::query()
+            ->when($this->projectIds !== [], fn ($q) => $q->whereIn('project_id', $this->projectIds))
+            ->pluck('id')
+            ->map(fn ($id): string => (string) $id)
+            ->all();
+
+        $ids = [];
+        foreach (app(CampaignDestinations::class)->for($unified) as $campaignId => $destination) {
+            if (in_array($destination->value, $this->destinations, true)) {
+                $ids[] = (string) $campaignId;
+            }
+        }
 
         return $ids === [] ? [self::IMPOSSIBLE] : $ids;
     }

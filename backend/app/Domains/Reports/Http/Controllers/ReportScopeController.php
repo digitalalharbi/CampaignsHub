@@ -6,11 +6,14 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -81,7 +84,22 @@ final class ReportScopeController extends Controller
             'q' => ['nullable', 'string', 'max:200'],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
+            // REPORT-SETUP-001 — the dependent filters. Each narrows the lists below it, server-side,
+            // so a picker cannot offer a campaign that the choices above it exclude.
+            'providers' => ['nullable', 'array'],
+            'providers.*' => ['string', 'max:40'],
+            'account_ids' => ['nullable', 'array'],
+            'account_ids.*' => ['uuid'],
+            'objectives' => ['nullable', 'array'],
+            'objectives.*' => ['string', 'max:40'],
+            'destinations' => ['nullable', 'array'],
+            'destinations.*' => [Rule::in(LeadDestination::values())],
         ]);
+
+        $fProviders = array_values(array_map('strtolower', array_filter((array) $request->input('providers', []), 'is_string')));
+        $fAccounts = array_values(array_filter((array) $request->input('account_ids', []), 'is_string'));
+        $fObjectives = array_values(array_filter((array) $request->input('objectives', []), 'is_string'));
+        $fDestinations = array_values(array_filter((array) $request->input('destinations', []), 'is_string'));
 
         $axis = $request->string('axis')->toString();
         $term = trim($request->string('q')->toString());
@@ -113,9 +131,27 @@ final class ReportScopeController extends Controller
             ? app(MetricsAggregator::class)->forProjects([$project])->lastActiveByCampaign($from, $to)
             : [];
 
+        $destinationOf = app(CampaignDestinations::class)->for(
+            UnifiedCampaign::query()->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all(),
+        );
+
         [$campaigns, $campaignsMore] = $this->bounded(
             UnifiedCampaign::query()
                 ->where('project_id', $project)
+                ->when($fObjectives !== [], fn ($q) => $q->whereIn('objective', $fObjectives))
+                ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->whereIn(
+                    'id',
+                    ExternalCampaign::query()
+                        ->where('project_id', $project)
+                        ->when($fProviders !== [], fn ($e) => $e->whereIn('provider', $fProviders))
+                        ->when($fAccounts !== [], fn ($e) => $e->whereIn('external_account_id', $fAccounts))
+                        ->whereNotNull('unified_campaign_id')
+                        ->select('unified_campaign_id'),
+                ))
+                ->when($fDestinations !== [], fn ($q) => $q->whereIn('id', array_keys(array_filter(
+                    $destinationOf,
+                    fn (LeadDestination $d): bool => in_array($d->value, $fDestinations, true),
+                )) ?: ['00000000-0000-0000-0000-000000000000']))
                 ->orderBy('name')
                 ->orderBy('id'),
             ['id', 'name', 'client_display_name', 'status', 'objective'],
@@ -124,6 +160,8 @@ final class ReportScopeController extends Controller
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
                 'objective' => $c->objective,
+                // LEAD-DESTINATION-001 — where this campaign's results happen, or null when unstated.
+                'destination' => isset($destinationOf[(string) $c->getKey()]) ? $destinationOf[(string) $c->getKey()]->value : null,
                 /*
                  * REPORT-SCOPE-SELECTION-001 — did this campaign RUN in the period being reported on?
                  *
@@ -152,6 +190,7 @@ final class ReportScopeController extends Controller
 
         $accounts = $accountIds === [] ? [] : ExternalAccount::query()
             ->whereIn('id', $accountIds)
+            ->when($fProviders !== [], fn ($q) => $q->whereIn('provider', $fProviders))
             ->orderBy('name')
             ->get(['id', 'name', 'provider', 'external_id'])
             ->map(fn (ExternalAccount $a): array => [
@@ -217,6 +256,18 @@ final class ReportScopeController extends Controller
                 ],
                 MarketingPath::cases(),
             ),
+            // The destinations present in this project, with how many campaigns each holds.
+            'destinations' => array_values(array_filter(array_map(
+                function (LeadDestination $d) use ($destinationOf): array {
+                    return [
+                        'key' => $d->value,
+                        'labels' => $d->label(),
+                        'messaging' => $d->isMessaging(),
+                        'campaign_count' => count(array_filter($destinationOf, fn (LeadDestination $x): bool => $x === $d)),
+                    ];
+                },
+                LeadDestination::cases(),
+            ), fn (array $row): bool => $row['campaign_count'] > 0)),
             'metrics' => self::METRICS,
             /*
              * Which axes did not fit, so the picker can say so where the choice is made.

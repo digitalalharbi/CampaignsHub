@@ -1,3 +1,4 @@
+import { CANONICAL_OBJECTIVES, DESTINATIONS } from './reportSetupCatalog'
 import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
@@ -119,19 +120,26 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    */
   const [campaignQuery, setCampaignQuery] = useState('')
 
+  // REPORT-SETUP-001 — Objective and Destination narrow the campaign list like the platform and account do.
+  const [campaignObjective, setCampaignObjective] = useState<string | null>(null)
+  const [campaignDestination, setCampaignDestination] = useState<string | null>(null)
+
   const visibleCampaigns = useMemo(() => {
     const needle = campaignQuery.trim().toLocaleLowerCase()
+    const members = CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
       if (campaignAccount !== null && !(c.accounts ?? []).some((a) => a.id === campaignAccount)) return false
+      if (members !== null && !members.includes(String(c.objective ?? ''))) return false
+      if (campaignDestination !== null && c.destination !== campaignDestination) return false
       if (needle === '') return true
 
       const haystack = [c.name, ...(c.accounts ?? []).map((a) => a.name)].join(' ').toLocaleLowerCase()
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, campaignAccount, campaignQuery])
+  }, [options.data, campaignPlatform, campaignAccount, campaignObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -351,6 +359,35 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               account name to narrow by it, which is the slow way to do the one thing they know
               exactly.
             */}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label={ar ? 'الهدف' : 'Objective'}
+                data-testid="live-builder-campaign-objective"
+                value={campaignObjective ?? ''}
+                onChange={(e) => setCampaignObjective(e.target.value === '' ? null : e.target.value)}
+                className="min-w-0 flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+              >
+                <option value="">{ar ? 'كل الأهداف' : 'All objectives'}</option>
+                {CANONICAL_OBJECTIVES.map((o) => (
+                  <option key={o.id} value={o.id}>{ar ? o.ar : o.en}</option>
+                ))}
+              </select>
+              {(options.data?.campaigns ?? []).some((c) => c.destination) && (
+                <select
+                  aria-label={ar ? 'الوجهة' : 'Destination'}
+                  data-testid="live-builder-campaign-destination"
+                  value={campaignDestination ?? ''}
+                  onChange={(e) => setCampaignDestination(e.target.value === '' ? null : e.target.value)}
+                  className="min-w-0 flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+                >
+                  <option value="">{ar ? 'كل الوجهات' : 'All destinations'}</option>
+                  {DESTINATIONS.filter((d) => (options.data?.campaigns ?? []).some((c) => c.destination === d.id)).map((d) => (
+                    <option key={d.id} value={d.id}>{ar ? d.ar : d.en}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
             {(adAccounts.length > 1 || options.data!.campaigns.length > 8) && (
               <div className="flex flex-wrap items-center gap-2">
                 {adAccounts.length > 1 && (
@@ -405,6 +442,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   onClick={() => {
                     setCampaignPlatform(null)
                     setCampaignAccount(null)
+                    setCampaignObjective(null)
+                    setCampaignDestination(null)
                     setCampaignQuery('')
                   }}
                   className="justify-self-start rounded-lg border border-border px-2 py-1 text-[11px] font-bold text-text-secondary hover:bg-surface-hover"
