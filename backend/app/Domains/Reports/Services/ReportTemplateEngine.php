@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Support\AdPlatforms;
 
 /**
@@ -36,12 +37,16 @@ final class ReportTemplateEngine
          * count and their own cost rather than borrowing «النتائج» and «تكلفة النتيجة», which are
          * true of both and specific to neither.
          */
-        'sales' => ['spend', 'add_to_cart', 'purchases', 'revenue', 'cpa', 'roas'],
-        'awareness' => ['impressions', 'reach', 'frequency', 'cpm', 'video_views', 'ctr'],
-        'traffic' => ['clicks', 'landing_page_views', 'ctr', 'cpc', 'spend'],
-        'leads' => ['leads', 'cpl', 'conversion_rate', 'ctr', 'spend'],
-        'app_installs' => ['installs', 'cpi', 'registrations', 'spend', 'ctr'],
-        'video' => ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
+        // REPORT-KPI-PRESETS-001 — the Owner's presets, one per objective, and customisable per report.
+        // Sales: spend · orders · sales value · cost per order · return.
+        'sales' => ['spend', 'purchases', 'revenue', 'cpa', 'roas'],
+        'awareness' => ['impressions', 'reach', 'frequency', 'cpm'],
+        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'landing_page_views'],
+        // Leads on a website (the default destination): form fills on the advertiser's own page.
+        'leads' => ['spend', 'impressions', 'leads', 'cpl', 'conversion_rate'],
+        'app_installs' => ['spend', 'installs', 'cpi', 'registrations'],
+        'engagement' => ['spend', 'impressions', 'engagements', 'engagement_rate', 'cpe'],
+        'video' => ['spend', 'impressions', 'video_views', 'video_completion_rate', 'cpm'],
         /*
          * Several objectives in one scope — operational figures only (§14.6).
          *
@@ -281,8 +286,49 @@ final class ReportTemplateEngine
         return $unique;
     }
 
-    public function metricSet(string $objective): array
+    /**
+     * REPORT-KPI-PRESETS-001 — the sets this engine SHIPPED before the current presets.
+     *
+     * `defaultConfig()` stores the metric set on a report the first time it is generated, so a
+     * report made under an older preset carries that set as if the Owner had chosen it. A stored set
+     * equal to one the engine itself shipped is not a choice, and is replaced by the current preset;
+     * anything else is the Owner's and is kept exactly.
+     */
+    private const SHIPPED_BEFORE = [
+        ['spend', 'add_to_cart', 'purchases', 'revenue', 'cpa', 'roas'],
+        ['impressions', 'reach', 'frequency', 'cpm', 'video_views', 'ctr'],
+        ['clicks', 'landing_page_views', 'ctr', 'cpc', 'spend'],
+        ['leads', 'cpl', 'conversion_rate', 'ctr', 'spend'],
+        ['installs', 'cpi', 'registrations', 'spend', 'ctr'],
+        ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
+        ['spend', 'impressions', 'leads', 'cpl'],
+    ];
+
+    /** Whether a stored set is one this engine produced, rather than one an Owner customised. */
+    public function isPreset(array $set): bool
     {
+        if (in_array($set, array_values(self::METRIC_SETS), true) || in_array($set, self::SHIPPED_BEFORE, true)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public function metricSet(string $objective, ?string $destination = null): array
+    {
+        /*
+         * REPORT-KPI-PRESETS-001 — a lead report's KPIs follow where its results happen.
+         * A message, a form on the ad and a call have no conversion rate worth a primary slot, and a
+         * message is never called a «lead» in the figure's name. Website keeps the base lead set.
+         */
+        if ($objective === 'leads' && $destination !== null) {
+            $d = LeadDestination::tryFrom($destination);
+
+            if ($d !== null && $d !== LeadDestination::Website && $d !== LeadDestination::Mixed) {
+                return ['spend', 'impressions', 'leads', 'cpl'];
+            }
+        }
+
         return self::METRIC_SETS[array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom'];
     }
 }

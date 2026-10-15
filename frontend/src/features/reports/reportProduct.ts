@@ -24,22 +24,22 @@ const PRODUCTS: Record<`${ReportMode}:${ReportForm}`, { ar: string; en: string }
    * A live link is a product with modes now (`live/modes.ts`), so its sentence names what the reader
    * can do rather than listing contents — and it stays one line: the client came for figures.
    */
-  /* CLIENT-LIVE-LINK-SAFETY-001 — the product's name is «رابط لحظي للعميل», on both forms. */
+  /* CLIENT-LIVE-LINK-SAFETY-001 — the product's name is «تقرير رابط», on both forms. */
   'live:executive_summary': {
-    ar: 'رابط لحظي للعميل — ملخص يُحدَّث عند كل فتح.',
-    en: 'Live client link — a summary recomputed every time it is opened.',
+    ar: 'تقرير رابط — ملخص يُحدَّث عند كل فتح.',
+    en: 'Link Report — a summary recomputed every time it is opened.',
   },
   'live:detailed': {
-    ar: 'رابط لحظي للعميل — ملخص، أداء، منصات، ومحتوى.',
-    en: 'Live client link — summary, performance, platforms and content.',
+    ar: 'تقرير رابط — ملخص، أداء، منصات، ومحتوى.',
+    en: 'Link Report — summary, performance, platforms and content.',
   },
   'snapshot:executive_summary': {
-    ar: 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.',
-    en: 'Executive summary — the headline results and decisions. Full detail lives in the detailed report.',
+    ar: 'تقرير محفوظ — أبرز النتائج والقرارات في وثيقة ثابتة.',
+    en: 'Saved Report — the headline results and decisions, fixed as a document.',
   },
   'snapshot:detailed': {
-    ar: 'تقرير تفصيلي — كل المنصات والأهداف والمحتوى الأعلى أداءً.',
-    en: 'Detailed report — every platform and objective, and the best-performing content.',
+    ar: 'تقرير محفوظ — كل المنصات والأهداف والمحتوى الأعلى أداءً.',
+    en: 'Saved Report — every platform and objective, and the best-performing content.',
   },
 }
 
@@ -50,17 +50,15 @@ export function productLabel(mode: string, form: string, locale: Locale): string
   return locale === 'ar' ? product.ar : product.en
 }
 
-/** The short name of the product, for a place with no room for the sentence. */
-export function productName(mode: string, form: string, locale: Locale): string {
+/**
+ * The short name of the product, for a place with no room for the sentence.
+ *
+ * REPORT-PRODUCTS-001 — exactly two names, whatever the detail level: «تقرير رابط» / Link Report and
+ * «تقرير محفوظ» / Saved Report. «ملخص تنفيذي», «تقرير تفصيلي» and «رابط لحظي للعميل» are not products
+ * any more; how much a report shows is its DETAIL LEVEL, a setting, not a name.
+ */
+export function productName(mode: string, _form: string, locale: Locale): string {
   const ar = locale === 'ar'
 
-  if (mode === 'live') {
-    return form === 'executive_summary'
-      ? (ar ? 'رابط لحظي للعميل — ملخص' : 'Live client link — summary')
-      : (ar ? 'رابط لحظي للعميل — كامل' : 'Live client link — full')
-  }
-
-  return form === 'executive_summary'
-    ? (ar ? 'ملخص تنفيذي' : 'Executive summary')
-    : (ar ? 'تقرير تفصيلي' : 'Detailed report')
+  return mode === 'live' ? (ar ? 'تقرير رابط' : 'Link Report') : (ar ? 'تقرير محفوظ' : 'Saved Report')
 }

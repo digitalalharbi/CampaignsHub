@@ -76,7 +76,7 @@ export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) 
   const purposeWords = {
     campaigns: { ar: 'لعرض حملاته', en: 'to see its campaigns' },
     analytics: { ar: 'لعرض تحليلاته', en: 'to see its analytics' },
-    reports: { ar: 'لعرض تقاريره وإنشاء رابط لحظي للعميل', en: 'to see its reports and create a live client link' },
+    reports: { ar: 'لعرض تقاريره وإنشاء تقرير رابط', en: 'to see its reports and create a link report' },
     recommendations: { ar: 'لعرض ما يستحق التنفيذ في حملاته', en: 'to see what its campaigns need done' },
     'spend-limits': { ar: 'لعرض حدود إنفاقه وضبطها', en: 'to see and set its spend limits' },
   }[purpose]
