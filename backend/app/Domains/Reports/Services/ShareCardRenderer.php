@@ -165,9 +165,9 @@ final class ShareCardRenderer
      */
     public function contents(ReportShare $share, Report $report): array
     {
-        $identity = $this->branding->forShare($share, 'preview-card', $report);
         $locale = $report->reportLocale();
-        $who = (string) ($identity['name'] ?? 'CampaignsHub');
+        // REPORT-TITLE-EXACT-001 — the card's headline is the report's entered title.
+        $who = ReportIdentity::pageTitle($report);
 
         return [
             'lang' => $locale,

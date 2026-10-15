@@ -27,13 +27,14 @@ class ReportPageTitleParityTest extends TestCase
         $titles = $this->source('features/reports/sharedBranding.ts');
         $brand = $this->source('lib/brand.ts');
 
-        $this->assertStringContainsString('`${title} — ${productName(locale)}`', $titles, 'the SPA stopped joining name and product with « — »');
+        // REPORT-TITLE-EXACT-001 — both sides return the entered title and nothing else.
+        $this->assertStringNotContainsString('productName(locale)}`', $titles, 'the SPA appended the product to the title again');
         $this->assertStringContainsString("'Performance report'", $titles);
         $this->assertStringContainsString("'تقرير الأداء'", $titles);
         $this->assertStringContainsString("nameAr: '".ReportIdentity::productName('ar')."'", $brand);
         $this->assertStringContainsString("nameEn: '".ReportIdentity::productName('en')."'", $brand);
 
-        $this->assertSame('Q3 — كامبينز هب', ReportIdentity::pageTitle(new Report(['name' => ' Q3 ', 'config' => ['locale' => 'ar']])));
-        $this->assertSame('Performance report — CampaignsHub', ReportIdentity::pageTitle(new Report(['name' => '', 'config' => ['locale' => 'en']])));
+        $this->assertSame('Q3', ReportIdentity::pageTitle(new Report(['name' => ' Q3 ', 'config' => ['locale' => 'ar']])));
+        $this->assertSame('Performance report', ReportIdentity::pageTitle(new Report(['name' => '', 'config' => ['locale' => 'en']])));
     }
 }

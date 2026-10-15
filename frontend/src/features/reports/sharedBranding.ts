@@ -34,15 +34,14 @@ export interface HeaderIdentity {
 }
 
 /**
- * REPORT BRANDING (Owner) — a report's page title: its name ending with the product's, in the
- * REPORT's language. «<اسم التقرير> — كامبينز هب» / «<Report name> — CampaignsHub». The backend's
- * `ReportIdentity::pageTitle()` builds the same string for the pasted-link card and the file.
+ * REPORT-TITLE-EXACT-001 — a report's page title is the title its Owner entered, and nothing else.
+ * The product's name no longer rides on it; the page chrome and the pasted-link card's footer carry
+ * the product. The backend's `ReportIdentity::pageTitle()` is the same rule.
  */
 export function reportPageTitle(name: string | null | undefined, reportLocale: string | null | undefined): string {
   const locale = reportLocale === 'en' ? 'en' : 'ar'
-  const title = name?.trim() ? name.trim() : (locale === 'en' ? 'Performance report' : 'تقرير الأداء')
 
-  return `${title} — ${productName(locale)}`
+  return name?.trim() ? name.trim() : (locale === 'en' ? 'Performance report' : 'تقرير الأداء')
 }
 
 /**

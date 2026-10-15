@@ -88,8 +88,9 @@ final class SharedReportCrawlerMetadataTest extends TestCase
     {
         $html = $this->crawl();
 
+        // REPORT-TITLE-EXACT-001 — the entered title; the client's name is not prefixed to it.
         $this->assertStringContainsString('تقرير الأداء الشهري', $html);
-        $this->assertStringContainsString('Nakheel', $html);
+        $this->assertStringNotContainsString('Nakheel —', $html);
         $this->assertStringNotContainsString('All your paid campaigns in one place', $html);
     }
 

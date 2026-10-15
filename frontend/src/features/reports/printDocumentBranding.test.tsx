@@ -77,7 +77,7 @@ describe('the document PDF’s cover', () => {
   it('titles the file with the report’s name ending with the product’s', () => {
     render({ name: 'Nakheel', logoUrl: null, by: null, byLogoUrl: null })
 
-    expect(document.title).toBe('August — كامبينز هب')
+    expect(document.title).toBe('August')
   })
 
   it('shows the agency’s own mark beside its name, and none where it has none', () => {

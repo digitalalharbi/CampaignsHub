@@ -107,8 +107,9 @@
   header { display: flex; align-items: center; gap: 28px; position: relative; }
 
   .mark {
-    height: 84px;
-    max-width: 280px;
+    /* The whole logo, uncropped: contain inside a box large enough to read on a chat card. */
+    height: 120px;
+    max-width: 420px;
     object-fit: contain;
     /* A mark is supplied at whatever size the agency uploaded; the box is what keeps a tall one from
        pushing the title off the card. */

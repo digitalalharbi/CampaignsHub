@@ -29,12 +29,12 @@ describe('the name a printed report carries in its metadata', () => {
   // REPORT BRANDING (Owner): a client or executive file is titled like its link — the report's name
   // ending with the product's, in the report's language. Whose report it is is on the cover.
   it('titles a client file with the report’s name and the product’s, in the report’s language', () => {
-    expect(title(client, 'client', PAYLOAD)).toBe('Q3 Performance — كامبينز هب')
-    expect(printTitle({ ...PAYLOAD, name: 'Q3 Performance', locale: 'en', audience: 'client' }, 'Nakheel')).toBe('Q3 Performance — CampaignsHub')
+    expect(title(client, 'client', PAYLOAD)).toBe('Q3 Performance')
+    expect(printTitle({ ...PAYLOAD, name: 'Q3 Performance', locale: 'en', audience: 'client' }, 'Nakheel')).toBe('Q3 Performance')
   })
 
   it('titles an executive file the same way', () => {
-    expect(title(client, 'executive', PAYLOAD)).toBe('Q3 Performance — كامبينز هب')
+    expect(title(client, 'executive', PAYLOAD)).toBe('Q3 Performance')
   })
 
   /* Client and executive files must not carry internal identifiers — that rule is untouched. */
@@ -57,7 +57,7 @@ describe('the name a printed report carries in its metadata', () => {
 
   /* With nothing resolved, the product's name — never an empty title. */
   it('never produces an empty title, even for an unnamed report', () => {
-    expect(printTitle({ ...PAYLOAD, name: '', locale: 'ar', audience: 'client' }, 'CampaignsHub')).toBe('تقرير الأداء — كامبينز هب')
+    expect(printTitle({ ...PAYLOAD, name: '', locale: 'ar', audience: 'client' }, 'CampaignsHub')).toBe('تقرير الأداء')
   })
 
   /**

@@ -801,6 +801,7 @@ function ScopeLostDialog({ ar, onClose }: { ar: boolean; onClose: () => void }) 
 function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
   const ar = useAr()
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [type, setType] = useState<string | null>('executive')
   /*
    * What the report IS — a decision-length summary, or the full account (REPORT-LINKS-13).
@@ -855,7 +856,10 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
   const create = useMutation({
     mutationFn: () =>
       createReport(projectId, {
-        name: name || (ar ? 'تقرير' : 'Report'),
+        // REPORT-TITLE-EXACT-001 — exactly what was typed; the form refuses an empty title rather
+        // than inventing «تقرير».
+        name: name.trim(),
+        ...(description.trim() === '' ? {} : { description: description.trim() }),
         type: type ?? 'executive',
         mode,
         form,
@@ -884,7 +888,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
-          <Button loading={create.isPending} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
+          <Button loading={create.isPending} disabled={name.trim() === ''} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
         </>
       }
     >
@@ -892,6 +896,9 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={ar ? 'يرجى تصحيح الأخطاء التالية' : 'Please correct the following'} />}
         <Field label={ar ? 'اسم التقرير' : 'Report name'} htmlFor="rb-name">
           <input id="rb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'مثال: التقرير الشهري — يوليو' : 'e.g. Monthly report — July'} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
+        </Field>
+        <Field label={ar ? 'وصف (اختياري)' : 'Description (optional)'} htmlFor="rb-description">
+          <textarea id="rb-description" value={description} maxLength={500} rows={2} onChange={(e) => setDescription(e.target.value)} placeholder={ar ? 'يظهر في التقرير وفي معاينة الرابط إن كتبته' : 'Shown in the report and the link preview only if you write one'} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
         </Field>
         <SelectField
           label={ar ? 'نوع التقرير' : 'Report type'}

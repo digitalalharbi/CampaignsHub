@@ -50,7 +50,7 @@ describe('the tab a client’s report opens in', () => {
     document.title = 'كل حملاتك الإعلانية المدفوعة في مكان واحد — CampaignsHub'
     open('Nakheel')
 
-    await waitFor(() => expect(document.title).toBe('Q3 Performance — كامبينز هب'))
+    await waitFor(() => expect(document.title).toBe('Q3 Performance'))
   })
 
   /**

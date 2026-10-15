@@ -43,8 +43,8 @@ describe('the identity a report header shows', () => {
 
 describe('a report’s page title', () => {
   it('is the report’s name ending with the product’s, in the report’s language', () => {
-    expect(reportPageTitle('تقرير الأداء الشهري', 'ar')).toBe('تقرير الأداء الشهري — كامبينز هب')
-    expect(reportPageTitle('Monthly performance', 'en')).toBe('Monthly performance — CampaignsHub')
+    expect(reportPageTitle('تقرير الأداء الشهري', 'ar')).toBe('تقرير الأداء الشهري')
+    expect(reportPageTitle('Monthly performance', 'en')).toBe('Monthly performance')
   })
 })
 
@@ -67,7 +67,7 @@ describe('a shared report page', () => {
 
     expect(await screen.findByTestId('shared-report-logo')).toHaveAttribute('src', '/l/client')
     expect(screen.getByTestId('shared-report-agency-logo')).toHaveAttribute('src', '/l/agency')
-    await waitFor(() => expect(document.title).toBe('تقرير الأداء الشهري — كامبينز هب'))
+    await waitFor(() => expect(document.title).toBe('تقرير الأداء الشهري'))
   })
 
   it('draws no image where no mark exists, and still names both', async () => {
@@ -89,6 +89,6 @@ describe('a shared report page', () => {
     await waitFor(() => expect(screen.getByTestId('shared-report-name')).toHaveTextContent('Nakheel'))
     await waitFor(() => expect(screen.getByTestId('shared-report-by')).toHaveTextContent('Razah Agency'))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
-    await waitFor(() => expect(document.title).toBe('Monthly performance — CampaignsHub'))
+    await waitFor(() => expect(document.title).toBe('Monthly performance'))
   })
 })

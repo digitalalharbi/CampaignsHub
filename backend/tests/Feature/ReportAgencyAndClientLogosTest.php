@@ -137,14 +137,14 @@ final class ReportAgencyAndClientLogosTest extends TestCase
      */
     public function test_a_reports_card_leads_with_the_client_in_the_reports_own_language(): void
     {
-        $this->assertSame('Nakheel — تقرير الأداء الشهري', $this->meta($this->preview(), 'og:title'));
+        $this->assertSame('تقرير الأداء الشهري', $this->meta($this->preview(), 'og:title'));
 
         app(TenantContext::class)->setTenantId($this->agency->id);
         $this->report->update(['name' => 'Monthly performance', 'config' => ['locale' => 'en']]);
         app(TenantContext::class)->forget();
 
         $html = $this->preview();
-        $this->assertSame('Nakheel — Monthly performance', $this->meta($html, 'og:title'));
+        $this->assertSame('Monthly performance', $this->meta($html, 'og:title'));
         /*
          * The `<title>` matches, and that is right rather than an oversight.
          *
@@ -155,7 +155,7 @@ final class ReportAgencyAndClientLogosTest extends TestCase
          * where keeping the product's name still earns its place: it tells two open report links
          * apart.
          */
-        $this->assertStringContainsString('<title>Nakheel — Monthly performance</title>', $html);
+        $this->assertStringContainsString('<title>Monthly performance</title>', $html);
         $this->assertStringContainsString('lang="en"', $html);
         $this->assertSame('CampaignsHub', $this->meta($html, 'og:site_name'));
     }

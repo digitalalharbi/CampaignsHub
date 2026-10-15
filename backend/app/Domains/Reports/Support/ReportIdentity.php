@@ -38,22 +38,25 @@ final class ReportIdentity
      * than filled with a placeholder: «تقرير — — أغسطس» tells a reader that something is broken.
      */
     /**
-     * REPORT BRANDING — the report's name ending with the product's, in the REPORT's own language.
+     * REPORT-TITLE-EXACT-001 — the title is the one the Owner entered, and nothing else.
      *
-     * «<اسم التقرير> — كامبينز هب» for an Arabic report, «<Report name> — CampaignsHub» for an English
-     * one. It is what the tab, the pasted-link card and the file's own title say; whose report it is
-     * travels beside it (the header, the card's description), not in it. The SPA mirrors this in
-     * `reportPageTitle()`, and `ReportPageTitleParityTest` holds the two to one format.
+     * It used to be «<name> — كامبينز هب» (REPORT BRANDING), and the card prefixed the client's
+     * name, and the file took a generated kind-and-period. Four visible titles for one report, none
+     * of which the Owner typed. Report setup is the single source of truth: this is exactly the
+     * entered name, in the tab, the PDF's own title, the pasted-link card and the file. The product's
+     * name is carried by the card's footer and the page chrome, not appended to the title.
+     * Only a report with NO name falls back to a neutral label, because a blank tab is worse.
+     * The SPA mirrors this in `reportPageTitle()`, held to it by `ReportPageTitleParityTest`.
      */
     public static function pageTitle(Report $report): string
     {
-        $locale = $report->reportLocale();
         $name = trim((string) ($report->name ?? ''));
-        if ($name === '') {
-            $name = $locale === 'en' ? 'Performance report' : 'تقرير الأداء';
+
+        if ($name !== '') {
+            return $name;
         }
 
-        return "{$name} — ".self::productName($locale);
+        return $report->reportLocale() === 'en' ? 'Performance report' : 'تقرير الأداء';
     }
 
     /** The product's name in a language — `brand.name_ar` for Arabic, `brand.name` otherwise. */
@@ -64,13 +67,9 @@ final class ReportIdentity
 
     public static function title(Report $report, string $locale = 'ar'): string
     {
-        $parts = array_values(array_filter([
-            self::kind($report, $locale),
-            $report->name !== '' ? $report->name : null,
-            self::period($report),
-        ], static fn (?string $p): bool => $p !== null && trim($p) !== ''));
+        $name = trim((string) ($report->name ?? ''));
 
-        return implode(' — ', $parts);
+        return $name !== '' ? $name : ($locale === 'en' ? 'Performance report' : 'تقرير الأداء');
     }
 
     /*
@@ -112,76 +111,11 @@ final class ReportIdentity
      */
     public static function filename(Report $report, string $format): string
     {
-        $slug = Str::slug(self::title($report, 'en'));
+        // The entered title, ASCII-folded where it can be. An Arabic-only title has no ASCII slug,
+        // so the file says `report` and the id keeps it unique — never an empty `.pdf`.
+        $slug = Str::slug(trim((string) ($report->name ?? ''))) ?: 'report';
         $short = substr((string) $report->getKey(), 0, 8);
 
-        // Cut before appending the id, so the part that makes the name UNIQUE is never the part lost.
         return Str::limit($slug, 70, '').'-'.$short.'.'.strtolower($format);
-    }
-
-    /** What kind of document this is, in the reader's language. */
-    private static function kind(Report $report, string $locale): string
-    {
-        $ar = $locale === 'ar';
-        $form = (string) ($report->form ?? 'detailed');
-
-        return $form === 'executive_summary'
-            ? ($ar ? 'ملخص تنفيذي' : 'Executive summary')
-            : ($ar ? 'تقرير تفصيلي' : 'Detailed report');
-    }
-
-    /**
-     * The window the report covers, as dates rather than as a phrase.
-     *
-     * «آخر ٣٠ يومًا» is meaningless on a document somebody opens in November. The dates are what make
-     * two files in one folder distinguishable, which is the entire point of naming them.
-     */
-    private static function period(Report $report): ?string
-    {
-        /*
-         * REPORT-TITLE-METADATA-001 — the COLUMNS first, and that is a defect being fixed.
-         *
-         * This read `config.period` and nothing else. Not one report in the estate stores a period
-         * there: every row carries `period_start` / `period_end` and leaves the config key unset,
-         * so this returned null for all of them — and the dates silently vanished from the two
-         * surfaces that need them most.
-         *
-         * The result was an email subject reading «تقرير تفصيلي — آساس الثبات» for January and the
-         * identical string for February, and an export filename distinguished only by eight
-         * characters of a uuid. The docblock above has always said why that matters — «the dates are
-         * what make two files in one folder distinguishable, which is the entire point of naming
-         * them» — so the intent was recorded and simply unmet, which is exactly the shape of thing
-         * «untested» hides.
-         *
-         * The config keys are kept as a fallback: a report built before the columns existed, or one
-         * whose period is a config-only concept, still names itself.
-         */
-        $config = (array) ($report->config ?? []);
-
-        $from = self::day($report->period_start) ?? self::stringOrNull($config['period']['from'] ?? $config['from'] ?? null);
-        $to = self::day($report->period_end) ?? self::stringOrNull($config['period']['to'] ?? $config['to'] ?? null);
-
-        if ($from === null || $to === null) {
-            return null;
-        }
-
-        return $from === $to ? $from : $from.' → '.$to;
-    }
-
-    /** A date column as `Y-m-d`, or null where it is unset — never «now» by accident. */
-    private static function day(mixed $value): ?string
-    {
-        if ($value instanceof \DateTimeInterface) {
-            return $value->format('Y-m-d');
-        }
-
-        $text = self::stringOrNull($value);
-
-        return $text === null ? null : substr($text, 0, 10);
-    }
-
-    private static function stringOrNull(mixed $value): ?string
-    {
-        return is_string($value) && trim($value) !== '' ? $value : null;
     }
 }
