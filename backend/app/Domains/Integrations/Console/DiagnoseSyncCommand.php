@@ -1533,7 +1533,7 @@ final class DiagnoseSyncCommand extends Command
                         '    · %s | objective=%s destination=%s | spend=%s withheld_rows=%d impressions=%s leads=%s cpl=%s conversions=%s cpa=%s roas=%s%s',
                         (string) ($row['name'] ?? $id),
                         (string) ($row['objective'] ?? 'unset'),
-                        ($destinations[$id] ?? null)?->value ?? 'unstated',
+                        isset($destinations[$id]) ? $destinations[$id]->value : 'unstated',
                         number_format($spend, 2),
                         (int) ($row['spend_withheld_rows'] ?? 0),
                         number_format((float) ($row['impressions'] ?? 0), 0),
