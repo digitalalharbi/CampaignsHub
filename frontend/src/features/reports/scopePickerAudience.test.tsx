@@ -111,6 +111,7 @@ describe('what a report builder may name, by audience', () => {
   it('an internal report keeps the whole hierarchy', async () => {
     render('internal')
     await screen.findByText('Platforms')
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     for (const axis of ['Ad accounts', 'Campaigns', 'Ad sets', 'Ads', 'Content']) {
       expect(

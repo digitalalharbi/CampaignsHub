@@ -150,6 +150,7 @@ describe('searching an axis the list could not hold', () => {
       />,
       { locale: 'en' },
     )
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     const box = within(await screen.findByTestId('scope-select-Campaigns'))
     fireEvent.click(box.getAllByRole('combobox')[0])
@@ -162,7 +163,7 @@ describe('searching an axis the list could not hold', () => {
   it('asks for the options of the period being reported on', async () => {
     setup({ from: '2026-07-01', to: '2026-07-31' })
 
-    await waitFor(() => expect(api.scopeOptions).toHaveBeenCalledWith('p1', { from: '2026-07-01', to: '2026-07-31' }))
+    await waitFor(() => expect(api.scopeOptions).toHaveBeenCalledWith('p1', { from: '2026-07-01', to: '2026-07-31' }, expect.anything()))
   })
 
   /** And the bound now tells the reader what to DO, rather than to change what they are building. */

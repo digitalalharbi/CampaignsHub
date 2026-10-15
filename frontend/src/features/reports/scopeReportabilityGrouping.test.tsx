@@ -95,14 +95,17 @@ describe.each(LOCALES)('the builder groups campaigns by what ran in the window (
     vi.mocked(searchScopeAxis).mockResolvedValue({} as never)
   })
 
-  const render = (value: Record<string, unknown> = PERIOD) =>
+  const render = async (value: Record<string, unknown> = PERIOD) => {
     renderWithProviders(
       <ReportScopePicker projectId="p1" value={value as never} onChange={vi.fn()} audience="internal" />,
       { locale },
     )
+    // REPORT-SETUP-001 — campaigns are listed under «Selected campaigns».
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+  }
 
   it('names the group that ran, and the group that did not', async () => {
-    render()
+    await render()
     await open(axis)
 
     expect(await screen.findByText('Ran Big')).toBeInTheDocument()
@@ -112,7 +115,7 @@ describe.each(LOCALES)('the builder groups campaigns by what ran in the window (
 
   /** Membership is never decided by the heading — nothing is hidden, which the ordering promised too. */
   it('hides nothing: every campaign is still offered', async () => {
-    render()
+    await render()
     await open(axis)
 
     for (const name of ['Ran Big', 'Ran Small', 'Quiet One']) {
@@ -125,7 +128,7 @@ describe.each(LOCALES)('the builder groups campaigns by what ran in the window (
    * returning the list untouched.
    */
   it('makes no claim when no period was chosen', async () => {
-    render({})
+    await render({})
     await open(axis)
 
     expect(await screen.findByText('Quiet One')).toBeInTheDocument()

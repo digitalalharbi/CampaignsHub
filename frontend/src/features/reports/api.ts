@@ -170,6 +170,9 @@ export interface LiveBuilderOptions {
      * any guess wrong.
      */
     platforms?: string[]
+    /** REPORT-SETUP-001 — the native canonical objective and where the results happen. */
+    objective?: string | null
+    destination?: string | null
     /**
      * REPORT-SCOPE-SELECTION-001 — which AD ACCOUNT this campaign's spend came from.
      *
@@ -718,6 +721,8 @@ export interface ReportScopeShape {
   ad_ids?: string[]
   creative_ids?: string[]
   objectives?: string[]
+  /** LEAD-DESTINATION-001 — lead_form · website · whatsapp · messenger · instagram_direct · calls · mixed. */
+  destinations?: string[]
   paths?: string[]
   metrics?: string[]
   from?: string
@@ -739,6 +744,8 @@ export interface ScopeOptions {
     name: string
     status: string | null
     objective: string | null
+    /** Where this campaign's results happen, or null when the platform did not say. */
+    destination?: string | null
     /**
      * REPORT-SCOPE-SELECTION-001 — the last day this campaign ran INSIDE the period being reported on.
      *
@@ -755,6 +762,8 @@ export interface ScopeOptions {
   creatives: Array<{ id: string; name: string; provider: string; format: string | null; campaign_id: string }>
   objectives: Array<{ key: string; labels: { ar: string; en: string }; path: string }>
   paths: Array<{ key: string; labels: { ar: string; en: string }; headline_metrics: string[] }>
+  /** The destinations present in this project, with how many campaigns each holds. */
+  destinations?: Array<{ key: string; labels: { ar: string; en: string }; messaging: boolean; campaign_count: number }>
   metrics: Array<{ key: string; ar: string; en: string }>
   grain: { figures: string[]; resolved_to_campaign: string[]; creatives_only: string[] }
   /*
@@ -780,11 +789,31 @@ export interface ScopeTemplate {
   created_at: string | null
 }
 
-export const scopeOptions = (p: string, period?: { from?: string; to?: string }) =>
-  getData<ScopeOptions>(
-    `${base(p)}/scope/options`
-    + (period?.from && period?.to ? `?from=${period.from}&to=${period.to}` : ''),
-  )
+/**
+ * REPORT-SETUP-001 — the dependent filters travel with the request, so the server narrows every list
+ * below the choice: provider → accounts and campaigns, account → campaigns, objective → campaigns,
+ * destination → campaigns. Nothing is offered that the choices above it exclude.
+ */
+export interface ScopeFilters {
+  providers?: string[]
+  account_ids?: string[]
+  objectives?: string[]
+  destinations?: string[]
+}
+
+export const scopeOptions = (p: string, period?: { from?: string; to?: string }, filters?: ScopeFilters) => {
+  const q = new URLSearchParams()
+  if (period?.from && period?.to) {
+    q.set('from', period.from)
+    q.set('to', period.to)
+  }
+  for (const [key, list] of Object.entries(filters ?? {})) {
+    for (const v of list ?? []) q.append(`${key}[]`, v)
+  }
+  const qs = q.toString()
+
+  return getData<ScopeOptions>(`${base(p)}/scope/options${qs === '' ? '' : `?${qs}`}`)
+}
 
 /**
  * One axis of the scope options, searched where the rows live — UX-MULTISELECT-SCALE-001.
