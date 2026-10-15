@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
@@ -1494,6 +1495,58 @@ final class DiagnoseSyncCommand extends Command
                 ));
             } elseif ($held > 0) {
                 $this->line('  identity          : not stated — spend is partly withheld, so no cost ratio is computed from it.');
+            }
+
+            /*
+             * LEAD-DESTINATION-001 — each campaign of THIS account as the reports read it: the
+             * objective it was classified under, where its results happen, and the figures with the
+             * identity beside them. Names are printed because the Owner asks about a campaign by name.
+             */
+            $unifiedIds = ExternalCampaign::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->where('project_id', $projectId)
+                ->whereNotNull('unified_campaign_id')
+                ->pluck('unified_campaign_id')
+                ->map(fn ($id): string => (string) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($unifiedIds !== []) {
+                $destinations = app(CampaignDestinations::class)->for($unifiedIds);
+                app(ProjectContext::class)->setProjectId((string) $projectId);
+                $rows = app(MetricsAggregator::class)->byCampaign(
+                    Carbon::parse((string) $first),
+                    Carbon::parse((string) $latest),
+                );
+                app(ProjectContext::class)->forget();
+
+                $this->line('  campaigns of this account, as the reports read them:');
+                foreach ($rows as $row) {
+                    $id = (string) ($row['campaign_id'] ?? '');
+                    if (! in_array($id, $unifiedIds, true)) {
+                        continue;
+                    }
+                    $spend = (float) ($row['spend'] ?? 0);
+                    $leads = (float) ($row['leads'] ?? 0);
+                    $this->line(sprintf(
+                        '    · %s | objective=%s destination=%s | spend=%s withheld_rows=%d impressions=%s leads=%s cpl=%s conversions=%s cpa=%s roas=%s%s',
+                        (string) ($row['name'] ?? $id),
+                        (string) ($row['objective'] ?? 'unset'),
+                        ($destinations[$id] ?? null)?->value ?? 'unstated',
+                        number_format($spend, 2),
+                        (int) ($row['spend_withheld_rows'] ?? 0),
+                        number_format((float) ($row['impressions'] ?? 0), 0),
+                        number_format($leads, 0),
+                        ($row['cpl'] ?? null) === null ? 'WITHHELD/none' : number_format((float) $row['cpl'], 2),
+                        number_format((float) ($row['conversions'] ?? 0), 0),
+                        ($row['cpa'] ?? null) === null ? 'none' : number_format((float) $row['cpa'], 2),
+                        ($row['roas'] ?? null) === null ? 'none' : number_format((float) $row['roas'], 3),
+                        $leads > 0 && (int) ($row['spend_withheld_rows'] ?? 0) === 0
+                            ? sprintf('  identity: %s ÷ %s = %s', number_format($spend, 2), number_format($leads, 0), number_format($spend / $leads, 2))
+                            : '',
+                    ));
+                }
             }
         }
 
