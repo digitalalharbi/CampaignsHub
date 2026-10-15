@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
@@ -1454,6 +1455,100 @@ final class DiagnoseSyncCommand extends Command
             number_format($revenueOriginal, 2),
             $sourceCurrency !== '' ? $sourceCurrency : '(currency not recorded)',
         ));
+
+        /*
+         * DERIVED-WITHHELD-001 — the identity, read from the SAME aggregator every surface reads.
+         *
+         * A cost ratio is stated only over complete money, so with any spend row withheld CPA must be
+         * absent here, and with none it must equal spend ÷ results for this very window. Printed
+         * beside the figures it divides so a reader can check the arithmetic by eye.
+         */
+        $first = (clone $metrics)->min('metric_date');
+        if ($first !== null && $latest !== null) {
+            app(ProjectContext::class)->setProjectId((string) $projectId);
+            $totals = app(MetricsAggregator::class)->totals(
+                Carbon::parse((string) $first),
+                Carbon::parse((string) $latest),
+            );
+            app(ProjectContext::class)->forget();
+
+            $held = (int) ($totals['spend_withheld_rows'] ?? 0);
+            $results = (float) ($totals['conversions'] ?? 0);
+            $this->line(sprintf(
+                '  derived (project, %s → %s): spend_withheld_rows=%d  conversions=%s  cpa=%s  cpc=%s  cpm=%s  roas=%s',
+                $first,
+                $latest,
+                $held,
+                number_format($results, 0),
+                $totals['cpa'] === null ? 'WITHHELD' : number_format((float) $totals['cpa'], 2),
+                $totals['cpc'] === null ? 'WITHHELD' : number_format((float) $totals['cpc'], 3),
+                $totals['cpm'] === null ? 'WITHHELD' : number_format((float) $totals['cpm'], 2),
+                $totals['roas'] === null ? 'WITHHELD' : number_format((float) $totals['roas'], 3),
+            ));
+            if ($held === 0 && $results > 0 && $totals['cpa'] !== null) {
+                $this->line(sprintf(
+                    '  identity          : spend %s ÷ results %s = %s  (cpa %s)',
+                    number_format((float) $totals['spend'], 2),
+                    number_format($results, 0),
+                    number_format((float) $totals['spend'] / $results, 2),
+                    number_format((float) $totals['cpa'], 2),
+                ));
+            } elseif ($held > 0) {
+                $this->line('  identity          : not stated — spend is partly withheld, so no cost ratio is computed from it.');
+            }
+
+            /*
+             * LEAD-DESTINATION-001 — each campaign of THIS account as the reports read it: the
+             * objective it was classified under, where its results happen, and the figures with the
+             * identity beside them. Names are printed because the Owner asks about a campaign by name.
+             */
+            $unifiedIds = ExternalCampaign::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->where('project_id', $projectId)
+                ->whereNotNull('unified_campaign_id')
+                ->pluck('unified_campaign_id')
+                ->map(fn ($id): string => (string) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($unifiedIds !== []) {
+                $destinations = app(CampaignDestinations::class)->for($unifiedIds);
+                app(ProjectContext::class)->setProjectId((string) $projectId);
+                $rows = app(MetricsAggregator::class)->byCampaign(
+                    Carbon::parse((string) $first),
+                    Carbon::parse((string) $latest),
+                );
+                app(ProjectContext::class)->forget();
+
+                $this->line('  campaigns of this account, as the reports read them:');
+                foreach ($rows as $row) {
+                    $id = (string) ($row['campaign_id'] ?? '');
+                    if (! in_array($id, $unifiedIds, true)) {
+                        continue;
+                    }
+                    $spend = (float) ($row['spend'] ?? 0);
+                    $leads = (float) ($row['leads'] ?? 0);
+                    $this->line(sprintf(
+                        '    · %s | objective=%s destination=%s | spend=%s withheld_rows=%d impressions=%s leads=%s cpl=%s conversions=%s cpa=%s roas=%s%s',
+                        (string) ($row['name'] ?? $id),
+                        (string) ($row['objective'] ?? 'unset'),
+                        isset($destinations[$id]) ? $destinations[$id]->value : 'unstated',
+                        number_format($spend, 2),
+                        (int) ($row['spend_withheld_rows'] ?? 0),
+                        number_format((float) ($row['impressions'] ?? 0), 0),
+                        number_format($leads, 0),
+                        ($row['cpl'] ?? null) === null ? 'WITHHELD/none' : number_format((float) $row['cpl'], 2),
+                        number_format((float) ($row['conversions'] ?? 0), 0),
+                        ($row['cpa'] ?? null) === null ? 'none' : number_format((float) $row['cpa'], 2),
+                        ($row['roas'] ?? null) === null ? 'none' : number_format((float) $row['roas'], 3),
+                        $leads > 0 && (int) ($row['spend_withheld_rows'] ?? 0) === 0
+                            ? sprintf('  identity: %s ÷ %s = %s', number_format($spend, 2), number_format($leads, 0), number_format($spend / $leads, 2))
+                            : '',
+                    ));
+                }
+            }
+        }
 
         if ($withheld > 0) {
             $this->line(sprintf(
