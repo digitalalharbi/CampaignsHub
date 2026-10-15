@@ -45,6 +45,7 @@ describe('ReportScopePicker', () => {
       truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
     })
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     const note = await screen.findByTestId('scope-truncated-Campaigns')
     expect(note).toHaveTextContent('Showing 500 only')
@@ -59,6 +60,7 @@ describe('ReportScopePicker', () => {
       truncated: { campaigns: false, ad_sets: false, ads: false, creatives: false },
     })
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     await screen.findByText('Campaigns')
     expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
@@ -72,6 +74,7 @@ describe('ReportScopePicker', () => {
   it('does not invent a completeness claim the server never made', async () => {
     vi.mocked(scopeOptions).mockResolvedValue(OPTIONS)
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     await screen.findByText('Campaigns')
     expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
@@ -84,6 +87,7 @@ describe('ReportScopePicker', () => {
       truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
     })
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'ar' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     const note = await screen.findByTestId('scope-truncated-الحملات')
     expect(note).toHaveTextContent('يُعرض 500 فقط')
@@ -92,11 +96,14 @@ describe('ReportScopePicker', () => {
 
   it('offers every axis the project has data for', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     expect(await screen.findByText('Platforms')).toBeInTheDocument()
     expect(screen.getByText('Ad accounts')).toBeInTheDocument()
     expect(screen.getByText('Campaigns')).toBeInTheDocument()
-    expect(screen.getByText('Marketing paths')).toBeInTheDocument()
+    // REPORT-SETUP-001 — «marketing paths» is gone; the six canonical objectives replace it.
+    expect(screen.queryByText('Marketing paths')).not.toBeInTheDocument()
+    expect(screen.getByText('Objectives')).toBeInTheDocument()
     expect(screen.getByText('Ad sets')).toBeInTheDocument()
     /*
      * «Content», not «Ads» — CONTENT-TERMINOLOGY-001.
@@ -118,6 +125,7 @@ describe('ReportScopePicker', () => {
    */
   it('warns that ad sets and ads do not narrow the figures the way they look like they do', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     expect(await screen.findByText(/No metrics are stored at this level/)).toBeInTheDocument()
     expect(screen.getByText(/Narrows the ad section only/)).toBeInTheDocument()
@@ -174,6 +182,7 @@ describe('ReportScopePicker', () => {
   /** Nothing chosen is nothing to save — a template of «the whole project» is not a scope. */
   it('will not save a template when no axis is bound', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     fireEvent.change(await screen.findByTestId('scope-template-name'), { target: { value: 'Everything' } })
 
@@ -205,6 +214,7 @@ describe('ReportScopePicker', () => {
       <ReportScopePicker projectId="p1" value={{}} onChange={onChange} audience="internal" />,
       { locale: 'en' },
     )
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     const axis = await screen.findByTestId('scope-select-Campaigns')
 
@@ -245,6 +255,7 @@ describe('ReportScopePicker', () => {
       <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />,
       { locale: 'en' },
     )
+    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     expect(await screen.findByTestId('scope-truncated-Campaigns')).toHaveTextContent('Showing 500 only')
   })
@@ -259,7 +270,9 @@ describe('ReportScopePicker', () => {
       { locale: 'en' },
     )
 
-    await screen.findByText('Marketing paths')
-    expect(screen.queryByTestId('scope-select-Marketing paths')).not.toBeInTheDocument()
+    // REPORT-SETUP-001 — the six canonical objectives are chips too, never a search box.
+    await screen.findByText('Objectives')
+    expect(screen.queryByTestId('scope-select-Objectives')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Leads$/ })).toBeInTheDocument()
   })
 })

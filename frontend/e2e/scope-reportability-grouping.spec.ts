@@ -73,6 +73,10 @@ const campaignsBox = (page: Page, locale: 'ar' | 'en') =>
   page.getByTestId(`scope-select-${COPY[locale].axis}`)
 
 async function openCampaigns(page: Page, locale: 'ar' | 'en') {
+  // REPORT-SETUP-001 — campaigns are listed under «Selected campaigns»; «All campaigns» is the default.
+  const selected = page.getByRole('radio', { name: /حملات محددة|Selected campaigns/ })
+  if (await selected.getAttribute('aria-checked') !== 'true') await selected.click()
+
   const box = campaignsBox(page, locale)
   await expect(box).toBeVisible({ timeout: 30000 })
   await box.getByRole('combobox').first().click()

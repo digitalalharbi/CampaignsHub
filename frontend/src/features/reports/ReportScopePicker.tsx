@@ -14,6 +14,7 @@ import {
   type ScopeOptions,
   type ScopeTemplate,
 } from './api'
+import { CANONICAL_OBJECTIVES } from './reportSetupCatalog'
 import { Button } from '@/components/ui/Button'
 import { MultiSelectField } from '@/components/forms/MultiSelectField'
 import { DateField } from '@/components/ui/DateField'
@@ -66,6 +67,10 @@ const COPY = {
      */
     creatives: 'المحتويات',
     objectives: 'الأهداف',
+    destinations: 'الوجهة',
+    scope: 'النطاق',
+    allCampaigns: 'كل الحملات',
+    selectedCampaigns: 'حملات محددة',
     paths: 'المسارات التسويقية',
     metrics: 'المؤشرات المعروضة',
     from: 'من',
@@ -100,6 +105,10 @@ const COPY = {
     ads: 'Ads',
     creatives: 'Content',
     objectives: 'Objectives',
+    destinations: 'Destination',
+    scope: 'Scope',
+    allCampaigns: 'All campaigns',
+    selectedCampaigns: 'Selected campaigns',
     paths: 'Marketing paths',
     metrics: 'Metrics shown',
     from: 'From',
@@ -121,7 +130,8 @@ const COPY = {
 }
 
 /** The axes this component edits as multi-selects, in the order they narrow from wide to deep. */
-type ListAxis = 'providers' | 'account_ids' | 'campaign_ids' | 'ad_set_ids' | 'ad_ids' | 'creative_ids' | 'objectives' | 'paths' | 'metrics'
+type ListAxis = 'providers' | 'account_ids' | 'campaign_ids' | 'ad_set_ids' | 'ad_ids' | 'creative_ids' | 'objectives' | 'destinations' | 'paths' | 'metrics'
+
 
 export function ReportScopePicker({
   projectId,
@@ -172,11 +182,21 @@ export function ReportScopePicker({
    * mistake as reading today's status, arriving by a different route.
    */
   const period = { from: value.from, to: value.to }
+  const filters = {
+    providers: value.providers,
+    account_ids: value.account_ids,
+    objectives: value.objectives,
+    destinations: value.destinations,
+  }
   const options = useQuery({
-    queryKey: ['report-scope-options', projectId, period.from, period.to],
-    queryFn: () => scopeOptions(projectId, period),
+    queryKey: ['report-scope-options', projectId, period.from, period.to, filters],
+    queryFn: () => scopeOptions(projectId, period, filters),
     retry: false,
+    // The previous answer stays on screen while the narrowed one loads, so the form does not flash empty.
+    placeholderData: (previous) => previous,
   })
+  // Explicit All / Selected: «all» means every campaign the filters above leave, never a hidden list.
+  const [campaignMode, setCampaignMode] = useState<'all' | 'selected'>((value.campaign_ids?.length ?? 0) > 0 ? 'selected' : 'all')
   const templates = useQuery({ queryKey: ['report-scope-templates', projectId], queryFn: () => listScopeTemplates(projectId), retry: false })
 
   const [templateName, setTemplateName] = useState('')
@@ -332,7 +352,60 @@ export function ReportScopePicker({
         t={t}
       />}
 
-      {namesInternalEntities && <ScopeSelect
+      {/*
+        REPORT-SETUP-001 — Objective, then Destination, then Campaigns: each narrows the next.
+        Six canonical objectives, whatever native objective each provider spelt; the native word stays
+        in the data. «Marketing paths» is gone — it was a second, overlapping way to say the same thing.
+      */}
+      <Chips
+        label={t.objectives}
+        items={CANONICAL_OBJECTIVES.map((x) => ({ id: x.id, label: ar ? x.ar : x.en }))}
+        selected={CANONICAL_OBJECTIVES.filter((x) => x.members.every((m) => (value.objectives ?? []).includes(m))).map((x) => x.id)}
+        onToggle={(id) => {
+          const group = CANONICAL_OBJECTIVES.find((x) => x.id === id)
+          if (!group) return
+          const current = value.objectives ?? []
+          const on = group.members.every((m) => current.includes(m))
+          set('objectives', on ? current.filter((m) => !group.members.includes(m)) : [...new Set([...current, ...group.members])])
+        }}
+        ar={ar}
+        t={t}
+      />
+
+      {(o.destinations?.length ?? 0) > 0 && (
+        <Chips
+          label={t.destinations}
+          items={(o.destinations ?? []).map((d) => ({ id: d.key, label: `${ar ? d.labels.ar : d.labels.en} (${d.campaign_count})` }))}
+          selected={value.destinations ?? []}
+          onToggle={(id) => toggle('destinations', id)}
+          ar={ar}
+          t={t}
+        />
+      )}
+
+      {/* Scope: every campaign the choices above leave, or an exact list. */}
+      {namesInternalEntities && (
+        <div role="radiogroup" aria-label={t.scope} className="flex flex-wrap items-center gap-2" data-testid="campaign-scope-mode">
+          <span className="text-xs font-bold text-text-primary">{t.scope}</span>
+          {(['all', 'selected'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={campaignMode === mode}
+              onClick={() => {
+                setCampaignMode(mode)
+                if (mode === 'all') set('campaign_ids', [])
+              }}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${campaignMode === mode ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+            >
+              {mode === 'all' ? t.allCampaigns : t.selectedCampaigns}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {namesInternalEntities && campaignMode === 'selected' && <ScopeSelect
         label={t.campaigns}
         /*
           REPORT-SCOPE-SELECTION-001 — «ran in this period» first, and said in words.
@@ -353,24 +426,6 @@ export function ReportScopePicker({
         ar={ar}
         t={t}
       />}
-
-      <Chips
-        label={t.paths}
-        items={o.paths.map((p) => ({ id: p.key, label: ar ? p.labels.ar : p.labels.en }))}
-        selected={value.paths ?? []}
-        onToggle={(id) => toggle('paths', id)}
-        ar={ar}
-        t={t}
-      />
-
-      <Chips
-        label={t.objectives}
-        items={o.objectives.map((x) => ({ id: x.key, label: ar ? x.labels.ar : x.labels.en }))}
-        selected={value.objectives ?? []}
-        onToggle={(id) => toggle('objectives', id)}
-        ar={ar}
-        t={t}
-      />
 
       {namesInternalEntities && o.ad_sets.length > 0 && (
         <ScopeSelect

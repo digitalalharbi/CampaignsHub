@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -185,6 +187,122 @@ final class ReportScopeEndpointTest extends TestCase
     }
 
     /** The picker is offered what this project actually has data for. */
+    /** A platform campaign behind each unified one, and where the sales campaign's ad set sends people. */
+    private function structure(): void
+    {
+        foreach ([['meta', $this->sales, 'WHATSAPP'], ['tiktok', $this->awareness, null]] as [$provider, $unified, $destination]) {
+            $external = new ExternalCampaign;
+            $external->forceFill([
+                'id' => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, 'scope-http:ext:'.$unified->name),
+                'tenant_id' => $this->tenant->getKey(),
+                'project_id' => $this->project->getKey(),
+                'unified_campaign_id' => $unified->getKey(),
+                'external_account_id' => $this->accounts[$provider],
+                'external_id' => 'x-'.$unified->name,
+                'name' => $unified->name,
+                'provider' => $provider,
+                'status' => 'active',
+            ])->save();
+
+            if ($destination !== null) {
+                $set = new ExternalAdSet;
+                $set->forceFill([
+                    'tenant_id' => $this->tenant->getKey(),
+                    'project_id' => $this->project->getKey(),
+                    'external_campaign_id' => $external->getKey(),
+                    'unified_campaign_id' => $unified->getKey(),
+                    'provider' => $provider,
+                    'external_id' => 'as-'.$unified->name,
+                    'name' => 'Set',
+                    'status' => 'active',
+                    'destination_type' => $destination,
+                ])->save();
+            }
+        }
+    }
+
+    private function optionNames(array $query): array
+    {
+        $data = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url('/scope/options?'.http_build_query($query)))
+            ->assertOk()
+            ->json('data');
+
+        return [array_column($data['campaigns'], 'name'), $data];
+    }
+
+    /**
+     * REPORT-SETUP-001 — each choice narrows the lists below it, on the server.
+     */
+    public function test_the_provider_narrows_accounts_and_campaigns(): void
+    {
+        $this->structure();
+
+        [$names, $data] = $this->optionNames(['providers' => ['meta']]);
+
+        $this->assertSame(['Sales'], $names);
+        $this->assertSame(['meta'], array_values(array_unique(array_column($data['accounts'], 'provider'))));
+    }
+
+    public function test_the_account_narrows_campaigns(): void
+    {
+        $this->structure();
+
+        [$names] = $this->optionNames(['account_ids' => [$this->accounts['tiktok']]]);
+
+        $this->assertSame(['Awareness'], $names);
+    }
+
+    public function test_the_objective_narrows_campaigns(): void
+    {
+        $this->structure();
+
+        [$names] = $this->optionNames(['objectives' => ['awareness']]);
+
+        $this->assertSame(['Awareness'], $names);
+    }
+
+    public function test_the_destination_narrows_campaigns_and_is_offered_with_its_count(): void
+    {
+        $this->structure();
+
+        [$names, $data] = $this->optionNames(['destinations' => ['whatsapp']]);
+
+        $this->assertSame(['Sales'], $names);
+        $this->assertSame('whatsapp', $data['campaigns'][0]['destination']);
+
+        $offered = array_column($data['destinations'], null, 'key');
+        $this->assertSame(1, $offered['whatsapp']['campaign_count']);
+        $this->assertTrue($offered['whatsapp']['messaging']);
+        $this->assertArrayNotHasKey('website', $offered, 'a destination nobody uses was offered');
+    }
+
+    public function test_combined_filters_intersect(): void
+    {
+        $this->structure();
+
+        [$names] = $this->optionNames(['providers' => ['tiktok'], 'destinations' => ['whatsapp']]);
+
+        $this->assertSame([], $names, 'a campaign the choices above it exclude was offered');
+    }
+
+    public function test_a_chosen_destination_is_persisted_and_bounds_the_report_to_its_campaigns(): void
+    {
+        $this->structure();
+
+        $scope = ReportScope::fromArray(['destinations' => ['whatsapp'], 'project_ids' => [(string) $this->project->getKey()]]);
+
+        $this->assertSame(['whatsapp'], $scope->toArray()['destinations']);
+        $this->assertSame([(string) $this->sales->getKey()], $scope->resolvedCampaignIds());
+    }
+
+    public function test_an_unknown_destination_is_dropped_rather_than_widening_the_report(): void
+    {
+        $scope = ReportScope::fromArray(['destinations' => ['carrier_pigeon']]);
+
+        $this->assertArrayNotHasKey('destinations', $scope->toArray());
+    }
+
     public function test_the_options_endpoint_offers_this_projects_own_choices(): void
     {
         $data = $this->actingAs($this->operator, 'sanctum')
