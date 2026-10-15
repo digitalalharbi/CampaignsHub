@@ -195,9 +195,13 @@ export function ConnectionWizard({
 
   const boundIds = useMemo(
     () => (bindings.data ?? [])
-      .filter((b: ProjectBinding) => b.is_active && b.account !== null)
+      // ACCOUNT-SELECTION-SCOPE-001 — only THIS connection's accounts are this dialog's selection.
+      // The project may also hold a Meta or Google account; seeding those into a TikTok save sent ids
+      // the connection does not own, and the whole save was refused («البيانات المُدخلة غير صحيحة»).
+      .filter((b: ProjectBinding) => b.is_active && b.account !== null
+        && (b.account.connection_id === undefined || b.account.connection_id === connectionId))
       .map((b: ProjectBinding) => b.account!.id),
-    [bindings.data],
+    [bindings.data, connectionId],
   )
 
   const [seeded, setSeeded] = useState(false)
@@ -827,7 +831,13 @@ export function ConnectionWizard({
       {save.isError && (
         <p className="flex items-start gap-2 rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger" data-testid="wizard-save-error">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          {toApiError(save.error).message}
+          <span className="grid gap-1">
+            <span>{toApiError(save.error).message}</span>
+            {/* The field-level detail the server sent, never only the generic sentence. */}
+            {Object.entries(toApiError(save.error).errors ?? {}).flatMap(([field, list]) => list.map((m) => (
+              <span key={`${field}:${m}`} data-testid="wizard-save-error-detail" className="text-xs">{m}</span>
+            )))}
+          </span>
         </p>
       )}
 

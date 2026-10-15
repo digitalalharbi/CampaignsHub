@@ -108,6 +108,43 @@ describe('managing the accounts of a connected source', () => {
     expect(vi.mocked(confirmAccountSelection)).not.toHaveBeenCalled()
   })
 
+  /**
+   * ACCOUNT-SELECTION-SCOPE-001 (Owner, ReSano / TikTok) — another platform's binding is not this
+   * dialog's selection, and is never sent with it.
+   */
+  it('does not send an account the project holds through another connection', async () => {
+    vi.mocked(listProjectBindings).mockResolvedValue([
+      { id: 'b1', provider: 'tiktok', is_active: true, account: { id: 'a1', external_id: 'ext-a1', name: 'SFMA', connection_id: 'c1' } },
+      { id: 'b9', provider: 'meta', is_active: true, account: { id: 'meta-1', external_id: 'act_1', name: 'hanka', connection_id: 'c-meta' } },
+    ] as never)
+
+    renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
+
+    fireEvent.click((await screen.findByText('Riyadh Store')).closest('li')!.querySelector('input[type="checkbox"]')!)
+    fireEvent.click(screen.getByTestId('wizard-save-selection'))
+
+    await waitFor(() => expect(vi.mocked(applyAccountSelection)).toHaveBeenCalled())
+    const sent = vi.mocked(applyAccountSelection).mock.calls.at(-1)?.[0]
+    expect([...(sent?.externalAccountIds ?? [])].sort()).toEqual(['a1', 'a2'])
+  })
+
+  it('shows the field-level detail the server sent, not only the generic sentence', async () => {
+    vi.mocked(applyAccountSelection).mockRejectedValue(
+      Object.assign(new Error('Request failed'), {
+        response: {
+          status: 422,
+          data: { message: 'The given data was invalid.', errors: { external_account_ids: ['Some of the selected accounts are no longer available on this connection (1: 5b0d6b48)'] } },
+        },
+      }),
+    )
+
+    renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('wizard-save-selection'))
+
+    const detail = await screen.findByTestId('wizard-save-error-detail')
+    expect(detail).toHaveTextContent('no longer available on this connection')
+  })
+
   it('states what the save changed, in the three groups', async () => {
     renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
 

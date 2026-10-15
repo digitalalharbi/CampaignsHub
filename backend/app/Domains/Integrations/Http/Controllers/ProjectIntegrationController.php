@@ -572,6 +572,9 @@ final class ProjectIntegrationController extends Controller
     {
         return [
             'id' => $a->id,
+            // ACCOUNT-SELECTION-SCOPE-001 — which authorisation this account came through, so a
+            // selection screen can keep one connection's choices apart from another's.
+            'connection_id' => $a->provider_connection_id,
             'account_type' => $a->account_type,
             'external_id' => $a->external_id,
             'name' => $a->name,

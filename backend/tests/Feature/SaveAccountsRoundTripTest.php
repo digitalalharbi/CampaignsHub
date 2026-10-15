@@ -173,6 +173,65 @@ final class SaveAccountsRoundTripTest extends TestCase
      *
      * @return array{0: string, 1: list<string>}
      */
+    /**
+     * ACCOUNT-SELECTION-SCOPE-001 (Owner, ReSano / TikTok) — saving one platform's choice on a
+     * project that already holds another platform's account.
+     *
+     * «Manage accounts» seeded the dialog from every binding the project had and sent them all with
+     * the connection being edited; the connection did not own the other platform's id, the save was
+     * refused as a whole, and the screen said only «البيانات المُدخلة غير صحيحة».
+     */
+    public function test_a_save_on_one_connection_keeps_another_connections_binding_and_succeeds(): void
+    {
+        [$firstConnection, $first] = $this->discover();
+        [$secondConnection, $second] = $this->discover();
+        $this->assertNotSame($firstConnection, $secondConnection);
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->putJson("/api/v1/projects/{$this->project->id}/integrations/selection", [
+                'connection_id' => $firstConnection, 'external_account_ids' => [$first[0]],
+            ])->assertOk();
+
+        // What the dialog really sent: the project's other binding AND the new choice.
+        $diff = $this->actingAs($this->owner, 'sanctum')
+            ->putJson("/api/v1/projects/{$this->project->id}/integrations/selection", [
+                'connection_id' => $secondConnection, 'external_account_ids' => [$first[0], $second[0]],
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame([$second[0]], $diff['added']);
+        $this->assertSame([], $diff['removed']);
+        $this->assertDatabaseHas('project_integration_bindings', [
+            'project_id' => $this->project->getKey(), 'external_account_id' => $first[0], 'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('project_integration_bindings', [
+            'project_id' => $this->project->getKey(), 'external_account_id' => $second[0], 'is_active' => true,
+        ]);
+
+        // And the bindings list says which connection each came through.
+        $bound = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/integrations")->assertOk()->json('data');
+        $byAccount = collect($bound)->keyBy(static fn (array $b) => $b['account']['id']);
+        $this->assertSame($firstConnection, $byAccount[$first[0]]['account']['connection_id']);
+        $this->assertSame($secondConnection, $byAccount[$second[0]]['account']['connection_id']);
+    }
+
+    public function test_an_id_no_connection_owns_is_refused_naming_the_field(): void
+    {
+        [$connectionId] = $this->discover();
+
+        $res = $this->actingAs($this->owner, 'sanctum')
+            ->putJson("/api/v1/projects/{$this->project->id}/integrations/selection", [
+                'connection_id' => $connectionId,
+                'external_account_ids' => ['5b0d6b48-6b0a-4d1c-8c8a-6a1f4f0c9a11'],
+            ])
+            ->assertStatus(422);
+
+        $this->assertArrayHasKey('external_account_ids', $res->json('errors'));
+        $this->assertStringContainsString('5b0d6b48', (string) $res->json('errors.external_account_ids.0'));
+    }
+
     private function discover(): array
     {
         $connect = $this->actingAs($this->owner, 'sanctum')

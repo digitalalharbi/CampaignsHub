@@ -366,7 +366,8 @@ export interface ProjectBinding {
   id: string
   provider: string
   is_active: boolean
-  account: { id: string; external_id: string; name: string } | null
+  /** `connection_id` is the authorisation the account came through (ACCOUNT-SELECTION-SCOPE-001). */
+  account: { id: string; external_id: string; name: string; connection_id?: string } | null
 }
 
 /**
