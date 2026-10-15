@@ -13,7 +13,7 @@ import type { ReportAd } from '../ReportAdsSection'
 import { attentionAction, attentionHeadline, type AttentionItem } from '../attention'
 import { ContentTile } from './LiveContent'
 import { liveSpark } from './liveSpark'
-import { ComparisonWithheld } from './LiveKpis'
+import { ComparisonWithheld, kpiKeysFor, visibleKpiKeys } from './LiveKpis'
 import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -213,7 +213,14 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
   const t = payload.totals
   const withheld = payload.comparison !== undefined && !payload.comparison.comparable
   const d: Record<string, number | null | undefined> = withheld ? {} : (payload.deltas ?? {})
-  const keys = resultBoardKeys(payload, reader, result)
+  // The Owner's own KPI selection leads — spend and its cost when selected and valid — then the
+  // results the period carried. Same selection as the dashboard, so the two cannot disagree.
+  // With no selection made in setup the client summary stays results-only (the standing framing
+  // rule); with one, the selection is the truth and spend shows when it was ticked and is valid.
+  const chosenInSetup = (payload.metrics?.length ?? 0) > 0
+  const selected = visibleKpiKeys(payload, reader, kpiKeysFor(payload, reader)).filter((k) => chosenInSetup || !SPEND_DERIVED.has(k))
+  const extras = resultBoardKeys(payload, reader, result).filter((k) => !selected.includes(k) && !(k === 'leads' && payload.result_kind != null && t.leads === t.conversions))
+  const keys = [...selected, ...extras].slice(0, 8)
   const card = (key: string) => {
     const meta = reader.meta[key]
     if (!meta) return null

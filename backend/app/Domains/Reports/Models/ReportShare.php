@@ -8,6 +8,7 @@ use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -40,6 +41,27 @@ final class ReportShare extends Model
         'revoked_at' => 'datetime',
         'is_demo' => 'boolean',
     ];
+
+    /**
+     * REPORT-SPEND-VISIBILITY-001 — the report's own KPI selection decides whether spend shows.
+     *
+     * `hide_spend` is the older switch, defaulted ON for every client link, and it silently overrode
+     * the metrics the Owner picked in report setup: «الإنفاق» ticked, spend absent, and another card
+     * in its place. Two visibility systems cannot both be the truth, so the selection wins — a live
+     * link that SELECTS spend shows spend, and the legacy flag keeps its meaning only for links that
+     * did not select it (snapshots, and live links built without the metric).
+     */
+    protected function hideSpend(): Attribute
+    {
+        return Attribute::make(
+            get: fn (mixed $value): bool => (bool) $value && ! $this->selectsSpend(),
+        );
+    }
+
+    public function selectsSpend(): bool
+    {
+        return is_array($this->scope) && in_array('spend', (array) ($this->scope['metrics'] ?? []), true);
+    }
 
     /**
      * A live link recomputes its figures on every request, within the ceiling in `scope`.
