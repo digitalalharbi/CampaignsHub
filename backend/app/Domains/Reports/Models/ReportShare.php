@@ -14,6 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
+/**
+ * @property bool $hide_spend the EFFECTIVE flag — see {@see hideSpend()}
+ */
 final class ReportShare extends Model
 {
     use BelongsToTenant;
