@@ -405,4 +405,58 @@ final class ShortLinkTest extends TestCase
 
         $this->assertDatabaseHas('short_links', ['id' => $id, 'deleted_at' => null]);
     }
+
+    // ---- SHORT-LINK-COMPLIANCE-001 --------------------------------------------------------------
+
+    private function createWith(array $extra): TestResponse
+    {
+        return $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'whatsapp', 'value' => '966500000009'] + $extra);
+    }
+
+    public function test_a_message_is_sanitised_and_percent_encoded_onto_wa_me_only(): void
+    {
+        $id = $this->createWith(['message' => "مرحبا\u{0007} &redirect=https://evil.test #x\r\n\r\n\r\n\r\nسعر؟"])
+            ->assertCreated()->json('data.id');
+        $link = ShortLink::query()->findOrFail($id);
+
+        $this->assertStringStartsWith('https://wa.me/966500000009?text=', $link->destination);
+        $this->assertSame('wa.me', parse_url($link->destination, PHP_URL_HOST));
+        $this->assertStringNotContainsString('&redirect=', $link->destination);
+        $this->assertStringNotContainsString("\u{0007}", (string) $link->message);
+        parse_str((string) parse_url($link->destination, PHP_URL_QUERY), $query);
+        $this->assertSame(['text'], array_keys($query), 'a typed message must never add a parameter');
+    }
+
+    public function test_every_visitor_gets_the_same_single_redirect_whatever_the_user_agent(): void
+    {
+        $slug = ShortLink::query()->findOrFail($this->create('whatsapp', '966500000009')->json('data.id'))->slug;
+
+        foreach (['Mozilla/5.0 (iPhone)', 'Googlebot/2.1', 'facebookexternalhit/1.1', 'TikTokSpider', 'SnapchatAdsReview', ''] as $agent) {
+            $this->withHeaders(['User-Agent' => $agent])->get('/l/'.$slug)
+                ->assertStatus(302)
+                ->assertRedirect('https://wa.me/966500000009');
+        }
+    }
+
+    public function test_landing_mode_states_the_destination_and_is_identical_for_a_crawler(): void
+    {
+        $slug = ShortLink::query()->findOrFail($this->createWith(['mode' => 'landing'])->assertCreated()->json('data.id'))->slug;
+
+        $person = $this->get('/l/'.$slug)->assertOk();
+        $bot = $this->withHeaders(['User-Agent' => 'Googlebot/2.1'])->get('/l/'.$slug)->assertOk();
+
+        $person->assertSee('wa.me', false)->assertSee('https://wa.me/966500000009', false);
+        $this->assertSame($person->getContent(), $bot->getContent());
+        $this->assertStringNotContainsString('http-equiv="refresh"', (string) $person->getContent());
+    }
+
+    public function test_the_admin_side_proves_the_final_destination_is_whatsapp(): void
+    {
+        $data = $this->createWith(['message' => 'hello'])->assertCreated()->json('data');
+
+        $this->assertSame('wa.me', $data['destination_host']);
+        $this->assertTrue($data['destination_is_whatsapp']);
+        $this->assertSame('redirect', $data['mode']);
+    }
 }

@@ -86,9 +86,12 @@ final class ShortLinkController extends Controller
         $data = $request->validate([
             'kind' => ['required', 'string', 'in:'.ShortLink::KIND_WHATSAPP.','.ShortLink::KIND_LINK],
             'value' => ['required', 'string', 'max:2048'],
+            'message' => ['nullable', 'string', 'max:1000'],
+            'mode' => ['nullable', 'string', 'in:'.ShortLink::MODE_REDIRECT.','.ShortLink::MODE_LANDING],
         ]);
 
-        $resolved = $this->destinations->resolve((string) $data['kind'], (string) $data['value']);
+        $resolved = $this->destinations->resolve((string) $data['kind'], (string) $data['value'], $data['message'] ?? null);
+        $resolved['mode'] = (string) ($data['mode'] ?? ShortLink::MODE_REDIRECT);
 
         $link = ShortLink::create($resolved + [
             'tenant_id' => (string) app(TenantContext::class)->tenantId(),
@@ -204,6 +207,11 @@ final class ShortLinkController extends Controller
             'id' => (string) $link->getKey(),
             'slug' => $link->slug,
             'kind' => $link->kind,
+            'mode' => $link->mode ?? ShortLink::MODE_REDIRECT,
+            'message' => $link->message,
+            // SHORT-LINK-COMPLIANCE-001 — the proof, admin-side: where this hop really ends.
+            'destination_host' => parse_url((string) $link->destination, PHP_URL_HOST) ?: null,
+            'destination_is_whatsapp' => parse_url((string) $link->destination, PHP_URL_HOST) === 'wa.me',
             'short_url' => $this->hops->shareUrl($link),
             /*
              * What they typed, not what we derived.

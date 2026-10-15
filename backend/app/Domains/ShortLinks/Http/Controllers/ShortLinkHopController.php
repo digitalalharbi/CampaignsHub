@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\ShortLinks\Http\Controllers;
 
+use App\Domains\ShortLinks\Models\ShortLink;
 use App\Domains\ShortLinks\Services\ShortLinkHops;
 use App\Http\Controllers\Controller;
 use App\Support\Frontend;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response;
 
 /**
  * SHORT-LINKS-001 — the hop itself, served by the platform.
@@ -24,9 +26,27 @@ final class ShortLinkHopController extends Controller
 {
     public function __construct(private readonly ShortLinkHops $hops) {}
 
-    public function redirect(string $slug): RedirectResponse
+    /**
+     * One behaviour for everybody — SHORT-LINK-COMPLIANCE-001.
+     *
+     * No user-agent, header, IP or referrer is read: a person, an ad platform's review bot and a
+     * link preview all receive the same single, server-side response. `redirect` mode is one 302 to
+     * the stored https destination; `landing` mode is one page that states the destination and offers
+     * it as a button. There is no chain, no script redirect and no second destination.
+     */
+    public function redirect(string $slug): RedirectResponse|Response
     {
         $link = $this->hops->resolveAndCount($slug);
+
+        if ($link !== null && $link->mode === ShortLink::MODE_LANDING) {
+            return response()
+                ->view('short-links.landing', [
+                    'destination' => (string) $link->destination,
+                    'host' => (string) parse_url((string) $link->destination, PHP_URL_HOST),
+                    'whatsapp' => $link->kind === ShortLink::KIND_WHATSAPP,
+                ])
+                ->header('X-Robots-Tag', 'noindex');
+        }
 
         return redirect()->away($link?->destination ?: Frontend::origin().'/', 302);
     }

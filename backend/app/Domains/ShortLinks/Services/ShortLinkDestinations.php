@@ -44,10 +44,10 @@ final class ShortLinkDestinations
      *
      * @throws ValidationException with the field the person actually typed into
      */
-    public function resolve(string $kind, string $value): array
+    public function resolve(string $kind, string $value, ?string $message = null): array
     {
         return match ($kind) {
-            ShortLink::KIND_WHATSAPP => $this->whatsapp($value),
+            ShortLink::KIND_WHATSAPP => $this->whatsapp($value, $message),
             ShortLink::KIND_LINK => $this->link($value),
             default => throw ValidationException::withMessages([
                 'kind' => [__('validation.in', ['attribute' => 'kind'])],
@@ -64,7 +64,7 @@ final class ShortLinkDestinations
      * that cannot be a phone number at all, because the resulting `wa.me` link would fail silently in
      * the recipient's app rather than here.
      */
-    private function whatsapp(string $value): array
+    private function whatsapp(string $value, ?string $message = null): array
     {
         $digits = preg_replace('/\D+/', '', $value) ?? '';
 
@@ -86,12 +86,35 @@ final class ShortLinkDestinations
             ]);
         }
 
+        $text = $this->sanitiseMessage($message);
+
         return [
             'kind' => ShortLink::KIND_WHATSAPP,
-            'destination' => 'https://wa.me/'.$digits,
+            // `wa.me` only, with the message percent-encoded: nothing the person typed can change the host.
+            'destination' => 'https://wa.me/'.$digits.($text === null ? '' : '?text='.rawurlencode($text)),
             // Their input, kept so the management list can show what they typed rather than our derivation.
             'source_value' => $digits,
+            'message' => $text,
         ];
+    }
+
+    /**
+     * The pre-filled first message: plain text, bounded, no control characters.
+     *
+     * Newlines are kept as single line breaks (a message may have two lines); every other control
+     * character, and runs of blank lines, are removed. It is later percent-encoded, so it can never
+     * add a parameter or alter the destination host — this only keeps the text itself clean.
+     */
+    private function sanitiseMessage(?string $message): ?string
+    {
+        if ($message === null) {
+            return null;
+        }
+
+        $clean = preg_replace('/[^\P{C}\n]+/u', '', str_replace(["\r\n", "\r"], "\n", $message)) ?? '';
+        $clean = trim(preg_replace("/\n{3,}/", "\n\n", $clean) ?? '');
+
+        return $clean === '' ? null : mb_substr($clean, 0, 500);
     }
 
     private function link(string $value): array
