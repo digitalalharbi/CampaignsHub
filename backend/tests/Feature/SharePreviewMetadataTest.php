@@ -383,6 +383,46 @@ final class SharePreviewMetadataTest extends TestCase
     }
 
     /** The canonical URL is the link that was shared, so a crawler files the card under it. */
+    /**
+     * SHARE-PREVIEW-PUBLIC-ORIGIN-001 — Production's card said `og:image = http://backend:8000/…`:
+     * the request host, which behind the frontend's nginx is the container's own name. WhatsApp
+     * cannot fetch that, so the card had no picture at all.
+     */
+    public function test_the_card_addresses_are_public_and_absolute_whatever_host_the_request_arrived_on(): void
+    {
+        config(['brand.frontend_url' => 'https://campaignshub.io']);
+        $this->rendererOrSkip();
+
+        $html = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23', 'Host' => 'backend:8000'])
+            ->get('http://backend:8000/r/'.$this->token)
+            ->assertOk()
+            ->getContent() ?: '';
+
+        $image = (string) $this->meta($html, 'og:image');
+
+        $this->assertStringStartsWith('https://campaignshub.io/r/'.$this->token.'/preview.png', $image);
+        $this->assertStringNotContainsString('backend', $image);
+        $this->assertStringStartsWith('https://campaignshub.io/r/'.$this->token, (string) $this->meta($html, 'og:url'));
+        $this->assertSame($image, $this->metaName($html, 'twitter:image'));
+    }
+
+    public function test_the_fallback_mark_is_public_too_when_no_card_can_be_drawn(): void
+    {
+        config(['brand.frontend_url' => 'https://campaignshub.io', 'reports.chromium.enabled' => false]);
+
+        $html = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23', 'Host' => 'backend:8000'])
+            ->get('http://backend:8000/r/'.$this->token)
+            ->assertOk()
+            ->getContent() ?: '';
+
+        $image = $this->meta($html, 'og:image');
+
+        if ($image !== null) {
+            $this->assertStringStartsWith('https://campaignshub.io/', $image);
+        }
+        $this->assertStringNotContainsString('backend:8000', $html);
+    }
+
     public function test_the_card_points_back_at_the_link_that_was_shared(): void
     {
         $html = $this->preview();

@@ -10,6 +10,7 @@ use App\Domains\Reports\Services\ShareCardRenderer;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
+use App\Support\Frontend;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
@@ -117,7 +118,7 @@ final class SharePreviewController extends Controller
              * and one that never set `APP_NAME` no longer sends «Laravel» to WhatsApp.
              */
             'siteName' => ReportIdentity::productName($locale),
-            'url' => url("/r/{$token}"),
+            'url' => Frontend::url("/r/{$token}"),
             /*
              * SHARE-PREVIEW-CARD-001 — the DRAWN card, or no picture at all.
              *
@@ -143,8 +144,8 @@ final class SharePreviewController extends Controller
              * version rides on the image URL, derived from the same key the card is cached under.
              */
             'image' => $drawn !== null
-                ? url("/r/{$token}/preview.png").'?v='.$this->cards->version($share, $report)
-                : $identity['logo_url'],
+                ? Frontend::url("/r/{$token}/preview.png").'?v='.$this->cards->version($share, $report)
+                : $this->publicUrl($identity['logo_url'] ?? null),
             // The LARGE layout only for a picture composed for it. A mark under
             // `summary_large_image` is the crop this card was built to stop.
             'largeImage' => $drawn !== null,
@@ -152,6 +153,32 @@ final class SharePreviewController extends Controller
             'imageWidth' => (int) config('reports.og.width', 1200),
             'imageHeight' => (int) config('reports.og.height', 630),
         ]);
+    }
+
+    /**
+     * SHARE-PREVIEW-PUBLIC-ORIGIN-001 — a crawler is given an address it can reach.
+     *
+     * `url()` is built from the REQUEST's host, and this request arrives through the frontend's
+     * nginx, which forwards `/r/…` to `http://backend:8000` without restating the host. Production's
+     * card therefore said `og:image = http://backend:8000/r/…/preview.png` — a name that exists only
+     * inside the container network. WhatsApp could not fetch it, so the card rendered with no
+     * picture at all, whatever logo the client had uploaded. The public origin is configuration
+     * (`brand.frontend_url`), the same one the share link itself is built from.
+     */
+    private function publicUrl(?string $absolute): ?string
+    {
+        if ($absolute === null || $absolute === '') {
+            return null;
+        }
+
+        $path = (string) parse_url($absolute, PHP_URL_PATH);
+        $query = parse_url($absolute, PHP_URL_QUERY);
+
+        if ($path === '') {
+            return $absolute;
+        }
+
+        return Frontend::url($path).($query ? '?'.$query : '');
     }
 
     /**
