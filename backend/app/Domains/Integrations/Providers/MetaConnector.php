@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Awaiting credentials on this install.
  */
-final class MetaConnector extends ApiAdvertisingConnector implements ReportsEntityGrains, ReportsPeriodReach
+final class MetaConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
 {
     /**
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
@@ -894,6 +894,76 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         }
 
         return SyncResult::of($rows);
+    }
+
+    /**
+     * META-CREATIVE-INSIGHTS-001 — daily figures per CREATIVE, so the content library has numbers.
+     *
+     * Meta already reported the ad grain (`entityInsights`), and the content library reads
+     * `creative_daily_metrics`, which only a connector declaring `ReportsCreativeInsights` ever
+     * fed. Meta did not, so every Meta creative read «no figures» while its ads had spent: the
+     * numbers existed upstream and in `entity_daily_metrics`, and nothing carried them one table
+     * across. HENKA's «best content» was empty for exactly that reason.
+     *
+     * Two reads — which creative each ad runs, and the ad-level insights — joined here. Several ads
+     * can share one creative, so figures are SUMMED per creative and day; `reach` is not, because a
+     * person reached by two ads is one person and adding them would overstate it.
+     */
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        try {
+            $creativeOfAd = [];
+
+            foreach ($this->readAll($this->tokens(), "{$adAccountId}/ads", 'ad creatives', [
+                'fields' => 'id,creative{id}',
+                'limit' => 500,
+            ]) as $ad) {
+                $creative = (string) (((array) ($ad['creative'] ?? []))['id'] ?? '');
+
+                if ($creative !== '' && isset($ad['id'])) {
+                    $creativeOfAd[(string) $ad['id']] = $creative;
+                }
+            }
+
+            $reported = $this->readAll($this->tokens(), "{$adAccountId}/insights", 'creative insights', [
+                'level' => 'ad',
+                'time_increment' => 1,
+                'fields' => 'ad_id,campaign_id,date_start,spend,impressions,clicks,actions,'
+                    .'action_values,video_play_actions,video_p100_watched_actions',
+                'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+                'action_attribution_windows' => json_encode(self::ATTRIBUTION_WINDOWS, JSON_THROW_ON_ERROR),
+                'limit' => 500,
+            ]);
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+
+        $summed = [];
+        $additive = ['spend', 'impressions', 'clicks', 'conversions', 'leads', 'revenue', 'video_views', 'video_completions', 'purchases', 'add_to_cart', 'checkout', 'landing_page_views', 'engagements'];
+
+        foreach ($reported as $row) {
+            $creative = $creativeOfAd[(string) ($row['ad_id'] ?? '')] ?? null;
+            $mapped = $creative === null ? null : $this->mapInsightRow($row, 'ad_id', 'campaign_id', $from);
+
+            if ($creative === null || $mapped === null) {
+                continue;
+            }
+
+            $key = $creative.'|'.$mapped['date'];
+            $summed[$key] ??= [
+                'campaign_id' => $creative,
+                'date' => $mapped['date'],
+                'attribution_window' => $mapped['attribution_window'],
+            ];
+
+            foreach ($additive as $measure) {
+                if (isset($mapped[$measure])) {
+                    $summed[$key][$measure] = ($summed[$key][$measure] ?? 0.0) + (float) $mapped[$measure];
+                }
+            }
+        }
+
+        return SyncResult::of(array_values($summed));
     }
 
     /**
