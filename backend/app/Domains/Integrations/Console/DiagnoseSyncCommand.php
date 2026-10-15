@@ -1531,12 +1531,24 @@ final class DiagnoseSyncCommand extends Command
                     count($rows),
                 ));
                 $matched = 0;
+                // Who decided the objective, and what the platform said: the two facts that tell a
+                // stale classification (the sweep has not run since) from a person's manual one.
+                $provenance = UnifiedCampaign::withoutGlobalScopes()
+                    ->whereIn('id', $unifiedIds)
+                    ->get(['id', 'objective_source', 'objective_platform_value'])
+                    ->keyBy(fn ($c): string => (string) $c->id);
                 foreach ($rows as $row) {
                     $id = (string) ($row['campaign_id'] ?? '');
                     if (! in_array($id, $unifiedIds, true)) {
                         continue;
                     }
                     $matched++;
+                    $why = $provenance->all()[$id] ?? null;
+                    $this->line(sprintf(
+                        '      objective source=%s platform_said=%s',
+                        $why === null ? '—' : (string) ($why->objective_source ?? '—'),
+                        $why === null ? '—' : (string) ($why->objective_platform_value ?? '—'),
+                    ));
                     $spend = (float) ($row['spend'] ?? 0);
                     $leads = (float) ($row['leads'] ?? 0);
                     $this->line(sprintf(

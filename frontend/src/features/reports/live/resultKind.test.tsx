@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { LiveKpiBoard } from './LiveKpis'
 import { cardHasFigure, metricLabel, useLiveMetricReader } from './liveMetrics'
+import { LivePlatformComparison } from '../LiveDetailTables'
 import type { LivePayload } from '../api'
 
 /**
@@ -69,5 +70,18 @@ describe('live KPI board', () => {
   it('a dash is not a figure, and a real zero is', () => {
     expect(cardHasFigure('spend', '—', base)).toBe(false)
     expect(cardHasFigure('conversions', '0', base)).toBe(true)
+  })
+
+  it('draws no spend or cost column in the platform table of a link that hides spend', () => {
+    const payload = {
+      ...base,
+      platforms: [{ provider: 'meta', spend: null, conversions: 213, impressions: 134000, clicks: 1740, ctr: 0.013 }],
+      result_kind: { kind: 'messaging', result: { ar: 'الرسائل', en: 'Messages' }, cost: { ar: 'تكلفة الرسالة', en: 'Cost per message' } },
+    } as unknown as LivePayload
+    const { container } = render(<LivePlatformComparison payload={payload} currency="USD" locale="ar" />)
+    const heads = Array.from(container.querySelectorAll('th')).map((n) => n.textContent ?? '')
+
+    expect(heads.join('|')).not.toMatch(/الإنفاق|تكلفة/)
+    expect(heads.join('|')).toMatch(/الرسائل/)
   })
 })

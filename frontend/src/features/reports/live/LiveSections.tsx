@@ -8,7 +8,7 @@ import { Num } from '@/components/ui/Num'
 import { platformColor } from '@/features/analytics/components'
 import { ratio } from '@/features/analytics/format'
 import type { LivePayload } from '../api'
-import type { useLiveMetricReader } from './liveMetrics'
+import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 
 /*
@@ -176,8 +176,11 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
   const { spendChartable, platformSpendRank } = useSpendCharting(payload, currency)
   // One card per section: the trend belongs to `trends`, the spend split to `platform_comparison`.
   const trend = sectionShown(payload, 'trends')
-  const split = sectionShown(payload, 'platform_comparison')
+  // A link that hides spend has no spend split to draw, and no spend line to apologise for.
+  const noSpend = spendHiddenByLink(payload)
+  const split = sectionShown(payload, 'platform_comparison') && !noSpend
   if (!trend && !split) return null
+  const resultName = payload.result_kind ? (ar ? payload.result_kind.result.ar : payload.result_kind.result.en) : (ar ? 'النتائج' : 'Results')
 
   return (
     <>
@@ -195,10 +198,10 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
                 // label a withheld/partial figure with a currency it is not in.
                 ...(spendChartable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' as const }] : []),
                 { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const },
-                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
+                { key: 'conversions', name: resultName, color: 'var(--purple)', kind: 'num' as const },
               ]}
             />
-            {!spendChartable && (
+            {!spendChartable && !noSpend && (
               <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? 'خط الإنفاق غير معروض: المبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend line hidden: amounts await an exchange rate or span currencies'}</p>
             )}
           </ChartCard>
