@@ -1,3 +1,5 @@
+import { ReportIdentityCards } from './ReportIdentityCards'
+import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { useMemo, useState } from 'react'
@@ -811,7 +813,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
    * is the one somebody sends a client; the full report is what you open when the summary raises a
    * question.
    */
-  const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
+  const [level, setLevel] = useState<DetailLevelKey>('summary')
+  const form = formOf(level)
   /* Snapshot stays the default: it is what every report made before this chooser existed was. */
   const [mode, setMode] = useState<'snapshot' | 'live'>('snapshot')
   /*
@@ -848,11 +851,17 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
-  const sectionPreview = (sectionRegistry.data?.sections ?? []).filter((x) =>
-    // `defaultFor()` on the server splits internal from everyone else; an executive report is a
-    // client-shaped one, and this mirrors that rather than inventing a third answer.
-    audience === 'internal' ? x.default_internal : x.default_client,
-  )
+  /*
+   * REPORT-SETUP-001 — the sections are CHOICES here, not a description of them.
+   * Each starts where the detail level and the audience put it, and what the Owner switches is sent
+   * as `section_settings`, so the report that is generated carries exactly this set.
+   */
+  const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>({})
+  const startingSections = levelSections(level)
+  const sectionPreview = (sectionRegistry.data?.sections ?? []).map((x) => ({
+    ...x,
+    on: sectionChoice[x.key] ?? startingSections[x.key] ?? (audience === 'internal' ? x.default_internal : x.default_client),
+  }))
   const create = useMutation({
     mutationFn: () =>
       createReport(projectId, {
@@ -863,6 +872,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         type: type ?? 'executive',
         mode,
         form,
+        detail_level: level,
+        ...(Object.keys(sectionChoice).length === 0 ? {} : { section_settings: { sections: sectionChoice } }),
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
         audience: audience ?? 'client',
         period_start: from,
@@ -947,30 +958,31 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             ))}
           </div>
         </Field>
-        <Field label={ar ? 'شكل التقرير' : 'Report form'}>
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              { key: 'executive_summary' as const, ar: 'ملخص تنفيذي', en: 'Executive summary',
-                hintAr: 'صفحات قليلة للقرار', hintEn: 'A few pages, for the decision' },
-              { key: 'detailed' as const, ar: 'تقرير تفصيلي', en: 'Detailed report',
-                hintAr: 'كل المنصات والفانل والإعلانات', hintEn: 'Every platform, funnel and ad' },
-            ]).map((o) => (
+        <Field label={ar ? 'مستوى التفصيل' : 'Detail level'}>
+          <div className="grid grid-cols-3 gap-2">
+            {DETAIL_LEVELS.map((o) => (
               <button
                 key={o.key}
                 type="button"
-                data-testid={`rb-form-${o.key}`}
-                aria-pressed={form === o.key}
-                onClick={() => setForm(o.key)}
+                data-testid={`rb-level-${o.key}`}
+                aria-pressed={level === o.key}
+                onClick={() => setLevel(o.key)}
                 className={`rounded-xl border p-3 text-start transition-colors ${
-                  form === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
+                  level === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
                 }`}
               >
                 <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
-                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.hintAr : o.hintEn}</span>
+                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.noteAr : o.noteEn}</span>
               </button>
             ))}
           </div>
         </Field>
+        {/*
+          REPORT-SETUP-001 — Branding: the CLIENT's logo and the PRESENTING company's logo, set here.
+          The client's identity is the report's primary one and the only custom mark a shared link
+          wears; the company's is secondary attribution inside the report.
+        */}
+        <ReportIdentityCards projectId={projectId} ar={ar} />
         {/*
           REPORT-CREATION-UX-001 — WHOSE report this is, said at creation.
 
@@ -1032,13 +1044,20 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           nothing.
         */}
         {sectionPreview.length > 0 && (
-          <p data-testid="rb-section-preview" className="-mt-1 text-[11px] leading-relaxed text-text-secondary">
-            {ar ? 'سيتضمّن: ' : 'Will include: '}
-            <span className="font-semibold text-text-primary">
-              {sectionPreview.map((x) => (ar ? x.title_ar : x.title_en)).join(ar ? '، ' : ', ')}
-            </span>
-            {ar ? ' — يمكن تعديل الأقسام بعد الإنشاء.' : ' — sections can be changed after it is created.'}
-          </p>
+          <fieldset data-testid="rb-sections" className="-mt-1 grid gap-1.5 rounded-xl border border-border p-3">
+            <legend className="px-1 text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير' : 'Report sections'}</legend>
+            {sectionPreview.map((x) => (
+              <label key={x.key} className="flex items-center gap-2 text-xs text-text-primary">
+                <input
+                  type="checkbox"
+                  data-testid={`rb-section-${x.key}`}
+                  checked={x.on}
+                  onChange={(e) => setSectionChoice((c) => ({ ...c, [x.key]: e.target.checked }))}
+                />
+                <span>{ar ? x.title_ar : x.title_en}</span>
+              </label>
+            ))}
+          </fieldset>
         )}
         <div data-testid="builder-audience">
         <SelectField

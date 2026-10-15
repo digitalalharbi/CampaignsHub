@@ -1,4 +1,4 @@
-import { CANONICAL_OBJECTIVES, DESTINATIONS } from './reportSetupCatalog'
+import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey } from './reportSetupCatalog'
 import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
@@ -158,7 +158,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * operator meant is a question they get asked, and one that shows more is a disclosure they
    * cannot take back.
    */
-  const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
+  const [level, setLevel] = useState<DetailLevelKey>('summary')
+  const form = formOf(level)
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it.
@@ -186,6 +187,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         from,
         to,
         form,
+        detail_level: level,
         hide_spend: hideSpend,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
@@ -563,33 +565,23 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             it leaves out.
           */}
           <div className="grid gap-2">
-            <span className="text-xs font-bold text-text-muted">{ar ? 'شكل التقرير' : 'What the link shows'}</span>
+            <span className="text-xs font-bold text-text-muted">{ar ? 'مستوى التفصيل' : 'Detail level'}</span>
             <div className="flex flex-wrap gap-1.5">
-              {([
-                /*
-                 * What the CLIENT will be able to open (`live/modes.ts`). The detailed note used to say
-                 * «the dashboard, and every campaign and platform» — a promise of the campaign roster the
-                 * client report rule removed, made to the operator deciding what to send.
-                 */
-                ['executive_summary', ar ? 'ملخّص تنفيذي' : 'Executive summary', ar ? 'ملخص قصير: المؤشرات الرئيسية وأهم الرسوم' : 'A short summary: headline KPIs and the key charts'],
-                ['detailed', ar ? 'تفصيلي' : 'Detailed', ar ? 'لوحة كاملة: ملخص، أداء، كل منصة، والمحتوى' : 'The full dashboard: summary, performance, each platform and content'],
-              ] as const).map(([key, label, note]) => (
+              {DETAIL_LEVELS.map((o) => (
                 <button
-                  key={key}
+                  key={o.key}
                   type="button"
-                  data-testid={`live-link-form-${key}`}
-                  onClick={() => setForm(key)}
-                  title={note}
-                  className={chip(form === key)}
+                  data-testid={`live-link-level-${o.key}`}
+                  onClick={() => setLevel(o.key)}
+                  title={ar ? o.noteAr : o.noteEn}
+                  className={chip(level === o.key)}
                 >
-                  {label}
+                  {ar ? o.ar : o.en}
                 </button>
               ))}
             </div>
-            <p data-testid="live-link-form-note" className="text-xs text-text-secondary">
-              {form === 'detailed'
-                ? (ar ? 'لوحة كاملة: ملخص، أداء، كل منصة، والمحتوى' : 'The full dashboard: summary, performance, each platform and content')
-                : (ar ? 'ملخص قصير: المؤشرات الرئيسية وأهم الرسوم' : 'A short summary: headline KPIs and the key charts')}
+            <p data-testid="live-link-level-note" className="text-xs text-text-secondary">
+              {ar ? DETAIL_LEVELS.find((o) => o.key === level)!.noteAr : DETAIL_LEVELS.find((o) => o.key === level)!.noteEn}
             </p>
           </div>
 
