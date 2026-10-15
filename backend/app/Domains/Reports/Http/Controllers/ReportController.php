@@ -100,6 +100,8 @@ final class ReportController extends Controller
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:160'],
+            // REPORT-SETUP-001 — shown only if the Owner wrote one.
+            'description' => ['nullable', 'string', 'max:500'],
             'type' => ['required', Rule::in(self::TYPES)],
             'mode' => ['nullable', Rule::in(['live', 'snapshot'])],
             'campaign_objective' => ['nullable', Rule::in(['sales', 'awareness', 'traffic', 'leads', 'app_installs', 'video', 'custom'])],
@@ -125,6 +127,7 @@ final class ReportController extends Controller
 
         $report = Report::create([
             'name' => $data['name'],
+            'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
             'type' => $data['type'],
             // Defaults to the FULL report, never the summary: a report that silently trimmed itself
             // would drop pages its reader was expecting and give no sign that it had.
@@ -188,6 +191,7 @@ final class ReportController extends Controller
         $model = $this->find($report);
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:160'],
+            'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'mode' => ['sometimes', Rule::in(['live', 'snapshot'])],
             'config' => ['sometimes', 'array'],
         ]);
@@ -272,6 +276,7 @@ final class ReportController extends Controller
         $out = [
             'id' => $r->id,
             'name' => $r->name,
+            'description' => $r->description,
             'type' => $r->type,
             // What the report IS, beside where its numbers come from — two independent facts, and a
             // list that shows only one of them cannot tell a five-page summary from a thirty-page

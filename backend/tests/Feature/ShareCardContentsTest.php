@@ -86,11 +86,12 @@ final class ShareCardContentsTest extends TestCase
         app(TenantContext::class)->forget();
     }
 
-    public function test_the_card_names_the_client_and_the_period(): void
+    public function test_the_card_carries_the_entered_title_and_the_period(): void
     {
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertSame('Nakheel', $card['who']);
+        // REPORT-TITLE-EXACT-001 — the card's headline is the entered report title, not the client.
+        $this->assertSame('تقرير الأداء الشهري', $card['who']);
         $this->assertSame('2026-07-01 — 2026-07-31', $card['period']);
         // The report's own language decides the direction, so an Arabic report's card reads right to left.
         $this->assertSame('ar', $card['lang']);

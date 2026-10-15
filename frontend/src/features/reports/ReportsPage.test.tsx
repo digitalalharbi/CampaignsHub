@@ -66,6 +66,7 @@ describe('ReportsPage — engine-fed builder', () => {
 
     fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
     await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     await waitFor(() =>
@@ -98,6 +99,7 @@ describe('ReportsPage — engine-fed builder', () => {
     fireEvent.click(screen.getByTestId('rb-mode-live'))
     expect(screen.getByTestId('rb-mode-live')).toHaveAttribute('aria-pressed', 'true')
 
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     await waitFor(() =>
@@ -128,6 +130,7 @@ describe('ReportsPage — engine-fed builder', () => {
     fireEvent.click(screen.getByTestId('rb-identity-agency'))
     expect(screen.getByTestId('rb-identity-agency')).toHaveAttribute('aria-pressed', 'true')
 
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     await waitFor(() =>
@@ -147,6 +150,7 @@ describe('ReportsPage — engine-fed builder', () => {
 
     fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
     await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     await waitFor(() => expect(createReport).toHaveBeenCalled())
@@ -160,6 +164,7 @@ describe('ReportsPage — engine-fed builder', () => {
 
     fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
     await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     await waitFor(() =>
@@ -206,6 +211,7 @@ describe('ReportsPage — engine-fed builder', () => {
     await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
     expect(screen.queryByTestId('rb-section-preview')).not.toBeInTheDocument()
 
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
     await waitFor(() => expect(createReport).toHaveBeenCalled())
   })
@@ -218,6 +224,7 @@ describe('ReportsPage — engine-fed builder', () => {
 
     fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
     await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.change(screen.getByLabelText(/اسم التقرير|Report name/), { target: { value: 'Q3 report' } })
     fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     const summary = await screen.findByTestId('error-summary')

@@ -287,6 +287,7 @@ final class LiveReportBuilderController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:160'],
+            'description' => ['nullable', 'string', 'max:500'],
             'campaign_ids' => ['array'],
             'campaign_ids.*' => ['uuid'],
             'providers' => ['array'],
@@ -351,6 +352,7 @@ final class LiveReportBuilderController extends Controller
         $report = Report::create([
             'project_id' => $project,
             'name' => $data['name'],
+            'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
             'type' => 'live',
             /*
              * A live SHARE LINK is an outward-facing document by construction, so its audience is a

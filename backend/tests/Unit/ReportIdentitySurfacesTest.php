@@ -47,63 +47,31 @@ final class ReportIdentitySurfacesTest extends TestCase
      * An inbox shows about sixty characters. «Your report is ready» spends all of them saying
      * nothing, and a client with two agencies cannot tell two such mails apart.
      */
-    public function test_the_email_subject_names_the_kind_the_report_and_the_period(): void
+    public function test_the_email_subject_is_exactly_the_entered_title(): void
     {
-        $subject = ReportIdentity::subject($this->report(), 'ar');
-
-        $this->assertStringContainsString('تقرير تفصيلي', $subject);
-        $this->assertStringContainsString('آساس الثبات', $subject);
-        $this->assertStringContainsString('2026-07-01', $subject);
-        $this->assertStringContainsString('2026-07-31', $subject);
+        $this->assertSame('آساس الثبات', ReportIdentity::subject($this->report(), 'ar'));
+        $this->assertSame('آساس الثبات', ReportIdentity::subject($this->report(['form' => 'executive_summary']), 'en'));
     }
 
-    /** An executive summary says so, because it is a different document for a different reader. */
-    public function test_the_subject_distinguishes_a_summary_from_a_detailed_report(): void
+    public function test_the_subject_adds_no_kind_or_period(): void
     {
-        $detailed = ReportIdentity::subject($this->report(), 'en');
-        $summary = ReportIdentity::subject($this->report(['form' => 'executive_summary']), 'en');
+        $subject = ReportIdentity::subject($this->report(), 'en');
 
-        $this->assertStringContainsString('Detailed report', $detailed);
-        $this->assertStringContainsString('Executive summary', $summary);
-        $this->assertNotSame($detailed, $summary);
-    }
-
-    /**
-     * The subject follows the READER's language, not the report's.
-     *
-     * A schedule carries its own locale because the recipient is not always the person who built
-     * the report — an agency builds in Arabic and mails an English-speaking stakeholder.
-     */
-    public function test_the_subject_follows_the_language_it_is_asked_for(): void
-    {
-        $this->assertStringContainsString('تقرير تفصيلي', ReportIdentity::subject($this->report(), 'ar'));
-        $this->assertStringContainsString('Detailed report', ReportIdentity::subject($this->report(), 'en'));
+        foreach (['Detailed report', 'Executive summary', 'تقرير تفصيلي', '2026-07-01'] as $needle) {
+            $this->assertStringNotContainsString($needle, $subject);
+        }
     }
 
     // ── the filename ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * ASCII, lower case, hyphenated — and never empty.
-     *
-     * `Str::slug` strips non-ASCII entirely, so slugging an Arabic title produces «» and a file
-     * called «.pdf», which the operating system hides. The English KIND always contributes text,
-     * which is why the name is built from the English title however the report is configured.
-     */
     public function test_an_arabic_report_still_gets_a_real_filename(): void
     {
         $name = ReportIdentity::filename($this->report(), 'pdf');
 
         $this->assertMatchesRegularExpression('/^[a-z0-9-]+\.pdf$/', $name);
-        $this->assertStringStartsWith('detailed-report', $name);
-        $this->assertStringNotEqualsFile(__FILE__, $name); // sanity: it is a name, not a path
+        $this->assertStringEndsWith('-7f3c1a2b.pdf', $name);
     }
 
-    /**
-     * Two reports of one kind over one period are still two files.
-     *
-     * The id is appended for exactly that, and it is appended AFTER the length cut — so the part
-     * that makes the name unique is never the part lost to the limit.
-     */
     public function test_two_reports_of_one_kind_over_one_period_are_two_files(): void
     {
         $a = ReportIdentity::filename($this->report(), 'pdf');

@@ -102,8 +102,9 @@ final class SharePreviewMetadataTest extends TestCase
          *
          * The product keeps `og:site_name`, which is where a platform belongs on a card.
          */
-        $this->assertStringContainsString('<title>Nakheel — تقرير الأداء الشهري</title>', $html);
-        $this->assertSame('Nakheel — تقرير الأداء الشهري', $this->meta($html, 'og:title'));
+        // REPORT-TITLE-EXACT-001 — exactly the title the Owner entered; no client prefix, no product suffix.
+        $this->assertStringContainsString('<title>تقرير الأداء الشهري</title>', $html);
+        $this->assertSame('تقرير الأداء الشهري', $this->meta($html, 'og:title'));
         $this->assertSame('كامبينز هب', $this->meta($html, 'og:site_name'));
         $this->assertSame('article', $this->meta($html, 'og:type'));
     }
@@ -122,7 +123,8 @@ final class SharePreviewMetadataTest extends TestCase
          * «من إعداد» rather than «بواسطة», the same words REPORT-IDENTITY-001 fixed on the public
          * header: «بواسطة» is a byline, and this is a report somebody PREPARED for somebody else.
          */
-        $this->assertSame('2026-07-01 — 2026-07-31 · من إعداد Agency', $description);
+        // No description was configured, so the card states the period — configured — and nothing composed.
+        $this->assertSame('2026-07-01 — 2026-07-31', $description);
         $this->assertStringNotContainsString('918273', $description);
     }
 
@@ -134,11 +136,27 @@ final class SharePreviewMetadataTest extends TestCase
      * a report about his client. The title may CONTAIN the product nowhere, and `og:site_name` is
      * the one place it belongs.
      */
+    /**
+     * REPORT-SETUP-001 — the description on the card is the one the Owner wrote, and only that.
+     */
+    public function test_a_configured_description_is_the_cards_description(): void
+    {
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        $this->report->forceFill(['description' => 'نتائج حملة واتساب لشهر أغسطس'])->save();
+        app(TenantContext::class)->forget();
+
+        $html = $this->preview();
+
+        $this->assertSame('نتائج حملة واتساب لشهر أغسطس', $this->meta($html, 'og:description'));
+        $this->assertSame('تقرير الأداء الشهري', $this->meta($html, 'og:title'));
+    }
+
     public function test_the_product_name_does_not_lead_a_card_that_has_a_client(): void
     {
         $title = (string) $this->meta($this->preview(), 'og:title');
 
-        $this->assertStringStartsWith('Nakheel', $title);
+        $this->assertSame('تقرير الأداء الشهري', $title);
+        $this->assertStringNotContainsString('Nakheel', $title);
         $this->assertStringNotContainsString('كامبينز هب', $title);
         $this->assertStringNotContainsString('CampaignsHub', $title);
     }
@@ -161,7 +179,8 @@ final class SharePreviewMetadataTest extends TestCase
 
         $title = (string) $this->meta($this->preview(), 'og:title');
 
-        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $title);
+        // Whoever the identity is, the title is the entered one.
+        $this->assertSame('تقرير الأداء الشهري', $title);
     }
 
     /**
@@ -195,7 +214,7 @@ final class SharePreviewMetadataTest extends TestCase
 
         $html = $this->preview($gated);
 
-        $this->assertSame('Nakheel — تقرير الأداء الشهري', $this->meta($html, 'og:title'));
+        $this->assertSame('تقرير الأداء الشهري', $this->meta($html, 'og:title'));
         $this->assertStringNotContainsString('918273', $html);
         $this->assertStringNotContainsString('let-me-in', $html);
     }
@@ -274,8 +293,8 @@ final class SharePreviewMetadataTest extends TestCase
 
         $html = $this->preview();
 
-        $this->assertSame('2026-07-01 — 2026-07-31 · من إعداد Agency', $this->meta($html, 'og:image:alt'));
-        $this->assertSame('2026-07-01 — 2026-07-31 · من إعداد Agency', $this->metaName($html, 'twitter:image:alt'));
+        $this->assertSame('2026-07-01 — 2026-07-31', $this->meta($html, 'og:image:alt'));
+        $this->assertSame('2026-07-01 — 2026-07-31', $this->metaName($html, 'twitter:image:alt'));
     }
 
     /**

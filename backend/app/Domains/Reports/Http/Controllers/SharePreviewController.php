@@ -188,24 +188,8 @@ final class SharePreviewController extends Controller
      */
     private function cardTitle(Report $report, array $identity): string
     {
-        $who = trim((string) ($identity['name'] ?? ''));
-        $product = ReportIdentity::productName($report->reportLocale());
-
-        /*
-         * Nothing resolved, so the identity IS the product — keep the browser-tab form rather than
-         * printing the product's name twice.
-         */
-        if ($who === '' || $who === $product) {
-            return ReportIdentity::pageTitle($report);
-        }
-
-        $name = trim((string) ($report->name ?? ''));
-
-        if ($name === '') {
-            $name = $report->reportLocale() === 'en' ? 'Performance report' : 'تقرير الأداء';
-        }
-
-        return "{$who} — {$name}";
+        // REPORT-TITLE-EXACT-001 — the entered title, never «client — title».
+        return ReportIdentity::pageTitle($report);
     }
 
     /**
@@ -223,33 +207,15 @@ final class SharePreviewController extends Controller
      */
     private function cardDescription(Report $report, string $who, ?string $period, array $identity): string
     {
-        $by = trim((string) ($identity['by'] ?? ''));
-        $leads = trim((string) ($identity['name'] ?? '')) !== '' && $this->titleCarriesIdentity($identity);
+        // Configured description if the Owner wrote one; otherwise the period, which is configured too.
+        // No «prepared by», no client name: nothing the report setup did not put there.
+        $description = trim((string) ($report->description ?? ''));
 
-        $parts = array_values(array_filter([
-            $leads ? null : $who,
-            $period,
-            /*
-             * REPORT-IDENTITY-001's own words — «من إعداد», not «بواسطة».
-             *
-             * «بواسطة» is a byline; this is a report somebody PREPARED for somebody else. The
-             * public report's header already says it this way, and a card that said it differently
-             * would be a second phrasing for one relationship. Composed here rather than through a
-             * translation key because this domain has no `reports` language file and inventing one
-             * for a single string is how a vocabulary ends up in two places.
-             */
-            $by === '' ? null : ($report->reportLocale() === 'en' ? "Prepared by {$by}" : "من إعداد {$by}"),
-        ], static fn (?string $p): bool => $p !== null && trim($p) !== ''));
+        if ($description !== '') {
+            return $description;
+        }
 
-        return $parts === [] ? $who : implode(' · ', $parts);
-    }
-
-    /** Whether {@see cardTitle} put the identity's name at the front. */
-    private function titleCarriesIdentity(array $identity): bool
-    {
-        $who = trim((string) ($identity['name'] ?? ''));
-
-        return $who !== '' && $who !== ReportIdentity::productName('ar') && $who !== ReportIdentity::productName('en');
+        return $period ?? ReportIdentity::pageTitle($report);
     }
 
     /**

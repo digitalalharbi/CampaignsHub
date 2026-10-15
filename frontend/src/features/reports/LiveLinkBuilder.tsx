@@ -64,6 +64,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const ar = useUi((s) => s.locale) === 'ar'
 
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [campaigns, setCampaigns] = useState<string[]>([])
   const [providers, setProviders] = useState<string[]>([])
   const [metrics, setMetrics] = useState<string[]>([])
@@ -170,6 +171,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     mutationFn: () =>
       createLiveLink(projectId, {
         name: name.trim(),
+        ...(description.trim() === '' ? {} : { description: description.trim() }),
         campaign_ids: campaigns,
         providers,
         metrics,
@@ -296,6 +298,18 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               data-testid="live-link-name"
               onChange={(e) => setName(e.target.value)}
               placeholder={ar ? 'أداء الحملات — أغسطس' : 'Campaign performance — August'}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base"
+            />
+          </Field>
+
+          <Field label={ar ? 'وصف (اختياري)' : 'Description (optional)'}>
+            <textarea
+              value={description}
+              maxLength={500}
+              rows={2}
+              data-testid="live-link-description"
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={ar ? 'يظهر في معاينة الرابط إن كتبته' : 'Shown in the link preview only if you write one'}
               className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base"
             />
           </Field>
