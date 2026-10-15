@@ -858,6 +858,57 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * LEAD-DESTINATION-001 — the platform's messaging result is a result, and is never a purchase.
+     *
+     * A click-to-WhatsApp row has no purchase action; its result is the conversation Meta attributed
+     * to the ad. It is published as `leads` (and as `conversions`, the generic result), while
+     * `purchases` stays absent so no ROAS or cost per purchase can be computed from it.
+     */
+    public function test_meta_maps_a_messaging_result_to_leads_and_never_to_purchases(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-08-03', 'spend' => '40.00',
+                'impressions' => '9000', 'clicks' => '300',
+                'actions' => [
+                    ['action_type' => 'link_click', 'value' => '280'],
+                    ['action_type' => 'onsite_conversion.messaging_conversation_started_7d', 'value' => '16'],
+                    // The wider figure CONTAINS the started conversations; it must never be added to them.
+                    ['action_type' => 'onsite_conversion.total_messaging_connection', 'value' => '20'],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-08-03', '2026-08-04')->records[0];
+
+        $this->assertSame(16.0, $row['leads']);
+        $this->assertSame(16.0, $row['conversions']);
+        $this->assertArrayNotHasKey('purchases', $row, 'a messaging buy was given purchases');
+        $this->assertArrayNotHasKey('revenue', $row);
+    }
+
+    public function test_a_purchase_stays_the_conversion_when_a_row_also_has_messaging(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-08-03', 'spend' => '40.00', 'impressions' => '9000',
+                'actions' => [
+                    ['action_type' => 'purchase', 'value' => '5'],
+                    ['action_type' => 'onsite_conversion.messaging_conversation_started_7d', 'value' => '16'],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-08-03', '2026-08-04')->records[0];
+
+        $this->assertSame(5.0, $row['conversions']);
+        $this->assertSame(5.0, $row['purchases']);
+        $this->assertSame(16.0, $row['leads']);
+    }
+
+    /**
      * An action type Meta never sent is ABSENT, not zero.
      *
      * Meta omits an action type entirely when its count is zero, so «no purchase action» cannot be

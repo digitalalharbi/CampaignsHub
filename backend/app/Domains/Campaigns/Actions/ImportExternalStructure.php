@@ -8,6 +8,8 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +81,8 @@ final class ImportExternalStructure
                         'status' => (string) ($row['status'] ?? 'unknown'),
                         'optimization_goal' => $row['optimization_goal'] ?? null,
                         'bid_strategy' => $row['bid_strategy'] ?? null,
+                        // LEAD-DESTINATION-001 — where the results happen, as the platform spelt it.
+                        'destination_type' => $row['destination_type'] ?? null,
                         'daily_budget' => $row['daily_budget'] ?? null,
                         'lifetime_budget' => $row['lifetime_budget'] ?? null,
                         'currency' => $row['currency'] ?? $account->currency,
@@ -137,6 +141,20 @@ final class ImportExternalStructure
                 $counts['ads']++;
             }
         });
+
+        /*
+         * LEAD-DESTINATION-001 — the ad sets are what state the destination, and the campaigns were
+         * classified before they existed. Re-derive the objective of every campaign this sweep
+         * touched so a messaging buy stops reading as a sales one on the next sweep, not the one after.
+         */
+        $unified = $campaigns->pluck('unified_campaign_id')->filter()->unique()->values()->all();
+        if ($unified !== []) {
+            $resolver = app(CampaignObjectiveResolver::class);
+
+            UnifiedCampaign::withoutGlobalScopes()
+                ->whereIn('id', $unified)
+                ->each(fn (UnifiedCampaign $c) => $resolver->sync($c));
+        }
 
         return $counts;
     }

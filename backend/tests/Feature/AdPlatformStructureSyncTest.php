@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -208,6 +211,52 @@ final class AdPlatformStructureSyncTest extends TestCase
         $creative = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '432')->firstOrFail();
         $this->assertSame('https://scontent.example/catalog-1080.jpg', $creative->asset_url, 'the 64px template image stayed the card\'s still');
         $this->assertSame('https://scontent.example/catalog-1080.jpg', $creative->thumbnail_url);
+    }
+
+    /**
+     * LEAD-DESTINATION-001 — `OUTCOME_SALES` is how Meta spells a click-to-WhatsApp buy as well as a
+     * website one; the ad set's `destination_type` is the only field that tells them apart.
+     */
+    private function destinationFixture(string $destination): UnifiedCampaign
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'Sales WhatsApp', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'KSA', 'status' => 'ACTIVE', 'destination_type' => $destination],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => []]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', '120')->firstOrFail();
+
+        return UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+    }
+
+    public function test_a_sales_objective_with_a_whatsapp_destination_is_lead_generation(): void
+    {
+        $unified = $this->destinationFixture('WHATSAPP');
+
+        $this->assertSame('WHATSAPP', ExternalAdSet::withoutGlobalScopes()->where('external_id', '220')->value('destination_type'));
+        $this->assertSame('leads', $unified->objective, 'a click-to-WhatsApp sales buy was classified as generic sales');
+        $this->assertSame('OUTCOME_SALES', $unified->objective_platform_value, 'the platform\'s own word was overwritten');
+        $this->assertSame(
+            LeadDestination::Whatsapp,
+            app(CampaignDestinations::class)->for([$unified->id])[$unified->id],
+        );
+    }
+
+    public function test_a_sales_objective_with_a_website_destination_stays_sales(): void
+    {
+        $unified = $this->destinationFixture('WEBSITE');
+
+        $this->assertSame('sales', $unified->objective);
     }
 
     /**

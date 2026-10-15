@@ -71,6 +71,9 @@ final class CampaignObjectiveResolver
         $resolved = [];
         $rawValues = [];
 
+        // LEAD-DESTINATION-001 — computed once; only consulted for a platform that states it.
+        $destination = app(CampaignDestinations::class)->for([(string) $campaign->id])[(string) $campaign->id] ?? null;
+
         foreach ($externals as $external) {
             $raw = strtoupper(trim((string) $external->objective));
 
@@ -91,6 +94,21 @@ final class CampaignObjectiveResolver
 
             if ($objective === null) {
                 continue;
+            }
+
+            /*
+             * LEAD-DESTINATION-001 — a sales or engagement BUY whose results happen in a message is
+             * lead generation. Meta spells `OUTCOME_SALES` for a click-to-WhatsApp campaign as it
+             * does for a website one; only the ad set's destination tells them apart. Without this
+             * the campaign printed purchase KPIs (ROAS, cost per purchase) it can never have.
+             * The platform's raw word is still recorded below, so the override is visible.
+             */
+            if ($destination !== null && $destination->isMessaging() && in_array($objective, [
+                CampaignObjective::Sales,
+                CampaignObjective::Engagement,
+                CampaignObjective::Conversions,
+            ], true)) {
+                $objective = CampaignObjective::Leads;
             }
 
             $resolved[$objective->value] = $objective;
