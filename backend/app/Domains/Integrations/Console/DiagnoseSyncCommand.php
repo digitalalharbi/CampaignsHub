@@ -1465,8 +1465,11 @@ final class DiagnoseSyncCommand extends Command
          */
         $first = (clone $metrics)->min('metric_date');
         if ($first !== null && $latest !== null) {
+            // The tenant of the account being diagnosed — without it the scope resolves to nothing and
+            // every figure below reads as an absence (the instrument's own blind spot, again).
+            app(TenantContext::class)->setTenantId((string) $account->tenant_id);
             app(ProjectContext::class)->setProjectId((string) $projectId);
-            $totals = app(MetricsAggregator::class)->totals(
+            $totals = app(MetricsAggregator::class)->forProjects([(string) $projectId])->totals(
                 Carbon::parse((string) $first),
                 Carbon::parse((string) $latest),
             );
@@ -1514,8 +1517,9 @@ final class DiagnoseSyncCommand extends Command
 
             if ($unifiedIds !== []) {
                 $destinations = app(CampaignDestinations::class)->for($unifiedIds);
+                app(TenantContext::class)->setTenantId((string) $account->tenant_id);
                 app(ProjectContext::class)->setProjectId((string) $projectId);
-                $rows = app(MetricsAggregator::class)->byCampaign(
+                $rows = app(MetricsAggregator::class)->forProjects([(string) $projectId])->byCampaign(
                     Carbon::parse((string) $first),
                     Carbon::parse((string) $latest),
                 );
