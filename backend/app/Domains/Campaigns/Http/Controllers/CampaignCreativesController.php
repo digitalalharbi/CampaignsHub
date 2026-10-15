@@ -46,7 +46,7 @@ final class CampaignCreativesController extends Controller
             ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)', 'creative_daily_metrics.project_id'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->select('creative_id')
-            ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue, SUM(video_views) video_views, SUM(video_completions) video_completions')
+            ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue, SUM(video_views) video_views, SUM(video_completions) video_completions, COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL) spend_withheld_rows, COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL) revenue_withheld_rows')
             ->groupBy('creative_id')
             ->get()
             ->keyBy('creative_id');
@@ -58,6 +58,9 @@ final class CampaignCreativesController extends Controller
         $rows = $creatives->map(function (ExternalCreative $c) use ($agg) {
             $m = $agg->get($c->id);
             $spend = (float) ($m->spend ?? 0);
+            // DERIVED-WITHHELD-001 — no cost ratio over partly withheld money.
+            $spendWithheld = (int) ($m->spend_withheld_rows ?? 0) > 0;
+            $revenueWithheld = (int) ($m->revenue_withheld_rows ?? 0) > 0;
             $impr = (float) ($m->impressions ?? 0);
             $clicks = (float) ($m->clicks ?? 0);
             $conv = (float) ($m->conversions ?? 0);
@@ -94,10 +97,10 @@ final class CampaignCreativesController extends Controller
                 'is_demo' => $c->is_demo,
                 'metrics' => [
                     'spend' => $spend, 'impressions' => $impr, 'clicks' => $clicks, 'conversions' => $conv, 'revenue' => $rev,
-                    'roas' => $spend > 0 ? round($rev / $spend, 2) : null,
-                    'cpa' => $conv > 0 ? round($spend / $conv, 2) : null,
+                    'roas' => ! $spendWithheld && ! $revenueWithheld && $spend > 0 ? round($rev / $spend, 2) : null,
+                    'cpa' => ! $spendWithheld && $conv > 0 ? round($spend / $conv, 2) : null,
                     'ctr' => $impr > 0 ? round($clicks / $impr, 4) : null,
-                    'cpm' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,
+                    'cpm' => ! $spendWithheld && $impr > 0 ? round($spend / $impr * 1000, 2) : null,
                     'view_rate' => $impr > 0 ? round($views / $impr, 4) : null,
                     'completion_rate' => $views > 0 ? round($completes / $views, 4) : null,
                 ],

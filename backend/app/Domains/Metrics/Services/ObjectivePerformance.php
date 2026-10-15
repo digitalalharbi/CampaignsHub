@@ -76,6 +76,10 @@ final class ObjectivePerformance
         $salesOrders = 0.0;
         $salesRevenue = 0.0;
         $totalSpend = 0.0;
+        // DERIVED-WITHHELD-001 — rows whose money was withheld; a ratio over them is not stated.
+        $totalSpendWithheld = 0;
+        $salesSpendWithheld = 0;
+        $salesRevenueWithheld = 0;
         $included = [];
         $excluded = [];
 
@@ -85,6 +89,8 @@ final class ObjectivePerformance
             $bucket = &$paths[$path->value];
 
             $bucket['spend'] += (float) $row->spend;
+            $bucket['spend_withheld_rows'] = (int) ($bucket['spend_withheld_rows'] ?? 0) + (int) ($row->spend_withheld_rows ?? 0);
+            $bucket['revenue_withheld_rows'] = (int) ($bucket['revenue_withheld_rows'] ?? 0) + (int) ($row->revenue_withheld_rows ?? 0);
             $bucket['impressions'] += (float) $row->impressions;
             $bucket['clicks'] += (float) $row->clicks;
             $bucket['landing_page_views'] += (float) $row->landing_page_views;
@@ -155,10 +161,13 @@ final class ObjectivePerformance
             }
 
             $totalSpend += (float) $row->spend;
+            $totalSpendWithheld += (int) ($row->spend_withheld_rows ?? 0);
 
             // The whole rule, in four lines: only a SALES campaign's money reaches the sales figures.
             if ($objective->isSales()) {
                 $salesSpend += (float) $row->spend;
+                $salesSpendWithheld += (int) ($row->spend_withheld_rows ?? 0);
+                $salesRevenueWithheld += (int) ($row->revenue_withheld_rows ?? 0);
                 $salesOrders += (float) $row->orders;
                 $salesRevenue += (float) $row->revenue;
                 $included[] = ['id' => $row->unified_campaign_id, 'name' => $row->name, 'objective' => $objective->value];
@@ -184,9 +193,11 @@ final class ObjectivePerformance
                 'spend' => round($salesSpend, 2),
                 'orders' => round($salesOrders, 2),
                 'revenue' => round($salesRevenue, 2),
-                'cpa' => $this->ratio($salesSpend, $salesOrders),
-                'roas' => $this->ratio($salesRevenue, $salesSpend),
-                'aov' => $this->ratio($salesRevenue, $salesOrders),
+                'cpa' => $salesSpendWithheld > 0 ? null : $this->ratio($salesSpend, $salesOrders),
+                'roas' => $salesSpendWithheld > 0 || $salesRevenueWithheld > 0 ? null : $this->ratio($salesRevenue, $salesSpend),
+                'aov' => $salesRevenueWithheld > 0 ? null : $this->ratio($salesRevenue, $salesOrders),
+                'spend_withheld_rows' => $salesSpendWithheld,
+                'revenue_withheld_rows' => $salesRevenueWithheld,
                 'formula' => [
                     'cpa' => 'sales-path spend ÷ sales-path orders',
                     'roas' => 'sales-attributed revenue ÷ sales-path spend',
@@ -205,8 +216,9 @@ final class ObjectivePerformance
                 'spend' => round($totalSpend, 2),
                 'orders' => round($salesOrders, 2),
                 'revenue' => round($salesRevenue, 2),
-                'blended_cpa' => $this->ratio($totalSpend, $salesOrders),
-                'blended_roas' => $this->ratio($salesRevenue, $totalSpend),
+                'blended_cpa' => $totalSpendWithheld > 0 ? null : $this->ratio($totalSpend, $salesOrders),
+                'blended_roas' => $totalSpendWithheld > 0 || $salesRevenueWithheld > 0 ? null : $this->ratio($salesRevenue, $totalSpend),
+                'spend_withheld_rows' => $totalSpendWithheld,
                 'formula' => [
                     'blended_cpa' => 'spend on EVERY path ÷ sales-path orders',
                     'blended_roas' => 'sales-attributed revenue ÷ spend on EVERY path',
@@ -629,7 +641,8 @@ final class ObjectivePerformance
             $path = $objective->path()->value;
             $date = (string) $row->metric_date;
 
-            $byPath[$path][$date] ??= ['spend' => 0.0, 'results' => 0.0, 'revenue' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0];
+            $byPath[$path][$date] ??= ['spend' => 0.0, 'results' => 0.0, 'revenue' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0, 'withheld' => 0];
+            $byPath[$path][$date]['withheld'] += (int) ($row->spend_withheld_rows ?? 0);
             $byPath[$path][$date]['spend'] += (float) $row->spend;
             $byPath[$path][$date]['results'] += (float) $row->orders;
             $byPath[$path][$date]['revenue'] += (float) $row->revenue;
@@ -666,10 +679,11 @@ final class ObjectivePerformance
                     'revenue' => $point === null ? null : round($point['revenue'], 2),
                     // Derived from THIS day's own sums — never from the window's, which is a
                     // different number the moment a result lands after the spend that bought it.
-                    'cost_per_result' => $point === null || $point['results'] <= 0
+                    // DERIVED-WITHHELD-001 — a day with withheld spend states no cost.
+                    'cost_per_result' => $point === null || $point['results'] <= 0 || $point['withheld'] > 0
                         ? null
                         : round($point['spend'] / $point['results'], 2),
-                    'cpm' => $point === null || $point['impressions'] <= 0
+                    'cpm' => $point === null || $point['impressions'] <= 0 || $point['withheld'] > 0
                         ? null
                         : round(($point['spend'] / $point['impressions']) * 1000, 2),
                 ];
@@ -878,6 +892,9 @@ final class ObjectivePerformance
 
         $mixed = count($composition) > 1;
 
+        $spendWithheld = (int) ($b['spend_withheld_rows'] ?? 0) > 0;
+        $revenueWithheld = (int) ($b['revenue_withheld_rows'] ?? 0) > 0;
+
         return [
             ...$b,
             'spend' => round($b['spend'], 2),
@@ -886,13 +903,13 @@ final class ObjectivePerformance
             'landing_page_views' => round($b['landing_page_views']),
             'orders' => round($b['orders']),
             'revenue' => round($b['revenue'], 2),
-            'cpm' => $b['impressions'] > 0 ? round($b['spend'] / $b['impressions'] * 1000, 2) : null,
-            'cpc' => $this->ratio($b['spend'], $b['clicks']),
+            'cpm' => ! $spendWithheld && $b['impressions'] > 0 ? round($b['spend'] / $b['impressions'] * 1000, 2) : null,
+            'cpc' => $spendWithheld ? null : $this->ratio($b['spend'], $b['clicks']),
             'ctr' => $b['impressions'] > 0 ? round($b['clicks'] / $b['impressions'], 4) : null,
-            'cost_per_lpv' => $this->ratio($b['spend'], $b['landing_page_views']),
+            'cost_per_lpv' => $spendWithheld ? null : $this->ratio($b['spend'], $b['landing_page_views']),
             // Null on every path that does not sell — see `$sellsThings` above.
-            'cpa' => $sellsThings ? $this->ratio($b['spend'], $b['orders']) : null,
-            'roas' => $sellsThings ? $this->ratio($b['revenue'], $b['spend']) : null,
+            'cpa' => $sellsThings && ! $spendWithheld ? $this->ratio($b['spend'], $b['orders']) : null,
+            'roas' => $sellsThings && ! $spendWithheld && ! $revenueWithheld ? $this->ratio($b['revenue'], $b['spend']) : null,
             'result_metrics_apply' => $sellsThings,
             'result_composition' => $composition,
             /*
