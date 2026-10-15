@@ -4,6 +4,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { compact, moneyExact, moneyFromTotals, percent } from '@/features/analytics/format'
 import { formatMoneyReading, moneyState, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { mixedResultsNote } from './reportMetrics'
+import { spendHiddenByLink } from './live/liveMetrics'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
 
@@ -158,11 +159,15 @@ export function LivePlatformComparison({
       ? 'تكلفة النتيجة لكل منصة هي متوسط كل الأهداف المُشتراة عليها.'
       : 'A platform’s cost per result averages every objective bought on it.',
   }
+  // A link that hides spend has no spend column and no cost column: «—» twice per row is not a table.
+  const noSpend = spendHiddenByLink(payload)
+  const resultName = payload.result_kind ? (ar ? payload.result_kind.result.ar : payload.result_kind.result.en) : (ar ? 'النتائج' : 'Results')
+  const costName = payload.result_kind ? (ar ? payload.result_kind.cost.ar : payload.result_kind.cost.en) : (ar ? 'تكلفة النتيجة' : 'Cost per result')
   const head = [
     t.platform,
     ar ? 'الإنفاق' : 'Spend',
-    ar ? 'النتائج' : 'Results',
-    ar ? 'تكلفة النتيجة' : 'Cost per result',
+    resultName,
+    costName,
     ar ? 'الظهور' : 'Impressions',
     ar ? 'النقرات' : 'Clicks',
     ar ? 'نسبة النقر' : 'CTR',
@@ -259,17 +264,20 @@ export function LivePlatformComparison({
     ]),
   }
 
+  const keep = noSpend ? [0, 2, 4, 5, 6] : [0, 1, 2, 3, 4, 5, 6]
+  const pick = <T,>(cells: T[]): T[] => keep.map((i) => cells[i])
+
   return (
     <div className="mt-3 min-w-0">
       <Section title={t.title} testid="live-platform-comparison" empty={rows.length === 0} none={t.none}>
         <MetricTable
-          head={head}
-          rows={built.rows}
-          values={built.values}
-          exact={built.exact}
+          head={pick(head)}
+          rows={built.rows.map(pick)}
+          values={built.values.map(pick)}
+          exact={built.exact.map(pick)}
           initialSort={{ column: 1, dir: 'desc' }}
         />
-        <p className="mt-2 text-xs text-text-muted">{t.blend}</p>
+        {!noSpend && <p className="mt-2 text-xs text-text-muted">{t.blend}</p>}
       </Section>
     </div>
   )
