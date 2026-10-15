@@ -235,3 +235,17 @@ export function cardHasFigure(key: string, text: string, payload: LivePayload): 
 
   return true
 }
+
+/**
+ * Whether the LINK hides spend — as opposed to spend being withheld or partial.
+ *
+ * A hidden spend arrives as null with no withheld rows and no original amount; a withheld one carries
+ * the original amount (money contract). Only the first means «this link does not show money», and a
+ * client page must then omit every spend surface instead of explaining an absence it chose.
+ */
+export function spendHiddenByLink(payload: LivePayload): boolean {
+  const t = (payload.totals ?? {}) as Record<string, unknown>
+
+  return t.spend === null && (t.spend_withheld_rows === null || t.spend_withheld_rows === undefined || t.spend_withheld_rows === 0)
+    && (t.spend_original === null || t.spend_original === undefined)
+}
