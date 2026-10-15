@@ -54,10 +54,14 @@
   html, body { width: 1200px; height: 630px; overflow: hidden; }
 
   body {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 72px 80px;
+    /* A dedicated logo area beside the title, and the footer across both. The logo is the subject of
+       a client's pasted link, so it gets a column of its own rather than a corner. */
+    display: grid;
+    grid-template-columns: 440px 1fr;
+    grid-template-rows: 1fr auto;
+    column-gap: 56px;
+    row-gap: 24px;
+    padding: 56px 72px;
     background: var(--ink);
     color: var(--ink-strong);
     /*
@@ -104,17 +108,33 @@
     background: var(--accent);
   }
 
-  header { display: flex; align-items: center; gap: 28px; position: relative; }
-
-  .mark {
-    /* The whole logo, uncropped: contain inside a box large enough to read on a chat card. */
-    height: 120px;
-    max-width: 420px;
-    object-fit: contain;
-    /* A mark is supplied at whatever size the agency uploaded; the box is what keeps a tall one from
-       pushing the title off the card. */
+  /*
+   * SHARE-CARD-LOGO-AREA-001 — the client's logo, whole, in an area of its own.
+   *
+   * `object-fit: contain` inside a fixed 440px panel: the complete image at its own aspect ratio,
+   * scaled as large as the panel allows, never cropped and never stretched — a square fills the
+   * panel, a wide mark spans its width, a tall one its height. The panel is white because a logo is
+   * designed to be seen on a light ground; a mark that carries its own colour simply covers it, and a
+   * transparent one reads as it was drawn. The image is the upload as-is — nothing is redrawn.
+   */
+  .logo-area { position: relative; display: flex; align-items: center; justify-content: center; }
+  .logo-panel {
+    width: 440px;
+    height: 440px;
+    box-sizing: border-box;
+    padding: 20px;
+    border-radius: 28px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
   }
+  /* The product's own mark is drawn for a dark ground, so it sits on the card without a white panel. */
+  .logo-panel.system { background: transparent; box-shadow: none; padding: 48px; }
+  .mark { width: 100%; height: 100%; object-fit: contain; display: block; }
 
+  .copy { position: relative; align-self: center; }
   .eyebrow {
     font-size: 26px;
     font-weight: 600;
@@ -123,7 +143,6 @@
     color: var(--ink-soft);
   }
 
-  main { position: relative; }
 
   h1 {
     font-size: {{ $titleSize }}px;
@@ -173,23 +192,25 @@
 <body>
 <div class="bg"></div>
 
-<header>
-  @if ($logo)
-    <img class="mark" src="{{ $logo }}" alt="">
-  @else
-    {{-- No mark configured. The eyebrow carries the identity instead of an invented placeholder. --}}
-    <span class="eyebrow">{{ $eyebrow }}</span>
-  @endif
-</header>
+<section class="logo-area">
+  <div class="logo-panel{{ ($logoIsProduct ?? false) ? ' system' : '' }}">
+    @if ($logo)
+      <img class="mark" src="{{ $logo }}" alt="">
+    @else
+      {{-- Unreachable while the product mark is the fallback; kept so a missing mark is never a broken box. --}}
+      <span class="eyebrow">{{ $eyebrow }}</span>
+    @endif
+  </div>
+</section>
 
-<main>
+<main class="copy">
   <h1>{{ $who }}</h1>
   @if ($period !== null)
     <p class="period"><bdi dir="ltr">{{ $period }}</bdi></p>
   @endif
 </main>
 
-<footer>
+<footer style="grid-column: 1 / -1;">
   <span>{{ $kicker }}</span>
   <span class="product">{{ $siteName }}</span>
 </footer>

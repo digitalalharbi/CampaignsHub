@@ -384,6 +384,121 @@ final class ShareCardContentsTest extends TestCase
     }
 
     /** The Arabic has to JOIN, which is the whole reason a browser draws this and GD does not. */
+    // ── SHARE-CARD-LOGO-AREA-001 — the whole logo, in an area of its own ────────────────────────
+
+    /** A PNG of a stated size and colour, optionally with a transparent background — real bytes, not a stub. */
+    private function logoPng(int $w, int $h, array $rgb, bool $transparent = false): string
+    {
+        $im = imagecreatetruecolor($w, $h);
+        imagesavealpha($im, true);
+        imagealphablending($im, false);
+
+        if ($transparent) {
+            imagefill($im, 0, 0, imagecolorallocatealpha($im, 0, 0, 0, 127));
+            // A mark drawn on nothing: an opaque block in the middle, the rest left transparent.
+            imagefilledrectangle($im, (int) ($w * 0.25), (int) ($h * 0.25), (int) ($w * 0.75), (int) ($h * 0.75), imagecolorallocate($im, ...$rgb));
+        } else {
+            imagefill($im, 0, 0, imagecolorallocate($im, ...$rgb));
+        }
+
+        ob_start();
+        imagepng($im);
+
+        return (string) ob_get_clean();
+    }
+
+    private function storeClientLogo(string $bytes): void
+    {
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'client',
+            (string) $this->client->id,
+            'client_logo',
+            'any',
+            UploadedFile::fake()->createWithContent('client.png', $bytes),
+        );
+        app(TenantContext::class)->forget();
+    }
+
+    /** @return array<string, array{0:int,1:int,2:bool}> */
+    public static function logoShapes(): array
+    {
+        return [
+            'square (HENKA)' => [600, 600, false],
+            'wide' => [1200, 300, false],
+            'tall' => [300, 1000, false],
+            'transparent' => [600, 400, true],
+        ];
+    }
+
+    /**
+     * @dataProvider logoShapes
+     */
+    public function test_any_client_logo_reaches_the_card_as_uploaded_and_is_fitted_not_cropped(int $w, int $h, bool $transparent): void
+    {
+        $bytes = $this->logoPng($w, $h, [90, 36, 138], $transparent);
+        $this->storeClientLogo($bytes);
+
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        // The upload itself, byte for byte — nothing was redrawn, re-encoded or extracted.
+        $this->assertSame('data:image/png;base64,'.base64_encode($bytes), $card['logo']);
+        $this->assertFalse($card['logoIsProduct']);
+
+        $html = $this->render();
+
+        // Fitted with `contain` inside a dedicated panel; `cover` would crop a wide or tall mark.
+        $this->assertStringContainsString('class="logo-panel"', $html);
+        $this->assertMatchesRegularExpression('/\.mark\s*\{[^}]*object-fit:\s*contain/s', $html);
+        $this->assertStringNotContainsString('object-fit: cover', $html);
+        $this->assertMatchesRegularExpression('/\.mark\s*\{[^}]*width:\s*100%[^}]*height:\s*100%/s', $html);
+        $this->assertMatchesRegularExpression('/\.logo-panel\s*\{[^}]*width:\s*440px[^}]*height:\s*440px/s', $html);
+    }
+
+    /**
+     * The drawn picture, where a browser exists: the centre of the logo panel IS the logo's colour,
+     * so the full purple square fills its area rather than sitting in a corner.
+     */
+    public function test_a_square_logo_fills_its_panel_in_the_drawn_card(): void
+    {
+        $this->storeClientLogo($this->logoPng(600, 600, [90, 36, 138]));
+
+        config(['reports.chromium.enabled' => true]);
+        $png = app(ShareCardRenderer::class)->png($this->share, $this->report);
+
+        if ($png === null) {
+            $this->markTestSkipped('this machine cannot draw a card — no browser');
+        }
+
+        $im = imagecreatefromstring($png);
+        $this->assertSame(1200, imagesx($im));
+        $this->assertSame(630, imagesy($im));
+
+        // An Arabic report runs right to left, so the panel is at the right: x 688–1128, y 95–535.
+        $probe = static fn (int $x, int $y): array => (function () use ($im, $x, $y): array {
+            $c = imagecolorat($im, $x, $y);
+
+            return [($c >> 16) & 0xFF, ($c >> 8) & 0xFF, $c & 0xFF];
+        })();
+
+        [$r, $g, $b] = $probe(908, 315);
+        $this->assertEqualsWithDelta(90, $r, 6);
+        $this->assertEqualsWithDelta(36, $g, 6);
+        $this->assertEqualsWithDelta(138, $b, 6);
+
+        // …and near the panel's own edge (inside the padding) it is the logo too, not a small icon.
+        [$r2] = $probe(688 + 60, 315);
+        $this->assertEqualsWithDelta(90, $r2, 6);
+    }
+
+    public function test_the_product_mark_sits_without_the_white_panel(): void
+    {
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        $this->assertTrue($card['logoIsProduct']);
+        $this->assertStringContainsString('logo-panel system', $this->render());
+    }
+
     public function test_the_card_asks_for_a_face_that_shapes_arabic(): void
     {
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
