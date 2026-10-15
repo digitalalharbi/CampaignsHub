@@ -145,7 +145,7 @@ final class SharePreviewController extends Controller
              */
             'image' => $drawn !== null
                 ? Frontend::url("/r/{$token}/preview.png").'?v='.$this->cards->version($share, $report)
-                : $this->publicUrl($identity['logo_url'] ?? null),
+                : $this->publicUrl($identity['client']['logo_url'] ?? null),
             // The LARGE layout only for a picture composed for it. A mark under
             // `summary_large_image` is the crop this card was built to stop.
             'largeImage' => $drawn !== null,

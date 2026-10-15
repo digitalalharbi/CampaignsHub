@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Branding\ProductMark;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -160,22 +161,30 @@ final class ShareCardContentsTest extends TestCase
      * which walks by KIND before layer, so an agency `report_logo` beat a client `client_logo` and
      * the picture a client saw of their own report carried somebody else's brand.
      */
-    public function test_the_card_falls_back_to_the_agency_mark_where_the_client_has_none(): void
+    public function test_with_no_client_mark_the_card_wears_the_product_mark_and_never_the_agencys(): void
     {
         app(TenantContext::class)->setTenantId($this->agency->id);
         app(BrandingService::class)->storeAsset(
             'tenant',
             null,
-            'primary_horizontal',
+            'report_logo',
             'any',
-            UploadedFile::fake()->createWithContent('agency.png', $this->png()),
+            UploadedFile::fake()->createWithContent('agency.png', $this->png().'AGENCY'),
         );
         app(TenantContext::class)->forget();
 
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertIsString($card['logo'], 'the client has no mark, so the card showed nothing at all');
-        $this->assertStringStartsWith('data:image/png;base64,', $card['logo']);
+        $this->assertSame(ProductMark::dataUri(), $card['logo'], "the agency's mark stood in for a client who has none");
+        $this->assertStringNotContainsString(base64_encode('AGENCY'), (string) $card['logo']);
+    }
+
+    public function test_with_no_mark_anywhere_the_card_still_wears_the_product_mark(): void
+    {
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        $this->assertSame(ProductMark::dataUri(), $card['logo']);
+        $this->assertStringContainsString('data:image/svg+xml;base64,', $card['logo']);
     }
 
     /**
@@ -279,7 +288,7 @@ final class ShareCardContentsTest extends TestCase
      * client with an undrawable mark produced a card with none at all — while the agency's perfectly
      * good one sat behind a fallback that could never run.
      */
-    public function test_an_undrawable_client_mark_falls_through_to_the_agency(): void
+    public function test_an_undrawable_client_mark_falls_to_the_product_mark_not_the_agency(): void
     {
         app(TenantContext::class)->setTenantId($this->agency->id);
         app(BrandingService::class)->storeAsset(
@@ -294,8 +303,7 @@ final class ShareCardContentsTest extends TestCase
 
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertIsString($card['logo'], 'the card blanked instead of using the mark behind it');
-        $this->assertStringStartsWith('data:image/png;base64,', $card['logo']);
+        $this->assertSame(ProductMark::dataUri(), $card['logo']);
     }
 
     /**
@@ -319,8 +327,9 @@ final class ShareCardContentsTest extends TestCase
 
         $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
 
-        $this->assertNull($card['logo'], 'bytes that decode as nothing were offered to the card as a mark');
-        $this->assertStringNotContainsString('<img', $this->render());
+        // Bytes that decode as nothing are not a mark: the card wears the product's, never them.
+        $this->assertSame(ProductMark::dataUri(), $card['logo']);
+        $this->assertStringNotContainsString(base64_encode('this is not a picture'), $this->render());
     }
 
     /**
