@@ -65,7 +65,7 @@ export function ContentTile({
           component and means exactly «this surface fills». The asset is one click away in the
           viewer, which still contains — §12's line, and the one this change would be wrong to cross.
       */}
-        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" fit="cover" forClient />
+        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" fit="cover" forClient provider={content.provider ?? null} />
         {rank !== undefined && (
           <span className="tnum absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">
             <Num>{`#${rank}`}</Num>
