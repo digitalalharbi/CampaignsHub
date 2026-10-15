@@ -15,6 +15,7 @@ use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportScope;
 use App\Http\Controllers\Controller;
@@ -104,6 +105,9 @@ final class ReportController extends Controller
             'mode' => ['nullable', Rule::in(['live', 'snapshot'])],
             'campaign_objective' => ['nullable', Rule::in(['sales', 'awareness', 'traffic', 'leads', 'app_installs', 'video', 'custom'])],
             'form' => ['nullable', Rule::in(self::FORMS)],
+            // REPORT-DETAIL-LEVEL-001 — summary | standard | detailed; sets the form and the starting sections.
+            'detail_level' => ['nullable', Rule::in(array_map(static fn (DetailLevel $l): string => $l->value, DetailLevel::cases()))],
+            'section_settings' => ['nullable', 'array'],
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
@@ -123,12 +127,14 @@ final class ReportController extends Controller
             'scope' => ['nullable', 'array'],
         ]);
 
+        $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+
         $report = Report::create([
             'name' => $data['name'],
             'type' => $data['type'],
             // Defaults to the FULL report, never the summary: a report that silently trimmed itself
             // would drop pages its reader was expecting and give no sign that it had.
-            'form' => $data['form'] ?? 'detailed',
+            'form' => $level?->form() ?? $data['form'] ?? 'detailed',
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
             'campaign_objective' => $data['campaign_objective'] ?? null,
@@ -141,7 +147,14 @@ final class ReportController extends Controller
              * currency here would have printed USD totals under whatever three letters were sent.
              */
             'currency' => ReportingCurrency::DEFAULT,
-            'config' => self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null),
+            'config' => self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level),
+            // The level's starting sections, with whatever the Owner switched explicitly laid over them.
+            'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
+                ? null
+                : ['sections' => array_merge(
+                    $level?->sections() ?? [],
+                    array_filter((array) (($data['section_settings']['sections'] ?? [])), 'is_bool'),
+                )],
             /*
              * What the report covers, from the moment it is created (§14.5).
              *
@@ -265,6 +278,19 @@ final class ReportController extends Controller
         abort_if($model === null, 404, 'Report not found.');
 
         return $model;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $config
+     * @return array<string, mixed>|null
+     */
+    private static function withDetailLevel(?array $config, ?DetailLevel $level): ?array
+    {
+        if ($level === null) {
+            return $config;
+        }
+
+        return array_merge($config ?? [], ['detail_level' => $level->value]);
     }
 
     private function shape(Report $r, bool $withData = false): array

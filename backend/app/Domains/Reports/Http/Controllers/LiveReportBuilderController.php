@@ -15,6 +15,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -321,6 +322,8 @@ final class LiveReportBuilderController extends Controller
              * before this meant, and reinterpreting them would change what an existing link shows.
              */
             'form' => ['nullable', Rule::in(['executive_summary', 'detailed'])],
+            // REPORT-DETAIL-LEVEL-001 — summary | standard | detailed. Sets the form and the sections it leaves out.
+            'detail_level' => ['nullable', Rule::in(array_map(static fn (DetailLevel $l): string => $l->value, DetailLevel::cases()))],
             /*
              * The sections this link hides — the report-section registry's own vocabulary, off-only.
              * The builder used to send display flags this endpoint never read, so they changed nothing.
@@ -336,6 +339,17 @@ final class LiveReportBuilderController extends Controller
          * would otherwise be written into the ceiling, and from then on every read-time check would
          * approve it — because it would be exactly what the share was granted.
          */
+        // REPORT-DETAIL-LEVEL-001 — the level decides the form and which sections start OFF; the Owner's
+        // own switches (`section_overrides`) are added on top, and can only narrow a link further.
+        $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+        if ($level !== null) {
+            $data['form'] = $level->form();
+            $data['section_overrides'] = array_values(array_unique(array_merge(
+                $level->offSections(),
+                (array) ($data['section_overrides'] ?? []),
+            )));
+        }
+
         $requested = array_values(array_unique((array) ($data['campaign_ids'] ?? [])));
         $campaignIds = UnifiedCampaign::query()
             ->where('project_id', $project)
@@ -389,7 +403,7 @@ final class LiveReportBuilderController extends Controller
              * No `data` snapshot on purpose — this report IS the live definition, and a stale copy
              * beside it would be a second answer nobody asked for.
              */
-            'config' => ['live' => true, 'metrics' => $metrics],
+            'config' => ['live' => true, 'metrics' => $metrics] + ($level === null ? [] : ['detail_level' => $level->value]),
         ]);
 
         [$share, $raw] = $this->shares->create($report, [
