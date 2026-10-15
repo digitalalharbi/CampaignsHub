@@ -38,10 +38,11 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    /* SHARE-CARD-BRAND-001 — the CampaignsHub palette, and only it. */
-    --ink: #0b1a16;
-    --ink-soft: rgba(247, 245, 240, 0.68);
-    --ink-strong: #f7f5f0;
+    /* SHARE-CARD-BRAND-001 — the CampaignsHub palette on its LIGHT ground, and only it. */
+    --ink: #ffffff;
+    --ink-soft: #3d4742;
+    --ink-strong: #0b1a16;
+    --paper: #f7f5f0;
     --green: #0d8a6f;
     --orange: #e8a33d;
   }
@@ -59,7 +60,7 @@
     /* A dedicated logo area beside the title, and the footer across both. The logo is the subject of
        a client's pasted link, so it gets a column of its own rather than a corner. */
     display: grid;
-    grid-template-columns: 440px 1fr;
+    grid-template-columns: {{ ($logoIsProduct ?? false) ? '560px' : '410px' }} 1fr;
     grid-template-rows: 1fr auto;
     column-gap: 56px;
     row-gap: 24px;
@@ -87,17 +88,17 @@
      than the viewport, which is the one element whose overflow rules are not local. */
   .bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 
-  /* Brand green wash anchored away from the reading side, and an orange hairline on the reading
-     edge — the lockup's own two colours, no gradient between unrelated hues. */
+  /* The orange of the lockup's dot, as a quiet corner, and a green hairline on the reading edge. */
   .bg::before {
     content: '';
     position: absolute;
-    inset-inline-end: -200px;
-    inset-block-start: -240px;
-    width: 720px;
-    height: 720px;
+    inset-inline-end: -120px;
+    inset-block-start: -120px;
+    width: 300px;
+    height: 300px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(13, 138, 111, 0.38) 0%, rgba(13, 138, 111, 0) 68%);
+    background: var(--orange);
+    opacity: 0.16;
   }
   .bg::after {
     content: '';
@@ -119,8 +120,8 @@
    */
   .logo-area { position: relative; display: flex; align-items: center; justify-content: center; }
   .logo-panel {
-    width: 440px;
-    height: 440px;
+    width: 410px;
+    height: 410px;
     box-sizing: border-box;
     padding: 20px;
     border-radius: 28px;
@@ -128,11 +129,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+    border: 2px solid #e4e0d6;
+    box-shadow: 0 10px 36px rgba(11, 26, 22, 0.10);
   }
   /* The product's own mark is drawn for a dark ground, so it sits on the card without a white panel. */
-  .logo-panel.system { background: transparent; box-shadow: none; padding: 0; }
+  /* The lockup is the subject here: no panel, as wide as the column allows. */
+  .logo-panel.system { background: transparent; box-shadow: none; border: 0; padding: 0; width: 100%; height: auto; }
   .mark { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .logo-panel.system .mark { height: auto; }
 
   .copy { position: relative; align-self: center; }
   .eyebrow {
@@ -187,7 +191,7 @@
   }
 
   /* The pack lockup carries generous padding; sized up and pulled in so the mark itself reads. */
-  .lockup { height: 150px; width: auto; display: block; margin-block: -52px; margin-inline: -42px; }
+  .lockup { height: 84px; width: auto; display: block; }
 </style>
 </head>
 <body>

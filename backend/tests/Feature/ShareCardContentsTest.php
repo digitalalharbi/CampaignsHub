@@ -449,7 +449,7 @@ final class ShareCardContentsTest extends TestCase
         $this->assertMatchesRegularExpression('/\.mark\s*\{[^}]*object-fit:\s*contain/s', $html);
         $this->assertStringNotContainsString('object-fit: cover', $html);
         $this->assertMatchesRegularExpression('/\.mark\s*\{[^}]*width:\s*100%[^}]*height:\s*100%/s', $html);
-        $this->assertMatchesRegularExpression('/\.logo-panel\s*\{[^}]*width:\s*440px[^}]*height:\s*440px/s', $html);
+        $this->assertMatchesRegularExpression('/\.logo-panel\s*\{[^}]*width:\s*410px[^}]*height:\s*410px/s', $html);
     }
 
     /**
