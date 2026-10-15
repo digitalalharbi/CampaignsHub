@@ -6,8 +6,8 @@ namespace App\Domains\Metrics\Actions;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Support\GroupedUpsert;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -145,17 +145,16 @@ final class UpsertEntityDailyMetrics
             ];
         }
 
-        foreach (array_chunk($payload, 500) as $chunk) {
-            DB::table('entity_daily_metrics')->upsert(
-                $chunk,
-                ['entity_type', 'entity_id', 'metric_date', 'attribution_window'],
-                [
-                    ...self::MEASURES, ...self::MONEY,
-                    'spend_original', 'revenue_original', 'original_currency', 'project_currency',
-                    'external_campaign_id', 'external_ad_set_id', 'sync_run_id', 'updated_at',
-                ],
-            );
-        }
+        GroupedUpsert::run(
+            'entity_daily_metrics',
+            $payload,
+            ['entity_type', 'entity_id', 'metric_date', 'attribution_window'],
+            [
+                ...self::MEASURES, ...self::MONEY,
+                'spend_original', 'revenue_original', 'original_currency', 'project_currency',
+                'external_campaign_id', 'external_ad_set_id', 'sync_run_id', 'updated_at',
+            ],
+        );
 
         return ['upserted' => count($payload), 'skipped' => $skipped, 'unkeyed' => $unkeyed];
     }
