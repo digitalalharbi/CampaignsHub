@@ -395,6 +395,34 @@ final class ReportScopeEndpointTest extends TestCase
         );
     }
 
+    /**
+     * REPORT-OWNER-CONTROL-001 — the Owner's `sections` map is ON as well as OFF, over the level's preset.
+     *
+     * A standard link has no advanced segmentation; the Owner switches it ON and it is in the report's
+     * own settings, not behind a disabled switch. And a section the Owner switches OFF that the preset
+     * had on (the funnel, on a detailed link) becomes a link-level hide.
+     */
+    public function test_the_owners_sections_map_turns_a_section_on_and_off_over_the_level(): void
+    {
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->project->getKey()}/reports/live", [
+                'name' => 'رابط',
+                'from' => '2026-07-01',
+                'to' => '2026-07-31',
+                'detail_level' => 'standard',
+                'sections' => ['advanced_segmentation' => true, 'recommendations' => false],
+            ])
+            ->assertCreated();
+
+        $share = ReportShare::withoutGlobalScopes()->findOrFail($res->json('data.share_id'));
+        $report = Report::withoutGlobalScopes()->findOrFail($res->json('data.report_id'));
+
+        $this->assertTrue($report->section_settings['sections']['advanced_segmentation'], 'a switch ON was ignored');
+        $this->assertFalse($report->section_settings['sections']['recommendations']);
+        $this->assertContains('recommendations', (array) ($share->settings['section_overrides'] ?? []));
+        $this->assertNotContains('advanced_segmentation', (array) ($share->settings['section_overrides'] ?? []));
+    }
+
     public function test_an_unknown_level_is_refused(): void
     {
         Queue::fake();
