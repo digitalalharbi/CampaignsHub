@@ -128,6 +128,26 @@ describe('opening an ad from a report', () => {
     expect(figures).toHaveTextContent('120,000')
   })
 
+  it('shows the whole creative in the modal: contained, never cropped by a second fit utility', () => {
+    renderWithProviders(<ReportAdDetail ad={ad()} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' })
+
+    const img = screen.getByTestId('report-ad-detail-poster')
+
+    expect(img.className).toMatch(/object-contain/)
+    expect(img.className).not.toMatch(/object-cover/)
+  })
+
+  it('draws a typed cover, not a broken frame, when no media exists', () => {
+    renderWithProviders(
+      <ReportAdDetail ad={ad({ preview: preview({ state: 'never_fetched', image_url: null }) })} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' },
+    )
+
+    const cover = screen.getByTestId('report-ad-detail-poster-absent')
+
+    expect(cover).toHaveAttribute('data-cover', 'fallback')
+    expect(cover.textContent).toMatch(/Meta/)
+  })
+
   it('says why the platform sent no file, rather than drawing an empty frame', () => {
     const withheld = ad({
       preview: preview({ state: 'withheld', image_url: null, note_en: 'The platform’s preview link carries a credential.' }),

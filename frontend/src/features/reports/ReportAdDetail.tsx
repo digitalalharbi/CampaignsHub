@@ -154,9 +154,11 @@ export function ReportAdDetail({
           <AdPoster
             preview={preview}
             name={ad.name ?? ''}
-            className="h-72 w-full bg-surface-secondary object-contain"
+            className="h-72 w-full bg-surface-secondary"
+            fit="contain"
             testid="report-ad-detail-poster"
             forClient
+            provider={ad.provider ?? null}
           />
         )}
 

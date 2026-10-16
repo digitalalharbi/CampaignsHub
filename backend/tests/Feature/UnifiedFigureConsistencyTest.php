@@ -966,22 +966,25 @@ final class UnifiedFigureConsistencyTest extends TestCase
         );
         app(TenantContext::class)->forget();
 
-        $reported = collect($section['ads'])->firstWhere('id', (string) $creative->getKey());
-        $this->assertNotNull($reported, 'the report’s ads section did not carry the creative the library shows');
+        // The ROSTER (everything presented), not the ranked list: this creative has no results, and
+        // CONTENT-RANKING-TRUTH-001 keeps a zero-result creative out of «best content».
+        $reported = collect($section['roster'])->firstWhere('id', (string) $creative->getKey());
+        $this->assertNotNull($reported, 'the report’s roster did not carry the creative the library shows');
 
+        fwrite(STDERR, 'KEYS='.json_encode(array_keys($reported)).PHP_EOL.json_encode($reported['metrics'] ?? null).PHP_EOL);
         $inWindow = 60.0;
 
         $this->assertSame($inWindow, round((float) $library['metrics']['spend'], 6), 'the library summed the wrong window');
-        $this->assertSame($inWindow, round((float) $reported['spend'], 6), 'the report summed the wrong window');
+        $this->assertSame($inWindow, round((float) $reported['metrics']['spend'], 6), 'the report summed the wrong window');
         $this->assertSame(
             round((float) $library['metrics']['spend'], 6),
-            round((float) $reported['spend'], 6),
+            round((float) $reported['metrics']['spend'], 6),
             'the operator’s library and the client’s report disagree about one creative’s spend',
         );
 
         $this->assertSame(
             600.0,
-            round((float) $reported['impressions'], 6),
+            round((float) $reported['metrics']['impressions'], 6),
             'the report’s impressions for the creative do not match the window either',
         );
     }
