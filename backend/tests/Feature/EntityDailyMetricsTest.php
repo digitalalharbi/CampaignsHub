@@ -480,4 +480,34 @@ final class EntityDailyMetricsTest extends TestCase
             'ad_set_id' => null,
         ]];
     }
+
+    /**
+     * META-SYNC-UPSERT-001 — rows reporting DIFFERENT measures are one valid write, and a re-sync
+     * that omits a measure leaves the stored one alone.
+     *
+     * Meta ads that sent a purchase and ads that sent none made the bulk INSERT's VALUES lists
+     * different lengths; Postgres refused the lot and the run was left «running» for ever.
+     */
+    public function test_rows_with_different_measures_are_stored_and_absent_stays_untouched(): void
+    {
+        $known = $this->known('sq-1') + $this->known('sq-2');
+
+        app(UpsertEntityDailyMetrics::class)->execute($this->account, 'ad_set', [
+            ['entity_id' => 'sq-1', 'date' => '2026-08-01', 'impressions' => 100, 'clicks' => 5, 'leads' => 4],
+            ['entity_id' => 'sq-2', 'date' => '2026-08-01', 'impressions' => 200],
+        ], $known);
+
+        $this->assertSame(2, DB::table('entity_daily_metrics')->count());
+
+        // A later sync of sq-1 reports impressions only: the lead count it stored must survive.
+        app(UpsertEntityDailyMetrics::class)->execute($this->account, 'ad_set', [
+            ['entity_id' => 'sq-1', 'date' => '2026-08-01', 'impressions' => 150],
+            ['entity_id' => 'sq-2', 'date' => '2026-08-01', 'impressions' => 250, 'clicks' => 9],
+        ], $known);
+
+        $one = DB::table('entity_daily_metrics')->where('external_entity_id', 'sq-1')->first();
+        $this->assertEqualsWithDelta(150, (float) $one->impressions, 0.01);
+        $this->assertEqualsWithDelta(4, (float) $one->leads, 0.01, 'an omitted measure must not be nulled');
+        $this->assertEqualsWithDelta(5, (float) $one->clicks, 0.01);
+    }
 }

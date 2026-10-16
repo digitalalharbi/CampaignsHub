@@ -34,7 +34,6 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Metrics/Actions/UpsertDailyMetrics.php' => 'writer',
         'Domains/Campaigns/Actions/UpsertCreativeDailyMetrics.php' => 'writer, scoped to the syncing account through its campaigns',
         'Domains/Campaigns/Actions/ImportExternalStructure.php' => 'writer',
-        'Domains/Metrics/Actions/UpsertEntityDailyMetrics.php' => 'writer',
         // Client-facing creative lists: every one starts a bare creative query and hands it to
         // `CreativeRows::applyFilters()`, which applies the rule — `BoundAccountVisibilityTest` proves
         // the live link and the snapshot agree with the dashboard about a deselected account.

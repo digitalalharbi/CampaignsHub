@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Support\GroupedUpsert;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -218,19 +219,18 @@ final class UpsertCreativeDailyMetrics
             $upserted++;
         }
 
-        foreach (array_chunk($payload, 500) as $chunk) {
-            DB::table('creative_daily_metrics')->upsert(
-                $chunk,
-                ['creative_id', 'metric_date'],
-                [
-                    ...self::MEASURES,
-                    // CREATIVE-MONEY-TRUTH-001 — a re-sync that finds a rate must be able to replace a
-                    // withheld null with the converted figure, so these update in place too.
-                    'spend_original', 'revenue_original', 'original_currency', 'project_currency',
-                    'campaign_id', 'updated_at',
-                ],
-            );
-        }
+        GroupedUpsert::run(
+            'creative_daily_metrics',
+            $payload,
+            ['creative_id', 'metric_date'],
+            [
+                ...self::MEASURES,
+                // CREATIVE-MONEY-TRUTH-001 — a re-sync that finds a rate must be able to replace a
+                // withheld null with the converted figure, so these update in place too.
+                'spend_original', 'revenue_original', 'original_currency', 'project_currency',
+                'campaign_id', 'updated_at',
+            ],
+        );
 
         $this->recordDelivery(array_values(array_unique(array_column($payload, 'creative_id'))));
 
