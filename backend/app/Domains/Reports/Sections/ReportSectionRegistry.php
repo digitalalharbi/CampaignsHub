@@ -135,9 +135,26 @@ final class ReportSectionRegistry
                 key: 'detailed_tables',
                 titleAr: 'الجداول التفصيلية',
                 titleEn: 'Detailed tables',
-                payloadKeys: ['platforms', 'campaigns', 'ad_sets', 'accounts'],
+                payloadKeys: ['platforms', 'campaigns', 'ad_sets'],
                 slideTypes: ['campaigns'],
                 clientDefault: false,
+            ),
+            /*
+             * REPORT-ACCOUNT-BREAKDOWN-001 — the ad ACCOUNTS, as their own section.
+             *
+             * The Owner asks to control accounts as a unit — alongside platforms, campaigns and ads — and a
+             * breakdown that rode inside «detailed tables» could be neither switched on for a Standard
+             * report nor removed from a Detailed one on its own. It is the Detailed product's depth (a
+             * provider → account split), off for everything else by default, and a real switch everywhere.
+             */
+            new ReportSection(
+                key: 'account_breakdown',
+                titleAr: 'تفصيل الحسابات الإعلانية',
+                titleEn: 'Ad account breakdown',
+                payloadKeys: ['accounts'],
+                slideTypes: ['accounts'],
+                clientDefault: false,
+                breakdown: true,
             ),
             new ReportSection(
                 key: 'objective_breakdown',
@@ -184,6 +201,8 @@ final class ReportSectionRegistry
         ) !== []);
 
         // A funnel of stages no platform reported is not a funnel; the store funnel stands on its own.
+        $this->availableWhen('account_breakdown', 'has_accounts', static fn (SectionContext $c): bool => $c->rows('accounts') !== []);
+
         $this->availableWhen('funnel', 'has_a_reported_stage', static fn (SectionContext $c): bool => array_filter(
             $c->rows('funnel'),
             static fn (array $stage): bool => ($stage['reported'] ?? false) === true,
