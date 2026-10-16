@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
-import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw } from 'lucide-react'
+import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -12,9 +12,10 @@ import { ReportAdDetail } from './ReportAdDetail'
 import { LiveContentDetail } from './live/LiveContent'
 import { LivePlatformDrawer } from './live/LivePlatformDrawer'
 import { FreshnessStrip } from './live/LiveSections'
-import { ContentView, DashboardView, PlatformsView, platformsOf, SummaryView } from './live/LiveViews'
+import { ContentView, DashboardView, PlatformsView, platformsOf, StandardView, SummaryView } from './live/LiveViews'
+import { TablesView } from './live/LiveTables'
 import { useLiveMetricReader } from './live/liveMetrics'
-import { MODE_LABELS, modesFor, ownsPlatformChoice, readMode, type LiveMode } from './live/modes'
+import { levelOf, MODE_LABELS, modesFor, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 
@@ -49,6 +50,8 @@ const RANGES = [
 
 const MODE_ICONS: Record<LiveMode, typeof LayoutDashboard> = {
   summary: FileText,
+  standard: FileText,
+  tables: TableIcon,
   dashboard: LayoutDashboard,
   platforms: Layers,
   content: ImageIcon,
@@ -77,14 +80,15 @@ export function LiveSharedReport({
    * The mode and the platform live in the ADDRESS, so a client can send «the Snapchat view» to a
    * colleague, reload without losing their place, and use Back between modes.
    */
-  const mode = readMode(search.get('view'), form)
-  const offered = modesFor(form)
+  // The level is known once the payload lands; until then the link is read as the form states it.
+  const firstMode = readMode(search.get('view'), form)
   const rawPlatform = search.get('platform')
 
+  const levelRef = useRef<LiveLevel | null>(null)
   const navigate = useCallback((next: LiveMode, platform?: string | null) => {
     setSearch((prev) => {
       const params = new URLSearchParams(prev)
-      if (next === 'summary') params.delete('view')
+      if (next === modesFor(form, levelRef.current)[0]) params.delete('view')
       else params.set('view', next)
       if (platform) params.set('platform', platform)
       else params.delete('platform')
@@ -108,12 +112,17 @@ export function LiveSharedReport({
     token,
     secret: password,
     days,
-    providers: ownsPlatformChoice(mode) ? [] : providers,
+    providers: ownsPlatformChoice(firstMode) ? [] : providers,
     failedMessage,
     refreshEveryMs: 5 * 60_000,
   })
 
   const whole = main.load.state === 'ready' ? main.load.payload : null
+  // REPORT-ARCHITECTURE-001 — the product (summary / standard / detailed) decides which views exist.
+  const level = levelOf(form, whole?.detail_level)
+  levelRef.current = level
+  const offered = modesFor(form, level)
+  const mode = readMode(search.get('view'), form, level)
   /*
    * REPORT-SECTION-SURFACES-001 — a view whose section the report does not carry is not offered:
    * the platform view reads the comparison's rows, the content view the content section.
@@ -284,6 +293,8 @@ export function LiveSharedReport({
       {/* Dimmed, not blanked, while refreshing: blanking would make every filter change feel like a page load. */}
       <div className={refreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
         {mode === 'summary' && <SummaryView payload={payload} {...common} />}
+        {mode === 'standard' && <StandardView payload={payload} {...common} />}
+        {mode === 'tables' && <TablesView payload={payload} reader={reader} locale={locale === 'ar' ? 'ar' : 'en'} onOpenContent={onOpenContent} />}
         {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} onOpenPlatform={setDrawer} />}
         {mode === 'platforms' && offeredHere.includes('platforms') && (
           <PlatformsView

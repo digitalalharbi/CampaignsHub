@@ -21,6 +21,17 @@ describe('the live link modes', () => {
     expect(readMode('campaigns', 'detailed')).toBe('summary')
   })
 
+  it('gives each level its own composition, not the same views with a dial', () => {
+    expect(modesFor('detailed', 'standard')).toEqual(['standard'])
+    expect(modesFor('detailed', 'detailed')).toEqual(['summary', 'dashboard', 'platforms', 'content', 'tables'])
+    expect(modesFor('executive_summary', 'detailed')).toEqual(['summary'])
+    // Tables exist only in the detailed product; a standard link asked for them still gets the standard report.
+    expect(readMode('tables', 'detailed', 'standard')).toBe('standard')
+    expect(readMode('tables', 'detailed', 'detailed')).toBe('tables')
+    // A link whose level is not known yet is the detailed product it always was.
+    expect(modesFor('detailed', null)).toEqual(modesFor('detailed', 'detailed'))
+  })
+
   it('lets only the platform and content modes choose their own platform', () => {
     expect(ownsPlatformChoice('platforms')).toBe(true)
     expect(ownsPlatformChoice('content')).toBe(true)

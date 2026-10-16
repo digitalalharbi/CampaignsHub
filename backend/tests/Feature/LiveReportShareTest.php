@@ -314,6 +314,26 @@ final class LiveReportShareTest extends TestCase
         return $raw;
     }
 
+    /**
+     * REPORT-ARCHITECTURE-001 — the level is on the payload, and what only DETAILED carries travels only there.
+     */
+    public function test_the_level_decides_what_travels_in_the_payload(): void
+    {
+        $token = $this->liveLink();
+
+        // No stored level on a link made before levels existed: the detailed product it always was.
+        $this->report->forceFill(['section_settings' => ['sections' => ['detailed_tables' => true]]])->save();
+        $default = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
+        $this->assertSame('detailed', $default->json('data.detail_level'));
+        $this->assertNotEmpty($default->json('data.accounts'), 'the detailed product carries the ad-account breakdown');
+
+        $this->report->forceFill(['config' => array_merge((array) $this->report->config, ['detail_level' => 'standard'])])->save();
+        $standard = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
+        $this->assertSame('standard', $standard->json('data.detail_level'));
+        $this->assertSame([], $standard->json('data.accounts'), 'a standard report must not carry the account breakdown');
+        $this->assertEmpty($standard->json('data.ads_platform_groups'));
+    }
+
     public function test_a_live_link_reports_current_figures_without_a_session(): void
     {
         $token = $this->liveLink();

@@ -18,22 +18,47 @@
  * chose to send a short document, and the server has already trimmed what a summary does not carry
  * (`ReportComposition`). A DETAILED link opens on the dashboard and offers all four.
  */
-export type LiveMode = 'summary' | 'dashboard' | 'platforms' | 'content'
+export type LiveMode = 'summary' | 'standard' | 'dashboard' | 'platforms' | 'content' | 'tables'
+
+/** REPORT-ARCHITECTURE-001 — the product the Owner chose: three different compositions, not one with a dial. */
+export type LiveLevel = 'summary' | 'standard' | 'detailed'
 
 export type LiveForm = 'executive_summary' | 'detailed'
 
-const DETAILED: LiveMode[] = ['summary', 'dashboard', 'platforms', 'content']
-
-export function modesFor(form: LiveForm): LiveMode[] {
-  return form === 'executive_summary' ? ['summary'] : DETAILED
+/*
+ * REPORT-ARCHITECTURE-001 — what each LEVEL is made of.
+ *
+ *   summary   — the executive one-pager: one view, no tabs.
+ *   standard  — the balanced client report: ONE composition (`StandardView`), no tabs, no tables.
+ *   detailed  — an analytical workspace: the executive summary, the full board, each platform on
+ *               its own, the content browser, and a tables view — five views a reader moves between.
+ *
+ * A non-summary link whose level is not yet known (the payload has not arrived) is read as detailed,
+ * which is what every link made before levels existed is.
+ */
+const BY_LEVEL: Record<LiveLevel, LiveMode[]> = {
+  summary: ['summary'],
+  standard: ['standard'],
+  // The executive summary stays the Owner's chosen opening view (REPORT-EXECUTIVE-SUMMARY-001); the
+  // analytical views are one tab away, and `tables` exists nowhere else.
+  detailed: ['summary', 'dashboard', 'platforms', 'content', 'tables'],
 }
 
-/** The mode an address asks for, if this form offers it; otherwise the form's own default. */
-export function readMode(raw: string | null | undefined, form: LiveForm): LiveMode {
-  const asked = modesFor(form).find((m) => m === raw)
+export function levelOf(form: LiveForm, level?: LiveLevel | null): LiveLevel {
+  if (form === 'executive_summary') return 'summary'
 
-  // REPORT-EXECUTIVE-SUMMARY-001 — every live link opens on the executive summary; the detailed form keeps its other views one tab away.
-  return asked ?? 'summary'
+  return level === 'standard' || level === 'detailed' ? level : 'detailed'
+}
+
+export function modesFor(form: LiveForm, level?: LiveLevel | null): LiveMode[] {
+  return BY_LEVEL[levelOf(form, level)]
+}
+
+/** The mode an address asks for, if this level offers it; otherwise the level's own opening view. */
+export function readMode(raw: string | null | undefined, form: LiveForm, level?: LiveLevel | null): LiveMode {
+  const offered = modesFor(form, level)
+
+  return offered.find((m) => m === raw) ?? offered[0]
 }
 
 /** Views that read the whole link rather than the client's platform chips — they pick a platform themselves. */
@@ -43,6 +68,8 @@ export function ownsPlatformChoice(mode: LiveMode): boolean {
 
 export const MODE_LABELS: Record<LiveMode, { ar: string; en: string }> = {
   summary: { ar: 'الملخص', en: 'Summary' },
+  standard: { ar: 'التقرير', en: 'Report' },
+  tables: { ar: 'الجداول', en: 'Tables' },
   dashboard: { ar: 'لوحة الأداء', en: 'Dashboard' },
   platforms: { ar: 'المنصات', en: 'Platforms' },
   content: { ar: 'المحتوى', en: 'Content' },
