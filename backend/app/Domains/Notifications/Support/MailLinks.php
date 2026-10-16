@@ -23,6 +23,9 @@ use App\Support\Frontend;
  */
 final class MailLinks
 {
+    /** The one support address the product publishes (`frontend/src/lib/brand.ts` `supportEmail`). */
+    public const SUPPORT_EMAIL = 'info@campaignshub.io';
+
     /** The application's own origin, without a trailing slash. */
     public static function app(): string
     {
@@ -50,6 +53,10 @@ final class MailLinks
             'privacy' => self::to('/privacy'),
             'terms' => self::to('/terms'),
             'security' => self::to('/security'),
+            // EMAIL-BRAND-001 — the support route (the brand's own address), the home link and the host the footer names.
+            'support' => 'mailto:'.self::SUPPORT_EMAIL,
+            'home' => self::app().'/',
+            'host' => (string) parse_url(self::app(), PHP_URL_HOST),
         ];
     }
 }

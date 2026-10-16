@@ -9,17 +9,17 @@
   into a string — «12,400 SAR», «لم ترسله المنصة», «لا توجد بيانات» — so there is no `?? 0` left in
   this file to get wrong.
 --}}
-@php($tone = ['good' => '#0f766e', 'warn' => '#b45309', 'bad' => '#b91c1c', 'neutral' => '#5b6b68'])
-@php($toneBg = ['good' => '#ecfdf5', 'warn' => '#fffbeb', 'bad' => '#fef2f2', 'neutral' => '#f8fafa'])
+@php($tone = ['good' => '#0d8a6f', 'warn' => '#b45309', 'bad' => '#b91c1c', 'neutral' => '#5b6b68'])
+@php($toneBg = ['good' => '#e8f5f1', 'warn' => '#fffbeb', 'bad' => '#fef2f2', 'neutral' => '#faf8f3'])
 
-<div style="font-family:{!! $font !!}; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0b1a16;">
 
-    <div style="font-size:20px; font-weight:800; color:#0f172a; margin:0 0 4px;">{{ $t['greeting'] }}</div>
+    <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
     <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $t['intro'] }}</div>
 
     {{-- The account line. Spend and results sum across projects; a cost per result deliberately does not. --}}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="background-color:#f8fafa; border:1px solid #e2e8e6; border-radius:12px; margin-bottom:20px;">
+           style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:20px;">
         <tr>
             <td style="padding:14px 16px;">
                 <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $t['account_total'] }}</div>
@@ -40,7 +40,7 @@
                         @foreach ($totals as $card)
                             <td class="ch-kpi" width="{{ (int) (100 / max(1, count($totals))) }}%" style="vertical-align:top;">
                                 <div style="font-size:12px; color:#5b6b68;">{{ $card['label'] }}</div>
-                                <div style="font-size:20px; font-weight:800; color:#0f172a;" dir="ltr">{{ $card['value'] }}</div>
+                                <div style="font-size:20px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
                                 @if ($card['change'])
                                     <div style="font-size:11px; font-weight:700; color:{{ $tone[$card['tone']] }};" dir="ltr">{{ $card['change'] }}</div>
                                 @endif
@@ -74,14 +74,14 @@
         @if ($movement['best'])
             <div style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }};
                         border-{{ $startSide }}:3px solid {{ $tone['good'] }};">
-                <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $movement['best']['name'] }} — {{ $t['best_move'] }}</div>
+                <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['best']['name'] }} — {{ $t['best_move'] }}</div>
                 <div style="font-size:12px; color:{{ $tone['good'] }};" dir="ltr">{{ $movement['best']['text'] }}</div>
             </div>
         @endif
         @if ($movement['worst'])
             <div style="margin-bottom:16px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['bad'] }};
                         border-{{ $startSide }}:3px solid {{ $tone['bad'] }};">
-                <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $movement['worst']['name'] }} — {{ $t['worst_move'] }}</div>
+                <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['worst']['name'] }} — {{ $t['worst_move'] }}</div>
                 <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="ltr">{{ $movement['worst']['text'] }}</div>
             </div>
         @endif
@@ -89,11 +89,11 @@
 
     @foreach ($projects as $p)
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="border:1px solid #e2e8e6; border-radius:12px; margin-bottom:16px;">
+               style="border:1px solid #e4e0d6; border-radius:12px; margin-bottom:16px;">
             <tr>
                 <td style="padding:16px;">
 
-                    <div style="font-size:16px; font-weight:800; color:#0f172a;">{{ $p['name'] }}</div>
+                    <div style="font-size:16px; font-weight:800; color:#0b1a16;">{{ $p['name'] }}</div>
 
                     {{-- The verdict, before the figures — this is the line a phone reader acts on. --}}
                     <div style="margin-top:8px; padding:10px 12px; border-radius:8px;
@@ -109,7 +109,7 @@
                             @foreach ($p['kpis'] as $kpi)
                                 <td class="ch-kpi" width="25%" style="vertical-align:top; padding-{{ $endSide }}:8px;">
                                     <div style="font-size:12px; color:#5b6b68;">{{ $kpi['label'] }}</div>
-                                    <div style="font-size:17px; font-weight:700; color:#0f172a;" dir="ltr">{{ $kpi['value'] }}</div>
+                                    <div style="font-size:17px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $kpi['value'] }}</div>
                                     @if ($kpi['change'])
                                         <div style="font-size:12px; font-weight:700; color:{{ $kpi['change_colour'] }};" dir="ltr">{{ $kpi['change'] }}</div>
                                     @endif
@@ -129,7 +129,7 @@
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
                             @foreach ($p['paths'] as $path)
                                 <tr>
-                                    <td width="28%" style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#0f172a;">{{ $path['label'] }}</td>
+                                    <td width="28%" style="padding:6px 0; border-bottom:1px solid #eeeae0; color:#0b1a16;">{{ $path['label'] }}</td>
                                     {{--
                                         The share of spend, drawn. Nested table with a percentage-width
                                         cell — the same email-safe technique the funnel below already
@@ -137,13 +137,13 @@
                                         product sends to. «Where did the money go» is read from bar
                                         lengths in one pass and from a column of figures in several.
                                     --}}
-                                    <td width="30%" style="padding:6px 0; border-bottom:1px solid #eef2f1;">
-                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef2f1; border-radius:4px;">
-                                            <tr><td width="{{ $path['width'] }}%" style="background-color:#0f766e; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
+                                    <td width="30%" style="padding:6px 0; border-bottom:1px solid #eeeae0;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eeeae0; border-radius:4px;">
+                                            <tr><td width="{{ $path['width'] }}%" style="background-color:#0d8a6f; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
                                         </table>
                                     </td>
-                                    <td style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#0f172a; text-align:{{ $endSide }};" dir="ltr">{{ $path['spend'] }}</td>
-                                    <td style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#5b6b68; text-align:{{ $endSide }};" dir="ltr">{{ $path['result'] }}</td>
+                                    <td style="padding:6px 0; border-bottom:1px solid #eeeae0; color:#0b1a16; text-align:{{ $endSide }};" dir="ltr">{{ $path['spend'] }}</td>
+                                    <td style="padding:6px 0; border-bottom:1px solid #eeeae0; color:#5b6b68; text-align:{{ $endSide }};" dir="ltr">{{ $path['result'] }}</td>
                                 </tr>
                             @endforeach
                         </table>
@@ -154,14 +154,14 @@
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px; font-size:13px;">
                             @if ($p['best'])
                                 <tr>
-                                    <td style="padding:4px 0; color:#0f766e; font-weight:700;">{{ $t['best'] }}</td>
-                                    <td style="padding:4px 0; color:#0f172a;">{{ $p['best'] }}</td>
+                                    <td style="padding:4px 0; color:#0d8a6f; font-weight:700;">{{ $t['best'] }}</td>
+                                    <td style="padding:4px 0; color:#0b1a16;">{{ $p['best'] }}</td>
                                 </tr>
                             @endif
                             @if ($p['worst'])
                                 <tr>
                                     <td style="padding:4px 0; color:#b45309; font-weight:700;">{{ $t['worst'] }}</td>
-                                    <td style="padding:4px 0; color:#0f172a;">{{ $p['worst'] }}</td>
+                                    <td style="padding:4px 0; color:#0b1a16;">{{ $p['worst'] }}</td>
                                 </tr>
                             @endif
                         </table>
@@ -180,13 +180,13 @@
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
                             @foreach ($p['funnel'] as $stage)
                                 <tr>
-                                    <td width="35%" style="padding:5px 0; color:#0f172a;">{{ $stage['label'] }}</td>
+                                    <td width="35%" style="padding:5px 0; color:#0b1a16;">{{ $stage['label'] }}</td>
                                     <td width="40%" style="padding:5px 0;">
-                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef2f1; border-radius:4px;">
-                                            <tr><td width="{{ $stage['width'] }}%" style="background-color:#0f766e; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eeeae0; border-radius:4px;">
+                                            <tr><td width="{{ $stage['width'] }}%" style="background-color:#0d8a6f; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
                                         </table>
                                     </td>
-                                    <td style="padding:5px 0; color:#0f172a; text-align:{{ $endSide }};" dir="ltr">{{ $stage['count'] }}</td>
+                                    <td style="padding:5px 0; color:#0b1a16; text-align:{{ $endSide }};" dir="ltr">{{ $stage['count'] }}</td>
                                 </tr>
                             @endforeach
                         </table>
@@ -198,8 +198,8 @@
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
                             @if ($p['creatives']['best'])
                                 <tr>
-                                    <td style="padding:4px 0; color:#0f766e; font-weight:700; white-space:nowrap;">{{ $t['best_content'] }}</td>
-                                    <td style="padding:4px 0; color:#0f172a;">
+                                    <td style="padding:4px 0; color:#0d8a6f; font-weight:700; white-space:nowrap;">{{ $t['best_content'] }}</td>
+                                    <td style="padding:4px 0; color:#0b1a16;">
                                         {{ $p['creatives']['best']['name'] }}
                                         @if ($p['creatives']['best']['reason'])
                                             <span style="color:#5b6b68;">— {{ $p['creatives']['best']['reason'] }}</span>
@@ -210,13 +210,13 @@
                             @foreach ($p['creatives']['declining'] as $c)
                                 <tr>
                                     <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['declining'] }}</td>
-                                    <td style="padding:4px 0; color:#0f172a;">{{ $c['name'] }}</td>
+                                    <td style="padding:4px 0; color:#0b1a16;">{{ $c['name'] }}</td>
                                 </tr>
                             @endforeach
                             @foreach ($p['creatives']['fatigued'] as $c)
                                 <tr>
                                     <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['fatigued'] }}</td>
-                                    <td style="padding:4px 0; color:#0f172a;">{{ $c['name'] }}</td>
+                                    <td style="padding:4px 0; color:#0b1a16;">{{ $c['name'] }}</td>
                                 </tr>
                             @endforeach
                         </table>
@@ -234,7 +234,7 @@
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
                             @foreach ($p['recommendations'] as $r)
                                 <tr>
-                                    <td style="padding:4px 0; color:#0f172a;">
+                                    <td style="padding:4px 0; color:#0b1a16;">
                                         <strong>{{ $r['title'] }}</strong>
                                         @if ($r['body'])
                                             <span style="color:#5b6b68;">— {{ $r['body'] }}</span>
@@ -259,7 +259,7 @@
                             {{-- What needs a person, before the figures that merely describe the day. --}}
                             <div style="margin-top:6px; padding:9px 11px; border-radius:8px; background-color:{{ $toneBg['warn'] }}; border-{{ $startSide }}:3px solid {{ $tone['warn'] }};">
                                 @foreach ($p['follow_up']['attention'] as $item)
-                                    <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $item }}</div>
+                                    <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $item }}</div>
                                 @endforeach
                             </div>
                         @endif
@@ -270,7 +270,7 @@
                                     @foreach ($row as $cell)
                                         <td width="33%" style="padding:6px 0;">
                                             <div style="font-size:11px; color:#8b9a97;">{{ $cell['label'] }}</div>
-                                            <div style="font-size:15px; font-weight:700; color:#0f172a;">{{ $cell['value'] }}</div>
+                                            <div style="font-size:15px; font-weight:700; color:#0b1a16;">{{ $cell['value'] }}</div>
                                         </td>
                                     @endforeach
                                 </tr>
@@ -289,9 +289,9 @@
                                 </tr>
                                 @foreach ($p['follow_up']['owners'] as $owner)
                                     <tr>
-                                        <td style="font-size:13px; color:#0f172a; padding:3px 0;">{{ $owner['name'] }}</td>
-                                        <td style="font-size:13px; color:#0f172a; padding:3px 0;">{{ $owner['received'] }}</td>
-                                        <td style="font-size:13px; color:#0f172a; padding:3px 0;">{{ $owner['contacted'] }}</td>
+                                        <td style="font-size:13px; color:#0b1a16; padding:3px 0;">{{ $owner['name'] }}</td>
+                                        <td style="font-size:13px; color:#0b1a16; padding:3px 0;">{{ $owner['received'] }}</td>
+                                        <td style="font-size:13px; color:#0b1a16; padding:3px 0;">{{ $owner['contacted'] }}</td>
                                         <td style="font-size:13px; color:{{ $owner['overdue'] === '0' ? '#5b6b68' : $tone['warn'] }}; padding:3px 0;">{{ $owner['overdue'] }}</td>
                                     </tr>
                                 @endforeach
@@ -311,7 +311,7 @@
                             <div style="margin-top:6px; padding:9px 11px; border-radius:8px;
                                         background-color:{{ $toneBg[$note['tone']] }};
                                         border-{{ $startSide }}:3px solid {{ $tone[$note['tone']] }};">
-                                <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $note['title'] }}</div>
+                                <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $note['title'] }}</div>
                                 <div style="font-size:12px; color:#5b6b68; line-height:1.6; padding-top:2px;">{{ $note['detail'] }}</div>
                             </div>
                         @endforeach
@@ -322,7 +322,7 @@
 
                     <div style="margin-top:14px;">
                         <a href="{{ $p['url'] }}"
-                           style="display:inline-block; background-color:#0f766e; color:#ffffff; font-size:13px; font-weight:700;
+                           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:13px; font-weight:700;
                                   text-decoration:none; padding:9px 16px; border-radius:8px;">{{ $t['open_dashboard'] }}</a>
                     </div>
                 </td>

@@ -66,6 +66,8 @@ final class MailShell
             // preview a reader gets, and repeating the title wastes it.
             'preheader' => $preheader,
             'urls' => MailLinks::footer(),
+            // EMAIL-BRAND-001 — the official lockup for the reader's language, on the production origin.
+            'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
             'showPreferences' => $preferences,
             'footerNote' => $footerNote,
             'year' => date('Y'),
@@ -82,7 +84,7 @@ final class MailShell
      *
      * @return array<string,string>
      */
-    private static function footerStrings(bool $ar): array
+    public static function footerStrings(bool $ar): array
     {
         return $ar
             ? [
@@ -90,6 +92,8 @@ final class MailShell
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
+                'support' => 'الدعم',
+                'sender' => 'أُرسلت هذه الرسالة من CampaignsHub — منصة إدارة الحملات الإعلانية المدفوعة.',
                 'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في CampaignsHub.',
             ]
             : [
@@ -97,6 +101,8 @@ final class MailShell
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',
+                'support' => 'Support',
+                'sender' => 'Sent by CampaignsHub — the paid-campaign management platform.',
                 'why' => 'You are receiving this because you follow this project in CampaignsHub.',
             ];
     }

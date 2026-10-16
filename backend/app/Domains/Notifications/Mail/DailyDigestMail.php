@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Mail;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
+use App\Domains\Notifications\Support\MailShell;
 use App\Support\AdPlatforms;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
@@ -149,7 +150,10 @@ final class DailyDigestMail extends Mailable
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
-                't' => $this->copy($ar),
+                // EMAIL-BRAND-001 — the official lockup, same as every other message.
+                'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
+                // The shared footer words (support, sender) under the digest's own copy.
+                't' => array_merge(MailShell::footerStrings($ar), $this->copy($ar)),
                 'totals' => $this->accountCards($p, $ar),
                 /*
                   EMAIL-DASHBOARD-UX-001 — the two rows a reader acts on, before the project list.

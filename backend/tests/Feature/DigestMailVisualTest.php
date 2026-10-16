@@ -51,7 +51,7 @@ final class DigestMailVisualTest extends TestCase
             // KPI tiles: at least three account-wide tiles, each a cell with a label and a bold figure.
             $this->assertGreaterThanOrEqual(3, substr_count($html, 'class="ch-kpi"'), "$locale: fewer than three KPI tiles");
             // At least one chart drawn as table-cell bars (spend share by path, funnel) — the email-safe chart.
-            $this->assertGreaterThanOrEqual(1, substr_count($html, 'background-color:#eef2f1'), "$locale: no bar track");
+            $this->assertGreaterThanOrEqual(1, substr_count($html, 'background-color:#eeeae0'), "$locale: no bar track");
             // Tables, not prose: more table cells than paragraphs by a wide margin.
             $cells = substr_count($html, '<td');
             $paragraphs = substr_count($html, '<p');
@@ -72,7 +72,8 @@ final class DigestMailVisualTest extends TestCase
         foreach (['ar', 'en'] as $locale) {
             $html = $this->html($locale);
 
-            $this->assertStringNotContainsString('<img', $html, "$locale: an image an email client may block");
+            // EMAIL-BRAND-001 — the official lockup is the only image; every chart is still type and tables.
+            $this->assertSame(1, substr_count($html, '<img'), "$locale: an image other than the brand lockup");
             $this->assertStringNotContainsString('<svg', $html, "$locale: inline SVG, which Outlook drops");
             $this->assertStringNotContainsString('<script', $html);
             $this->assertStringNotContainsString('<canvas', $html);

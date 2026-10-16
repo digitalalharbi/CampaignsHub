@@ -186,10 +186,21 @@ final class DigestMailRenderTest extends TestCase
         $this->assertStringNotContainsString('rose by more than a quarter', $html);
     }
 
-    /** No external images: a blocked logo is a grey box, and a blocked chart is nothing at all. */
-    public function test_the_email_loads_no_external_images(): void
+    /**
+     * One image, and it is the brand — EMAIL-BRAND-001.
+     *
+     * A chart drawn as an image is nothing at all when images are blocked, so the data stays type and
+     * tables. The ONE exception is the official lockup in the header: a PNG on the exact dark ground
+     * with its name as alt text, so a blocked image shows the brand name on the right colour.
+     */
+    public function test_the_only_image_is_the_official_lockup(): void
     {
-        $this->assertStringNotContainsString('<img', $this->html('en'));
+        $html = $this->html('en');
+
+        $this->assertSame(1, substr_count($html, '<img'));
+        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-en-dark\.png" width="220" alt="CampaignsHub"#', $html);
+        $this->assertStringNotContainsString('data:image', $html);
+        $this->assertStringNotContainsString('background-image', $html);
     }
 
     /** Every reader can reach their own preferences and the three policies from the footer. */

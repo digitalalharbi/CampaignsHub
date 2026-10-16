@@ -19,7 +19,7 @@
   to recognise yourself; anything finer is data that has to be protected in an unencrypted mailbox
   without helping the reader decide anything.
 --}}
-<div style="font-family:{!! $font !!}; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0b1a16;">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 16px;">{{ $greeting }}</div>
 
@@ -27,18 +27,18 @@
            style="background-color:{{ $toneBg }}; border-radius:12px; margin-bottom:18px;">
         <tr>
             <td style="padding:16px 18px; border-{{ $startSide }}:4px solid {{ $toneInk }}; border-radius:12px;">
-                <div style="font-size:18px; font-weight:800; color:#0f172a; line-height:1.3;">{{ $title }}</div>
-                <div style="font-size:14px; color:#334155; line-height:1.8; padding-top:8px;">{{ $detail }}</div>
+                <div style="font-size:18px; font-weight:800; color:#0b1a16; line-height:1.3;">{{ $title }}</div>
+                <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $detail }}</div>
             </td>
         </tr>
     </table>
 
     @if ($facts !== [])
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="border:1px solid #e2e8e6; border-radius:12px; margin-bottom:20px;">
+               style="border:1px solid #e4e0d6; border-radius:12px; margin-bottom:20px;">
             @foreach ($facts as $fact)
                 <tr>
-                    <td style="padding:11px 16px; {{ ! $loop->last ? 'border-bottom:1px solid #eef2f1;' : '' }}">
+                    <td style="padding:11px 16px; {{ ! $loop->last ? 'border-bottom:1px solid #eeeae0;' : '' }}">
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                             <tr>
                                 <td style="font-size:13px; color:#5b6b68; line-height:1.8;">{{ $fact['label'] }}</td>
@@ -57,7 +57,7 @@
                                 --}}
                                 <td align="{{ $endSide }}"
                                     dir="{{ $fact['numeric'] ? 'ltr' : 'auto' }}"
-                                    style="font-family:{!! $fact['numeric'] ? $numericFont : $font !!}; font-size:13px; color:#0f172a; line-height:1.8;">{{ $fact['value'] }}</td>
+                                    style="font-family:{!! $fact['numeric'] ? $numericFont : $font !!}; font-size:13px; color:#0b1a16; line-height:1.8;">{{ $fact['value'] }}</td>
                             </tr>
                         </table>
                     </td>
@@ -75,7 +75,7 @@
     --}}
     <div>
         <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0f766e; color:#ffffff; font-size:14px; font-weight:700;
+           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
                   text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
     </div>
 

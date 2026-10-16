@@ -92,6 +92,6 @@ final class DigestPathBarTest extends TestCase
 
         $this->assertNotNull($html, 'the gallery has no digest-daily message to render');
         // The email-safe technique: a percentage-width cell inside a nested presentation table.
-        $this->assertMatchesRegularExpression('/width="\d+%" style="background-color:#0f766e/', $html);
+        $this->assertMatchesRegularExpression('/width="\d+%" style="background-color:#0d8a6f/', $html);
     }
 }

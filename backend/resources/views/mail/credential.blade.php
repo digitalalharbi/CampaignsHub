@@ -25,10 +25,10 @@
   The code never appears in a URL. It is text in the body, so it cannot end up in a referrer header,
   a proxy log, or a browser history entry.
 --}}
-<div style="font-family:{!! $font !!}; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0b1a16;">
 
-    <div style="font-size:18px; font-weight:800; color:#0f172a; line-height:1.3;">{{ $title }}</div>
-    <div style="font-size:14px; color:#334155; line-height:1.8; padding-top:8px;">{{ $intro }}</div>
+    <div style="font-size:18px; font-weight:800; color:#0b1a16; line-height:1.3;">{{ $title }}</div>
+    <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $intro }}</div>
 
     @if ($code !== null)
         {{--
@@ -40,10 +40,10 @@
           does not lose their place.
         --}}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="background-color:#f8fafa; border:1px solid #e2e8e6; border-radius:12px; margin:18px 0;">
+               style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:18px 0;">
             <tr>
                 <td align="center" style="padding:20px 16px;">
-                    <div dir="ltr" style="font-family:{!! $numericFont !!}; font-size:24px; font-weight:800; color:#0f172a; letter-spacing:6px; line-height:1.3;">{{ $code }}</div>
+                    <div dir="ltr" style="font-family:{!! $numericFont !!}; font-size:24px; font-weight:800; color:#0b1a16; letter-spacing:6px; line-height:1.3;">{{ $code }}</div>
                     <div style="font-size:12px; color:#5b6b68; padding-top:10px; line-height:1.7;">{{ $validity }}</div>
                 </td>
             </tr>
@@ -54,14 +54,14 @@
                style="background-color:#fffbeb; border-radius:12px; margin-bottom:18px;">
             <tr>
                 <td style="padding:14px 16px; border-{{ $startSide }}:4px solid #b45309; border-radius:12px;">
-                    <div style="font-size:13px; color:#334155; line-height:1.8;">{{ $t['never_share'] }}</div>
+                    <div style="font-size:13px; color:#3d4742; line-height:1.8;">{{ $t['never_share'] }}</div>
                 </td>
             </tr>
         </table>
     @else
         <div style="margin:20px 0;">
             <a href="{{ $actionUrl }}"
-               style="display:inline-block; background-color:#0f766e; color:#ffffff; font-size:14px; font-weight:700;
+               style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
                       text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
         </div>
 
@@ -89,10 +89,10 @@
       to say what to DO rather than «contact support».
     --}}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="border-top:1px solid #eef2f1; margin-top:22px;">
+           style="border-top:1px solid #eeeae0; margin-top:22px;">
         <tr>
             <td style="padding-top:14px;">
-                <div style="font-size:13px; font-weight:700; color:#0f172a; line-height:1.3;">{{ $t['not_you_title'] }}</div>
+                <div style="font-size:13px; font-weight:700; color:#0b1a16; line-height:1.3;">{{ $t['not_you_title'] }}</div>
                 <div style="font-size:13px; color:#5b6b68; line-height:1.8; padding-top:6px;">{{ $notYou }}</div>
             </td>
         </tr>

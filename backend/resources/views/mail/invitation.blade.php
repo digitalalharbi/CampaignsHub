@@ -19,20 +19,20 @@
   No figures, no campaign data, no client names. The reader has no access yet, and an invitation that
   previews the workspace's numbers has disclosed them to an address that may have been mistyped.
 --}}
-<div style="font-family:{!! $font !!}; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0b1a16;">
 
-    <div style="font-size:18px; font-weight:800; color:#0f172a; line-height:1.3;">{{ $title }}</div>
-    <div style="font-size:14px; color:#334155; line-height:1.8; padding-top:8px;">{{ $intro }}</div>
+    <div style="font-size:18px; font-weight:800; color:#0b1a16; line-height:1.3;">{{ $title }}</div>
+    <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $intro }}</div>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="background-color:#f8fafa; border:1px solid #e2e8e6; border-radius:12px; margin:18px 0;">
+           style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:18px 0;">
         <tr>
             <td style="padding:16px;">
                 <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $t['workspace'] }}</div>
-                <div style="font-size:16px; font-weight:800; color:#0f172a; line-height:1.3; padding-top:4px;">{{ $workspace }}</div>
+                <div style="font-size:16px; font-weight:800; color:#0b1a16; line-height:1.3; padding-top:4px;">{{ $workspace }}</div>
 
                 <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; padding-top:14px;">{{ $t['role'] }}</div>
-                <div style="font-size:16px; font-weight:800; color:#0f172a; line-height:1.3; padding-top:4px;">{{ $roleName }}</div>
+                <div style="font-size:16px; font-weight:800; color:#0b1a16; line-height:1.3; padding-top:4px;">{{ $roleName }}</div>
                 {{--
                   What the role actually means, when the product can say.
 
@@ -49,7 +49,7 @@
 
     <div>
         <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0f766e; color:#ffffff; font-size:14px; font-weight:700;
+           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
                   text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
     </div>
 
@@ -62,7 +62,7 @@
     </div>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="border-top:1px solid #eef2f1; margin-top:22px;">
+           style="border-top:1px solid #eeeae0; margin-top:22px;">
         <tr>
             <td style="padding-top:14px;">
                 <div style="font-size:13px; color:#5b6b68; line-height:1.8;">{{ $t['not_expecting'] }}</div>
