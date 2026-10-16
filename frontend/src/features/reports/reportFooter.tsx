@@ -50,7 +50,9 @@ function formatStamp(iso: string, locale: 'ar' | 'en'): string {
 
   if (Number.isNaN(d.getTime())) return iso
 
-  return d.toLocaleString(locale === 'ar' ? 'ar-SA-u-nu-latn' : 'en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  const ar = locale === 'ar'
+
+  return d.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
 export function ReportFooter({ facts, locale, className = '' }: { facts: ReportFooterFacts; locale: 'ar' | 'en'; className?: string }) {
