@@ -3,12 +3,12 @@ import { withStreamsSlide } from './reportSections'
 import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
-import { ATTENTION_SLIDE, SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
+import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
 import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
-import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { REPORT_NOTE, reportFooterItems } from './reportFooter'
 import { brand } from '@/lib/brand'
 
 const ATTENTION_PER_PAGE = 2
@@ -88,7 +88,7 @@ export function PrintReport() {
       visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
     }
     withStreamsSlide(visible, d)
-    if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
+    // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.
     return visible
   }, [payload])
 
@@ -231,12 +231,6 @@ export function PrintReport() {
               an audience that is client-facing gets provenance in the PDF's metadata, where an
               auditor can still find it, and never as visible engineering text.
             */}
-            {s.type === '__methodology' && !isClientAudience(payload.audience) && (
-              <div className="report-provenance" dir="ltr">
-                <bdi>Report {payload.report_id}</bdi> · <bdi>checksum {(payload.checksum ?? '').slice(0, 16)}</bdi> · <bdi>data_version {payload.data_version ?? '—'}</bdi>
-                {' · '}<bdi>{d.data_source ?? 'daily_metrics'}</bdi> · <bdi>{d.attribution_window ?? 'default'}</bdi> · <bdi>{payload.currency}</bdi> · <bdi>{d.timezone ?? 'Asia/Riyadh'}</bdi> · <bdi>{mode}</bdi>
-              </div>
-            )}
           </div>
           {/*
             BRAND-ATTRIBUTION-001 — the credit, ONCE, on the cover.
@@ -262,8 +256,12 @@ export function PrintReport() {
           {/* Professional per-page footer — never on the cover; one per page, inside the safe area. */}
           {s.type !== 'cover' && (
             <footer className="report-slide-footer">
-              <div className="report-footer-note">
-                {d.disclaimer && <PerformanceNotice data={d.disclaimer} variant="footer" />}
+              {/* REPORT-FOOTER-001 — the one note, small and muted, and the facts under it. */}
+              <div className="report-footer-note" data-testid="print-footer-note">
+                <p>{REPORT_NOTE.ar}</p>
+                <p data-testid="print-footer-meta">
+                  {reportFooterItems({ updatedAt: d.generated_at ?? null, period: d.period ?? null, currency: payload.currency, timezone: d.timezone ?? 'Asia/Riyadh', objective: typeof d.objective === 'string' ? d.objective : null }, 'ar').map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                </p>
               </div>
               <div className="report-footer-meta">
                 {/* The footer names whoever the report belongs to, for the same reason the title does. */}
@@ -321,7 +319,7 @@ function measureLayout() {
     const isCover = !!el.querySelector('.report-cover')
     // Methodology is a legitimate text page; like the cover it is exempt from the "sparse" heuristic.
     // So is an attention page holding a single block: its content is complete, not missing.
-    const isTextPage = ['__methodology', '__attention'].includes(el.getAttribute('data-slide-type') ?? '')
+    const isTextPage = ['__attention'].includes(el.getAttribute('data-slide-type') ?? '')
     const pr = el.getBoundingClientRect()
     const cs = getComputedStyle(el)
     const padT = parseFloat(cs.paddingTop) || 0
