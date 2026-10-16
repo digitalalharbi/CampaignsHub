@@ -22,6 +22,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -332,7 +333,7 @@ final class ReportScopeEndpointTest extends TestCase
         $this->assertSame('executive_summary', $report->form);
         $this->assertSame('summary', $report->config['detail_level']);
         $sections = $report->section_settings['sections'];
-        foreach (['objective_breakdown', 'detailed_tables', 'funnel', 'advanced_segmentation'] as $off) {
+        foreach (['objective_breakdown', 'detailed_tables', 'funnel', 'advanced_segmentation', 'account_breakdown'] as $off) {
             $this->assertFalse($sections[$off], "{$off} stayed on in a summary");
         }
         $this->assertTrue($sections['kpis']);
@@ -355,7 +356,7 @@ final class ReportScopeEndpointTest extends TestCase
     {
         $sections = $this->createWith(['detail_level' => 'detailed'])->section_settings['sections'];
 
-        foreach (['objective_breakdown', 'detailed_tables', 'funnel', 'budget_pacing', 'advanced_segmentation'] as $on) {
+        foreach (['objective_breakdown', 'detailed_tables', 'funnel', 'budget_pacing', 'advanced_segmentation', 'account_breakdown'] as $on) {
             $this->assertTrue($sections[$on], "{$on} was left out of a detailed report");
         }
     }
@@ -390,7 +391,7 @@ final class ReportScopeEndpointTest extends TestCase
         $this->assertSame('summary', $report->config['detail_level']);
         $this->assertSame('executive_summary', $share->form);
         $this->assertEqualsCanonicalizing(
-            ['objective_breakdown', 'detailed_tables', 'funnel', 'budget_pacing', 'advanced_segmentation'],
+            ['objective_breakdown', 'detailed_tables', 'funnel', 'budget_pacing', 'advanced_segmentation', 'account_breakdown'],
             (array) ($share->settings['section_overrides'] ?? []),
         );
     }
@@ -433,6 +434,26 @@ final class ReportScopeEndpointTest extends TestCase
         $this->assertSame('2026-07-01', $report->period_start->toDateString());
         $this->assertSame('2026-07-31', $report->period_end->toDateString());
         $this->assertSame('monthly', $report->config['period_kind']);
+    }
+
+    /**
+     * REPORT-ACCOUNT-BREAKDOWN-001 — the saved report's DEPTH follows the level through the same sections.
+     *
+     * A detailed snapshot carries the provider → ad-account split and its deck has the page; a standard
+     * snapshot computes neither. One saved configuration (`section_settings`) decides both.
+     */
+    public function test_a_saved_detailed_report_carries_the_account_split_and_a_standard_one_does_not(): void
+    {
+        $detailed = $this->report();
+        $detailed->forceFill(['section_settings' => ['sections' => DetailLevel::Detailed->sections()]])->save();
+        $standard = $this->report();
+        $standard->forceFill(['section_settings' => ['sections' => DetailLevel::Standard->sections()]])->save();
+
+        $deep = $this->generate($detailed);
+        $balanced = $this->generate($standard);
+
+        $this->assertNotEmpty($deep['accounts'] ?? [], 'the detailed snapshot must carry the ad-account split');
+        $this->assertEmpty($balanced['accounts'] ?? [], 'a standard snapshot must not compute it');
     }
 
     public function test_an_unknown_level_is_refused(): void

@@ -22,6 +22,7 @@ export type ReportSectionKey =
   | 'detailed_tables'
   | 'objective_breakdown'
   | 'advanced_segmentation'
+  | 'account_breakdown'
 
 export interface WithReportSections {
   report_sections?: ReportSectionKey[] | string[]
