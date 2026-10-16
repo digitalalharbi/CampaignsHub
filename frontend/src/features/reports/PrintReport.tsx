@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { withStreamsSlide } from './reportSections'
-import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
-import { ATTENTION_SLIDE, SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
+import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
 import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
-import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { REPORT_NOTE, reportFooterItems } from './reportFooter'
 import { brand } from '@/lib/brand'
 
 const ATTENTION_PER_PAGE = 2
@@ -88,7 +87,7 @@ export function PrintReport() {
       visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
     }
     withStreamsSlide(visible, d)
-    if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
+    // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.
     return visible
   }, [payload])
 
@@ -176,9 +175,6 @@ export function PrintReport() {
   const d = payload.data
   const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, ...coverMeta(headerIdentity(payload.branding, 'ar')) }
   const landscape = type === 'presentation'
-  const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
-  const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
-  const updated = d.generated_at ? fmtDate(String(d.generated_at)) : ''
   /*
    * The year this report belongs to, read from its own dates before the clock — the period it
    * covers first, then when it was generated. A deck is a record, and a record does not restamp
@@ -231,12 +227,6 @@ export function PrintReport() {
               an audience that is client-facing gets provenance in the PDF's metadata, where an
               auditor can still find it, and never as visible engineering text.
             */}
-            {s.type === '__methodology' && !isClientAudience(payload.audience) && (
-              <div className="report-provenance" dir="ltr">
-                <bdi>Report {payload.report_id}</bdi> · <bdi>checksum {(payload.checksum ?? '').slice(0, 16)}</bdi> · <bdi>data_version {payload.data_version ?? '—'}</bdi>
-                {' · '}<bdi>{d.data_source ?? 'daily_metrics'}</bdi> · <bdi>{d.attribution_window ?? 'default'}</bdi> · <bdi>{payload.currency}</bdi> · <bdi>{d.timezone ?? 'Asia/Riyadh'}</bdi> · <bdi>{mode}</bdi>
-              </div>
-            )}
           </div>
           {/*
             BRAND-ATTRIBUTION-001 — the credit, ONCE, on the cover.
@@ -262,13 +252,16 @@ export function PrintReport() {
           {/* Professional per-page footer — never on the cover; one per page, inside the safe area. */}
           {s.type !== 'cover' && (
             <footer className="report-slide-footer">
-              <div className="report-footer-note">
-                {d.disclaimer && <PerformanceNotice data={d.disclaimer} variant="footer" />}
+              {/* REPORT-FOOTER-001 — the one note, small and muted; its facts share ONE row with the page number so the
+                  band is no taller than the single note it replaced (the layout gate measures the safe area above it). */}
+              <div className="report-footer-note" data-testid="print-footer-note">
+                <p>{REPORT_NOTE.ar}</p>
               </div>
               <div className="report-footer-meta">
-                {/* The footer names whoever the report belongs to, for the same reason the title does. */}
-                <span className="report-footer-brand">{headerIdentity(payload.branding, 'ar').name}{payload.is_demo ? ' · Demo' : ''}{period ? ` · ${period}` : ''}</span>
-                <span className="report-footer-page">{mode}{updated ? ` · آخر تحديث ${updated}` : ''} · <bdi dir="ltr">{i + 1} / {total}</bdi></span>
+                <span className="report-footer-brand" data-testid="print-footer-meta">
+                  {reportFooterItems({ updatedAt: d.generated_at ?? null, period: d.period ?? null, currency: payload.currency, timezone: d.timezone ?? 'Asia/Riyadh', objective: typeof d.objective === 'string' ? d.objective : null }, 'ar').map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                </span>
+                <span className="report-footer-page"><bdi dir="ltr">{i + 1} / {total}</bdi></span>
               </div>
             </footer>
           )}
@@ -321,7 +314,7 @@ function measureLayout() {
     const isCover = !!el.querySelector('.report-cover')
     // Methodology is a legitimate text page; like the cover it is exempt from the "sparse" heuristic.
     // So is an attention page holding a single block: its content is complete, not missing.
-    const isTextPage = ['__methodology', '__attention'].includes(el.getAttribute('data-slide-type') ?? '')
+    const isTextPage = ['__attention'].includes(el.getAttribute('data-slide-type') ?? '')
     const pr = el.getBoundingClientRect()
     const cs = getComputedStyle(el)
     const padT = parseFloat(cs.paddingTop) || 0
@@ -400,7 +393,7 @@ function measureLayout() {
     })
 
     pages.push({
-      page: i + 1, isCover, contentUtilization, chartCoverage, textDensity, largestEmptyRegion,
+      page: i + 1, slideType: el.getAttribute('data-slide-type') ?? '', areaH: Math.round(areaH), footerH: Math.round(fr?.height ?? 0), isCover, contentUtilization, chartCoverage, textDensity, largestEmptyRegion,
       footerCoverage, overflow, overflowX, empty, sparse, footerDetected: !!footer || isCover,
       fitScale, scaledBelowReadableLimit, clippedElements: clipped,
     })
@@ -458,10 +451,11 @@ function printCss(landscape: boolean): string {
     display: flex; flex-direction: column; gap: 3px;
     border-top: 1px solid var(--border); padding-top: 6px;
   }
-  .report-footer-note { font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+  .report-footer-note { font-size: 8.5px; line-height: 1.3; color: var(--text-muted); }
   .report-footer-note p { margin: 0; }
   .report-footer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .report-footer-brand, .report-footer-page { font-size: 9.5px; color: var(--text-muted); white-space: nowrap; }
+  .report-footer-brand { font-size: 8.5px; color: var(--text-muted); white-space: normal; line-height: 1.3; }
+  .report-footer-page { font-size: 8.5px; color: var(--text-muted); white-space: nowrap; }
   /*
     The cover's one line of attribution. Small, at the foot of the page, and a real anchor so the
     PDF carries a clickable link rather than a URL somebody has to retype.

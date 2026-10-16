@@ -82,7 +82,7 @@ try {
   // shrunk below the readable limit — so overflow:hidden / auto-scaling can never HIDE a real defect.
   const bad = layout.filter((p) => p.overflow || p.overflowX || p.empty || p.clippedElements > 0 || p.scaledBelowReadableLimit)
   if (bad.length && !cfg.ignoreLayout) {
-    fail('layout_validation_failed', bad.map((p) => `page ${p.page}: ${p.overflow ? 'overflow ' : ''}${p.overflowX ? 'overflowX ' : ''}${p.empty ? 'empty ' : ''}${p.clippedElements > 0 ? `clipped(${p.clippedElements}) ` : ''}${p.scaledBelowReadableLimit ? `unreadable(${p.fitScale})` : ''}`.trim()).join(' | '))
+    fail('layout_validation_failed', bad.map((p) => `page ${p.page} [${p.slideType ?? '?'} util ${p.contentUtilization} area ${p.areaH} footer ${p.footerH}]: ${p.overflow ? 'overflow ' : ''}${p.overflowX ? 'overflowX ' : ''}${p.empty ? 'empty ' : ''}${p.clippedElements > 0 ? `clipped(${p.clippedElements}) ` : ''}${p.scaledBelowReadableLimit ? `unreadable(${p.fitScale})` : ''}`.trim()).join(' | '))
   }
 
   await page.emulateMedia({ media: 'print' })
