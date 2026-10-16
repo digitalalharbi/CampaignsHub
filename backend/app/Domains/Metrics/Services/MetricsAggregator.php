@@ -2506,7 +2506,9 @@ final class MetricsAggregator
             'in_app_events' => round($inAppEvents, 2),
             'engagements' => round($engagements, 2),
             // derived KPIs (computed from the sums, never summed)
-            'roas' => $costOk && ! $revenueWithheld && $spend > 0 ? round($revenue / $spend, 3) : null,
+            // A return needs a revenue figure to divide: `revenue` arrives coalesced to 0 when nobody reported
+            // any, and 0 ÷ spend is a «0.0×» claimed about a campaign that was never measured for revenue.
+            'roas' => $costOk && ! $revenueWithheld && $spend > 0 && $revenue > 0 ? round($revenue / $spend, 3) : null,
             'cpa' => $costOk && $conv > 0 ? round($spend / $conv, 2) : null,
             'ctr' => $impr > 0 ? round($clicks / $impr, 5) : null,
             'cpc' => $costOk && $clicks > 0 ? round($spend / $clicks, 3) : null,

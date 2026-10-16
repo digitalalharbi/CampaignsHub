@@ -70,6 +70,25 @@ final class CreativeRankingService
             return [];
         }
 
+        /*
+         * CONTENT-RANKING-TRUTH-001 — «best» needs a figure that is both PRESENT and POSITIVE.
+         *
+         * Items that spent but produced nothing on the ranking basis used to stay in the list
+         * whenever fewer than the limit existed: a CPA/CPL/ROAS basis sorts a null last, it does not
+         * remove it, so a creative with 0 results sat under «الأفضل أداءً» beside a card whose
+         * primary result read 0. An absent figure cannot lead, and neither can a zero: a zero result
+         * count, a zero return and a zero rate are the absence of the thing the section ranks on.
+         * An empty section is honest; a «best» with nothing to show for it is a contradiction.
+         */
+        $items = array_values(array_filter(
+            $items,
+            static fn (array $i): bool => is_numeric($i[$sortKey] ?? null) && (float) $i[$sortKey] > 0,
+        ));
+
+        if ($items === []) {
+            return [];
+        }
+
         usort($items, function ($a, $b) use ($sortKey, $direction) {
             $va = $a[$sortKey] ?? null;
             $vb = $b[$sortKey] ?? null;
