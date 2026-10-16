@@ -53,11 +53,11 @@ export function levelSections(level: DetailLevelKey): Record<string, boolean> {
   const always = { kpis: true, trends: true, platform_comparison: true, content_performance: true, recommendations: true }
 
   if (level === 'summary') {
-    return { ...always, objective_breakdown: false, detailed_tables: false, funnel: false, budget_pacing: false, advanced_segmentation: false }
+    return { ...always, objective_breakdown: false, detailed_tables: false, funnel: false, budget_pacing: false, advanced_segmentation: false, account_breakdown: false }
   }
   if (level === 'standard') {
-    return { ...always, objective_breakdown: true, detailed_tables: true, funnel: false, budget_pacing: false, advanced_segmentation: false }
+    return { ...always, objective_breakdown: true, detailed_tables: true, funnel: false, budget_pacing: false, advanced_segmentation: false, account_breakdown: false }
   }
 
-  return { ...always, objective_breakdown: true, detailed_tables: true, funnel: true, budget_pacing: true, advanced_segmentation: true }
+  return { ...always, objective_breakdown: true, detailed_tables: true, funnel: true, budget_pacing: true, advanced_segmentation: true, account_breakdown: true }
 }

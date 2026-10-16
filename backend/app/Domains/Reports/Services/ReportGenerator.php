@@ -16,6 +16,7 @@ use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Sections\BusinessStreams;
+use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
@@ -251,6 +252,14 @@ final class ReportGenerator
             'timeseries' => $agg->timeseries($from, $to),
             'platform_series' => $agg->timeseriesByProvider($from, $to),
             'platforms' => $platforms,
+            /*
+             * REPORT-ACCOUNT-BREAKDOWN-001 — the provider → ad-account split, built only when this report's
+             * own settings carry the section (Detailed by preset, or switched on by the Owner). A summary
+             * or standard snapshot never computes it, and the section system removes it when it is off.
+             */
+            'accounts' => $report->sectionSettings()->enabled(app(ReportSectionRegistry::class)->get('account_breakdown'), (string) ($report->audience ?? 'client'))
+                ? $agg->byAccount($from, $to)
+                : [],
             'best' => $this->leaders($lens, $platforms, $campaigns, $currency ?? ''),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — empty, and computed all the same.
