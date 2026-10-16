@@ -160,7 +160,9 @@ final class ReportController extends Controller
              * currency here would have printed USD totals under whatever three letters were sent.
              */
             'currency' => ReportingCurrency::DEFAULT,
-            'config' => array_merge(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level), ['period_kind' => $periodKind]),
+            'config' => ($periodKind === 'custom')
+                ? self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level)
+                : array_merge((array) self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level), ['period_kind' => $periodKind]),
             // The level's starting sections, with whatever the Owner switched explicitly laid over them.
             'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
                 ? null
