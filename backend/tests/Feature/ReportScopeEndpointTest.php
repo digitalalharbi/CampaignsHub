@@ -423,6 +423,18 @@ final class ReportScopeEndpointTest extends TestCase
         $this->assertNotContains('advanced_segmentation', (array) ($share->settings['section_overrides'] ?? []));
     }
 
+    /**
+     * REPORT-PERIOD-001 — a saved report of a kind computes its own window from the anchor.
+     */
+    public function test_a_saved_monthly_report_covers_the_calendar_month_of_its_anchor(): void
+    {
+        $report = $this->createWith(['period_kind' => 'monthly', 'period_start' => '2026-07-05', 'period_end' => '2026-07-20']);
+
+        $this->assertSame('2026-07-01', $report->period_start->toDateString());
+        $this->assertSame('2026-07-31', $report->period_end->toDateString());
+        $this->assertSame('monthly', $report->config['period_kind']);
+    }
+
     public function test_an_unknown_level_is_refused(): void
     {
         Queue::fake();
