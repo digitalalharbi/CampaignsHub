@@ -99,6 +99,24 @@ final class LiveReportService
     }
 
     /**
+     * REPORT-ARCHITECTURE-001 — the DETAIL LEVEL of this link: summary, standard or detailed.
+     *
+     * The form is two-valued (executive_summary | detailed) because every older renderer reads it; the
+     * level is the third rung the Owner chose in setup, stored on the report. A link made before the
+     * level existed has none, and a non-summary link without one is the detailed product it always was.
+     */
+    private function levelFor(ReportShare $share): string
+    {
+        if ($this->formFor($share) === 'executive_summary') {
+            return 'summary';
+        }
+
+        $stored = ((array) ($share->report->config ?? []))['detail_level'] ?? null;
+
+        return in_array($stored, ['standard', 'detailed'], true) ? $stored : 'detailed';
+    }
+
+    /**
      * One piece of content, opened from a client link — the platform → content drilldown.
      *
      * Resolved by the share-bound `ContentKey`, inside the SAME content bound the payload's lists use
@@ -738,7 +756,28 @@ final class LiveReportService
             content: array_values((array) ($payload['ads_roster'] ?? [])),
         ));
 
+        /*
+         * REPORT-ARCHITECTURE-001 — what only the DETAILED product carries: the ad-account breakdown.
+         *
+         * It belongs to the `detailed_tables` section, so the Owner's switch for that section removes
+         * it from the payload like its neighbours; the level decides whether it is built at all, so a
+         * standard or summary link never even computes it.
+         */
+        $level = $this->levelFor($share);
+        $payload['detail_level'] = $level;
+        $payload['accounts'] = $level === 'detailed' ? $engine->byAccount($from, $to) : [];
+
         $payload = $this->applySectionFlags($payload, $share);
+
+        /*
+         * A STANDARD report is the balanced client product, not the detailed one with a few blocks
+         * hidden: the per-platform creative groups and the unbounded roster are analytical depth, and
+         * what a product does not carry must not travel in its payload.
+         */
+        if ($level === 'standard') {
+            $payload['ads_platform_groups'] = [];
+            $payload['ads_roster'] = array_slice((array) ($payload['ads_roster'] ?? []), 0, 12);
+        }
 
         /*
          * REPORT-PRODUCT-MODEL-001 / Owner defect row 96 — the FORM composes the document.

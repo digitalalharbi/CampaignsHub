@@ -406,6 +406,16 @@ final class LiveReportBuilderController extends Controller
              * beside it would be a second answer nobody asked for.
              */
             'config' => ['live' => true, 'metrics' => $metrics] + ($level === null ? [] : ['detail_level' => $level->value]),
+            /*
+             * REPORT-ARCHITECTURE-001 — the level's sections are the report's OWN section settings.
+             *
+             * The link's `section_overrides` can only switch sections OFF, so a section that is off for a
+             * client by default (the detailed tables, advanced segmentation) could never be switched ON
+             * for a live link: the Detailed product's own depth never appeared on it. The report carries
+             * the level's full ON/OFF map, exactly as a saved report does (`ReportController`), and the
+             * link narrows it from there.
+             */
+            'section_settings' => $level === null ? null : ['sections' => $level->sections()],
         ]);
 
         [$share, $raw] = $this->shares->create($report, [
