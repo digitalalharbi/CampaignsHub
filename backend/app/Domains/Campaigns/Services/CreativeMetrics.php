@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Enums\ResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Support\FinancialRatios;
 use App\Domains\Projects\Context\ProjectContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -1065,9 +1066,9 @@ final class CreativeMetrics
         // Every one is null when its denominator is missing or zero — a ratio over nothing is «there
         // is nothing to divide», and 0 reads as «it costs nothing».
         $figures['ctr'] = $this->ratio($clicks, $impressions);
-        $figures['cpc'] = $this->ratio($spend, $clicks);
-        $figures['cpm'] = $impressions ? $this->ratio($spend, $impressions / 1000) : null;
-        $figures['cpa'] = $this->ratio($spend, $conversions);
+        $figures['cpc'] = FinancialRatios::costPer($spend, $clicks, 4);
+        $figures['cpm'] = FinancialRatios::costPer($spend, $impressions, 4, 1000.0);
+        $figures['cpa'] = FinancialRatios::costPer($spend, $conversions, 4);
         /*
          * The cost of the result the campaign was bought for — CONTENT-KPI-COVERAGE-002.
          *
@@ -1077,12 +1078,12 @@ final class CreativeMetrics
          * null when the denominator is missing or zero, so a creative whose platform reported no
          * leads gets «not reported» rather than a cost per nothing.
          */
-        $figures['cpl'] = $this->ratio($spend, $num('leads'));
-        $figures['cpi'] = $this->ratio($spend, $num('installs'));
-        $figures['roas'] = $this->ratio($revenue, $spend);
+        $figures['cpl'] = FinancialRatios::costPer($spend, $num('leads'), 4);
+        $figures['cpi'] = FinancialRatios::costPer($spend, $num('installs'), 4);
+        $figures['roas'] = FinancialRatios::roas($spend, $revenue, 4);
         $figures['conversion_rate'] = $this->ratio($conversions, $clicks);
         $figures['aov'] = $this->ratio($revenue, $conversions);
-        $figures['cost_per_view'] = $this->ratio($spend, $videoViews);
+        $figures['cost_per_view'] = FinancialRatios::costPer($spend, $videoViews, 4);
         $figures['view_rate'] = $this->ratio($videoViews, $impressions);
         $figures['completion_rate'] = $this->ratio($num('video_p100') ?? $num('video_completions'), $videoViews);
         $figures['hook_rate'] = $this->ratio($num('video_views_3s'), $impressions);
@@ -1101,7 +1102,7 @@ final class CreativeMetrics
          * system pointing at the old one.
          */
         $figures['orders'] = $conversions;
-        $figures['cost_per_lpv'] = $this->ratio($spend, $num('landing_page_views'));
+        $figures['cost_per_lpv'] = FinancialRatios::costPer($spend, $num('landing_page_views'), 4);
 
         /*
          * Owner defect 95 — the two figures the Engagement family is JUDGED by, and never computed.

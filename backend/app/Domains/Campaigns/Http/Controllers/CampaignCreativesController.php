@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Support\FinancialRatios;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -97,10 +98,10 @@ final class CampaignCreativesController extends Controller
                 'is_demo' => $c->is_demo,
                 'metrics' => [
                     'spend' => $spend, 'impressions' => $impr, 'clicks' => $clicks, 'conversions' => $conv, 'revenue' => $rev,
-                    'roas' => ! $spendWithheld && ! $revenueWithheld && $spend > 0 ? round($rev / $spend, 2) : null,
-                    'cpa' => ! $spendWithheld && $conv > 0 ? round($spend / $conv, 2) : null,
+                    'roas' => FinancialRatios::roas(! $spendWithheld && ! $revenueWithheld ? (float) $spend : null, (float) $rev, 2),
+                    'cpa' => FinancialRatios::costPer(! $spendWithheld ? (float) $spend : null, (float) $conv, 2),
                     'ctr' => $impr > 0 ? round($clicks / $impr, 4) : null,
-                    'cpm' => ! $spendWithheld && $impr > 0 ? round($spend / $impr * 1000, 2) : null,
+                    'cpm' => FinancialRatios::costPer(! $spendWithheld ? (float) $spend : null, (float) $impr, 2, 1000.0),
                     'view_rate' => $impr > 0 ? round($views / $impr, 4) : null,
                     'completion_rate' => $views > 0 ? round($completes / $views, 4) : null,
                 ],

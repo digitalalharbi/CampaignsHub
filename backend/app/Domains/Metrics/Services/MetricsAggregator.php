@@ -17,6 +17,7 @@ use App\Domains\Metrics\Coverage\AggregateCoverage;
 use App\Domains\Metrics\Coverage\ContributorCoverage;
 use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Support\FinancialRatios;
 use App\Domains\Metrics\ValueObjects\MoneyScope;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
@@ -2508,16 +2509,17 @@ final class MetricsAggregator
             // derived KPIs (computed from the sums, never summed)
             // A return needs a revenue figure to divide: `revenue` arrives coalesced to 0 when nobody reported
             // any, and 0 ÷ spend is a «0.0×» claimed about a campaign that was never measured for revenue.
-            'roas' => $costOk && ! $revenueWithheld && $spend > 0 && $revenue > 0 ? round($revenue / $spend, 3) : null,
-            'cpa' => $costOk && $conv > 0 ? round($spend / $conv, 2) : null,
+            // `revenue` arrives coalesced to 0 when nobody reported any, so a zero here is not a measurement.
+            'roas' => FinancialRatios::roas($costOk && ! $revenueWithheld ? $spend : null, $revenue > 0 ? $revenue : null, 3),
+            'cpa' => FinancialRatios::costPer($costOk ? $spend : null, $conv, 2),
             'ctr' => $impr > 0 ? round($clicks / $impr, 5) : null,
-            'cpc' => $costOk && $clicks > 0 ? round($spend / $clicks, 3) : null,
-            'cpm' => $costOk && $impr > 0 ? round($spend / $impr * 1000, 2) : null,
+            'cpc' => FinancialRatios::costPer($costOk ? $spend : null, $clicks, 3),
+            'cpm' => FinancialRatios::costPer($costOk ? $spend : null, $impr, 2, 1000.0),
             // Only over the provider's own deduplicated reach — never over a sum of reaches.
             'frequency' => $reachDeduplicated && $reach > 0 ? round($impr / $reach, 2) : null,
-            'cpl' => $costOk && $leads > 0 ? round($spend / $leads, 2) : null,
-            'cpi' => $costOk && $installs > 0 ? round($spend / $installs, 2) : null,
-            'cpe' => $costOk && $engagements > 0 ? round($spend / $engagements, 3) : null,
+            'cpl' => FinancialRatios::costPer($costOk ? $spend : null, $leads, 2),
+            'cpi' => FinancialRatios::costPer($costOk ? $spend : null, $installs, 2),
+            'cpe' => FinancialRatios::costPer($costOk ? $spend : null, $engagements, 3),
             'aov' => ! $revenueWithheld && $purchases > 0 ? round($revenue / $purchases, 2) : null,
             'conversion_rate' => $clicks > 0 ? round($conv / $clicks, 5) : null,
             'engagement_rate' => $impr > 0 ? round($engagements / $impr, 5) : null,
