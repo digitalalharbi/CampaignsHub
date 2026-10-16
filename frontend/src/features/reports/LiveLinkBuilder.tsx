@@ -1,4 +1,4 @@
-import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey } from './reportSetupCatalog'
+import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey, levelSections } from './reportSetupCatalog'
 import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
@@ -172,7 +172,13 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     than as a switch, because a link can narrow a report and never widen one.
   */
   const registry = useQuery({ queryKey: ['report-section-registry', projectId], queryFn: () => reportSectionRegistry(projectId), retry: false })
-  const [linkOff, setLinkOff] = useState<string[]>([])
+  /*
+   * REPORT-OWNER-CONTROL-001 — the Owner's ON/OFF choice per section, laid over the level's preset.
+   * Reset when the level changes: a preset chosen after a switch is a new starting point.
+   */
+  const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>({})
+  const sectionOn = (key: string, defaultClient: boolean): boolean =>
+    sectionChoice[key] ?? levelSections(level)[key] ?? defaultClient
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -191,7 +197,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         hide_spend: hideSpend,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
-        section_overrides: linkOff,
+        sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
       }),
@@ -572,7 +578,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   key={o.key}
                   type="button"
                   data-testid={`live-link-level-${o.key}`}
-                  onClick={() => setLevel(o.key)}
+                  onClick={() => { setLevel(o.key); setSectionChoice({}) }}
                   title={ar ? o.noteAr : o.noteEn}
                   className={chip(level === o.key)}
                 >
@@ -599,14 +605,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               {(registry.data?.sections ?? []).map((choice) => {
                 /* A summary does not contain this section, so the toggle cannot honour it. */
                 const withheld = form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(choice.key)
-                const byReport = !choice.default_client
-
                 return (
                   <label
                     key={choice.key}
                     data-testid={`live-link-section-row-${choice.key}`}
-                    data-withheld={withheld ? 'by-form' : byReport ? 'by-report' : undefined}
-                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${withheld || byReport ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-hover'}`}
+                    data-withheld={withheld ? 'by-form' : undefined}
+                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${withheld ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-hover'}`}
                   >
                     <span>
                       {ar ? choice.title_ar : choice.title_en}
@@ -616,18 +620,14 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                         </span>
                       )}
                     </span>
-                    {byReport ? (
-                      <span className="text-[11px] text-text-muted">{ar ? 'مخفي في التقرير' : 'Hidden by the report'}</span>
-                    ) : (
-                      <input
-                        type="checkbox"
-                        data-testid={`live-link-section-${choice.key}`}
-                        disabled={withheld}
-                        checked={withheld ? false : !linkOff.includes(choice.key)}
-                        onChange={(e) => setLinkOff((prev) => (e.target.checked ? prev.filter((k) => k !== choice.key) : [...prev, choice.key]))}
-                        className="h-4 w-4 accent-brand-600"
-                      />
-                    )}
+                    <input
+                      type="checkbox"
+                      data-testid={`live-link-section-${choice.key}`}
+                      disabled={withheld}
+                      checked={withheld ? false : sectionOn(choice.key, choice.default_client)}
+                      onChange={(e) => setSectionChoice((prev) => ({ ...prev, [choice.key]: e.target.checked }))}
+                      className="h-4 w-4 accent-brand-600"
+                    />
                   </label>
                 )
               })}

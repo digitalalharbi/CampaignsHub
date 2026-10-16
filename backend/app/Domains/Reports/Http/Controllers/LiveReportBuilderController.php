@@ -329,6 +329,9 @@ final class LiveReportBuilderController extends Controller
              * The sections this link hides — the report-section registry's own vocabulary, off-only.
              * The builder used to send display flags this endpoint never read, so they changed nothing.
              */
+            // REPORT-OWNER-CONTROL-001 — the Owner's full ON/OFF choice per section, applied over the level's preset.
+            'sections' => ['sometimes', 'array'],
+            'sections.*' => ['boolean'],
             'section_overrides' => ['sometimes', 'array'],
             'section_overrides.*' => [Rule::in(app(ReportSectionRegistry::class)->keys())],
         ]);
@@ -343,10 +346,27 @@ final class LiveReportBuilderController extends Controller
         // REPORT-DETAIL-LEVEL-001 — the level decides the form and which sections start OFF; the Owner's
         // own switches (`section_overrides`) are added on top, and can only narrow a link further.
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+        /*
+         * REPORT-OWNER-CONTROL-001 — the Owner's choice per section is ON as well as OFF.
+         *
+         * The level is a preset; the Owner's `sections` map is laid over it, and what results is the
+         * report's own section settings. A link's `section_overrides` stay off-only (a link narrows a
+         * report), so they are derived FROM the result — a section the Owner switched ON that the
+         * level leaves off now actually appears, instead of sitting behind a disabled switch.
+         */
+        $registry = app(ReportSectionRegistry::class);
+        $chosen = array_filter(
+            (array) ($data['sections'] ?? []),
+            static fn ($on, $key): bool => is_bool($on) && $registry->has((string) $key),
+            ARRAY_FILTER_USE_BOTH,
+        );
+        $effective = $level === null && $chosen === [] ? null : array_merge($level?->sections() ?? [], $chosen);
         if ($level !== null) {
             $data['form'] = $level->form();
+        }
+        if ($effective !== null) {
             $data['section_overrides'] = array_values(array_unique(array_merge(
-                $level->offSections(),
+                array_keys(array_filter($effective, static fn (bool $on): bool => $on === false)),
                 (array) ($data['section_overrides'] ?? []),
             )));
         }
@@ -415,7 +435,7 @@ final class LiveReportBuilderController extends Controller
              * the level's full ON/OFF map, exactly as a saved report does (`ReportController`), and the
              * link narrows it from there.
              */
-            'section_settings' => $level === null ? null : ['sections' => $level->sections()],
+            'section_settings' => $effective === null ? null : ['sections' => $effective],
         ]);
 
         [$share, $raw] = $this->shares->create($report, [
