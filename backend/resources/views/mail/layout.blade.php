@@ -53,22 +53,31 @@
         }
     </style>
 </head>
-<body style="margin:0; padding:0; background-color:#f1f5f4; -webkit-text-size-adjust:100%;">
+<body style="margin:0; padding:0; background-color:#f7f5f0; -webkit-text-size-adjust:100%;">
     {{-- The preview line email clients show beside the subject. Hidden in the body itself. --}}
     <div style="display:none; max-height:0; overflow:hidden; opacity:0;">{{ $preheader ?? '' }}</div>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f4;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7f5f0;">
         <tr>
             <td align="center" style="padding:24px 12px;">
-                <table role="presentation" class="ch-wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e2e8e6;">
+                <table role="presentation" class="ch-wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
 
-                    {{-- Header: the brand as type and colour, because an image would be blocked. --}}
+                    {{--
+                      Header: the official lockup on the dark ground — EMAIL-BRAND-001.
+
+                      An image CAN be blocked, so the lockup is a real <img> with its alt text set to the
+                      name AND the cell carries the dark ground and a type line beneath it: a client that
+                      blocks images shows the brand name on the right colour rather than a grey box. The
+                      file is a plain PNG on the exact ground (#0b1a16) at twice its display width, hosted
+                      on the production origin — never a data: URI (Gmail strips them) and never an SVG
+                      (Outlook does not draw them).
+                    --}}
                     <tr>
-                        <td class="ch-pad" style="background-color:#0f766e; padding:20px 24px;">
-                            <div style="font-family:{!! $font !!}; font-size:18px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">
-                                {{ $brand }}
-                            </div>
-                            <div style="font-family:{!! $font !!}; font-size:13px; color:#c6f0e9; padding-top:2px;">
+                        <td class="ch-pad" style="background-color:#0b1a16; padding:18px 24px 14px 24px; border-bottom:3px solid #0d8a6f;">
+                            <a href="{{ $urls['home'] }}" style="text-decoration:none;">
+                                <img src="{{ $logoUrl }}" width="220" alt="{{ $brand }}" style="display:block; border:0; outline:none; text-decoration:none; width:220px; max-width:100%; height:auto; color:#f7f5f0; font-family:{!! $font !!}; font-size:18px; font-weight:800;" />
+                            </a>
+                            <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:8px;">
                                 {{ $headerNote }}
                             </div>
                             {{--
@@ -80,7 +89,7 @@
                                 every digest is a caveat nobody reads.
                             --}}
                             @if (!empty($scopeNote ?? ''))
-                                <div style="font-family:{!! $font !!}; font-size:12px; color:#c6f0e9; padding-top:4px;">
+                                <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:4px;">
                                     {{ $scopeNote }}
                                 </div>
                             @endif
@@ -107,10 +116,10 @@
                       plainly why the message cannot be switched off instead.
                     --}}
                     <tr>
-                        <td class="ch-pad" style="padding:16px 24px; background-color:#f8fafa; border-top:1px solid #e2e8e6;">
+                        <td class="ch-pad" style="padding:16px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6;">
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; line-height:1.7;">
                                 @if (($showPreferences ?? true) === true)
-                                    <a href="{{ $urls['preferences'] }}" style="color:#0f766e; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
+                                    <a href="{{ $urls['preferences'] }}" style="color:#0d8a6f; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
                                     &nbsp;·&nbsp;
                                 @endif
                                 <a href="{{ $urls['privacy'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['privacy'] }}</a>
@@ -118,6 +127,8 @@
                                 <a href="{{ $urls['terms'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['terms'] }}</a>
                                 &nbsp;·&nbsp;
                                 <a href="{{ $urls['security'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['security'] }}</a>
+                                &nbsp;·&nbsp;
+                                <a href="{{ $urls['support'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['support'] }}</a>
                             </div>
                             @if (($footerNote ?? '') !== '')
                                 <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px; line-height:1.7;">
@@ -125,7 +136,8 @@
                                 </div>
                             @endif
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px;">
-                                © {{ $year }} {{ $brand }}
+                                © {{ $year }} {{ $brand }} · <a href="{{ $urls['home'] }}" style="color:#8b9a97; text-decoration:underline;">{{ $urls['host'] }}</a>
+                                <br />{{ $t['sender'] }}
                             </div>
                         </td>
                     </tr>

@@ -134,13 +134,13 @@ final class BrandingTest extends TestCase
     public function test_save_settings_upserts_and_records_white_label_verbatim(): void
     {
         $first = $this->branding()->saveSettings('tenant', null, [
-            'colors' => ['primary' => '#0F172A'],
+            'colors' => ['primary' => '#0b1a16'],
             'fonts' => ['body' => 'Inter'],
             'white_label' => true,
         ]);
 
         $this->assertTrue($first->white_label);
-        $this->assertSame('#0F172A', $first->colors['primary']);
+        $this->assertSame('#0b1a16', $first->colors['primary']);
 
         $second = $this->branding()->saveSettings('tenant', null, ['white_label' => false]);
 

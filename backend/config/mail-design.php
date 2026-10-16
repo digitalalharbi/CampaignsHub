@@ -36,23 +36,27 @@ return [
      * happens when the palette is a list of hexes and the author picks the nearest one.
      */
     'colour' => [
-        'brand' => '#0f766e',
-        'brand_ink' => '#c6f0e9',   // on the brand background, in the header
-        'ink' => '#0f172a',         // body text
-        'ink_soft' => '#334155',    // secondary body text
+        'brand' => '#0d8a6f',
+        'brand_ink' => '#c9d2cc',   // on the brand background, in the header
+        'ink' => '#0b1a16',         // body text
+        'ink_soft' => '#3d4742',    // secondary body text
         'muted' => '#5b6b68',       // labels
         'muted_soft' => '#8b9a97',  // footnotes and timestamps
-        'canvas' => '#f1f5f4',      // outside the card
+        'canvas' => '#f7f5f0',      // outside the card
         'surface' => '#ffffff',     // the card itself
-        'surface_soft' => '#f8fafa', // a panel inside the card
-        'border' => '#e2e8e6',
-        'divider' => '#eef2f1',
-        'good' => '#0f766e',
-        'good_bg' => '#ecfdf5',
+        'surface_soft' => '#faf8f3', // a panel inside the card
+        'border' => '#e4e0d6',
+        'divider' => '#eeeae0',
+        'good' => '#0d8a6f',
+        'good_bg' => '#e8f5f1',
         'warn' => '#b45309',
         'warn_bg' => '#fffbeb',
         'bad' => '#b91c1c',
         'bad_bg' => '#fef2f2',
+        // The CampaignsHub identity as an email header: the dark ground, its text, and the orange of the mark's dot.
+        'header_bg' => '#0b1a16',
+        'header_ink' => '#f7f5f0',
+        'accent' => '#e8a33d',
     ],
 
     /*

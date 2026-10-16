@@ -10,12 +10,12 @@
   external images, explicit backgrounds so a dark-mode client cannot invert a card into
   black-on-black. See `layout.blade.php`.
 --}}
-@php($tone = ['critical' => '#b91c1c', 'warning' => '#b45309', 'positive' => '#0f766e', 'info' => '#5b6b68'])
-@php($toneBg = ['critical' => '#fef2f2', 'warning' => '#fffbeb', 'positive' => '#ecfdf5', 'info' => '#f8fafa'])
+@php($tone = ['critical' => '#b91c1c', 'warning' => '#b45309', 'positive' => '#0d8a6f', 'info' => '#5b6b68'])
+@php($toneBg = ['critical' => '#fef2f2', 'warning' => '#fffbeb', 'positive' => '#e8f5f1', 'info' => '#faf8f3'])
 @php($colour = $tone[$severity] ?? $tone['info'])
 @php($background = $toneBg[$severity] ?? $toneBg['info'])
 
-<div style="font-family:{!! $font !!}; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0b1a16;">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 16px;">{{ $greeting }}</div>
 
@@ -32,8 +32,8 @@
                 @if ($context !== '')
                     <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $context }}</div>
                 @endif
-                <div style="font-size:18px; font-weight:800; color:#0f172a; padding-top:4px; line-height:1.5;">{{ $title }}</div>
-                <div style="font-size:14px; color:#334155; line-height:1.8; padding-top:8px;">{{ $detail }}</div>
+                <div style="font-size:18px; font-weight:800; color:#0b1a16; padding-top:4px; line-height:1.5;">{{ $title }}</div>
+                <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $detail }}</div>
             </td>
         </tr>
     </table>
@@ -41,7 +41,7 @@
     {{-- One button, and it says what it does. «اضغط هنا» tells a reader nothing about where they land. --}}
     <div>
         <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0f766e; color:#ffffff; font-size:14px; font-weight:700;
+           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
                   text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
     </div>
 
