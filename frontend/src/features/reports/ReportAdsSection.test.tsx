@@ -204,16 +204,16 @@ describe('the reading of the ads grid', () => {
    * reading that is not an absence — so the absence sentence was empty, and the card drew a blank
    * box with nothing written in it. In a document a client keeps, that reads as a broken report.
    */
-  it('says a video has no cover frame instead of drawing an empty box', () => {
+  it('draws a video with no cover frame from the film\u2019s own first frame instead of an empty box', () => {
     const film = ad({
       preview: preview({ kind: 'video', video_url: 'https://cdn/ad.mp4', image_url: null, thumbnail_url: null }),
     })
 
     renderWithProviders(<ReportAdsSection ads={[film]} locale="en" onOpen={() => {}} />, { locale: 'en' })
 
-    const absent = screen.getByTestId('report-ad-poster-0-absent')
-    expect(absent).toHaveTextContent(/no cover frame/i)
-    expect(absent).toHaveAttribute('data-absence', 'video-no-cover')
+    // MEDIA-TRUTH-001 — the film itself supplies the cover: its first frame, never an invented picture.
+    expect(screen.getByTestId('report-ad-poster-0-first-frame')).toHaveAttribute('data-cover', 'video-first-frame')
+    expect(screen.queryByTestId('report-ad-poster-0-absent')).not.toBeInTheDocument()
     // And the card still opens, because the film itself is there to be played.
     expect(screen.getByTestId('report-ad-card')).toHaveAttribute('data-openable', 'true')
   })

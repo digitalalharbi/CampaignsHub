@@ -1,11 +1,11 @@
 import { campaignStatusLabel } from '@/features/campaigns/labels'
 import { creativeKindLabel } from './creativeKind'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AdPoster } from './AdPoster'
 import { CreativeCarousel } from './CreativeCarousel'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
-import { assetAspect, readPreview } from './adPreview'
+import { assetAspect, measuredAspect, readPreview, type MediaAspect } from './adPreview'
 import { canonicalObjectiveLabel, canonicalOfRaw } from '@/features/campaigns/canonicalObjectives'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { CreativeCard } from './api'
@@ -75,7 +75,11 @@ export function AdPreviewDialog({
    * it said nothing. One expression, because the stage's height and the fit inside it must not be
    * answering two different questions about one creative.
    */
-  const stageAspect = creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio)
+  // MEDIA-TRUTH-001 — when nobody stated a shape, the browser's own measurement of the decoded asset does.
+  const [measured, setMeasured] = useState<MediaAspect | null>(null)
+  useEffect(() => setMeasured(null), [creative.id])
+  const onMeasured = (w: number, h: number) => setMeasured(measuredAspect(w, h))
+  const stageAspect = creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio) ?? measured
 
   /*
    * «No figures of its own» — the same test the card makes, from the same field.
@@ -235,6 +239,7 @@ export function AdPreviewDialog({
               aspect={creative.preview?.aspect ?? null}
               bound="container"
               className="h-full w-full"
+              onMeasured={onMeasured}
             />
         ) : (
           <AdPoster
@@ -243,6 +248,7 @@ export function AdPreviewDialog({
             /* The stage owns the box; the asset owns its own proportions inside it. */
             className="max-h-full max-w-full"
             testid="ad-preview-dialog-poster"
+            onMeasured={onMeasured}
             width={creative.width}
             height={creative.height}
             aspectRatio={creative.aspect_ratio}
