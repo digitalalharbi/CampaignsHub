@@ -1,3 +1,4 @@
+import { REPORT_NOTE, reportFooterItems } from './reportFooter'
 import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
@@ -801,26 +802,29 @@ export function PrintDocument({
         </section>
       )}
 
-      {/* Appendix */}
-      <section className="doc-section doc-appendix">
-        <h2>Appendix A — Methodology &amp; Notes</h2>
+      {/*
+        REPORT-FOOTER-001 — no appendix section: one small muted footer, outside the numbered body, with the
+        report's facts under it. It is not counted as a section and has no heading.
+      */}
+      <footer className="doc-footnote" data-testid="print-document-footer">
+        <p>{REPORT_NOTE.en}</p>
         <p>
-          Figures are aggregated from connected advertising platforms for the stated period. ROAS is
-          revenue divided by spend; Cost per Result is spend divided by attributed results. Currency
-          is {currency}. Numbers use Western digits.
+          {reportFooterItems({
+            updatedAt: typeof data.generated_at === 'string' ? data.generated_at : null,
+            period: data.period ?? null,
+            currency,
+            timezone: typeof data.timezone === 'string' ? data.timezone : 'Asia/Riyadh',
+            objective: typeof data.objective === 'string' ? data.objective : null,
+          }, 'en').map(([k, v]) => `${k}: ${v}`).join(' | ')}
         </p>
-        {data.attribution_window && <p>Attribution window: {data.attribution_window}.</p>}
-        {data.data_source && <p>Data source: {data.data_source}.</p>}
-        <p className="doc-disclaimer">
-          This document is prepared for the client named above and reflects the campaign data available
-          at generation time. Past performance does not guarantee future results.
-        </p>
-      </section>
+      </footer>
     </div>
   )
 }
 
 const DOC_CSS = `
+.doc-footnote { margin-top: 18pt; padding-top: 6pt; border-top: 0.5pt solid #d4d4d8; font-size: 8pt; line-height: 1.45; color: #71717a; }
+.doc-footnote p { margin: 0 0 2pt; }
 @page { size: A4 portrait; margin: 18mm 16mm; }
 .doc-root { font-family: Inter, system-ui, sans-serif; color: #1a1a1a; font-size: 10.5pt; line-height: 1.5;
   /* Disable ligatures/contextual alternates: Chromium can emit a ligature glyph without a

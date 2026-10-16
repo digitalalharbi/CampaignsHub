@@ -18,6 +18,7 @@ import { useLiveMetricReader } from './live/liveMetrics'
 import { levelOf, MODE_LABELS, modesFor, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
+import { ReportFooter } from './reportFooter'
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -326,6 +327,21 @@ export function LiveSharedReport({
           />
         )}
       </div>
+
+      {/*
+        REPORT-FOOTER-001 — the same footer every report surface ends with. The objective is stated only
+        where the link's campaigns share ONE; a mixed programme names none rather than guessing.
+      */}
+      <ReportFooter
+        locale={ar ? 'ar' : 'en'}
+        facts={{
+          updatedAt: computedAt.toISOString(),
+          period: payload.period,
+          currency: unit || null,
+          timezone: 'Asia/Riyadh',
+          objective: (payload.objective_analytics?.families?.length ?? 0) === 1 ? payload.objective_analytics?.families?.[0]?.family ?? null : null,
+        }}
+      />
 
       {drawer && mode === 'dashboard' && (
         <LivePlatformDrawer
