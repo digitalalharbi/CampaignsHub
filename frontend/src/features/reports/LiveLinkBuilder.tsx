@@ -69,6 +69,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [campaigns, setCampaigns] = useState<string[]>([])
   const [providers, setProviders] = useState<string[]>([])
   const [metrics, setMetrics] = useState<string[]>([])
+  // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
+  const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
   const [from, setFrom] = useState(isoDaysAgo(30))
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
 
@@ -192,6 +194,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         metrics,
         from,
         to,
+        period_kind: periodKind,
         form,
         detail_level: level,
         hide_spend: hideSpend,
@@ -541,10 +544,35 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             )}
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Field label={ar ? 'من' : 'From'}><DateField value={from} onChange={setFrom} /></Field>
-            <Field label={ar ? 'إلى' : 'To'}><DateField value={to} onChange={setTo} /></Field>
+          <div className="grid gap-2" data-testid="live-link-period">
+            <span className="text-xs font-bold text-text-muted">{ar ? 'نوع الفترة' : 'Period'}</span>
+            <div role="group" className="grid grid-cols-4 gap-1">
+              {([['daily', 'يومي', 'Daily'], ['weekly', 'أسبوعي', 'Weekly'], ['monthly', 'شهري', 'Monthly'], ['custom', 'مخصص', 'Custom']] as const).map(([key, labelAr, labelEn]) => (
+                <button
+                  key={key}
+                  type="button"
+                  data-testid={`live-link-period-${key}`}
+                  aria-pressed={periodKind === key}
+                  onClick={() => setPeriodKind(key)}
+                  className={`rounded-xl border px-2 py-1.5 text-sm font-semibold ${periodKind === key ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary'}`}
+                >
+                  {ar ? labelAr : labelEn}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-text-muted">
+              {periodKind === 'daily' && (ar ? 'يوم واحد يُقارَن بالأمس، واتجاه آخر أسبوع.' : 'One day, compared with the previous day; the trend is the trailing week.')}
+              {periodKind === 'weekly' && (ar ? 'الأسبوع (الاثنين–الأحد) يُقارَن بالأسبوع السابق.' : 'The Monday–Sunday week, compared with the previous week.')}
+              {periodKind === 'monthly' && (ar ? 'الشهر الميلادي يُقارَن بالشهر السابق.' : 'The calendar month, compared with the previous month.')}
+              {periodKind === 'custom' && (ar ? 'نطاق تحدده، يُقارَن بفترة بنفس الطول قبله.' : 'A range you choose, compared with the same length before it.')}
+            </p>
           </div>
+          {periodKind === 'custom' && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label={ar ? 'من' : 'From'}><DateField value={from} onChange={setFrom} /></Field>
+              <Field label={ar ? 'إلى' : 'To'}><DateField value={to} onChange={setTo} /></Field>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <span className="text-xs font-bold text-text-muted">{ar ? 'المؤشرات المعروضة للعميل' : 'Metrics the client sees'}</span>

@@ -17,6 +17,7 @@ use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
@@ -305,6 +306,8 @@ final class LiveReportBuilderController extends Controller
             'metrics.*' => ['string', 'max:40'],
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
+            // REPORT-PERIOD-001 — daily | weekly | monthly | custom. The first three anchor on `to`.
+            'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
             'password' => ['nullable', 'string', 'min:4', 'max:64'],
             'expires_at' => ['nullable', 'date', 'after:now'],
             'hide_spend' => ['boolean'],
@@ -371,6 +374,13 @@ final class LiveReportBuilderController extends Controller
             )));
         }
 
+        $periodKind = in_array($data['period_kind'] ?? null, ReportPeriod::KINDS, true) ? (string) $data['period_kind'] : 'custom';
+        if ($periodKind !== 'custom') {
+            $window = ReportPeriod::resolve($periodKind, Carbon::parse($data['from']), Carbon::parse($data['to']));
+            $data['from'] = $window['from']->toDateString();
+            $data['to'] = $window['to']->toDateString();
+        }
+
         $requested = array_values(array_unique((array) ($data['campaign_ids'] ?? [])));
         $campaignIds = UnifiedCampaign::query()
             ->where('project_id', $project)
@@ -425,7 +435,7 @@ final class LiveReportBuilderController extends Controller
              * No `data` snapshot on purpose — this report IS the live definition, and a stale copy
              * beside it would be a second answer nobody asked for.
              */
-            'config' => ['live' => true, 'metrics' => $metrics] + ($level === null ? [] : ['detail_level' => $level->value]),
+            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind] + ($level === null ? [] : ['detail_level' => $level->value]),
             /*
              * REPORT-ARCHITECTURE-001 — the level's sections are the report's OWN section settings.
              *

@@ -222,7 +222,15 @@ export function LiveSharedReport({
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
-          {RANGES.map((r) => (
+          {(payload.period.kind ?? 'custom') !== 'custom' && (
+            <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
+              {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
+              {' · '}
+              {ar ? payload.period.comparison_ar : payload.period.comparison_en}
+              {payload.period.partial ? (ar ? ' · الفترة لم تكتمل' : ' · in progress') : ''}
+            </span>
+          )}
+          {(payload.period.kind ?? 'custom') === 'custom' && RANGES.map((r) => (
             <button
               key={r.days}
               type="button"
