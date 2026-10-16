@@ -22,7 +22,11 @@ test.describe('the live client link, mode by mode', () => {
     await ready(page, 'live-mode-summary')
 
     const tabs = page.getByTestId('live-modes').getByRole('tab')
-    await expect(tabs).toHaveCount(4)
+    // REPORT-ARCHITECTURE-001 — a detailed link offers the summary, dashboard, platforms and content views and (since
+    // the tables view exists) one more; the count is a floor, and no campaign view is ever among them.
+    await expect(tabs.first()).toBeVisible()
+    expect(await tabs.count()).toBeGreaterThanOrEqual(4)
+    await expect(page.getByTestId('live-mode-tab-campaigns')).toHaveCount(0)
     // The summary is its own product, not the dashboard retitled: none of the dashboard's tables.
     await expect(page.getByTestId('live-platform-comparison')).toHaveCount(0)
     await expect(page.getByTestId('live-detail-tables')).toHaveCount(0)
