@@ -1,5 +1,8 @@
 import { useUi } from '@/stores/ui'
-import { ImageOff } from 'lucide-react'
+import { Film, Image as ImageIcon, ImageOff, LayoutGrid, ShoppingBag } from 'lucide-react'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
+import { platformColor } from '@/features/analytics/components'
 import { absenceLabel, absenceShort, assetAspect, clientAbsence, mediaFit, posterSource, previewShape, readPreview, type MediaAspect } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
@@ -22,6 +25,7 @@ export function AdPoster({
   fit,
   stage,
   forClient = false,
+  provider = null,
 }: {
   preview: CreativePreview | null | undefined
   name: string
@@ -72,6 +76,8 @@ export function AdPoster({
    * names our pipeline (CLIENT-DIAGNOSTIC-SEPARATION-001). The operator surfaces keep the four states.
    */
   forClient?: boolean
+  /** The platform the content ran on — names the fallback cover; never invents a picture. */
+  provider?: string | null
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
@@ -95,16 +101,33 @@ export function AdPoster({
       const said = reason === 'fetch_failed'
         ? clientAbsence({ kind: 'none', reason: 'expired', note: null }, ar)
         : clientAbsence(reading, ar)
+      const key = provider ? canonicalPlatform(provider) : null
+      const color = key ? platformColor(key) : 'var(--brand-600)'
+      const kindLabel = reading.kind === 'video'
+        ? (ar ? 'فيديو' : 'Video')
+        : reading.kind === 'catalog'
+          ? (ar ? 'كتالوج' : 'Catalog')
+          : reading.kind === 'collection'
+            ? (ar ? 'مجموعة' : 'Collection')
+            : (ar ? 'محتوى إعلاني' : 'Ad content')
+      const Icon = reading.kind === 'video' ? Film : reading.kind === 'catalog' ? ShoppingBag : reading.kind === 'collection' ? LayoutGrid : ImageIcon
 
+      // REPORT-COVER-001 — never an empty frame. A typed cover that says WHAT this is and WHERE it
+      // ran, and does not pretend to be the creative (no image is invented; the sentence stays on hover).
       return (
         <span
           data-testid={testid ? `${testid}-absent` : undefined}
           data-absence={reason}
+          data-cover="fallback"
           title={said.sentence}
-          className={`flex flex-col items-center justify-center gap-1 rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
+          className={`relative flex flex-col items-center justify-center gap-1.5 overflow-hidden rounded-lg border border-border bg-surface-secondary p-2 text-center text-text-muted ${className}`}
         >
-          <ImageOff size={16} aria-hidden className="shrink-0 opacity-60" />
-          <span data-testid={testid ? `${testid}-absent-label` : undefined} className="font-semibold">{said.short}</span>
+          <span aria-hidden className="absolute inset-x-0 top-0 h-1.5" style={{ background: color }} />
+          <Icon size={22} aria-hidden className="shrink-0" style={{ color }} />
+          <span data-testid={testid ? `${testid}-absent-label` : undefined} className="text-xs font-bold text-text-primary">
+            {key ? providerLabel(key, ar ? 'ar' : 'en') : kindLabel}
+          </span>
+          <span className="text-[11px] font-semibold">{said.short}</span>
           <span className="sr-only">{said.sentence}</span>
         </span>
       )
