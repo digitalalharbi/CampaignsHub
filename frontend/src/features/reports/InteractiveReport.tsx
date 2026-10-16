@@ -28,7 +28,7 @@ import {
 import { platformColor } from '@/features/analytics/components'
 import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
 import { TrendPill } from '@/features/analytics/components'
-import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { ReportFooter } from './reportFooter'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { SPECS } from '@/features/analytics/metricCatalog'
@@ -411,7 +411,6 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
     case '__attention': return <AttentionBlocks items={slide.range ? (data.attention ?? []).slice(...slide.range) : data.attention} ar />
-    case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
     default: return null
   }
 }
@@ -441,16 +440,14 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
     // The story ends with what needs attention — a page only when the server sent something to show.
     if ((data.attention?.length ?? 0) > 0) visible.push(ATTENTION_SLIDE)
     withStreamsSlide(visible, data)
-    if (data.disclaimer) {
-      visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
-    }
     return visible
   }, [data])
   const cur = slides[i]
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />
   // Short performance note repeated quietly under each slide (footer), except the cover.
-  const footer = (s: Slide) => (s.type !== 'cover' && data.disclaimer ? <div className="mt-3 border-t border-border pt-2"><PerformanceNotice data={data.disclaimer} variant="footer" /></div> : null)
+  // REPORT-FOOTER-001 — the per-slide note is gone; one external footer ends the report (`ReportFooter`).
+  const footer = (_s: Slide) => null
 
   if (slides.length === 0) return <p className="py-8 text-center text-sm text-text-secondary">لا شرائح مرئية.</p>
 
@@ -481,6 +478,17 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       ) : (
         <div className="space-y-4">{slides.map((s) => <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{render(s)}{footer(s)}</div>)}</div>
       )}
+      {/* REPORT-FOOTER-001 — outside the body, not a section: the one footer the page, the preview and the deck end with. */}
+      <ReportFooter
+        locale={ar ? 'ar' : 'en'}
+        facts={{
+          updatedAt: data.generated_at ?? null,
+          period: data.period ?? null,
+          currency: data.currency ?? null,
+          timezone: data.timezone ?? 'Asia/Riyadh',
+          objective: typeof data.objective === 'string' ? data.objective : null,
+        }}
+      />
     </div>
   )
 }
@@ -792,7 +800,6 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
           </section>
         </div>
       )}
-      {data.disclaimer && <div className="mt-3"><PerformanceNotice data={data.disclaimer} variant="footer" /></div>}
     </div>
   )
 }

@@ -384,6 +384,9 @@ describe('the report levels are different products', () => {
     expect(screen.queryByTestId('live-modes')).not.toBeInTheDocument()
     expect(within(view).getByTestId('standard-best-content')).toBeInTheDocument()
     expect(within(view).getByTestId('standard-commentary')).toBeInTheDocument()
+    // REPORT-FOOTER-001 — the link ends with the one footer, outside the report body.
+    expect(screen.getByTestId('report-footer')).toBeInTheDocument()
+    expect(within(view).queryByTestId('report-footer')).not.toBeInTheDocument()
     for (const deeper of ['live-detail-tables', 'live-scope-counts', 'live-mode-tables']) {
       expect(screen.queryByTestId(deeper), deeper).not.toBeInTheDocument()
     }
