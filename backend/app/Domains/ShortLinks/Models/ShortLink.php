@@ -34,8 +34,12 @@ final class ShortLink extends Model
 
     public const KIND_LINK = 'link';
 
+    public const MODE_REDIRECT = 'redirect';
+
+    public const MODE_LANDING = 'landing';
+
     protected $fillable = [
-        'tenant_id', 'project_id', 'slug', 'kind', 'destination', 'source_value',
+        'tenant_id', 'project_id', 'slug', 'kind', 'destination', 'source_value', 'message', 'mode',
         'clicks', 'last_clicked_at', 'is_active', 'created_by',
     ];
 

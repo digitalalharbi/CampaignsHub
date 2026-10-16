@@ -1,4 +1,4 @@
-import { getData, getEnvelope, postData, deleteData } from '@/lib/api/client'
+import { getData, getEnvelope, postData, deleteData, patchData } from '@/lib/api/client'
 
 /**
  * SHORT-LINKS-001 — the whole contract, which is deliberately two fields.
@@ -29,6 +29,11 @@ export interface ShortLink {
   last_clicked_at: string | null
   is_active: boolean
   created_at: string | null
+  /** The pre-filled WhatsApp message, or null. */
+  message?: string | null
+  mode?: 'redirect' | 'landing'
+  destination_host?: string | null
+  destination_is_whatsapp?: boolean
 }
 
 /** One day inside the RECORDED period. A day before it is absent, never a zero. */
@@ -84,8 +89,12 @@ export const shortLinkHistory = (id: string, from?: string, to?: string) => {
   }>
 }
 
-export const createShortLink = (kind: ShortLinkKind, value: string) =>
-  postData<ShortLink>('/short-links', { kind, value })
+export const createShortLink = (kind: ShortLinkKind, value: string, message?: string) =>
+  postData<ShortLink>('/short-links', { kind, value, ...(message ? { message } : {}) })
+
+/** SHORT-LINK-COMPLIANCE-001 — edit the words waiting in the WhatsApp composer; the recipient never changes. */
+export const updateShortLinkMessage = (id: string, message: string) =>
+  patchData<ShortLink>(`/short-links/${id}`, { message })
 
 export const disableShortLink = (id: string) => postData<ShortLink>(`/short-links/${id}/disable`, {})
 

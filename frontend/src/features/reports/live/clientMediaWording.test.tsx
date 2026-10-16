@@ -40,4 +40,13 @@ describe('a missing picture on a client surface', () => {
       expect(saidTo(container)).not.toMatch(PIPELINE)
     })
   }
+
+  it('draws a typed cover, never an empty frame, and names the platform', () => {
+    const { container } = renderWithProviders(<ContentTile content={content} locale="en" currency="SAR" />, { locale: 'en' })
+    const cover = container.querySelector('[data-cover="fallback"]')
+
+    expect(cover).not.toBeNull()
+    expect(cover?.textContent).toMatch(/Snapchat/)
+    expect(cover?.querySelector('img')).toBeNull()
+  })
 })
