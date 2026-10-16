@@ -171,6 +171,65 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
   )
 }
 
+/* ─────────────────────────────── A2 — Standard report ─────────────────────────────── */
+
+/**
+ * REPORT-ARCHITECTURE-001 — the STANDARD product: a balanced report a client reads top to bottom.
+ *
+ * It is its own composition, not the dashboard with blocks removed. The order is the story a client
+ * asks for — what happened (four headline figures), what it means (the commentary, FIRST rather than
+ * last), how the period moved and which platforms carried it, which objective did what, which content
+ * to look at — and it stops there. No tabs, no tables to work in, no pacing, no segmentation, no
+ * per-platform drill-down: that depth is the Detailed product's, and it travels only in that payload.
+ */
+export function StandardView({ payload, reader, currency, locale, onOpenContent }: Common) {
+  const ar = locale === 'ar'
+
+  return (
+    <div data-testid="live-mode-standard" className="flex flex-col gap-6">
+      <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} heroOnly />
+      {sectionOn(payload, 'recommendations') && (
+        <section data-testid="standard-commentary" className="rounded-2xl border border-border bg-surface p-4">
+          <SectionTitle>{ar ? 'الخلاصة' : 'What it means'}</SectionTitle>
+          <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />
+        </section>
+      )}
+      <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
+      {sectionOn(payload, 'platform_comparison') && (
+        <LivePlatformComparison payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
+      )}
+      {sectionOn(payload, 'objective_breakdown') && (payload.objective_analytics
+        ? <ObjectiveAnalyticsSection section={payload.objective_analytics} currency={currency} ar={ar} showContent={false} />
+        : <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />)}
+      {sectionOn(payload, 'content_performance') && (
+        <section className="flex flex-col gap-4">
+          <ContentStrip
+            title={ar ? 'أفضل المحتوى' : 'Best content'}
+            items={(payload.ads ?? []).slice(0, 6)}
+            testid="standard-best-content"
+            currency={currency}
+            locale={locale}
+            onOpen={onOpenContent}
+            ranked
+            columns={3}
+            empty={ar ? 'لا محتوى بنتائج قابلة للترتيب في هذه الفترة' : 'No content with rankable results in this period'}
+          />
+          <ContentStrip
+            title={ar ? 'محتوى بفرصة للتحسين' : 'Content with room to improve'}
+            items={(payload.ads_weakest ?? []).slice(0, 3)}
+            testid="standard-weakest-content"
+            currency={currency}
+            locale={locale}
+            onOpen={onOpenContent}
+            columns={3}
+          />
+        </section>
+      )}
+      {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
+    </div>
+  )
+}
+
 /* ─────────────────────────────── B — Performance dashboard ─────────────────────────────── */
 
 export function DashboardView({

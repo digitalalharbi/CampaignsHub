@@ -591,7 +591,7 @@ final class ShareService
          * enumerated rather than walked precisely so that adding a section is a decision somebody
          * makes here, and this is that decision.
          */
-        foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
+        foreach (['timeseries', 'platforms', 'accounts', 'campaigns', 'ad_sets', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($payload[$section]) && is_array($payload[$section])) {
                 $payload[$section] = array_map(
                     function ($row) use ($strip) {

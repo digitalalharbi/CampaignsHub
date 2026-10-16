@@ -127,6 +127,7 @@ final class ClientLinkMoneyKeysTest extends TestCase
             'deltas' => $this->row(),
             'timeseries' => [$this->row()],
             'platforms' => [$this->row()],
+            'accounts' => [$this->row()],
             'campaigns' => [$this->row()],
             'ad_sets' => [$this->row()],
             'budget' => [$this->row()],
@@ -136,7 +137,7 @@ final class ClientLinkMoneyKeysTest extends TestCase
 
         $this->assertRedacted($out['totals'], 'totals');
         $this->assertRedacted($out['deltas'], 'deltas');
-        foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets', 'budget'] as $section) {
+        foreach (['timeseries', 'platforms', 'accounts', 'campaigns', 'ad_sets', 'budget'] as $section) {
             $this->assertRedacted($out[$section][0], $section);
         }
     }
