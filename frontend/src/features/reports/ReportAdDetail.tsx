@@ -1,8 +1,8 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AdPoster } from '@/features/content/AdPoster'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
-import { readPreview } from '@/features/content/adPreview'
+import { measuredAspect, readPreview, type MediaAspect } from '@/features/content/adPreview'
 import { providerLabel, objectiveLabel } from '@/features/campaigns/labels'
 import type { ReportAd } from './ReportAdsSection'
 import type { Locale } from '@/stores/ui'
@@ -47,6 +47,9 @@ export function ReportAdDetail({
   /** What a surface adds below the figures — the live link puts the content's own trend here. */
   children?: ReactNode
 }) {
+  // MEDIA-TRUTH-001 — the stage follows the creative's shape: the platform's word, else the browser's measurement.
+  const [measured, setMeasured] = useState<MediaAspect | null>(null)
+  const onMeasured = (w: number, h: number) => setMeasured(measuredAspect(w, h))
   const ar = locale === 'ar'
   const preview = ad.preview ?? null
   const reading = readPreview(preview, ar)
@@ -144,6 +147,7 @@ export function ReportAdDetail({
           </button>
         </div>
 
+<<<<<<< HEAD
         {reading.kind === 'video' ? (
           <CreativeVideoPlayer src={reading.src} poster={reading.poster} />
         ) : (
@@ -161,6 +165,36 @@ export function ReportAdDetail({
             provider={ad.provider ?? null}
           />
         )}
+=======
+        {(() => {
+          const shape: MediaAspect | null = preview?.aspect ?? measured
+          // A story is a tall stage with the film at its own width — never a thin strip in a wide box.
+          const stage = shape === 'vertical' ? 'h-[62vh] max-h-[640px]' : shape === 'square' ? 'h-[46vh] max-h-[420px]' : 'h-72'
+
+          return (
+            <div data-testid="report-ad-detail-stage" data-shape={shape ?? 'unknown'} className={`flex items-center justify-center overflow-hidden rounded-xl bg-surface-secondary ${stage}`}>
+              {reading.kind === 'video' ? (
+                <CreativeVideoPlayer src={reading.src} poster={reading.poster} aspect={preview?.aspect ?? measured} bound="container" className="h-full w-full" onMeasured={onMeasured} />
+              ) : (
+                /*
+                 * `contain`, stated: the modal is where the reader came to see the whole frame, so
+                 * nothing is cut here — and the stage, not the image, owns the box.
+                 */
+                <AdPoster
+                  preview={preview}
+                  name={ad.name ?? ''}
+                  className="max-h-full max-w-full"
+                  fit="contain"
+                  testid="report-ad-detail-poster"
+                  forClient
+                  provider={ad.provider ?? null}
+                  onMeasured={onMeasured}
+                />
+              )}
+            </div>
+          )
+        })()}
+>>>>>>> 5d83cd4c7 (fix(media): stage follows the creative's real shape; a film with no cover draws its first frame (MEDIA-TRUTH-001))
 
         {/*
           CONTENT-PREVIEW-SHAPES-001 — the component decides the kind, not the caller.

@@ -49,4 +49,17 @@ describe('a missing picture on a client surface', () => {
     expect(cover?.textContent).toMatch(/Snapchat/)
     expect(cover?.querySelector('img')).toBeNull()
   })
+
+  it('draws a film that has no cover frame from its own first frame, never an invented picture', () => {
+    const film = {
+      ...content,
+      preview: { state: 'available', kind: 'video', image_url: null, video_url: 'https://cdn/film.mp4', thumbnail_url: null, expires_at: null, note_ar: null, note_en: null, cards: null },
+    } as unknown as ReportAd
+    const { container } = renderWithProviders(<ContentTile content={film} locale="en" currency="SAR" />, { locale: 'en' })
+    const frame = container.querySelector('[data-cover="video-first-frame"]')
+
+    expect(frame).not.toBeNull()
+    expect(frame?.getAttribute('src')).toContain('film.mp4')
+    expect(container.querySelector('[data-cover="fallback"]')).toBeNull()
+  })
 })
