@@ -32,6 +32,7 @@ use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -363,6 +364,18 @@ final class LiveReportService
         $from = Carbon::parse($applied['from']);
         $to = Carbon::parse($applied['to']);
 
+        /*
+         * REPORT-PERIOD-001 — the link's period KIND decides the window, the comparison and the grain.
+         * A daily/weekly/monthly link is anchored on the day the reader asked for (today by default),
+         * not on a free range; a custom link is exactly the range asked for.
+         */
+        $periodKind = ((array) ($share->report->config ?? []))['period_kind'] ?? null;
+        $window = ReportPeriod::resolve(is_string($periodKind) ? $periodKind : null, $from, $to);
+        if ($window['kind'] !== 'custom') {
+            $from = $window['from'];
+            $to = $window['to'];
+        }
+
         $engine = $this->scopedEngine($share, $scope, $applied['providers']);
         /*
          * REPORT-CURRENCY-TRUTH-001 — the rows win, on the live page as on the snapshot.
@@ -444,7 +457,7 @@ final class LiveReportService
          * is the client's question and they answer it; why our sync failed is ours.
          */
         $totals = ClientEntityBoundary::coverage($engine->totals($from, $to));
-        $previous = ClientEntityBoundary::coverage($this->previousPeriod($engine, $from, $to));
+        $previous = ClientEntityBoundary::coverage($engine->totals($window['previous_from'], $window['previous_to']));
         /*
          * REPORT-COVERAGE-001 — two windows compare only when both are whole.
          *
@@ -462,6 +475,13 @@ final class LiveReportService
                 'from' => $from->toDateString(),
                 'to' => $to->toDateString(),
                 'days' => $from->diffInDays($to) + 1,
+                // REPORT-PERIOD-001 — what kind of window this is and what it is compared with.
+                'kind' => $window['kind'],
+                'grain' => $window['grain'],
+                'partial' => $window['partial'],
+                'previous' => ['from' => $window['previous_from']->toDateString(), 'to' => $window['previous_to']->toDateString()],
+                'comparison_ar' => $window['comparison_ar'],
+                'comparison_en' => $window['comparison_en'],
             ],
             'currency' => $currency,
             'totals' => $totals,
@@ -479,7 +499,10 @@ final class LiveReportService
             'result_kind' => $this->resultKind($scope, $applied['campaigns']),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
-            'timeseries' => $engine->timeseries($from, $to),
+            // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.
+            'timeseries' => $window['kind'] === 'daily'
+                ? $engine->timeseries($to->copy()->subDays(6), $to)
+                : ReportPeriod::bucket($engine->timeseries($from, $to), $window['grain']),
             'platforms' => $this->platformsWithMovement($engine, $from, $to, $comparison['comparable']),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries PERFORMANCE, not the campaign
@@ -1335,14 +1358,6 @@ final class LiveReportService
             'contributors' => $contributors,
             'through' => count($dates) === 1 ? $dates[0] : null,
         ];
-    }
-
-    /** The same window immediately before this one, for period-over-period deltas. */
-    private function previousPeriod(MetricsAggregator $engine, Carbon $from, Carbon $to): array
-    {
-        $days = $from->diffInDays($to) + 1;
-
-        return $engine->totals($from->copy()->subDays($days), $from->copy()->subDay());
     }
 
     /**

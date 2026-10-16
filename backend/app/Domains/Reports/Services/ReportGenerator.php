@@ -21,6 +21,7 @@ use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -112,9 +113,12 @@ final class ReportGenerator
         $currency = $basis['bases'] === 0 ? $report->currency : $basis['currency'];
 
         $totals = $agg->totals($from, $to);
-        $len = $from->diffInDays($to) + 1;
-        $prevTo = $from->copy()->subDay();
-        $prevFrom = $prevTo->copy()->subDays($len - 1);
+        // REPORT-PERIOD-001 — the comparison window is the KIND's: the previous day / ISO week / calendar month,
+        // or the same length before for a custom range. One rule, shared with the live link.
+        $periodKind = ((array) ($report->config ?? []))['period_kind'] ?? null;
+        $window = ReportPeriod::resolve(is_string($periodKind) ? $periodKind : null, $from, $to);
+        $prevFrom = $window['previous_from'];
+        $prevTo = $window['previous_to'];
         $previous = $agg->totals($prevFrom, $prevTo);
         /*
          * REPORT-SNAPSHOT-COMPARABILITY-001 — two windows compare only when both are whole.
