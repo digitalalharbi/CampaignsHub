@@ -135,6 +135,8 @@ describe('opening an ad from a report', () => {
 
     expect(img.className).toMatch(/object-contain/)
     expect(img.className).not.toMatch(/object-cover/)
+    // A viewer opened on purpose loads its one image now — a lazy image in a 0×0 box never enters the viewport.
+    expect(img).toHaveAttribute('loading', 'eager')
   })
 
   it('draws a typed cover, not a broken frame, when no media exists', () => {
