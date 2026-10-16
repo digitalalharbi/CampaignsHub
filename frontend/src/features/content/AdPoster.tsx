@@ -27,6 +27,7 @@ export function AdPoster({
   forClient = false,
   provider = null,
   onMeasured,
+  eager = false,
 }: {
   preview: CreativePreview | null | undefined
   name: string
@@ -81,6 +82,8 @@ export function AdPoster({
   provider?: string | null
   /** The decoded size, so the surface can shape its stage when the platform stated none. */
   onMeasured?: (width: number, height: number) => void
+  /** A viewer the reader opened on purpose: the one image must load now, not when a 0×0 box scrolls into view. */
+  eager?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
@@ -235,7 +238,7 @@ export function AdPoster({
        * decodes, and leaves a blank frame with no error anywhere — which is how the demo library
        * came to render ten empty cards.
        */
-      loading={src.startsWith('data:') ? 'eager' : 'lazy'}
+      loading={eager || src.startsWith('data:') ? 'eager' : 'lazy'}
       /*
        * A load that fails says so. It used to leave an `<img>` painting nothing over the space where
        * the ad should be — the owner's blank card, with no sentence and no signal anywhere.
