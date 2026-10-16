@@ -171,4 +171,20 @@ describe('building a live client link', () => {
     await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
     expect((sent().sections as Record<string, boolean>).funnel).toBe(false)
   })
+
+  /**
+   * REPORT-PERIOD-001 — the period is a KIND with data semantics, and only «custom» takes free dates.
+   */
+  it('sends the period kind, and shows free date fields only for a custom range', async () => {
+    await build()
+
+    expect(await screen.findByText('From')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('live-link-period-weekly'))
+    expect(screen.queryByText('From')).not.toBeInTheDocument()
+    expect(screen.getByTestId('live-link-period')).toHaveTextContent('previous week')
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect(sent().period_kind).toBe('weekly')
+  })
 })

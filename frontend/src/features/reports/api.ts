@@ -318,7 +318,18 @@ export interface LivePayload {
   /** REPORT-SECTION-STREAMS-001 — present only with advanced segmentation on and streams defined. */
   business_streams?: BusinessStreamRow[]
   business_streams_cover_total?: boolean
-  period: { from: string; to: string; days: number }
+  period: {
+    from: string
+    to: string
+    days: number
+    /** REPORT-PERIOD-001 — daily | weekly | monthly | custom: the window, its comparison and its trend grain. */
+    kind?: 'daily' | 'weekly' | 'monthly' | 'custom'
+    grain?: 'day' | 'week' | 'month'
+    partial?: boolean
+    previous?: { from: string; to: string }
+    comparison_ar?: string
+    comparison_en?: string
+  }
   /** REPORT-ARCHITECTURE-001 — the product this link is: an executive summary, a balanced standard report, or the detailed analytical one. */
   detail_level?: 'summary' | 'standard' | 'detailed'
   /** The ad-account breakdown only the detailed product carries. */

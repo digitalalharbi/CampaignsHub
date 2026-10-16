@@ -334,6 +334,26 @@ final class LiveReportShareTest extends TestCase
         $this->assertEmpty($standard->json('data.ads_platform_groups'));
     }
 
+    /**
+     * REPORT-PERIOD-001 — the link's period KIND decides the window and its comparison.
+     */
+    public function test_a_weekly_link_is_the_iso_week_and_says_what_it_is_compared_with(): void
+    {
+        $token = $this->liveLink(['earliest' => '2026-01-01', 'latest' => '2027-01-01']);
+        $this->report->forceFill(['config' => array_merge((array) $this->report->config, ['period_kind' => 'weekly'])])->save();
+
+        $period = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data.period');
+
+        $this->assertSame('weekly', $period['kind']);
+        $this->assertSame('day', $period['grain']);
+        $this->assertTrue(Carbon::parse($period['from'])->isMonday(), 'a weekly window starts on Monday');
+        $this->assertLessThanOrEqual(7, $period['days']);
+        $this->assertSame('مقابل الأسبوع السابق', $period['comparison_ar']);
+        $this->assertSame(Carbon::parse($period['from'])->subDay()->toDateString(), Carbon::parse($period['previous']['to'])->addDays(
+            (int) Carbon::parse($period['previous']['to'])->diffInDays(Carbon::parse($period['from'])->subDay()),
+        )->toDateString());
+    }
+
     public function test_a_live_link_reports_current_figures_without_a_session(): void
     {
         $token = $this->liveLink();

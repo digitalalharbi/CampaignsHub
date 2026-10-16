@@ -17,6 +17,7 @@ use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -113,6 +114,8 @@ final class ReportController extends Controller
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
+            // REPORT-PERIOD-001 — daily | weekly | monthly | custom; the first three anchor on `period_end` (default today).
+            'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
             'config' => ['nullable', 'array'],
             /*
              * WHOSE identity this report carries — REPORT-CREATION-UX-001's last clause.
@@ -130,6 +133,13 @@ final class ReportController extends Controller
         ]);
 
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+
+        $periodKind = in_array($data['period_kind'] ?? null, ReportPeriod::KINDS, true) ? (string) $data['period_kind'] : 'custom';
+        if ($periodKind !== 'custom') {
+            $window = ReportPeriod::resolve($periodKind, Carbon::parse($data['period_start'] ?? Carbon::today()), Carbon::parse($data['period_end'] ?? Carbon::today()));
+            $data['period_start'] = $window['from']->toDateString();
+            $data['period_end'] = $window['to']->toDateString();
+        }
 
         $report = Report::create([
             'name' => $data['name'],
@@ -150,7 +160,7 @@ final class ReportController extends Controller
              * currency here would have printed USD totals under whatever three letters were sent.
              */
             'currency' => ReportingCurrency::DEFAULT,
-            'config' => self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level),
+            'config' => array_merge(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level), ['period_kind' => $periodKind]),
             // The level's starting sections, with whatever the Owner switched explicitly laid over them.
             'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
                 ? null
