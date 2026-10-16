@@ -136,19 +136,39 @@ describe('building a live client link', () => {
   })
 
   /**
-   * Coordinator decision — the link's switches are the report-section registry's list, off-only.
-   * A section a client report hides by default is shown as hidden by the report, not as a switch.
+   * REPORT-OWNER-CONTROL-001 — every section is a real switch, ON as well as OFF.
+   *
+   * A section a client report hides by default used to be a disabled row reading «Hidden by the
+   * report», which made the Owner's «show the detailed tables» a control that could never be used.
+   * Now the full map travels — the level's preset with the Owner's choices over it — and the server
+   * stores it as the report's own section settings.
    */
-  it('lists the registry sections and sends the ones switched off as section overrides', async () => {
+  it('sends the Owner\u2019s full ON/OFF map: a default-off section can be switched ON, a preset-on one OFF', async () => {
     await build()
 
+    fireEvent.click(await screen.findByTestId('live-link-level-detailed'))
+    // The detailed preset starts the pacing section ON; the Owner switches it off.
     fireEvent.click(await screen.findByTestId('live-link-section-budget_pacing'))
-    expect(screen.getByTestId('live-link-section-row-detailed_tables')).toHaveTextContent('Hidden by the report')
-    expect(screen.queryByTestId('live-link-section-detailed_tables')).toBeNull()
+    // A section the report hides by default is a real switch now, not a disabled row.
+    const tables = screen.getByTestId('live-link-section-detailed_tables') as HTMLInputElement
+    expect(tables.disabled).toBe(false)
     fireEvent.click(screen.getByTestId('live-link-create'))
 
     await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
-    expect(sent().section_overrides).toEqual(['budget_pacing'])
-    expect(sent().sections).toBeUndefined()
+    const map = sent().sections as Record<string, boolean>
+    expect(map.budget_pacing).toBe(false)
+    expect(map.detailed_tables).toBe(true)
+    expect(sent().section_overrides).toBeUndefined()
+  })
+
+  it('a section the summary form does not contain stays withheld and is sent as OFF', async () => {
+    await build()
+
+    const row = await screen.findByTestId('live-link-section-row-funnel')
+    expect(row).toHaveAttribute('data-withheld', 'by-form')
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect((sent().sections as Record<string, boolean>).funnel).toBe(false)
   })
 })
