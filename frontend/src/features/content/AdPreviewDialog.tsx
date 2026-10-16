@@ -248,6 +248,7 @@ export function AdPreviewDialog({
             /* The stage owns the box; the asset owns its own proportions inside it. */
             className="max-h-full max-w-full"
             testid="ad-preview-dialog-poster"
+            eager
             onMeasured={onMeasured}
             width={creative.width}
             height={creative.height}

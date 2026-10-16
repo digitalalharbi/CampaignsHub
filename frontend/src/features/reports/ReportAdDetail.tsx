@@ -170,6 +170,7 @@ export function ReportAdDetail({
                   forClient
                   provider={ad.provider ?? null}
                   onMeasured={onMeasured}
+                  eager
                 />
               )}
             </div>
