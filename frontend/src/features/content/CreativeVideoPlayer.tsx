@@ -63,6 +63,7 @@ export function CreativeVideoPlayer({
   aspect = null,
   bound = 'viewport',
   className = '',
+  onMeasured,
 }: {
   src: string
   poster?: string | null
@@ -93,6 +94,8 @@ export function CreativeVideoPlayer({
    */
   bound?: 'viewport' | 'container'
   className?: string
+  /** The film's own size once its metadata is read — for a stage whose provider never stated one. */
+  onMeasured?: (width: number, height: number) => void
 }) {
   const { locale } = useUi()
   const t = COPY[locale === 'ar' ? 'ar' : 'en']
@@ -233,6 +236,7 @@ export function CreativeVideoPlayer({
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration)
+          if (e.currentTarget.videoWidth > 0 && e.currentTarget.videoHeight > 0) onMeasured?.(e.currentTarget.videoWidth, e.currentTarget.videoHeight)
           e.currentTarget.playbackRate = speed
           e.currentTarget.volume = volume
         }}

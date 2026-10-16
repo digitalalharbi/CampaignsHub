@@ -45,6 +45,7 @@ export function PosterImage({
   testid,
   fallback,
   onFailed,
+  onMeasured,
 }: {
   src: string
   alt: string
@@ -56,6 +57,8 @@ export function PosterImage({
   fallback: React.ReactNode
   /** For a caller that has a SECOND thing to try — the library card falls back to the film. */
   onFailed?: () => void
+  /** The decoded size, once the browser has it — for a stage whose provider never stated one. */
+  onMeasured?: (width: number, height: number) => void
 }) {
   const [state, setState] = useState<'pending' | 'loaded' | 'failed'>('pending')
   const [natural, setNatural] = useState<string | null>(null)
@@ -93,6 +96,7 @@ export function PosterImage({
         if (img.naturalWidth > 0 && img.naturalHeight > 0) {
           setNatural(`${img.naturalWidth}x${img.naturalHeight}`)
           setState('loaded')
+          onMeasured?.(img.naturalWidth, img.naturalHeight)
         } else {
           setState('failed')
           onFailed?.()

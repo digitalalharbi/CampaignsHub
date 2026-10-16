@@ -214,6 +214,18 @@ export function mediaFitClass(
   return mediaFit(asset, stage, surface) === 'contain' ? 'object-contain' : 'object-cover'
 }
 
+/**
+ * The shape of an asset the BROWSER measured — MEDIA-TRUTH-001.
+ *
+ * Meta, TikTok and Snapchat often send no dimensions at all (`aspect` null), and a stage sized from
+ * «nothing stated» is a landscape one: a 9:16 story then floats as a thin strip inside a wide box.
+ * The decoded image and the loaded film both know their own size, so when nobody stated one the
+ * measured size decides — the same square band `assetAspect` uses, so the two cannot disagree.
+ */
+export function measuredAspect(width: number, height: number): MediaAspect | null {
+  return assetAspect(width, height, null)
+}
+
 export function aspectClass(aspect: 'vertical' | 'square' | 'horizontal' | null): string | null {
   return aspect === 'vertical' ? 'aspect-[9/16]' : aspect === 'horizontal' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : null
 }

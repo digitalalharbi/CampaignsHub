@@ -26,6 +26,7 @@ export function AdPoster({
   stage,
   forClient = false,
   provider = null,
+  onMeasured,
 }: {
   preview: CreativePreview | null | undefined
   name: string
@@ -78,6 +79,8 @@ export function AdPoster({
   forClient?: boolean
   /** The platform the content ran on — names the fallback cover; never invents a picture. */
   provider?: string | null
+  /** The decoded size, so the surface can shape its stage when the platform stated none. */
+  onMeasured?: (width: number, height: number) => void
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
@@ -97,6 +100,24 @@ export function AdPoster({
      * moves to the `title` rather than being cut down. Both come from the same reading, so the label
      * and the sentence cannot describe different absences.
      */
+    // MEDIA-TRUTH-001 — a film the platform sent WITHOUT a cover frame still has one: its own first frame.
+    // Drawn from the real video (metadata only, paused, muted), never invented; the typed cover below
+    // is for the creative that has no media at all.
+    if (forClient && reading.kind === 'video' && reading.poster === null && reading.src) {
+      return (
+        <video
+          data-testid={testid ? `${testid}-first-frame` : undefined}
+          data-cover="video-first-frame"
+          src={`${reading.src}#t=0.1`}
+          preload="metadata"
+          muted
+          playsInline
+          aria-label={name}
+          className={`rounded-lg bg-surface-secondary ${fit === 'cover' ? 'object-cover' : 'object-contain'} ${className}`}
+        />
+      )
+    }
+
     if (forClient) {
       const said = reason === 'fetch_failed'
         ? clientAbsence({ kind: 'none', reason: 'expired', note: null }, ar)
@@ -208,6 +229,7 @@ export function AdPoster({
       alt={name}
       shape={portrait ? 'portrait' : 'landscape'}
       testid={testid}
+      onMeasured={onMeasured}
       /*
        * A `data:` URI must load eagerly. A lazy one never enters the viewport observer, never
        * decodes, and leaves a blank frame with no error anywhere — which is how the demo library
