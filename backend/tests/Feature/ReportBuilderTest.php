@@ -39,7 +39,8 @@ final class ReportBuilderTest extends TestCase
         /*
          * 4 fixed + 1 rich slide per platform × 2 + the closing sequence §14.10 asks for:
          * platform_comparison, funnel (sales), budget, ads, campaigns, observations, recommendations,
-         * next_steps, data_quality = 4 + 2 + 9 = 15.
+         * next_steps, data_quality = 4 + 2 + 9 = 15 — plus the `accounts` page (REPORT-ACCOUNT-BREAKDOWN-001), planned
+         * for every non-summary deck and removed by the section system wherever the report leaves it off = 16.
          *
          * `ads` joined the closing sequence with REPORT-AD-PREVIEW-001: it sits after the money and
          * before the observations, because it is the EVIDENCE the observations are about to
@@ -50,7 +51,8 @@ final class ReportBuilderTest extends TestCase
          * a summary, which is about what the money did rather than how it was arranged, and removed
          * section-and-data-together for a client, whose boundary this product keeps.
          */
-        $this->assertCount(15, $config['slides']);
+        $this->assertCount(16, $config['slides']);
+        $this->assertContains('accounts', $types);
         $this->assertContains('campaigns', $types);
         $this->assertContains('ads', $types);
         $this->assertContains('platform_comparison', $types);
