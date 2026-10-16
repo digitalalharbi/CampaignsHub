@@ -161,13 +161,13 @@ describe('a detailed link', () => {
   beforeEach(answerByProvider)
   afterEach(() => vi.clearAllMocks())
 
-  it('opens on the executive summary and offers four modes, none of them campaigns', async () => {
+  it('opens on the executive summary and offers five views, none of them campaigns', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
 
     // REPORT-EXECUTIVE-SUMMARY-001 — every live link opens on the executive dashboard.
     await screen.findByTestId('live-mode-summary')
     const tabs = within(screen.getByTestId('live-modes')).getAllByRole('tab').map((t) => t.getAttribute('data-testid'))
-    expect(tabs).toEqual(['live-mode-tab-summary', 'live-mode-tab-dashboard', 'live-mode-tab-platforms', 'live-mode-tab-content'])
+    expect(tabs).toEqual(['live-mode-tab-summary', 'live-mode-tab-dashboard', 'live-mode-tab-platforms', 'live-mode-tab-content', 'live-mode-tab-tables'])
     fireEvent.click(screen.getByTestId('live-mode-tab-dashboard'))
     await screen.findByTestId('live-mode-dashboard')
     expect(screen.getByTestId('live-weakest-content')).toBeInTheDocument()
@@ -358,5 +358,57 @@ describe('a link left open stays live', () => {
     visibility('visible')
     await vi.advanceTimersByTimeAsync(60_000)
     await waitFor(() => expect(vi.mocked(fetchLiveShared).mock.calls.length).toBeGreaterThan(opened))
+  })
+})
+
+/**
+ * REPORT-ARCHITECTURE-001 — Standard and Detailed are two compositions, not one page with a dial.
+ */
+describe('the report levels are different products', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  const serve = (level: 'standard' | 'detailed') => vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => ({
+    status: 200,
+    envelope: { data: {
+      ...payloadFor(opts.providers),
+      detail_level: level,
+      accounts: level === 'detailed' ? [{ account_id: 'a1', provider: 'meta', account_name: 'HENKA ads', spend: 700, impressions: 70_000, clicks: 2100, conversions: 40, cpa: 17.5 }] : [],
+    } },
+  }) as never)
+
+  it('a STANDARD link is one composition: no tabs, no tables, no depth it does not carry', async () => {
+    serve('standard')
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+
+    const view = await screen.findByTestId('live-mode-standard')
+    expect(screen.queryByTestId('live-modes')).not.toBeInTheDocument()
+    expect(within(view).getByTestId('standard-best-content')).toBeInTheDocument()
+    expect(within(view).getByTestId('standard-commentary')).toBeInTheDocument()
+    for (const deeper of ['live-detail-tables', 'live-scope-counts', 'live-mode-tables']) {
+      expect(screen.queryByTestId(deeper), deeper).not.toBeInTheDocument()
+    }
+  })
+
+  it('a DETAILED link is a workspace of views, and its tables view holds the analytical depth', async () => {
+    serve('detailed')
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+
+    await screen.findByTestId('live-mode-summary')
+    expect(screen.getByTestId('live-mode-tab-tables')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('live-mode-tab-tables'))
+
+    const tables = await screen.findByTestId('live-mode-tables')
+    expect(within(tables).getByTestId('tables-platforms')).toBeInTheDocument()
+    expect(within(tables).getByTestId('tables-days')).toBeInTheDocument()
+    expect(within(tables).getByTestId('tables-content')).toBeInTheDocument()
+    expect(within(tables).getByTestId('tables-accounts')).toHaveTextContent('HENKA ads')
+  })
+
+  it('the two levels share no composition: a standard report never contains the tables view', async () => {
+    serve('standard')
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=tables' })
+
+    await screen.findByTestId('live-mode-standard')
+    expect(screen.queryByTestId('live-mode-tables')).not.toBeInTheDocument()
   })
 })

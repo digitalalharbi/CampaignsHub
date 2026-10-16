@@ -135,7 +135,7 @@ final class ReportSectionRegistry
                 key: 'detailed_tables',
                 titleAr: 'الجداول التفصيلية',
                 titleEn: 'Detailed tables',
-                payloadKeys: ['platforms', 'campaigns', 'ad_sets'],
+                payloadKeys: ['platforms', 'campaigns', 'ad_sets', 'accounts'],
                 slideTypes: ['campaigns'],
                 clientDefault: false,
             ),
