@@ -147,25 +147,6 @@ export function ReportAdDetail({
           </button>
         </div>
 
-<<<<<<< HEAD
-        {reading.kind === 'video' ? (
-          <CreativeVideoPlayer src={reading.src} poster={reading.poster} />
-        ) : (
-          /*
-           * `object-contain`, not `cover`: a story ad is 9:16 and the card crops it to fit a grid.
-           * The modal is where the reader came to see the whole frame, so nothing is cut here.
-           */
-          <AdPoster
-            preview={preview}
-            name={ad.name ?? ''}
-            className="h-72 w-full bg-surface-secondary"
-            fit="contain"
-            testid="report-ad-detail-poster"
-            forClient
-            provider={ad.provider ?? null}
-          />
-        )}
-=======
         {(() => {
           const shape: MediaAspect | null = preview?.aspect ?? measured
           // A story is a tall stage with the film at its own width — never a thin strip in a wide box.
@@ -194,7 +175,6 @@ export function ReportAdDetail({
             </div>
           )
         })()}
->>>>>>> 5d83cd4c7 (fix(media): stage follows the creative's real shape; a film with no cover draws its first frame (MEDIA-TRUTH-001))
 
         {/*
           CONTENT-PREVIEW-SHAPES-001 — the component decides the kind, not the caller.
