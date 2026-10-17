@@ -768,6 +768,35 @@ final class DiagnoseSyncCommand extends Command
         }
 
         /*
+         * CONTENT-NOTHING-TO-DRAW-WHY-001 — what the provider sent for the creatives that draw nothing.
+         *
+         * A count of blank cards names the problem and never the cause: a Spark Ad outside the Asset
+         * Library, a text-only chat card, a field the mapping does not read all print the same
+         * «nothing to draw». So the stored payload of up to three such creatives is summarised by KEY
+         * NAME and VALUE KIND only — never a value, because a media URL or a body of ad copy does not
+         * belong in a workflow log.
+         */
+        $blank = (clone $creatives)
+            ->whereNull('asset_url')->whereNull('video_url')->whereNull('thumbnail_url')
+            ->orderByDesc('last_active_at')
+            ->limit(3)
+            ->get(['format', 'raw', 'cards']);
+
+        if ($blank->isNotEmpty()) {
+            $this->line('');
+            $this->line('  WHAT THE PROVIDER SENT for creatives that draw nothing (key names and kinds, never values)');
+
+            foreach ($blank as $row) {
+                $raw = is_array($row->raw) ? $row->raw : [];
+                $kinds = [];
+                foreach ($raw as $key => $value) {
+                    $kinds[] = $key.':'.(is_array($value) ? 'array('.count($value).')' : (is_string($value) ? ($value === '' ? 'empty' : 'string') : gettype($value)));
+                }
+                $this->line(sprintf('  %-12s: %s', (string) $row->format, $kinds === [] ? '(no payload kept)' : implode(' · ', $kinds)));
+            }
+        }
+
+        /*
          * SNAP-CREATIVE-METRICS-LIVE-001 — the column that decides what the library OPENS on.
          *
          * The counts above were both true and useless for the actual defect: 814 rows existed and
