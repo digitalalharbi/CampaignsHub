@@ -322,7 +322,7 @@ final class LiveReportShareTest extends TestCase
         $token = $this->liveLink();
 
         // No stored level on a link made before levels existed: the detailed product it always was.
-        $this->report->forceFill(['section_settings' => ['sections' => ['detailed_tables' => true]]])->save();
+        $this->report->forceFill(['section_settings' => ['sections' => ['account_breakdown' => true]]])->save();
         $default = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
         $this->assertSame('detailed', $default->json('data.detail_level'));
         $this->assertNotEmpty($default->json('data.accounts'), 'the detailed product carries the ad-account breakdown');
@@ -330,7 +330,7 @@ final class LiveReportShareTest extends TestCase
         $this->report->forceFill(['config' => array_merge((array) $this->report->config, ['detail_level' => 'standard'])])->save();
         $standard = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
         $this->assertSame('standard', $standard->json('data.detail_level'));
-        $this->assertSame([], $standard->json('data.accounts'), 'a standard report must not carry the account breakdown');
+        $this->assertEmpty($standard->json('data.accounts'), 'a standard report must not carry the account breakdown');
         $this->assertEmpty($standard->json('data.ads_platform_groups'));
     }
 

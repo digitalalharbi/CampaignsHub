@@ -37,6 +37,7 @@ final class ReportSectionResolverTest extends TestCase
             'deltas' => ['spend' => 0.1],
             'timeseries' => [['date' => '2026-08-01', 'spend' => 600.0], ['date' => '2026-08-02', 'spend' => 600.0]],
             'platforms' => [['provider' => 'meta', 'spend' => 700.0], ['provider' => 'snapchat', 'spend' => 500.0]],
+            'accounts' => [['account_id' => 'a1', 'provider' => 'meta', 'account_name' => 'HENKA', 'spend' => 700.0]],
             'budget' => [['provider' => 'meta', 'budget' => 2000.0, 'spent' => 700.0]],
             'funnel' => [['stage' => 'impressions', 'reported' => true, 'count' => 90000]],
             'store_funnel' => null,
@@ -67,7 +68,7 @@ final class ReportSectionResolverTest extends TestCase
     {
         $this->assertSame([
             'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'site_measurement', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation',
+            'site_measurement', 'recommendations', 'detailed_tables', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

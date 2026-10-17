@@ -54,6 +54,7 @@ enum DetailLevel: string
                 'funnel' => false,
                 'budget_pacing' => false,
                 'advanced_segmentation' => false,
+                'account_breakdown' => false,
             ],
             self::Standard => $always + [
                 'objective_breakdown' => true,
@@ -61,6 +62,7 @@ enum DetailLevel: string
                 'funnel' => false,
                 'budget_pacing' => false,
                 'advanced_segmentation' => false,
+                'account_breakdown' => false,
             ],
             self::Detailed => $always + [
                 'objective_breakdown' => true,
@@ -68,6 +70,7 @@ enum DetailLevel: string
                 'funnel' => true,
                 'budget_pacing' => true,
                 'advanced_segmentation' => true,
+                'account_breakdown' => true,
             ],
         };
     }

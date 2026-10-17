@@ -104,7 +104,7 @@ export function TablesView({
         </Block>
       )}
 
-      {sectionShown(payload, 'detailed_tables') && (
+      {sectionShown(payload, 'account_breakdown') && (
         <Block title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} testid="tables-accounts" empty={accounts.length === 0}>
           <MetricTable head={accHead} rows={accRows} values={accValues} initialSort={{ column: 2, dir: 'desc' }} />
         </Block>

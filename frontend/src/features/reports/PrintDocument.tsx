@@ -1,4 +1,6 @@
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
@@ -602,6 +604,26 @@ export function PrintDocument({
         <section className="doc-section">
           <h2>Platforms in Detail</h2>
           <PrintPlatformDrilldowns blocks={data.platform_drilldowns} locale="en" currency={currency} />
+        </section>
+      )}
+
+      {/*
+        REPORT-ACCOUNT-BREAKDOWN-001 — the provider → ad-account split, printed only when the report's own
+        section settings carry it (the same switch the page, the link and the deck read).
+      */}
+      {shown('account_breakdown') && ((data as { accounts?: Array<Record<string, unknown>> }).accounts ?? []).length > 0 && (
+        <section className="doc-section" data-testid="print-accounts">
+          <h2>Ad Accounts</h2>
+          <Table
+            head={['Ad account', 'Platform', 'Spend', 'Results', 'Cost per result']}
+            rows={((data as { accounts?: Array<Record<string, unknown>> }).accounts ?? []).map((a) => [
+              String(a.account_name ?? 'Unnamed account'),
+              providerLabel(canonicalPlatform(String(a.provider ?? '')), 'en'),
+              moneyExact(typeof a.spend === 'number' ? a.spend : null, currency),
+              typeof a.conversions === 'number' ? a.conversions.toLocaleString('en-US') : '—',
+              moneyExact(typeof a.cpa === 'number' ? a.cpa : null, currency),
+            ])}
+          />
         </section>
       )}
 
