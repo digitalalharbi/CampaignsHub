@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Skeleton } from '@/components/ui/States'
 import { Num } from '@/components/ui/Num'
-import type { ActionSeverity } from './actionCenter'
 import { FindingCard } from './FindingCard'
-import { natureCounts, type Finding, type FindingNature } from './findings'
-import { natureLabel, severityLabel } from './findingCopy'
+import { healthSummary, natureCounts, type Finding, type FindingNature } from './findings'
+import { natureLabel } from './findingCopy'
 
 /**
  * RECOMMENDATIONS-VISUAL-001 — the queue, as figures first.
@@ -26,6 +25,7 @@ export function FindingsBoard({
   projectId,
   currency,
   ar,
+  activeCampaigns = null,
 }: {
   findings: Finding[]
   loading: boolean
@@ -33,14 +33,12 @@ export function FindingsBoard({
   projectId: string
   currency: string | null
   ar: boolean
+  /** Campaigns that delivered in the window the findings were measured over; null when it could not be read. */
+  activeCampaigns?: number | null
 }) {
   const [nature, setNature] = useState<FindingNature | 'all'>('all')
   const counts = useMemo(() => natureCounts(findings), [findings])
-  const severity = useMemo(() => {
-    const out: Record<ActionSeverity, number> = { critical: 0, warning: 0, info: 0 }
-    for (const f of findings) out[f.severity] += 1
-    return out
-  }, [findings])
+  const health = useMemo(() => healthSummary(findings), [findings])
   const shown = nature === 'all' ? findings : findings.filter((f) => f.nature === nature)
 
   return (
@@ -79,17 +77,15 @@ export function FindingsBoard({
         )
       ) : (
         <>
+          {/*
+            RECS-OVERVIEW-ATF-001 — how the portfolio is doing, in the first viewport: active, needing attention,
+            critical, and what to do next. Everything below is the detail behind these four numbers.
+          */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="action-center-summary">
-            {(['critical', 'warning', 'info'] as ActionSeverity[]).map((s) => (
-              <div key={s} className="rounded-xl border border-border bg-surface p-3" data-testid={`summary-severity-${s}`}>
-                <p className="text-[11px] text-text-muted">{severityLabel(s, ar)}</p>
-                <p className={`text-2xl font-extrabold ${s === 'critical' ? 'text-danger' : s === 'warning' ? 'text-warning' : 'text-info'}`}><Num>{severity[s]}</Num></p>
-              </div>
-            ))}
-            <div className="rounded-xl border border-border bg-surface p-3" data-testid="summary-opportunity">
-              <p className="text-[11px] text-text-muted">{natureLabel('opportunity', ar)}</p>
-              <p className="text-2xl font-extrabold text-success"><Num>{counts.opportunity}</Num></p>
-            </div>
+            <HealthTile testId="health-active" label={ar ? 'حملات نشطة' : 'Active campaigns'} value={activeCampaigns} tone="brand" />
+            <HealthTile testId="health-attention" label={ar ? 'تحتاج انتباهًا' : 'Need attention'} value={health.attention} tone="warning" />
+            <HealthTile testId="health-critical" label={ar ? 'حرجة' : 'Critical'} value={health.critical} tone="danger" />
+            <HealthTile testId="health-next" label={ar ? 'الإجراءات التالية' : 'Next actions'} value={health.nextActions} tone="success" />
           </div>
 
           <div role="tablist" className="flex flex-wrap gap-1.5" data-testid="action-center-nature">
@@ -129,4 +125,16 @@ const SOURCE: Record<SourceKey, { ar: string; en: string }> = {
   limits: { ar: 'حدود الإنفاق', en: 'spend limits' },
   pacing: { ar: 'ميزانيات الحملات ووتيرتها', en: 'campaign budgets and pace' },
   creatives: { ar: 'أداء المحتوى', en: 'creative performance' },
+}
+
+
+function HealthTile({ testId, label, value, tone }: { testId: string; label: string; value: number | null; tone: 'brand' | 'warning' | 'danger' | 'success' }) {
+  const color = { brand: 'text-text-primary', warning: 'text-warning', danger: 'text-danger', success: 'text-success' }[tone]
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3" data-testid={testId}>
+      <p className="text-[11px] text-text-muted">{label}</p>
+      <p className={`text-2xl font-extrabold ${color}`}>{value === null ? '—' : <Num>{value}</Num>}</p>
+    </div>
+  )
 }
