@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Mail } from 'lucide-react'
-import { fetchEmailLedger, fetchEmailPreview, fetchEmailPreviews, type EmailDelivery } from './api'
+import { fetchEmailLedger, fetchEmailPreview, fetchEmailPreviews, sendTestEmail, type EmailDelivery, type EmailLedger } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
@@ -79,6 +79,7 @@ export function EmailOperationsPage() {
       ) : (
         <div className="space-y-6">
           <TransportBanner transport={ledger.data.transport} ar={ar} />
+          <MailSettingsCard transport={ledger.data.transport} ar={ar} />
 
           {/* Counted over the whole window, not the page. */}
           <div className="flex flex-wrap gap-3">
@@ -242,6 +243,65 @@ function TransportBanner({ transport, ar }: { transport: { state: string; provid
         ? 'تُسجَّل كل محاولة بحالة «بانتظار بيانات الاعتماد» ولا يغادر شيء. القوالب والجدولة والتفضيلات جاهزة وتعمل فور ربط المزوّد.'
         : 'Every attempt is recorded as awaiting credentials and nothing leaves. The templates, the schedule and the preferences are ready and take effect the moment a provider is wired.'}
     </Alert>
+  )
+}
+
+/**
+ * EMAIL-SETTINGS-PAGE-001 — who the mail is from, when it last worked, when it last failed, and a test.
+ *
+ * Addresses and timestamps only: no host, port, user or key ever reaches this page, so a screenshot of
+ * it is safe to send to the person fixing the mail. The test message goes to the signed-in operator and
+ * nobody else, and its outcome is whatever the ledger recorded — `awaiting credentials` is a result, not
+ * an error, and is said as one.
+ */
+function MailSettingsCard({ transport, ar }: { transport: EmailLedger['transport']; ar: boolean }) {
+  const qc = useQueryClient()
+  const test = useMutation({
+    mutationFn: () => sendTestEmail(ar ? 'ar' : 'en'),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['admin', 'email'] }) },
+  })
+  const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB') : (ar ? 'لم يحدث بعد' : 'Never'))
+  const outcome: Record<string, { ar: string; en: string }> = {
+    sent: { ar: 'أُرسلت', en: 'Sent' },
+    sandbox: { ar: 'كُتبت في السجل فقط — لا تصل لأحد', en: 'Written to the log only — it reaches nobody' },
+    awaiting_credentials: { ar: 'سُجّلت بانتظار بيانات الاعتماد — لم يغادر شيء', en: 'Recorded as awaiting credentials — nothing left' },
+    failed: { ar: 'فشلت', en: 'Failed' },
+    already_sent: { ar: 'أُرسلت قبل لحظات', en: 'Already sent a moment ago' },
+  }
+
+  return (
+    <section data-testid="mail-settings" className="grid gap-4 rounded-2xl border border-border bg-surface p-5 md:grid-cols-2">
+      <dl className="grid gap-2 text-sm">
+        <Row label={ar ? 'المُرسِل' : 'Sender'} value={transport.sender?.address ? `${transport.sender.name} <${transport.sender.address}>` : (ar ? 'غير مضبوط' : 'Not set')} ltr />
+        <Row label={ar ? 'الرد إلى' : 'Reply-to'} value={transport.reply_to || (ar ? 'غير مضبوط' : 'Not set')} ltr />
+        <Row label={ar ? 'آخر نجاح' : 'Last success'} value={when(transport.last_success_at)} />
+        <Row
+          label={ar ? 'آخر فشل' : 'Last failure'}
+          value={transport.last_failure ? `${when(transport.last_failure.at)} · ${transport.last_failure.kind}${transport.last_failure.error ? ` — ${transport.last_failure.error}` : ''}` : (ar ? 'لا يوجد' : 'None')}
+        />
+      </dl>
+      <div className="flex flex-col items-start gap-2">
+        <Button variant="secondary" disabled={test.isPending} onClick={() => test.mutate()} data-testid="mail-test-send">
+          {ar ? 'أرسل لي رسالة اختبار' : 'Send me a test email'}
+        </Button>
+        <p className="text-xs text-text-muted">{ar ? 'تُرسل إلى بريدك أنت فقط، وتظهر نتيجتها في السجل أدناه.' : 'Goes to your own address only, and its result appears in the ledger below.'}</p>
+        {test.data && (
+          <p data-testid="mail-test-result" className="text-sm font-semibold text-text-primary">
+            {(outcome[test.data.state] ?? { ar: test.data.state, en: test.data.state })[ar ? 'ar' : 'en']} — <span dir="ltr">{test.data.recipient}</span>
+          </p>
+        )}
+        {test.isError && <p role="alert" className="text-sm text-danger">{ar ? 'تعذّر تنفيذ الاختبار.' : 'The test could not be run.'}</p>}
+      </div>
+    </section>
+  )
+}
+
+function Row({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
+  return (
+    <div className="flex flex-wrap justify-between gap-x-4">
+      <dt className="text-text-muted">{label}</dt>
+      <dd className="font-semibold text-text-primary" dir={ltr ? 'ltr' : undefined}>{value}</dd>
+    </div>
   )
 }
 
