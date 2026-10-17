@@ -567,7 +567,14 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         foreach ($data as $key => $value) {
             $name = (string) $key;
             if (is_array($value) && $value !== [] && ! array_is_list($value)) {
-                $name .= '{'.implode(',', array_map('strval', array_slice(array_keys($value), 0, 12))).'}';
+                // One more level for an object's own object, names only: `video_detail{video_info{poster_url,…}}`.
+                $inner = [];
+                foreach (array_slice($value, 0, 12, true) as $k => $v) {
+                    $inner[] = (string) $k.(is_array($v) && $v !== [] && ! array_is_list($v)
+                        ? '{'.implode(',', array_map('strval', array_slice(array_keys($v), 0, 12))).'}'
+                        : '');
+                }
+                $name .= '{'.implode(',', $inner).'}';
             } elseif (is_array($value)) {
                 $name .= '['.count($value).']';
             }

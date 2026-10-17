@@ -78,7 +78,7 @@ final class SecretNeverInLoggedUrlTest extends TestCase
         Http::fake([
             'business-api.tiktok.com/open_api/*/oauth2/advertiser/get*' => Http::response([
                 'code' => 0,
-                'data' => ['list' => [['advertiser_id' => '777', 'advertiser_name' => 'Confidential name', 'currency' => 'SAR']], 'video_info' => ['poster_url' => 'https://cdn.example/secret.jpg', 'duration' => 12]],
+                'data' => ['list' => [['advertiser_id' => '777', 'advertiser_name' => 'Confidential name', 'currency' => 'SAR']], 'video_info' => ['poster_url' => 'https://cdn.example/secret.jpg', 'duration' => 12], 'video_detail' => ['item_id' => '1', 'video_info' => ['poster_url' => 'https://cdn.example/x.jpg', 'is_ai' => true]]],
             ]),
         ]);
 
@@ -88,6 +88,7 @@ final class SecretNeverInLoggedUrlTest extends TestCase
 
         $this->assertContains('list[1]', $keys);
         $this->assertContains('video_info{poster_url,duration}', $keys);
+        $this->assertContains('video_detail{item_id,video_info{poster_url,is_ai}}', $keys, 'one level deeper: the object inside the object, names only');
         $this->assertStringNotContainsString('secret.jpg', implode(' ', $keys));
         $this->assertStringNotContainsString('Confidential name', implode(' ', $keys));
     }
