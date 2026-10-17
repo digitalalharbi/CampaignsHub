@@ -3,7 +3,7 @@ import { RulePresets } from './RulePresets'
 import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDER, type AlertCategory } from './alertTaxonomy'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
 import { FilterBar, FilterChips, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import {
@@ -99,6 +99,18 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
   measurement_outage: { ar: 'انقطاع القياس (GA4)', en: 'Measurement outage (GA4)' },
+}
+
+/** ALERTS-VISUAL-UI-001 — the severity read at a glance: the stripe on the card and the badge beside the title. */
+const sevStripe: Record<AlertEvent['severity'], string> = {
+  critical: 'border-s-danger',
+  warning: 'border-s-warning',
+  info: 'border-s-info',
+}
+const sevBadge: Record<AlertEvent['severity'], string> = {
+  critical: 'bg-[var(--negative-background)] text-danger',
+  warning: 'bg-[var(--warning-background)] text-warning',
+  info: 'bg-[var(--info-background)] text-info',
 }
 
 const sevClass: Record<AlertEvent['severity'], string> = {
@@ -405,7 +417,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       ) : (
         <ul className="flex flex-col gap-2">
           {events.map((e) => (
-            <li key={e.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">
+            <li key={e.id} data-severity={e.severity} className={`flex flex-col gap-2 rounded-2xl border border-s-4 border-border bg-surface p-4 ${sevStripe[e.severity]}`}>
               <div className="flex items-start gap-3">
                 <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${sevClass[e.severity]}`} aria-hidden />
                 <div className="flex flex-1 flex-col gap-1">
@@ -426,11 +438,16 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     >
                       {alertCategoryLabel(alertCategory(e.type), locale)}
                     </span>
-                    <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-                      {c.source}: {TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}
+                    {/*
+                      ALERTS-VISUAL-UI-001 — a label, not a sentence. «Source: …» and «Severity: …» spent
+                      most of their width on the words that name the field; the field is obvious from the
+                      value, and the severity is already carried by the stripe and the dot.
+                    */}
+                    <span title={c.source} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                      {TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}
                     </span>
-                    <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-                      {c.severity}: {sevLabel(e.severity, c)}
+                    <span title={c.severity} data-testid={`alert-severity-${e.id}`} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${sevBadge[e.severity]}`}>
+                      {sevLabel(e.severity, c)}
                     </span>
                     {/*
                       ANALYTICS-FILTER-TRUTH-001 — why an alert with no project is on a project's page.
@@ -456,7 +473,8 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     event and would crowd out the evidence.
                   */}
                   {alertNextAction(e.type, locale) !== null && (
-                    <p data-testid={`alert-action-${e.id}`} className="text-[12px] font-semibold text-text-primary">
+                    <p data-testid={`alert-action-${e.id}`} className="flex items-center gap-1.5 text-[12px] font-semibold text-brand-700">
+                      <ArrowRight size={12} className="shrink-0 rtl:rotate-180" aria-hidden />
                       {alertNextAction(e.type, locale)}
                     </p>
                   )}
