@@ -45,6 +45,22 @@ describe('PortfolioPerformance', () => {
     expect(within(screen.getByTestId('portfolio-secondary')).getByText(/CTR/)).toBeInTheDocument()
   })
 
+  it('lists platforms in the product-wide order, whatever order the server sent them in', async () => {
+    vi.mocked(fetchPortalOverview).mockResolvedValue({
+      ...base,
+      platforms: [
+        { provider: 'google', impressions: 1, clicks: 1, conversions: 1 },
+        { provider: 'meta', impressions: 1, clicks: 1, conversions: 1 },
+        { provider: 'snapchat', impressions: 1, clicks: 1, conversions: 1 },
+        { provider: 'tiktok', impressions: 1, clicks: 1, conversions: 1 },
+      ],
+    })
+    renderWithProviders(<PortfolioPerformance />, { locale: 'en' })
+
+    const marks = await screen.findAllByTestId('provider-mark')
+    expect(marks.map((m) => m.getAttribute('data-provider'))).toEqual(['snapchat', 'tiktok', 'meta', 'google'])
+  })
+
   it('draws no money unless the server sent it', async () => {
     vi.mocked(fetchPortalOverview).mockResolvedValue(base)
     renderWithProviders(<PortfolioPerformance />, { locale: 'en' })

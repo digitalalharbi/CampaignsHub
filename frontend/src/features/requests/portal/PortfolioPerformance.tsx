@@ -6,6 +6,7 @@ import { Num } from '@/components/ui/Num'
 import { PortalTrend } from './PortalTrend'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
+import { sortByPlatform } from '@/lib/platforms'
 import { days } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { fetchPortalOverview, type PortalOverview } from './portalOverviewApi'
@@ -93,7 +94,8 @@ function Body({ data, t, ar, spaceTo }: { data: PortalOverview; t: typeof COPY.a
         <p className="rounded-2xl border border-border bg-surface p-5 text-sm text-text-muted">{t.none}</p>
       ) : (
         <>
-          <StatGrid>
+          {/* Three in a row at every width, phone included: the primary figures read as one glance, not a stack. */}
+          <StatGrid columns="grid-cols-3">
             {primaryKeys.map((k) => (
               <StatCard key={k} testid={`portfolio-kpi-${k}`} label={t.k[k] ?? k} value={<Num>{format(k, data.kpis[k], data.currency)}</Num>} />
             ))}
@@ -118,7 +120,7 @@ function Body({ data, t, ar, spaceTo }: { data: PortalOverview; t: typeof COPY.a
           <div data-testid="portfolio-platforms" className="rounded-2xl border border-border bg-surface p-4">
             <h3 className="mb-2 text-sm font-bold text-text-primary">{t.platforms}</h3>
             <ul className="divide-y divide-border">
-              {data.platforms.map((p) => (
+              {sortByPlatform(data.platforms, (p) => p.provider).map((p) => (
                 <li key={p.provider ?? 'unknown'} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="flex min-w-0 items-center gap-2">
                     <ProviderMark provider={p.provider ?? ''} />
