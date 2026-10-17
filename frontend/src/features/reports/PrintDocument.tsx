@@ -1,9 +1,6 @@
-<<<<<<< HEAD
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
-=======
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
->>>>>>> 5d349592 (feat(reports): ad accounts are their own section, in the live Tables view, the saved deck and the PDF (REPORT-ACCOUNT-BREAKDOWN-001))
 import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
