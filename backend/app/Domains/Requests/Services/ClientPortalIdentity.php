@@ -58,6 +58,30 @@ final class ClientPortalIdentity
     }
 
     /**
+     * The projects this request is confined to, or null when it is not (CP-USERS-001).
+     *
+     * A client user may be limited to some of their client's projects — a marketing lead for one brand of
+     * several. That ceiling lives on the membership as project scopes, and it is a HARD one: the client
+     * space still resolves, but nothing inside it may be read beyond these projects. Null means «the whole
+     * space», which only the membership engine can say deliberately (no project scopes) and which the
+     * legacy token engine always says, because a token has never carried a project limit.
+     *
+     * @return list<string>|null
+     */
+    public function projectReach(Request $request, ?ClientPortalToken $token): ?array
+    {
+        $membership = $this->membershipFor($request, $token);
+
+        if ($membership === null) {
+            return null;
+        }
+
+        $ids = $membership->projectScopeIds();
+
+        return $ids === [] ? null : array_values($ids);
+    }
+
+    /**
      * What each engine would answer for this request, side by side.
      *
      * The cutover is only safe when these agree for every user and every space. Comparing them at

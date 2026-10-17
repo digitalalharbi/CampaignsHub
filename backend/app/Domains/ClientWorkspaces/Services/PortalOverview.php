@@ -31,10 +31,14 @@ final class PortalOverview
     public function __construct(private readonly ClientAnalyticsService $analytics) {}
 
     /** @return array<string, mixed> */
-    public function for(ClientWorkspace $workspace, Carbon $from, Carbon $to): array
+    /**
+     * @param  list<string>|null  $onlyProjectIds  a project-restricted user's ceiling; null = the whole space
+     * @return array<string, mixed>
+     */
+    public function for(ClientWorkspace $workspace, Carbon $from, Carbon $to, ?array $onlyProjectIds = null): array
     {
         $v = PortalVisibility::visibilityFor($workspace);
-        $data = $this->analytics->forClient($workspace, $from, $to);
+        $data = $this->analytics->forClient($workspace, $from, $to, $onlyProjectIds);
 
         $totals = (array) ($data['totals'] ?? $data['counts'] ?? []);
         $spendWhole = $v['spend'] && ((int) ($totals['spend_withheld_rows'] ?? 0)) === 0 && ($data['money_blended'] ?? false);
@@ -72,13 +76,16 @@ final class PortalOverview
             return $row;
         }, array_values((array) ($data['platforms'] ?? [])));
 
-        $projects = Project::query()->where('client_workspace_id', $workspace->getKey())->orderBy('name')->get(['id', 'name', 'status']);
+        $projects = Project::query()->where('client_workspace_id', $workspace->getKey())
+            ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('id', $onlyProjectIds))
+            ->orderBy('name')->get(['id', 'name', 'status']);
         $spendByProject = [];
         foreach ((array) ($data['projects'] ?? []) as $row) {
             $spendByProject[(string) $row['project_id']] = $row['spend'];
         }
 
-        $campaigns = UnifiedCampaign::query()->where('client_workspace_id', $workspace->getKey());
+        $campaigns = UnifiedCampaign::query()->where('client_workspace_id', $workspace->getKey())
+            ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('project_id', $onlyProjectIds));
         $byStatus = (clone $campaigns)->selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status')->map(fn ($n): int => (int) $n)->all();
 
         return [

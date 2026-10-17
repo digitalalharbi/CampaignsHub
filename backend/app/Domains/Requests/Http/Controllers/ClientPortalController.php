@@ -338,7 +338,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->visibleWorkspaceIds($token, 'invoices');
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -405,7 +405,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->visibleWorkspaceIds($token, 'invoices');
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -469,7 +469,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->visibleWorkspaceIds($token, 'messages');
+        $ids = $this->wholeClientWorkspaceIds($token, 'messages');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -512,7 +512,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->visibleWorkspaceIds($token, 'messages');
+        $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         abort_if($ids === [], 422, 'No client workspace is available to open a conversation.');
 
         $data = $request->validate([
@@ -627,7 +627,7 @@ final class ClientPortalController
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
-            : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->orderByDesc('created_at'));
+            : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->when($this->restrictedProjectIds($token) !== null, fn ($q) => $q->whereIn('project_id', $this->restrictedProjectIds($token)))->orderByDesc('created_at'));
 
         return response()->json(['data' => [
             'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c, $workspaces))->values()->all(),
@@ -689,7 +689,10 @@ final class ClientPortalController
             return [];
         }
 
+        $restricted = $this->restrictedProjectIds($token);
+
         return Project::query()->whereIn('client_workspace_id', $workspaceIds)
+            ->when($restricted !== null, fn ($q) => $q->whereIn('id', $restricted))
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
     }
 
@@ -715,10 +718,19 @@ final class ClientPortalController
 
         $projectIds = $this->ownedProjectIds($token, 'files');
         $campaignIds = UnifiedCampaign::query()->whereIn('client_workspace_id', $workspaceIds)
+            ->when($this->restrictedProjectIds($token) !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
 
-        $linkIds = DriveLink::query()->where(function (Builder $q) use ($workspaceIds, $projectIds, $campaignIds): void {
-            $q->where(fn (Builder $w) => $w->where('scope', 'client')->whereIn('scope_id', $workspaceIds));
+        // A project-restricted user with nothing project-attributable to read has nothing to read: an empty
+        // OR-group would otherwise match every folder in the tenant.
+        if ($this->restrictedProjectIds($token) !== null && $projectIds === [] && $campaignIds === []) {
+            return collect();
+        }
+
+        $linkIds = DriveLink::query()->where(function (Builder $q) use ($token, $workspaceIds, $projectIds, $campaignIds): void {
+            if ($this->wholeSpaceOnly($token)) {
+                $q->where(fn (Builder $w) => $w->where('scope', 'client')->whereIn('scope_id', $workspaceIds));
+            }
             if ($projectIds !== []) {
                 $q->orWhere(fn (Builder $w) => $w->where('scope', 'project')->whereIn('scope_id', $projectIds));
             }
@@ -904,11 +916,47 @@ final class ClientPortalController
      */
     private function ownedWorkspaceIds(ClientPortalToken $token): array
     {
+        /*
+         * CP-ARCH-001 — a MEMBERSHIP names its spaces; request rows do not.
+         *
+         * The list below was derived from the client ids on the contact's requests, which is the token
+         * engine's only evidence of reach. For a membership session that made a granted space invisible
+         * until somebody had submitted a request under that address: a client invited to their own
+         * workspace opened a portal with no campaigns, reports or figures in it. The membership already
+         * says which spaces are theirs (and `selectedSpaceId` still narrows to the one in the URL, 404
+         * for any other), so that is what is read.
+         */
+        $reach = $this->identity->reach(request(), $token);
+        if ($reach['engine'] === 'membership') {
+            $space = $this->selectedSpaceId($token);
+
+            return $space !== null ? (in_array($space, $reach['ids'], true) ? [$space] : []) : array_values($reach['ids']);
+        }
+
         return (clone $this->contactScope($token))
             ->whereNotNull('client_id')
             ->pluck('client_id')
             ->map(fn ($id): string => (string) $id)
             ->unique()->values()->all();
+    }
+
+    /**
+     * The projects this session is confined to, or null for the whole space (CP-USERS-001).
+     *
+     * @return list<string>|null
+     */
+    private function restrictedProjectIds(ClientPortalToken $token): ?array
+    {
+        return $this->identity->projectReach(request(), $token);
+    }
+
+    /**
+     * A project-restricted user reads project-attributable things only. Client-wide paperwork — invoices,
+     * quotes, conversations — belongs to the whole client, not to one of its projects, so it is not theirs.
+     */
+    private function wholeSpaceOnly(ClientPortalToken $token): bool
+    {
+        return $this->restrictedProjectIds($token) === null;
     }
 
     /**
@@ -921,7 +969,7 @@ final class ClientPortalController
     {
         $ids = $this->ownedWorkspaceIds($token);
 
-        return $ids === [] ? [] : ClientWorkspace::query()->whereIn('id', $ids)->get()
+        return $ids === [] ? [] : ClientWorkspace::query()->whereIn('id', $ids)->whereNull('archived_at')->get()
             ->keyBy(fn (ClientWorkspace $w): string => (string) $w->getKey())->all();
     }
 
@@ -943,6 +991,17 @@ final class ClientPortalController
     }
 
     /**
+     * `visibleWorkspaceIds` for sections that belong to the WHOLE client (billing, conversations): empty for
+     * a project-restricted user, who is confined to the projects they were given.
+     *
+     * @return list<string>
+     */
+    private function wholeClientWorkspaceIds(ClientPortalToken $token, string $section): array
+    {
+        return $this->wholeSpaceOnly($token) ? $this->visibleWorkspaceIds($token, $section) : [];
+    }
+
+    /**
      * The owned workspaces that hide this section — to be excluded from a request-shaped query.
      *
      * @return list<string>
@@ -957,7 +1016,7 @@ final class ClientPortalController
 
     private function ownedQuote(ClientPortalToken $token, string $id): Quote
     {
-        $ids = $this->visibleWorkspaceIds($token, 'invoices');
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Quote|null $quote */
         $quote = $ids === [] ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($quote === null, 404);
@@ -967,7 +1026,7 @@ final class ClientPortalController
 
     private function ownedInvoice(ClientPortalToken $token, string $id): Invoice
     {
-        $ids = $this->visibleWorkspaceIds($token, 'invoices');
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
         $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
         abort_if($invoice === null, 404);
@@ -977,7 +1036,7 @@ final class ClientPortalController
 
     private function ownedThread(ClientPortalToken $token, string $id): MessageThread
     {
-        $ids = $this->visibleWorkspaceIds($token, 'messages');
+        $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         /** @var MessageThread|null $thread */
         $thread = $ids === [] ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($thread === null, 404);
@@ -1499,7 +1558,7 @@ final class ClientPortalController
         $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);
         abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
 
-        return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay())]);
+        return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay(), $this->restrictedProjectIds($token))]);
     }
 
     /**
@@ -1565,7 +1624,12 @@ final class ClientPortalController
     {
         $hidden = $this->hiddenWorkspaceIds($token, 'requests');
 
+        $restricted = $this->restrictedProjectIds($token);
+
         return $this->contactScope($token)->when(
+            $restricted !== null,
+            static fn ($q) => $q->whereIn('project_id', $restricted),
+        )->when(
             $hidden !== [],
             static fn ($q) => $q->where(static fn ($w) => $w->whereNull('client_id')->orWhereNotIn('client_id', $hidden)),
         );
