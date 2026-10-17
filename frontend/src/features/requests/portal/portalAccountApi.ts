@@ -259,7 +259,8 @@ export interface PortalCampaignMetrics {
 
 export interface PortalCampaign {
   id: string
-  name: string
+  /** Null where the agency does not show campaign names to this client. */
+  name: string | null
   status: string
   objective: string | null
   starts_on: string | null
@@ -267,8 +268,40 @@ export interface PortalCampaign {
   metrics: PortalCampaignMetrics
 }
 
-export const listClientCampaigns = async (): Promise<PortalCampaign[]> =>
-  (await getData<{ campaigns: PortalCampaign[] }>('/client/campaigns')).campaigns
+/** CP-SCALE-001 — one server page of campaigns, with facets counted over the whole visible set. */
+export interface PortalCampaignPage {
+  campaigns: PortalCampaign[]
+  total: number
+  page: number
+  per_page: number
+  last_page: number
+  /** False when the agency hides campaign names: the server then ignores a search term. */
+  names_searchable: boolean
+  facets: {
+    status: Record<string, number>
+    objective: Record<string, number>
+    projects: Array<{ id: string; name: string | null; count: number }>
+  }
+}
+
+export interface PortalCampaignQuery {
+  page?: number
+  per_page?: number
+  q?: string
+  status?: string
+  objective?: string
+  project?: string
+}
+
+export const listClientCampaigns = async (query: PortalCampaignQuery = {}): Promise<PortalCampaignPage> => {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '' && value !== null) params.set(key, String(value))
+  }
+  const suffix = params.toString()
+
+  return getData<PortalCampaignPage>(`/client/campaigns${suffix === '' ? '' : `?${suffix}`}`)
+}
 
 // ---------------------------------------------------------------------------
 // Client-facing content — reports (only client-audience reports with an active share)
