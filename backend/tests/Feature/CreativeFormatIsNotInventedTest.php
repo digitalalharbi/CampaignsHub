@@ -60,6 +60,23 @@ final class CreativeFormatIsNotInventedTest extends TestCase
         ]);
     }
 
+    /**
+     * CONTENT-NOTHING-TO-DRAW-WHY-001 — the body the platform sent is kept on the creative, so the diagnosis can read it.
+     * It also carries Snapchat's `ai_content_source`, which `CreativePresenter::aiMedia()` reads and nothing had stored.
+     */
+    public function test_the_providers_creative_body_is_kept_and_an_oversized_one_is_not(): void
+    {
+        $kept = $this->import(['external_id' => 'cr-raw', 'name' => 'Has a body', 'raw' => ['ai_content_source' => 'ai_generated', 'type' => 'chat_card']]);
+        $this->assertSame('ai_generated', $kept->raw['ai_content_source']);
+        $this->assertTrue(app(CreativePresenter::class)->preview($kept) !== []);
+
+        $none = $this->import(['external_id' => 'cr-none', 'name' => 'No body']);
+        $this->assertNull($none->raw);
+
+        $huge = $this->import(['external_id' => 'cr-huge', 'name' => 'Too big', 'raw' => ['blob' => str_repeat('x', 20000)]]);
+        $this->assertNull($huge->raw, 'a body too large for a row read on every card is dropped, not stored');
+    }
+
     /** A creative whose connector stated no format is stored as «we do not know». */
     public function test_an_unstated_format_is_stored_as_null(): void
     {
