@@ -1,4 +1,5 @@
 import { StatCard } from '@/components/ui/StatCard'
+import { RulePresets } from './RulePresets'
 import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDER, type AlertCategory } from './alertTaxonomy'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -257,7 +258,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   return (
     <div className="flex flex-col gap-4">
       {/* Summary — status of the alert ledger at a glance. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-4 gap-2">
         {/*
           ALERTS-COPY-001 — «تحتاج إجراء» under a zero, in the brand tone that means «look here».
           The same defect as «متوقفة 0 / تحتاج مراجعة» on Campaigns: a caption asserting that action
@@ -268,7 +269,6 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           testid="open"
           label={c.sum_open}
           value={summary.open}
-          hint={summary.open > 0 ? c.sum_open_hint : c.sum_open_clear}
           tone={summary.open > 0 ? 'brand' : 'success'}
         />
         <SummaryCard testid="critical" label={c.sum_critical} value={summary.critical} tone="danger" />
@@ -658,6 +658,8 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     : []
 
   return (
+    <div className="flex flex-col gap-4">
+    <RulePresets rules={rules} busy={createM.isPending} ar={locale === 'ar'} onAdd={(rule) => createM.mutate(rule)} />
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-2">
         {capped && (
@@ -792,6 +794,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           {c.save}
         </button>
       </form>
+    </div>
     </div>
   )
 }
