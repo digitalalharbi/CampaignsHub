@@ -107,6 +107,8 @@ export interface ReportData {
   timeseries: Row[]
   platform_series?: Record<string, Row[]>
   platforms: Row[]
+  /** REPORT-ACCOUNT-BREAKDOWN-001 — the provider → ad-account split, present only where the section is on. */
+  accounts?: Row[]
   campaigns: Row[]
   top_creatives?: Row[]
   /**
@@ -389,6 +391,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case 'objective_performance': return <GeneralPerformanceSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
+    case 'accounts': return <AccountsSlide data={data} />
     case 'campaigns': return <CampaignsSlide data={data} />
     case 'observations': return <ObservationsSlide data={data} />
     /*
@@ -1791,6 +1794,45 @@ function CampaignsSlide({ data }: { data: ReportData }) {
       ) : (
         <div data-testid="report-campaigns-table">
           <DataMetricTable columns={columns} rows={table} initialSort={{ column: 2, dir: 'desc' }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * REPORT-ACCOUNT-BREAKDOWN-001 — the Detailed deck's provider → ad-account split.
+ *
+ * One row per ad account with its platform and what it produced; money columns follow the money
+ * contract (the table prints a null as «—» and a null currency bare). Present only where the report's
+ * own section settings carry the section, so a Standard deck never has this page.
+ */
+function AccountsSlide({ data }: { data: ReportData }) {
+  const c = data.currency
+  const rows = [...(data.accounts ?? [])]
+  const columns: Column[] = [
+    { key: 'name', label: 'الحساب الإعلاني', kind: 'text' },
+    { key: 'platform', label: 'المنصة', kind: 'text' },
+    { key: 'spend', label: 'الإنفاق', kind: 'money', currency: c ?? null },
+    { key: 'results', label: 'النتائج', kind: 'number' },
+    { key: 'cost', label: 'تكلفة النتيجة', kind: 'cost', currency: c ?? null },
+  ]
+  const table: TableRow[] = rows.map((r) => ({
+    name: String(r.account_name ?? 'حساب بلا اسم'),
+    platform: r.provider ? providerLabel(String(r.provider), 'ar') : '—',
+    spend: typeof r.spend === 'number' ? r.spend : null,
+    results: typeof r.conversions === 'number' ? r.conversions : null,
+    cost: typeof r.cpa === 'number' ? r.cpa : null,
+  }))
+
+  return (
+    <div>
+      <Title sub="كل حساب إعلاني على حدة: ماذا أنتج، وبأي تكلفة">تفصيل الحسابات الإعلانية</Title>
+      {table.length === 0 ? (
+        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">لا حسابات بأرقام في هذا النطاق.</p>
+      ) : (
+        <div data-testid="report-accounts-table">
+          <DataMetricTable columns={columns} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
         </div>
       )}
     </div>
