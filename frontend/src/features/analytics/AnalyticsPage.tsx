@@ -1,3 +1,4 @@
+import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
@@ -2499,7 +2500,7 @@ function PlatformCell({ provider }: { provider: string }) {
 
   return (
     <span className="inline-flex items-center gap-1.5 font-semibold text-text-primary">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(provider) }} />
+      <ProviderMark provider={provider} size={18} />
       {providerLabel(canonicalPlatform(provider), ar ? 'ar' : 'en')}
     </span>
   )

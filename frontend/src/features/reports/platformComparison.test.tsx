@@ -97,7 +97,7 @@ describe('the platform comparison table', () => {
   it('keeps the row of a platform that reported no results, and refuses its cost', () => {
     const table = render([{ provider: 'x', spend: 400, conversions: 0, cpa: null }])
 
-    expect(table.getByText('X')).toBeInTheDocument()
+    expect(table.getAllByText('X').length).toBeGreaterThan(0)
     expect(table.queryByText(/Infinity|NaN/)).toBeNull()
   })
 
@@ -167,5 +167,14 @@ describe('the platform comparison table', () => {
 
     // Three platforms plus the header row.
     expect(table.getAllByRole('row')).toHaveLength(4)
+  })
+
+  it('puts a restrained provider mark beside each platform name, never instead of it', () => {
+    const table = render([{ provider: 'meta', spend: 400, conversions: 4 }])
+
+    const mark = table.getByTestId('provider-mark')
+    expect(mark).toHaveAttribute('data-provider', 'meta')
+    expect(mark).toHaveAttribute('aria-hidden', 'true')
+    expect(mark.parentElement?.textContent).toMatch(/Meta/i)
   })
 })
