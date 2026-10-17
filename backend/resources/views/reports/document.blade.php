@@ -19,7 +19,7 @@
   ul.summary li { margin: 3px 0; }
   @page { margin: 40px 34px 60px; }
   .doc-footer { position: fixed; bottom: -40px; left: 0; right: 0; font-size: 9px; color: #8a94a6;
-    border-top: 1px solid #e6eaef; padding-top: 5px; text-align: justify; line-height: 1.5; }
+    border: 1px solid #e6eaef; border-radius: 6px; padding: 5px 10px; text-align: center; line-height: 1.5; }
   .doc-footer .pnum:after { content: counter(page); }
   .note-box { background: #f3f6f9; border: 1px solid #e6eaef; border-radius: 8px; padding: 10px 12px;
     margin-top: 10px; line-height: 1.7; text-align: justify; color: #33405a; }
@@ -91,8 +91,8 @@
   @php
     $fLoc = data_get($data, 'disclaimer.locale_default', 'ar') === 'en' ? 'en' : 'ar';
     $fNote = $fLoc === 'ar'
-      ? 'ملاحظة: تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.'
-      : 'Note: Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.';
+      ? 'ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.'
+      : 'Note: Campaigns are managed on a performance-based methodology; results may vary by period, platform, data source, attribution model and the campaign learning phase.';
     $fLabels = $fLoc === 'ar'
       ? ['آخر تحديث', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة']
       : ['Last updated', 'Period', 'Currency', 'Time zone', 'Campaign objective'];
@@ -110,7 +110,7 @@
     {{ $fNote }}
     <br>
     {{ collect($fItems)->map(fn ($v, $k) => $k.': '.$v)->implode(' | ') }}
-    <span style="float:{{ $fLoc === 'ar' ? 'left' : 'right' }}">{{ $chName }} · <span class="pnum"></span></span>
+    <br><span>{{ $chName }} · <span class="pnum"></span></span>
   </div>
 </body>
 </html>
