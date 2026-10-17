@@ -454,3 +454,39 @@ export function natureCounts(findings: Finding[]): Record<FindingNature, number>
   for (const f of findings) out[f.nature] += 1
   return out
 }
+
+/**
+ * RECS-OVERVIEW-ATF-001 — the portfolio's health in four numbers, for the top of the page.
+ *
+ * Counted by SUBJECT, not by card: three alerts about one campaign are one campaign that needs attention,
+ * and a reader asking «how many things are on fire» is asking about campaigns, limits and connections, not
+ * about how many engines noticed. A subject takes its WORST severity, so a campaign with a critical and a
+ * warning finding counts once, as critical.
+ *
+ * `nextActions` is every finding the Owner can act on that is not just an observation — critical and
+ * warning cards plus the opportunities — so the number beside «Next actions» is the length of the list
+ * below it that matters.
+ */
+export function healthSummary(findings: readonly Finding[]): { critical: number; attention: number; nextActions: number } {
+  const worst = new Map<string, ActionSeverity>()
+  const rank: Record<ActionSeverity, number> = { critical: 0, warning: 1, info: 2 }
+
+  for (const f of findings) {
+    const key = `${f.subject.type}:${f.subject.id ?? f.subject.name ?? f.id}`
+    const seen = worst.get(key)
+    if (seen === undefined || rank[f.severity] < rank[seen]) worst.set(key, f.severity)
+  }
+
+  let critical = 0
+  let attention = 0
+  for (const s of worst.values()) {
+    if (s === 'critical') critical += 1
+    else if (s === 'warning') attention += 1
+  }
+
+  return {
+    critical,
+    attention,
+    nextActions: findings.filter((f) => f.severity !== 'info' || f.nature === 'opportunity').length,
+  }
+}

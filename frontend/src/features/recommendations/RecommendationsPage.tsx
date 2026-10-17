@@ -226,6 +226,7 @@ export function RecommendationsPage() {
         projectId={currentProjectId}
         currency={summary.data?.currency ?? null}
         ar={ar}
+        activeCampaigns={campaigns.isSuccess ? (campaigns.data ?? []).filter((c) => (c.impressions ?? 0) > 0 || (c.spend ?? 0) > 0).length : null}
       />
 
       <h2 className="pt-2 text-base font-bold text-text-primary">{ar ? 'توصيات كتبها الفريق' : 'Recommendations the team wrote'}</h2>

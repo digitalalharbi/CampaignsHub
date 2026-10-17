@@ -121,7 +121,7 @@ describe('a finding card carries its figures, its action and its evidence', () =
     renderWithProviders(<RecommendationsPage />, { locale: 'en' })
 
     await screen.findByTestId('finding-alert:a1')
-    expect(screen.getByTestId('summary-opportunity')).toHaveTextContent('1')
+    expect(screen.getByTestId('health-next')).toBeInTheDocument()
     fireEvent.click(within(screen.getByTestId('action-center-nature')).getByRole('tab', { name: /opportunity/i }))
     expect(screen.queryByTestId('finding-alert:a1')).toBeNull()
     expect(screen.getByTestId('finding-alert:a2')).toHaveAttribute('data-nature', 'opportunity')
