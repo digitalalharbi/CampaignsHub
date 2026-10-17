@@ -15,6 +15,7 @@ use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
@@ -1449,6 +1450,33 @@ final class ClientPortalController
                 'name' => (string) $c->name,
             ])->values()->all(),
         ]]);
+    }
+
+    /**
+     * GET /client/overview — the client's portfolio on the canonical numbers (CP-DASH-001).
+     *
+     * One space at a time: a portfolio that merged two clients' figures would be the cross-client
+     * leak the spaces exist to prevent, so a contact on several spaces must choose one (422 until
+     * they do) and a space the agency has switched `dashboard` off for answers 403.
+     */
+    public function overview(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $models = $this->ownedWorkspaceModels($token);
+        abort_if($models === [], 404);
+        abort_if(count($models) > 1, 422, 'Choose a client space first.');
+
+        /** @var ClientWorkspace $workspace */
+        $workspace = array_values($models)[0];
+        abort_unless(PortalVisibility::allows($workspace, 'dashboard'), 403, 'The dashboard is not available for this space.');
+
+        $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
+        $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);
+        abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay())]);
     }
 
     /**

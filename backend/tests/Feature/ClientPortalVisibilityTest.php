@@ -44,7 +44,7 @@ final class ClientPortalVisibilityTest extends TestCase
         ]);
         $project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'name' => 'P', 'status' => 'active']);
         ExternalRequest::create([
-            'tenant_id' => $this->tenant->id, 'reference' => 'REQ-2026-'.strtoupper(substr(md5($email), 0, 6)),
+            'tenant_id' => $this->tenant->id, 'reference' => 'REQ-2026-'.strtoupper(substr(md5($email.uniqid()), 0, 6)),
             'type_id' => RequestType::query()->firstOrFail()->id, 'status_id' => RequestStatus::query()->firstOrFail()->id,
             'contact_name' => 'Client', 'contact_email' => $email, 'contact_phone' => $phone,
             'client_id' => $workspace->id, 'journey_stage' => 'in_progress', 'submitted_at' => now(),
@@ -158,5 +158,40 @@ final class ClientPortalVisibilityTest extends TestCase
             ->assertJsonPath('data.spaces.0.visibility.invoices', true)
             ->assertJsonPath('data.spaces.0.capabilities.campaign_writes', true)
             ->assertJsonPath('data.spaces.0.capabilities.margin_profit', false);
+    }
+
+    public function test_the_portfolio_overview_is_scoped_to_one_space_and_money_is_opt_in(): void
+    {
+        $a = $this->client('a@x.test', '+966500000001');
+        $b = $this->client('b@x.test', '+966500000002', ['portal' => ['visibility' => ['spend' => true]]]);
+        $a['project']->update(['name' => 'Alpha Brand']);
+        $b['project']->update(['name' => 'Bravo Brand']);
+        $this->campaign($a, 'A1');
+        $this->campaign($b, 'B1');
+
+        $resA = $this->getJson('/api/v1/client/overview', $this->login('a@x.test'))->assertOk();
+        $resA->assertJsonPath('data.space.slug', $a['workspace']->slug)
+            ->assertJsonPath('data.campaigns.total', 1)
+            ->assertJsonPath('data.projects.0.name', 'Alpha Brand');
+        $this->assertStringNotContainsString('Bravo Brand', $resA->getContent());
+        $this->assertArrayNotHasKey('spend', $resA->json('data.kpis'), 'money is absent unless the agency switches it on');
+        $this->assertArrayNotHasKey('roas', $resA->json('data.kpis'));
+
+        $resB = $this->getJson('/api/v1/client/overview', $this->login('b@x.test'))->assertOk();
+        $this->assertArrayHasKey('spend', $resB->json('data.kpis'));
+        $this->assertSame('USD', $resB->json('data.currency'));
+        $this->assertArrayNotHasKey('roas', $resB->json('data.kpis'), 'ROAS needs both spend and revenue switched on');
+    }
+
+    public function test_the_overview_is_refused_when_the_dashboard_is_off_and_never_merges_two_spaces(): void
+    {
+        $this->client('a@x.test', '+966500000001', ['portal' => ['visibility' => ['dashboard' => false]]]);
+        $this->getJson('/api/v1/client/overview', $this->login('a@x.test'))->assertForbidden();
+
+        // One contact on two clients: no merged portfolio, a choice is required.
+        $first = $this->client('both@x.test', '+966500000003');
+        $second = $this->client('both@x.test', '+966500000003');
+        $this->getJson('/api/v1/client/overview', $this->login('both@x.test'))->assertStatus(422);
+        $this->assertNotSame($first['workspace']->id, $second['workspace']->id);
     }
 }

@@ -65,6 +65,10 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/spaces', [ClientPortalController::class, 'spaces'])->name('spaces.index')
         ->middleware('throttle:120,1');
 
+    // CP-DASH-001: the client's portfolio, one space at a time.
+    Route::get('/overview', [ClientPortalController::class, 'overview'])->name('overview.show')
+        ->middleware('throttle:60,1');
+
     // CP-VISIBILITY-001: what the agency lets this client see and do, per space.
     Route::get('/visibility', [ClientPortalController::class, 'visibility'])->name('visibility.show')
         ->middleware('throttle:120,1');
