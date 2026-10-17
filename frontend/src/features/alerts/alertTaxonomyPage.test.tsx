@@ -109,6 +109,27 @@ describe('an alert says what kind of problem it is', () => {
   })
 })
 
+describe('severity is read at a glance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listAlertRules).mockResolvedValue({ rules: [], total: 0 } as never)
+    vi.mocked(listProjects).mockResolvedValue([] as never)
+    signInWith(['alerts.view', 'alerts.manage'])
+  })
+  afterEach(() => signOut())
+
+  /* ALERTS-VISUAL-UI-001 — a stripe on the card and one word on a coloured badge, not «Severity: …». */
+  it('marks the card with its severity and names it in one word', async () => {
+    show([event({ id: 'a', type: 'budget_risk', severity: 'critical' })])
+
+    const badge = await screen.findByTestId('alert-severity-a')
+    expect(badge).toHaveTextContent(/^Critical$/)
+    expect(badge.closest('li')).toHaveAttribute('data-severity', 'critical')
+    expect(screen.queryByText(/Severity:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Source:/)).not.toBeInTheDocument()
+  })
+})
+
 describe('narrowing by kind', () => {
   beforeEach(() => {
     vi.clearAllMocks()
