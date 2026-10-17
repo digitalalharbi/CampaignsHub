@@ -117,8 +117,13 @@ export class SignedOutError extends Error {
   }
 }
 
-/** `/portal/clients/<slug>/...` — the URL segment that names an isolated client space. */
+/** `/portal/clients/<slug>/...` — the LEGACY URL segment that named an isolated client space. */
 export const CLIENT_SPACE_PREFIX = '/portal/clients/'
+
+/** The first path segments under `/portal` that are the portal's own pages, never a client space. */
+export const PORTAL_RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
+  'clients', 'spaces', 'login', 'requests', 'quotes', 'invoices', 'messages', 'profile', 'files', 'campaigns', 'reports',
+])
 
 /**
  * The client space named in a path, or null when the path is not inside one.
@@ -128,10 +133,20 @@ export const CLIENT_SPACE_PREFIX = '/portal/clients/'
  * A cached copy would survive a navigation and address the previous space.
  */
 export function clientSpaceSlugOf(pathname: string): string | null {
-  if (!pathname.startsWith(CLIENT_SPACE_PREFIX)) return null
-  const slug = pathname.slice(CLIENT_SPACE_PREFIX.length).split('/')[0]
+  // The legacy form, still answered (and redirected) so no bookmark or sent email breaks.
+  if (pathname.startsWith(CLIENT_SPACE_PREFIX)) {
+    const legacy = pathname.slice(CLIENT_SPACE_PREFIX.length).split('/')[0]
 
-  return slug === '' ? null : decodeURIComponent(slug)
+    return legacy === '' ? null : decodeURIComponent(legacy)
+  }
+
+  // CP-ROUTING-001 — the clean form: `/portal/<slug>/...`. The first segment is a space unless it is
+  // one of the portal's own sections, which is why a client slug may never equal one (the server
+  // refuses those slugs).
+  const match = /^\/portal\/([^/]+)/.exec(pathname)
+  if (match === null || PORTAL_RESERVED_SEGMENTS.has(match[1])) return null
+
+  return decodeURIComponent(match[1])
 }
 
 /**

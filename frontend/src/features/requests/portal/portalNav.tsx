@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useClientSpacePath } from './clientSpace'
+import { usePortalVisibility } from './usePortalVisibility'
 
 /**
  * Bilingual labels for the portal sections (self-contained to the portal, Arabic-first).
@@ -35,14 +36,35 @@ export const PORTAL_NAV: { to: string; icon: LucideIcon; ar: string; en: string;
   { to: '/profile', icon: User, ar: 'الملف الشخصي', en: 'Profile' },
 ]
 
+/**
+ * CP-VISIBILITY-001 — which visibility section each destination belongs to. Home and Profile are always
+ * the client's own; quotes ride with invoices because they are the same paperwork.
+ */
+const SECTION_OF: Record<string, string> = {
+  '/requests': 'requests', '/campaigns': 'campaigns', '/reports': 'reports',
+  '/quotes': 'invoices', '/invoices': 'invoices', '/messages': 'messages', '/files': 'files',
+}
+
+/** The mobile bar's four destinations, in the Owner's order, and what sits under More. */
+export const PORTAL_PRIMARY = ['', '/reports', '/campaigns', '/requests'] as const
+export const PORTAL_MORE_ORDER = ['/invoices', '/quotes', '/messages', '/files', '/profile'] as const
+
+/** The destinations this client's agency has left switched on. */
+export function useVisiblePortalNav() {
+  const { allows } = usePortalVisibility()
+
+  return PORTAL_NAV.filter((i) => SECTION_OF[i.to] === undefined || allows(SECTION_OF[i.to]))
+}
+
 /** Horizontal, scrollable section nav shown under the portal header on every authenticated page. */
 export function PortalNav({ ar }: { ar: boolean }) {
   const spaceTo = useClientSpacePath()
+  const items = useVisiblePortalNav()
 
   return (
     <nav className="border-b border-border bg-surface">
       <div className="mx-auto flex max-w-4xl gap-1 overflow-x-auto px-2 sm:px-4">
-        {PORTAL_NAV.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.to}
             to={spaceTo(item.to)}
