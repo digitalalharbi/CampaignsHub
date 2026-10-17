@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Billing\Models\Invoice;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
@@ -209,7 +210,7 @@ final class ClientPortalVisibilityTest extends TestCase
     public function test_a_client_never_sees_an_invoice_before_it_is_issued_and_may_download_it_after(): void
     {
         $a = $this->client('a@x.test', '+966500000001');
-        $make = fn (string $status, string $number) => \App\Domains\Billing\Models\Invoice::create([
+        $make = fn (string $status, string $number) => Invoice::create([
             'tenant_id' => $this->tenant->id, 'client_workspace_id' => $a['workspace']->id, 'number' => $number, 'currency' => 'SAR',
             'subtotal' => 100, 'tax' => 15, 'total' => 115, 'line_items' => [], 'amount_paid' => 0, 'status' => $status,
         ]);

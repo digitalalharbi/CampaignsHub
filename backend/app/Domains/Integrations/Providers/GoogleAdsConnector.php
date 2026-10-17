@@ -637,6 +637,22 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
      *
      * @return list<array<string,mixed>>
      */
+    /** @var list<string> optional metrics Google refused in this run and that were left out of the query */
+    private array $droppedOptionalFields = [];
+
+    /** Optional metrics that may be left out when Google no longer recognises them. */
+    private const OPTIONAL_METRICS = ['metrics.video_views', 'metrics.engagements'];
+
+    /** The optional metric a refusal names as unrecognised, or null when it names anything else. */
+    public static function unrecognisedOptionalField(string $message): ?string
+    {
+        if (preg_match("~Unrecognized field in the query: '(metrics\.[a-z_0-9]+)'~", $message, $m) === 1 && in_array($m[1], self::OPTIONAL_METRICS, true)) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
     private function stream(OAuthTokens $tokens, string $customerId, string $query): array
     {
         $customer = $this->plainCustomerId($customerId);
@@ -655,17 +671,44 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
         $outer = $this->loginCustomerId;
         $this->loginCustomerId = $outer ?? $this->managerOf($customer);
 
-        try {
-            $response = $this->api($tokens)->post($this->url("customers/{$customer}/googleAds:searchStream"), [
-                'query' => trim($query),
-            ]);
-        } finally {
-            $this->loginCustomerId = $outer;
+        /*
+         * GADS-OPTIONAL-FIELD-001 — a field Google no longer knows must not take the whole sync with it.
+         *
+         * Production 2026-10-17: every Google sync failed with `Unrecognized field in the query:
+         * 'metrics.video_views'`, 0 rows, for as long as that field was in the SELECT — spend, clicks
+         * and conversions included, none of which needed it. Video views and engagements are
+         * supplementary: when Google names one of THEM as unrecognised the query is asked again without
+         * it and that metric is simply absent (null — Missing is not Zero). Any other refusal, and
+         * any unrecognised field outside this list, still fails loudly.
+         */
+        $dropped = [];
+
+        while (true) {
+            try {
+                $response = $this->api($tokens)->post($this->url("customers/{$customer}/googleAds:searchStream"), [
+                    'query' => trim($query),
+                ]);
+            } finally {
+                $this->loginCustomerId = $outer;
+            }
+
+            if ($response->successful()) {
+                break;
+            }
+
+            $message = $this->refusal($response, $customer);
+            $field = self::unrecognisedOptionalField($message);
+
+            if ($field === null || in_array($field, $dropped, true) || count($dropped) >= 3) {
+                throw new \RuntimeException($message);
+            }
+
+            $dropped[] = $field;
+            $query = (string) preg_replace('~,\s*'.preg_quote($field, '~').'\b|\b'.preg_quote($field, '~').'\s*,\s*~', '', $query, 1);
+            $this->loginCustomerId = $outer ?? $this->managerOf($customer);
         }
 
-        if (! $response->successful()) {
-            throw new \RuntimeException($this->refusal($response, $customer));
-        }
+        $this->droppedOptionalFields = array_values(array_unique(array_merge($this->droppedOptionalFields, $dropped)));
 
         /** @var array<int,array<string,mixed>> $chunks */
         $chunks = $response->json() ?? [];
