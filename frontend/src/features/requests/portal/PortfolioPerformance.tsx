@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Num } from '@/components/ui/Num'
+import { PortalTrend } from './PortalTrend'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { days } from '@/lib/counted'
@@ -109,6 +110,8 @@ function Body({ data, t, ar, spaceTo }: { data: PortalOverview; t: typeof COPY.a
           )}
         </>
       )}
+
+      {data.trend !== undefined && data.trend.length > 1 && <PortalTrend trend={data.trend} days={data.period.days} />}
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {data.platforms.length > 0 && (
