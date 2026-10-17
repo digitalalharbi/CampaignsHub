@@ -177,4 +177,22 @@ describe('the platform comparison table', () => {
     expect(mark).toHaveAttribute('aria-hidden', 'true')
     expect(mark.parentElement?.textContent).toMatch(/Meta/i)
   })
+
+  /* REPORT-TABLES-OWNER-COLUMNS-001 */
+  it('shows exactly the columns the Owner chose, always keeping the platform name', () => {
+    const p = { ...payload([{ provider: 'meta', spend: 400, conversions: 4, clicks: 9 }]), columns: { platforms: ['clicks', 'results'] } } as unknown as LivePayload
+    renderWithProviders(<LivePlatformComparison payload={p} currency="SAR" locale="en" />, { locale: 'en' })
+    const table = within(screen.getByTestId('live-platform-comparison'))
+
+    const headers = table.getAllByRole('columnheader').map((h: HTMLElement) => h.textContent?.trim() ?? '')
+    expect(headers.map((h: string) => h.replace(/[↕↓↑]/g, ''))).toEqual(['Platform', 'Results', 'Clicks'])
+  })
+
+  it('treats the server’s empty list as «no restriction» and shows every column', () => {
+    const p = { ...payload([{ provider: 'meta', spend: 400, conversions: 4 }]), columns: [] } as unknown as LivePayload
+    renderWithProviders(<LivePlatformComparison payload={p} currency="SAR" locale="en" />, { locale: 'en' })
+    const table = within(screen.getByTestId('live-platform-comparison'))
+
+    expect(table.getAllByRole('columnheader')).toHaveLength(7)
+  })
 })
