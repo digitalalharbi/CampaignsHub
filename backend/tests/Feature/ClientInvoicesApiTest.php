@@ -118,8 +118,8 @@ final class ClientInvoicesApiTest extends TestCase
 
     public function test_the_pdf_is_a_download_for_an_operator_who_may_read_billing(): void
     {
-        if (! config('reports.chromium.enabled')) {
-            $this->markTestSkipped('Chromium PDF rendering is not enabled in this environment.');
+        if (! config('reports.chromium.enabled') || ! is_dir(base_path('../frontend/node_modules/playwright-core'))) {
+            $this->markTestSkipped('Chromium PDF rendering is not available in this environment (not enabled, or playwright-core is not installed).');
         }
 
         $this->actingAs($this->owner, 'sanctum');

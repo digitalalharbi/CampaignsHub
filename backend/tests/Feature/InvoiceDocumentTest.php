@@ -105,8 +105,8 @@ final class InvoiceDocumentTest extends TestCase
 
     public function test_the_pdf_is_a_real_file_when_the_renderer_is_enabled(): void
     {
-        if (! config('reports.chromium.enabled')) {
-            $this->markTestSkipped('Chromium PDF rendering is not enabled in this environment.');
+        if (! config('reports.chromium.enabled') || ! is_dir(base_path('../frontend/node_modules/playwright-core'))) {
+            $this->markTestSkipped('Chromium PDF rendering is not available in this environment (not enabled, or playwright-core is not installed).');
         }
 
         $bytes = app(InvoicePdf::class)->render($this->invoice(), 'ar');
