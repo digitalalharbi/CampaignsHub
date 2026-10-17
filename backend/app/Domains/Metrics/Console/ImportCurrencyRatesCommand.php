@@ -41,6 +41,10 @@ final class ImportCurrencyRatesCommand extends Command
         $result = $feed->import($date);
 
         if ($result['state'] !== 'ready') {
+            if ($result['imported'] > 0) {
+                app(ScheduledRunRows::class)->report((int) $result['imported']);
+                $this->info("Recorded {$result['imported']} legally pegged rate(s) (no feed needed).");
+            }
             $this->warn(match ($result['state']) {
                 'awaiting_configuration' => 'No exchange-rate source is configured (FX_RATE_DRIVER is unset). Nothing was fetched and nothing was invented.',
                 default => 'The configured exchange-rate source is missing something it needs. Nothing was fetched.',
