@@ -15,12 +15,14 @@ use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -211,7 +213,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
 
-        $requests = $this->contactScope($token)
+        $requests = $this->requestScope($token)
             ->with(['type', 'status'])->orderByDesc('submitted_at')->get()
             ->map(fn (ExternalRequest $r) => [
                 'reference' => $r->reference,
@@ -333,7 +335,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'invoices');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -394,7 +396,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'invoices');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -443,7 +445,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'messages');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -486,7 +488,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'messages');
         abort_if($ids === [], 422, 'No client workspace is available to open a conversation.');
 
         $data = $request->validate([
@@ -562,7 +564,7 @@ final class ClientPortalController
         $this->bindTenant($token);
 
         // 1) Client-visible uploads on the client's own requests.
-        $requests = (clone $this->contactScope($token))->get(['id', 'reference']);
+        $requests = (clone $this->requestScope($token))->get(['id', 'reference']);
         $referenceById = $requests->pluck('reference', 'id');
         $requestIds = $requests->pluck('id')->all();
 
@@ -596,14 +598,15 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'campaigns');
+        $workspaces = $this->ownedWorkspaceModels($token);
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
             : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->orderByDesc('created_at'));
 
         return response()->json(['data' => [
-            'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c))->values()->all(),
+            'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c, $workspaces))->values()->all(),
             'total' => $page['total'],
             'withheld' => $page['withheld'],
         ]]);
@@ -617,7 +620,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $projectIds = $this->ownedProjectIds($token);
+        $projectIds = $this->ownedProjectIds($token, 'reports');
         if ($projectIds === []) {
             return response()->json(['data' => ['reports' => []]]);
         }
@@ -655,9 +658,9 @@ final class ClientPortalController
      *
      * @return list<string>
      */
-    private function ownedProjectIds(ClientPortalToken $token): array
+    private function ownedProjectIds(ClientPortalToken $token, string $section = 'projects'): array
     {
-        $workspaceIds = $this->ownedWorkspaceIds($token);
+        $workspaceIds = $this->visibleWorkspaceIds($token, $section);
         if ($workspaceIds === []) {
             return [];
         }
@@ -681,12 +684,12 @@ final class ClientPortalController
      */
     private function clientDriveFiles(ClientPortalToken $token): Collection
     {
-        $workspaceIds = $this->ownedWorkspaceIds($token);
+        $workspaceIds = $this->visibleWorkspaceIds($token, 'files');
         if ($workspaceIds === []) {
             return collect();
         }
 
-        $projectIds = $this->ownedProjectIds($token);
+        $projectIds = $this->ownedProjectIds($token, 'files');
         $campaignIds = UnifiedCampaign::query()->whereIn('client_workspace_id', $workspaceIds)
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
 
@@ -725,20 +728,26 @@ final class ClientPortalController
     }
 
     /** @return array<string,mixed> client-safe campaign: high-level fields + delivery metrics, NO cost fields. */
-    private function campaignShape(UnifiedCampaign $c): array
+    private function campaignShape(UnifiedCampaign $c, array $workspaces): array
     {
         // Reuse the SAME metrics engine (MetricsAggregator) the internal surfaces use, scoped to this campaign.
         $totals = $this->metrics->forCampaign((string) $c->getKey())
             ->totals(Carbon::now()->subDays(30), Carbon::now());
 
-        return [
+        $workspace = $workspaces[(string) $c->client_workspace_id] ?? null;
+        $shows = static fn (string $key): bool => $workspace !== null && PortalVisibility::allows($workspace, $key);
+
+        $shape = [
             'id' => (string) $c->getKey(),
-            'name' => $c->client_display_name ?: $c->name,
+            // CP-VISIBILITY-001 — the name is the agency's to show; hidden, the client still gets the
+            // objective and status, which describe the campaign without naming it.
+            'name' => $shows('campaign_names') ? ($c->client_display_name ?: $c->name) : null,
             'status' => $c->status,
             'objective' => $c->objective,
             'starts_on' => optional($c->starts_on)->toDateString(),
             'ends_on' => optional($c->ends_on)->toDateString(),
-            // High-level, client-safe metrics ONLY — spend/revenue/roas/cpa/cpc/cpm are deliberately omitted.
+            // High-level, client-safe metrics ONLY. Money appears below, and only when the agency has
+            // switched it on for this workspace.
             'metrics' => [
                 'impressions' => $totals['impressions'] ?? 0,
                 'clicks' => $totals['clicks'] ?? 0,
@@ -746,6 +755,22 @@ final class ClientPortalController
                 'ctr' => $totals['ctr'] ?? null,
             ],
         ];
+
+        /*
+         * Money, only on the Owner's say-so and only when it is whole. A total with withheld rows is
+         * absent (null), never a smaller number: Missing is not Zero, and a client reading 40% of the
+         * spend as the spend is a worse answer than none.
+         */
+        if ($shows('spend')) {
+            $shape['spend'] = ((int) ($totals['spend_withheld_rows'] ?? 0)) === 0 ? ($totals['spend'] ?? null) : null;
+            $shape['currency'] = ReportingCurrency::DEFAULT;
+        }
+        if ($shows('revenue')) {
+            $shape['revenue'] = ((int) ($totals['revenue_withheld_rows'] ?? 0)) === 0 ? ($totals['revenue'] ?? null) : null;
+            $shape['currency'] = ReportingCurrency::DEFAULT;
+        }
+
+        return $shape;
     }
 
     /** @return array<string,mixed> client-safe report + its active-share descriptor (never the raw token). */
@@ -862,9 +887,53 @@ final class ClientPortalController
             ->unique()->values()->all();
     }
 
-    private function ownedQuote(ClientPortalToken $token, string $id): Quote
+    /**
+     * The owned workspaces, keyed by id. Read per call and never remembered: one controller instance serves
+     * several sessions in a process (queue, tests, Octane), and a remembered answer is another client's.
+     *
+     * @return array<string, ClientWorkspace>
+     */
+    private function ownedWorkspaceModels(ClientPortalToken $token): array
     {
         $ids = $this->ownedWorkspaceIds($token);
+
+        return $ids === [] ? [] : ClientWorkspace::query()->whereIn('id', $ids)->get()
+            ->keyBy(fn (ClientWorkspace $w): string => (string) $w->getKey())->all();
+    }
+
+    /**
+     * The owned workspaces for which the agency lets THIS section be seen (CP-VISIBILITY-001).
+     *
+     * Asked on the server for every reader: a switched-off section is an empty or refused response, not
+     * a payload the page chooses not to draw. With several spaces merged, each is judged on its own, so
+     * one client's `invoices = off` cannot hide, or reveal, another's.
+     *
+     * @return list<string>
+     */
+    private function visibleWorkspaceIds(ClientPortalToken $token, string $section): array
+    {
+        return array_values(array_map('strval', array_keys(array_filter(
+            $this->ownedWorkspaceModels($token),
+            static fn (ClientWorkspace $w): bool => PortalVisibility::allows($w, $section),
+        ))));
+    }
+
+    /**
+     * The owned workspaces that hide this section — to be excluded from a request-shaped query.
+     *
+     * @return list<string>
+     */
+    private function hiddenWorkspaceIds(ClientPortalToken $token, string $section): array
+    {
+        return array_values(array_map('strval', array_keys(array_filter(
+            $this->ownedWorkspaceModels($token),
+            static fn (ClientWorkspace $w): bool => ! PortalVisibility::allows($w, $section),
+        ))));
+    }
+
+    private function ownedQuote(ClientPortalToken $token, string $id): Quote
+    {
+        $ids = $this->visibleWorkspaceIds($token, 'invoices');
         /** @var Quote|null $quote */
         $quote = $ids === [] ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($quote === null, 404);
@@ -874,7 +943,7 @@ final class ClientPortalController
 
     private function ownedInvoice(ClientPortalToken $token, string $id): Invoice
     {
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
         $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($invoice === null, 404);
@@ -884,7 +953,7 @@ final class ClientPortalController
 
     private function ownedThread(ClientPortalToken $token, string $id): MessageThread
     {
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'messages');
         /** @var MessageThread|null $thread */
         $thread = $ids === [] ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($thread === null, 404);
@@ -1383,6 +1452,28 @@ final class ClientPortalController
     }
 
     /**
+     * GET /client/visibility — what the agency lets THIS client see and do, per space (CP-VISIBILITY-001).
+     *
+     * Handed to the front end so navigation matches the server, and for nothing else: every reader above
+     * has already enforced the same map, so a client who ignores this answer gains nothing.
+     */
+    public function visibility(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $ids = $this->ownedWorkspaceIds($token);
+        $spaces = $ids === [] ? collect() : ClientWorkspace::query()->whereIn('id', $ids)->whereNull('archived_at')->orderBy('name')->get();
+
+        return response()->json(['data' => ['spaces' => $spaces->map(fn (ClientWorkspace $w) => [
+            'slug' => (string) $w->slug,
+            'mode' => (string) $w->mode,
+            'visibility' => PortalVisibility::visibilityFor($w),
+            'capabilities' => PortalVisibility::capabilitiesFor($w),
+        ])->values()->all()]]);
+    }
+
+    /**
      * Every client workspace this contact owns, IGNORING the selected space — the list a space can be
      * chosen from. Kept separate from `ownedWorkspaceIds()`, which is narrowed by that selection.
      *
@@ -1413,10 +1504,26 @@ final class ClientPortalController
             ->pluck('client_id')->map(fn ($id): string => (string) $id)->unique()->values()->all();
     }
 
+    /**
+     * The requests this client may see: the contact's scope, minus any workspace whose agency has switched
+     * the `requests` section off. A request not yet converted has no workspace and stays the submitter's.
+     *
+     * @return Builder<ExternalRequest>
+     */
+    private function requestScope(ClientPortalToken $token)
+    {
+        $hidden = $this->hiddenWorkspaceIds($token, 'requests');
+
+        return $this->contactScope($token)->when(
+            $hidden !== [],
+            static fn ($q) => $q->where(static fn ($w) => $w->whereNull('client_id')->orWhereNotIn('client_id', $hidden)),
+        );
+    }
+
     private function resolveOwnedRequest(ClientPortalToken $token, string $reference): ExternalRequest
     {
         /** @var ExternalRequest|null $req */
-        $req = (clone $this->contactScope($token))->with(['type', 'status'])->where('reference', $reference)->first();
+        $req = (clone $this->requestScope($token))->with(['type', 'status'])->where('reference', $reference)->first();
         abort_if($req === null, 404); // not this client's request → 404 (non-revealing)
 
         return $req;
