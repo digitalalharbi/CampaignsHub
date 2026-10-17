@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SyncRunLog;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -229,6 +230,6 @@ final class CampaignMetricsController extends Controller
     /** @return array<string, string> */
     private function meta(Carbon $from, Carbon $to): array
     {
-        return ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'currency' => 'SAR', 'data_source' => 'daily_metrics'];
+        return ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'currency' => ReportingCurrency::DEFAULT, 'data_source' => 'daily_metrics'];
     }
 }

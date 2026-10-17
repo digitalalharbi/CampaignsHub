@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Metrics\Services\ReportingCurrency;
 
 /**
  * The digest payload, turned into the sentences an email can print — MAIL-002.
@@ -69,7 +70,7 @@ final class DigestPresenter
     }
 
     /** Money, always with its currency — a bare number reads as a count. */
-    public function money(float|int|null $value, string $currency = 'SAR'): string
+    public function money(float|int|null $value, string $currency = ReportingCurrency::DEFAULT): string
     {
         if ($value === null) {
             return $this->noData();
@@ -89,7 +90,7 @@ final class DigestPresenter
      * and rounding it to 28 is a different answer to the question the card is asking. This is for
      * headline sums only, which is why it is a separate method rather than a flag on `money()`.
      */
-    public function headline(float|int|null $value, string $currency = 'SAR'): string
+    public function headline(float|int|null $value, string $currency = ReportingCurrency::DEFAULT): string
     {
         if ($value === null) {
             return $this->noData();
