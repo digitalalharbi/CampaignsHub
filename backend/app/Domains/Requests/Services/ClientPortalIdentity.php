@@ -82,6 +82,18 @@ final class ClientPortalIdentity
     }
 
     /**
+     * The client role of a MEMBERSHIP session — `client_viewer`, `client_approver` or `client_admin` — or null
+     * for the legacy contact engine, where the person who verified the contact is the decision maker and
+     * has always been able to act (CP-USERS-001).
+     */
+    public function clientRole(Request $request, ?ClientPortalToken $token): ?string
+    {
+        $membership = $this->membershipFor($request, $token);
+
+        return $membership === null ? null : (string) $membership->role;
+    }
+
+    /**
      * What each engine would answer for this request, side by side.
      *
      * The cutover is only safe when these agree for every user and every space. Comparing them at

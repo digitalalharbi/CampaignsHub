@@ -298,6 +298,7 @@ final class ClientPortalController
     public function reply(Request $request, string $reference): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $req = $this->resolveOwnedRequest($token, $reference);
 
         $data = $request->validate([
@@ -364,6 +365,7 @@ final class ClientPortalController
     public function approveQuote(Request $request, string $quote): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedQuote($token, $quote);
 
@@ -383,6 +385,7 @@ final class ClientPortalController
     public function rejectQuote(Request $request, string $quote): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedQuote($token, $quote);
 
@@ -452,6 +455,7 @@ final class ClientPortalController
     public function payInvoice(Request $request, string $invoice): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedInvoice($token, $invoice);
 
@@ -511,6 +515,7 @@ final class ClientPortalController
     public function openThread(Request $request): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         abort_if($ids === [], 422, 'No client workspace is available to open a conversation.');
@@ -540,6 +545,7 @@ final class ClientPortalController
     public function postThreadMessage(Request $request, string $thread): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedThread($token, $thread);
 
@@ -938,6 +944,16 @@ final class ClientPortalController
             ->pluck('client_id')
             ->map(fn ($id): string => (string) $id)
             ->unique()->values()->all();
+    }
+
+    /**
+     * A view-only client user reads and never acts (CP-USERS-001): no approving or paying, no replying, no
+     * opening or answering a conversation. An approver or an admin may, and so may the legacy contact engine,
+     * whose verified contact has always been the decision maker. Refused with 403 before anything is read.
+     */
+    private function requireActor(ClientPortalToken $token): void
+    {
+        abort_if($this->identity->clientRole(request(), $token) === 'client_viewer', 403, 'Your access to this portal is read-only.');
     }
 
     /**
