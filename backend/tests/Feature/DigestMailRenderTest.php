@@ -134,7 +134,7 @@ final class DigestMailRenderTest extends TestCase
 
         $this->assertStringContainsString('By marketing path', $en);
         $this->assertStringContainsString('2 campaigns', $en, 'awareness reports what it ran, not a cost it never earned');
-        $this->assertStringContainsString('cost/result 87.10 SAR', $en, 'the conversion path keeps its own cost');
+        $this->assertStringContainsString('cost/result 87.10 USD', $en, 'the conversion path keeps its own cost');
 
         // A path with no spend at all is left out rather than printed as a zero row.
         $this->assertStringNotContainsString('0 campaigns', $en);
@@ -158,10 +158,25 @@ final class DigestMailRenderTest extends TestCase
         $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->envelope()->subject;
         $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->envelope()->subject;
 
-        $this->assertStringContainsString('12,400 SAR', $en);
+        $this->assertStringContainsString('12,400 USD', $en);
         $this->assertStringContainsString('84 results', $en);
-        $this->assertStringContainsString('12,400 SAR', $ar);
+        $this->assertStringContainsString('12,400 USD', $ar);
         $this->assertStringContainsString('نتيجة', $ar);
+    }
+
+    /** REPORT-FOOTER-001 — the inbox ends with the same fixed note and a quiet metadata line, in both languages. */
+    public function test_the_digest_ends_with_the_report_note_and_metadata_line(): void
+    {
+        $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->render();
+        $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->render();
+
+        $this->assertStringContainsString('Reading the results depends on the performance and data available', $en);
+        $this->assertStringContainsString('Last updated:', $en);
+        $this->assertStringContainsString('Currency: USD', $en);
+        $this->assertStringContainsString('Time zone: Asia/Riyadh', $en);
+        $this->assertStringContainsString('تعتمد قراءة النتائج على الأداء والبيانات المتاحة', $ar);
+        $this->assertStringContainsString('آخر تحديث:', $ar);
+        $this->assertStringContainsString('العملة: USD', $ar);
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Support\AdPlatforms;
 
 /**
@@ -84,7 +85,7 @@ final class ReportObservations
     public function build(ReportObjectiveLens $lens, array $data): array
     {
         $out = [];
-        $currency = (string) ($data['currency'] ?? 'SAR');
+        $currency = (string) ($data['currency'] ?? ReportingCurrency::DEFAULT);
 
         foreach ([
             $this->headlineMovement($lens, $data, $currency),
