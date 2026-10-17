@@ -259,6 +259,28 @@ final class ReportShareTest extends TestCase
         $this->actingAs($viewer, 'sanctum')->patchJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}", ['watermark' => true])->assertForbidden();
     }
 
+    /**
+     * REPORT-CLIENT-NO-DELTAS-001 — a new client link carries no previous-period comparison unless asked, and
+     * naming one switch in an edit does not reset the others.
+     */
+    public function test_a_new_client_link_has_no_previous_comparison_by_default_and_an_edit_keeps_the_other_switches(): void
+    {
+        $this->actingAs($this->owner, 'sanctum');
+        $base = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares";
+
+        $made = $this->postJson($base, ['sections' => ['budget' => false]])->assertCreated()->json('data');
+        $this->assertFalse($made['sections']['previous_comparison']);
+        $this->assertFalse($made['sections']['budget']);
+
+        $asked = $this->postJson($base, ['sections' => ['previous_comparison' => true]])->assertCreated()->json('data');
+        $this->assertTrue($asked['sections']['previous_comparison']);
+
+        $this->patchJson("{$base}/{$made['id']}", ['sections' => ['previous_comparison' => true]])->assertOk();
+        $stored = ReportShare::withoutGlobalScopes()->find($made['id'])->settings['sections'];
+        $this->assertTrue($stored['previous_comparison']);
+        $this->assertFalse($stored['budget'], 'naming one switch left the other exactly as it was');
+    }
+
     public function test_password_gate(): void
     {
         [, $raw] = app(ShareService::class)->create($this->report, ['password' => 'secret1'], null);

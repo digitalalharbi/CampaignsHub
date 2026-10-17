@@ -129,6 +129,7 @@ export interface ShareRow {
   mode: 'live' | 'snapshot'
   /** How much of the report this link is; null means the report's own. */
   form?: 'executive_summary' | 'detailed' | null
+  sections?: { previous_comparison?: boolean } & Record<string, boolean | undefined>
   scope: {
     project_id?: string
     campaign_ids?: string[]
@@ -289,6 +290,8 @@ export interface ShareEdit {
   clear_password?: boolean
   expires_at?: string
   clear_expiry?: boolean
+  /** Named switches only; the server merges them over the link's existing ones. */
+  sections?: Record<string, boolean>
 }
 
 export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>

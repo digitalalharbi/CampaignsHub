@@ -19,14 +19,14 @@ const COPY = {
     download: 'السماح بالتنزيل', watermark: 'علامة مائية', spend: 'إخفاء الإنفاق', revenue: 'إخفاء الإيرادات', names: 'إخفاء أسماء الحملات',
     form: 'مستوى التقرير', formAsIs: 'كما هو التقرير', formExec: 'ملخص تنفيذي', formDetailed: 'تقرير تفصيلي',
     password: 'كلمة مرور جديدة', clearPassword: 'إزالة كلمة المرور', expiry: 'تاريخ انتهاء جديد', clearExpiry: 'بلا انتهاء',
-    save: 'حفظ التعديل', cancel: 'إلغاء', protectedNow: 'محمي بكلمة مرور حالياً',
+    previous: 'إظهار مقارنة الفترة السابقة للعميل', save: 'حفظ التعديل', cancel: 'إلغاء', protectedNow: 'محمي بكلمة مرور حالياً',
   },
   en: {
     title: 'Edit link', hint: 'The link itself stays exactly as it is — the client sees the change the next time they open it.',
     download: 'Allow download', watermark: 'Watermark', spend: 'Hide spend', revenue: 'Hide revenue', names: 'Hide campaign names',
     form: 'Report level', formAsIs: 'As the report is', formExec: 'Executive summary', formDetailed: 'Detailed report',
     password: 'New password', clearPassword: 'Remove the password', expiry: 'New expiry date', clearExpiry: 'Never expires',
-    save: 'Save changes', cancel: 'Cancel', protectedNow: 'Currently password-protected',
+    previous: 'Show the previous-period comparison to the client', save: 'Save changes', cancel: 'Cancel', protectedNow: 'Currently password-protected',
   },
 }
 
@@ -67,6 +67,16 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
           <Row k="hide_revenue" label={t.revenue} />
           <Row k="hide_campaign_names" label={t.names} />
         </div>
+        <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+          <span>{t.previous}</span>
+          <input
+            type="checkbox"
+            data-testid="edit-previous-comparison"
+            checked={edit.sections?.previous_comparison ?? share.sections?.previous_comparison ?? false}
+            onChange={(e) => setEdit((x) => ({ ...x, sections: { ...(x.sections ?? {}), previous_comparison: e.target.checked } }))}
+            className="h-4 w-4 accent-brand-600"
+          />
+        </label>
         <label className="block text-xs font-semibold text-text-secondary">{t.form}
           <select data-testid="edit-form" value={(edit.form !== undefined ? edit.form : share.form ?? '') ?? ''} onChange={(e) => setEdit((x) => ({ ...x, form: (e.target.value || null) as ShareEdit['form'] }))} className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
             <option value="">{t.formAsIs}</option>

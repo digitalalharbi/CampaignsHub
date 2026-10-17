@@ -62,3 +62,18 @@ export function productName(mode: string, _form: string, locale: Locale): string
 
   return mode === 'live' ? (ar ? 'تقرير رابط' : 'Link Report') : (ar ? 'تقرير محفوظ' : 'Saved Report')
 }
+
+/**
+ * REPORT-CLIENT-WORDING-001 — the sentence a CLIENT reads under the report's title.
+ *
+ * «Link Report» and «Saved Report» are the agency's own product names: how the agency builds the thing, not
+ * what the client is looking at. A client who is sent a report should read what it contains and how fresh it
+ * is, never the vocabulary of the tool that made it. The Owner-side names above are unchanged.
+ */
+export function clientBlurb(mode: string, locale: Locale): string {
+  const ar = locale === 'ar'
+
+  return mode === 'live'
+    ? (ar ? 'ملخص الأداء والمنصات والمحتوى — الأرقام محدَّثة عند كل فتح.' : 'Performance summary, platforms and content — figures are refreshed every time you open it.')
+    : (ar ? 'ملخص الأداء والمنصات والمحتوى كما أُعدّ للفترة المحددة.' : 'Performance summary, platforms and content as prepared for the period.')
+}
