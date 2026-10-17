@@ -14,6 +14,11 @@ export interface RequestRow {
   priority_label: string
   priority_label_en: string
   contact: string
+  /** CP-REQ-ONE-001 — the client workspace and project the request belongs to; null before conversion. */
+  client?: string | null
+  project?: string | null
+  /** Who the next move belongs to: the client, the agency, a hold, or nobody (finished). */
+  waiting_on?: 'client' | 'agency' | 'hold' | null
   assignee: string | null
   assigned_to: number | null
   source: string

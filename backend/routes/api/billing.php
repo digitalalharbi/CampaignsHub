@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Billing\Http\Controllers\BillingController;
+use App\Domains\Billing\Http\Controllers\ClientInvoicesController;
 use App\Domains\Billing\Http\Controllers\FinanceCenterController;
 use Illuminate\Support\Facades\Route;
 
@@ -20,6 +21,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->group(function (
     Route::get('billing/receivables', [FinanceCenterController::class, 'receivables'])->name('billing.receivables');
 
     Route::get('billing/invoices', [BillingController::class, 'invoices'])->name('billing.invoices.index');
+    // INV-PROFILE-001 / INV-LIFECYCLE-001 / INV-PDF-001 — the agency-to-client fee invoice.
+    Route::get('billing/clients/{client}/profile', [ClientInvoicesController::class, 'profile'])->name('billing.clients.profile.show');
+    Route::put('billing/clients/{client}/profile', [ClientInvoicesController::class, 'saveProfile'])->name('billing.clients.profile.save');
+    Route::post('billing/clients/{client}/invoices/draft', [ClientInvoicesController::class, 'draft'])->name('billing.clients.invoices.draft');
+    Route::post('billing/invoices/{invoice}/{action}', [ClientInvoicesController::class, 'act'])->whereIn('action', ['review', 'issue', 'send', 'payment', 'correct'])->name('billing.invoices.act');
+    Route::get('billing/invoices/{invoice}/pdf', [ClientInvoicesController::class, 'pdf'])->name('billing.invoices.pdf');
     Route::post('billing/invoices/{invoice}/pay', [BillingController::class, 'startPayment'])->name('billing.invoices.pay');
 });
 

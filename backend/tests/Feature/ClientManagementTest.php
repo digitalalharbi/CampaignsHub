@@ -110,6 +110,34 @@ final class ClientManagementTest extends TestCase
         ])->assertForbidden();
     }
 
+    /** CP-VISIBILITY-001 — the portal contract is written sanitised and merged; the agency-only powers can never be granted. */
+    public function test_portal_visibility_is_stored_sanitised_and_merged(): void
+    {
+        $c = $this->client();
+
+        $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/clients/{$c->id}/settings", [
+            'settings' => ['portal' => [
+                'visibility' => ['spend' => true, 'invoices' => false, 'not_a_section' => true],
+                'capabilities' => ['campaign_writes' => true, 'margin_profit' => true, 'bogus' => true],
+            ]],
+        ])->assertOk();
+
+        $stored = $c->fresh()->settings['portal'];
+        $this->assertEquals(['spend' => true, 'invoices' => false], $stored['visibility']);
+        $this->assertSame(['campaign_writes' => true], $stored['capabilities'], 'unknown keys and agency-only powers are dropped');
+
+        // A second write that mentions only one key keeps the earlier choices.
+        $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/clients/{$c->id}/settings", [
+            'settings' => ['portal' => ['visibility' => ['reports' => false]]],
+        ])->assertOk();
+        $this->assertEquals(['reports' => false, 'spend' => true, 'invoices' => false], $c->fresh()->settings['portal']['visibility']);
+
+        // A read-only member cannot change it.
+        $this->actingAs($this->readonly, 'sanctum')->patchJson("/api/v1/app/clients/{$c->id}/settings", [
+            'settings' => ['portal' => ['visibility' => ['spend' => false]]],
+        ])->assertForbidden();
+    }
+
     public function test_settings_persist(): void
     {
         $c = $this->client();

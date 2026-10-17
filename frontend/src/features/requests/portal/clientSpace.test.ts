@@ -12,12 +12,15 @@ describe('clientSpaceSlugOf', () => {
     ['/portal/clients/acme/invoices', 'acme'],
     ['/portal/clients/acme/invoices/inv-1', 'acme'],
     ['/portal/clients/two%20words', 'two words'],
+    ['/portal/razzahavenu', 'razzahavenu'],
+    ['/portal/razzahavenu/reports', 'razzahavenu'],
+    ['/portal/resano/invoices/inv-1', 'resano'],
   ])('reads %s as %s', (path, slug) => {
     expect(clientSpaceSlugOf(path)).toBe(slug)
   })
 
   /** Outside a space there is NO slug — and no header, so the server keeps its existing behaviour. */
-  it.each(['/client', '/client/invoices', '/portal', '/portal/clients', '/portal/clients/', '/app/clients/x'])(
+  it.each(['/client', '/client/invoices', '/portal', '/portal/clients', '/portal/clients/', '/app/clients/x', '/portal/requests', '/portal/invoices/inv-1', '/portal/spaces', '/portal/login'])(
     'reads no space from %s',
     (path) => {
       expect(clientSpaceSlugOf(path)).toBeNull()
@@ -27,7 +30,8 @@ describe('clientSpaceSlugOf', () => {
 
 describe('clientSpaceBaseOf', () => {
   it('keeps links inside the space the visitor is in', () => {
-    expect(clientSpaceBaseOf('/portal/clients/acme/quotes')).toBe('/portal/clients/acme')
+    expect(clientSpaceBaseOf('/portal/clients/acme/quotes')).toBe('/portal/acme')
+    expect(clientSpaceBaseOf('/portal/acme/quotes')).toBe('/portal/acme')
   })
 
   /**
@@ -41,6 +45,6 @@ describe('clientSpaceBaseOf', () => {
   })
 
   it('re-encodes a slug that needed encoding', () => {
-    expect(clientSpaceBaseOf('/portal/clients/two%20words/files')).toBe('/portal/clients/two%20words')
+    expect(clientSpaceBaseOf('/portal/clients/two%20words/files')).toBe('/portal/two%20words')
   })
 })

@@ -34,12 +34,16 @@ final class ClientAnalyticsService
         private readonly TenantContext $tenant,
     ) {}
 
-    /** @return array<string,mixed> */
-    public function forClient(ClientWorkspace $client, Carbon $from, Carbon $to): array
+    /**
+     * @param  list<string>|null  $onlyProjectIds  narrow to these of the client's projects (a restricted portal user); null = all
+     * @return array<string,mixed>
+     */
+    public function forClient(ClientWorkspace $client, Carbon $from, Carbon $to, ?array $onlyProjectIds = null): array
     {
         $tenantId = (string) $this->tenant->tenantId();
         $projectIds = DB::table('projects')->where('tenant_id', $tenantId)
             ->where('client_workspace_id', $client->id)->whereNull('deleted_at')
+            ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('id', $onlyProjectIds))
             ->pluck('name', 'id'); // [id => name]
         $ids = $projectIds->keys()->map(fn ($v) => (string) $v)->all();
 

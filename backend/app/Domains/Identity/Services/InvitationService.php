@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Services;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailLinks;
@@ -118,6 +119,64 @@ final class InvitationService
         ];
     }
 
+    /**
+     * An invitation into ONE client's portal (CP-USERS-001): the same secure, hashed, expiring token as a
+     * workspace invitation, carrying the client, the role and an optional project ceiling. Accepting it
+     * creates the account, proves the address, and grants a client-portal membership confined to that
+     * client — and nothing else: no staff role, no tenant-wide access.
+     *
+     * @param  list<string>|null  $projectIds
+     * @return array{id: string, delivery_status: string, dev_link: ?string}
+     */
+    public function inviteToClientPortal(ClientWorkspace $workspace, string $email, string $role, ?array $projectIds, User $invitedBy): array
+    {
+        $email = Str::lower(trim($email));
+        $tenant = Tenant::findOrFail($workspace->tenant_id);
+
+        $pending = DB::table('workspace_invitations')->where('tenant_id', $tenant->id)->where('email', $email)->whereNull('accepted_at')->exists();
+        if ($pending) {
+            throw ValidationException::withMessages(['email' => 'An invitation is already pending for this email.']);
+        }
+
+        $token = Str::random(48);
+        $id = (string) Str::ulid();
+        DB::table('workspace_invitations')->insert([
+            'id' => $id,
+            'tenant_id' => $tenant->id,
+            'email' => $email,
+            'role_slug' => $role,
+            'portal' => Portal::ClientPortal->value,
+            'client_workspace_id' => $workspace->getKey(),
+            'project_ids' => $projectIds === null || $projectIds === [] ? null : json_encode(array_values($projectIds)),
+            'token_hash' => hash('sha256', $token),
+            'delivery_status' => 'pending',
+            'invited_by' => $invitedBy->id,
+            'expires_at' => Carbon::now()->addHours(self::TTL_HOURS),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+
+        $status = TransactionalMailer::asDeliveryStatus(app(TransactionalMailer::class)->send(
+            recipient: $email,
+            mail: new InvitationMail(
+                workspace: (string) $workspace->name,
+                roleSlug: $role,
+                acceptUrl: MailLinks::to("/invite/accept?token={$token}"),
+                lang: 'ar',
+                invitedBy: (string) $invitedBy->name,
+                expiresInHours: self::TTL_HOURS,
+            ),
+            kind: 'invitation',
+            template: 'mail.invitation',
+            tenantId: (string) $tenant->id,
+            dedupKey: "invitation:{$id}",
+        ));
+
+        DB::table('workspace_invitations')->where('id', $id)->update(['delivery_status' => $status, 'updated_at' => Carbon::now()]);
+
+        return ['id' => $id, 'delivery_status' => $status, 'dev_link' => ContactVerificationService::exposeDevSecrets() ? "/invite/accept?token={$token}" : null];
+    }
+
     /** @return array<string,mixed> public preview of an invite (workspace + email) by token. */
     public function preview(string $token): array
     {
@@ -125,7 +184,10 @@ final class InvitationService
 
         return [
             'email' => $inv->email,
-            'workspace_name' => Tenant::whereKey($inv->tenant_id)->value('name'),
+            // A client-portal invitation is into the CLIENT's space, so that is the name the invitee sees.
+            'workspace_name' => $inv->client_workspace_id !== null
+                ? ClientWorkspace::withoutGlobalScopes()->whereKey($inv->client_workspace_id)->value('name')
+                : Tenant::whereKey($inv->tenant_id)->value('name'),
             'role_slug' => $inv->role_slug,
         ];
     }
@@ -149,6 +211,25 @@ final class InvitationService
             ]);
             // email_verified_at is non-mass-assignable — set it explicitly (accepting the link proves ownership).
             $user->forceFill(['email_verified_at' => Carbon::now()])->save();
+
+            // CP-USERS-001 — a client-portal invitation grants ONE client's portal and nothing else: no staff
+            // role, no project memberships in the agency's workspace, no tenant-wide scope.
+            if ($inv->portal === Portal::ClientPortal->value) {
+                app(GrantMembership::class)->execute(new MembershipGrant(
+                    user: $user,
+                    tenant: Tenant::findOrFail($inv->tenant_id),
+                    portal: Portal::ClientPortal,
+                    role: $inv->role_slug,
+                    clientScopeIds: [(string) $inv->client_workspace_id],
+                    projectScopeIds: $inv->project_ids ? json_decode($inv->project_ids, true) : null,
+                    grantedBy: User::find($inv->invited_by),
+                ));
+
+                DB::table('workspace_invitations')->where('id', $inv->id)
+                    ->update(['accepted_at' => Carbon::now(), 'accepted_user_id' => $user->id, 'updated_at' => Carbon::now()]);
+
+                return $user;
+            }
 
             $role = Role::where('slug', $inv->role_slug)
                 ->where(fn ($q) => $q->where('tenant_id', $inv->tenant_id)->orWhereNull('tenant_id'))->firstOrFail();
