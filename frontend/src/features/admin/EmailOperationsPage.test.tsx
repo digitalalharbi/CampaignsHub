@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { EmailOperationsPage } from './EmailOperationsPage'
 import { renderWithProviders } from '@/test/utils'
 import type { EmailLedger } from './api'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, fetchEmailLedger: vi.fn(), fetchEmailPreviews: vi.fn(), fetchEmailPreview: vi.fn() }
+  return { ...actual, fetchEmailLedger: vi.fn(), fetchEmailPreviews: vi.fn(), fetchEmailPreview: vi.fn(), sendTestEmail: vi.fn() }
 })
 
-import { fetchEmailLedger, fetchEmailPreview, fetchEmailPreviews } from './api'
+import { fetchEmailLedger, fetchEmailPreview, fetchEmailPreviews, sendTestEmail } from './api'
 
 function ledger(over: Partial<EmailLedger> = {}): EmailLedger {
   return {
@@ -98,5 +98,30 @@ describe('the email operations console', () => {
 
     expect(frame.getAttribute('sandbox')).toBe('')
     expect(frame.getAttribute('srcdoc')).toContain('مرحبًا')
+  })
+})
+
+describe('the mail settings card', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('states the sender and the last outcomes, and sends the test to the operator only', async () => {
+    open({
+      transport: {
+        state: 'awaiting_credentials', provider_configured: false, driver: 'smtp',
+        sender: { address: 'no-reply@campaignshub.io', name: 'CampaignsHub' }, reply_to: '',
+        last_success_at: null, last_failure: { at: '2026-10-17T08:00:00Z', kind: 'password_reset', error: 'refused' },
+      },
+    })
+    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'awaiting_credentials', recipient: 'owner@campaignshub.io' })
+
+    const card = await screen.findByTestId('mail-settings')
+    expect(card).toHaveTextContent('no-reply@campaignshub.io')
+    expect(card).toHaveTextContent('password_reset')
+
+    fireEvent.click(screen.getByTestId('mail-test-send'))
+    await waitFor(() => expect(sendTestEmail).toHaveBeenCalledWith('ar'))
+    const result = await screen.findByTestId('mail-test-result')
+    expect(result).toHaveTextContent('owner@campaignshub.io')
+    expect(result).toHaveTextContent('لم يغادر شيء')
   })
 })

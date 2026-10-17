@@ -50,6 +50,8 @@ Route::middleware(['auth:sanctum', 'platform'])
          * to mail thousands of people by mis-click.
          */
         Route::get('/email/deliveries', [PlatformEmailController::class, 'index'])->name('email.deliveries');
+        // EMAIL-SETTINGS-PAGE-001 — one message to the signed-in operator, never to an address in the request.
+        Route::post('/email/test', [PlatformEmailController::class, 'test'])->middleware('throttle:3,1')->name('email.test');
         Route::get('/email/previews', [PlatformEmailController::class, 'previews'])->name('email.previews');
         Route::get('/email/previews/{key}', [PlatformEmailController::class, 'preview'])->name('email.preview');
 

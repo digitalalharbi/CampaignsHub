@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use App\Http\Controllers\Controller;
@@ -14,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -139,7 +142,83 @@ final class PlatformEmailController extends Controller
             'state' => MailTransportState::current(),
             'provider_configured' => $this->providers->isConfigured('email'),
             'driver' => (string) config('mail.default', 'log'),
+            /*
+             * EMAIL-SETTINGS-PAGE-001 — who the mail says it is from, and when it last worked or failed.
+             *
+             * Addresses and timestamps only. No host, port, username, password or key: this payload is a
+             * diagnosis, and a settings screen that echoes a credential is a credential leak with a
+             * friendly face.
+             */
+            'sender' => [
+                'address' => (string) config('mail.from.address', ''),
+                'name' => (string) config('mail.from.name', ''),
+            ],
+            'reply_to' => (string) (config('mail.reply_to.address') ?? ''),
+            'last_success_at' => $this->lastAt(['sent']),
+            'last_failure' => $this->lastFailure(),
         ];
+    }
+
+    /**
+     * The newest time a message reached one of the given states, over both ledgers.
+     *
+     * @param  list<string>  $states
+     */
+    private function lastAt(array $states): ?string
+    {
+        $a = DB::table('mail_deliveries')->whereIn('status', $states)->max('created_at');
+        $b = DB::table('digest_sends')->whereIn('status', $states)->max('created_at');
+        $latest = collect([$a, $b])->filter()->max();
+
+        return $latest === null ? null : Carbon::parse((string) $latest)->toIso8601String();
+    }
+
+    /** @return array{at: string, kind: string, error: string}|null */
+    private function lastFailure(): ?array
+    {
+        $row = DB::table('mail_deliveries')->where('status', 'failed')->orderByDesc('created_at')->first(['created_at', 'kind', 'error']);
+        if ($row === null) {
+            return null;
+        }
+
+        // Trimmed to one short line, the same reason the ledger below already shows: a raw transport error can run to pages.
+        return [
+            'at' => Carbon::parse((string) $row->created_at)->toIso8601String(),
+            'kind' => (string) $row->kind,
+            'error' => Str::limit(preg_replace('/\s+/', ' ', (string) ($row->error ?? '')) ?? '', 80, '…'),
+        ];
+    }
+
+    /**
+     * POST /admin/email/test — one message, to the signed-in operator, through the same ledger.
+     *
+     * Never to an address in the request: a console that can reach every tenant's recipients must not
+     * also be able to mail an arbitrary one. With no provider configured the honest outcome is recorded
+     * (`awaiting_credentials`) rather than a pretend success.
+     */
+    public function test(Request $request, TransactionalMailer $mailer): JsonResponse
+    {
+        $user = $request->user();
+        $lang = in_array($request->input('lang'), ['ar', 'en'], true) ? (string) $request->input('lang') : 'ar';
+
+        $state = $mailer->send(
+            recipient: (string) $user->email,
+            mail: new OperationalMail(
+                kind: 'message', severity: 'info',
+                title: $lang === 'ar' ? 'رسالة اختبار من CampaignsHub' : 'A test message from CampaignsHub',
+                detail: $lang === 'ar' ? 'وصلتك هذه الرسالة لأن مشرف المنصة طلب اختبار إرسال البريد.' : 'You received this because a platform operator asked to test outgoing mail.',
+                context: 'CampaignsHub',
+                lang: $lang,
+                recipientName: (string) $user->name,
+            ),
+            kind: 'test',
+            template: 'operational',
+            locale: $lang,
+            userId: (int) $user->id,
+            dedupKey: 'test:'.$user->id.':'.now()->format('YmdHi'),
+        );
+
+        return ApiResponse::success(['state' => $state, 'recipient' => (string) $user->email], 'Test message recorded.');
     }
 
     /**
