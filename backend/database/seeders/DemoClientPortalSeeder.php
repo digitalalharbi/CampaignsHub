@@ -315,7 +315,9 @@ final class DemoClientPortalSeeder extends Seeder
             $total = $subtotal + $tax;
             $paid = $status === 'paid' ? $total : $paidBase;
 
-            Invoice::updateOrCreate(
+            // Demo data is not a financial record: its dates are re-based to today on every run, which the
+            // issued-invoice guard (INV-IMMUTABLE-001) would otherwise refuse. Real invoices never pass here.
+            Invoice::withoutEvents(fn () => Invoice::updateOrCreate(
                 ['number' => self::INVOICE_PREFIX.$number],
                 [
                     'tenant_id' => $workspace->tenant_id,
@@ -334,7 +336,7 @@ final class DemoClientPortalSeeder extends Seeder
                     'issued_at' => $today->copy()->addDays($issuedDaysAgo),
                     'paid_at' => $status === 'paid' ? $today->copy()->addDays($issuedDaysAgo + 4) : null,
                 ],
-            );
+            ));
         }
     }
 
