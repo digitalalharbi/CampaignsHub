@@ -17,6 +17,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
+use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
@@ -404,6 +405,10 @@ final class LiveReportBuilderController extends Controller
             // REPORT-OWNER-CONTROL-001 — the Owner's full ON/OFF choice per section, applied over the level's preset.
             'sections' => ['sometimes', 'array'],
             'sections.*' => ['boolean'],
+            // REPORT-TABLES-OWNER-COLUMNS-001 — the columns each table publishes; unknown keys are cut, absent means all.
+            'columns' => ['sometimes', 'array'],
+            'columns.*' => ['array'],
+            'columns.*.*' => ['string', 'max:40'],
             'section_overrides' => ['sometimes', 'array'],
             'section_overrides.*' => [Rule::in(app(ReportSectionRegistry::class)->keys())],
         ]);
@@ -519,7 +524,10 @@ final class LiveReportBuilderController extends Controller
             'hide_spend' => $data['hide_spend'] ?? true,
             'hide_revenue' => $data['hide_revenue'] ?? false,
             'form' => $data['form'] ?? null,
-            'settings' => ['section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? [])))],
+            'settings' => [
+                'section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? []))),
+                'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
+            ],
             'scope' => [
                 'project_id' => (string) $project,
                 'campaign_ids' => $campaignIds,
