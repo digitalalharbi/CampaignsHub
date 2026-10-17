@@ -13,6 +13,7 @@ use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportObjectiveLens;
@@ -339,7 +340,7 @@ final class DailyDigest
          * detectors read a snapshot-shaped array, so the digest hands them one.
          */
         $block['observations'] = $this->observations->build($lens, [
-            'currency' => 'SAR',
+            'currency' => ReportingCurrency::DEFAULT,
             'kpis' => $current,
             'delta' => $block['change'],
             'reported' => $reported,

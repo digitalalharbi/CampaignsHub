@@ -458,12 +458,12 @@ function printCss(landscape: boolean): string {
   .report-slide-footer {
     position: absolute; left: 34px; right: 34px; bottom: 12px;
     display: flex; flex-direction: column; gap: 3px;
-    border-top: 1px solid var(--border); padding-top: 6px;
+    border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; text-align: center;
   }
   .report-footer-note { font-size: 8.5px; line-height: 1.3; color: var(--text-muted); }
   .report-footer-note p { margin: 0; }
-  .report-footer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .report-footer-brand { font-size: 8.5px; color: var(--text-muted); white-space: normal; line-height: 1.3; }
+  .report-footer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 3px; }
+  .report-footer-brand { flex: 1 1 auto; text-align: center; font-size: 8.5px; color: var(--text-muted); white-space: normal; line-height: 1.3; }
   .report-footer-page { font-size: 8.5px; color: var(--text-muted); white-space: nowrap; }
   /*
     The cover's one line of attribution. Small, at the foot of the page, and a real anchor so the
