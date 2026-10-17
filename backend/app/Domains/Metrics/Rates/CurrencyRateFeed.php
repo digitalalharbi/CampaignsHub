@@ -141,20 +141,42 @@ final class CurrencyRateFeed
         $status = $this->status();
         $pairs = $this->unmetPairs();
 
+        // FX-PEG-001 — legally fixed rates need no feed and no key. Recorded FIRST and dated at the
+        // earliest withheld figure, so nearest-on-or-before covers the whole span with one honest row.
+        $pegged = 0;
+        $remaining = [];
+        foreach ($pairs as $pair) {
+            $rate = OfficialPegs::rate($pair['base'], $pair['quote']);
+            if ($rate === null || $rate <= 0 || $pair['base'] === $pair['quote']) {
+                $remaining[] = $pair;
+
+                continue;
+            }
+            $this->record(
+                base: $pair['base'],
+                quote: $pair['quote'],
+                rate: $rate,
+                date: Carbon::parse((string) ($pair['earliest'] ?? $date->toDateString())),
+                source: OfficialPegs::source($pair['base'], $pair['quote']),
+            );
+            $pegged++;
+        }
+        $pairs = $remaining;
+
         if ($status['state'] !== 'ready' || $this->source === null) {
             // Not an error and not silence: the caller says what is missing, and NOTHING is written.
             // A feed that invented a rate here would defeat every fail-closed decision upstream.
             return [
                 'state' => $status['state'],
-                'requested' => count($pairs),
-                'imported' => 0,
+                'requested' => count($pairs) + $pegged,
+                'imported' => $pegged,
                 'missing' => array_map(static fn (array $p): string => $p['base'].'→'.$p['quote'], $pairs),
                 'error' => null,
             ];
         }
 
         if ($pairs === []) {
-            return ['state' => 'ready', 'requested' => 0, 'imported' => 0, 'missing' => [], 'error' => null];
+            return ['state' => 'ready', 'requested' => $pegged, 'imported' => $pegged, 'missing' => [], 'error' => null];
         }
 
         try {
@@ -166,7 +188,7 @@ final class CurrencyRateFeed
             return [
                 'state' => 'ready',
                 'requested' => count($pairs),
-                'imported' => 0,
+                'imported' => $pegged,
                 'missing' => array_map(static fn (array $p): string => $p['base'].'→'.$p['quote'], $pairs),
                 'error' => $e->getMessage(),
             ];
@@ -204,7 +226,7 @@ final class CurrencyRateFeed
             }
         }
 
-        return ['state' => 'ready', 'requested' => count($pairs), 'imported' => $imported, 'missing' => $missing, 'error' => null];
+        return ['state' => 'ready', 'requested' => count($pairs) + $pegged, 'imported' => $imported + $pegged, 'missing' => $missing, 'error' => null];
     }
 
     /**

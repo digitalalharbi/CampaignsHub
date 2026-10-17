@@ -44,6 +44,26 @@ final class CurrencyRateFeedTest extends TestCase
 
     private ?Project $project = null;
 
+    /**
+     * FX-PEG-001 — the riyal is fixed to the dollar by statute, so Spend must not read «no data»
+     * beside live impressions for want of a subscription. A floating pair still has to be sourced.
+     */
+    public function test_a_legally_pegged_pair_is_recorded_without_any_feed_and_a_floating_one_is_not(): void
+    {
+        config()->set('fx.rates.driver', null);
+        $this->withheldAdSpend('SAR', 'USD', 2);
+        $this->withheldAdSpend('EUR', 'USD');
+
+        $result = app(CurrencyRateFeed::class)->import(Carbon::parse('2026-10-17'));
+
+        $sar = CurrencyRate::query()->where('base_currency', 'SAR')->where('quote_currency', 'USD')->first();
+        $this->assertNotNull($sar);
+        $this->assertEqualsWithDelta(1 / 3.75, (float) $sar->rate, 1e-9);
+        $this->assertSame('official-peg:SAMA', $sar->source);
+        $this->assertSame(['EUR→USD'], $result['missing']);
+        $this->assertSame(0, CurrencyRate::query()->where('base_currency', 'EUR')->count(), 'a floating currency is never invented');
+    }
+
     // ── The state of the supply ───────────────────────────────────────────────────────────────
 
     /** With no driver chosen, the state is «awaiting configuration» — not «broken», and not «ready». */
@@ -76,11 +96,11 @@ final class CurrencyRateFeedTest extends TestCase
     public function test_the_import_command_invents_nothing_when_no_source_is_configured(): void
     {
         config()->set('fx.rates.driver', null);
-        $this->withheldAdSpend('USD', 'SAR');
+        $this->withheldAdSpend('USD', 'EUR');
 
         $this->artisan('fx:rates')
             ->expectsOutputToContain('No exchange-rate source is configured')
-            ->expectsOutputToContain('USD→SAR')
+            ->expectsOutputToContain('USD→EUR')
             ->assertSuccessful();
 
         $this->assertSame(0, CurrencyRate::query()->count(), 'nothing may be written when nothing is configured');
@@ -96,8 +116,8 @@ final class CurrencyRateFeedTest extends TestCase
      */
     public function test_the_pairs_needed_are_read_from_the_figures_already_withheld(): void
     {
-        $this->withheldAdSpend('USD', 'SAR', 3);
-        $this->withheldOrder('KWD', 'SAR');
+        $this->withheldAdSpend('USD', 'EUR', 3);
+        $this->withheldOrder('KWD', 'EUR');
 
         $pairs = app(CurrencyRateFeed::class)->unmetPairs();
 
@@ -113,8 +133,8 @@ final class CurrencyRateFeedTest extends TestCase
     /** A configured source is asked only for those pairs, and what it answers is recorded. */
     public function test_a_configured_source_is_asked_for_the_missing_pairs_and_its_answer_is_stored(): void
     {
-        $this->withheldAdSpend('USD', 'SAR');
-        $this->bindSource(new StubRateSource(['USD|SAR' => 3.75]));
+        $this->withheldAdSpend('USD', 'EUR');
+        $this->bindSource(new StubRateSource(['USD|EUR' => 3.75]));
 
         $result = app(CurrencyRateFeed::class)->import(Carbon::parse('2026-06-01'));
 
@@ -137,22 +157,22 @@ final class CurrencyRateFeedTest extends TestCase
      */
     public function test_a_pair_the_source_cannot_answer_is_reported_rather_than_filled(): void
     {
-        $this->withheldAdSpend('USD', 'SAR');
-        $this->withheldOrder('KWD', 'SAR');
-        $this->bindSource(new StubRateSource(['USD|SAR' => 3.75]));
+        $this->withheldAdSpend('USD', 'EUR');
+        $this->withheldOrder('KWD', 'EUR');
+        $this->bindSource(new StubRateSource(['USD|EUR' => 3.75]));
 
         $result = app(CurrencyRateFeed::class)->import(Carbon::parse('2026-06-01'));
 
         $this->assertSame(1, $result['imported']);
-        $this->assertSame(['KWD→SAR'], $result['missing']);
+        $this->assertSame(['KWD→EUR'], $result['missing']);
         $this->assertSame(1, CurrencyRate::query()->count());
     }
 
     /** A source answering with a nonsensical rate is ignored, not stored. */
     public function test_a_zero_rate_is_refused(): void
     {
-        $this->withheldAdSpend('USD', 'SAR');
-        $this->bindSource(new StubRateSource(['USD|SAR' => 0.0]));
+        $this->withheldAdSpend('USD', 'EUR');
+        $this->bindSource(new StubRateSource(['USD|EUR' => 0.0]));
 
         $result = app(CurrencyRateFeed::class)->import(Carbon::parse('2026-06-01'));
 
@@ -163,7 +183,7 @@ final class CurrencyRateFeedTest extends TestCase
     /** A source that throws fails the run rather than being mistaken for «no rates today». */
     public function test_a_source_that_throws_is_reported_as_a_failure(): void
     {
-        $this->withheldAdSpend('USD', 'SAR');
+        $this->withheldAdSpend('USD', 'EUR');
         $this->bindSource(new ThrowingRateSource);
 
         $this->artisan('fx:rates')->assertFailed();
@@ -174,8 +194,8 @@ final class CurrencyRateFeedTest extends TestCase
     {
         $feed = app(CurrencyRateFeed::class);
 
-        $feed->record('USD', 'SAR', 3.70, Carbon::parse('2026-06-01'), 'stub-feed');
-        $feed->record('USD', 'SAR', 3.75, Carbon::parse('2026-06-01'), 'stub-feed');
+        $feed->record('USD', 'EUR', 3.70, Carbon::parse('2026-06-01'), 'stub-feed');
+        $feed->record('USD', 'EUR', 3.75, Carbon::parse('2026-06-01'), 'stub-feed');
 
         $this->assertSame(1, CurrencyRate::query()->count());
         $this->assertEqualsWithDelta(3.75, (float) CurrencyRate::query()->firstOrFail()->rate, 0.0001);
@@ -208,7 +228,7 @@ final class CurrencyRateFeedTest extends TestCase
     {
         $this->actingAs($this->platformOwner())
             ->postJson('/api/v1/admin/fx/rates', [
-                'base' => 'USD', 'quote' => 'SAR', 'rate' => 3.75,
+                'base' => 'USD', 'quote' => 'EUR', 'rate' => 3.75,
                 'rate_date' => Carbon::tomorrow()->toDateString(),
             ])
             ->assertStatus(422);
@@ -224,7 +244,7 @@ final class CurrencyRateFeedTest extends TestCase
         foreach ([0, -1.5] as $rate) {
             $this->actingAs($owner)
                 ->postJson('/api/v1/admin/fx/rates', [
-                    'base' => 'USD', 'quote' => 'SAR', 'rate' => $rate, 'rate_date' => '2026-06-01',
+                    'base' => 'USD', 'quote' => 'EUR', 'rate' => $rate, 'rate_date' => '2026-06-01',
                 ])
                 ->assertStatus(422);
         }
@@ -236,7 +256,7 @@ final class CurrencyRateFeedTest extends TestCase
     public function test_the_console_reports_the_feed_state_beside_what_it_is_costing(): void
     {
         config()->set('fx.rates.driver', null);
-        $this->withheldAdSpend('USD', 'SAR', 2);
+        $this->withheldAdSpend('USD', 'EUR', 2);
 
         $body = $this->actingAs($this->platformOwner())
             ->getJson('/api/v1/admin/fx/rates')
@@ -255,7 +275,7 @@ final class CurrencyRateFeedTest extends TestCase
 
         $this->actingAs($user)->getJson('/api/v1/admin/fx/rates')->assertStatus(403);
         $this->actingAs($user)->postJson('/api/v1/admin/fx/rates', [
-            'base' => 'USD', 'quote' => 'SAR', 'rate' => 3.75, 'rate_date' => '2026-06-01',
+            'base' => 'USD', 'quote' => 'EUR', 'rate' => 3.75, 'rate_date' => '2026-06-01',
         ])->assertStatus(403);
     }
 
