@@ -105,6 +105,71 @@ final class PortalOverview
                 'total' => array_sum($byStatus),
                 'by_status' => $byStatus,
             ] : null,
+<<<<<<< ours
         ];
     }
+=======
+            'attention' => $this->attention($workspace, $v, $onlyProjectIds),
+            'trend' => $this->trend((array) ($data['timeseries'] ?? [])),
+        ];
+    }
+
+    /**
+     * CP-DASH-001 — the delivery curve: one point per day that HAS data, never a zero for a day that has none.
+     *
+     * Only the delivery metrics a client is always allowed (impressions, clicks, conversions). Money never
+     * rides in the curve: whether a client may see spend is the agency's decision, and a daily series of it
+     * would be a second place to get that decision wrong. A day absent from the series is a gap on the chart,
+     * not a drop to zero, and a figure the platform did not report stays null rather than 0.
+     *
+     * @param  list<array<string,mixed>>  $series
+     * @return list<array{date: string, impressions: ?float, clicks: ?float, conversions: ?float}>
+     */
+    private function trend(array $series): array
+    {
+        $num = static fn (mixed $v): ?float => is_numeric($v) ? (float) $v : null;
+
+        return array_values(array_map(static fn (array $p): array => [
+            'date' => (string) $p['date'],
+            'impressions' => $num($p['impressions'] ?? null),
+            'clicks' => $num($p['clicks'] ?? null),
+            'conversions' => $num($p['conversions'] ?? null),
+        ], array_filter($series, static fn ($p): bool => is_array($p) && isset($p['date']))));
+    }
+
+    /**
+     * CP-DASH-001 — what is waiting on THIS client, counted from the records that say so.
+     *
+     * Each count exists only where the agency lets the client see that section, and an invoice count is
+     * absent for a user confined to some projects (client-wide paperwork is not theirs). A missing key
+     * means «not available to you», never zero.
+     *
+     * @param  array<string, bool>  $v
+     * @param  list<string>|null  $onlyProjectIds
+     * @return array<string, int>
+     */
+    private function attention(ClientWorkspace $workspace, array $v, ?array $onlyProjectIds): array
+    {
+        $out = [];
+
+        if ($v['requests']) {
+            $out['requests_waiting'] = ExternalRequest::query()
+                ->where('client_id', $workspace->getKey())
+                ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('project_id', $onlyProjectIds))
+                ->whereHas('status', fn ($q) => $q->where('key', 'waiting_client'))
+                ->count();
+        }
+
+        if ($v['invoices'] && $onlyProjectIds === null) {
+            $states = Invoice::query()->where('client_workspace_id', $workspace->getKey())
+                ->whereIn('status', ['issued', 'sent', 'partially_paid'])->get()
+                ->map(fn (Invoice $i): string => $i->displayStatus())->countBy();
+
+            $out['invoices_overdue'] = (int) ($states['overdue'] ?? 0);
+            $out['invoices_due'] = (int) ($states['due'] ?? 0) + (int) ($states['partially_paid'] ?? 0);
+        }
+
+        return $out;
+    }
+>>>>>>> theirs
 }
