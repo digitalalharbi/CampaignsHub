@@ -90,6 +90,16 @@ const OPERATOR_VOCABULARY = [
   'account binding',
   'provenance',
   'data_version',
+  /*
+   * REPORT-CLIENT-WORDING-001 — the agency's own product names. «Link Report» and «Saved Report» describe how
+   * the AGENCY builds a report; a client was reading «تقرير رابط — ملخص، أداء…» under the title of the report
+   * they had been sent. What the report contains and how fresh it is are the client's to read; the name of the
+   * tool is not.
+   */
+  'Link Report',
+  'Saved Report',
+  'تقرير رابط',
+  'تقرير محفوظ',
 ]
 
 /**

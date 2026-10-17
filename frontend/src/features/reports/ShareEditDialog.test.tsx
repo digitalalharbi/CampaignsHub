@@ -65,4 +65,15 @@ describe('ShareEditDialog', () => {
     fireEvent.click(screen.getByTestId('edit-save'))
     await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', { clear_password: true, clear_expiry: true }))
   })
+
+  /** REPORT-CLIENT-NO-DELTAS-001 — off unless the Owner turns it on, and saving names only that switch. */
+  it('shows the previous-period comparison as off and sends only that switch when it is turned on', async () => {
+    mount()
+    expect(screen.getByTestId('edit-previous-comparison')).not.toBeChecked()
+
+    fireEvent.click(screen.getByTestId('edit-previous-comparison'))
+    fireEvent.click(screen.getByTestId('edit-save'))
+
+    await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', { sections: { previous_comparison: true } }))
+  })
 })

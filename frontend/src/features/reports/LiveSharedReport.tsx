@@ -226,8 +226,8 @@ export function LiveSharedReport({
           {(payload.period.kind ?? 'custom') !== 'custom' && (
             <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
               {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
-              {' · '}
-              {ar ? payload.period.comparison_ar : payload.period.comparison_en}
+              {/* REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is the agency's view unless the Owner switched it on. */}
+              {payload.sections?.previous_comparison !== false && (<>{' · '}{ar ? payload.period.comparison_ar : payload.period.comparison_en}</>)}
               {payload.period.partial ? (ar ? ' · الفترة لم تكتمل' : ' · in progress') : ''}
             </span>
           )}

@@ -7,7 +7,7 @@ import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
-import { productLabel } from './reportProduct'
+import { clientBlurb } from './reportProduct'
 import { SharedAttributionSection } from './SharedAttributionSection'
 import { SharedCreativeSection } from './SharedCreativeSection'
 import { Button } from '@/components/ui/Button'
@@ -270,7 +270,7 @@ export function PublicReport() {
                 incomplete — the one reading the trimming was meant to prevent.
               */}
               <p data-testid="report-form-label" className="mb-4 text-xs font-semibold text-text-secondary">
-                {productLabel(report.mode ?? 'snapshot', report.form ?? 'detailed', locale)}
+                {clientBlurb(report.mode ?? 'snapshot', locale)}
               </p>
 
               {/*

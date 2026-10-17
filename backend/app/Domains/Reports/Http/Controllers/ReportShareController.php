@@ -130,7 +130,13 @@ final class ReportShareController extends Controller
              * Resolved the same way and for the same reason: an absent or malformed key becomes
              * «closed», so a link cannot acquire a section by omission.
              */
-            'sections' => ShareSections::fromArray($opts['sections'] ?? [])->toArray(),
+            /*
+             * REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is OFF on a new client link
+             * unless the Owner switched it on. It is the agency's own working view (it invites a question
+             * about last week the client was never promised an answer to), so a link that did not ask for
+             * it does not carry it. Links created before this keep what they were stored with.
+             */
+            'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => false])->toArray(),
             'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
         ];
 
@@ -254,7 +260,8 @@ final class ReportShareController extends Controller
             $settings['creatives'] = CreativeVisibility::fromArray($opts['creatives'])->toArray();
         }
         if (array_key_exists('sections', $opts)) {
-            $settings['sections'] = ShareSections::fromArray($opts['sections'])->toArray();
+            // Merged over what the link already has: naming one switch must not reset the others to their default.
+            $settings['sections'] = ShareSections::fromArray(array_replace((array) ($settings['sections'] ?? []), $opts['sections']))->toArray();
         }
         $fill['settings'] = $settings;
 
