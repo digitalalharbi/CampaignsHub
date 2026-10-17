@@ -1609,6 +1609,21 @@ export function lossBefore(
 }
 
 /**
+ * BUDGET-HIERARCHY-001 — one cell for the three plan figures every rung of the hierarchy shares:
+ * expected to date, daily average and over / under. A null is a refusal the row already explained
+ * (`note`), so it renders «—» with that reason rather than a zero; `signed` marks an overrun red.
+ */
+function PlanFigure({ value, unit, note, signed }: { value: number | null | undefined; unit: string | null | undefined; note?: string; signed?: boolean }) {
+  if (value === null || value === undefined) return <span className="text-text-muted" title={note}>—</span>
+  const over = signed && value > 0
+  return (
+    <span dir="ltr" className={`tnum ${over ? 'font-semibold text-danger' : ''}`}>
+      {signed && value > 0 ? '+' : ''}{money(value, unit ?? undefined)}
+    </span>
+  )
+}
+
+/**
  * BUDGET-ACCOUNTS-001 — how close each ad account is to the ceiling the platform enforces.
  *
  * The campaign table below answers «is this campaign pacing to the plan we typed». This answers the
@@ -1648,11 +1663,12 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
 
       <MetricTable
         head={ar
-          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع', 'الحملات']
-          : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Pace', 'Projected', 'Campaigns']}
+          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت', 'الحملات']
+          : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under', 'Campaigns']}
         rows={rows.map((r) => {
           const unit = r.spent_currency ?? undefined
           const noCap = ar ? 'لم تُرسل' : 'Not sent'
+          const noCapNote = ar ? 'لم تُصرّح أي حملة على هذا الحساب بحدّ' : 'No campaign on this account states a ceiling'
 
           return [
             <span key="a" className="font-semibold text-text-primary">
@@ -1679,10 +1695,13 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
                   <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
                 </span>
               ),
+            <PlanFigure key="e" value={r.expected_to_date} unit={unit ?? null} note={noCapNote} />,
+            <PlanFigure key="d" value={r.daily_average} unit={unit ?? null} />,
             r.pace === null
               ? <span key="p" className="text-text-muted">—</span>
               : <span key="p" className={`tnum font-semibold ${r.pace > 1 ? 'text-danger' : r.pace > 0.9 ? 'text-warning' : 'text-success'}`}>{ratio(r.pace, '×')}</span>,
             money(r.projected_spend, unit),
+            <PlanFigure key="ou" value={r.over_under} unit={unit ?? null} note={noCapNote} signed />,
             <span key="n" className="tnum">
               {r.capped_campaigns < r.campaigns
                 ? `${r.campaigns} (${ar ? `${r.capped_campaigns} بحدّ` : `${r.capped_campaigns} capped`})`
@@ -1697,8 +1716,11 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
           r.cap,
           r.remaining,
           r.consumed_pct,
+          r.expected_to_date ?? null,
+          r.daily_average ?? null,
           r.pace,
           r.projected_spend,
+          r.over_under ?? null,
           r.campaigns,
         ])}
         /* Most consumed first: the account about to stop delivering is why this table is open. */
@@ -1748,7 +1770,9 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         and the row says which case it is instead of leaving a reader to guess at an empty cell.
       */}
       <MetricTable
-        head={ar ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع'] : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
+        head={ar
+          ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => {
           const basisNote = r.pacing_basis === 'currency_mismatch'
             ? (ar
@@ -1786,6 +1810,8 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                   <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
                 </div>
               ),
+            <PlanFigure key="e" value={r.expected_to_date} unit={r.budget_currency} note={basisNote} />,
+            <PlanFigure key="d" value={r.daily_average} unit={r.budget_currency} note={basisNote} />,
             r.pace === null
               ? <span key="p" className="text-text-muted" title={basisNote}>—</span>
               : (
@@ -1802,6 +1828,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                   {r.paced_through && <span className="ms-1 text-[11px] text-text-muted">{ar ? `حتى ${r.paced_through}` : `through ${r.paced_through}`}</span>}
                 </span>
               ),
+            <PlanFigure key="ou" value={r.over_under} unit={r.budget_currency} note={basisNote} signed />,
           ]
         })}
         values={rows.map((r) => [
@@ -1810,11 +1837,14 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
           r.spent ?? null,
           r.remaining,
           r.consumed_pct,
+          r.expected_to_date ?? null,
+          r.daily_average ?? null,
           r.pace,
           r.projected_spend ?? null,
+          r.over_under ?? null,
         ])}
         /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
-        initialSort={{ column: 5, dir: 'desc' }}
+        initialSort={{ column: 7, dir: 'desc' }}
       />
     </Panel>
     </div>
