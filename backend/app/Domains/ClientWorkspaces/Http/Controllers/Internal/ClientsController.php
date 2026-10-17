@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\ClientWorkspaces\Services\ClientPortfolioStats;
+use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -137,6 +138,14 @@ final class ClientsController
             'classification' => $this->classification($c),
             'is_archived' => $c->isArchived(),
             'archived_at' => optional($c->archived_at)->toIso8601String(),
+            // CP-VISIBILITY-001 — what this client's portal shows and what its people may do, as the portal
+            // itself will read it (defaults laid under the agency's choices), so the settings screen never
+            // keeps a second copy of the defaults.
+            'portal' => [
+                'mode' => (string) $c->mode,
+                'visibility' => PortalVisibility::visibilityFor($c),
+                'capabilities' => PortalVisibility::capabilitiesFor($c),
+            ],
             'can' => [
                 'update' => $user->hasPermission('clients.update'),
                 'manage_settings' => $user->hasPermission('clients.manage_settings'),
