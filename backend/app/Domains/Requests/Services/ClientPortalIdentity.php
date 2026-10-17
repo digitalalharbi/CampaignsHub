@@ -82,15 +82,25 @@ final class ClientPortalIdentity
     }
 
     /**
-     * The client role of a MEMBERSHIP session — `client_viewer`, `client_approver` or `client_admin` — or null
-     * for the legacy contact engine, where the person who verified the contact is the decision maker and
-     * has always been able to act (CP-USERS-001).
+     * The client role that RESTRICTS this session — `client_viewer`, `client_approver` or `client_admin` — or
+     * null when nothing restricts it (CP-USERS-001).
+     *
+     * Only a role a person CHOSE restricts anybody. The legacy contact engine has never had one (the
+     * verified contact is the decision maker), and the memberships the migration and the seeders provisioned
+     * (`invited_by` null) carry `client_viewer` only because a row needs some role: reading it as a
+     * restriction would have turned every existing client who could reply and approve into a read-only
+     * account on the day this shipped. A membership granted or accepted through the agency's client-users
+     * flow records who granted it, and that is the one whose role is meant.
      */
     public function clientRole(Request $request, ?ClientPortalToken $token): ?string
     {
+        if ($request->user() === null) {
+            return null;
+        }
+
         $membership = $this->membershipFor($request, $token);
 
-        return $membership === null ? null : (string) $membership->role;
+        return $membership !== null && $membership->invited_by !== null ? (string) $membership->role : null;
     }
 
     /**

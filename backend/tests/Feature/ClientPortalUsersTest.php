@@ -11,7 +11,9 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
@@ -191,6 +193,20 @@ final class ClientPortalUsersTest extends TestCase
         $this->assertSame('sent', Quote::withoutGlobalScopes()->find($quote->id)->status, 'nothing changed');
 
         $this->actingAs($approver);
+        $this->postJson("/api/v1/client/quotes/{$quote->id}/approve", [], $this->spa)->assertStatus(201);
+    }
+
+    public function test_a_role_nobody_chose_does_not_restrict_anyone(): void
+    {
+        $quote = Quote::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->workspace->id, 'number' => 'QUO-U-2', 'currency' => 'SAR', 'subtotal' => 100, 'tax' => 15, 'total' => 115, 'line_items' => [], 'status' => 'sent']);
+
+        // A membership the system provisioned (migration, seeding): `client_viewer` only because a row needs a role.
+        $legacy = User::create(['name' => 'Legacy', 'email' => 'legacy@client.test', 'password' => 'x12345678']);
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $legacy, tenant: $this->tenant, portal: Portal::ClientPortal, role: 'client_viewer', clientScopeIds: [(string) $this->workspace->id],
+        ));
+
+        $this->actingAs($legacy);
         $this->postJson("/api/v1/client/quotes/{$quote->id}/approve", [], $this->spa)->assertStatus(201);
     }
 }
