@@ -210,6 +210,25 @@ test.describe('the client portal', () => {
     await walkRail(page, hrefs)
   })
 
+  /**
+   * OWNER DEFECT 2026-10-18 — signing out of the client portal landed on `/switch` showing
+   * «تعذّر تحميل مساحات العمل». The exit ended the server session but left the signed-in user in the app,
+   * so `/login` bounced onward to a switcher whose request the dead session refused.
+   */
+  test('signing out lands on the sign-in page, never on the workspace switcher', async ({ page }) => {
+    await page.goto('/portal')
+    await expect(page.getByRole('navigation').first().locator('a[href^="/portal"]').nth(3)).toBeVisible({ timeout: 20_000 })
+
+    await page.getByRole('button', { name: /خروج|sign out|log out/i }).first().click()
+
+    await expect(page).toHaveURL(/\/login/, { timeout: 20_000 })
+    await expect(page).not.toHaveURL(/\/switch/)
+    await expect(page.locator('body')).not.toContainText(/تعذّر تحميل مساحات العمل|workspaces could not be loaded/i)
+    // Stays put: a stale guard bouncing the visitor onward would leave /login within a moment.
+    await page.waitForTimeout(1500)
+    await expect(page).toHaveURL(/\/login/)
+  })
+
   /** Direct open, refresh and Back all land in the portal — not at its login. */
   test('a deep link survives a refresh and a Back', async ({ page }) => {
     await page.goto('/portal')
