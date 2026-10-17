@@ -431,6 +431,9 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
      * @param  list<array<string,mixed>>  $ads
      * @return list<array<string,mixed>>
      */
+    /** Spark posters asked for in one sweep — a call each, so bounded. */
+    private const SPARK_POSTER_CAP = 400;
+
     private function withMedia(OAuthTokens $tokens, string $adAccountId, array $ads): array
     {
         $videoIds = [];
@@ -445,8 +448,47 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
             }
         }
 
+        /*
+         * TIKTOK-SPARK-COVER-001 — a Spark Ad runs an organic post, which is not in the Asset Library, so
+         * `file/video/ad/info/` never answers for it. Production 2026-10-17: 283 of the 331 TikTok
+         * creatives drew nothing — the Spark ones. The post's own cover comes from the identity that
+         * owns it: `identity/video/info/` with the ad's identity and the post id, answering
+         * `video_info.poster_url`. One call per post, capped, and a refusal costs that poster only.
+         */
+        $sparks = [];
+        foreach ($ads as $ad) {
+            $creative = (array) ($ad['creative'] ?? []);
+            $raw = (array) ($ad['raw'] ?? []);
+            if (($creative['raw']['media'] ?? null) === 'spark' && ! isset($sparks[(string) $creative['external_id']])) {
+                $sparks[(string) $creative['external_id']] = array_filter([
+                    'identity_type' => $raw['identity_type'] ?? null,
+                    'identity_id' => $raw['identity_id'] ?? null,
+                    'identity_authorized_bc_id' => $raw['identity_authorized_bc_id'] ?? null,
+                ], static fn ($v) => is_string($v) && $v !== '');
+            }
+        }
+
         $videos = [];
         $images = [];
+        $posts = [];
+        foreach (array_slice($sparks, 0, self::SPARK_POSTER_CAP, true) as $itemId => $identity) {
+            if (! isset($identity['identity_type'], $identity['identity_id'])) {
+                continue;
+            }
+            try {
+                $body = $this->read($this->api($tokens)->get($this->url('identity/video/info/'), [
+                    'advertiser_id' => $adAccountId,
+                    'item_id' => $itemId,
+                ] + $identity), 'spark post info');
+                $info = (array) ($body['data']['video_info'] ?? []);
+                if ($info !== []) {
+                    $posts[$itemId] = $info;
+                }
+            } catch (RuntimeException $e) {
+                Log::warning('TikTok Spark post info could not be read; that creative keeps no poster.', ['reason' => $e->getMessage()]);
+            }
+        }
+
         try {
             foreach (array_chunk(array_values(array_unique($videoIds)), 60) as $chunk) {
                 $body = $this->read($this->api($tokens)->get($this->url('file/video/ad/info/'), [
@@ -486,6 +528,12 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                     'thumbnail_url' => is_string($v['video_cover_url'] ?? null) ? $v['video_cover_url'] : null,
                     'video_url' => is_string($v['preview_url'] ?? null) ? $v['preview_url'] : null,
                     'asset_expires_at' => is_string($v['preview_url_expire_time'] ?? null) ? $v['preview_url_expire_time'].' UTC' : null,
+                ], static fn ($x) => $x !== null);
+            } elseif (isset($posts[$id])) {
+                $v = $posts[$id];
+                $creative += array_filter([
+                    'thumbnail_url' => is_string($v['poster_url'] ?? null) ? $v['poster_url'] : null,
+                    'video_url' => is_string($v['preview_url'] ?? null) ? $v['preview_url'] : null,
                 ], static fn ($x) => $x !== null);
             } elseif (isset($images[$id])) {
                 $url = is_string($images[$id]['image_url'] ?? null) ? $images[$id]['image_url'] : null;
