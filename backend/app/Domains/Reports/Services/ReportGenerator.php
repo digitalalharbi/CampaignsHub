@@ -923,8 +923,11 @@ final class ReportGenerator
                     'status' => $isRec ? ($report->is_demo ? 'approved' : 'draft') : 'reviewed',
                 ])->save();
             } else {
-                // Refresh the text/evidence but keep the lifecycle fields.
-                $ann->forceFill(['text_ar' => $item['title'] ?? null, 'evidence' => $evidence, 'priority' => $priority])->save();
+                // Refresh the text/evidence but keep the lifecycle fields — and, WD-DRAFTS-001, never overwrite
+                // words the Owner wrote: an edited note stays exactly as edited across every regeneration.
+                $ann->forceFill($ann->source === 'edited'
+                    ? ['evidence' => $evidence, 'priority' => $priority]
+                    : ['text_ar' => $item['title'] ?? null, 'evidence' => $evidence, 'priority' => $priority])->save();
             }
 
             return $item + [
