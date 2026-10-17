@@ -180,7 +180,8 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
                     'name' => (string) ($a['name'] ?? $id),
                     'status' => strtolower((string) ($a['status'] ?? 'unknown')),
                     'review_status' => $this->stringOrNull($a, 'review_status'),
-                    'destination_url' => $this->stringOrNull($a, 'destination_url'),
+                    // The documented field is `creative.target_url`; `destination_url` is kept for older payloads.
+                    'destination_url' => $this->stringOrNull($a, 'destination_url') ?? $this->stringOrNull((array) ($a['creative'] ?? []), 'target_url'),
                     'creative' => $this->creative($id, (array) $a),
                     'raw' => (array) $a,
                 ], static fn ($v) => $v !== null);
@@ -216,6 +217,18 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
             'thumbnail_url' => $this->stringOrNull($creative, 'image_url'),
             'asset_url' => $this->stringOrNull($creative, 'image_url') ?? $this->stringOrNull($creative, 'file_url'),
             'preview_url' => $this->stringOrNull($creative, 'preview_url'),
+            'destination_url' => $this->stringOrNull($creative, 'target_url'),
+            /*
+             * OPENAI-COVER-EVIDENCE-001 — the creative exactly as OpenAI sent it, text and file id and
+             * all. A card with no `image_url` is either a text-only chat card by design or a field this
+             * mapping does not read; without the payload nobody can tell which.
+             */
+            'raw' => array_filter([
+                'type' => $this->stringOrNull($creative, 'type'),
+                'file_id' => $this->stringOrNull($creative, 'file_id'),
+                'body' => $this->stringOrNull($creative, 'body'),
+                'keys' => array_keys($creative),
+            ], static fn ($v) => $v !== null && $v !== []),
         ], static fn ($v) => $v !== null);
     }
 
