@@ -35,6 +35,8 @@ final class ScheduledWorkInventoryTest extends TestCase
     private const EXPECTED = [
         'alerts:evaluate',
         'commerce:sync',
+        // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
+        'delivery:prepare-weekly',
         'fx:rates',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker

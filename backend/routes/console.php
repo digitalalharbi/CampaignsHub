@@ -178,3 +178,11 @@ Schedule::command('integrations:prune-raw')->dailyAt('03:30');
  * today's rate already on file rather than being withheld until tomorrow.
  */
 Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
+
+/*
+ * The weekly delivery packs (WD-SCHEDULE-001) — Monday morning, Riyadh time.
+ *
+ * Prepares last ISO week's DRAFT pack for each client that opted in; sending is the Owner's decision.
+ * Idempotent per project and week, so a late retry or a manual preparation cannot double it.
+ */
+Schedule::command('delivery:prepare-weekly')->weeklyOn(1, '06:00')->timezone('Asia/Riyadh')->withoutOverlapping();
