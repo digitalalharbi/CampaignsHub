@@ -92,3 +92,23 @@ export function uploadEvidence(input: {
 
 export const deleteEvidence = (id: string) => api.delete(`/delivery/evidence/${id}`)
 export const evidenceFileUrl = (id: string) => `/api/v1/delivery/evidence/${id}/file`
+
+/** DELIV-DASH-001 — one row per client: where the weekly delivery and the money stand, and the one next step. */
+export type NextAction = 'prepare_pack' | 'review_pack' | 'approve_pack' | 'send_pack' | 'follow_up_payment' | 'none'
+
+export interface DeliveryOverviewRow {
+  client_id: string
+  client: string
+  pack: { id: string; period: { from: string; to: string }; status: 'draft' | 'approved' | 'sent'; sent_at: string | null } | null
+  report: { status: string; undecided_recommendations: number } | null
+  evidence: number | null
+  last_viewed_at: string | null
+  /** Null when the reader may not see this client's billing — never a zero. */
+  invoice: { id: number; number: string; status: string; currency: string; total: number; amount_due: number | null; due_date: string | null } | null
+  follow_up_required: boolean
+  next_action: NextAction
+  visual: 'ok' | 'attention' | 'urgent'
+}
+
+export const getDeliveryOverview = () => getData<DeliveryOverviewRow[]>('/delivery/overview')
+
