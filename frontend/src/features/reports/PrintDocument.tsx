@@ -845,7 +845,7 @@ export function PrintDocument({
 }
 
 const DOC_CSS = `
-.doc-footnote { margin-top: 18pt; padding-top: 6pt; border-top: 0.5pt solid #d4d4d8; font-size: 8pt; line-height: 1.45; color: #71717a; }
+.doc-footnote { margin: 18pt auto 0; max-width: 150mm; text-align: center; padding: 6pt 10pt; border: 0.5pt solid #d4d4d8; border-radius: 6pt; font-size: 8pt; line-height: 1.45; color: #71717a; }
 .doc-footnote p { margin: 0 0 2pt; }
 @page { size: A4 portrait; margin: 18mm 16mm; }
 .doc-root { font-family: Inter, system-ui, sans-serif; color: #1a1a1a; font-size: 10.5pt; line-height: 1.5;
