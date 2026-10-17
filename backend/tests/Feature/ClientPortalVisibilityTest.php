@@ -194,4 +194,15 @@ final class ClientPortalVisibilityTest extends TestCase
         $this->getJson('/api/v1/client/overview', $this->login('both@x.test'))->assertStatus(422);
         $this->assertNotSame($first['workspace']->id, $second['workspace']->id);
     }
+
+    public function test_a_client_slug_can_never_equal_a_portal_page(): void
+    {
+        foreach (['invoices', 'Requests', 'reports'] as $reserved) {
+            $w = ClientWorkspace::create([
+                'tenant_id' => $this->tenant->id, 'name' => 'X', 'slug' => $reserved,
+                'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
+            ]);
+            $this->assertSame($reserved.'-client', $w->slug);
+        }
+    }
 }
