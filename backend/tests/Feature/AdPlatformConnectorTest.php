@@ -619,6 +619,38 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * TIKTOK-SPARK-COVER-001 — a `BC_AUTH_TT` identity is asked with its Business Center (live: code 40000 without it).
+     */
+    public function test_a_bc_authorised_spark_identity_is_asked_with_the_advertisers_owner_business_center(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'advertiser/info/')) {
+                return Http::response(['code' => 0, 'data' => ['list' => [['advertiser_id' => 'adv-1', 'owner_bc_id' => 'bc-77']]]]);
+            }
+            if (str_contains($url, 'identity/video/info/')) {
+                $asked[] = $url;
+
+                return str_contains($url, 'identity_authorized_bc_id=bc-77')
+                    ? Http::response(['code' => 0, 'data' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/bc.jpg']]])
+                    : Http::response(['code' => 40000, 'message' => 'Unable to fetch a valid item.', 'request_id' => 'r']);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 's1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark 1', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001', 'identity_type' => 'BC_AUTH_TT', 'identity_id' => 'idn-1'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertSame('https://p16.tiktokcdn.com/bc.jpg', $ads['s1']['creative']['thumbnail_url']);
+        $this->assertCount(1, $asked);
+        $this->assertStringContainsString('identity_type=BC_AUTH_TT', $asked[0]);
+    }
+
+    /**
      * TIKTOK-CONTENT-001 — creative figures from the ad-level report: two ads running one video sum
      * into that video's day; reach (unique people per ad) is not summed; a Spark Ad's figures land on
      * its post; an ad with no creative is not placed.
