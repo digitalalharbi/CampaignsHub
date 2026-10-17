@@ -149,7 +149,7 @@ final class DigestPresenter
 
         $good = $lowerIsBetter ? $delta < 0 : $delta > 0;
 
-        return $good ? '#0f766e' : '#b91c1c';
+        return $good ? '#0d8a6f' : '#b91c1c';
     }
 
     public function pathLabel(string $path): string

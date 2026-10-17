@@ -216,7 +216,9 @@ final class MailPreviewsTest extends TestCase
     public function test_no_preview_reaches_for_an_image(): void
     {
         foreach ($this->render() as $name => $html) {
-            $this->assertStringNotContainsString('<img', $html, "{$name} loads an image");
+            // EMAIL-BRAND-001 — the official lockup in the header is the one image, and nothing else.
+            $this->assertSame(1, substr_count($html, '<img'), "{$name} loads more than the brand lockup");
+            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-(ar|en)-dark\.png"#', $html, "{$name}'s image is not the brand lockup");
             $this->assertStringNotContainsString('background-image', $html, "{$name} loads a background image");
         }
     }
