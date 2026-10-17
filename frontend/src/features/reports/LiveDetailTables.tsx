@@ -267,7 +267,15 @@ export function LivePlatformComparison({
     ]),
   }
 
-  const keep = noSpend ? [0, 2, 4, 5, 6] : [0, 1, 2, 3, 4, 5, 6]
+  /*
+   * REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's choice, on top of the money rule: a link that hides
+   * spend still shows no spend or cost column however the picker was set. The name column is never a
+   * choice. An absent table (or the server's empty list) means every column.
+   */
+  const COLUMN_KEYS = ['platform', 'spend', 'results', 'cost', 'impressions', 'clicks', 'ctr']
+  const chosen = Array.isArray(payload.columns) ? undefined : payload.columns?.platforms
+  const keep = (noSpend ? [0, 2, 4, 5, 6] : [0, 1, 2, 3, 4, 5, 6])
+    .filter((i) => i === 0 || chosen === undefined || chosen.includes(COLUMN_KEYS[i]))
   const pick = <T,>(cells: T[]): T[] => keep.map((i) => cells[i])
 
   return (
@@ -278,7 +286,7 @@ export function LivePlatformComparison({
           rows={built.rows.map(pick)}
           values={built.values.map(pick)}
           exact={built.exact.map(pick)}
-          initialSort={{ column: 1, dir: 'desc' }}
+          initialSort={keep.length > 1 ? { column: 1, dir: 'desc' } : undefined}
         />
         {!noSpend && <p className="mt-2 text-xs text-text-muted">{t.blend}</p>}
       </Section>
