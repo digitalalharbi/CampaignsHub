@@ -6,12 +6,13 @@ import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Num } from '@/components/ui/Num'
+import { TabClientInvoicing } from './billing/TabClientInvoicing'
 
 /**
  * Client billing tab — this client's quotes + invoices, filtered from the tenant billing ledger
  * (both models carry client_workspace_id). Read-only rollup; actions live in the Billing section.
  */
-export function TabBilling({ clientId }: { clientId: string }) {
+export function TabBilling({ clientId, canManage = false }: { clientId: string; canManage?: boolean }) {
   const portalTo = usePortalPath()
   const ar = useUi((s) => s.locale) === 'ar'
   const quotesQ = useQuery({ queryKey: ['billing', 'quotes'], queryFn: listQuotes })
@@ -100,6 +101,7 @@ export function TabBilling({ clientId }: { clientId: string }) {
           </section>
         </div>
       )}
+      <TabClientInvoicing clientId={clientId} canManage={canManage} />
     </div>
   )
 }

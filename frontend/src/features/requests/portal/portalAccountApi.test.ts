@@ -92,10 +92,13 @@ describe('portalAccountApi — client content (files / campaigns / reports)', ()
     expect(out).toEqual([{ id: 'f1', source: 'drive', name: 'deck.pdf' }])
   })
 
-  it('unwraps the campaigns list', async () => {
-    mockGet.mockResolvedValue({ campaigns: [{ id: 'c1', name: 'Launch' }] })
-    expect(await listClientCampaigns()).toEqual([{ id: 'c1', name: 'Launch' }])
+  it('returns the campaigns page and sends only the filters that were set', async () => {
+    mockGet.mockResolvedValue({ campaigns: [{ id: 'c1', name: 'Launch' }], total: 1, page: 1, per_page: 25, last_page: 1 })
+    expect((await listClientCampaigns()).campaigns).toEqual([{ id: 'c1', name: 'Launch' }])
     expect(getData).toHaveBeenCalledWith('/client/campaigns')
+
+    await listClientCampaigns({ q: 'ramadan', status: '', page: 2, per_page: 25 })
+    expect(getData).toHaveBeenLastCalledWith('/client/campaigns?q=ramadan&page=2&per_page=25')
   })
 
   it('unwraps the reports list', async () => {
