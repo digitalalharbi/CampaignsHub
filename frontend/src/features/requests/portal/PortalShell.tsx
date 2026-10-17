@@ -6,7 +6,7 @@ import { LogOut, Moon, Sun } from 'lucide-react'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
-import { PORTAL_NAV, PortalNav } from './portalNav'
+import { PORTAL_MORE_ORDER, PORTAL_PRIMARY, PortalNav, useVisiblePortalNav } from './portalNav'
 import { useClientSpacePath } from './clientSpace'
 import { brandStyle, useClientBranding } from './useClientBranding'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
@@ -52,10 +52,12 @@ export function PortalShell({
    * Home, requests, campaigns and reports: what is happening and how it is going. Quotes, invoices,
    * messages, files and profile are in More — the paperwork, which is looked up rather than watched.
    */
-  const PRIMARY = ['', '/requests', '/campaigns', '/reports']
-  const tabs = PORTAL_NAV.filter((i) => PRIMARY.includes(i.to))
+  const visibleNav = useVisiblePortalNav()
+  const byTo = new Map(visibleNav.map((i) => [i.to, i]))
+  const tabs = PORTAL_PRIMARY.map((to) => byTo.get(to))
+    .filter((i): i is NonNullable<typeof i> => i !== undefined)
     .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
-  const moreItems = PORTAL_NAV.filter((i) => !PRIMARY.includes(i.to))
+  const moreItems = PORTAL_MORE_ORDER.map((to) => byTo.get(to)).filter((i): i is NonNullable<typeof i> => i !== undefined)
     .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
   // The primary mark if the agency uploaded one; otherwise the platform's own.
   const uploaded = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
