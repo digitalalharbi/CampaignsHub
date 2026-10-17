@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Billing\Models\Invoice;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
@@ -11,8 +12,12 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Models\User;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -209,7 +214,7 @@ final class ClientPortalVisibilityTest extends TestCase
     public function test_a_client_never_sees_an_invoice_before_it_is_issued_and_may_download_it_after(): void
     {
         $a = $this->client('a@x.test', '+966500000001');
-        $make = fn (string $status, string $number) => \App\Domains\Billing\Models\Invoice::create([
+        $make = fn (string $status, string $number) => Invoice::create([
             'tenant_id' => $this->tenant->id, 'client_workspace_id' => $a['workspace']->id, 'number' => $number, 'currency' => 'SAR',
             'subtotal' => 100, 'tax' => 15, 'total' => 115, 'line_items' => [], 'amount_paid' => 0, 'status' => $status,
         ]);
@@ -223,5 +228,74 @@ final class ClientPortalVisibilityTest extends TestCase
         $this->getJson("/api/v1/client/invoices/{$draft->id}", $h)->assertNotFound();
         $this->getJson("/api/v1/client/invoices/{$reviewed->id}/pdf", $h)->assertNotFound();
         $this->getJson("/api/v1/client/invoices/{$issued->id}", $h)->assertOk();
+    }
+
+    private function manyCampaigns(array $client, int $n): void
+    {
+        for ($i = 1; $i <= $n; $i++) {
+            UnifiedCampaign::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $client['project']->id, 'client_workspace_id' => $client['workspace']->id,
+                'name' => ($i % 2 === 0 ? 'Ramadan' : 'Summer').' push '.str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                'objective' => $i % 3 === 0 ? 'leads' : 'conversions', 'status' => $i % 5 === 0 ? 'paused' : 'active',
+            ]);
+        }
+    }
+
+    public function test_campaigns_are_paged_searched_and_filtered_on_the_server_with_whole_set_facets(): void
+    {
+        $a = $this->client('a@x.test', '+966500000001');
+        $this->manyCampaigns($a, 60);
+        $h = $this->login('a@x.test');
+
+        $first = $this->getJson('/api/v1/client/campaigns', $h)->assertOk();
+        $this->assertCount(25, $first->json('data.campaigns'));
+        $this->assertSame(60, $first->json('data.total'));
+        $this->assertSame(3, $first->json('data.last_page'));
+        $this->assertSame(['active' => 48, 'paused' => 12], $first->json('data.facets.status'));
+        $this->assertSame(60, $first->json('data.facets.projects.0.count'));
+
+        $this->assertCount(10, $this->getJson('/api/v1/client/campaigns?page=3', $h)->json('data.campaigns'));
+        $this->assertCount(50, $this->getJson('/api/v1/client/campaigns?per_page=500', $h)->json('data.campaigns'), 'a page can never be asked to exceed 50');
+
+        $paused = $this->getJson('/api/v1/client/campaigns?status=paused&per_page=50', $h)->assertOk();
+        $this->assertSame(12, $paused->json('data.total'));
+        $this->assertSame(['paused'], array_values(array_unique(array_column($paused->json('data.campaigns'), 'status'))));
+
+        $found = $this->getJson('/api/v1/client/campaigns?q=ramadan', $h)->assertOk();
+        $this->assertSame(30, $found->json('data.total'));
+        $this->assertSame(0, $this->getJson('/api/v1/client/campaigns?q=zzz', $h)->json('data.total'));
+        $this->assertSame(6, $this->getJson('/api/v1/client/campaigns?q=ramadan&status=paused', $h)->json('data.total'), 'filters combine');
+    }
+
+    public function test_a_hidden_campaign_name_cannot_be_probed_by_searching_for_it(): void
+    {
+        $a = $this->client('a@x.test', '+966500000001', ['portal' => ['visibility' => ['campaign_names' => false, 'projects' => false]]]);
+        $this->manyCampaigns($a, 6);
+        $h = $this->login('a@x.test');
+
+        $res = $this->getJson('/api/v1/client/campaigns?q=Ramadan', $h)->assertOk();
+
+        $this->assertSame(6, $res->json('data.total'), 'the search term is ignored, not matched against names the client may not see');
+        $this->assertFalse($res->json('data.names_searchable'));
+        $this->assertSame([], $res->json('data.facets.projects'), 'project names are not offered where projects are hidden');
+    }
+
+    public function test_the_facets_of_a_project_restricted_user_cover_only_their_projects(): void
+    {
+        $a = $this->client('a@x.test', '+966500000001');
+        $other = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $a['workspace']->id, 'name' => 'Other', 'status' => 'active']);
+        $this->manyCampaigns($a, 4);
+        UnifiedCampaign::create(['tenant_id' => $this->tenant->id, 'project_id' => $other->id, 'client_workspace_id' => $a['workspace']->id, 'name' => 'Not yours', 'objective' => 'leads', 'status' => 'active']);
+        $user = User::create(['name' => 'R', 'email' => 'r@x.test', 'password' => 'secret123']);
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $this->tenant, portal: Portal::ClientPortal, role: 'client_viewer',
+            clientScopeIds: [(string) $a['workspace']->id], projectScopeIds: [(string) $a['project']->id],
+        ));
+
+        $res = $this->actingAs($user)->getJson('/api/v1/client/campaigns', ['Origin' => 'http://localhost:5173'])->assertOk();
+
+        $this->assertSame(4, $res->json('data.total'));
+        $this->assertCount(1, $res->json('data.facets.projects'));
+        $this->assertStringNotContainsString('Not yours', $res->getContent());
     }
 }
