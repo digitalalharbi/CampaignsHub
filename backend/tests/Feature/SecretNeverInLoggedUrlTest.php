@@ -69,6 +69,30 @@ final class SecretNeverInLoggedUrlTest extends TestCase
     }
 
     /**
+     * The receipt names the SHAPE one level below `data` — key names, never values.
+     *
+     * A successful call that yielded nothing could not be told from one that answered a different shape.
+     */
+    public function test_the_call_receipt_names_the_shape_of_data_and_never_a_value(): void
+    {
+        Http::fake([
+            'business-api.tiktok.com/open_api/*/oauth2/advertiser/get*' => Http::response([
+                'code' => 0,
+                'data' => ['list' => [['advertiser_id' => '777', 'advertiser_name' => 'Confidential name', 'currency' => 'SAR']], 'video_info' => ['poster_url' => 'https://cdn.example/secret.jpg', 'duration' => 12]],
+            ]),
+        ]);
+
+        $connector = new TikTokConnector;
+        $connector->discoverAdAccounts(new OAuthTokens('AT'));
+        $keys = $connector->takeCallLog()[0]['data_keys'];
+
+        $this->assertContains('list[1]', $keys);
+        $this->assertContains('video_info{poster_url,duration}', $keys);
+        $this->assertStringNotContainsString('secret.jpg', implode(' ', $keys));
+        $this->assertStringNotContainsString('Confidential name', implode(' ', $keys));
+    }
+
+    /**
      * **The defect, pinned.** The receipt of the one call that sends the secret in the query.
      */
     public function test_the_call_receipt_of_tiktok_discovery_carries_no_app_secret(): void
