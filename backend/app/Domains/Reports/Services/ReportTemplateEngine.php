@@ -203,6 +203,10 @@ final class ReportTemplateEngine
          * section so a client never meets a heading over a list that was removed for their benefit.
          */
         if (! $summary) {
+            // REPORT-ACCOUNT-BREAKDOWN-001 — the provider → ad-account split precedes the campaign roster. The
+            // slide is always PLANNED for a non-summary deck; the `account_breakdown` section removes it
+            // wherever the report's own settings leave it off, so only a Detailed deck carries it.
+            $slides[] = ['id' => 'accounts', 'type' => 'accounts', 'order' => $order++, 'visible' => true];
             $slides[] = ['id' => 'campaigns', 'type' => 'campaigns', 'order' => $order++, 'visible' => true];
         }
         $slides[] = ['id' => 'observations', 'type' => 'observations', 'order' => $order++, 'visible' => true];
