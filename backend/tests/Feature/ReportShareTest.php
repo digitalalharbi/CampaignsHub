@@ -20,6 +20,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -180,6 +181,111 @@ final class ReportShareTest extends TestCase
         $share = ReportShare::withoutGlobalScopes()->latest('id')->first();
 
         $this->assertSame([], ReportColumns::forShare($share)->toArray());
+    }
+
+    /**
+     * REPORT-LINK-ANALYTICS-001 — the Owner sees how often the link was opened: total views, privacy-safe
+     * unique views, first and last opened. Link-preview fetches are not people, one browser opening it twice
+     * is one person, and the client's own payload carries none of it.
+     */
+    public function test_the_owner_sees_link_analytics_and_the_client_never_does(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [], null);
+        $at = Carbon::parse('2026-10-10 09:00:00');
+        $log = function (string $action, string $ip, string $ua, Carbon $when) use ($share): void {
+            DB::table('report_share_access_logs')->insert(['id' => (string) Str::uuid(), 'share_id' => $share->id, 'action' => $action, 'ip' => $ip, 'user_agent' => $ua, 'created_at' => $when]);
+        };
+        $chrome = 'Mozilla/5.0 Chrome/120';
+        $log('view', '1.1.1.1', $chrome, $at);
+        $log('view', '1.1.1.1', $chrome, $at->copy()->addDay());                 // same browser again
+        $log('view', '2.2.2.2', 'Mozilla/5.0 Safari/17', $at->copy()->addDays(2)); // a second person
+        $log('view', '3.3.3.3', 'WhatsApp/2.23', $at->copy()->addHour());          // a link-preview fetch
+        $log('view', '4.4.4.4', 'Mozilla/5.0 (compatible; Googlebot/2.1)', $at);   // a crawler
+        $log('download', '1.1.1.1', $chrome, $at->copy()->addDays(3));
+        $log('denied', '9.9.9.9', $chrome, $at);
+
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}/analytics";
+        $res = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+
+        $this->assertSame(3, $res->json('data.views'));
+        $this->assertSame(2, $res->json('data.unique_views'));
+        $this->assertSame('2026-10-10T09:00:00+00:00', $res->json('data.first_viewed_at'));
+        $this->assertSame('2026-10-12T09:00:00+00:00', $res->json('data.last_viewed_at'));
+        $this->assertSame(1, $res->json('data.downloads'));
+        $this->assertStringNotContainsString('1.1.1.1', $res->getContent(), 'no address ever leaves the analytics');
+
+        $public = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->getContent();
+        foreach (['unique_views', 'first_viewed_at', 'analytics'] as $private) {
+            $this->assertStringNotContainsString($private, $public, "the client's payload carries {$private}");
+        }
+    }
+
+    public function test_link_analytics_are_not_available_without_the_share_permission(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $viewer = User::create(['name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'slug' => 'v']);
+        $role->givePermissionTo('reports.view');
+        $viewer->assignRole($role);
+
+        $this->actingAs($viewer, 'sanctum')->getJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}/analytics")->assertForbidden();
+    }
+
+    /**
+     * REPORT-LINK-EDIT-IN-PLACE-001 — the Owner edits a published link and the SAME URL reflects it at once.
+     */
+    public function test_a_published_link_is_edited_in_place_and_the_same_token_reflects_it_immediately(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, ['hide_spend' => true], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+
+        $before = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.kpis');
+        $this->assertNull($before['spend']);
+
+        $this->actingAs($this->owner, 'sanctum')->patchJson($url, ['hide_spend' => false, 'hide_revenue' => true, 'password' => 'secret9'])->assertOk();
+
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertStatus(401);                       // the new password gates the SAME url
+        $after = $this->withHeader('X-Report-Password', 'secret9')->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.kpis');
+        $this->assertEquals(100, $after['spend']);                                                // spend now shown
+        $this->assertNull($after['revenue']);                                                      // revenue now hidden
+
+        $this->patchJson($url, ['clear_password' => true])->assertOk();
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+
+        $fresh = ReportShare::withoutGlobalScopes()->find($share->id);
+        $this->assertSame($share->token_hash, $fresh->token_hash, 'the link itself never changes');
+        $this->assertSame(1, ReportShare::withoutGlobalScopes()->count(), 'no second link was made');
+    }
+
+    public function test_an_edit_goes_through_the_same_value_objects_and_a_revoked_link_cannot_be_edited(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+        $this->actingAs($this->owner, 'sanctum');
+
+        // `roas` beside a hidden spend is a published spend: the value object closes that combination.
+        $this->patchJson($url, ['creatives' => ['spend' => false, 'roas' => true]])->assertOk();
+        $stored = ReportShare::withoutGlobalScopes()->find($share->id)->settings['creatives'];
+        $this->assertFalse($stored['spend'] ?? false);
+        $this->assertFalse($stored['roas'] ?? false);
+
+        $this->patchJson($url, ['expires_at' => now()->subDay()->toDateString()])->assertStatus(422);
+
+        $share->update(['revoked_at' => now()]);
+        $this->patchJson($url, ['watermark' => true])->assertStatus(409);
+    }
+
+    public function test_only_someone_who_may_share_can_edit_a_link(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $viewer = User::create(['name' => 'V', 'email' => 'v2@a.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V2', 'slug' => 'v2']);
+        $role->givePermissionTo('reports.view');
+        $viewer->assignRole($role);
+
+        $this->actingAs($viewer, 'sanctum')->patchJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}", ['watermark' => true])->assertForbidden();
     }
 
     public function test_password_gate(): void

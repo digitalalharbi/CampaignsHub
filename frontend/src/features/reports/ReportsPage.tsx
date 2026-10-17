@@ -9,6 +9,8 @@ import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { productName } from '@/lib/brand'
+import { ShareAnalyticsStrip } from './ShareAnalyticsStrip'
+import { ShareEditDialog } from './ShareEditDialog'
 import {
   createReport,
   listReportSections,
@@ -1165,6 +1167,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
   const [created, setCreated] = useState<CreatedShare | null>(null)
   const [copied, setCopied] = useState(false)
   const [logsFor, setLogsFor] = useState<string | null>(null)
+  const [editing, setEditing] = useState<ShareRow | null>(null)
 
   const create = useMutation({
     mutationFn: () =>
@@ -1404,6 +1407,9 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                     </button>
                     {s.active && (
                       <>
+                        <button data-testid={`share-edit-${s.id}`} onClick={() => setEditing(s)} className="text-xs font-semibold text-text-secondary hover:underline">
+                          {ar ? 'تعديل' : 'Edit'}
+                        </button>
                         {/*
                           Renew pushes the expiry out by a month from today rather than opening a date
                           picker. The action an operator wants here is «keep this working», and asking
@@ -1426,6 +1432,15 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
         </div>
 
         {logsFor && <ShareAccessHistory projectId={projectId} reportId={reportId} shareId={logsFor} onClose={() => setLogsFor(null)} />}
+        {editing && (
+          <ShareEditDialog
+            projectId={projectId}
+            reportId={reportId}
+            share={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] })}
+          />
+        )}
       </div>
     </Modal>
   )
@@ -1463,6 +1478,7 @@ function ShareAccessHistory({
 
   return (
     <Modal open onClose={onClose} title={ar ? 'سجل فتح الرابط' : 'Link access history'} size="md">
+      <ShareAnalyticsStrip projectId={projectId} reportId={reportId} shareId={shareId} />
       {logs.isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : (logs.data?.length ?? 0) === 0 ? (

@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ShareAnalytics;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportColumns;
@@ -18,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /** Manage secure client links for a report (create/list/revoke + access logs). Requires reports.share. */
 final class ReportShareController extends Controller
@@ -176,6 +178,111 @@ final class ReportShareController extends Controller
         $audit->log(action: 'report.shared_link_renewed', entityType: ReportShare::class, entityId: (string) $model->id);
 
         return ApiResponse::success($this->shape($model), 'Link renewed.');
+    }
+
+    /**
+     * PATCH …/shares/{share} — REPORT-LINK-EDIT-IN-PLACE-001: the Owner changes a published link and the SAME
+     * URL reflects it at once.
+     *
+     * The token, the URL and the mode (live or snapshot) are the link's identity and never change here; what
+     * the Owner decided about it can: the hide switches, download, watermark, expiry, the password (set, or
+     * cleared with `clear_password`), the form, the creative and section switches, and the ceiling. The values
+     * go through the SAME value objects the creation path uses, so an edit can never store a combination that
+     * creating the link would have refused. Everything is applied when the link is next opened — nothing is
+     * copied into a second link, and nobody is asked to resend a URL.
+     */
+    public function update(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $model = $this->findReport($report);
+        $link = ReportShare::findOrFail($share);
+        abort_unless((string) $link->report_id === (string) $model->id, 404);
+        abort_if($link->revoked_at !== null, 409, 'A revoked link cannot be edited.');
+
+        $opts = $request->validate([
+            'password' => ['nullable', 'string', 'min:4', 'max:64'],
+            'clear_password' => ['boolean'],
+            'expires_at' => ['nullable', 'date', 'after:now'],
+            'clear_expiry' => ['boolean'],
+            'allow_download' => ['boolean'],
+            'hide_spend' => ['boolean'],
+            'hide_revenue' => ['boolean'],
+            'hide_campaign_names' => ['boolean'],
+            'watermark' => ['boolean'],
+            'form' => ['nullable', 'in:executive_summary,detailed'],
+            'campaign_ids' => ['array'],
+            'campaign_ids.*' => ['uuid'],
+            'providers' => ['array'],
+            'providers.*' => ['string', 'max:40'],
+            'earliest' => ['nullable', 'date'],
+            'latest' => ['nullable', 'date'],
+            'creative_ids' => ['array'],
+            'creative_ids.*' => ['uuid'],
+            'creative_group_ids' => ['array'],
+            'creative_group_ids.*' => ['uuid'],
+            'excluded_creative_ids' => ['array'],
+            'excluded_creative_ids.*' => ['uuid'],
+            'objectives' => ['array'],
+            'objectives.*' => ['string', 'max:40'],
+            'paths' => ['array'],
+            'paths.*' => ['string', 'max:40'],
+            'creatives' => ['array'],
+            'creatives.*' => ['boolean'],
+            'sections' => ['array'],
+            'sections.*' => ['boolean'],
+        ]);
+
+        $before = $link->only(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'form', 'expires_at']);
+        $fill = array_intersect_key($opts, array_flip(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark']));
+
+        if (array_key_exists('form', $opts)) {
+            $fill['form'] = $opts['form'];
+        }
+        if (! empty($opts['clear_password'])) {
+            $fill['password_hash'] = null;
+        } elseif (! empty($opts['password'])) {
+            $fill['password_hash'] = Hash::make($opts['password']);
+        }
+        if (! empty($opts['clear_expiry'])) {
+            $fill['expires_at'] = null;
+        } elseif (! empty($opts['expires_at'])) {
+            $fill['expires_at'] = $opts['expires_at'];
+        }
+
+        $settings = (array) ($link->settings ?? []);
+        if (array_key_exists('creatives', $opts)) {
+            $settings['creatives'] = CreativeVisibility::fromArray($opts['creatives'])->toArray();
+        }
+        if (array_key_exists('sections', $opts)) {
+            $settings['sections'] = ShareSections::fromArray($opts['sections'])->toArray();
+        }
+        $fill['settings'] = $settings;
+
+        $ceilingKeys = ['campaign_ids', 'providers', 'earliest', 'latest', 'creative_ids', 'creative_group_ids', 'excluded_creative_ids', 'objectives', 'paths'];
+        if (array_intersect_key($opts, array_flip($ceilingKeys)) !== []) {
+            // Keep what was not mentioned: an edit that names one axis must not widen the others back to default.
+            $existing = (array) ($link->scope ?? []);
+            $merged = $opts + array_intersect_key($existing, array_flip($ceilingKeys));
+            $merged['mode'] = $link->mode;
+            $fill['scope'] = $this->scopeFor($model, $merged);
+        }
+
+        $link->fill($fill)->save();
+        $audit->log(action: 'report.shared_link_updated', entityType: ReportShare::class, entityId: (string) $link->id, before: $before, after: array_diff_key($fill, ['password_hash' => 1]));
+
+        return ApiResponse::success($this->shape($link->fresh()), 'Link updated — the same URL now reflects it.');
+    }
+
+    /**
+     * GET …/shares/{share}/analytics — REPORT-LINK-ANALYTICS-001. Owner only: total views, privacy-safe unique
+     * views, first and last opened. The public payload never carries these.
+     */
+    public function analytics(Request $request, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $this->findReport($report);
+
+        return ApiResponse::success(app(ShareAnalytics::class)->for(ReportShare::findOrFail($share)), 'Link analytics.');
     }
 
     public function logs(Request $request, string $project, string $report, string $share): JsonResponse
