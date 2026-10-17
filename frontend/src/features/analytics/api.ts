@@ -286,6 +286,10 @@ export interface AccountBudgetRow {
   campaigns: number
   /** How many of them stated a ceiling, so a partial cap cannot be read as a total. */
   capped_campaigns: number
+  /** BUDGET-HIERARCHY-001 — the three plan figures, null wherever the account states no ceiling. */
+  expected_to_date?: number | null
+  daily_average?: number | null
+  over_under?: number | null
 }
 
 export interface BudgetRow {
@@ -310,6 +314,10 @@ export interface BudgetRow {
   projected_spend: number | null
   /** BUDGET-PACING-COVERAGE-001 — the day the pace is measured through when it is not today; null means today. */
   paced_through?: string | null
+  /** BUDGET-HIERARCHY-001 — what should have been spent by now, the average daily spend, and the signed projected overrun. */
+  expected_to_date?: number | null
+  daily_average?: number | null
+  over_under?: number | null
   /**
    * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
    * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
