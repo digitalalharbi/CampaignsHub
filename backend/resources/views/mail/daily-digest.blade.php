@@ -35,19 +35,39 @@
                   entirely when nothing reported any, rather than printed as a zero a lead-generation
                   account would read as a loss.
                 --}}
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
-                    <tr>
-                        @foreach ($totals as $card)
-                            <td class="ch-kpi" width="{{ (int) (100 / max(1, count($totals))) }}%" style="vertical-align:top;">
-                                <div style="font-size:12px; color:#5b6b68;">{{ $card['label'] }}</div>
-                                <div style="font-size:20px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
-                                @if ($card['change'])
-                                    <div style="font-size:11px; font-weight:700; color:{{ $tone[$card['tone']] }};" dir="ltr">{{ $card['change'] }}</div>
-                                @endif
-                            </td>
-                        @endforeach
-                    </tr>
-                </table>
+                {{--
+                  EMAIL-PERF-DASHBOARDS-001 — one large figure, then the rest small.
+
+                  Equal cards make a reader do the ranking the email should have done. The first card is
+                  the one the mailable ranked first (spend for the account line), so it leads at display
+                  size on its own row; the others sit beneath it as a compact strip.
+                --}}
+                @php($lead = $totals[0] ?? null)
+                @php($rest = array_slice($totals, 1))
+                @if ($lead)
+                    <div style="margin-top:10px;">
+                        <div style="font-size:12px; color:#5b6b68;">{{ $lead['label'] }}</div>
+                        <div class="ch-kpi-lead" style="font-size:30px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
+                        @if ($lead['change'])
+                            <div style="font-size:12px; font-weight:700; color:{{ $tone[$lead['tone']] }};" dir="ltr">{{ $lead['change'] }}</div>
+                        @endif
+                    </div>
+                @endif
+                @if ($rest)
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px; border-top:1px solid #e4e0d6;">
+                        <tr>
+                            @foreach ($rest as $card)
+                                <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; padding-top:10px;">
+                                    <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
+                                    <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
+                                    @if ($card['change'])
+                                        <div style="font-size:11px; font-weight:700; color:{{ $tone[$card['tone']] }};" dir="ltr">{{ $card['change'] }}</div>
+                                    @endif
+                                </td>
+                            @endforeach
+                        </tr>
+                    </table>
+                @endif
                 {{--
                   Stated, not implied. A reader who sees three account-wide figures will look for a
                   fourth — and the fourth they want is a cost per result, which across projects would
@@ -104,19 +124,32 @@
                     </div>
 
                     {{-- What happened, and what changed against the window before this one. --}}
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
-                        <tr>
-                            @foreach ($p['kpis'] as $kpi)
-                                <td class="ch-kpi" width="25%" style="vertical-align:top; padding-{{ $endSide }}:8px;">
-                                    <div style="font-size:12px; color:#5b6b68;">{{ $kpi['label'] }}</div>
-                                    <div style="font-size:17px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $kpi['value'] }}</div>
-                                    @if ($kpi['change'])
-                                        <div style="font-size:12px; font-weight:700; color:{{ $kpi['change_colour'] }};" dir="ltr">{{ $kpi['change'] }}</div>
-                                    @endif
-                                </td>
-                            @endforeach
-                        </tr>
-                    </table>
+                    @php($lead = $p['kpis'][0] ?? null)
+                    @php($rest = array_slice($p['kpis'], 1))
+                    @if ($lead)
+                        <div style="margin-top:14px;">
+                            <div style="font-size:12px; color:#5b6b68;">{{ $lead['label'] }}</div>
+                            <div class="ch-kpi-lead" style="font-size:28px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
+                            @if ($lead['change'])
+                                <div style="font-size:12px; font-weight:700; color:{{ $lead['change_colour'] }};" dir="ltr">{{ $lead['change'] }}</div>
+                            @endif
+                        </div>
+                    @endif
+                    @if ($rest)
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;">
+                            <tr>
+                                @foreach ($rest as $kpi)
+                                    <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; padding-{{ $endSide }}:8px;">
+                                        <div style="font-size:11px; color:#5b6b68;">{{ $kpi['label'] }}</div>
+                                        <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $kpi['value'] }}</div>
+                                        @if ($kpi['change'])
+                                            <div style="font-size:11px; font-weight:700; color:{{ $kpi['change_colour'] }};" dir="ltr">{{ $kpi['change'] }}</div>
+                                        @endif
+                                    </td>
+                                @endforeach
+                            </tr>
+                        </table>
+                    @endif
 
                     {{--
                       By marketing path — the block that keeps this honest about objectives.
