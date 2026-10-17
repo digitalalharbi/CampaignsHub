@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { InteractiveReport } from './InteractiveReport'
-import { REPORT_NOTE, ReportFooter, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, REPORT_NOTE_MORE, ReportFooter, reportFooterItems } from './reportFooter'
 
 /**
  * REPORT-FOOTER-001 — one subtle footer, the same on every surface; never a section.
@@ -13,7 +13,7 @@ describe('the report footer', () => {
     render(<ReportFooter locale="ar" facts={facts} />)
 
     expect(screen.getByTestId('report-footer-note')).toHaveTextContent(REPORT_NOTE.ar)
-    expect(REPORT_NOTE.ar).toBe('ملاحظة: تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.')
+    expect(REPORT_NOTE.ar).toBe('ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.')
     const meta = screen.getByTestId('report-footer-meta').textContent ?? ''
     const order = ['آخر تحديث', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة'].map((l) => meta.indexOf(l))
     expect(order.every((i) => i >= 0)).toBe(true)
@@ -26,12 +26,25 @@ describe('the report footer', () => {
     expect(labels).toEqual(['آخر تحديث', 'الفترة', 'العملة'])
   })
 
-  it('is outside the report body: no heading, no card, and not a section', () => {
+  it('keeps the long explanation behind «معرفة المزيد» and shows it only when asked', () => {
+    render(<ReportFooter locale="ar" facts={facts} />)
+
+    expect(screen.queryByTestId('report-footer-more')).toBeNull()
+    fireEvent.click(screen.getByTestId('report-footer-toggle'))
+    expect(screen.getByTestId('report-footer-more')).toHaveTextContent(REPORT_NOTE_MORE.ar)
+    expect(screen.getByTestId('report-footer-toggle')).toHaveTextContent('إخفاء')
+    fireEvent.click(screen.getByTestId('report-footer-toggle'))
+    expect(screen.queryByTestId('report-footer-more')).toBeNull()
+  })
+
+  it('is one subtle centred frame outside the report body: no heading, no fill, and not a section', () => {
     const { container } = render(<ReportFooter locale="en" facts={facts} />)
     const footer = screen.getByTestId('report-footer')
 
     expect(container.querySelector('h1,h2,h3,h4')).toBeNull()
-    expect(footer.className).not.toMatch(/\brounded-|\bbg-surface|\bshadow-/)
+    expect(footer.className).toMatch(/text-center/)
+    expect(footer.className).toMatch(/\bborder\b/)
+    expect(footer.className).not.toMatch(/\bbg-surface|\bshadow-/)
     expect(footer.className).toMatch(/text-\[11px\]/)
     expect(footer.className).toMatch(/text-text-muted/)
     expect(screen.queryByText('منهجية التقرير وملاحظات البيانات')).toBeNull()
