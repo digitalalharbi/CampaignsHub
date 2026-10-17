@@ -372,7 +372,16 @@ function measureLayout() {
     const overflow = innerRect.bottom > bottom + 4
     const overflowX = el.scrollWidth > el.clientWidth + 2
     const footerCoverage = fr ? Math.round(((fr.height) / pr.height) * 100) / 100 : 0
-    const empty = !isCover && !isTextPage && contentUtilization < 0.1
+    /*
+     * REPORT-PDF-EMPTY-001 — «empty» means BLANK, not «short».
+     *
+     * A recommendations page carrying one real recommendation covers well under a tenth of the sheet and
+     * is still a correct page; the gate called it empty whenever the day's data produced few of them, which
+     * failed the PDF export of a healthy report on CI while it passed an hour earlier on the same code. A
+     * page is blank when it covers almost nothing AND says almost nothing.
+     */
+    const spokenChars = (scope.innerText ?? '').replace(/\s+/g, ' ').trim().length
+    const empty = !isCover && !isTextPage && contentUtilization < 0.1 && spokenChars < 80
     const sparse = !isCover && !isTextPage && largestEmptyRegion > 0.42
 
     // Fit / clipping integrity — overflow:hidden must never HIDE important content.
