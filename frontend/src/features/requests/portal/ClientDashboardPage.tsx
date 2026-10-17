@@ -10,6 +10,7 @@ import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
 import { PortfolioPerformance } from './PortfolioPerformance'
+import { PortalAttention } from './PortalAttention'
 
 const COPY = {
   ar: {
@@ -61,6 +62,8 @@ export function ClientDashboardPage() {
         <h1 className="font-heading text-2xl font-extrabold text-text-primary">{t.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
       </div>
+
+      <PortalAttention />
 
       <PortfolioPerformance />
 
