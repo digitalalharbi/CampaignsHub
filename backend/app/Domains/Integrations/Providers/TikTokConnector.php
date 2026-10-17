@@ -522,7 +522,15 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                     'advertiser_id' => $adAccountId,
                     'item_id' => $itemId,
                 ] + $identity), 'spark post info');
-                $info = (array) ($body['data']['video_info'] ?? []);
+                /*
+                 * TIKTOK-SPARK-COVER-001 (evidence 2026-10-18) — the answer is `data.video_detail.video_info`.
+                 *
+                 * 154 of 163 live calls succeeded and every one was read from `data.video_info`, which TikTok
+                 * does not send, so a successful answer produced no poster and 283 creatives kept drawing
+                 * nothing. The receipt's key names showed the real nesting; the old position is still read
+                 * for an answer that uses it.
+                 */
+                $info = (array) ($body['data']['video_detail']['video_info'] ?? $body['data']['video_info'] ?? []);
                 if ($info !== []) {
                     $posts[$itemId] = $info;
                 }
@@ -573,9 +581,11 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 ], static fn ($x) => $x !== null);
             } elseif (isset($posts[$id])) {
                 $v = $posts[$id];
+                $poster = collect(['poster_url', 'cover_image_url', 'cover_url', 'video_cover_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
+                $file = collect(['preview_url', 'video_url', 'play_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
                 $creative += array_filter([
-                    'thumbnail_url' => is_string($v['poster_url'] ?? null) ? $v['poster_url'] : null,
-                    'video_url' => is_string($v['preview_url'] ?? null) ? $v['preview_url'] : null,
+                    'thumbnail_url' => $poster,
+                    'video_url' => $file,
                 ], static fn ($x) => $x !== null);
             } elseif (isset($images[$id])) {
                 $url = is_string($images[$id]['image_url'] ?? null) ? $images[$id]['image_url'] : null;
