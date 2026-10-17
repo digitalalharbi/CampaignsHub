@@ -479,6 +479,11 @@ export interface LivePayload {
    */
   breakdowns?: { platform_drilldown?: boolean; content_drilldown?: boolean }
   /**
+   * REPORT-TABLES-OWNER-COLUMNS-001 — the columns the Owner chose to publish, per table. A table that
+   * is absent here shows every column; the server sends `[]` (not `{}`) when nothing was restricted.
+   */
+  columns?: Record<string, string[]> | string[]
+  /**
    * REPORT-RECOMMENDATION-BLOCKS-001 — already the client cut: operator-internal items are not in it
    * unless the operator approved them. `null` when the report's `recommendations` section is off.
    */

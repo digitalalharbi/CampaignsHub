@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ShareSections;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -87,6 +88,10 @@ final class ReportShareController extends Controller
             'creatives.*' => ['boolean'],
             'sections' => ['array'],
             'sections.*' => ['boolean'],
+            // REPORT-TABLES-OWNER-COLUMNS-001 — the columns each table publishes; unknown keys are cut, absent means all.
+            'columns' => ['array'],
+            'columns.*' => ['array'],
+            'columns.*.*' => ['string', 'max:40'],
         ]);
 
         /*
@@ -124,6 +129,7 @@ final class ReportShareController extends Controller
              * «closed», so a link cannot acquire a section by omission.
              */
             'sections' => ShareSections::fromArray($opts['sections'] ?? [])->toArray(),
+            'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
         ];
 
         [$share, $raw] = $this->shares->create($model, $opts, $request->user()->id);

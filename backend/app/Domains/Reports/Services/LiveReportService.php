@@ -31,6 +31,7 @@ use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportBreakdowns;
+use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
@@ -660,6 +661,8 @@ final class LiveReportService
             'sections' => $share->visibleSections(),
             // REPORT-DRILLDOWN-001 — which optional breakdowns this link offers; off here means no control is drawn.
             'breakdowns' => ReportBreakdowns::forShare($share),
+            // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the Owner chose per table; absent table means every column.
+            'columns' => ReportColumns::forShare($share)->toArray(),
             /*
              * REPORT-RECOMMENDATION-BLOCKS-001 — what needs attention, judged per objective family and
              * platform on the SAME bounds as the objective split above. Built only when the section is
@@ -929,6 +932,8 @@ final class LiveReportService
             'ads' => $content['ads'] ?? [],
             'ads_weakest' => $content['ads_weakest'] ?? [],
             'breakdowns' => ReportBreakdowns::forShare($share),
+            // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the Owner chose per table; absent table means every column.
+            'columns' => ReportColumns::forShare($share)->toArray(),
         ];
 
         return ReportComposition::for($this->formFor($share))->apply($payload);
