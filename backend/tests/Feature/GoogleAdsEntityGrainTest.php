@@ -145,6 +145,61 @@ final class GoogleAdsEntityGrainTest extends TestCase
         $this->assertNotNull($connector->lastEntityFailure(), 'the run log cannot say why the table is empty');
     }
 
+    private function refusalBody(string $field): array
+    {
+        return [[
+            'error' => [
+                'code' => 400,
+                'message' => 'Request contains an invalid argument.',
+                'status' => 'INVALID_ARGUMENT',
+                'details' => [[
+                    '@type' => 'type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsFailure',
+                    'errors' => [[
+                        'errorCode' => ['queryError' => 'UNRECOGNIZED_FIELD'],
+                        'message' => "Unrecognized field in the query: '{$field}'.",
+                    ]],
+                    'requestId' => 'req-1',
+                ]],
+            ],
+        ]];
+    }
+
+    /** GADS-OPTIONAL-FIELD-001 — Google dropping video_views must not fail the sync that never needed it. */
+    public function test_an_unrecognised_optional_metric_is_left_out_and_the_sync_still_lands(): void
+    {
+        $connector = $this->google();
+        $queries = [];
+
+        Http::fake(function ($request) use (&$queries) {
+            $queries[] = (string) ($request->data()['query'] ?? '');
+
+            return count($queries) === 1
+                ? Http::response($this->refusalBody('metrics.video_views'), 400)
+                : Http::response($this->body());
+        });
+
+        $result = $connector->entityInsights('111-111-1111', ReportsEntityGrains::AD, [], '2026-08-01', '2026-08-02');
+
+        $this->assertTrue($result->success, 'the sync failed: '.($result->message ?? ''));
+        $this->assertCount(2, $queries);
+        $this->assertStringContainsString('metrics.video_views', $queries[0]);
+        $this->assertStringNotContainsString('video_views', $queries[1]);
+        $this->assertStringContainsString('metrics.cost_micros', $queries[1], 'the money fields stay');
+        $this->assertNull($result->records[0]['video_views'] ?? null, 'a metric Google did not send is absent, never zero');
+    }
+
+    public function test_an_unrecognised_core_field_still_fails_loudly(): void
+    {
+        $connector = $this->google();
+
+        Http::fake(['googleads.googleapis.com/*' => Http::response($this->refusalBody('metrics.cost_micros'), 400)]);
+
+        $result = $connector->entityInsights('111-111-1111', ReportsEntityGrains::AD, [], '2026-08-01', '2026-08-02');
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('cost_micros', (string) $result->message);
+    }
+
     private function google(): ReportsEntityGrains
     {
         $tenant = Tenant::create(['name' => 'G', 'slug' => 'g-'.uniqid(), 'status' => 'active']);
