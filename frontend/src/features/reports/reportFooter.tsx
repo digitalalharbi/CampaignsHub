@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { objectiveLabel } from '@/features/campaigns/labels'
 
 /**
@@ -12,9 +13,17 @@ import { objectiveLabel } from '@/features/campaigns/labels'
  * the deck and the PDF, which is what makes it a footer and not a disclaimer somebody forgot to update.
  */
 export const REPORT_NOTE = {
-  ar: 'ملاحظة: تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.',
-  en: 'Note: Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
+  ar: 'ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.',
+  en: 'Note: Campaigns are managed on a performance-based methodology; results may vary by period, platform, data source, attribution model and the campaign learning phase.',
 } as const
+
+/** The longer explanation, kept behind «معرفة المزيد» — never printed unless a reader asks for it. */
+export const REPORT_NOTE_MORE = {
+  ar: 'تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.',
+  en: 'Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
+} as const
+
+const MORE_LABEL = { ar: { more: 'معرفة المزيد', less: 'إخفاء' }, en: { more: 'Learn more', less: 'Hide' } } as const
 
 export interface ReportFooterFacts {
   /** When these figures were produced — a snapshot's generation time, or a live link's last computation. */
@@ -57,16 +66,24 @@ function formatStamp(iso: string, locale: 'ar' | 'en'): string {
 
 export function ReportFooter({ facts, locale, className = '' }: { facts: ReportFooterFacts; locale: 'ar' | 'en'; className?: string }) {
   const items = reportFooterItems(facts, locale)
+  const [open, setOpen] = useState(false)
+  const label = MORE_LABEL[locale]
 
   return (
-    <footer data-testid="report-footer" dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`report-footer mt-8 border-t border-border/60 pt-3 text-[11px] leading-relaxed text-text-muted ${className}`}>
-      <p data-testid="report-footer-note">{REPORT_NOTE[locale]}</p>
+    <footer data-testid="report-footer" dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`report-footer mx-auto mt-8 max-w-3xl rounded-xl border border-border/60 px-4 py-3 text-center text-[11px] leading-relaxed text-text-muted ${className}`}>
+      <p data-testid="report-footer-note">
+        {REPORT_NOTE[locale]}{' '}
+        <button type="button" data-testid="report-footer-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="font-medium text-text-secondary underline underline-offset-2 hover:text-text-primary">
+          {open ? label.less : label.more}
+        </button>
+      </p>
+      {open && <p data-testid="report-footer-more" className="mt-1.5">{REPORT_NOTE_MORE[locale]}</p>}
       {items.length > 0 && (
-        <p data-testid="report-footer-meta" className="mt-1.5">
-          {items.map(([label, value], i) => (
-            <span key={label}>
-              {i > 0 && <span aria-hidden className="mx-1.5 opacity-60">|</span>}
-              {label}: <bdi className="tnum">{value}</bdi>
+        <p data-testid="report-footer-meta" className="mt-2 flex flex-wrap items-center justify-center gap-y-1 border-t border-border/50 pt-2">
+          {items.map(([itemLabel, value], i) => (
+            <span key={itemLabel} className="inline-flex items-center">
+              {i > 0 && <span aria-hidden className="mx-2.5 h-3 w-px bg-border" />}
+              <span>{itemLabel}: <bdi className="tnum">{value}</bdi></span>
             </span>
           ))}
         </p>
