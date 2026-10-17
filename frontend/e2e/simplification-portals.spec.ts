@@ -159,9 +159,18 @@ test.describe('the client portal leads with results, not paperwork', () => {
     // before reading their labels, or a slower browser reads the gap and finds none.
     await expect(nav.locator('a').nth(3)).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
-    const labels = await nav.locator('a').evaluateAll((els) =>
+    const readLabels = () => nav.locator('a').evaluateAll((els) =>
       els.map((e) => (e as HTMLElement).innerText.trim()).filter(Boolean),
     )
+    /*
+     * The rail is drawn from the agency's visibility switches, which arrive a beat after the first paint,
+     * so the labels are polled until the section being asserted on is there — a section that is truly
+     * absent still fails, after the timeout, naming itself.
+     */
+    await expect.poll(async () => (await readLabels()).some((l) => /الحملات|Campaigns/.test(l)), {
+      message: 'campaigns is missing from the client rail', timeout: RAIL_PAINT_TIMEOUT,
+    }).toBe(true)
+    const labels = await readLabels()
 
     const at = (re: RegExp) => labels.findIndex((l) => re.test(l))
     const campaigns = at(/الحملات|Campaigns/)
