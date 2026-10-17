@@ -255,4 +255,21 @@ final class DeliveryPackTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->deleteJson("/api/v1/delivery/evidence/{$id}")->assertOk();
         Storage::disk('local')->assertMissing($path);
     }
+
+    /** WD-SCHEDULE-001 — the weekly sweep prepares a draft for opted-in clients only, once per week. */
+    public function test_the_weekly_sweep_prepares_drafts_for_opted_in_clients_only_and_is_idempotent(): void
+    {
+        $other = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'Henka', 'slug' => 'henka', 'mode' => 'managed', 'status' => 'active']);
+        Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $other->id, 'name' => 'Other', 'status' => 'active']);
+        $this->workspace->forceFill(['settings' => ['delivery' => ['weekly' => true]]])->save();
+
+        $this->artisan('delivery:prepare-weekly', ['--date' => '2026-10-19'])->expectsOutputToContain('1 client(s) opted in, 1 pack(s) ensured.')->assertSuccessful();
+        $this->artisan('delivery:prepare-weekly', ['--date' => '2026-10-19'])->assertSuccessful();
+
+        $packs = DeliveryPack::withoutGlobalScopes()->get();
+        $this->assertCount(1, $packs, 'asking again for the same week must not create a second pack');
+        $this->assertSame((string) $this->project->id, (string) $packs[0]->project_id);
+        $this->assertSame('2026-10-12', $packs[0]->period_start->toDateString());
+        $this->assertSame('draft', $packs[0]->status, 'the sweep prepares; the Owner approves and sends');
+    }
 }
