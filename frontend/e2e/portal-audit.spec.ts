@@ -203,12 +203,13 @@ test.describe('the client portal', () => {
      * its links have painted — a navigation element can exist a beat before they do, and reading the
      * links in that gap found none on a slower browser.
      */
-    await expect(page.getByRole('navigation').first().locator('a[href^="/portal"]').nth(3)).toBeVisible({ timeout: 20_000 })
-
-    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/portal"]')
+    const readHrefs = () => page.getByRole('navigation').first().locator('a[href^="/portal"]')
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+    // Polled rather than read once: the rail is re-drawn as the space resolves, and a single read can land
+    // between two draws (measured on WebKit: the links present at one instant and gone the next).
+    let hrefs: string[] = []
+    await expect.poll(async () => { hrefs = await readHrefs(); return hrefs.length }, { message: 'the client rail has no links', timeout: 20_000 }).toBeGreaterThan(3)
 
-    expect(hrefs.length, 'the client rail has no links').toBeGreaterThan(3)
 
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(railBudget(hrefs.length))
