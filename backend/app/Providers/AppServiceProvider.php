@@ -18,6 +18,7 @@ use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Access\ProjectAbilities;
@@ -38,6 +39,7 @@ use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -168,6 +170,14 @@ class AppServiceProvider extends ServiceProvider
          * without anybody editing it, and — the part that matters — so a command that THROWS is still
          * recorded, which a write at the end of its own handler could never manage.
          */
+        // EMAIL-PLAINTEXT-001 — every HTML message also leaves with a text/plain alternative.
+        Event::listen(MessageSending::class, static function (MessageSending $event): void {
+            $message = $event->message;
+            $html = $message->getHtmlBody();
+            if (is_string($html) && $html !== '' && ($message->getTextBody() === null || $message->getTextBody() === '')) {
+                $message->text(PlainText::fromHtml($html));
+            }
+        });
         Event::listen(ScheduledTaskStarting::class, [RecordScheduledRun::class, 'starting']);
         Event::listen(ScheduledTaskFinished::class, [RecordScheduledRun::class, 'finished']);
         Event::listen(ScheduledTaskFailed::class, [RecordScheduledRun::class, 'failed']);
