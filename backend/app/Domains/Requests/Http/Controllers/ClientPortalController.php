@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Services\BillingService;
+use App\Domains\Billing\Services\InvoicePdf;
 use App\Domains\Branding\BrandingSpec;
 use App\Domains\Branding\Models\BrandingAsset;
 use App\Domains\Branding\Models\BrandingSetting;
@@ -57,6 +58,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -393,6 +395,12 @@ final class ClientPortalController
     }
 
     /** GET /client/invoices — the client's invoices with payment status (client-safe). */
+    /**
+     * INV-LIFECYCLE-001 — a draft or a reviewed invoice is the agency's working copy. The client sees an
+     * invoice when it is ISSUED, never before: an unreviewed figure shown to a client is a figure promised.
+     */
+    private const UNISSUED_INVOICE = ['draft', 'reviewed'];
+
     public function invoices(Request $request): JsonResponse
     {
         $token = $this->requireSession($request);
@@ -401,7 +409,7 @@ final class ClientPortalController
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
-            : $this->capped(Invoice::query()->whereIn('client_workspace_id', $ids)->latest('created_at'));
+            : $this->capped(Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->latest('created_at'));
 
         $invoices = $page['rows']->map(fn (Invoice $i) => $this->invoiceShape($i));
 
@@ -426,6 +434,21 @@ final class ClientPortalController
      * payment stays pending and the client sees an honest `awaiting_provider_credentials` state — never a fake
      * success. NOTHING is marked paid here (only a verified webhook settles).
      */
+    /** GET /client/invoices/{invoice}/pdf — the issued invoice as a document (INV-PDF-001). */
+    public function invoicePdf(Request $request, string $invoice): Response
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $record = $this->ownedInvoice($token, $invoice);
+        $pdf = app(InvoicePdf::class);
+        abort_unless($pdf->available(), 503, 'PDF rendering is not available.');
+
+        return response($pdf->render($record, (string) $request->query('lang', 'ar')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$record->number.'.pdf"',
+        ]);
+    }
+
     public function payInvoice(Request $request, string $invoice): JsonResponse
     {
         $token = $this->requireSession($request);
@@ -946,7 +969,7 @@ final class ClientPortalController
     {
         $ids = $this->visibleWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
-        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
         abort_if($invoice === null, 404);
 
         return $invoice;

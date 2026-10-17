@@ -205,4 +205,23 @@ final class ClientPortalVisibilityTest extends TestCase
             $this->assertSame($reserved.'-client', $w->slug);
         }
     }
+
+    public function test_a_client_never_sees_an_invoice_before_it_is_issued_and_may_download_it_after(): void
+    {
+        $a = $this->client('a@x.test', '+966500000001');
+        $make = fn (string $status, string $number) => \App\Domains\Billing\Models\Invoice::create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $a['workspace']->id, 'number' => $number, 'currency' => 'SAR',
+            'subtotal' => 100, 'tax' => 15, 'total' => 115, 'line_items' => [], 'amount_paid' => 0, 'status' => $status,
+        ]);
+        $draft = $make('draft', 'INV-D-1');
+        $reviewed = $make('reviewed', 'INV-R-1');
+        $issued = $make('issued', 'INV-I-1');
+        $h = $this->login('a@x.test');
+
+        $numbers = array_column($this->getJson('/api/v1/client/invoices', $h)->assertOk()->json('data.invoices'), 'number');
+        $this->assertSame(['INV-I-1'], $numbers);
+        $this->getJson("/api/v1/client/invoices/{$draft->id}", $h)->assertNotFound();
+        $this->getJson("/api/v1/client/invoices/{$reviewed->id}/pdf", $h)->assertNotFound();
+        $this->getJson("/api/v1/client/invoices/{$issued->id}", $h)->assertOk();
+    }
 }

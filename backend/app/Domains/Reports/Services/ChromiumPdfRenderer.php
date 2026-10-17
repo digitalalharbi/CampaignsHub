@@ -87,7 +87,7 @@ final class ChromiumPdfRenderer
      *
      * @return array<string,mixed> the validation report
      */
-    private function normalizeArabicTextLayer(string $path): array
+    public function normalizeArabicTextLayer(string $path): array
     {
         if (! config('reports.chromium.arabic_textlayer_fix', true)) {
             return ['status' => 'skipped'];

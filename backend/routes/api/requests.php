@@ -124,6 +124,8 @@ Route::prefix('client')->name('client.')->group(function (): void {
         ->middleware('throttle:120,1');
     Route::get('/invoices/{invoice}', [ClientPortalController::class, 'showInvoice'])->name('invoices.show')
         ->middleware('throttle:120,1');
+    Route::get('/invoices/{invoice}/pdf', [ClientPortalController::class, 'invoicePdf'])->name('invoices.pdf')
+        ->middleware('throttle:20,1');
     Route::post('/invoices/{invoice}/pay', [ClientPortalController::class, 'payInvoice'])->name('invoices.pay')
         ->middleware('throttle:30,1');
 
