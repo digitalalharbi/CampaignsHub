@@ -189,7 +189,7 @@ export function ClientCommandCenterPage() {
 
           {tab === 'reports' && d.can.view_reports && <TabReports d={d} />}
 
-          {tab === 'billing' && <TabBilling clientId={d.id} />}
+          {tab === 'billing' && <TabBilling clientId={d.id} canManage={d.can.manage_settings} />}
           {tab === 'delivery' && <TabDelivery clientId={d.id} projects={d.projects} />}
           {tab === 'portal' && <TabPortal d={d} />}
           {tab === 'messages' && <TabMessages clientId={d.id} />}
