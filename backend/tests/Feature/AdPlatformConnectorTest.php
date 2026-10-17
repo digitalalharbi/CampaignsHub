@@ -597,7 +597,7 @@ final class AdPlatformConnectorTest extends TestCase
                     return Http::response(['code' => 40002, 'message' => 'item not found', 'request_id' => 'r']);
                 }
 
-                return Http::response(['code' => 0, 'data' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/spark-1.jpg', 'preview_url' => 'https://v16.tiktokcdn.com/spark-1.mp4']]]);
+                return Http::response(['code' => 0, 'data' => ['video_detail' => ['item_id' => 'x', 'video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/spark-1.jpg', 'preview_url' => 'https://v16.tiktokcdn.com/spark-1.mp4']]]]);
             }
 
             return Http::response(['code' => 0, 'data' => ['list' => [
@@ -634,7 +634,7 @@ final class AdPlatformConnectorTest extends TestCase
                 $asked[] = $url;
 
                 return str_contains($url, 'identity_authorized_bc_id=bc-77')
-                    ? Http::response(['code' => 0, 'data' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/bc.jpg']]])
+                    ? Http::response(['code' => 0, 'data' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/bc.jpg']]]) // the legacy position is still read
                     : Http::response(['code' => 40000, 'message' => 'Unable to fetch a valid item.', 'request_id' => 'r']);
             }
 

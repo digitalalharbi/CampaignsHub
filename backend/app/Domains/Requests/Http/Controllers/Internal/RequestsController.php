@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Http\Controllers\Internal;
 
 use App\Domains\Billing\Models\Quote;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Requests\Services\RequestSla;
@@ -60,8 +62,13 @@ final class RequestsController
 
         $page = $query->orderBy($sort, $dir)->paginate(min($request->integer('per_page', 20), 100));
 
+        // CP-REQ-ONE-001 — the client and project names, read once for the page rather than once per row.
+        $items = collect($page->items());
+        $clients = ClientWorkspace::query()->whereIn('id', $items->pluck('client_id')->filter()->unique()->all())->pluck('name', 'id');
+        $projects = Project::query()->whereIn('id', $items->pluck('project_id')->filter()->unique()->all())->pluck('name', 'id');
+
         return response()->json([
-            'data' => collect($page->items())->map(fn (ExternalRequest $r) => $this->row($r))->all(),
+            'data' => $items->map(fn (ExternalRequest $r) => $this->row($r, $clients->all(), $projects->all()))->all(),
             'meta' => [
                 'total' => $page->total(), 'per_page' => $page->perPage(),
                 'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(),
@@ -212,7 +219,11 @@ final class RequestsController
             $serviceKeys = array_values(array_filter((array) ($req->services ?? []), 'is_string'));
         }
 
-        return response()->json(['data' => array_merge($this->row($req), [
+        return response()->json(['data' => array_merge($this->row(
+            $req,
+            $req->client_id !== null ? [(string) $req->client_id => (string) ClientWorkspace::query()->whereKey($req->client_id)->value('name')] : [],
+            $req->project_id !== null ? [(string) $req->project_id => (string) Project::query()->whereKey($req->project_id)->value('name')] : [],
+        ), [
             'objective' => $req->objective,
             'services' => $serviceKeys,
             'services_resolved' => $this->paidServices->resolve($serviceKeys),
@@ -297,7 +308,34 @@ final class RequestsController
     }
 
     /** @return array<string,mixed> */
-    private function row(ExternalRequest $r): array
+    /**
+     * Who the request is waiting on — the one column an agency inbox is read for (CP-REQ-ONE-001).
+     *
+     * Derived from the status and the journey stage that already exist, never stored a second time:
+     * `client` when the next move is theirs (information, an answer to a quote, an approval, a payment,
+     * a review), `hold` when somebody paused it, `null` when it is finished, otherwise `agency`.
+     */
+    public static function waitingOn(string $status, ?string $stage): ?string
+    {
+        if (in_array($status, ['completed', 'rejected', 'cancelled', 'archived'], true)) {
+            return null;
+        }
+        if ($status === 'on_hold' || $stage === 'on_hold') {
+            return 'hold';
+        }
+        if (in_array($status, ['waiting_client', 'quoted'], true)
+            || in_array($stage, ['waiting_for_information', 'awaiting_client_approval', 'payment_pending', 'client_review'], true)) {
+            return 'client';
+        }
+
+        return 'agency';
+    }
+
+    /**
+     * @param  array<string, string>  $clients  client workspace id => name
+     * @param  array<string, string>  $projects  project id => name
+     */
+    private function row(ExternalRequest $r, array $clients = [], array $projects = []): array
     {
         return [
             'id' => $r->id,
@@ -323,6 +361,10 @@ final class RequestsController
             'priority_label' => RequestLabels::priority($r->priority, 'ar'),
             'priority_label_en' => RequestLabels::priority($r->priority, 'en'),
             'contact' => $r->company_name ?: $r->contact_name,
+            // The workspace and project the request belongs to — null before it is converted, never a guess.
+            'client' => $r->client_id !== null ? ($clients[(string) $r->client_id] ?? null) : null,
+            'project' => $r->project_id !== null ? ($projects[(string) $r->project_id] ?? null) : null,
+            'waiting_on' => self::waitingOn((string) $r->status->key, $r->journey_stage !== null ? (string) $r->journey_stage : null),
             'assignee' => $r->assignee?->name,
             'assigned_to' => $r->assigned_to,
             'source' => $r->source,
