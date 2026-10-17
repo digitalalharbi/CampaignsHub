@@ -113,7 +113,7 @@ import { CreatorShell } from '@/layouts/CreatorShell'
 import { CreatorWorkPage } from '@/features/influencers/creator/CreatorWorkPage'
 import { CreatorCollaborationPage } from '@/features/influencers/creator/CreatorCollaborationPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
-import { legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 
 /**
  * ROUTE-BOUNDARY-001 — every branch of the tree has somewhere to land when it throws.
@@ -240,19 +240,24 @@ export const router = createBrowserRouter(withErrorBoundary([
   // contact actually owns.
   { path: '/portal', element: <ClientPortalHomePage /> },
   { path: '/portal/spaces', element: <ClientSpacePickerPage /> },
-  { path: '/portal/clients/:clientSlug', element: <ClientDashboardPage /> },
-  { path: '/portal/clients/:clientSlug/requests', element: <ClientRequestsPage /> },
-  { path: '/portal/clients/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
-  { path: '/portal/clients/:clientSlug/quotes', element: <ClientQuotesPage /> },
-  { path: '/portal/clients/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
-  { path: '/portal/clients/:clientSlug/invoices', element: <ClientInvoicesPage /> },
-  { path: '/portal/clients/:clientSlug/invoices/:id', element: <ClientInvoiceDetailPage /> },
-  { path: '/portal/clients/:clientSlug/messages', element: <ClientMessagesPage /> },
-  { path: '/portal/clients/:clientSlug/messages/:id', element: <ClientThreadPage /> },
-  { path: '/portal/clients/:clientSlug/campaigns', element: <ClientCampaignsPage /> },
-  { path: '/portal/clients/:clientSlug/files', element: <ClientFilesPage /> },
-  { path: '/portal/clients/:clientSlug/reports', element: <ClientReportsPage /> },
-  { path: '/portal/clients/:clientSlug/profile', element: <ClientProfilePage /> },
+  // CP-ROUTING-001 — the old `/portal/clients/<slug>/…` form, redirected to the clean one so a bookmark
+  // or an email already sent still lands on the right page.
+  { path: '/portal/clients/:clientSlug/*', element: <LegacyClientSpaceRedirect /> },
+  { path: '/portal/clients/:clientSlug', element: <LegacyClientSpaceRedirect /> },
+  // The clean form. Static segments outrank `:clientSlug`, so `/portal/requests` stays the merged view.
+  { path: '/portal/:clientSlug', element: <ClientDashboardPage /> },
+  { path: '/portal/:clientSlug/requests', element: <ClientRequestsPage /> },
+  { path: '/portal/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/portal/:clientSlug/quotes', element: <ClientQuotesPage /> },
+  { path: '/portal/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
+  { path: '/portal/:clientSlug/invoices', element: <ClientInvoicesPage /> },
+  { path: '/portal/:clientSlug/invoices/:id', element: <ClientInvoiceDetailPage /> },
+  { path: '/portal/:clientSlug/messages', element: <ClientMessagesPage /> },
+  { path: '/portal/:clientSlug/messages/:id', element: <ClientThreadPage /> },
+  { path: '/portal/:clientSlug/campaigns', element: <ClientCampaignsPage /> },
+  { path: '/portal/:clientSlug/files', element: <ClientFilesPage /> },
+  { path: '/portal/:clientSlug/reports', element: <ClientReportsPage /> },
+  { path: '/portal/:clientSlug/profile', element: <ClientProfilePage /> },
 
   /*
    * SHARE-SHORT-001 — the short public path, and the long one it replaces.

@@ -231,3 +231,15 @@ export const legacyClientPortalRedirects = MOVED_TO_PORTAL.map((path) => ({
   path: `/client${path === '' ? '' : `/${path}`}`,
   element: <ClientPathToPortal />,
 }))
+
+/**
+ * CP-ROUTING-001 — `/portal/clients/<slug>/…` becomes `/portal/<slug>/…`.
+ *
+ * The slug is part of the URL a client was sent, so the redirect keeps everything after it (section,
+ * detail id, query string) untouched and only drops the `clients/` segment.
+ */
+export function LegacyClientSpaceRedirect() {
+  const { pathname, search, hash } = useLocation()
+
+  return <Navigate to={`${pathname.replace(/^\/portal\/clients\//, '/portal/')}${search}${hash}`} replace />
+}

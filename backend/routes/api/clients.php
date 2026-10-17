@@ -6,6 +6,7 @@ use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientActivityControl
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientAnalyticsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientFilesController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientManagementController;
+use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientPortalUsersController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientReportsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTaxonomyController;
@@ -42,6 +43,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     Route::post('/{client}/team', [ClientTeamController::class, 'store'])->name('team.store');
     Route::patch('/{client}/team/{user}', [ClientTeamController::class, 'update'])->name('team.update');
     Route::delete('/{client}/team/{user}', [ClientTeamController::class, 'destroy'])->name('team.destroy');
+
+    // CP-USERS-001 — the people who can open this client's portal.
+    Route::get('/{client}/portal-users', [ClientPortalUsersController::class, 'index'])->name('portal-users.index');
+    Route::post('/{client}/portal-users', [ClientPortalUsersController::class, 'store'])->name('portal-users.store');
+    Route::delete('/{client}/portal-users/{membership}', [ClientPortalUsersController::class, 'destroy'])->name('portal-users.destroy');
 
     // Files (read-only over existing private stores) + secure streamed download.
     Route::get('/{client}/files', [ClientFilesController::class, 'index'])->name('files.index');

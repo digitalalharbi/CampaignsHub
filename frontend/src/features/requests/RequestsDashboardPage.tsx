@@ -176,26 +176,35 @@ function TableView({ rows, t, ar }: { rows: RequestRow[]; t: (k: TranslationKey)
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-xs font-semibold text-text-muted">
-              {(['col_reference', 'col_service', 'col_contact', 'col_status', 'col_priority', 'col_assignee', 'col_sla'] as const).map((c) => <th key={c} className="px-4 py-3 text-start">{t(c)}</th>)}
+              {(['col_client', 'col_project', 'col_request', 'col_priority', 'col_status', 'col_waiting_on', 'col_assignee', 'col_last_update'] as const).map((c) => <th key={c} className="px-4 py-3 text-start">{t(c)}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-border last:border-0 hover:bg-surface-hover">
-                <td className="px-4 py-3"><Link to={`/app/requests/${r.id}`} className="font-mono font-semibold text-brand-600 hover:underline" dir="ltr">{r.reference}</Link></td>
-                <td className="px-4 py-3 text-text-secondary">{r.service_ar}</td>
-                <td className="px-4 py-3 text-text-primary">{r.contact}</td>
+                <td className="px-4 py-3 text-text-primary">{r.client ?? r.contact}</td>
+                <td className="px-4 py-3 text-text-secondary">{r.project ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <span className="block text-text-primary">{ar ? r.service_ar : r.service}</span>
+                  <Link to={`/app/requests/${r.id}`} className="font-mono text-[11px] font-semibold text-brand-600 hover:underline" dir="ltr">{r.reference}</Link>
+                </td>
                 {/*
                   REQ-LABELS-001 — the name, not the key.
-                  This rendered `r.status_label` (English-only, from the API) and `r.priority` (the raw
-                  key), so an Arabic inbox read «Under Review» and «medium». Both labels now arrive in
-                  both languages and the locale chooses, which also means the language toggle does not
-                  need a refetch to take effect.
+                  Both labels arrive in both languages and the locale chooses, so the language toggle needs
+                  no refetch.
                 */}
-                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone(r.status)}`}>{ar ? r.status_label : r.status_label_en}</span></td>
                 <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${priorityTone(r.priority)}`}>{ar ? r.priority_label : r.priority_label_en}</span></td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone(r.status)}`}>{ar ? r.status_label : r.status_label_en}</span></td>
+                <td className="px-4 py-3 text-xs">
+                  {r.waiting_on ? (
+                    <span className={`rounded-full px-2 py-0.5 font-semibold ${r.waiting_on === 'client' ? 'bg-warning/15 text-warning' : 'bg-surface-secondary text-text-secondary'}`}>{t(`waiting_on_${r.waiting_on}` as TranslationKey)}</span>
+                  ) : <span className="text-text-muted">—</span>}
+                </td>
                 <td className="px-4 py-3 text-text-secondary">{r.assignee ?? '—'}</td>
-                <td className="px-4 py-3">{r.sla_breached ? <span className="text-xs font-semibold text-danger">{t('sla_overdue')}</span> : <span className="tnum text-xs text-text-muted" dir="ltr">{r.sla_due_at?.slice(0, 10) ?? '—'}</span>}</td>
+                <td className="px-4 py-3">
+                  {r.sla_breached && <span className="me-2 text-xs font-semibold text-danger">{t('sla_overdue')}</span>}
+                  <span className="tnum text-xs text-text-muted" dir="ltr">{(r.last_activity_at ?? r.submitted_at)?.slice(0, 10) ?? '—'}</span>
+                </td>
               </tr>
             ))}
           </tbody>
