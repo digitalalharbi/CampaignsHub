@@ -87,7 +87,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      * removes a secret by name and by configured value and leaves everything else standing. A receipt
      * printed into a workflow log must never be the place a secret is read from.
      *
-     * @var list<array{url:string,status:int,request_id:?string,keys:list<string>,reason:?string}>
+     * @var list<array{url:string,status:int,request_id:?string,keys:list<string>,data_keys:list<string>,reason:?string}>
      */
     protected array $callLog = [];
 
@@ -514,6 +514,14 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
                 : null,
             'keys' => array_map(strval(...), array_keys($body)),
             /*
+             * One level below `data`, KEY NAMES only — the receipt was blind exactly where it mattered.
+             *
+             * `response keys: code, message, request_id, data` says an answer arrived and nothing about
+             * what is inside it, so a successful Spark-poster call that yielded no poster could not be told
+             * from one that answered a different shape. Names, never values: a media url is not a log line.
+             */
+            'data_keys' => self::shapeOf($body['data'] ?? null),
+            /*
              * The provider's OWN sentence, on a refusal — the field this receipt was missing.
              *
              * The docblock above says a refusal is the case a diagnosis most needs the receipt for,
@@ -545,12 +553,47 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
     }
 
     /**
+     * The key names of a payload, and of each object directly inside it — never a value.
+     *
+     * @return list<string>
+     */
+    private static function shapeOf(mixed $data): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($data as $key => $value) {
+            $name = (string) $key;
+            if (is_array($value) && $value !== [] && ! array_is_list($value)) {
+                // One more level for an object's own object, names only: `video_detail{video_info{poster_url,…}}`.
+                $inner = [];
+                foreach (array_slice($value, 0, 12, true) as $k => $v) {
+                    $inner[] = (string) $k.(is_array($v) && $v !== [] && ! array_is_list($v)
+                        ? '{'.implode(',', array_map('strval', array_slice(array_keys($v), 0, 12))).'}'
+                        : '');
+                }
+                $name .= '{'.implode(',', $inner).'}';
+            } elseif (is_array($value)) {
+                $name .= '['.count($value).']';
+            }
+            $out[] = $name;
+            if (count($out) >= 12) {
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Take the call log for this sync, and forget it.
      *
      * Drained like the bodies and the row count, and for the same reason: one connector instance is
      * bound per sync, and a call carried into the next window would be attributed to it.
      *
-     * @return list<array{url:string,status:int,request_id:?string,keys:list<string>,reason:?string}>
+     * @return list<array{url:string,status:int,request_id:?string,keys:list<string>,data_keys:list<string>,reason:?string}>
      */
     public function takeCallLog(): array
     {

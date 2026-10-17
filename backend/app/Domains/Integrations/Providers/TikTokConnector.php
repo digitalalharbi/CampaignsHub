@@ -239,6 +239,32 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         return $accounts;
     }
 
+    /** The Business Center that owns this advertiser, or null when the platform does not say. */
+    private function ownerBusinessCenter(OAuthTokens $tokens, string $adAccountId): ?string
+    {
+        try {
+            $body = $this->read(
+                $this->api($tokens)->get($this->url('advertiser/info/'), [
+                    'advertiser_ids' => json_encode([$adAccountId], JSON_THROW_ON_ERROR),
+                    'fields' => json_encode(['advertiser_id', 'owner_bc_id'], JSON_THROW_ON_ERROR),
+                ]),
+                'advertiser owner',
+            );
+        } catch (RuntimeException $e) {
+            Log::warning('TikTok owner Business Center could not be read; Spark posters are asked without it.', ['reason' => $e->getMessage()]);
+
+            return null;
+        }
+
+        foreach ((array) ($body['data']['list'] ?? []) as $a) {
+            if (is_array($a) && isset($a['owner_bc_id']) && is_string($a['owner_bc_id']) && $a['owner_bc_id'] !== '') {
+                return $a['owner_bc_id'];
+            }
+        }
+
+        return null;
+    }
+
     /**
      * @param  list<string>  $ids
      * @return array<string, array{currency: ?string, timezone: ?string}>
@@ -511,16 +537,40 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         $videos = [];
         $images = [];
         $posts = [];
+        $ownerBc = null;
         foreach (array_slice($sparks, 0, self::SPARK_POSTER_CAP, true) as $itemId => $identity) {
             if (! isset($identity['identity_type'], $identity['identity_id'])) {
                 continue;
+            }
+
+            /*
+             * TIKTOK-SPARK-COVER-001 (evidence 2026-10-18) — every live call answered code 40000, «Unable to
+             * fetch a valid item. Please check the 'identity_id'», because the identities are `BC_AUTH_TT`:
+             * a post authorised to a Business Center. TikTok names the Business Center as part of that
+             * identity (`identity_authorized_bc_id`), and the ads' own bodies do not carry it, so the
+             * question was asked without half its address. The advertiser's `owner_bc_id` is that
+             * Business Center; it is read once per account and only when an identity lacks its own.
+             */
+            if ($identity['identity_type'] === 'BC_AUTH_TT' && ! isset($identity['identity_authorized_bc_id'])) {
+                $ownerBc ??= $this->ownerBusinessCenter($tokens, $adAccountId) ?? false;
+                if ($ownerBc !== false) {
+                    $identity['identity_authorized_bc_id'] = $ownerBc;
+                }
             }
             try {
                 $body = $this->read($this->api($tokens)->get($this->url('identity/video/info/'), [
                     'advertiser_id' => $adAccountId,
                     'item_id' => $itemId,
                 ] + $identity), 'spark post info');
-                $info = (array) ($body['data']['video_info'] ?? []);
+                /*
+                 * TIKTOK-SPARK-COVER-001 (evidence 2026-10-18) — the answer is `data.video_detail.video_info`.
+                 *
+                 * 154 of 163 live calls succeeded and every one was read from `data.video_info`, which TikTok
+                 * does not send, so a successful answer produced no poster and 283 creatives kept drawing
+                 * nothing. The receipt's key names showed the real nesting; the old position is still read
+                 * for an answer that uses it.
+                 */
+                $info = (array) ($body['data']['video_detail']['video_info'] ?? $body['data']['video_info'] ?? []);
                 if ($info !== []) {
                     $posts[$itemId] = $info;
                 }
@@ -576,9 +626,11 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 ], static fn ($x) => $x !== null);
             } elseif (isset($posts[$id])) {
                 $v = $posts[$id];
+                $poster = collect(['poster_url', 'cover_image_url', 'cover_url', 'video_cover_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
+                $file = collect(['preview_url', 'video_url', 'play_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
                 $creative += array_filter([
-                    'thumbnail_url' => is_string($v['poster_url'] ?? null) ? $v['poster_url'] : null,
-                    'video_url' => is_string($v['preview_url'] ?? null) ? $v['preview_url'] : null,
+                    'thumbnail_url' => $poster,
+                    'video_url' => $file,
                 ], static fn ($x) => $x !== null);
             } elseif (isset($images[$id])) {
                 $url = is_string($images[$id]['image_url'] ?? null) ? $images[$id]['image_url'] : null;
