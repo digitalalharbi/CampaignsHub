@@ -63,6 +63,7 @@ import { PortfolioPage } from '@/features/projects/PortfolioPage'
 import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
 import { AlertsPage } from '@/features/alerts/AlertsPage'
 import { SpendLimitsPage } from '@/features/budget/SpendLimitsPage'
+import { DeliveryOverviewPage } from '@/features/clients/delivery/DeliveryOverviewPage'
 import { DevStatusPage } from '@/features/dev/DevStatusPage'
 import { billingRoutes } from '@/features/billing/billingRoutes'
 import { messagingRoutes } from '@/features/messaging/messagingRoutes'
@@ -599,6 +600,7 @@ export const router = createBrowserRouter(withErrorBoundary([
              */
             { path: 'recommendations', element: <RecommendationsPage /> },
             { path: 'spend-limits', element: <SpendLimitsPage /> },
+            { path: 'delivery', element: <DeliveryOverviewPage /> },
             { path: 'tasks', element: <TasksPage /> },
           { path: 'short-links', element: <ShortLinksPage /> },
             { path: 'files', element: <FilesLibraryPage /> },

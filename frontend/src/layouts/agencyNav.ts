@@ -1,7 +1,7 @@
 import {
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users, Lightbulb, Wallet } from 'lucide-react'
+  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Send, Settings, TrendingUp, Users, Lightbulb, Wallet } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -132,6 +132,8 @@ export const agencyNavGroups: readonly NavGroup[] = [
       { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
       { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
+      // DELIV-DASH-001 — every client's weekly delivery and billing, with the one next step.
+      { to: '/agency/delivery', ar: 'التسليم الأسبوعي', en: 'Weekly delivery', icon: Send, cap: 'reports.view' },
     ],
   },
   {
