@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
+use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
@@ -71,6 +73,34 @@ final class DailyDigestMail extends Mailable
          */
         private readonly ?string $senderName = null,
     ) {}
+
+    /**
+     * REPORT-FOOTER-001 in an inbox — the same fixed sentence and the same metadata line the page, the
+     * link, the deck and the PDF end with. Across several projects the campaign objective is not one
+     * thing, so it is left out rather than guessed.
+     *
+     * @return array{note: string, items: list<array{0: string, 1: string}>}
+     */
+    private function reportFooter(bool $ar): array
+    {
+        $tz = ReportingTimezone::DEFAULT;
+        $from = (string) ($this->digest['date'] ?? '');
+        $to = (string) ($this->digest['to_date'] ?? $from);
+        $period = $from === '' ? null : ($from === $to ? $from : "{$from} → {$to}");
+        $items = array_values(array_filter([
+            [$ar ? 'آخر تحديث' : 'Last updated', now($tz)->format('Y-m-d H:i')],
+            $period === null ? null : [$ar ? 'الفترة' : 'Period', $period],
+            [$ar ? 'العملة' : 'Currency', ReportingCurrency::DEFAULT],
+            [$ar ? 'المنطقة الزمنية' : 'Time zone', $tz],
+        ]));
+
+        return [
+            'note' => $ar
+                ? 'ملاحظة: تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.'
+                : 'Note: Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
+            'items' => $items,
+        ];
+    }
 
     /** The name this email presents itself under — the agency's, or the product's. */
     private function brandName(): string
@@ -164,6 +194,7 @@ final class DailyDigestMail extends Mailable
                   a list nobody reads to the bottom.
                 */
                 'movement' => $this->movement($p, $ar),
+                'reportFooter' => $this->reportFooter($ar),
                 'projects' => $this->projects($p, $ar, $app),
                 'slot' => view('mail.daily-digest', [
                     'font' => MailDesign::font($ar),
@@ -173,6 +204,7 @@ final class DailyDigestMail extends Mailable
                     'startSide' => $ar ? 'right' : 'left',
                     'totals' => $this->accountCards($p, $ar),
                     'movement' => $this->movement($p, $ar),
+                    'reportFooter' => $this->reportFooter($ar),
                     'projects' => $this->projects($p, $ar, $app),
                 ])->render(),
             ],

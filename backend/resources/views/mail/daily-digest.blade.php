@@ -331,4 +331,14 @@
     @endforeach
 
     <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:4px;">{{ $t['footer_note'] }}</div>
+
+    {{-- REPORT-FOOTER-001 — one quiet note and one metadata line, never a card or a heading. --}}
+    @if (! empty($reportFooter))
+        <div style="margin-top:14px; padding-top:10px; border-top:1px solid #e4e0d6; font-size:11px; color:#8b9a97; line-height:1.7;">
+            <div>{{ $reportFooter['note'] }}</div>
+            <div style="margin-top:4px;">
+                @foreach ($reportFooter['items'] as $item){{ $item[0] }}: {{ $item[1] }}@if (! $loop->last) | @endif @endforeach
+            </div>
+        </div>
+    @endif
 </div>
