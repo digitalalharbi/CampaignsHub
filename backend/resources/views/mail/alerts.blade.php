@@ -61,7 +61,7 @@
         {{ $single
             ? $t['why']
             : ($dir === 'rtl'
-                ? 'وصلتك هذه الرسالة لأنك تتابع هذه المشاريع في CampaignsHub.'
+                ? 'وصلتك هذه الرسالة لأنك تتابع هذه المشاريع في كامبينز هب.'
                 : 'You are receiving this because you follow these projects in CampaignsHub.') }}
     </div>
 </div>
