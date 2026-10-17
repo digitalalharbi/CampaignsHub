@@ -198,6 +198,12 @@ test.describe('the client portal', () => {
   test('every rail link opens a page that is not empty', async ({ page }) => {
     await page.goto('/portal')
     await expect(page.getByRole('navigation').first()).toBeVisible()
+    /*
+     * `/portal` now resolves the client's space and then redirects into it, so the rail is read only once
+     * its links have painted — a navigation element can exist a beat before they do, and reading the
+     * links in that gap found none on a slower browser.
+     */
+    await expect(page.getByRole('navigation').first().locator('a[href^="/portal"]').nth(3)).toBeVisible({ timeout: 20_000 })
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/portal"]')
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])

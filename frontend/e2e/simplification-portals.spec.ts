@@ -155,6 +155,9 @@ test.describe('the client portal leads with results, not paperwork', () => {
 
     const nav = page.getByRole('navigation').first()
     await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
+    // `/portal` resolves the client's space and redirects into it: wait for the rail's links to paint
+    // before reading their labels, or a slower browser reads the gap and finds none.
+    await expect(nav.locator('a').nth(3)).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
     const labels = await nav.locator('a').evaluateAll((els) =>
       els.map((e) => (e as HTMLElement).innerText.trim()).filter(Boolean),
