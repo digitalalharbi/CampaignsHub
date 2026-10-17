@@ -49,6 +49,8 @@ final class OperationalMail extends Mailable
         public readonly string $path = '/app/dashboard',
         /** What the button says — a verb, never «اضغط هنا». */
         public readonly ?string $action = null,
+        /** Why this arrived, when «you follow this project» is not true — an account or billing message. */
+        public readonly ?string $why = null,
     ) {}
 
     public function envelope(): Envelope
@@ -91,6 +93,9 @@ final class OperationalMail extends Mailable
             'actionLabel' => $this->action ?? ($ar ? 'فتح في CampaignsHub' : 'Open in CampaignsHub'),
             'actionUrl' => $app.$this->path,
         ];
+        if ($this->why !== null) {
+            $body['t']['why'] = $this->why;
+        }
 
         return new Content(view: 'mail.layout', with: $body + [
             'slot' => view('mail.operational', $body)->render(),

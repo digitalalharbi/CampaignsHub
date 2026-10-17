@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Subscriptions\Jobs\SendSubscriptionNotification;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionNotification;
@@ -161,6 +162,31 @@ final class SubscriptionNotificationTest extends TestCase
 
         $this->assertSame('sent', $notification->refresh()->status);
         $this->assertTrue($notification->reachedSomebody());
+    }
+
+    /**
+     * EMAIL-TRANSACTIONAL-SET-001 — a subscription message goes through the shared mail shell, carries the
+     * stored body unchanged, and says why it arrived (the account, not a project the reader follows).
+     */
+    public function test_a_subscription_message_uses_the_shared_shell_and_its_own_reason(): void
+    {
+        config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.provider.test', 'mail.mailers.smtp.username' => 'campaignshub']);
+        Mail::fake();
+        $this->paidTrial();
+
+        $notification = SubscriptionNotification::query()->where('event', 'trial_started')->firstOrFail();
+        (new SendSubscriptionNotification((string) $notification->getKey()))->handle();
+
+        Mail::assertSent(OperationalMail::class, function ($mail) use ($notification): bool {
+            $html = $mail->render();
+
+            return $mail->hasTo($notification->to_email)
+                && $mail->detail === $notification->body
+                && $mail->title === $notification->subject
+                && str_contains($html, 'CampaignsHub')
+                && ! str_contains($html, 'you follow this project')
+                && ! str_contains($html, 'تتابع هذا المشروع');
+        });
     }
 
     // ── The eight lifecycle moments ───────────────────────────────────────────────────────────
