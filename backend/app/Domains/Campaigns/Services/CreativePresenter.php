@@ -250,7 +250,8 @@ final class CreativePresenter
      *     note_en: string|null,
      *     cards: list<array<string, mixed>>|null,
      *     cards_reported: bool,
-     *     cards_withheld: int
+     *     cards_withheld: int,
+     *     text: array{headline: string|null, body: string|null}|null
      * }
      */
     public function preview(ExternalCreative $creative): array
@@ -490,6 +491,24 @@ final class CreativePresenter
                 'note_ar' => 'جُلبت بطاقات هذا الإعلان، ولم يحمل أيٌّ منها أصلًا صالحًا للعرض.',
                 'note_en' => 'This ad’s cards were fetched and none of them carried a usable asset.',
             ],
+            /*
+             * OPENAI-CHAT-CARD-TEXT-001 — a ChatGPT Ads card has a file the API will not give back.
+             *
+             * The Ads API documents `POST /upload` (which returns a `file_id`) and attaches that id to
+             * a card, and documents no call that reads a file by its id. So the picture exists and is
+             * out of reach by design, which is neither «the platform exposed no asset» (it did name
+             * one) nor a gap in this product to fix with a request. The card's own words are shown in
+             * its place, and the state stays `unavailable`: no image is claimed.
+             */
+            $image === null && $video === null && $thumb === null && strtolower((string) $creative->format) === 'chat_card' => [
+                'state' => 'unavailable',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                'note_ar' => 'بطاقة محادثة من إعلانات ChatGPT: صورتها ملف مرفوع لا تتيح واجهة المنصة قراءته، فيُعرض نصّ الإعلان بدلًا منها.',
+                'note_en' => 'A ChatGPT Ads chat card: its image is an uploaded file the platform’s API offers no way to read back, so the ad’s own text is shown instead.',
+            ],
             $image === null && $video === null && $thumb === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,
@@ -512,7 +531,34 @@ final class CreativePresenter
             ],
         };
 
-        return $shape + $this->cards($creative, $shape['state']);
+        return $shape + ['text' => $this->copyText($creative)] + $this->cards($creative, $shape['state']);
+    }
+
+    /**
+     * The ad's own words, for a creative whose picture cannot be drawn — or null when it has none.
+     *
+     * A chat card carries a title and a body. Rows imported before the copy columns were written still
+     * hold the body in the retained payload, so that is read too; the title is the creative's name,
+     * which is how this connector stores it.
+     *
+     * @return array{headline: string|null, body: string|null}|null
+     */
+    private function copyText(ExternalCreative $creative): ?array
+    {
+        if (strtolower((string) $creative->format) !== 'chat_card') {
+            return null;
+        }
+
+        $raw = (array) ($creative->raw ?? []);
+        $body = $this->plain($creative->body) ?? $this->plain($raw['body'] ?? null);
+        $headline = $this->plain($creative->headline) ?? $this->plain($creative->name);
+
+        return $body === null && $headline === null ? null : ['headline' => $headline, 'body' => $body];
+    }
+
+    private function plain(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
     }
 
     /**
