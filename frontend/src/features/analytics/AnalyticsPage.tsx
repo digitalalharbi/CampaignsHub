@@ -1,3 +1,4 @@
+import { ConsumptionBar } from './ConsumptionBar'
 import { Num } from '@/components/ui/Num'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
@@ -1685,15 +1686,7 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
             r.consumed_pct === null
               ? <span key="cp" className="text-text-muted">—</span>
               : (
-                <span key="cp" className="inline-flex items-center gap-2">
-                  <span className="h-1.5 w-14 overflow-hidden rounded-full bg-surface-secondary">
-                    <span
-                      className={`block h-full rounded-full ${r.consumed_pct >= 0.9 ? 'bg-danger' : r.consumed_pct >= 0.8 ? 'bg-warning' : 'bg-brand-500'}`}
-                      style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }}
-                    />
-                  </span>
-                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
-                </span>
+                <ConsumptionBar key="cp" consumed={r.consumed_pct} expected={r.expected_to_date} total={r.cap} width="w-14" />
               ),
             <PlanFigure key="e" value={r.expected_to_date} unit={unit ?? null} note={noCapNote} />,
             <PlanFigure key="d" value={r.daily_average} unit={unit ?? null} />,
@@ -1803,12 +1796,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
             r.consumed_pct === null
               ? <span key="c" className="text-text-muted" title={basisNote}>—</span>
               : (
-                <div key="c" className="flex items-center gap-2">
-                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
-                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }} />
-                  </div>
-                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
-                </div>
+                <ConsumptionBar key="c" consumed={r.consumed_pct} expected={r.expected_to_date} total={r.budget} />
               ),
             <PlanFigure key="e" value={r.expected_to_date} unit={r.budget_currency} note={basisNote} />,
             <PlanFigure key="d" value={r.daily_average} unit={r.budget_currency} note={basisNote} />,
@@ -3984,7 +3972,7 @@ function PlatformBudgets({ projectId, range, filters }: TabProps) {
           <span key="b" dir="ltr">{money(r.budget, r.budget_currency ?? undefined)}</span>,
           <span key="s" dir="ltr">{r.spent === null ? '—' : money(r.spent, r.spent_currency ?? undefined)}</span>,
           <span key="r" dir="ltr">{r.remaining === null ? '—' : money(r.remaining, r.budget_currency ?? undefined)}</span>,
-          <span key="c" dir="ltr">{r.consumed_pct === null ? '—' : percent(r.consumed_pct)}</span>,
+          r.consumed_pct === null ? <span key="c" dir="ltr">—</span> : <ConsumptionBar key="c" consumed={r.consumed_pct} expected={r.expected_to_date} total={r.budget} />,
           <span key="e" dir="ltr">{r.expected_to_date === null || r.expected_to_date === undefined ? '—' : money(r.expected_to_date, r.budget_currency ?? undefined)}</span>,
           <span key="d" dir="ltr">{r.daily_average === null || r.daily_average === undefined ? '—' : money(r.daily_average, r.budget_currency ?? undefined)}</span>,
           /* A pace is a multiple of the budget: 1.0 lands on it, above overruns. */
