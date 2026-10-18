@@ -141,5 +141,17 @@ export async function chooseFirstAccount(page: import('@playwright/test').Page):
   // Visible checkboxes: tick every account the project offers, as a report covered before accounts were chosen.
   const boxes = box.getByRole('checkbox')
   const count = await boxes.count()
-  for (let i = 0; i < count; i++) await boxes.nth(i).check()
+  for (let i = 0; i < count; i++) {
+    /*
+     * click + a retrying assertion, not `check()`.
+     *
+     * These are CONTROLLED inputs: the page renders the tick a moment after the click. `check()` reads
+     * the state straight after clicking and, on a slow runner, saw the not-yet-rendered one and failed
+     * with «did not change its state» (WebKit CI). The assertion waits for the render, and still
+     * fails if the tick never lands — which is the property that matters.
+     */
+    const box = boxes.nth(i)
+    await box.click()
+    await expect(box).toBeChecked({ timeout: 15_000 })
+  }
 }
