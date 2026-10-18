@@ -186,6 +186,7 @@ final class AgentApprovalGatewayTest extends TestCase
     public function test_approving_without_an_enabled_executor_reaches_no_platform(): void
     {
         Http::fake();
+        config()->set('agents.execute_providers', []);   // no provider enabled for execution
         $id = $this->propose()->json('data.id');
 
         $this->actingAs($this->approver)->postJson($this->url("/{$id}/approve"))

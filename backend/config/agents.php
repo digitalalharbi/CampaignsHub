@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Domains\Agents\Executors\CampaignWriteExecutor;
 
 return [
     /*
@@ -19,12 +20,21 @@ return [
     'proposal_ttl_hours' => 72,
 
     /*
-     * Executors, by class name. EMPTY on purpose: no provider write is enabled until that provider's call has
-     * been verified. Approving an action whose provider has no executor ends `blocked`, with the reason.
+     * Executors, by class name. The one executor carries an APPROVED proposal through the existing campaign
+     * write path (CampaignWriteService) as its approver — no new route to a platform exists.
      *
      * @var list<class-string<\App\Domains\Agents\Contracts\ProposalExecutor>>
      */
-    'executors' => [],
+    'executors' => [CampaignWriteExecutor::class],
+
+    /*
+     * Which providers an approved proposal may be carried to. Meta (`ads_management`) and Google Ads
+     * (`adwords`) grant write access in the scopes this product requests. Snapchat waits for the Owner's
+     * reversible write test on the stored token (AGENTS-SNAP-WRITE-CONFIRM-001) and TikTok for its app
+     * permission; LinkedIn and X are read-only grants. Approving for a provider not listed ends `blocked`
+     * with execution_not_enabled_for_provider.
+     */
+    'execute_providers' => array_values(array_filter(explode(',', (string) env('AGENTS_EXECUTE_PROVIDERS', 'meta,google')))),
 
     /*
      * AGENTS-ENGINE-001 — which model each role uses, per provider. The plan gives the strongest model to
