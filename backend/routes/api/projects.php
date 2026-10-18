@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Agents\Http\Controllers\ActionProposalController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
@@ -280,6 +281,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * LIVEREP-002 — build a live client link from a choice (client → project → campaigns → platforms
      * → period → metrics), rather than from an already-generated document.
      */
+    /*
+     * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue. Reading needs to see campaigns; putting a change
+     * forward or deciding one needs to manage them, and the controller adds the tenant permission.
+     */
+    Route::get('agent-proposals', [ActionProposalController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-proposals.index');
+    Route::post('agent-proposals', [ActionProposalController::class, 'store'])->middleware('project.can:campaigns.manage')->name('agent-proposals.store');
+    Route::post('agent-proposals/{proposal}/approve', [ActionProposalController::class, 'approve'])->middleware('project.can:campaigns.manage')->name('agent-proposals.approve');
+    Route::post('agent-proposals/{proposal}/reject', [ActionProposalController::class, 'reject'])->middleware('project.can:campaigns.manage')->name('agent-proposals.reject');
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
     Route::get('reports/live/options/ads', [LiveReportBuilderController::class, 'ads'])->middleware('project.can:reports.view')->name('reports.live.options.ads');
     Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.live.store')
