@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, RefreshCw, Store } from 'lucide-react'
-import { listStoreProviders, startStoreOAuth, syncStore, type StoreProvider, type StoreRow, type StoreState } from './api'
-import { listClientWorkspaces } from '@/features/projects/api'
+import { assignStore, listStoreProviders, startStoreOAuth, syncStore, type StoreProvider, type StoreRow, type StoreState } from './api'
+import { listClientWorkspaces, listProjects, type Project } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
@@ -53,13 +53,19 @@ function stamp(iso: string | null, ar: boolean): string {
   })
 }
 
-function StoreCard({ store, provider, ar, onSync, syncing }: {
+function StoreCard({ store, provider, ar, onSync, syncing, projects, onAssign, assigning }: {
   store: StoreRow
   provider: StoreProvider
   ar: boolean
   onSync: () => void
   syncing: boolean
+  projects: Project[]
+  onAssign: (projectId: string | null) => void
+  assigning: boolean
 }) {
+  const run = store.last_run?.status
+  const inFlight = run === 'queued' || run === 'running'
+
   return (
     <li data-testid={`store-${store.id}`} className="rounded-xl border border-border bg-surface-secondary p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -67,11 +73,44 @@ function StoreCard({ store, provider, ar, onSync, syncing }: {
           <p className="truncate font-semibold text-text-primary">{store.name}</p>
           {store.domain && <p className="truncate text-[11px] text-text-muted" dir="ltr">{store.domain}</p>}
         </div>
-        <Button size="sm" variant="secondary" onClick={onSync} disabled={syncing}>
+        <Button size="sm" variant="secondary" onClick={onSync} disabled={syncing || store.project_id === null} title={store.project_id === null ? (ar ? 'اختر مشروعًا أولًا' : 'Choose a project first') : undefined}>
           {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
           {ar ? 'زامن الآن' : 'Sync now'}
         </Button>
       </div>
+
+      {/*
+        COMMERCE-ASSIGN-001 — WHICH PROJECT this store feeds, chosen here.
+
+        A store with no project is read by nobody: «sync» answers 409 and nothing arrives. The card
+        therefore asks, in words, rather than leaving a button that can only fail.
+      */}
+      <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+        <span className="font-semibold text-text-muted">{ar ? 'المشروع' : 'Project'}:</span>
+        <select
+          data-testid={`store-project-${store.id}`}
+          aria-label={ar ? 'مشروع المتجر' : 'Store project'}
+          value={store.project_id ?? ''}
+          disabled={assigning}
+          onChange={(e) => onAssign(e.target.value === '' ? null : e.target.value)}
+          className="min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+        >
+          <option value="">{ar ? 'اختر مشروعًا' : 'Choose a project'}</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        {store.project_id === null && (
+          <span data-testid={`store-needs-project-${store.id}`} className="text-warning">
+            {ar ? 'لن تُقرأ بيانات المتجر قبل اختيار مشروع.' : 'No data is read until a project is chosen.'}
+          </span>
+        )}
+        {inFlight && (
+          <span data-testid={`store-reading-${store.id}`} className="inline-flex items-center gap-1 text-info">
+            <Loader2 size={12} className="animate-spin" /> {ar ? 'تجري قراءة المتجر…' : 'Reading the store…'}
+          </span>
+        )}
+      </label>
 
       <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-secondary">
         <div><dt className="inline text-text-muted">{ar ? 'المنتجات' : 'Products'}: </dt><dd className="tnum inline font-semibold">{store.counts.products}</dd></div>
@@ -115,7 +154,17 @@ export function StoresPanel() {
     queryKey: ['commerce-stores'],
     queryFn: listStoreProviders,
     // A sync is a queued job, so the page that started it has no way of hearing that it finished.
-    refetchInterval: (q) => (q.state.data?.some((p) => p.state === 'syncing') ? 5000 : false),
+    refetchInterval: (q) =>
+      q.state.data?.some((p) => p.state === 'syncing' || p.stores.some((s) => s.last_run?.status === 'queued' || s.last_run?.status === 'running'))
+        ? 5000
+        : false,
+  })
+
+  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
+  const projectChoices = projects.data ?? []
+  const assign = useMutation({
+    mutationFn: ({ storeId, projectId }: { storeId: string; projectId: string | null }) => assignStore(storeId, projectId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
   })
 
   const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
@@ -141,7 +190,8 @@ export function StoresPanel() {
   }
 
   const providers = query.data ?? []
-  const actionError = authorize.isError ? toApiError(authorize.error) : null
+  const failed = authorize.isError ? authorize.error : assign.isError ? assign.error : sync.isError ? sync.error : null
+  const actionError = failed ? toApiError(failed) : null
 
   return (
     <section className="space-y-4" data-testid="stores-panel">
@@ -256,6 +306,9 @@ export function StoresPanel() {
                           ar={ar}
                           syncing={sync.isPending}
                           onSync={() => sync.mutate(store.id)}
+                          projects={projectChoices}
+                          assigning={assign.isPending}
+                          onAssign={(projectId) => assign.mutate({ storeId: store.id, projectId })}
                         />
                       ))}
                     </ul>

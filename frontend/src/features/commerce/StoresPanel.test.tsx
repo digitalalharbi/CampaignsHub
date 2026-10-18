@@ -8,11 +8,12 @@ vi.mock('./api', () => ({
   listStoreProviders: vi.fn(),
   startStoreOAuth: vi.fn(),
   syncStore: vi.fn(),
+  assignStore: vi.fn(),
 }))
-vi.mock('@/features/projects/api', () => ({ listClientWorkspaces: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listClientWorkspaces: vi.fn(), listProjects: vi.fn() }))
 
-import { listStoreProviders, startStoreOAuth, syncStore } from './api'
-import { listClientWorkspaces } from '@/features/projects/api'
+import { assignStore, listStoreProviders, startStoreOAuth, syncStore } from './api'
+import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 
 function provider(over: Partial<StoreProvider> = {}): StoreProvider {
   return {
@@ -32,6 +33,7 @@ describe('StoresPanel', () => {
     vi.clearAllMocks()
     signInWith(['integrations.view', 'integrations.connect'])
     vi.mocked(listClientWorkspaces).mockResolvedValue([])
+    vi.mocked(listProjects).mockResolvedValue([{ id: 'p1', name: 'Project 1' }, { id: 'p2', name: 'Project 2' }] as never)
   })
   afterEach(() => signOut())
 
@@ -80,7 +82,7 @@ describe('StoresPanel', () => {
         state: 'connected',
         supports_abandoned_carts: false,
         stores: [{
-          id: 's1', external_id: 'z-1', name: 'متجر زد', domain: null, currency: 'SAR',
+          id: 's1', external_id: 'z-1', name: 'متجر زد', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
           last_synced_at: '2026-08-05T09:00:00+00:00',
           counts: { products: 12, orders: 4, abandoned_carts: 0 },
           last_run: null,
@@ -100,7 +102,7 @@ describe('StoresPanel', () => {
       provider({
         state: 'connected',
         stores: [{
-          id: 's1', external_id: 'sa-1', name: 'متجر', domain: 'demo.salla.sa', currency: 'SAR',
+          id: 's1', external_id: 'sa-1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: 'demo.salla.sa', currency: 'SAR',
           last_synced_at: null,
           counts: { products: 0, orders: 0, abandoned_carts: 0 },
           last_run: null,
@@ -126,7 +128,7 @@ describe('StoresPanel', () => {
       provider({
         state: 'connected',
         stores: [{
-          id: 's1', external_id: 'sa-1', name: 'متجر', domain: null, currency: 'SAR',
+          id: 's1', external_id: 'sa-1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
           last_synced_at: null,
           counts: { products: 0, orders: 0, abandoned_carts: 0 },
           last_run: null,
@@ -147,5 +149,56 @@ describe('StoresPanel', () => {
     renderWithProviders(<StoresPanel />, { locale: 'ar' })
 
     expect(await screen.findByTestId('store-client-workspace')).toBeInTheDocument()
+  })
+
+  /**
+   * COMMERCE-ASSIGN-001 — a store with no project asks for one in words and cannot be synced into
+   * nothing; choosing a project calls the assignment with that project.
+   */
+  it('asks an unassigned store for a project, and assigns the one chosen', async () => {
+    vi.mocked(assignStore).mockResolvedValue({} as never)
+    vi.mocked(listStoreProviders).mockResolvedValue([
+      provider({
+        state: 'connected',
+        stores: [{
+          id: 's1', external_id: '793298857', name: 'dev-store', project_id: null, project_name: null, domain: null, currency: 'SAR',
+          last_synced_at: null, counts: { products: 0, orders: 0, abandoned_carts: 0 }, last_run: null,
+        }],
+      }),
+    ])
+
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    expect(await screen.findByTestId('store-needs-project-s1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sync now/ })).toBeDisabled()
+
+    const select = screen.getByTestId('store-project-s1') as HTMLSelectElement
+    expect(select.value).toBe('')
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Choose a project', 'Project 1', 'Project 2'])
+
+    fireEvent.change(select, { target: { value: 'p1' } })
+    await waitFor(() => expect(assignStore).toHaveBeenCalledWith('s1', 'p1'))
+  })
+
+  it('shows progress while the first read is queued, and lets the project be detached', async () => {
+    vi.mocked(assignStore).mockResolvedValue({} as never)
+    vi.mocked(listStoreProviders).mockResolvedValue([
+      provider({
+        state: 'connected',
+        stores: [{
+          id: 's1', external_id: '1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
+          last_synced_at: null, counts: { products: 0, orders: 0, abandoned_carts: 0 },
+          last_run: { status: 'queued', records: 0, error: null, finished_at: null },
+        }],
+      }),
+    ])
+
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    expect(await screen.findByTestId('store-reading-s1')).toBeInTheDocument()
+    expect((screen.getByTestId('store-project-s1') as HTMLSelectElement).value).toBe('p1')
+
+    fireEvent.change(screen.getByTestId('store-project-s1'), { target: { value: '' } })
+    await waitFor(() => expect(assignStore).toHaveBeenCalledWith('s1', null))
   })
 })
