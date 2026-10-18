@@ -63,7 +63,21 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
 
     if (values.length === 0) continue
 
-    await projectSelect.selectOption(values[0])
+    // REPORT-SCOPE-HIERARCHY-001 — a saved report names its ad accounts, so take a project that has one.
+    // The project with the most accounts, so the report covers as much as the seed offers.
+    let chosen = ''
+    let most = 0
+    for (const v of values) {
+      const r = await page.request.get(`/api/v1/projects/${v}/reports/scope/options`, { headers: API_HEADERS })
+      const accounts = r.ok() ? ((await r.json()).data?.accounts ?? []) : []
+      if (accounts.length > most) {
+        chosen = v
+        most = accounts.length
+      }
+    }
+    if (chosen === '') continue
+
+    await projectSelect.selectOption(chosen)
 
     /*
      * The switcher runs after its queries settle and clears a project it does not recognise, so the
@@ -71,10 +85,10 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
      * builder will work; if not, this client is skipped rather than walking into a dead dialog.
      */
     await page.waitForTimeout(600)
-    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === values[0]
+    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === chosen
 
     if (held) {
-      projectId = values[0]
+      projectId = chosen
       break
     }
   }
@@ -99,6 +113,7 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
    */
   await page.getByRole('button', { name: /تقرير محفوظ|Saved report/ }).click()
   await page.getByPlaceholder(/التقرير الشهري/).fill(name)
+  await chooseFirstAccount(page)
   const [createRes] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith('/reports') && r.request().method() === 'POST'),
     page.getByRole('button', { name: 'إنشاء وتوليد' }).click(),
@@ -113,4 +128,34 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
   }, { timeout: 90_000, intervals: [2000] }).toBe('completed')
 
   return { projectId, reportId }
+}
+
+
+/**
+ * REPORT-SCOPE-HIERARCHY-001 — a saved report names its ad accounts, so the builder will not create
+ * one until an account is chosen. Picks every account the project offers.
+ */
+export async function chooseFirstAccount(page: import('@playwright/test').Page): Promise<void> {
+  const box = page.locator('[data-kind="accounts"]')
+  await expect(box, 'the project offers no ad account to build a report from').toBeVisible({ timeout: 20_000 })
+  // Visible checkboxes: tick every account the project offers, as a report covered before accounts were chosen.
+  const boxes = box.getByRole('checkbox')
+  const count = await boxes.count()
+  for (let i = 0; i < count; i++) {
+    /*
+     * click + a retrying assertion, not `check()`.
+     *
+     * These are CONTROLLED inputs: the page renders the tick a moment after the click. `check()` reads
+     * the state straight after clicking and, on a slow runner, saw the not-yet-rendered one and failed
+     * with «did not change its state» (WebKit CI). The assertion waits for the render, and still
+     * fails if the tick never lands — which is the property that matters.
+     */
+    const box = boxes.nth(i)
+    // Re-press only while it is NOT ticked: under heavy load (Firefox CI) a click can land on a row that
+    // is still being laid out and miss. The assertion is the same one — the tick must be there.
+    await expect(async () => {
+      if (!(await box.isChecked())) await box.click()
+      await expect(box).toBeChecked({ timeout: 4_000 })
+    }).toPass({ timeout: 40_000 })
+  }
 }

@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { isClientAudience } from './InteractiveReport'
+import { ScopeCheckList } from './ScopeCheckList'
 import { orderByReportability } from '@/features/campaigns/campaignRelevance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Info, Trash2 } from 'lucide-react'
@@ -173,6 +174,13 @@ export function ReportScopePicker({
    * and a path or an objective describes what the money was for rather than what it was called.
    */
   const namesInternalEntities = !isClientAudience(audience ?? 'client')
+  /*
+   * REPORT-SCOPE-HIERARCHY-001 — the ad account, campaign and ad rungs are offered for EVERY audience.
+   * This is the operator's own dialog, and hiding the rungs from a client-audience report left the
+   * operator no way to say which accounts it covers — which is how one client's report carried
+   * another's. What the CLIENT then sees stays stripped server-side (`ClientEntityBoundary`); only
+   * ad sets and content, which this release does not require, keep the old audience rule.
+   */
 
   /*
    * REPORT-SCOPE-SELECTION-001 — the campaign list knows which period it is being asked about.
@@ -195,8 +203,6 @@ export function ReportScopePicker({
     // The previous answer stays on screen while the narrowed one loads, so the form does not flash empty.
     placeholderData: (previous) => previous,
   })
-  // Explicit All / Selected: «all» means every campaign the filters above leave, never a hidden list.
-  const [campaignMode, setCampaignMode] = useState<'all' | 'selected'>((value.campaign_ids?.length ?? 0) > 0 ? 'selected' : 'all')
   const templates = useQuery({ queryKey: ['report-scope-templates', projectId], queryFn: () => listScopeTemplates(projectId), retry: false })
 
   const [templateName, setTemplateName] = useState('')
@@ -231,27 +237,37 @@ export function ReportScopePicker({
    * is REMOVED from the scope rather than stored as an empty list, because «[]» and «absent» mean
    * different things to the report — one is «narrowed to nothing», the other is «not narrowed».
    */
+  /*
+   * `latest` is the scope AS LAST WRITTEN, so two changes before a re-render compose instead of the
+   * second discarding the first (see `ScopeCheckList`).
+   */
+  const latest = useRef(value)
+  latest.current = value
+  const emit = (out: ReportScopeShape) => {
+    latest.current = out
+    onChange(out)
+  }
   const set = (axis: ListAxis, next: string[]) => {
-    const out = { ...value }
+    const out = { ...latest.current }
     if (next.length === 0) delete out[axis]
     else out[axis] = next
-    onChange(out)
+    emit(out)
   }
 
   const toggle = (axis: ListAxis, id: string) => {
-    const current = value[axis] ?? []
+    const current = latest.current[axis] ?? []
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
-    const out = { ...value }
+    const out = { ...latest.current }
     if (next.length === 0) delete out[axis]
     else out[axis] = next
-    onChange(out)
+    emit(out)
   }
 
   const setDate = (key: 'from' | 'to', v: string) => {
-    const out = { ...value }
+    const out = { ...latest.current }
     if (!v) delete out[key]
     else out[key] = v
-    onChange(out)
+    emit(out)
   }
 
   const boundCount = useMemo(
@@ -307,6 +323,39 @@ export function ReportScopePicker({
     }))
   }, [options.data, period.from, period.to, t])
 
+  /*
+   * The hierarchy below the accounts: campaigns exist only inside the chosen accounts, and ads only
+   * inside the ticked campaigns — or, with none ticked, inside every campaign the accounts leave.
+   */
+  const accountsChosen = (value.account_ids ?? []).length > 0
+  const campaignName = useMemo(() => new Map(campaignItems.map((c) => [c.id, c.label])), [campaignItems])
+  const visibleAds = useMemo(() => {
+    const within = new Set((value.campaign_ids ?? []).length > 0 ? value.campaign_ids : campaignItems.map((c) => c.id))
+
+    return (options.data?.ads ?? []).filter((a) => within.has(a.campaign_id))
+  }, [options.data, value.campaign_ids, campaignItems])
+
+  /*
+   * A selection can outlive the choice above it — an account unticked, a campaign unticked. The ids
+   * that no longer sit inside the hierarchy are dropped, because the server refuses a campaign
+   * outside its account and an ad outside its campaign. Only once the narrowed lists have arrived.
+   */
+  useEffect(() => {
+    if (!options.data || options.isPlaceholderData) return
+    const campaigns = new Set(accountsChosen ? campaignItems.map((c) => c.id) : [])
+    const ads = new Set(accountsChosen ? visibleAds.map((a) => a.id) : [])
+    const keepCampaigns = (value.campaign_ids ?? []).filter((id) => campaigns.has(id))
+    const keepAds = (value.ad_ids ?? []).filter((id) => ads.has(id))
+    if (keepCampaigns.length === (value.campaign_ids ?? []).length && keepAds.length === (value.ad_ids ?? []).length) return
+    const out = { ...value }
+    if (keepCampaigns.length === 0) delete out.campaign_ids
+    else out.campaign_ids = keepCampaigns
+    if (keepAds.length === 0) delete out.ad_ids
+    else out.ad_ids = keepAds
+    onChange(out)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.data, options.isPlaceholderData, campaignItems, visibleAds, accountsChosen])
+
   if (options.isLoading) return <Skeleton className="h-40 w-full" />
   if (options.isError) {
     return <ErrorState title={t.loadError} error={options.error} onRetry={() => void options.refetch()} ar={ar} />
@@ -343,14 +392,15 @@ export function ReportScopePicker({
         t={t}
       />
 
-      {namesInternalEntities && <ScopeSelect
+      <ScopeCheckList
+        kind="accounts"
         label={t.accounts}
-        items={o.accounts.map((a) => ({ id: a.id, label: `${a.name} · ${a.provider}` }))}
+        required
+        items={o.accounts.map((a) => ({ id: a.id, label: a.name, sub: a.provider }))}
         selected={value.account_ids ?? []}
         onChange={(next) => set('account_ids', next)}
         ar={ar}
-        t={t}
-      />}
+      />
 
       {/*
         REPORT-SETUP-001 — Objective, then Destination, then Campaigns: each narrows the next.
@@ -383,49 +433,24 @@ export function ReportScopePicker({
         />
       )}
 
-      {/* Scope: every campaign the choices above leave, or an exact list. */}
-      {namesInternalEntities && (
-        <div role="radiogroup" aria-label={t.scope} className="flex flex-wrap items-center gap-2" data-testid="campaign-scope-mode">
-          <span className="text-xs font-bold text-text-primary">{t.scope}</span>
-          {(['all', 'selected'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={campaignMode === mode}
-              onClick={() => {
-                setCampaignMode(mode)
-                if (mode === 'all') set('campaign_ids', [])
-              }}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold ${campaignMode === mode ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
-            >
-              {mode === 'all' ? t.allCampaigns : t.selectedCampaigns}
-            </button>
-          ))}
-        </div>
+      {/*
+        Campaigns of the SELECTED accounts only, as visible checkboxes. Nothing ticked means every
+        campaign inside that choice — never every campaign of the project.
+      */}
+      {accountsChosen && (
+        <ScopeCheckList
+          kind="campaigns"
+          label={t.campaigns}
+          note={period.from && period.to ? t.ranInPeriod : undefined}
+          truncated={o.truncated?.campaigns}
+          limit={o.limit}
+          items={campaignItems.map((c) => ({ id: c.id, label: c.label, group: c.group }))}
+          selected={value.campaign_ids ?? []}
+          onChange={(next) => set('campaign_ids', next)}
+          emptyMeans={ar ? 'كل حملات الحسابات المحددة' : 'All campaigns of the selected accounts'}
+          ar={ar}
+        />
       )}
-
-      {namesInternalEntities && campaignMode === 'selected' && <ScopeSelect
-        label={t.campaigns}
-        /*
-          REPORT-SCOPE-SELECTION-001 — «ran in this period» first, and said in words.
-
-          «Reportability = campaign lifecycle + selected period + canonical status — NOT a simplistic
-          `status === active` frontend filter», because a campaign inactive today may have been
-          active during the window being reported on. The heading decides ORDER and emphasis, never
-          membership: nothing is hidden, and with no period asked about no claim is made either way.
-        */
-        note={period.from && period.to ? t.ranInPeriod : undefined}
-        truncated={o.truncated?.campaigns}
-        axis="campaigns"
-        projectId={projectId}
-        limit={o.limit}
-        items={campaignItems}
-        selected={value.campaign_ids ?? []}
-        onChange={(next) => set('campaign_ids', next)}
-        ar={ar}
-        t={t}
-      />}
 
       {namesInternalEntities && o.ad_sets.length > 0 && (
         <ScopeSelect
@@ -443,19 +468,17 @@ export function ReportScopePicker({
         />
       )}
 
-      {namesInternalEntities && o.ads.length > 0 && (
-        <ScopeSelect
+      {accountsChosen && visibleAds.length > 0 && (
+        <ScopeCheckList
+          kind="ads"
           label={t.ads}
-          note={t.grainCampaign}
           truncated={o.truncated?.ads}
-        axis="ads"
-        projectId={projectId}
           limit={o.limit}
-          items={o.ads.map((a) => ({ id: a.id, label: a.name }))}
+          items={visibleAds.map((a) => ({ id: a.id, label: a.name, sub: campaignName.get(a.campaign_id) }))}
           selected={value.ad_ids ?? []}
           onChange={(next) => set('ad_ids', next)}
+          emptyMeans={ar ? 'كل إعلانات الحملات المحددة' : 'All ads of the selected campaigns'}
           ar={ar}
-          t={t}
         />
       )}
 
@@ -565,6 +588,7 @@ function ScopeSelect({
   t,
   axis,
   projectId,
+  kind,
 }: {
   label: string
   /**
@@ -598,6 +622,8 @@ function ScopeSelect({
    */
   axis?: string
   projectId?: string
+  /** A language-independent name for the rung, for tests and tools that must not depend on the label. */
+  kind?: string
 }) {
   const [term, setTerm] = useState('')
 
@@ -660,7 +686,7 @@ function ScopeSelect({
   if (items.length === 0 && selected.length === 0) return null
 
   return (
-    <div data-testid={`scope-select-${label}`}>
+    <div data-testid={`scope-select-${label}`} data-kind={kind}>
       <div className="mb-1.5 flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold text-text-primary">{label}</span>
         {selected.length > 0 && (

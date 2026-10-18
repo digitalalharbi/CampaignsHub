@@ -83,6 +83,55 @@ final class HiddenSectionLeavesTheBytesTest extends TestCase
         $this->assertStringContainsString('Meta — Retargeting', app(ReportExporter::class)->render($report, 'csv'));
     }
 
+    private function platformRows(string $csv): array
+    {
+        $lines = preg_split('/\r?\n/', $csv) ?: [];
+        $at = array_search(true, array_map(static fn (string $l): bool => str_starts_with($l, 'Platforms,'), $lines), true);
+        $rows = [];
+        if ($at === false) {
+            return $rows;
+        }
+        for ($i = $at + 1; $i < count($lines) && trim($lines[$i]) !== ''; $i++) {
+            $rows[] = explode(',', $lines[$i])[0];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * REPORT-SCOPE-HIERARCHY-001 — one platform ran, so there is no comparison slide, and the platform
+     * table must still be in the file: nothing was hidden, there was just nothing to compare.
+     */
+    public function test_a_single_platform_report_keeps_its_platform_table(): void
+    {
+        $csv = app(ReportExporter::class)->render($this->report(campaignsVisible: true), 'csv');
+
+        $this->assertSame(['meta'], $this->platformRows($csv));
+    }
+
+    /** An operator who switched the comparison off still removes the table. */
+    public function test_a_comparison_switched_off_removes_the_platform_table(): void
+    {
+        $report = $this->report(campaignsVisible: true);
+        $config = $report->config;
+        $config['slides'][] = ['id' => 'platform_comparison', 'type' => 'platform_comparison', 'order' => 3, 'visible' => false];
+        $report->update(['config' => $config]);
+
+        $this->assertSame([], $this->platformRows(app(ReportExporter::class)->render($report, 'csv')));
+    }
+
+    /** With two platforms an absent comparison slide is a summary leaving it out — the old rule stands. */
+    public function test_two_platforms_without_a_comparison_slide_still_leave_the_table_out(): void
+    {
+        $report = $this->report(campaignsVisible: true);
+        $data = $report->data;
+        $data['kpis']['spend'] = 5000.0;
+        $data['platforms'][] = ['provider' => 'tiktok', 'spend' => 1000.0, 'revenue' => 0.0, 'conversions' => 0.0];
+        $report->update(['data' => $data]);
+
+        $this->assertSame([], $this->platformRows(app(ReportExporter::class)->render($report, 'csv')));
+    }
+
     private function report(bool $campaignsVisible): Report
     {
         return Report::create([
