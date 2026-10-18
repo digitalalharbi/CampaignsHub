@@ -86,7 +86,7 @@ final class SecretNeverInLoggedUrlTest extends TestCase
         $connector->discoverAdAccounts(new OAuthTokens('AT'));
         $keys = $connector->takeCallLog()[0]['data_keys'];
 
-        $this->assertContains('list[1]', $keys);
+        $this->assertContains('list[1]{advertiser_id,advertiser_name,currency}', $keys, 'a list names its length and the key names of its first object');
         $this->assertContains('video_info{poster_url,duration}', $keys);
         $this->assertContains('video_detail{item_id,video_info{poster_url,is_ai}}', $keys, 'one level deeper: the object inside the object, names only');
         $this->assertStringNotContainsString('secret.jpg', implode(' ', $keys));

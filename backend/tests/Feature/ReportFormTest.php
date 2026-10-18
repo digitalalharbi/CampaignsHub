@@ -19,6 +19,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use Tests\Concerns\SeedsReportAccount;
 use Tests\TestCase;
 
 /**
@@ -38,6 +39,7 @@ use Tests\TestCase;
 final class ReportFormTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsReportAccount;
 
     private Tenant $tenant;
 
@@ -217,7 +219,7 @@ final class ReportFormTest extends TestCase
     public function test_a_report_that_names_no_form_is_a_detailed_one(): void
     {
         $this->actingAs($this->operator, 'sanctum')
-            ->postJson("/api/v1/projects/{$this->project->id}/reports", ['name' => 'Default', 'type' => 'monthly'])
+            ->postJson("/api/v1/projects/{$this->project->id}/reports", ['name' => 'Default', 'type' => 'monthly', 'scope' => $this->reportScopeFor((string) $this->project->id)])
             ->assertCreated();
 
         $this->assertSame('detailed', Report::where('name', 'Default')->value('form'));
@@ -236,7 +238,7 @@ final class ReportFormTest extends TestCase
     {
         $created = $this->actingAs($this->operator, 'sanctum')
             ->postJson("/api/v1/projects/{$this->project->id}/reports", [
-                'name' => 'Summary through the door', 'type' => 'monthly', 'form' => 'executive_summary',
+                'name' => 'Summary through the door', 'type' => 'monthly', 'form' => 'executive_summary', 'scope' => $this->reportScopeFor((string) $this->project->id),
             ])
             ->assertCreated();
 
