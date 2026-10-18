@@ -73,7 +73,11 @@ jobs:
               exit 1
             fi
 
-            if [ "$merge" = "BEHIND" ]; then
+            # GitHub reports `UNKNOWN` for a while after main moves, which read as «not behind» and
+            # left a stale PR waiting for checks that would never come. Behind is a fact about commits,
+            # so it is asked of them: how many commits of main the branch lacks.
+            behind_by=$(gh api "repos/$GH_REPO/compare/main...$sha" --jq .behind_by 2>/dev/null || echo 0)
+            if [ "$merge" = "BEHIND" ] || [ "${behind_by:-0}" -gt 0 ]; then
               gh pr update-branch "$pr"
               if [ "$HAVE_QUEUE_TOKEN" != "true" ]; then
                 # A token-made push starts no pull_request run, so CI is started by dispatch; its
