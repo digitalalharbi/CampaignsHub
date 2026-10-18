@@ -152,6 +152,29 @@ final class ReportExporter
             }
         }
 
+        /*
+         * REPORT-SCOPE-HIERARCHY-001 — the platform table is not the comparison slide's alone.
+         *
+         * The template draws `platform_comparison` only when MORE than one platform ran, so a report
+         * scoped to one ad account has no such slide — not because anybody hid it, but because there
+         * is nothing to compare. Reading that absence as «hidden» dropped the table from the CSV and
+         * the workbook while the report itself, its API and its per-platform pages all carried the
+         * platform's figures: a single-platform export lost the one table it exists to give.
+         *
+         * The table stays when a per-platform page draws from it, and when there is at most one
+         * platform and no slide was explicitly switched off. An operator's `visible => false` on the
+         * comparison still removes it.
+         */
+        $comparisonSwitchedOff = false;
+        foreach ($slides as $slide) {
+            if (is_array($slide) && ($slide['type'] ?? null) === 'platform_comparison' && ($slide['visible'] ?? true) === false) {
+                $comparisonSwitchedOff = true;
+            }
+        }
+        if (! $comparisonSwitchedOff && (isset($present['platform_performance']) || count((array) ($data['platforms'] ?? [])) <= 1)) {
+            $present['platform_comparison'] = true;
+        }
+
         foreach ($keysOf as $type => $keys) {
             if (isset($present[$type])) {
                 continue;

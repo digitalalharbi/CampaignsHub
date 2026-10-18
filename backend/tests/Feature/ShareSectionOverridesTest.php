@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -19,6 +20,7 @@ use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -203,12 +205,19 @@ final class ShareSectionOverridesTest extends TestCase
     /** The live-link builder sends its switches in the same vocabulary, and they are stored — not a placebo. */
     public function test_the_live_link_builder_stores_its_section_switches(): void
     {
-        UnifiedCampaign::create([
+        $campaign = UnifiedCampaign::create([
             'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
             'name' => 'C1', 'status' => 'active', 'objective' => 'sales',
         ]);
+        $account = (string) Str::uuid();
+        DailyMetric::create([
+            'id' => (string) Str::uuid(), 'project_id' => $this->project->getKey(),
+            'external_account_id' => $account, 'external_campaign_id' => (string) Str::uuid(),
+            'unified_campaign_id' => $campaign->getKey(), 'provider' => 'meta', 'metric_key' => 'spend',
+            'metric_date' => now()->toDateString(), 'value' => 1,
+        ]);
         $url = "/api/v1/projects/{$this->project->getKey()}/reports/live";
-        $body = ['name' => 'Exec link', 'from' => now()->subDays(7)->toDateString(), 'to' => now()->toDateString(), 'providers' => ['meta']];
+        $body = ['account_ids' => [$account], 'name' => 'Exec link', 'from' => now()->subDays(7)->toDateString(), 'to' => now()->toDateString(), 'providers' => ['meta']];
 
         $this->actingAs($this->operator, 'sanctum')
             ->postJson($url, $body + ['section_overrides' => ['campaign_names']])
