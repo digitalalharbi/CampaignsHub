@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 export interface CheckItem {
   id: string
@@ -38,7 +38,21 @@ export function ScopeCheckList({ label, kind, items, selected, onChange, ar, emp
   const needle = query.trim().toLocaleLowerCase()
   const shown = items.filter((i) => needle === '' || `${i.label} ${i.sub ?? ''}`.toLocaleLowerCase().includes(needle))
   const chosen = new Set(selected)
-  const toggle = (id: string) => onChange(chosen.has(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  /*
+   * The LATEST selection, updated the moment it changes — not the one this render saw.
+   *
+   * Two ticks that land before React has re-rendered both read the same `selected`, and the second
+   * overwrites the first: the operator (or a fast test) ticks four accounts and three are lost, with
+   * nothing to say so. Composing each change on the last one makes consecutive ticks add up.
+   */
+  const latest = useRef(selected)
+  latest.current = selected
+  const commit = (next: string[]) => {
+    latest.current = next
+    onChange(next)
+  }
+  const toggle = (id: string) =>
+    commit(latest.current.includes(id) ? latest.current.filter((x) => x !== id) : [...latest.current, id])
 
   // Group headings only where the caller supplied them; rows keep the caller's order.
   const groups: Array<[string | undefined, CheckItem[]]> = []
@@ -58,10 +72,10 @@ export function ScopeCheckList({ label, kind, items, selected, onChange, ar, emp
               ? emptyMeans
               : ar ? `${selected.length} من ${items.length} محدد` : `${selected.length} of ${items.length} selected`}
           </span>
-          <button type="button" data-testid={`scope-all-${kind}`} onClick={() => onChange([...new Set([...selected, ...shown.map((i) => i.id)])])} className="font-bold text-brand-700 hover:underline">
+          <button type="button" data-testid={`scope-all-${kind}`} onClick={() => commit([...new Set([...latest.current, ...shown.map((i) => i.id)])])} className="font-bold text-brand-700 hover:underline">
             {ar ? 'تحديد الكل' : 'Select all'}
           </button>
-          <button type="button" data-testid={`scope-clear-${kind}`} onClick={() => onChange([])} disabled={selected.length === 0} className="font-bold text-brand-700 hover:underline disabled:opacity-40">
+          <button type="button" data-testid={`scope-clear-${kind}`} onClick={() => commit([])} disabled={selected.length === 0} className="font-bold text-brand-700 hover:underline disabled:opacity-40">
             {ar ? 'مسح' : 'Clear'}
           </button>
         </span>

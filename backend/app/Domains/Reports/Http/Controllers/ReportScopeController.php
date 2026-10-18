@@ -203,6 +203,26 @@ final class ReportScopeController extends Controller
             ->whereNotNull('external_account_id')
             ->distinct()->pluck('external_account_id')->all();
 
+        /*
+         * REPORT-SCOPE-HIERARCHY-001 — and the accounts that have CAMPAIGNS but no figures yet.
+         *
+         * The picker offered only accounts with metrics, while the campaign list (and the server's
+         * check) also counts an account through its synced campaigns. So a campaign that never ran
+         * belonged to an account the picker did not list — ticking every account offered still left
+         * it out, and a report could not be scoped to it. One definition of «an account of this
+         * project»: figures OR campaigns.
+         */
+        $structureAccountIds = ExternalCampaign::query()
+            ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
+            ->whereNotNull('unified_campaign_id')
+            ->whereNotNull('external_account_id')
+            ->distinct()->pluck('external_account_id')->all();
+        $accountIds = array_values(array_unique(array_merge(
+            array_map('strval', $accountIds),
+            array_map('strval', $structureAccountIds),
+        )));
+
         $accounts = $accountIds === [] ? [] : ExternalAccount::query()
             ->whereIn('id', $accountIds)
             ->when($fProviders !== [], fn ($q) => $q->whereIn('provider', $fProviders))

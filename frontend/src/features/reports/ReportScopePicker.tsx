@@ -237,27 +237,37 @@ export function ReportScopePicker({
    * is REMOVED from the scope rather than stored as an empty list, because «[]» and «absent» mean
    * different things to the report — one is «narrowed to nothing», the other is «not narrowed».
    */
+  /*
+   * `latest` is the scope AS LAST WRITTEN, so two changes before a re-render compose instead of the
+   * second discarding the first (see `ScopeCheckList`).
+   */
+  const latest = useRef(value)
+  latest.current = value
+  const emit = (out: ReportScopeShape) => {
+    latest.current = out
+    onChange(out)
+  }
   const set = (axis: ListAxis, next: string[]) => {
-    const out = { ...value }
+    const out = { ...latest.current }
     if (next.length === 0) delete out[axis]
     else out[axis] = next
-    onChange(out)
+    emit(out)
   }
 
   const toggle = (axis: ListAxis, id: string) => {
-    const current = value[axis] ?? []
+    const current = latest.current[axis] ?? []
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
-    const out = { ...value }
+    const out = { ...latest.current }
     if (next.length === 0) delete out[axis]
     else out[axis] = next
-    onChange(out)
+    emit(out)
   }
 
   const setDate = (key: 'from' | 'to', v: string) => {
-    const out = { ...value }
+    const out = { ...latest.current }
     if (!v) delete out[key]
     else out[key] = v
-    onChange(out)
+    emit(out)
   }
 
   const boundCount = useMemo(

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { ReportScopePicker } from './ReportScopePicker'
 import type { ReportScopeShape, ScopeOptions } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -144,5 +144,24 @@ describe('the ad account → campaign → ad checkbox flow', () => {
 
     fireEvent.click(screen.getByTestId('scope-clear-accounts'))
     expect(stored().account_ids).toBeUndefined()
+  })
+
+  /**
+   * Ticks that land before React re-renders must all count. A fast operator, or a test driving a slow
+   * browser, ticks the next account before the first tick has been rendered; each handler used to read
+   * the selection its own render saw, so the last tick overwrote the others and accounts went missing
+   * with no message — which is how a report came to cover fewer accounts than were ticked.
+   */
+  it('keeps every tick when several land in one batch', async () => {
+    renderWithProviders(<Harness />, { locale: 'en' })
+    await screen.findByTestId('scope-select-Ad accounts')
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('scope-accounts-a-razzah'))
+      fireEvent.click(screen.getByTestId('scope-accounts-a-hanka'))
+      fireEvent.click(screen.getByTestId('scope-accounts-a-ssf'))
+    })
+
+    expect(stored().account_ids).toEqual(['a-razzah', 'a-hanka', 'a-ssf'])
   })
 })

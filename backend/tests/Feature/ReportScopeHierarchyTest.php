@@ -256,4 +256,22 @@ final class ReportScopeHierarchyTest extends TestCase
 
         $this->assertSame(['Razzah A', 'Razzah B', 'Razzah2 A'], $names);
     }
+
+    public function test_the_saved_report_picker_lists_an_account_that_has_campaigns_but_no_figures(): void
+    {
+        $quiet = (string) Str::uuid();
+        $campaign = UnifiedCampaign::create(['project_id' => $this->project->id, 'name' => 'Never ran', 'status' => 'active', 'objective' => 'sales']);
+        $this->realAccount($quiet);
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $campaign->tenant_id, 'project_id' => $this->project->id, 'unified_campaign_id' => $campaign->id,
+            'external_account_id' => $quiet, 'provider' => 'meta', 'external_id' => 'ec-'.Str::uuid(),
+            'name' => 'Never ran', 'status' => 'active',
+        ]);
+
+        $json = $this->getJson("/api/v1/projects/{$this->project->id}/reports/scope/options")->assertOk()->json('data');
+        $this->assertContains($quiet, array_column($json['accounts'], 'id'));
+
+        $names = collect($this->getJson("/api/v1/projects/{$this->project->id}/reports/scope/options?account_ids[]={$quiet}")->json('data.campaigns'))->pluck('name')->all();
+        $this->assertSame(['Never ran'], $names);
+    }
 }
