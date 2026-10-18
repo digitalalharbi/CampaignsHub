@@ -49,7 +49,18 @@ const OWNED_PREFIXES = ['chub:draft:', 'ch-requests-', 'chub:']
  * is: a client contact typing their address there reaches the one-time-code step, so there is no
  * longer a second door for callers on the portal side to send them to.
  */
-export async function signOutCompletely(queryClient?: QueryClient, destination = '/login'): Promise<void> {
+export async function signOutCompletely(
+  queryClient?: QueryClient,
+  destination = '/login',
+  /**
+   * Another session to end in the same exit — the client portal's one-time-code session, which is a
+   * second engine beside the web session. It runs AFTER the barrier is up and the in-flight queries are
+   * abandoned, never before: ended first, a dashboard request still in the air finishes afterwards and
+   * writes the session back (measured on Firefox: the visitor was bounced from /login straight back into
+   * the portal).
+   */
+  alsoEnd?: () => Promise<unknown>,
+): Promise<void> {
   /*
    * ACCESS-EXIT-002 — the barrier goes up FIRST, before a single byte of the logout is sent.
    *
@@ -77,6 +88,12 @@ export async function signOutCompletely(queryClient?: QueryClient, destination =
     // filter reaches every observer, which is what «no authenticated request survives this» requires.
     await queryClient?.cancelQueries()
   } catch { /* nothing in flight, or no client passed */ }
+
+  if (alsoEnd) {
+    try {
+      await alsoEnd()
+    } catch { /* best-effort, like the web logout below */ }
+  }
 
   // Best-effort: see the note above on why a failure here must not stop the rest.
   try {

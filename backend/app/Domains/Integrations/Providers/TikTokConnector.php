@@ -460,6 +460,46 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
     /** Spark posters asked for in one sweep — a call each, so bounded. */
     private const SPARK_POSTER_CAP = 400;
 
+    /**
+     * @param  list<string>  $ids
+     * @return array<string, array<string,mixed>>
+     */
+    private function videoInfo(OAuthTokens $tokens, string $adAccountId, array $ids, int &$budget): array
+    {
+        if ($ids === [] || $budget <= 0) {
+            return [];
+        }
+
+        $budget--;
+
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url('file/video/ad/info/'), [
+                'advertiser_id' => $adAccountId,
+                'video_ids' => json_encode($ids, JSON_THROW_ON_ERROR),
+            ]), 'video info');
+        } catch (RuntimeException $e) {
+            if (count($ids) === 1) {
+                Log::warning('TikTok refused one video; that creative keeps no poster.', ['reason' => $e->getMessage()]);
+
+                return [];
+            }
+
+            $half = intdiv(count($ids), 2);
+
+            return $this->videoInfo($tokens, $adAccountId, array_slice($ids, 0, $half), $budget)
+                + $this->videoInfo($tokens, $adAccountId, array_slice($ids, $half), $budget);
+        }
+
+        $out = [];
+        foreach ((array) ($body['data']['list'] ?? []) as $v) {
+            if (is_array($v) && isset($v['video_id'])) {
+                $out[(string) $v['video_id']] = $v;
+            }
+        }
+
+        return $out;
+    }
+
     private function withMedia(OAuthTokens $tokens, string $adAccountId, array $ads): array
     {
         $videoIds = [];
@@ -539,18 +579,23 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
             }
         }
 
-        try {
-            foreach (array_chunk(array_values(array_unique($videoIds)), 60) as $chunk) {
-                $body = $this->read($this->api($tokens)->get($this->url('file/video/ad/info/'), [
-                    'advertiser_id' => $adAccountId,
-                    'video_ids' => json_encode($chunk, JSON_THROW_ON_ERROR),
-                ]), 'video info');
-                foreach ((array) ($body['data']['list'] ?? []) as $v) {
-                    if (is_array($v) && isset($v['video_id'])) {
-                        $videos[(string) $v['video_id']] = $v;
-                    }
-                }
+        /*
+         * TIKTOK-VIDEO-INFO-SPLIT-001 — one refused video no longer costs the other fifty-nine.
+         *
+         * Production 2026-10-18: `file/video/ad/info/` answered «Insufficient permissions for some videos»
+         * for a chunk, and the whole chunk — and, because one try wrapped the loop, every chunk after it —
+         * was lost, leaving only 43 of 326 videos with a poster. A refused chunk is now halved and asked
+         * again until the refused ids stand alone and are dropped; the permitted ones keep their poster.
+         * Bounded, so a wholly refused account costs a few dozen calls and not one per video.
+         */
+        $budget = 80;
+        foreach (array_chunk(array_values(array_unique($videoIds)), 60) as $chunk) {
+            foreach ($this->videoInfo($tokens, $adAccountId, $chunk, $budget) as $id => $v) {
+                $videos[$id] = $v;
             }
+        }
+
+        try {
             foreach (array_chunk(array_values(array_unique($imageIds)), 100) as $chunk) {
                 $body = $this->read($this->api($tokens)->get($this->url('file/image/ad/info/'), [
                     'advertiser_id' => $adAccountId,

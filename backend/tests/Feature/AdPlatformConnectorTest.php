@@ -651,6 +651,43 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * TIKTOK-VIDEO-INFO-SPLIT-001 — one refused video does not cost the others their poster.
+     */
+    public function test_a_refused_video_is_split_out_and_the_rest_keep_their_poster(): void
+    {
+        $this->configure('tiktok');
+        $calls = 0;
+        Http::fake(function ($request) use (&$calls) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'file/video/ad/info/')) {
+                $calls++;
+                preg_match('/video_ids=(\[.*\])/', $url, $m);
+                $ids = (array) json_decode($m[1] ?? '[]', true);
+                if (in_array('v-bad', $ids, true)) {
+                    return Http::response(['code' => 40001, 'message' => 'Insufficient permissions for some videos: [v-bad]', 'request_id' => 'r']);
+                }
+
+                return Http::response(['code' => 0, 'data' => ['list' => array_map(fn ($id) => ['video_id' => $id, 'video_cover_url' => "https://p16.tiktokcdn.com/{$id}.jpg"], $ids)]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'a1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'One', 'video_id' => 'v-1'],
+                ['ad_id' => 'a2', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Two', 'video_id' => 'v-bad'],
+                ['ad_id' => 'a3', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Three', 'video_id' => 'v-3'],
+                ['ad_id' => 'a4', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Four', 'video_id' => 'v-4'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertSame('https://p16.tiktokcdn.com/v-1.jpg', $ads['a1']['creative']['thumbnail_url']);
+        $this->assertSame('https://p16.tiktokcdn.com/v-3.jpg', $ads['a3']['creative']['thumbnail_url']);
+        $this->assertSame('https://p16.tiktokcdn.com/v-4.jpg', $ads['a4']['creative']['thumbnail_url']);
+        $this->assertArrayNotHasKey('thumbnail_url', $ads['a2']['creative'], 'the refused video keeps no invented poster');
+        $this->assertLessThanOrEqual(8, $calls, 'a split is logarithmic, not one call per video');
+    }
+
+    /**
      * TIKTOK-CONTENT-001 — creative figures from the ad-level report: two ads running one video sum
      * into that video's day; reach (unique people per ad) is not summed; a Spark Ad's figures land on
      * its post; an ad with no creative is not placed.
