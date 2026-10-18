@@ -5,7 +5,7 @@ import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { PlatformMark } from '@/components/brand/PlatformMark'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, Copy, Link2 } from 'lucide-react'
-import { createLiveLink, liveBuilderOptions, reportSectionRegistry, type LiveBuilderOptions } from './api'
+import { createLiveLink, liveBuilderAds, liveBuilderOptions, reportSectionRegistry, type LiveBuilderOptions, type LiveBuilderAd, type AdAccountRef } from './api'
 import { groupByLifecycle } from './reportScopeLifecycle'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
@@ -66,7 +66,17 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  /*
+   * REPORT-SCOPE-HIERARCHY-001 — the hierarchy is chosen top-down: ad accounts first, then (optionally)
+   * campaigns inside them, then (optionally) ads inside those. Nothing selected at a level means ALL of
+   * it, but the first level can never be empty: a link must name the accounts it speaks about, because
+   * «no choice = everything in the project» is how another client's account reached a report.
+   */
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
+  const [accountQuery, setAccountQuery] = useState('')
   const [campaigns, setCampaigns] = useState<string[]>([])
+  const [adIds, setAdIds] = useState<string[]>([])
+  const [adQuery, setAdQuery] = useState('')
   const [providers, setProviders] = useState<string[]>([])
   const [metrics, setMetrics] = useState<string[]>([])
   // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
@@ -111,7 +121,6 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * Taken from `ad_accounts` rather than collected off the campaigns: the server builds both from the
    * same rows, so the control can never offer an account that narrows the list to nothing.
    */
-  const [campaignAccount, setCampaignAccount] = useState<string | null>(null)
   const adAccounts = options.data?.ad_accounts ?? []
 
   /*
@@ -133,7 +142,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
-      if (campaignAccount !== null && !(c.accounts ?? []).some((a) => a.id === campaignAccount)) return false
+      if (!(c.accounts ?? []).some((a) => selectedAccounts.includes(a.id))) return false
       if (members !== null && !members.includes(String(c.objective ?? ''))) return false
       if (campaignDestination !== null && c.destination !== campaignDestination) return false
       if (needle === '') return true
@@ -142,12 +151,29 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, campaignAccount, campaignObjective, campaignDestination, campaignQuery])
+  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
     [visibleCampaigns, from, to],
   )
+  const adsQuery = useQuery({
+    queryKey: ['live-builder-ads', projectId, [...campaigns].sort()],
+    queryFn: () => liveBuilderAds(projectId, campaigns),
+    enabled: campaigns.length > 0 && campaigns.length <= 100,
+  })
+  const chosenAds = useMemo(() => {
+    const known = new Set((adsQuery.data?.ads ?? []).map((a) => a.id))
+    return adIds.filter((id) => known.has(id))
+  }, [adIds, adsQuery.data])
+
+  const toggleAccount = (id: string) => {
+    const next = selectedAccounts.includes(id) ? selectedAccounts.filter((a) => a !== id) : [...selectedAccounts, id]
+    setSelectedAccounts(next)
+    // A campaign ticked under an account that is no longer selected must not stay in the request.
+    setCampaigns((prev) => prev.filter((cid) => (options.data?.campaigns ?? []).find((c) => c.id === cid)?.accounts?.some((a) => next.includes(a.id))))
+  }
+
   /*
    * REPORT-CREATION-UX-001 — WHICH report this link is.
    *
@@ -189,7 +215,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
       createLiveLink(projectId, {
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
-        campaign_ids: campaigns,
+        account_ids: selectedAccounts,
+        accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
         metrics,
         from,
@@ -247,7 +274,9 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
   const summary = useMemo(() => {
     const parts: string[] = []
-    parts.push(campaigns.length === 0 ? (ar ? 'كل الحملات' : 'All campaigns') : `${campaigns.length} ${ar ? 'حملة' : 'campaigns'}`)
+    parts.push(`${selectedAccounts.length} ${ar ? 'حساب إعلاني' : 'ad accounts'}`)
+    parts.push(campaigns.length === 0 ? (ar ? 'كل حملات الحسابات المحددة' : 'All campaigns of those accounts') : `${campaigns.length} ${ar ? 'حملة' : 'campaigns'}`)
+    if (chosenAds.length > 0) parts.push(`${chosenAds.length} ${ar ? 'إعلان' : 'ads'}`)
     parts.push(providers.length === 0
       ? (ar ? 'كل المنصات' : 'All platforms')
       : providers.map((p) => providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')).join(ar ? '، ' : ', '))
@@ -273,7 +302,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     if (allowDownload) parts.push(ar ? 'مع إمكانية التنزيل' : 'downloadable')
 
     return parts.join(' · ')
-  }, [campaigns, providers, metrics, form, hideSpend, hideRevenue, allowDownload, ar])
+  }, [selectedAccounts, chosenAds, campaigns, providers, metrics, form, hideSpend, hideRevenue, allowDownload, ar])
 
   return (
     <Modal open onClose={onClose} title={ar ? 'تقرير رابط' : 'Link Report'} size="lg">
@@ -332,6 +361,17 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base"
             />
           </Field>
+
+          <AccountPicker
+            ar={ar}
+            accounts={adAccounts}
+            selected={selectedAccounts}
+            query={accountQuery}
+            onQuery={setAccountQuery}
+            onToggle={toggleAccount}
+            onAll={() => setSelectedAccounts(adAccounts.map((a) => a.id))}
+            onClear={() => { setSelectedAccounts([]); setCampaigns([]); setAdIds([]) }}
+          />
 
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -413,25 +453,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               )}
             </div>
 
-            {(adAccounts.length > 1 || options.data!.campaigns.length > 8) && (
+            {options.data!.campaigns.length > 8 && (
               <div className="flex flex-wrap items-center gap-2">
-                {adAccounts.length > 1 && (
-                  <select
-                    aria-label={ar ? 'الحساب الإعلاني' : 'Ad account'}
-                    data-testid="live-builder-campaign-account"
-                    value={campaignAccount ?? ''}
-                    onChange={(e) => setCampaignAccount(e.target.value === '' ? null : e.target.value)}
-                    className="min-w-0 max-w-[55%] flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
-                  >
-                    <option value="">{ar ? 'كل الحسابات الإعلانية' : 'All ad accounts'}</option>
-                    {adAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} — {providerLabel(a.provider, ar ? 'ar' : 'en')}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
                 {options.data!.campaigns.length > 8 && (
                   <input
                     type="search"
@@ -446,7 +469,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               </div>
             )}
 
-            {options.data!.campaigns.length === 0 ? (
+            {selectedAccounts.length === 0 ? (
+              <p className="text-xs text-text-muted" data-testid="live-builder-pick-accounts">
+                {ar ? 'اختر حسابًا إعلانيًا واحدًا على الأقل لتظهر حملاته.' : 'Pick at least one ad account to see its campaigns.'}
+              </p>
+            ) : options.data!.campaigns.length === 0 ? (
               <p className="text-xs text-text-muted">{ar ? 'لا توجد حملات في هذا المشروع بعد.' : 'No campaigns in this project yet.'}</p>
             ) : visibleCampaigns.length === 0 ? (
               /*
@@ -466,7 +493,6 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   type="button"
                   onClick={() => {
                     setCampaignPlatform(null)
-                    setCampaignAccount(null)
                     setCampaignObjective(null)
                     setCampaignDestination(null)
                     setCampaignQuery('')
@@ -520,6 +546,21 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               </div>
             )}
           </div>
+
+          {campaigns.length > 0 && (
+            <AdPicker
+              ar={ar}
+              ads={adsQuery.data?.ads ?? []}
+              loading={adsQuery.isLoading}
+              tooMany={campaigns.length > 100}
+              campaigns={options.data!.campaigns}
+              selected={chosenAds}
+              query={adQuery}
+              onQuery={setAdQuery}
+              onToggle={(id) => toggle(setAdIds, id)}
+              onClear={() => setAdIds([])}
+            />
+          )}
 
           <div className="grid gap-2">
             <span className="text-xs font-bold text-text-muted">{ar ? 'المنصات' : 'Platforms'}</span>
@@ -691,7 +732,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             </p>
           )}
 
-          <Button data-testid="live-link-create" loading={create.isPending} disabled={name.trim() === ''} onClick={() => create.mutate()}>
+          <Button data-testid="live-link-create" loading={create.isPending} disabled={name.trim() === '' || selectedAccounts.length === 0} onClick={() => create.mutate()}>
             <Link2 size={16} /> {ar ? 'إنشاء الرابط' : 'Create the link'}
           </Button>
         </div>
@@ -747,5 +788,148 @@ function CampaignOption({ campaign, ar, checked, onToggle }: {
         ))}
       </span>
     </label>
+  )
+}
+
+/**
+ * The request's per-account choices: only an account the operator narrowed gets an entry, and an
+ * account without one means «all of its campaigns / all of its ads». A campaign ticked under two
+ * accounts is sent under both.
+ */
+function accountSelection(
+  accountIds: string[],
+  campaignIds: string[],
+  adIds: string[],
+  campaigns: LiveBuilderOptions['campaigns'],
+  ads: LiveBuilderAd[],
+): Record<string, { campaign_ids?: string[]; ad_ids?: string[] }> {
+  const out: Record<string, { campaign_ids?: string[]; ad_ids?: string[] }> = {}
+  for (const id of accountIds) {
+    const own = campaignIds.filter((cid) => campaigns.find((c) => c.id === cid)?.accounts?.some((a) => a.id === id))
+    const ownAds = adIds.filter((aid) => own.includes(ads.find((a) => a.id === aid)?.campaign_id ?? ''))
+    const entry: { campaign_ids?: string[]; ad_ids?: string[] } = {}
+    if (own.length > 0) entry.campaign_ids = own
+    if (ownAds.length > 0) entry.ad_ids = ownAds
+    if (Object.keys(entry).length > 0) out[id] = entry
+  }
+  return out
+}
+
+/** Level 1 — the ad accounts. Search, select all, clear, and a count; at least one is required. */
+function AccountPicker({ ar, accounts, selected, query, onQuery, onToggle, onAll, onClear }: {
+  ar: boolean
+  accounts: AdAccountRef[]
+  selected: string[]
+  query: string
+  onQuery: (v: string) => void
+  onToggle: (id: string) => void
+  onAll: () => void
+  onClear: () => void
+}) {
+  const needle = query.trim().toLocaleLowerCase()
+  const shown = accounts.filter((a) => needle === '' || `${a.name} ${a.provider}`.toLocaleLowerCase().includes(needle))
+
+  return (
+    <div className="grid gap-2" data-testid="live-builder-accounts">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-text-muted">{ar ? 'الحسابات الإعلانية' : 'Ad accounts'}</span>
+        <span className="flex items-center gap-2 text-[11px] text-text-muted">
+          <span data-testid="live-builder-accounts-count">{ar ? `${selected.length} من ${accounts.length} محدد` : `${selected.length} of ${accounts.length} selected`}</span>
+          <button type="button" onClick={onAll} className="font-bold text-brand-700 hover:underline">{ar ? 'تحديد الكل' : 'Select all'}</button>
+          <button type="button" onClick={onClear} disabled={selected.length === 0} className="font-bold text-brand-700 hover:underline disabled:opacity-40">{ar ? 'مسح' : 'Clear'}</button>
+        </span>
+      </div>
+      {accounts.length > 6 && (
+        <input
+          type="search"
+          aria-label={ar ? 'ابحث عن حساب إعلاني' : 'Search ad accounts'}
+          data-testid="live-builder-account-search"
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          placeholder={ar ? 'ابحث باسم الحساب' : 'Search by account name'}
+          className="min-w-0 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+        />
+      )}
+      {accounts.length === 0 ? (
+        <p className="text-xs text-text-muted">{ar ? 'لا حسابات إعلانية مرتبطة بهذا المشروع بعد.' : 'No ad accounts are bound to this project yet.'}</p>
+      ) : (
+        <div className="grid max-h-36 gap-1 overflow-y-auto">
+          {shown.map((a) => (
+            <label key={a.id} className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={selected.includes(a.id)} onChange={() => onToggle(a.id)} data-testid={`live-builder-account-${a.id}`} className="h-3.5 w-3.5 shrink-0 accent-brand-600" />
+              <span className="min-w-0 flex-1 truncate">{a.name}</span>
+              <span className="shrink-0 text-text-muted"><PlatformMark platform={a.provider} size={12} /></span>
+            </label>
+          ))}
+          {shown.length === 0 && <p className="text-xs text-text-muted">{ar ? 'لا حساب يطابق البحث.' : 'No account matches the search.'}</p>}
+        </div>
+      )}
+      {selected.length === 0 && accounts.length > 0 && (
+        <p className="text-[11px] text-danger" data-testid="live-builder-accounts-required">
+          {ar ? 'اختر حسابًا واحدًا على الأقل — لا يُشمل أي حساب تلقائيًا.' : 'Choose at least one — no account is included by default.'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Level 3 — the ads inside the ticked campaigns. Nothing ticked = every ad of those campaigns. */
+function AdPicker({ ar, ads, loading, tooMany, campaigns, selected, query, onQuery, onToggle, onClear }: {
+  ar: boolean
+  ads: LiveBuilderAd[]
+  loading: boolean
+  tooMany: boolean
+  campaigns: LiveBuilderOptions['campaigns']
+  selected: string[]
+  query: string
+  onQuery: (v: string) => void
+  onToggle: (id: string) => void
+  onClear: () => void
+}) {
+  const needle = query.trim().toLocaleLowerCase()
+  const nameOf = (id: string) => campaigns.find((c) => c.id === id)?.name ?? ''
+  const shown = ads.filter((a) => needle === '' || `${a.name} ${nameOf(a.campaign_id)}`.toLocaleLowerCase().includes(needle))
+
+  if (tooMany) return null
+
+  return (
+    <div className="grid gap-2" data-testid="live-builder-ads">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-text-muted">{ar ? 'الإعلانات' : 'Ads'}</span>
+        <span className="flex items-center gap-2 text-[11px] text-text-muted">
+          <span data-testid="live-builder-ads-count">
+            {selected.length === 0 ? (ar ? 'كل إعلانات الحملات المحددة' : 'All ads of the ticked campaigns') : (ar ? `${selected.length} من ${ads.length} محدد` : `${selected.length} of ${ads.length} selected`)}
+          </span>
+          <button type="button" onClick={onClear} disabled={selected.length === 0} className="font-bold text-brand-700 hover:underline disabled:opacity-40">{ar ? 'مسح' : 'Clear'}</button>
+        </span>
+      </div>
+      {loading ? (
+        <Skeleton className="h-10 w-full" />
+      ) : ads.length === 0 ? (
+        <p className="text-xs text-text-muted">{ar ? 'لا إعلانات مسجلة لهذه الحملات.' : 'No ads are recorded for these campaigns.'}</p>
+      ) : (
+        <>
+          {ads.length > 8 && (
+            <input
+              type="search"
+              aria-label={ar ? 'ابحث عن إعلان' : 'Search ads'}
+              data-testid="live-builder-ad-search"
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder={ar ? 'ابحث باسم الإعلان أو الحملة' : 'Search by ad or campaign'}
+              className="min-w-0 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
+            />
+          )}
+          <div className="grid max-h-36 gap-1 overflow-y-auto">
+            {shown.map((a) => (
+              <label key={a.id} className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={selected.includes(a.id)} onChange={() => onToggle(a.id)} className="h-3.5 w-3.5 shrink-0 accent-brand-600" />
+                <span className="min-w-0 flex-1 truncate">{a.name}<span className="text-text-muted">{' · '}{nameOf(a.campaign_id)}</span></span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   )
 }

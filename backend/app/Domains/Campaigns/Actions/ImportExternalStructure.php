@@ -236,6 +236,17 @@ final class ImportExternalStructure
                 'cards' => $creative['cards'] ?? null,
                 'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
                 'destination_url' => $creative['destination_url'] ?? null,
+                /*
+                 * CONTENT-NOTHING-TO-DRAW-WHY-001 — the body the platform sent, kept.
+                 *
+                 * `raw` has been a fillable, cast column since the model was written and nothing here ever
+                 * wrote it, so «what did the provider send for the creatives that draw nothing» could only
+                 * answer «no payload kept» — Production 2026-10-18 printed exactly that for all ten OpenAI chat
+                 * cards, after the connector had started handing the payload over. A connector that sends
+                 * none keeps none, and an oversized body is dropped rather than stored (a creative row is
+                 * read on every card of the library).
+                 */
+                'raw' => $this->keptBody($creative['raw'] ?? null),
                 'source_type' => 'api',
                 'is_demo' => false,
                 'last_synced_at' => Carbon::now(),
@@ -245,6 +256,20 @@ final class ImportExternalStructure
         $counts['creatives']++;
 
         return (string) $row->getKey();
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private function keptBody(mixed $raw): ?array
+    {
+        if (! is_array($raw) || $raw === []) {
+            return null;
+        }
+
+        $encoded = json_encode($raw);
+
+        return $encoded !== false && strlen($encoded) <= 16_384 ? $raw : null;
     }
 
     /** A platform timestamp, or null — an unparseable one is not worth failing a whole import over. */

@@ -191,6 +191,7 @@ final class ReportContentFormatsTest extends TestCase
         $created = $this->actingAs($this->operator, 'sanctum')
             ->postJson("/api/v1/projects/{$this->project->getKey()}/reports/live", array_merge([
                 'name' => 'Client link',
+                'account_ids' => [(string) $this->account->getKey()],
                 'from' => '2026-09-01',
                 'to' => '2026-09-30',
                 'form' => 'detailed',

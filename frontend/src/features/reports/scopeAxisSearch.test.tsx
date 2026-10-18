@@ -144,18 +144,16 @@ describe('searching an axis the list could not hold', () => {
     renderWithProviders(
       <ReportScopePicker
         projectId="p1"
-        value={{ from: '2026-07-01', to: '2026-07-31' }}
+        value={{ from: '2026-07-01', to: '2026-07-31', account_ids: ['a1'] }}
         onChange={vi.fn()}
         audience="internal"
       />,
       { locale: 'en' },
     )
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    await screen.findByTestId('scope-select-Campaigns')
 
     const box = within(await screen.findByTestId('scope-select-Campaigns'))
-    fireEvent.click(box.getAllByRole('combobox')[0])
-
-    const names = box.getAllByRole('option').map((o) => o.textContent ?? '')
+    const names = box.getAllByRole('checkbox').map((c) => (c.closest('label') as HTMLElement).textContent ?? '')
     expect(names[0], 'today’s status decided the order of a historical report').toContain('Ran in July')
   })
 
