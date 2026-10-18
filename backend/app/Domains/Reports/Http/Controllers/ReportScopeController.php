@@ -140,7 +140,7 @@ final class ReportScopeController extends Controller
             UnifiedCampaign::query()
                 ->where('project_id', $project)
                 ->when($fObjectives !== [], fn ($q) => $q->whereIn('objective', $fObjectives))
-                ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->whereIn(
+                ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->where(fn ($w) => $w->whereIn(
                     'id',
                     ExternalCampaign::query()
                         ->where('project_id', $project)
@@ -148,7 +148,21 @@ final class ReportScopeController extends Controller
                         ->when($fAccounts !== [], fn ($e) => $e->whereIn('external_account_id', $fAccounts))
                         ->whereNotNull('unified_campaign_id')
                         ->select('unified_campaign_id'),
-                ))
+                )
+                    /*
+                     * REPORT-SCOPE-HIERARCHY-001 — and the campaigns an account has FIGURES for. The
+                     * structure join alone left a metrics-only account with an empty campaign list,
+                     * which is the same two sources the account list and the server's check use.
+                     */
+                    ->when($fAccounts !== [], fn ($x) => $x->orWhereIn(
+                        'id',
+                        DailyMetric::query()
+                            ->where('project_id', $project)
+                            ->whereIn('external_account_id', $fAccounts)
+                            ->when($fProviders !== [], fn ($m) => $m->whereIn('provider', $fProviders))
+                            ->whereNotNull('unified_campaign_id')
+                            ->select('unified_campaign_id'),
+                    ))))
                 ->when($fDestinations !== [], fn ($q) => $q->whereIn('id', array_keys(array_filter(
                     $destinationOf,
                     fn (LeadDestination $d): bool => in_array($d->value, $fDestinations, true),

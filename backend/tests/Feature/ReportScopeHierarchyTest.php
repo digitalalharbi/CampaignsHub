@@ -248,4 +248,12 @@ final class ReportScopeHierarchyTest extends TestCase
         $razzahA = collect($data['campaigns'])->firstWhere('id', (string) $this->razzahA->id);
         $this->assertSame([$this->razzah], array_column($razzahA['accounts'], 'id'));
     }
+
+    public function test_the_picker_narrows_campaigns_to_the_selected_accounts(): void
+    {
+        $url = "/api/v1/projects/{$this->project->id}/reports/scope/options?account_ids[]={$this->razzah}&account_ids[]={$this->razzah2}";
+        $names = collect($this->getJson($url)->assertOk()->json('data.campaigns'))->pluck('name')->sort()->values()->all();
+
+        $this->assertSame(['Razzah A', 'Razzah B', 'Razzah2 A'], $names);
+    }
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { ReportScopePicker } from './ReportScopePicker'
 import type { ScopeOptions } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -48,9 +48,9 @@ const INTERNAL_NAMES = [
   'hero_video_v3_final',
 ]
 
-const render = (audience: string) =>
+const render = (audience: string, value: Record<string, unknown> = {}) =>
   renderWithProviders(
-    <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience={audience} />,
+    <ReportScopePicker projectId="p1" value={value as never} onChange={vi.fn()} audience={audience} />,
     { locale: 'en' },
   )
 
@@ -115,9 +115,9 @@ describe('what a report builder may name, by audience', () => {
    * account, campaign, ad set, ad and creative, and can reach those names.
    */
   it('an internal report keeps the whole hierarchy', async () => {
-    render('internal')
+    render('internal', { account_ids: ['a1'] })
     await screen.findByText('Platforms')
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    await screen.findByTestId('scope-select-Campaigns')
 
     for (const axis of ['Ad sets', 'Content']) {
       expect(
@@ -128,11 +128,7 @@ describe('what a report builder may name, by audience', () => {
 
     /* And the names are genuinely reachable — one axis opened is enough to prove the wiring. */
     const campaigns = screen.getByTestId('scope-select-Campaigns')
-    fireEvent.click(within(campaigns).getAllByRole('combobox')[0])
-
-    expect(
-      within(campaigns).getByRole('option', { name: /Prospecting Broad KSA/ }),
-    ).toBeInTheDocument()
+    expect(within(campaigns).getByText(/Prospecting Broad KSA/)).toBeInTheDocument()
   })
 
   /**

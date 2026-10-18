@@ -138,15 +138,8 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
 export async function chooseFirstAccount(page: import('@playwright/test').Page): Promise<void> {
   const box = page.locator('[data-kind="accounts"]')
   await expect(box, 'the project offers no ad account to build a report from').toBeVisible({ timeout: 20_000 })
-  await box.getByRole('combobox').first().click()
-  // Every account the project offers, as a report covered before accounts were chosen.
-  const trigger = box.getByRole('combobox').first()
-  const options = page.getByRole('listbox').getByRole('option')
-  const count = await options.count()
-  for (let i = 0; i < count; i++) {
-    if (!(await page.getByRole('listbox').isVisible())) await trigger.click()
-    const option = options.nth(i)
-    if ((await option.getAttribute('aria-selected')) !== 'true') await option.click()
-  }
-  if (await page.getByRole('listbox').isVisible()) await trigger.click()
+  // Visible checkboxes: tick every account the project offers, as a report covered before accounts were chosen.
+  const boxes = box.getByRole('checkbox')
+  const count = await boxes.count()
+  for (let i = 0; i < count; i++) await boxes.nth(i).check()
 }
