@@ -1,4 +1,5 @@
 import {
+  Bot,
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
   Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users, Lightbulb, Wallet } from 'lucide-react'
@@ -130,6 +131,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
        * more media than any advertiser, had neither.
        */
       { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
+      { to: '/agency/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot },
       { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
     ],

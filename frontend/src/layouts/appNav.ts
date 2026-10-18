@@ -1,4 +1,5 @@
 import {
+  Bot,
   Layers,
   Link2,
   BarChart3,
@@ -87,6 +88,7 @@ export const appNavGroups: readonly NavGroup[] = [
       { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
       { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
+      { to: '/app/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, ent: 'analytics' },
       { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
       { to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' },
     ],

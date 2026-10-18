@@ -10,6 +10,7 @@ import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
+import { AgentCenterPage } from '@/features/agents/AgentCenterPage'
 import { ApprovalsPage } from '@/features/agents/ApprovalsPage'
 import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
 import { ExecutiveOpsPage } from '@/features/crm/ExecutiveOpsPage'
@@ -335,6 +336,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            * was reachable only by opening its campaign. The field was written and never acted on.
            */
           { path: 'recommendations', element: <RecommendationsPage /> },
+          { path: 'agents', element: <AgentCenterPage /> },
           { path: 'agents/approvals', element: <ApprovalsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
           /*
@@ -600,6 +602,7 @@ export const router = createBrowserRouter(withErrorBoundary([
              * resolve their own portal for every link they draw.
              */
             { path: 'recommendations', element: <RecommendationsPage /> },
+            { path: 'agents', element: <AgentCenterPage /> },
             { path: 'agents/approvals', element: <ApprovalsPage /> },
             { path: 'spend-limits', element: <SpendLimitsPage /> },
             { path: 'tasks', element: <TasksPage /> },
