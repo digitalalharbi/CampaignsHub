@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { API_HEADERS, AUTH, selectProject } from './helpers'
 
 /**
  * TYPOGRAPHY-PRODUCT-POLISH-001 — the report list a phone can actually read.
@@ -16,6 +16,20 @@ import { AUTH } from './helpers'
 test.use({ storageState: AUTH.advertiser })
 
 test('the report list is readable on a phone, and is a table on a desktop', async ({ page }) => {
+  /*
+   * Open a project that HAS reports. The app opens the advertiser's default project, and a spec that
+   * creates a project for this advertiser moves that default to one with no reports — the list was
+   * then correctly empty and this check failed on a fact about another spec (Firefox CI, #755).
+   */
+  const projects = ((await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json()).data ?? []) as Array<{ id: string }>
+  let withReports: string | null = null
+  for (const p of projects) {
+    const r = await page.request.get(`/api/v1/projects/${p.id}/reports`, { headers: API_HEADERS })
+    if (r.ok() && ((await r.json()).data?.reports ?? []).length > 0) { withReports = p.id; break }
+  }
+  expect(withReports, 'the advertiser has no project with a saved report to list').not.toBeNull()
+  await selectProject(page, withReports!)
+
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/app/reports')
 
