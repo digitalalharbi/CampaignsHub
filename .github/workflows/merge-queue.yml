@@ -37,8 +37,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      GH_TOKEN: ${{ github.token }}
+      # MERGE_QUEUE_TOKEN (optional) is a fine-grained token with contents, pull-requests and actions
+      # write. A branch update or merge made with IT starts the same workflows a person's push would;
+      # one made with the repository token does not, and a CI run started by dispatch is not counted by
+      # the pull request's required checks (measured on #756: the checks existed on the commit and the
+      # pull request still reported none). Without the token the queue can merge and report, but it
+      # cannot make a stale PR testable.
+      GH_TOKEN: ${{ secrets.MERGE_QUEUE_TOKEN || github.token }}
       GH_REPO: ${{ github.repository }}
+      HAVE_QUEUE_TOKEN: ${{ secrets.MERGE_QUEUE_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,13 +74,18 @@ jobs:
             fi
 
             if [ "$merge" = "BEHIND" ]; then
-              gh pr update-branch "$pr" && gh workflow run ci.yml --ref "$branch"
-              echo "#$pr was behind main: branch updated and CI started. Waiting."
+              if [ "$HAVE_QUEUE_TOKEN" = "true" ]; then
+                gh pr update-branch "$pr"
+                echo "#$pr was behind main: branch updated; its pull_request CI starts from that push. Waiting."
+                exit 0
+              fi
+              echo "::warning::#$pr is behind main and this run has no MERGE_QUEUE_TOKEN, so it cannot start CI that the pull request would count. Push the updated branch yourself (git merge origin/main && git push), or add the MERGE_QUEUE_TOKEN secret."
               exit 0
             fi
 
             # Check runs for THIS head only, by name; a name that is absent is not a pass.
-            runs=$(gh api "repos/$GH_REPO/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | {name, status, conclusion}]')
+            # The pull request's own view of its checks — what branch protection counts — not every run on the commit.
+            runs=$(gh pr view "$pr" --json statusCheckRollup --jq '[.statusCheckRollup[] | {name: (.name // .context), status: ((.status // "COMPLETED") | ascii_downcase), conclusion: ((.conclusion // .state // "") | ascii_downcase)}]')
             pending=0
             for need in "${REQUIRED[@]}"; do
               row=$(jq -c --arg n "$need" '[.[] | select(.name==$n)] | last // empty' <<<"$runs")
@@ -91,7 +103,8 @@ jobs:
 
             gh pr merge "$pr" --squash || { echo "::error::#$pr could not be merged (see the message above). Halted."; exit 1; }
             echo "#$pr merged."
-            gh workflow run deploy-production.yml --ref main
+            # A merge made with the repository token does not trigger the push-based deploy.
+            if [ "$HAVE_QUEUE_TOKEN" != "true" ]; then gh workflow run deploy-production.yml --ref main; fi
             echo "Deploy started for the new main."
             # The next PR is now behind main; the next iteration updates it.
           done
