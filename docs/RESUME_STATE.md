@@ -1,6 +1,6 @@
 # START HERE — 2026-10-18 (late) — resuming in a new Claude session
 
-**Git is the authority.** The merge queue is no longer a script in a session: it is `.github/workflows/merge-queue.yml`, ordered by `docs/MERGE_QUEUE.md` (every 15 minutes and after each CI run it updates the head PR, waits, or squash-merges and starts the deploy; a red check halts it, nothing is bypassed). Until that workflow is on `main` the order is: **#756 (P0 report scope) → this queue PR → #744 → #754 → #755 → #752**.
+**Git is the authority.** The merge queue is no longer a script in a session: it is `.github/workflows/merge-queue.yml`, ordered by `docs/MERGE_QUEUE.md` (every 15 minutes and after each CI run it updates the head PR, waits, or squash-merges and starts the deploy; a red check halts it, nothing is bypassed). The order is **#756 (P0 report scope) → #744 → #754 → #755 → #752**; #757 (the queue itself) is merged first, by hand, because it only changes a workflow and docs.
 
 **Session limitation, not a development blocker:** background processes started from a Claude session die when it ends (this killed the previous watcher). Never rebuild one; read `gh pr list` and the queue file.
 
