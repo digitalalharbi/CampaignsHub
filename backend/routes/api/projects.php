@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Agents\Http\Controllers\ActionProposalController;
+use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
@@ -285,6 +286,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue. Reading needs to see campaigns; putting a change
      * forward or deciding one needs to manage them, and the controller adds the tenant permission.
      */
+    // AGENTS-CLIENT-RULES-001 — goals, decision rules and gateway limits; the comparison agents start from.
+    Route::get('agent-rules', [AgentRulesController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-rules.show');
+    Route::put('agent-rules', [AgentRulesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-rules.update');
+    Route::get('agent-rules/compare', [AgentRulesController::class, 'compare'])->middleware('project.can:analytics.view')->name('agent-rules.compare');
     Route::get('agent-proposals', [ActionProposalController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-proposals.index');
     Route::post('agent-proposals', [ActionProposalController::class, 'store'])->middleware('project.can:campaigns.manage')->name('agent-proposals.store');
     Route::post('agent-proposals/{proposal}/approve', [ActionProposalController::class, 'approve'])->middleware('project.can:campaigns.manage')->name('agent-proposals.approve');
