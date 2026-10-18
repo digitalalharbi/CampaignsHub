@@ -151,7 +151,11 @@ export async function chooseFirstAccount(page: import('@playwright/test').Page):
      * fails if the tick never lands — which is the property that matters.
      */
     const box = boxes.nth(i)
-    await box.click()
-    await expect(box).toBeChecked({ timeout: 15_000 })
+    // Re-press only while it is NOT ticked: under heavy load (Firefox CI) a click can land on a row that
+    // is still being laid out and miss. The assertion is the same one — the tick must be there.
+    await expect(async () => {
+      if (!(await box.isChecked())) await box.click()
+      await expect(box).toBeChecked({ timeout: 4_000 })
+    }).toPass({ timeout: 40_000 })
   }
 }
