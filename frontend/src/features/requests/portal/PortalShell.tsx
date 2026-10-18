@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { productName } from '@/lib/brand'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, Moon, Sun } from 'lucide-react'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
+import { signOutCompletely } from '@/features/auth/signOut'
 import { PORTAL_MORE_ORDER, PORTAL_PRIMARY, PortalNav, useVisiblePortalNav } from './portalNav'
 import { useClientSpacePath } from './clientSpace'
 import { brandStyle, useClientBranding } from './useClientBranding'
@@ -36,7 +37,6 @@ export function PortalShell({
   const toggleLocale = useUi((s) => s.toggleLocale)
   const toggleTheme = useUi((s) => s.toggleTheme)
   const ar = locale === 'ar'
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const spaceTo = useClientSpacePath()
   const branding = useClientBranding()
@@ -79,10 +79,18 @@ export function PortalShell({
   const [brokenLogo, setBrokenLogo] = useState<string | null>(null)
   const logo = uploaded !== undefined && uploaded.url !== brokenLogo ? uploaded : undefined
 
+  /*
+   * OWNER DEFECT 2026-10-18 — leaving the portal went to `/switch` with «تعذّر تحميل مساحات العمل».
+   *
+   * This ended the portal session and navigated through the router, leaving the SPA's signed-in user in
+   * memory: `/login` bounced that user onward, a person with several workspaces reached the switcher,
+   * and the switcher's request was refused by the session that no longer existed. The exit is the shared
+   * complete one — server session, store, cache, owned storage — ending in a hard navigation to the
+   * sign-in page, so no stale guard can read what the exit had not yet cleared.
+   */
   const signOut = async () => {
-    try { await portalLogout() } catch { /* clearing the local session is enough to sign the user out */ }
-    qc.clear()
-    navigate('/login', { replace: true })
+    try { await portalLogout() } catch { /* the shared exit below ends the rest, and tolerates a failure of its own */ }
+    await signOutCompletely(qc, '/login')
   }
 
   return (
