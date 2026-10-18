@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
-import { legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 import { renderWithProviders } from '@/test/utils'
 
 /**
@@ -85,5 +85,30 @@ describe('the /* → /app/* redirect list', () => {
     '/clients/:clientId',
   ])('still serves %s', (path) => {
     expect(covered.has(path)).toBe(true)
+  })
+})
+
+/** CP-ROUTING-001 — the old `/portal/clients/<slug>/…` form lands on the same page in the clean form. */
+describe('the /portal/clients/<slug> → /portal/<slug> redirect', () => {
+  function renderSpace(route: string) {
+    return renderWithProviders(
+      <Routes>
+        <Route path="/portal/clients/:clientSlug/*" element={<LegacyClientSpaceRedirect />} />
+        <Route path="/portal/clients/:clientSlug" element={<LegacyClientSpaceRedirect />} />
+        <Route path="/portal/:clientSlug" element={<p>space:home</p>} />
+        <Route path="/portal/:clientSlug/invoices/:id" element={<p>space:invoice</p>} />
+      </Routes>,
+      { route, locale: 'en' },
+    )
+  }
+
+  it('keeps the slug and the record', () => {
+    renderSpace('/portal/clients/razzahavenu')
+    expect(screen.getByText('space:home')).toBeInTheDocument()
+  })
+
+  it('carries the section and the id through', () => {
+    renderSpace('/portal/clients/resano/invoices/inv-7')
+    expect(screen.getByText('space:invoice')).toBeInTheDocument()
   })
 })

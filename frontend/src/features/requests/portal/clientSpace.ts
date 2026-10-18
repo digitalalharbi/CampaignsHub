@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import { CLIENT_SPACE_PREFIX, clientSpaceSlugOf, getData } from '@/lib/api/client'
+import { clientSpaceSlugOf, getData } from '@/lib/api/client'
 
 /**
  * Isolated client spaces (PORTAL-CLIENT-001).
@@ -22,7 +22,8 @@ export { clientSpaceSlugOf }
 export function clientSpaceBaseOf(pathname: string): string {
   const slug = clientSpaceSlugOf(pathname)
 
-  return slug === null ? '/portal' : `${CLIENT_SPACE_PREFIX}${encodeURIComponent(slug)}`
+  // CP-ROUTING-001 — links are always written in the clean form, whichever form the visitor arrived by.
+  return slug === null ? '/portal' : `/portal/${encodeURIComponent(slug)}`
 }
 
 export function useClientSpaceSlug(): string | null {

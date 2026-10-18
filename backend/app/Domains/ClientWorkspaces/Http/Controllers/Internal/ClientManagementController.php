@@ -9,6 +9,7 @@ use App\Domains\ClientWorkspaces\Enums\Industry;
 use App\Domains\ClientWorkspaces\Enums\ServiceLevel;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\ClientWorkspaces\Services\ClientManagementService;
+use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -75,11 +76,25 @@ final class ClientManagementController
             'settings.report_prefs.default_format' => ['sometimes', 'nullable', 'in:pdf,xlsx,csv'],
             'settings.alert_prefs.budget_risk' => ['sometimes', 'boolean'],
             'settings.alert_prefs.sync_failed' => ['sometimes', 'boolean'],
+            // CP-VISIBILITY-001 — what the client's portal may show and do; stored sanitised, never raw.
+            'settings.portal.visibility' => ['sometimes', 'array'],
+            'settings.portal.capabilities' => ['sometimes', 'array'],
         ]);
+
+        $settings = $validated['settings'] ?? [];
+        if (isset($settings['portal'])) {
+            // Only the keys the contract knows, as booleans, merged over what is stored — an omitted key
+            // keeps its earlier choice, and a key nobody defined can never be written.
+            $stored = (array) data_get($c->settings, 'portal', []);
+            $settings['portal'] = [
+                'visibility' => PortalVisibility::sanitiseVisibility((array) ($settings['portal']['visibility'] ?? [])) + (array) ($stored['visibility'] ?? []),
+                'capabilities' => PortalVisibility::sanitiseCapabilities((array) ($settings['portal']['capabilities'] ?? [])) + (array) ($stored['capabilities'] ?? []),
+            ];
+        }
 
         $c = $this->service->updateSettings(
             $c,
-            $validated['settings'] ?? [],
+            $settings,
             $request->user(),
             $validated['name'] ?? null,
             $validated['branding'] ?? null,
