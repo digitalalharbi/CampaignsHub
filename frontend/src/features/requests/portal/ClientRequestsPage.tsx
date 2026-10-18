@@ -17,6 +17,7 @@ function statusTone(s: string): string {
 
 export function ClientRequestsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const spaceTo = useClientSpacePath()
   const q = useQuery({ queryKey: ['client', 'requests'], queryFn: listPortalRequests, retry: false })
   usePortalGuard(q.isError, q.error)
 
@@ -29,7 +30,7 @@ export function ClientRequestsPage() {
           <h1 className="font-heading text-2xl font-extrabold text-text-primary">{ar ? 'طلباتي' : 'My requests'}</h1>
           <p className="mt-1 text-sm text-text-secondary">{ar ? 'تابع حالة طلباتك وتواصل مع الفريق ومشاركة الملفات.' : 'Track your requests, message the team and share files.'}</p>
         </div>
-        <Link to="/requests/new" className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"><Plus size={16} /> {ar ? 'طلب جديد' : 'New request'}</Link>
+        <Link to={spaceTo('/requests/new')} className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"><Plus size={16} /> {ar ? 'طلب جديد' : 'New request'}</Link>
       </div>
 
       {q.isLoading ? (

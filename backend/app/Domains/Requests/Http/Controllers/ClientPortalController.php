@@ -20,6 +20,7 @@ use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
@@ -35,6 +36,7 @@ use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Services\ClientPortalIdentity;
+use App\Domains\Requests\Services\ClientRequestCreator;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
@@ -186,7 +188,7 @@ final class ClientPortalController
     }
 
     /** POST /client/logout */
-    public function logout(Request $request): JsonResponse
+    public function logout(Request $request, SessionRevocations $revocations): JsonResponse
     {
         $token = $this->resolveSession($request);
 
@@ -200,6 +202,18 @@ final class ClientPortalController
         // Both engines end together. Revoking one and leaving the other is how "I signed out" stops
         // being true while still looking like it worked.
         if (Auth::guard('web')->check()) {
+            /*
+             * OWNER DEFECT 102 — record the id BEFORE it is destroyed, exactly as `/auth/logout` does.
+             *
+             * This ended the session and recorded nothing, and the client's follow-up `/auth/logout` is
+             * answered 401 once the session is gone, so it never reached the controller that records it.
+             * A dashboard request still in flight then wrote its payload back under the same id and the
+             * visitor was bounced from /login straight back into the portal (ACCESS-EXIT-003).
+             */
+            if ($request->hasSession()) {
+                $revocations->revoke($request->session()->getId());
+            }
+
             Auth::guard('web')->logout();
 
             if ($request->hasSession()) {
@@ -237,6 +251,52 @@ final class ClientPortalController
             ]);
 
         return response()->json(['data' => ['requests' => $requests]]);
+    }
+
+    /**
+     * POST /client/requests — a client opens a request from inside their space (CP-REQ-ONE-001).
+     *
+     * The space is the one the session is in, never a parameter. The agency chooses whether a client
+     * may ask at all (`create_requests`), and a space whose requests section is switched off cannot
+     * be written to either — a section the client cannot see is not one they open things in.
+     */
+    public function store(Request $request, ClientRequestCreator $creator): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $this->requireActor($token);
+
+        $owned = $this->ownedWorkspaceModels($token);
+        // Exactly one space, from the session: a request must belong to a client, and guessing which
+        // of several would put it in the wrong one.
+        abort_if(count($owned) !== 1, 422, 'Choose a client space first.');
+        /** @var ClientWorkspace $space */
+        $space = array_values($owned)[0];
+        abort_unless(PortalVisibility::allows($space, 'requests'), 403, 'Requests are not available in this space.');
+        abort_unless((PortalVisibility::capabilitiesFor($space)['create_requests'] ?? false) === true, 403, 'Your agency has not enabled new requests here.');
+
+        $data = $request->validate([
+            'type' => ['required', 'string', Rule::exists('request_types', 'key')->where('is_active', true)],
+            'message' => ['required', 'string', 'min:5', 'max:4000'],
+            'priority' => ['nullable', Rule::in(['low', 'medium', 'high'])],
+            'project_id' => ['nullable', 'string', 'max:64'],
+            'related' => ['nullable', 'array'],
+            'related.kind' => ['required_with:related', Rule::in(['campaign', 'report', 'invoice'])],
+            'related.id' => ['required_with:related', 'string', 'max:64'],
+        ]);
+
+        try {
+            $created = $creator->create($space, $token, $data, $this->restrictedProjectIds($token));
+        } catch (InvalidArgumentException) {
+            // The same answer for «not yours» and «does not exist».
+            abort(404);
+        }
+
+        return response()->json(['data' => [
+            'reference' => $created->reference,
+            'status' => 'new',
+            'submitted_at' => optional($created->submitted_at)->toIso8601String(),
+        ]], 201);
     }
 
     /** GET /client/requests/{reference} — client-safe detail + resulting project/campaign after conversion. */
