@@ -597,7 +597,7 @@ final class AdPlatformConnectorTest extends TestCase
                     return Http::response(['code' => 40002, 'message' => 'item not found', 'request_id' => 'r']);
                 }
 
-                return Http::response(['code' => 0, 'data' => ['video_detail' => ['item_id' => 'x', 'video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/spark-1.jpg', 'preview_url' => 'https://v16.tiktokcdn.com/spark-1.mp4']]]]);
+                return Http::response(['code' => 0, 'data' => ['video_detail' => ['item_id' => 'x', 'video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/spark-1.jpg', 'url' => 'https://v16.tiktokcdn.com/spark-1.mp4', 'duration' => 12, 'format' => 'mp4']]]]);
             }
 
             return Http::response(['code' => 0, 'data' => ['list' => [

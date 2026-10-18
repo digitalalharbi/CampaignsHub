@@ -626,8 +626,9 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 ], static fn ($x) => $x !== null);
             } elseif (isset($posts[$id])) {
                 $v = $posts[$id];
+                // Measured 2026-10-18: video_info carries bit_rate, duration, format, height, poster_url, signature, size, url, width.
                 $poster = collect(['poster_url', 'cover_image_url', 'cover_url', 'video_cover_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
-                $file = collect(['preview_url', 'video_url', 'play_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
+                $file = collect(['preview_url', 'url', 'video_url', 'play_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
                 $creative += array_filter([
                     'thumbnail_url' => $poster,
                     'video_url' => $file,
