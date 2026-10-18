@@ -323,7 +323,7 @@ final class ReportObservations
                  * it for them keeps spending.
                  */
                 'detail' => sprintf(
-                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف CampaignsHub العرض — أوقف الحملة على المنصة إن كان هذا المقصود.',
+                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف كامبينز هب العرض — أوقف الحملة على المنصة إن كان هذا المقصود.',
                     number_format((float) ($limit['consumed'] ?? 0), 2),
                     $currency,
                     number_format((float) ($limit['amount'] ?? 0), 2),
