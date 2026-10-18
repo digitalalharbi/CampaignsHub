@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
+import { chooseFirstAccount } from './report-builder'
 
 /**
  * REPORT-SCOPE-SELECTION-001 §B — the grouping, in a browser, on real seeded data.
@@ -69,34 +70,19 @@ async function openBuilder(page: Page, locale: 'ar' | 'en') {
 }
 
 /** The campaigns control, addressed by its own testid — which carries the LOCALIZED axis label. */
-const campaignsBox = (page: Page, locale: 'ar' | 'en') =>
-  page.getByTestId(`scope-select-${COPY[locale].axis}`)
+const campaignsBox = (page: Page) => page.locator('[data-kind="campaigns"]')
 
-async function openCampaigns(page: Page, locale: 'ar' | 'en') {
-  // REPORT-SETUP-001 — campaigns are listed under «Selected campaigns»; «All campaigns» is the default.
-  const selected = page.getByRole('radio', { name: /حملات محددة|Selected campaigns/ })
-  if (await selected.getAttribute('aria-checked') !== 'true') await selected.click()
+async function openCampaigns(page: Page, _locale: 'ar' | 'en') {
+  // REPORT-SCOPE-HIERARCHY-001 — campaigns are a list of checkboxes for the TICKED accounts, so the
+  // accounts are chosen first; nothing needs opening.
+  await chooseFirstAccount(page)
 
-  const box = campaignsBox(page, locale)
+  const box = campaignsBox(page)
   await expect(box).toBeVisible({ timeout: 30000 })
-  await box.getByRole('combobox').first().click()
 
   return box
 }
 
-/**
- * Name the window, and PROVE it was named.
- *
- * The value is asserted after each fill because this helper proved nothing about its own effect:
- * `waitForLoadState('networkidle')` is a guarantee about the NETWORK, and a period that never
- * reached React issues no request at all — so it resolved instantly and the test walked on with an
- * unnamed window. That surfaced forty lines later as a missing «عملت في هذه الفترة», reading as «the
- * grouping is broken» when what had actually happened is that nobody had asked for a period.
- *
- * Only the FIRST test in this file ever failed that way, and only on webkit: the three tests after
- * it make the same assertion through the same helper and passed in the same run, which is what says
- * the grouping renders and the helper is what was unreliable.
- */
 async function setPeriod(page: Page) {
   /*
    * No Escape between the fields, and that is load-bearing rather than an omission.
@@ -153,7 +139,7 @@ for (const locale of ['ar', 'en'] as const) {
       await expect(box.getByText('حملة الإطلاق — لم تُشغَّل بعد', { exact: false }).first()).toBeVisible()
 
       /* The heading decides emphasis, never membership. */
-      const options = box.getByRole('option')
+      const options = box.getByRole('checkbox')
       expect(await options.count(), 'the grouping dropped campaigns from the list').toBeGreaterThan(1)
     })
 
@@ -169,14 +155,14 @@ for (const locale of ['ar', 'en'] as const) {
       await expect(box.getByText(t.ran, { exact: false })).toHaveCount(0)
       await expect(box.getByText(t.quiet, { exact: false })).toHaveCount(0)
       /* The control still works — this is «no claim», not «no list». */
-      expect(await box.getByRole('option').count()).toBeGreaterThan(0)
+      expect(await box.getByRole('checkbox').count()).toBeGreaterThan(0)
     })
 
     /**
-     * The server's axis search cannot answer «did it run in this window», so its results may not be
-     * filed under either heading. Three characters is the threshold the control asks the server at.
+     * Searching narrows the list in place. The campaigns are the page's own rows, whose reportability
+     * is known, so the headings stay true while the list shrinks — nothing is re-asked of the server.
      */
-    test('a server-searched row carries no reportability claim', async ({ page, request }) => {
+    test('searching narrows the campaigns without losing the headings that still apply', async ({ page, request }) => {
       await selectProject(page, await seededProject(request, PROJECT))
       await openBuilder(page, locale)
       await setPeriod(page)
@@ -184,26 +170,15 @@ for (const locale of ['ar', 'en'] as const) {
       const box = await openCampaigns(page, locale)
       await expect(box.getByText(t.ran, { exact: false }).first()).toBeVisible()
 
-      /*
-       * The panel's search is the SECOND combobox in the control, not a searchbox.
-       *
-       * `PanelSearch` renders `<input type="text" role="combobox">` — the trigger is the first
-       * combobox and the search is the second. A first version asked for `getByRole('searchbox')`,
-       * matched nothing, and failed both locales on a missing input while claiming the search results
-       * carried a heading.
-       */
-      const search = box.getByRole('combobox').nth(1)
-      await expect(search).toBeVisible()
-      await search.fill('الإطلاق')
-      await page.waitForLoadState('networkidle')
+      const before = await box.getByRole('checkbox').count()
+      await box.getByTestId('scope-search-campaigns').fill('الإطلاق')
 
-      /*
-       * Once the server has answered, the list it replaced the page's own with is unlabelled: the
-       * endpoint was asked which rows MATCH, not which ran, and printing a heading over its answer
-       * would state something nobody asked it.
-       */
-      await expect(box.getByRole('option').first()).toBeVisible()
-      await expect(box.getByText(t.quiet, { exact: false })).toHaveCount(0)
+      await expect(async () => {
+        const after = await box.getByRole('checkbox').count()
+        expect(after).toBeGreaterThan(0)
+        expect(after).toBeLessThan(before)
+      }).toPass({ timeout: 10000 })
+      await expect(box.getByText(t.quiet, { exact: false }).first()).toBeVisible()
     })
 
     /** A heading in the DOM that the reader cannot see is not a heading. */
