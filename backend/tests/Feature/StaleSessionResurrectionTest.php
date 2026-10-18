@@ -156,6 +156,28 @@ final class StaleSessionResurrectionTest extends TestCase
         $this->browser($sessionId)->getJson('/api/v1/auth/me')->assertUnauthorized();
     }
 
+    /**
+     * OWNER DEFECT 102, second half — the client portal's sign-out must revoke the session id too.
+     *
+     * `/client/logout` ended the web session but never recorded the id, and the client's follow-up
+     * `/auth/logout` answers 401 once the session is gone, so it never reached the controller that does
+     * record it. A dashboard request still in flight then wrote its payload back and the visitor was
+     * bounced from /login straight back into the portal (measured on Firefox: `/client/logout` 200,
+     * `/auth/logout` 401, `/auth/me` 200).
+     */
+    public function test_a_session_restored_after_the_client_portal_sign_out_cannot_authenticate(): void
+    {
+        $sessionId = $this->signIn();
+        $payload = $this->readPayload($sessionId);
+
+        $this->browser($sessionId)->postJson('/api/v1/client/logout')->assertOk();
+        $this->assertSame('', $this->readPayload($sessionId), 'the portal sign-out must destroy the session it signed out');
+
+        $this->writePayloadBack($sessionId, $payload);
+
+        $this->browser($sessionId)->getJson('/api/v1/auth/me')->assertUnauthorized();
+    }
+
     /** And it stays refused — a revoked id is not a one-shot rejection that clears itself. */
     public function test_the_refusal_survives_repetition(): void
     {
