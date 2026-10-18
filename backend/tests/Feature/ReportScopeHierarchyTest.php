@@ -231,4 +231,21 @@ final class ReportScopeHierarchyTest extends TestCase
         ])->assertCreated()->json('data.token');
         $this->assertSame(100.0, $spend($narrow));
     }
+
+    public function test_the_saved_report_picker_lists_every_account_with_figures_even_without_an_account_row(): void
+    {
+        $ids = collect($this->getJson("/api/v1/projects/{$this->project->id}/reports/scope/options")->assertOk()->json('data.accounts'))->pluck('id')->all();
+
+        $this->assertEqualsCanonicalizing([$this->razzah, $this->razzah2, $this->hanka], $ids);
+    }
+
+    public function test_the_link_builder_offers_the_accounts_that_have_figures_and_the_campaigns_behind_each(): void
+    {
+        $data = $this->getJson("/api/v1/projects/{$this->project->id}/reports/live/options")->assertOk()->json('data');
+
+        $this->assertEqualsCanonicalizing([$this->razzah, $this->razzah2, $this->hanka], array_column($data['ad_accounts'], 'id'));
+
+        $razzahA = collect($data['campaigns'])->firstWhere('id', (string) $this->razzahA->id);
+        $this->assertSame([$this->razzah], array_column($razzahA['accounts'], 'id'));
+    }
 }

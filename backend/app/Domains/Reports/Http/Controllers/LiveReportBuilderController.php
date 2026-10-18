@@ -19,6 +19,7 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
+use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
@@ -234,10 +235,33 @@ final class LiveReportBuilderController extends Controller
                 'external_accounts.provider as account_provider',
             ]);
 
+        /*
+         * REPORT-SCOPE-HIERARCHY-001 — accounts that have FIGURES for a campaign count too.
+         *
+         * The structure join above finds an account only through a synced external campaign, so a
+         * project whose spend arrived without one — seeded data, or history from before the structure
+         * sync — listed no account at all, and a link must now name one. `ReportScopeHierarchy`
+         * accepts the same two sources, so the picker can never offer what the server would refuse.
+         */
+        $metricRows = DailyMetric::query()
+            ->where('daily_metrics.project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('daily_metrics.unified_campaign_id')
+            ->whereNotNull('daily_metrics.external_account_id')
+            ->leftJoin('external_accounts', 'external_accounts.id', '=', 'daily_metrics.external_account_id')
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.external_account_id', 'external_accounts.name', 'external_accounts.provider', 'daily_metrics.provider')
+            ->toBase()
+            ->get([
+                'daily_metrics.unified_campaign_id as campaign_id',
+                'daily_metrics.external_account_id as account_id',
+                'external_accounts.name as account_name',
+                DB::raw('COALESCE(external_accounts.provider, daily_metrics.provider) as account_provider'),
+            ]);
+
         $byCampaign = [];
         $all = [];
 
-        foreach ($rows as $row) {
+        foreach ($rows->concat($metricRows) as $row) {
             $account = [
                 'id' => (string) $row->account_id,
                 /*
@@ -539,37 +563,7 @@ final class LiveReportBuilderController extends Controller
     {
         $accountIds = array_values(array_unique((array) $data['account_ids']));
 
-        $rows = DailyMetric::query()
-            ->where('project_id', $project)
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
-            ->whereIn('external_account_id', $accountIds)
-            ->whereNotNull('unified_campaign_id')
-            ->distinct()
-            ->get(['external_account_id', 'unified_campaign_id']);
-
-        /** @var array<string, list<string>> $byAccount */
-        $byAccount = [];
-        foreach ($rows as $row) {
-            $byAccount[(string) $row->external_account_id][] = (string) $row->unified_campaign_id;
-        }
-
-        // The builder lists accounts from campaign structure as well as from metrics, so a bound
-        // account that has campaigns and no figures yet is chosen from the same set it was offered.
-        $structure = ExternalCampaign::query()
-            ->where('project_id', $project)
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
-            ->whereIn('external_account_id', $accountIds)
-            ->whereNotNull('unified_campaign_id')
-            ->distinct()
-            ->toBase()
-            ->get(['external_account_id', 'unified_campaign_id']);
-        foreach ($structure as $row) {
-            $byAccount[(string) $row->external_account_id][] = (string) $row->unified_campaign_id;
-        }
-
-        foreach ($accountIds as $account) {
-            abort_unless(isset($byAccount[$account]), 422, 'An ad account is not part of this project.');
-        }
+        $byAccount = ReportScopeHierarchy::campaignsByAccount($project, $accountIds);
 
         $campaigns = [];
         $ads = [];
@@ -582,14 +576,7 @@ final class LiveReportBuilderController extends Controller
 
             $chosenAds = array_values(array_unique((array) ($data['accounts'][$account]['ad_ids'] ?? [])));
             if ($chosenAds !== []) {
-                $valid = ExternalAd::query()
-                    ->where('project_id', $project)
-                    ->whereIn('id', $chosenAds)
-                    ->whereIn('unified_campaign_id', $take)
-                    ->pluck('id')
-                    ->map(strval(...))
-                    ->all();
-                abort_unless(array_diff($chosenAds, array_map('strval', $valid)) === [], 422, 'An ad does not belong to the campaigns chosen for its account.');
+                abort_unless(ReportScopeHierarchy::adsBelong($project, $chosenAds, $take), 422, 'An ad does not belong to the campaigns chosen for its account.');
                 $ads = array_merge($ads, $chosenAds);
             }
         }

@@ -173,6 +173,13 @@ export function ReportScopePicker({
    * and a path or an objective describes what the money was for rather than what it was called.
    */
   const namesInternalEntities = !isClientAudience(audience ?? 'client')
+  /*
+   * REPORT-SCOPE-HIERARCHY-001 — the ad account, campaign and ad rungs are offered for EVERY audience.
+   * This is the operator's own dialog, and hiding the rungs from a client-audience report left the
+   * operator no way to say which accounts it covers — which is how one client's report carried
+   * another's. What the CLIENT then sees stays stripped server-side (`ClientEntityBoundary`); only
+   * ad sets and content, which this release does not require, keep the old audience rule.
+   */
 
   /*
    * REPORT-SCOPE-SELECTION-001 — the campaign list knows which period it is being asked about.
@@ -343,7 +350,8 @@ export function ReportScopePicker({
         t={t}
       />
 
-      {namesInternalEntities && <ScopeSelect
+      {<ScopeSelect
+        kind="accounts"
         label={t.accounts}
         items={o.accounts.map((a) => ({ id: a.id, label: `${a.name} · ${a.provider}` }))}
         selected={value.account_ids ?? []}
@@ -351,6 +359,12 @@ export function ReportScopePicker({
         ar={ar}
         t={t}
       />}
+
+      {(value.account_ids ?? []).length === 0 && o.accounts.length > 0 && (
+        <p className="text-[11px] text-danger" data-testid="scope-accounts-required">
+          {ar ? 'اختر حسابًا إعلانيًا واحدًا على الأقل — لا يُشمل أي حساب تلقائيًا.' : 'Choose at least one ad account — none is included by default.'}
+        </p>
+      )}
 
       {/*
         REPORT-SETUP-001 — Objective, then Destination, then Campaigns: each narrows the next.
@@ -384,7 +398,7 @@ export function ReportScopePicker({
       )}
 
       {/* Scope: every campaign the choices above leave, or an exact list. */}
-      {namesInternalEntities && (
+      {(
         <div role="radiogroup" aria-label={t.scope} className="flex flex-wrap items-center gap-2" data-testid="campaign-scope-mode">
           <span className="text-xs font-bold text-text-primary">{t.scope}</span>
           {(['all', 'selected'] as const).map((mode) => (
@@ -405,7 +419,7 @@ export function ReportScopePicker({
         </div>
       )}
 
-      {namesInternalEntities && campaignMode === 'selected' && <ScopeSelect
+      {campaignMode === 'selected' && <ScopeSelect
         label={t.campaigns}
         /*
           REPORT-SCOPE-SELECTION-001 — «ran in this period» first, and said in words.
@@ -443,7 +457,7 @@ export function ReportScopePicker({
         />
       )}
 
-      {namesInternalEntities && o.ads.length > 0 && (
+      {o.ads.length > 0 && (
         <ScopeSelect
           label={t.ads}
           note={t.grainCampaign}
@@ -565,6 +579,7 @@ function ScopeSelect({
   t,
   axis,
   projectId,
+  kind,
 }: {
   label: string
   /**
@@ -598,6 +613,8 @@ function ScopeSelect({
    */
   axis?: string
   projectId?: string
+  /** A language-independent name for the rung, for tests and tools that must not depend on the label. */
+  kind?: string
 }) {
   const [term, setTerm] = useState('')
 
@@ -660,7 +677,7 @@ function ScopeSelect({
   if (items.length === 0 && selected.length === 0) return null
 
   return (
-    <div data-testid={`scope-select-${label}`}>
+    <div data-testid={`scope-select-${label}`} data-kind={kind}>
       <div className="mb-1.5 flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold text-text-primary">{label}</span>
         {selected.length > 0 && (

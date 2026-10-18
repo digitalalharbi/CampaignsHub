@@ -63,7 +63,21 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
 
     if (values.length === 0) continue
 
-    await projectSelect.selectOption(values[0])
+    // REPORT-SCOPE-HIERARCHY-001 — a saved report names its ad accounts, so take a project that has one.
+    // The richest one: these specs reconcile a platform table, which a one-platform report omits.
+    let chosen = ''
+    let most = 1 // at least two accounts: a one-platform report has no platform table to reconcile
+    for (const v of values) {
+      const r = await page.request.get(`/api/v1/projects/${v}/reports/scope/options`, { headers: API_HEADERS })
+      const accounts = r.ok() ? ((await r.json()).data?.accounts ?? []) : []
+      if (accounts.length > most) {
+        chosen = v
+        most = accounts.length
+      }
+    }
+    if (chosen === '') continue
+
+    await projectSelect.selectOption(chosen)
 
     /*
      * The switcher runs after its queries settle and clears a project it does not recognise, so the
@@ -71,10 +85,10 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
      * builder will work; if not, this client is skipped rather than walking into a dead dialog.
      */
     await page.waitForTimeout(600)
-    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === values[0]
+    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === chosen
 
     if (held) {
-      projectId = values[0]
+      projectId = chosen
       break
     }
   }
@@ -99,6 +113,7 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
    */
   await page.getByRole('button', { name: /تقرير محفوظ|Saved report/ }).click()
   await page.getByPlaceholder(/التقرير الشهري/).fill(name)
+  await chooseFirstAccount(page)
   const [createRes] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith('/reports') && r.request().method() === 'POST'),
     page.getByRole('button', { name: 'إنشاء وتوليد' }).click(),
@@ -113,4 +128,26 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
   }, { timeout: 90_000, intervals: [2000] }).toBe('completed')
 
   return { projectId, reportId }
+}
+
+
+/**
+ * REPORT-SCOPE-HIERARCHY-001 — a saved report names its ad accounts, so the builder will not create
+ * one until an account is chosen. Picks every account the project offers.
+ */
+export async function chooseFirstAccount(page: import('@playwright/test').Page): Promise<void> {
+  const box = page.locator('[data-kind="accounts"]')
+  await expect(box, 'the project offers no ad account to build a report from').toBeVisible({ timeout: 20_000 })
+  await box.getByRole('combobox').first().click()
+  // All of them: the exports drop the platform table for a one-platform report, and these specs
+  // reconcile that table, so they need the same breadth a report had before accounts were chosen.
+  const trigger = box.getByRole('combobox').first()
+  const options = page.getByRole('listbox').getByRole('option')
+  const count = await options.count()
+  for (let i = 0; i < count; i++) {
+    if (!(await page.getByRole('listbox').isVisible())) await trigger.click()
+    const option = options.nth(i)
+    if ((await option.getAttribute('aria-selected')) !== 'true') await option.click()
+  }
+  if (await page.getByRole('listbox').isVisible()) await trigger.click()
 }

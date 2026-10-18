@@ -26,6 +26,8 @@ test.describe('the live client link an operator copies', () => {
     await expect(dialog).toBeVisible({ timeout: 10000 })
 
     await dialog.locator('input[type="text"], input:not([type])').first().fill(`E2E link ${Date.now()}`)
+    // REPORT-SCOPE-HIERARCHY-001 — a link names its ad accounts; the first one the project offers.
+    await dialog.getByTestId('live-builder-accounts').getByRole('checkbox').first().check()
     await dialog.getByRole('button', { name: /إنشاء الرابط|Create link/ }).click()
 
     const url = page.getByTestId('live-link-url')

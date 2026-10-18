@@ -319,6 +319,7 @@ final class ReportScopeEndpointTest extends TestCase
                 'type' => 'executive',
                 'period_start' => '2026-07-01',
                 'period_end' => '2026-07-31',
+                'scope' => ['account_ids' => array_values($this->accounts)],
             ], $extra))
             ->assertCreated()
             ->json('data.id');
@@ -671,7 +672,7 @@ final class ReportScopeEndpointTest extends TestCase
 
         $response = $this->actingAs($this->operator, 'sanctum')
             ->putJson($this->url("/{$report->getKey()}/scope"), [
-                'scope' => ['providers' => ['meta'], 'campaign_ids' => [(string) $this->sales->getKey()]],
+                'scope' => ['account_ids' => [$this->accounts['meta']], 'providers' => ['meta'], 'campaign_ids' => [(string) $this->sales->getKey()]],
             ])
             ->assertOk();
 
@@ -687,38 +688,71 @@ final class ReportScopeEndpointTest extends TestCase
         $this->assertEqualsWithDelta(1000.0, $this->generate($report)['kpis']['spend'], 0.01);
     }
 
-    /** Clearing the scope is expressible, and returns the report to the whole project. */
-    public function test_clearing_a_scope_returns_the_report_to_the_whole_project(): void
+    /**
+     * REPORT-SCOPE-HIERARCHY-001 — a saved report carries exactly the accounts it was created with.
+     *
+     * Meta spent 1000 and TikTok 500 in the same project. A report created for the Meta account
+     * generates 1000 — the TikTok account's 500 is nowhere in it — and the stored scope is what every
+     * later reader (Preview, share, PDF, export) applies.
+     */
+    public function test_a_saved_report_generates_only_its_selected_accounts(): void
+    {
+        $meta = $this->createWith(['scope' => ['account_ids' => [$this->accounts['meta']]]]);
+        $tiktok = $this->createWith(['scope' => ['account_ids' => [$this->accounts['tiktok']]]]);
+
+        $this->assertSame([$this->accounts['meta']], $meta->scope['account_ids']);
+        $this->assertEqualsWithDelta(1000.0, $this->generate($meta)['kpis']['spend'], 0.01);
+        $this->assertEqualsWithDelta(500.0, $this->generate($tiktok)['kpis']['spend'], 0.01);
+    }
+
+    public function test_creating_a_saved_report_without_an_account_is_refused(): void
+    {
+        $this->actingAs($this->operator, 'sanctum')
+            ->postJson($this->url(), ['name' => 'x', 'type' => 'executive'])
+            ->assertStatus(422);
+    }
+
+    /**
+     * REPORT-SCOPE-HIERARCHY-001 — a saved report's scope can no longer be cleared to «the whole project».
+     *
+     * That reading is how one client's report carried another client's accounts. The request is refused
+     * and the report keeps the scope it had.
+     */
+    public function test_a_scope_with_no_ad_account_is_refused_and_the_report_keeps_its_scope(): void
     {
         $report = $this->report(['providers' => ['meta']]);
 
         $this->actingAs($this->operator, 'sanctum')
             ->putJson($this->url("/{$report->getKey()}/scope"), ['scope' => []])
-            ->assertOk();
+            ->assertStatus(422);
 
-        $this->assertNull($report->refresh()->scope);
-        $this->assertEqualsWithDelta(1500.0, $this->generate($report)['kpis']['spend'], 0.01);
+        $this->assertSame(['meta'], $report->refresh()->scope['providers']);
     }
 
-    /**
-     * An id from outside this project is dropped — and dropping it does NOT reopen the axis.
-     *
-     * This is the fail-closed half of the rule. Filtering a foreign campaign id down to an empty list
-     * would leave `campaign_ids` unbounded, so a scope an operator set deliberately would silently
-     * become «the whole project» — the widening this unit exists to make impossible.
-     */
-    public function test_a_foreign_id_is_dropped_without_reopening_the_axis(): void
+    /** A campaign from outside the selected accounts is refused, not dropped and not widened. */
+    public function test_a_foreign_id_is_refused_and_the_scope_is_unchanged(): void
     {
-        $report = $this->report();
+        $report = $this->report(['providers' => ['meta']]);
 
         $this->actingAs($this->operator, 'sanctum')
             ->putJson($this->url("/{$report->getKey()}/scope"), [
-                'scope' => ['campaign_ids' => [(string) Uuid::uuid4()]],
+                'scope' => ['account_ids' => [$this->accounts['meta']], 'campaign_ids' => [(string) Uuid::uuid4()]],
             ])
-            ->assertOk();
+            ->assertStatus(422);
 
-        $this->assertSame([ReportScope::IMPOSSIBLE], $report->refresh()->scope['campaign_ids']);
-        $this->assertEqualsWithDelta(0.0, $this->generate($report)['kpis']['spend'], 0.01);
+        $this->assertSame(['meta'], $report->refresh()->scope['providers']);
+    }
+
+    /** A campaign of another account is refused under this account. */
+    public function test_a_campaign_of_another_account_is_refused(): void
+    {
+        $report = $this->report(['providers' => ['meta']]);
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->putJson($this->url("/{$report->getKey()}/scope"), [
+                'scope' => ['account_ids' => [$this->accounts['meta']], 'campaign_ids' => [(string) $this->awareness->getKey()]],
+            ])
+            ->assertStatus(422);
     }
 
     /** An unknown objective is refused outright rather than stored and ignored. */
@@ -728,7 +762,7 @@ final class ReportScopeEndpointTest extends TestCase
 
         $this->actingAs($this->operator, 'sanctum')
             ->putJson($this->url("/{$report->getKey()}/scope"), [
-                'scope' => ['objectives' => ['make_me_rich']],
+                'scope' => ['account_ids' => [$this->accounts['meta']], 'objectives' => ['make_me_rich']],
             ])
             ->assertStatus(422)
             ->assertJsonValidationErrors('scope.objectives.0');
