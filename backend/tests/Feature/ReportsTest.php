@@ -25,12 +25,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\SeedsReportAccount;
 use Tests\TestCase;
 
 /** Reports: queued generation from real metrics, real file exports + signed download, RBAC, isolation. */
 final class ReportsTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsReportAccount;
 
     private Tenant $tenant;
 
@@ -82,7 +84,7 @@ final class ReportsTest extends TestCase
     {
         Queue::fake();
         $this->actingAs($this->owner, 'sanctum')
-            ->postJson("/api/v1/projects/{$this->projectA->id}/reports", ['name' => 'Weekly', 'type' => 'weekly'])
+            ->postJson("/api/v1/projects/{$this->projectA->id}/reports", ['name' => 'Weekly', 'type' => 'weekly', 'scope' => $this->reportScopeFor((string) $this->projectA->id)])
             ->assertCreated()
             ->assertJsonPath('data.status', 'processing');
         Queue::assertPushed(GenerateReportJob::class);

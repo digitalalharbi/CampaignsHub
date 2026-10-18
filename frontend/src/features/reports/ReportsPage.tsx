@@ -742,7 +742,7 @@ function ScopeEditor({
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
-          <Button loading={save.isPending} onClick={() => save.mutate()} data-testid="scope-save">
+          <Button loading={save.isPending} disabled={(value.account_ids ?? []).length === 0} onClick={() => save.mutate()} data-testid="scope-save">
             {ar ? 'حفظ وإعادة التوليد' : 'Save and regenerate'}
           </Button>
         </>
@@ -899,7 +899,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
-          <Button loading={create.isPending} disabled={name.trim() === ''} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
+          <Button loading={create.isPending} disabled={name.trim() === '' || (scope.account_ids ?? []).length === 0} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
         </>
       }
     >

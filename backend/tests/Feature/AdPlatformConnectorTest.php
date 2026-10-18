@@ -584,6 +584,109 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertStringNotContainsString('7300000000000000001', implode(' ', array_filter($asked, fn ($u) => str_contains($u, 'file/'))));
     }
 
+    /** TIKTOK-SPARK-COVER-001 — a Spark Ad's poster comes from its owning identity; a refused post costs only itself. */
+    public function test_a_tiktok_spark_ad_gets_its_posts_own_poster_from_the_identity(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'identity/video/info/')) {
+                $asked[] = $url;
+                if (str_contains($url, 'item_id=7300000000000000002')) {
+                    return Http::response(['code' => 40002, 'message' => 'item not found', 'request_id' => 'r']);
+                }
+
+                return Http::response(['code' => 0, 'data' => ['video_detail' => ['item_id' => 'x', 'video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/spark-1.jpg', 'preview_url' => 'https://v16.tiktokcdn.com/spark-1.mp4']]]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 's1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark 1', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001', 'identity_type' => 'AUTHORIZED_BC', 'identity_id' => 'idn-1', 'identity_authorized_bc_id' => 'bc-1'],
+                ['ad_id' => 's2', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark 2', 'video_id' => null, 'tiktok_item_id' => '7300000000000000002', 'identity_type' => 'AUTHORIZED_BC', 'identity_id' => 'idn-1', 'identity_authorized_bc_id' => 'bc-1'],
+                ['ad_id' => 's3', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark no identity', 'video_id' => null, 'tiktok_item_id' => '7300000000000000003'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertSame('https://p16.tiktokcdn.com/spark-1.jpg', $ads['s1']['creative']['thumbnail_url']);
+        $this->assertSame('https://v16.tiktokcdn.com/spark-1.mp4', $ads['s1']['creative']['video_url']);
+        $this->assertArrayNotHasKey('thumbnail_url', $ads['s2']['creative'], 'a refused post keeps no invented poster');
+        $this->assertArrayNotHasKey('thumbnail_url', $ads['s3']['creative'], 'no identity, no question asked');
+        $this->assertCount(2, $asked);
+        $this->assertStringContainsString('identity_id=idn-1', $asked[0]);
+        $this->assertStringContainsString('identity_type=AUTHORIZED_BC', $asked[0]);
+    }
+
+    /**
+     * TIKTOK-SPARK-COVER-001 — a `BC_AUTH_TT` identity is asked with its Business Center (live: code 40000 without it).
+     */
+    public function test_a_bc_authorised_spark_identity_is_asked_with_the_advertisers_owner_business_center(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'advertiser/info/')) {
+                return Http::response(['code' => 0, 'data' => ['list' => [['advertiser_id' => 'adv-1', 'owner_bc_id' => 'bc-77']]]]);
+            }
+            if (str_contains($url, 'identity/video/info/')) {
+                $asked[] = $url;
+
+                return str_contains($url, 'identity_authorized_bc_id=bc-77')
+                    ? Http::response(['code' => 0, 'data' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/bc.jpg']]]) // the legacy position is still read
+                    : Http::response(['code' => 40000, 'message' => 'Unable to fetch a valid item.', 'request_id' => 'r']);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 's1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark 1', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001', 'identity_type' => 'BC_AUTH_TT', 'identity_id' => 'idn-1'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertSame('https://p16.tiktokcdn.com/bc.jpg', $ads['s1']['creative']['thumbnail_url']);
+        $this->assertCount(1, $asked);
+        $this->assertStringContainsString('identity_type=BC_AUTH_TT', $asked[0]);
+    }
+
+    /**
+     * TIKTOK-VIDEO-INFO-SPLIT-001 — one refused video does not cost the others their poster.
+     */
+    public function test_a_refused_video_is_split_out_and_the_rest_keep_their_poster(): void
+    {
+        $this->configure('tiktok');
+        $calls = 0;
+        Http::fake(function ($request) use (&$calls) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'file/video/ad/info/')) {
+                $calls++;
+                preg_match('/video_ids=(\[.*\])/', $url, $m);
+                $ids = (array) json_decode($m[1] ?? '[]', true);
+                if (in_array('v-bad', $ids, true)) {
+                    return Http::response(['code' => 40001, 'message' => 'Insufficient permissions for some videos: [v-bad]', 'request_id' => 'r']);
+                }
+
+                return Http::response(['code' => 0, 'data' => ['list' => array_map(fn ($id) => ['video_id' => $id, 'video_cover_url' => "https://p16.tiktokcdn.com/{$id}.jpg"], $ids)]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'a1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'One', 'video_id' => 'v-1'],
+                ['ad_id' => 'a2', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Two', 'video_id' => 'v-bad'],
+                ['ad_id' => 'a3', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Three', 'video_id' => 'v-3'],
+                ['ad_id' => 'a4', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Four', 'video_id' => 'v-4'],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertSame('https://p16.tiktokcdn.com/v-1.jpg', $ads['a1']['creative']['thumbnail_url']);
+        $this->assertSame('https://p16.tiktokcdn.com/v-3.jpg', $ads['a3']['creative']['thumbnail_url']);
+        $this->assertSame('https://p16.tiktokcdn.com/v-4.jpg', $ads['a4']['creative']['thumbnail_url']);
+        $this->assertArrayNotHasKey('thumbnail_url', $ads['a2']['creative'], 'the refused video keeps no invented poster');
+        $this->assertLessThanOrEqual(8, $calls, 'a split is logarithmic, not one call per video');
+    }
+
     /**
      * TIKTOK-CONTENT-001 — creative figures from the ad-level report: two ads running one video sum
      * into that video's day; reach (unique people per ad) is not summed; a Spark Ad's figures land on

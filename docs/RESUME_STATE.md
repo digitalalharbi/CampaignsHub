@@ -1,3 +1,37 @@
+# START HERE — 2026-10-18 (late) — resuming in a new Claude session
+
+**Git is the authority.** The merge queue is no longer a script in a session: it is `.github/workflows/merge-queue.yml`, ordered by `docs/MERGE_QUEUE.md` (every 15 minutes and after each CI run it updates the head PR, waits, or squash-merges and starts the deploy; a red check halts it, nothing is bypassed). The order is **#756 (P0 report scope) → #744 → #754 → #755 → #752**; #757 (the queue itself) is merged first, by hand, because it only changes a workflow and docs.
+
+**Session limitation, not a development blocker:** background processes started from a Claude session die when it ends (this killed the previous watcher). Never rebuild one; read `gh pr list` and the queue file.
+
+**What is built and waiting for CI/merge:** #756 REPORT-SCOPE-HIERARCHY-001 — explicit ad accounts → campaigns → ads for live links and saved reports (`ReportScopeHierarchy`, required accounts, 422 on a foreign id, visible checkbox lists, single-platform exports keep their platform table). Status stays **IMPLEMENTED_NOT_VERIFIED**: the Razzah-only Production check needs an authenticated Owner session (BLOCKED_OPERATIONAL_EVIDENCE).
+
+**Ready on branches, no PR yet (merge cleanly with main, open one when a queue slot frees):** `feat/brand-lockup-by-language` (admin console name follows language, guard test; add its BRAND-LANG-001 matrix sentence AFTER `feat/budget-pace-marker` merges, they edit the same row), `feat/budget-pace-marker`, `test/client-isolation-probe-r`, `feat/report-table-identity-r` (then `feat/report-owner-columns`), `feat/ecb-rate-source`; `fix/quick-preview-trend-truth` has one conflict. Others per `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`.
+
+**After #744 merges:** run the TikTok/OpenAI structure sweeps and diagnostics to read the OpenAI chat-card payload key names (CONTENT-OPENAI-COVER-001).
+
+**Owner-only blockers:** authenticated Owner/client sessions for Production proof of anything behind login (report scope, portal logout, budget UI); EUR/floating FX rate; X Ads, Zid and Salla connections; TikTok Asset Library grant; payment gateway keys; real email delivery.
+
+**CI traps:** WebKit `page.goto: WebKit encountered an internal error` = browser flake, rerun; the scope specs need `networkidle` plus long timeouts after ticking accounts; e2e that create reports tick accounts with `chooseFirstAccount` (e2e/report-builder.ts).
+
+---
+
+# START HERE — 2026-10-18 (the client-wave landed; the queue is serial)
+
+**Git is the authority.** `origin/main` carries the client operating-model wave (#741), the TikTok Spark fixes (#743, #746, #748), the OpenAI evidence (#738), the budget rungs (#742) and the probe receipts (#745).
+
+**Open and serial** (`scratchpad/serial.sh`, one merge at a time — strict up-to-date means every merge restarts every other PR's CI, about an hour on the webkit gate): #747 (client portal sign-out, Owner defect 102), #749 (Arabic brand name guard), #750 (client create-request), #744 (the importer keeps the creative body), then re-queue what each fix needs.
+
+**Pushed, no PR yet** (restack with `scratchpad/restack.py <tip> <new> [parent]`): feat/portal-attention-r, feat/report-table-identity-r, test/client-isolation-probe-r, feat/delivery-ui-r, fix/probe-list-shapes, fix/tiktok-spark-video-detail (merged as #746), feat/email-settings-diagnostics, feat/email-kpi-hierarchy, feat/transactional-mail-audit, feat/ecb-rate-source, test/guards-batch (money ladder, email parity, weekly digest), fix/quick-preview-trend-truth. Children that need their parent merged first: portal-trend (on attention), report-owner-columns (on table-identity), delivery-weekly-schedule and delivery-overview (on delivery-ui), portal-campaigns-paged, report-link-analytics, alert-rule-presets, alert-card-layout.
+
+**Production facts**: TikTok videos that draw 43 of 326 → 190 of 326 and images 5 of 5 after #746/#748; the rest are Asset Library permission refusals (Owner grant). OpenAI chat cards 0 of 10 and LinkedIn/Google have no creative rows — the importer never wrote `raw` (#744). X and Zid have no connection; Salla is connected and unbound; LinkedIn has 2 paused campaigns. Spark identities were never the problem: the answer's body is `data.video_detail.video_info`.
+
+**Traps this wave**: never sign out of a shared e2e storageState; poll rail reads on WebKit; the defect ledger row needs exactly its header's cells; a pushed fix does not re-run `gh run rerun --failed`.
+
+**Owner-only blockers**: EUR/floating rate (FX_RATE_DRIVER=…EcbReferenceRates or /admin), X Ads connection, Zid connection, Salla assignment, TikTok Asset Library grant, payment gateway keys, real email delivery, an authenticated session for Production proof of anything behind login.
+
+---
+
 # START HERE — 2026-09-16 (session reset; parent is coordinator only)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.

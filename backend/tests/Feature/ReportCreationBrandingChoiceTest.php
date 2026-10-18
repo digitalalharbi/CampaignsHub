@@ -18,6 +18,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Tests\Concerns\SeedsReportAccount;
 use Tests\TestCase;
 
 /**
@@ -39,6 +40,7 @@ use Tests\TestCase;
 final class ReportCreationBrandingChoiceTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsReportAccount;
 
     private Tenant $agency;
 
@@ -73,7 +75,7 @@ final class ReportCreationBrandingChoiceTest extends TestCase
     private function create(array $body): Report
     {
         $id = $this->actingAs($this->owner, 'sanctum')
-            ->postJson("/api/v1/projects/{$this->project->id}/reports", ['name' => 'R', 'type' => 'executive'] + $body)
+            ->postJson("/api/v1/projects/{$this->project->id}/reports", ['name' => 'R', 'type' => 'executive', 'scope' => $this->reportScopeFor((string) $this->project->id)] + $body)
             ->assertCreated()
             ->json('data.id');
 
@@ -135,7 +137,7 @@ final class ReportCreationBrandingChoiceTest extends TestCase
     public function test_an_unknown_identity_is_refused(): void
     {
         $this->actingAs($this->owner, 'sanctum')
-            ->postJson("/api/v1/projects/{$this->project->id}/reports", ['name' => 'R', 'type' => 'executive', 'branding_identity' => 'platform'])
+            ->postJson("/api/v1/projects/{$this->project->id}/reports", ['name' => 'R', 'type' => 'executive', 'branding_identity' => 'platform', 'scope' => $this->reportScopeFor((string) $this->project->id)])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['branding_identity']);
     }

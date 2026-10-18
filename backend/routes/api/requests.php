@@ -65,6 +65,14 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/spaces', [ClientPortalController::class, 'spaces'])->name('spaces.index')
         ->middleware('throttle:120,1');
 
+    // CP-DASH-001: the client's portfolio, one space at a time.
+    Route::get('/overview', [ClientPortalController::class, 'overview'])->name('overview.show')
+        ->middleware('throttle:60,1');
+
+    // CP-VISIBILITY-001: what the agency lets this client see and do, per space.
+    Route::get('/visibility', [ClientPortalController::class, 'visibility'])->name('visibility.show')
+        ->middleware('throttle:120,1');
+
     // AGENCY-005: the agency's brand as THIS client's space should show it. The space comes from the
     // session, never from a parameter.
     Route::get('/branding', [ClientPortalController::class, 'branding'])->name('branding.show')
@@ -84,6 +92,9 @@ Route::prefix('client')->name('client.')->group(function (): void {
 
     Route::get('/requests', [ClientPortalController::class, 'index'])->name('requests.index')
         ->middleware('throttle:120,1');
+    // CP-REQ-ONE-001: a client opens a request from inside their space.
+    Route::post('/requests', [ClientPortalController::class, 'store'])->name('requests.store')
+        ->middleware('throttle:10,1');
     Route::get('/requests/{reference}', [ClientPortalController::class, 'show'])->name('requests.show')
         ->middleware('throttle:120,1');
     Route::post('/requests/{reference}/reply', [ClientPortalController::class, 'reply'])->name('requests.reply')
@@ -116,6 +127,8 @@ Route::prefix('client')->name('client.')->group(function (): void {
         ->middleware('throttle:120,1');
     Route::get('/invoices/{invoice}', [ClientPortalController::class, 'showInvoice'])->name('invoices.show')
         ->middleware('throttle:120,1');
+    Route::get('/invoices/{invoice}/pdf', [ClientPortalController::class, 'invoicePdf'])->name('invoices.pdf')
+        ->middleware('throttle:20,1');
     Route::post('/invoices/{invoice}/pay', [ClientPortalController::class, 'payInvoice'])->name('invoices.pay')
         ->middleware('throttle:30,1');
 

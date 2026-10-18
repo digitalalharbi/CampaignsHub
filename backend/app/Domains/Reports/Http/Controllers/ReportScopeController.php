@@ -22,6 +22,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Support\ReportScope;
+use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
@@ -139,7 +140,7 @@ final class ReportScopeController extends Controller
             UnifiedCampaign::query()
                 ->where('project_id', $project)
                 ->when($fObjectives !== [], fn ($q) => $q->whereIn('objective', $fObjectives))
-                ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->whereIn(
+                ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->where(fn ($w) => $w->whereIn(
                     'id',
                     ExternalCampaign::query()
                         ->where('project_id', $project)
@@ -147,7 +148,21 @@ final class ReportScopeController extends Controller
                         ->when($fAccounts !== [], fn ($e) => $e->whereIn('external_account_id', $fAccounts))
                         ->whereNotNull('unified_campaign_id')
                         ->select('unified_campaign_id'),
-                ))
+                )
+                    /*
+                     * REPORT-SCOPE-HIERARCHY-001 — and the campaigns an account has FIGURES for. The
+                     * structure join alone left a metrics-only account with an empty campaign list,
+                     * which is the same two sources the account list and the server's check use.
+                     */
+                    ->when($fAccounts !== [], fn ($x) => $x->orWhereIn(
+                        'id',
+                        DailyMetric::query()
+                            ->where('project_id', $project)
+                            ->whereIn('external_account_id', $fAccounts)
+                            ->when($fProviders !== [], fn ($m) => $m->whereIn('provider', $fProviders))
+                            ->whereNotNull('unified_campaign_id')
+                            ->select('unified_campaign_id'),
+                    ))))
                 ->when($fDestinations !== [], fn ($q) => $q->whereIn('id', array_keys(array_filter(
                     $destinationOf,
                     fn (LeadDestination $d): bool => in_array($d->value, $fDestinations, true),
@@ -188,6 +203,26 @@ final class ReportScopeController extends Controller
             ->whereNotNull('external_account_id')
             ->distinct()->pluck('external_account_id')->all();
 
+        /*
+         * REPORT-SCOPE-HIERARCHY-001 — and the accounts that have CAMPAIGNS but no figures yet.
+         *
+         * The picker offered only accounts with metrics, while the campaign list (and the server's
+         * check) also counts an account through its synced campaigns. So a campaign that never ran
+         * belonged to an account the picker did not list — ticking every account offered still left
+         * it out, and a report could not be scoped to it. One definition of «an account of this
+         * project»: figures OR campaigns.
+         */
+        $structureAccountIds = ExternalCampaign::query()
+            ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
+            ->whereNotNull('unified_campaign_id')
+            ->whereNotNull('external_account_id')
+            ->distinct()->pluck('external_account_id')->all();
+        $accountIds = array_values(array_unique(array_merge(
+            array_map('strval', $accountIds),
+            array_map('strval', $structureAccountIds),
+        )));
+
         $accounts = $accountIds === [] ? [] : ExternalAccount::query()
             ->whereIn('id', $accountIds)
             ->when($fProviders !== [], fn ($q) => $q->whereIn('provider', $fProviders))
@@ -198,6 +233,32 @@ final class ReportScopeController extends Controller
                 'name' => $a->name ?: $a->external_id,
                 'provider' => $a->provider,
             ])->all();
+
+        /*
+         * REPORT-SCOPE-HIERARCHY-001 — an account with figures and no account row is still an account.
+         *
+         * Metrics seeded or synced before the account row existed carry an `external_account_id` that
+         * resolves to no `ExternalAccount`. The list used to drop it, and a saved report must now name
+         * its accounts — so a project in that state could not be reported on at all. Listed by its id,
+         * the same fallback the link builder uses when a provider gives no name.
+         */
+        $named = array_column($accounts, 'id');
+        $unnamed = array_values(array_diff(array_map('strval', $accountIds), $named));
+        if ($unnamed !== []) {
+            $providerOf = DailyMetric::query()
+                ->where('project_id', $project)
+                ->whereIn('external_account_id', $unnamed)
+                ->groupBy('external_account_id')
+                ->selectRaw('external_account_id, MIN(provider) AS provider')
+                ->pluck('provider', 'external_account_id');
+            foreach ($unnamed as $id) {
+                $provider = (string) ($providerOf[$id] ?? '');
+                if ($fProviders !== [] && ! in_array(strtolower($provider), $fProviders, true)) {
+                    continue;
+                }
+                $accounts[] = ['id' => $id, 'name' => $id, 'provider' => $provider];
+            }
+        }
 
         [$adSets, $adSetsMore] = $this->bounded(
             ExternalAdSet::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
@@ -449,6 +510,8 @@ final class ReportScopeController extends Controller
         $model = Report::query()->where('project_id', $project)->findOrFail($report);
         $before = $model->scope;
 
+        // REPORT-SCOPE-HIERARCHY-001 — editing a saved report's scope names its accounts too.
+        ReportScopeHierarchy::verifyFlat($project, (array) $request->input('scope', []));
         $scope = $this->validated($request, $project);
 
         $model->forceFill([

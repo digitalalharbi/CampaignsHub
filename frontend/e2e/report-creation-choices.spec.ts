@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
+import { chooseFirstAccount } from './report-builder'
 
 /**
  * REPORT-CREATION-UX-001 — the builder's choices reach the report it creates, in a real browser.
@@ -50,6 +51,7 @@ test.describe('report builder — the choices reach the report', () => {
     await page.getByTestId('rb-level-summary').click()
     await page.getByTestId('rb-identity-agency').click()
     await page.locator('#rb-name').fill('E2E creation choices')
+    await chooseFirstAccount(page)
 
     const created = page.waitForResponse(
       (r) => r.request().method() === 'POST' && /\/api\/v1\/projects\/[^/]+\/reports$/.test(r.url()),
@@ -87,6 +89,7 @@ test.describe('report builder — the choices reach the report', () => {
     await openBuilder(page)
 
     await page.locator('#rb-name').fill('E2E default identity')
+    await chooseFirstAccount(page)
 
     const created = page.waitForResponse(
       (r) => r.request().method() === 'POST' && /\/api\/v1\/projects\/[^/]+\/reports$/.test(r.url()),

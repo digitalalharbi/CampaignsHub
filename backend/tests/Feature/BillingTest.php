@@ -310,13 +310,13 @@ final class BillingTest extends TestCase
         $q1 = $this->draftQuote(1000);
         $svc->approveQuote($q1);
         $inv1 = Invoice::query()->where('quote_id', $q1->id)->firstOrFail();
-        $inv1->forceFill(['amount_paid' => 400, 'status' => 'partially_paid', 'due_date' => now()->subDays(45)->toDateString()])->save();
+        Invoice::withoutEvents(fn () => $inv1->forceFill(['amount_paid' => 400, 'status' => 'partially_paid', 'due_date' => now()->subDays(45)->toDateString()])->save());
 
         // Invoice 2: 500 total, nothing paid, not yet due → current bucket.
         $q2 = $this->draftQuote(500);
         $svc->approveQuote($q2);
         $inv2 = Invoice::query()->where('quote_id', $q2->id)->firstOrFail();
-        $inv2->forceFill(['amount_paid' => 0, 'status' => 'issued', 'due_date' => now()->addDays(10)->toDateString()])->save();
+        Invoice::withoutEvents(fn () => $inv2->forceFill(['amount_paid' => 0, 'status' => 'issued', 'due_date' => now()->addDays(10)->toDateString()])->save());
 
         // A pending payment must NOT be treated as money in.
         Payment::create([
@@ -352,7 +352,7 @@ final class BillingTest extends TestCase
         $openQuote = $this->draftQuote(800);
         $svc->approveQuote($openQuote);
         $open = Invoice::query()->where('quote_id', $openQuote->id)->firstOrFail();
-        $open->forceFill(['amount_paid' => 100, 'status' => 'overdue', 'due_date' => now()->subDays(12)->toDateString()])->save();
+        Invoice::withoutEvents(fn () => $open->forceFill(['amount_paid' => 100, 'status' => 'overdue', 'due_date' => now()->subDays(12)->toDateString()])->save());
 
         $rows = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/billing/receivables')->assertOk()->json('data');
 

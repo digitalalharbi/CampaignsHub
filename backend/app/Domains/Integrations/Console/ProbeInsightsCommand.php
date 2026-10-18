@@ -1008,6 +1008,9 @@ final class ProbeInsightsCommand extends Command
             // The response SHAPE, not its contents: the top-level keys say whether the platform
             // answered with a payload, an error envelope or an empty success.
             $this->line('      response keys: '.(implode(', ', $call['keys']) ?: '(none)'));
+            if (($call['data_keys'] ?? []) !== []) {
+                $this->line('      data: '.implode(', ', $call['data_keys']));
+            }
 
             /*
              * And on a refusal, WHAT IT SAID — the line that stops the next person guessing.

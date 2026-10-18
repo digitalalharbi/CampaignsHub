@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignDestinations;
@@ -18,6 +19,7 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
+use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
@@ -170,6 +172,34 @@ final class LiveReportBuilderController extends Controller
     }
 
     /**
+     * REPORT-SCOPE-HIERARCHY-001 — the ads under chosen campaigns, asked for when a campaign is
+     * expanded rather than shipped with every option (a project can hold thousands).
+     */
+    public function ads(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('reports.share'), 403);
+
+        $campaignIds = array_values(array_filter((array) $request->query('campaign_ids', []), 'is_string'));
+        abort_if($campaignIds === [] || count($campaignIds) > 100, 422, 'Name the campaigns to list ads for.');
+
+        $ads = ExternalAd::query()
+            ->where('project_id', $project)
+            ->whereIn('unified_campaign_id', $campaignIds)
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_ads.external_campaign_id', 'external_ads.project_id'))
+            ->orderBy('name')
+            ->limit(1000)
+            ->get(['id', 'name', 'status', 'unified_campaign_id'])
+            ->map(fn (ExternalAd $a): array => [
+                'id' => (string) $a->id,
+                'name' => trim((string) $a->name) !== '' ? (string) $a->name : (string) $a->id,
+                'status' => $a->status,
+                'campaign_id' => (string) $a->unified_campaign_id,
+            ])->all();
+
+        return ApiResponse::success(['ads' => $ads], 'Ads.');
+    }
+
+    /**
      * The ad accounts behind each of a project's unified campaigns.
      *
      * ACCOUNT-SCOPE-ISOLATION-001 is applied here like everywhere else: a deselected account's
@@ -205,10 +235,33 @@ final class LiveReportBuilderController extends Controller
                 'external_accounts.provider as account_provider',
             ]);
 
+        /*
+         * REPORT-SCOPE-HIERARCHY-001 — accounts that have FIGURES for a campaign count too.
+         *
+         * The structure join above finds an account only through a synced external campaign, so a
+         * project whose spend arrived without one — seeded data, or history from before the structure
+         * sync — listed no account at all, and a link must now name one. `ReportScopeHierarchy`
+         * accepts the same two sources, so the picker can never offer what the server would refuse.
+         */
+        $metricRows = DailyMetric::query()
+            ->where('daily_metrics.project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('daily_metrics.unified_campaign_id')
+            ->whereNotNull('daily_metrics.external_account_id')
+            ->leftJoin('external_accounts', 'external_accounts.id', '=', 'daily_metrics.external_account_id')
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.external_account_id', 'external_accounts.name', 'external_accounts.provider', 'daily_metrics.provider')
+            ->toBase()
+            ->get([
+                'daily_metrics.unified_campaign_id as campaign_id',
+                'daily_metrics.external_account_id as account_id',
+                'external_accounts.name as account_name',
+                DB::raw('COALESCE(external_accounts.provider, daily_metrics.provider) as account_provider'),
+            ]);
+
         $byCampaign = [];
         $all = [];
 
-        foreach ($rows as $row) {
+        foreach ($rows->concat($metricRows) as $row) {
             $account = [
                 'id' => (string) $row->account_id,
                 /*
@@ -300,6 +353,22 @@ final class LiveReportBuilderController extends Controller
             'description' => ['nullable', 'string', 'max:500'],
             'campaign_ids' => ['array'],
             'campaign_ids.*' => ['uuid'],
+            /*
+             * REPORT-SCOPE-HIERARCHY-001 — the hierarchy, chosen top-down and enforced here.
+             *
+             * `account_ids` is REQUIRED: a link names the ad accounts it speaks about. An empty list
+             * used to mean «every campaign in the project», and a project that holds several clients'
+             * accounts then carried all of them — the owner's Razzah report showing hanka's spend.
+             * `accounts.{id}.campaign_ids` narrows one account to chosen campaigns (absent = all of
+             * that account); `accounts.{id}.ad_ids` narrows to chosen ads (absent = all).
+             */
+            'account_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'account_ids.*' => ['uuid', 'distinct'],
+            'accounts' => ['sometimes', 'array'],
+            'accounts.*.campaign_ids' => ['sometimes', 'array'],
+            'accounts.*.campaign_ids.*' => ['uuid'],
+            'accounts.*.ad_ids' => ['sometimes', 'array'],
+            'accounts.*.ad_ids.*' => ['uuid'],
             'providers' => ['array'],
             'providers.*' => ['string', 'max:40'],
             'metrics' => ['array'],
@@ -381,19 +450,13 @@ final class LiveReportBuilderController extends Controller
             $data['to'] = $window['to']->toDateString();
         }
 
-        $requested = array_values(array_unique((array) ($data['campaign_ids'] ?? [])));
-        $campaignIds = UnifiedCampaign::query()
-            ->where('project_id', $project)
-            ->when($requested !== [], fn ($q) => $q->whereIn('id', $requested))
-            ->pluck('id')
-            ->map(strval(...))
-            ->all();
+        [$accountIds, $campaignIds, $adIds] = $this->resolveHierarchy($project, $data);
 
-        abort_if($campaignIds === [], 422, 'No campaigns in this project to share.');
+        abort_if($campaignIds === [], 422, 'No campaigns in the selected accounts to share.');
 
         $providers = array_values(array_unique((array) ($data['providers'] ?? [])));
         if ($providers === []) {
-            $providers = DailyMetric::query()->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all();
+            $providers = DailyMetric::query()->where('project_id', $project)->whereIn('external_account_id', $accountIds)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all();
         }
 
         $metrics = array_values(array_intersect(
@@ -460,6 +523,8 @@ final class LiveReportBuilderController extends Controller
             'scope' => [
                 'project_id' => (string) $project,
                 'campaign_ids' => $campaignIds,
+                'account_ids' => $accountIds,
+                'ad_ids' => $adIds,
                 'providers' => $providers,
                 'metrics' => $metrics,
                 'earliest' => Carbon::parse($data['from'])->toDateString(),
@@ -481,5 +546,48 @@ final class LiveReportBuilderController extends Controller
             'url' => ShareService::urlFor($raw), 'path' => ShareService::pathFor($raw),
             'token' => $raw,
         ], 'Live link created. Copy it now — it is shown only once.', status: 201);
+    }
+
+    /**
+     * REPORT-SCOPE-HIERARCHY-001 — accounts → campaigns → ads, each level checked against the one above.
+     *
+     * Every id is verified against the database rather than trusted: an account must be one this
+     * project actually shows (bound, with data), a chosen campaign must belong to ITS account, a
+     * chosen ad to one of the chosen campaigns. A violation is a 422, never a quiet drop — dropping a
+     * stray id would turn «Razzah plus something I mistyped» into a narrower report nobody asked for.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: list<string>, 1: list<string>, 2: list<string>} account ids, campaign ids, ad ids
+     */
+    private function resolveHierarchy(string $project, array $data): array
+    {
+        $accountIds = array_values(array_unique((array) $data['account_ids']));
+
+        $byAccount = ReportScopeHierarchy::campaignsByAccount($project, $accountIds);
+
+        $campaigns = [];
+        $ads = [];
+        foreach ($accountIds as $account) {
+            $own = array_values(array_unique($byAccount[$account]));
+            $chosen = array_values(array_unique((array) ($data['accounts'][$account]['campaign_ids'] ?? [])));
+            abort_unless(array_diff($chosen, $own) === [], 422, 'A campaign does not belong to the ad account it was chosen under.');
+            $take = $chosen === [] ? $own : $chosen;
+            $campaigns = array_merge($campaigns, $take);
+
+            $chosenAds = array_values(array_unique((array) ($data['accounts'][$account]['ad_ids'] ?? [])));
+            if ($chosenAds !== []) {
+                abort_unless(ReportScopeHierarchy::adsBelong($project, $chosenAds, $take), 422, 'An ad does not belong to the campaigns chosen for its account.');
+                $ads = array_merge($ads, $chosenAds);
+            }
+        }
+
+        $campaigns = UnifiedCampaign::query()
+            ->where('project_id', $project)
+            ->whereIn('id', array_values(array_unique($campaigns)))
+            ->pluck('id')
+            ->map(strval(...))
+            ->all();
+
+        return [$accountIds, $campaigns, array_values(array_unique($ads))];
     }
 }

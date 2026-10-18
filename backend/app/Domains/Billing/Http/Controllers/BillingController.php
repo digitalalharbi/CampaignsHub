@@ -87,7 +87,7 @@ final class BillingController extends Controller
 
         $query = Invoice::query()->latest('created_at');
         if ($status = $request->string('status')->toString()) {
-            if (in_array($status, ['draft', 'issued', 'paid', 'partially_paid', 'void', 'refunded'], true)) {
+            if (in_array($status, ['draft', 'reviewed', 'issued', 'sent', 'paid', 'partially_paid', 'void', 'refunded'], true)) {
                 $query->where('status', $status);
             }
         }

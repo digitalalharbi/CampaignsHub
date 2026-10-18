@@ -31,6 +31,20 @@ vi.mock('./api', async (orig) => {
   return { ...actual, listReports: vi.fn(), createReport: vi.fn(), listReportSections: vi.fn() }
 })
 
+/*
+ * REPORT-SCOPE-HIERARCHY-001 — a new saved report names its ad accounts, so the builder will not
+ * create one without. The picker has its own tests; here it just chooses an account.
+ */
+vi.mock('./ReportScopePicker', async () => {
+  const React = await import('react')
+  return {
+    ReportScopePicker: ({ onChange }: { onChange: (v: { account_ids: string[] }) => void }) => {
+      React.useEffect(() => { onChange({ account_ids: ['a1'] }) }, [])
+      return null
+    },
+  }
+})
+
 import { createReport, listReportSections, listReports } from './api'
 
 describe('ReportsPage — engine-fed builder', () => {
