@@ -31,11 +31,12 @@ vi.mock('./api', async (importOriginal) => ({
   projectReportIdentity: () => Promise.resolve(state.identity),
   liveBuilderOptions: () => Promise.resolve({
     campaigns: [
-      { id: 'c1', name: 'حملة سناب', status: 'active', last_active_on: null, platforms: ['snapchat'] },
-      { id: 'c2', name: 'حملة ميتا', status: 'active', last_active_on: null, platforms: ['meta'] },
-      { id: 'c3', name: 'حملة مشتركة', status: 'active', last_active_on: null, platforms: ['snapchat', 'meta'] },
+      { id: 'c1', name: 'حملة سناب', status: 'active', last_active_on: null, platforms: ['snapchat'], accounts: [{ id: 'a1', name: 'حساب', provider: 'snapchat' }] },
+      { id: 'c2', name: 'حملة ميتا', status: 'active', last_active_on: null, platforms: ['meta'], accounts: [{ id: 'a1', name: 'حساب', provider: 'snapchat' }] },
+      { id: 'c3', name: 'حملة مشتركة', status: 'active', last_active_on: null, platforms: ['snapchat', 'meta'], accounts: [{ id: 'a1', name: 'حساب', provider: 'snapchat' }] },
     ],
     providers: ['snapchat', 'meta'],
+    ad_accounts: [{ id: 'a1', name: 'حساب', provider: 'snapchat' }],
     metrics: [{ key: 'spend', ar: 'الإنفاق', en: 'Spend' }],
   }),
   reportSectionRegistry: () => Promise.resolve({ sections: [] }),
@@ -112,6 +113,7 @@ describe('the report link builder', () => {
   it('narrows the campaigns to one platform', async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p1" onClose={vi.fn()} />, { locale: 'ar' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'تحديد الكل' }))
     const list = await screen.findByTestId('live-builder-campaigns')
     expect(list).toHaveTextContent('حملة سناب')
     expect(list).toHaveTextContent('حملة ميتا')
@@ -133,6 +135,7 @@ describe('the report link builder', () => {
   it('keeps a selected campaign selected when the filter moves', async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p1" onClose={vi.fn()} />, { locale: 'ar' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'تحديد الكل' }))
     const list = await screen.findByTestId('live-builder-campaigns')
     const snapRow = [...list.querySelectorAll('label')].find((l) => l.textContent?.includes('حملة سناب'))!
     fireEvent.click(snapRow.querySelector('input')!)

@@ -379,6 +379,7 @@ final class ReportScopeEndpointTest extends TestCase
         $res = $this->actingAs($this->operator, 'sanctum')
             ->postJson($this->url('/live'), [
                 'name' => 'رابط هنكا',
+                'account_ids' => array_values($this->accounts),
                 'from' => '2026-07-01',
                 'to' => '2026-07-31',
                 'detail_level' => 'summary',
@@ -408,6 +409,7 @@ final class ReportScopeEndpointTest extends TestCase
         $res = $this->actingAs($this->operator, 'sanctum')
             ->postJson("/api/v1/projects/{$this->project->getKey()}/reports/live", [
                 'name' => 'رابط',
+                'account_ids' => array_values($this->accounts),
                 'from' => '2026-07-01',
                 'to' => '2026-07-31',
                 'detail_level' => 'standard',

@@ -27,7 +27,8 @@ import { createLiveLink, liveBuilderOptions, reportSectionRegistry } from './api
  * chose. So these tests assert what was SENT, not what was rendered.
  */
 const OPTIONS = {
-  campaigns: [{ id: 'c-1', name: 'Eid', status: 'active', last_active_on: '2026-08-20', objective: 'sales' }],
+  campaigns: [{ id: 'c-1', name: 'Eid', status: 'active', last_active_on: '2026-08-20', objective: 'sales', accounts: [{ id: 'a-1', name: 'Brand', provider: 'meta' }] }],
+  ad_accounts: [{ id: 'a-1', name: 'Brand', provider: 'meta' }],
   providers: ['meta'],
   metrics: [{ key: 'spend', ar: 'الإنفاق', en: 'Spend' }],
 }
@@ -55,6 +56,7 @@ describe('building a live client link', () => {
   const build = async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p-1" onClose={() => {}} />, { locale: 'en' })
     await screen.findByTestId('live-link-summary')
+    fireEvent.click(screen.getByTestId('live-builder-account-a-1'))
     fireEvent.change(screen.getByTestId("live-link-name"), { target: { value: "Client link" } })
   }
 
