@@ -1,0 +1,97 @@
+name: Merge queue
+
+# The serial merge queue, kept in GitHub rather than in somebody's terminal.
+#
+# `main` requires every PR to be up to date and green, so a merge makes every other open PR stale and
+# restarts about an hour of browser CI. Merging them one at a time, in a stated order, used to be done
+# by a script running inside a development session; when the session ended, so did the queue. This does
+# the same job on a schedule, with no secret beyond the repository token and no paid service.
+#
+# Order and membership live in docs/MERGE_QUEUE.md. See that file for what one run does.
+#
+# It cannot merge anything the rules would not: a red check halts it, a missing check is "still
+# waiting", and the branch must be current. The deploy is started explicitly after a merge because a
+# merge made with the repository token does not trigger the push-based deploy.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+  # A finished CI run is the moment the head of the queue may have become mergeable.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  checks: read
+
+concurrency:
+  group: merge-queue
+  cancel-in-progress: false
+
+jobs:
+  advance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Advance the head of the queue
+        shell: bash
+        run: |
+          set -uo pipefail
+          REQUIRED=("backend" "frontend" "image" "gate (chromium)" "gate (firefox)" "gate (webkit)")
+
+          mapfile -t QUEUE < <(sed -n '/^```$/,/^```$/p' docs/MERGE_QUEUE.md | grep -E '^[0-9]+$')
+          [ "${#QUEUE[@]}" -gt 0 ] || { echo "The queue is empty."; exit 0; }
+
+          for pr in "${QUEUE[@]}"; do
+            info=$(gh pr view "$pr" --json state,mergeStateStatus,headRefName,headRefOid)
+            state=$(jq -r .state <<<"$info"); merge=$(jq -r .mergeStateStatus <<<"$info")
+            branch=$(jq -r .headRefName <<<"$info"); sha=$(jq -r .headRefOid <<<"$info")
+            [ "$state" = "OPEN" ] || { echo "#$pr is $state — skipped."; continue; }
+
+            echo "Head of the queue: #$pr ($branch @ ${sha:0:8}, $merge)"
+
+            if [ "$merge" = "DIRTY" ]; then
+              echo "::error::#$pr has merge conflicts. Resolve them on the branch; the queue is halted."
+              exit 1
+            fi
+
+            if [ "$merge" = "BEHIND" ]; then
+              gh pr update-branch "$pr" && gh workflow run ci.yml --ref "$branch"
+              echo "#$pr was behind main: branch updated and CI started. Waiting."
+              exit 0
+            fi
+
+            # Check runs for THIS head only, by name; a name that is absent is not a pass.
+            runs=$(gh api "repos/$GH_REPO/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | {name, status, conclusion}]')
+            pending=0
+            for need in "${REQUIRED[@]}"; do
+              row=$(jq -c --arg n "$need" '[.[] | select(.name==$n)] | last // empty' <<<"$runs")
+              if [ -z "$row" ]; then pending=1; echo "  $need: not reported yet"; continue; fi
+              status=$(jq -r .status <<<"$row"); concl=$(jq -r .conclusion <<<"$row")
+              if [ "$status" != "completed" ]; then pending=1; echo "  $need: $status"; continue; fi
+              if [ "$concl" != "success" ]; then
+                echo "::error::#$pr: '$need' finished '$concl'. The queue is halted — fix it or rerun the check."
+                exit 1
+              fi
+              echo "  $need: success"
+            done
+
+            if [ "$pending" = 1 ]; then echo "#$pr is still being checked. Waiting."; exit 0; fi
+
+            gh pr merge "$pr" --squash || { echo "::error::#$pr could not be merged (see the message above). Halted."; exit 1; }
+            echo "#$pr merged."
+            gh workflow run deploy-production.yml --ref main
+            echo "Deploy started for the new main."
+            # The next PR is now behind main; the next iteration updates it.
+          done
