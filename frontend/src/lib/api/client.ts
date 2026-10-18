@@ -72,7 +72,7 @@ api.interceptors.request.use((config) => {
 let signingOut = false
 
 /** Everything the barrier must let through — the sign-out's own traffic, and nothing else. */
-const SIGN_OUT_ALLOWED = ['/auth/logout']
+const SIGN_OUT_ALLOWED = ['/auth/logout', '/client/logout']
 
 /**
  * Raise the barrier. Called BEFORE `/auth/logout` is sent, never after.

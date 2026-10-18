@@ -20,6 +20,7 @@ use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
@@ -186,7 +187,7 @@ final class ClientPortalController
     }
 
     /** POST /client/logout */
-    public function logout(Request $request): JsonResponse
+    public function logout(Request $request, SessionRevocations $revocations): JsonResponse
     {
         $token = $this->resolveSession($request);
 
@@ -200,6 +201,18 @@ final class ClientPortalController
         // Both engines end together. Revoking one and leaving the other is how "I signed out" stops
         // being true while still looking like it worked.
         if (Auth::guard('web')->check()) {
+            /*
+             * OWNER DEFECT 102 — record the id BEFORE it is destroyed, exactly as `/auth/logout` does.
+             *
+             * This ended the session and recorded nothing, and the client's follow-up `/auth/logout` is
+             * answered 401 once the session is gone, so it never reached the controller that records it.
+             * A dashboard request still in flight then wrote its payload back under the same id and the
+             * visitor was bounced from /login straight back into the portal (ACCESS-EXIT-003).
+             */
+            if ($request->hasSession()) {
+                $revocations->revoke($request->session()->getId());
+            }
+
             Auth::guard('web')->logout();
 
             if ($request->hasSession()) {
