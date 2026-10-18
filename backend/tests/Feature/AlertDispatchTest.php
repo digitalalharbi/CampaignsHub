@@ -116,7 +116,7 @@ final class AlertDispatchTest extends TestCase
                 // «internal», and «nothing stops delivery» — the two facts that separate it from a
                 // platform budget, which the platform itself enforces.
                 && str_contains($detail, 'داخلي')
-                && str_contains($detail, 'لا يوقف CampaignsHub العرض');
+                && str_contains($detail, 'لا يوقف كامبينز هب العرض');
         });
     }
 
