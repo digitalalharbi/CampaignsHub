@@ -2226,3 +2226,13 @@ Nothing below is complete until Production says so. Each row maps one Owner sent
 | BUDGET-LIMITS-ACTIONS-001 | K OPS / MONEY | Limits and actions only where the provider capability permits | — | — | — | **NOT_STARTED** | — | Capability matrix per provider before any control is shown. |
 | PROJECTS-RBAC-CLOSURE-001 | L TEAM / SEC | Projects and RBAC closed against the matrix rows and Production | — | — | — | **PARTIAL** | — | TEAM-PROJECT-RBAC-001 is BLOCKED_OPERATIONAL_EVIDENCE; remaining executable clauses to list. |
 | PRODUCTION-ACCEPTANCE-001 | E TESTING | Every tracked row above is Production VERIFIED or carries a precise external or Owner blocker | — | — | — | **IN_PROGRESS** | — | Closes last. |
+
+## Owner batch 2026-10-18 — logout, branding and portal parity
+
+| ID | Module | Requirement | Backend | Frontend | Test | Status | Commit | Remaining gap |
+|---|---|---|---|---|---|---|---|---|
+| CP-LOGOUT-001 | M CLIENT PORTAL | Signing out of the client portal clears the session and workspace context and lands on /login, never on /switch with a workspace-load error; multi-workspace sign-in has no loop | — | PortalShell uses signOutCompletely | PortalShellLogout (unit, failed first), portal-audit e2e | **IMPLEMENTED_NOT_VERIFIED** | — | Production proof needs a real multi-workspace client session. |
+| BRAND-LANG-001 | G BRAND | Every portal shows the name and official logo for the selected language: Arabic كمبينز هب, English CampaignsHub | — | — | — | **NOT_STARTED** | — | Audit each portal header, auth page, email and PDF for the lockup that follows the language. |
+| CP-PARITY-001 | M CLIENT PORTAL | The client portal reaches the other portals' functionality, navigation and visual quality while keeping client-specific permissions | — | — | — | **NOT_STARTED** | — | Compare rail, header, dashboard blocks and tables with the advertiser portal; close gaps without loosening visibility. |
+| UX-COMPACT-CHARTS-001 | H UX | Compact KPI cards, less spacing and repeated text, meaningful interactive Line, Bar, Area and Donut charts, comparisons, funnels and budget visuals; no page-level horizontal scroll at mobile, tablet and desktop; no decorative or misleading chart | — | — | — | **NOT_STARTED** | — | Progressive; each surface through its own scoped PR. |
+
