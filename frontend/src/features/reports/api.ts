@@ -203,6 +203,11 @@ export const liveBuilderOptions = (p: string, period?: { from: string; to: strin
     `${base(p)}/live/options${period ? `?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}` : ''}`,
   )
 
+/** REPORT-SCOPE-HIERARCHY-001 — the ads under the chosen campaigns, fetched when campaigns are ticked. */
+export interface LiveBuilderAd { id: string; name: string; status: string | null; campaign_id: string }
+export const liveBuilderAds = (p: string, campaignIds: string[]) =>
+  getData<{ ads: LiveBuilderAd[] }>(`${base(p)}/live/options/ads?${campaignIds.map((id) => `campaign_ids[]=${encodeURIComponent(id)}`).join('&')}`)
+
 export const createLiveLink = (p: string, body: Record<string, unknown>) =>
   postData<{ report_id: string; share_id: string; url: string; token: string }>(`${base(p)}/live`, body)
 

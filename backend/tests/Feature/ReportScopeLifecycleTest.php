@@ -198,7 +198,7 @@ final class ReportScopeLifecycleTest extends TestCase
     {
         $this->actingAs($this->owner, 'sanctum')
             ->postJson("/api/v1/projects/{$this->project->id}/reports/live", [
-                'name' => 'X', 'from' => '2026-07-01', 'to' => '2026-07-31', 'form' => 'wall_chart',
+                'name' => 'X', 'account_ids' => [(string) $this->account->getKey()], 'from' => '2026-07-01', 'to' => '2026-07-31', 'form' => 'wall_chart',
             ])
             ->assertStatus(422);
     }
@@ -218,6 +218,7 @@ final class ReportScopeLifecycleTest extends TestCase
         $id = $this->actingAs($this->owner, 'sanctum')
             ->postJson("/api/v1/projects/{$this->project->id}/reports/live", array_merge([
                 'name' => 'Client link',
+                'account_ids' => [(string) $this->account->getKey()],
                 'from' => '2026-07-01',
                 'to' => '2026-07-31',
             ], $over))

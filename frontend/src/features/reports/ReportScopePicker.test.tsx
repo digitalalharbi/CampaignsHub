@@ -44,8 +44,8 @@ describe('ReportScopePicker', () => {
       limit: 500,
       truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
     })
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    await screen.findByTestId('scope-select-Campaigns')
 
     const note = await screen.findByTestId('scope-truncated-Campaigns')
     expect(note).toHaveTextContent('Showing 500 only')
@@ -59,8 +59,8 @@ describe('ReportScopePicker', () => {
       limit: 500,
       truncated: { campaigns: false, ad_sets: false, ads: false, creatives: false },
     })
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    await screen.findByTestId('scope-select-Campaigns')
 
     await screen.findByText('Campaigns')
     expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
@@ -73,8 +73,8 @@ describe('ReportScopePicker', () => {
    */
   it('does not invent a completeness claim the server never made', async () => {
     vi.mocked(scopeOptions).mockResolvedValue(OPTIONS)
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    await screen.findByTestId('scope-select-Campaigns')
 
     await screen.findByText('Campaigns')
     expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
@@ -86,8 +86,8 @@ describe('ReportScopePicker', () => {
       limit: 500,
       truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
     })
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'ar' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />, { locale: 'ar' })
+    await screen.findByTestId('scope-select-الحملات')
 
     const note = await screen.findByTestId('scope-truncated-الحملات')
     expect(note).toHaveTextContent('يُعرض 500 فقط')
@@ -95,8 +95,8 @@ describe('ReportScopePicker', () => {
   })
 
   it('offers every axis the project has data for', async () => {
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    await screen.findByTestId('scope-select-Campaigns')
 
     expect(await screen.findByText('Platforms')).toBeInTheDocument()
     expect(screen.getByText('Ad accounts')).toBeInTheDocument()
@@ -124,8 +124,8 @@ describe('ReportScopePicker', () => {
    * silently would have a reader believe a campaign's spend was one ad set's.
    */
   it('warns that ad sets and ads do not narrow the figures the way they look like they do', async () => {
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
+    await screen.findByTestId('scope-select-Campaigns')
 
     expect(await screen.findByText(/No metrics are stored at this level/)).toBeInTheDocument()
     expect(screen.getByText(/Narrows the ad section only/)).toBeInTheDocument()
@@ -133,11 +133,11 @@ describe('ReportScopePicker', () => {
 
   it('adds a chosen member to its axis', async () => {
     const onChange = vi.fn()
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={onChange} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={onChange} />, { locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('scope-chip-meta'))
 
-    expect(onChange).toHaveBeenCalledWith({ providers: ['meta'] })
+    expect(onChange).toHaveBeenCalledWith({ account_ids: ['a1'], providers: ['meta'] })
   })
 
   /**
@@ -150,13 +150,13 @@ describe('ReportScopePicker', () => {
   it('omits an axis it has emptied instead of sending an empty list', async () => {
     const onChange = vi.fn()
     renderWithProviders(
-      <ReportScopePicker projectId="p1" value={{ providers: ['meta'], campaign_ids: ['c1'] }} onChange={onChange} />,
+      <ReportScopePicker projectId="p1" value={{ account_ids: ['a1'], providers: ['meta'], campaign_ids: ['c1'] }} onChange={onChange} />,
       { locale: 'en' },
     )
 
     fireEvent.click(await screen.findByTestId('scope-chip-meta'))
 
-    expect(onChange).toHaveBeenCalledWith({ campaign_ids: ['c1'] })
+    expect(onChange).toHaveBeenCalledWith({ account_ids: ['a1'], campaign_ids: ['c1'] })
     expect(onChange.mock.calls[0][0]).not.toHaveProperty('providers')
   })
 
@@ -182,7 +182,6 @@ describe('ReportScopePicker', () => {
   /** Nothing chosen is nothing to save — a template of «the whole project» is not a scope. */
   it('will not save a template when no axis is bound', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
 
     fireEvent.change(await screen.findByTestId('scope-template-name'), { target: { value: 'Everything' } })
 
@@ -211,30 +210,19 @@ describe('ReportScopePicker', () => {
 
     const onChange = vi.fn()
     renderWithProviders(
-      <ReportScopePicker projectId="p1" value={{}} onChange={onChange} audience="internal" />,
+      <ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={onChange} audience="internal" />,
       { locale: 'en' },
     )
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    await screen.findByTestId('scope-select-Campaigns')
 
     const axis = await screen.findByTestId('scope-select-Campaigns')
 
-    /* Opened by its own trigger, then searched — not scrolled. */
-    fireEvent.click(axis.querySelector('button')!)
-    /* Trigger and panel search both carry role=combobox; the search is the one that is an input. */
-    const search = (await within(axis).findAllByRole('combobox')).find(
-      (el) => el.tagName === 'INPUT',
-    )!
-    fireEvent.change(search, { target: { value: 'Ramadan' } })
-
-    /*
-     * `mouseDown`, not `click` — the option commits on mouse-down so the panel does not lose the
-     * selection to its own blur. This is how the component's own tests drive it.
-     */
-    const hit = await within(axis).findByRole('option', { name: /Ramadan Sale/ })
-    fireEvent.mouseDown(hit)
+    /* The list is on the page — search it, then tick the match. */
+    fireEvent.change(within(axis).getByTestId('scope-search-campaigns'), { target: { value: 'Ramadan' } })
+    fireEvent.click(await within(axis).findByTestId('scope-campaigns-c137'))
 
     await waitFor(() => expect(onChange).toHaveBeenCalled())
-    expect(onChange.mock.calls.at(-1)![0]).toEqual({ campaign_ids: ['c137'] })
+    expect(onChange.mock.calls.at(-1)![0]).toEqual({ account_ids: ['a1'], campaign_ids: ['c137'] })
   })
 
   /**
@@ -252,10 +240,10 @@ describe('ReportScopePicker', () => {
     } as ScopeOptions)
 
     renderWithProviders(
-      <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />,
+      <ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />,
       { locale: 'en' },
     )
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    await screen.findByTestId('scope-select-Campaigns')
 
     expect(await screen.findByTestId('scope-truncated-Campaigns')).toHaveTextContent('Showing 500 only')
   })
@@ -266,7 +254,7 @@ describe('ReportScopePicker', () => {
    */
   it('leaves the short fixed axes as chips', async () => {
     renderWithProviders(
-      <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />,
+      <ReportScopePicker projectId="p1" value={{ account_ids: ['a1'] }} onChange={vi.fn()} audience="internal" />,
       { locale: 'en' },
     )
 

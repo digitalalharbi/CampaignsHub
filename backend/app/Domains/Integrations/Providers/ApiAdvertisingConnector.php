@@ -576,7 +576,19 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
                 }
                 $name .= '{'.implode(',', $inner).'}';
             } elseif (is_array($value)) {
+                // A list: its length, and the key names of its FIRST object (two levels, names only) so a probe
+                // can say what a creative or an ad body carries without printing one value of it.
+                $first = $value[0] ?? null;
                 $name .= '['.count($value).']';
+                if (is_array($first) && $first !== [] && ! array_is_list($first)) {
+                    $inner = [];
+                    foreach (array_slice($first, 0, 14, true) as $k => $v) {
+                        $inner[] = (string) $k.(is_array($v) && $v !== [] && ! array_is_list($v)
+                            ? '{'.implode(',', array_map('strval', array_slice(array_keys($v), 0, 10))).'}'
+                            : '');
+                    }
+                    $name .= '{'.implode(',', $inner).'}';
+                }
             }
             $out[] = $name;
             if (count($out) >= 12) {

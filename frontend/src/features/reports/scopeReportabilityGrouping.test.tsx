@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { ReportScopePicker } from './ReportScopePicker'
 import type { ScopeOptions } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -63,7 +63,7 @@ const OPTIONS: ScopeOptions = {
   grain: { figures: ['providers'], resolved_to_campaign: ['ad_set_ids'], creatives_only: ['creative_ids'] },
 } as unknown as ScopeOptions
 
-const PERIOD = { from: '2026-07-01', to: '2026-07-31' }
+const PERIOD = { from: '2026-07-01', to: '2026-07-31', account_ids: ['a1'] }
 
 /*
  * The control is addressed by its own testid, the way `scopeAxisSearch.test.tsx` addresses it.
@@ -75,8 +75,7 @@ const PERIOD = { from: '2026-07-01', to: '2026-07-31' }
  */
 const open = async (axis: string) => {
   const box = within(await screen.findByTestId(`scope-select-${axis}`))
-  fireEvent.click(box.getAllByRole('combobox')[0])
-
+  // The rows are checkboxes on the page — nothing to open.
   return box
 }
 
@@ -101,7 +100,7 @@ describe.each(LOCALES)('the builder groups campaigns by what ran in the window (
       { locale },
     )
     // REPORT-SETUP-001 — campaigns are listed under «Selected campaigns».
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    await screen.findByTestId(`scope-select-${axis}`)
   }
 
   it('names the group that ran, and the group that did not', async () => {
@@ -128,7 +127,7 @@ describe.each(LOCALES)('the builder groups campaigns by what ran in the window (
    * returning the list untouched.
    */
   it('makes no claim when no period was chosen', async () => {
-    await render({})
+    await render({ account_ids: ['a1'] })
     await open(axis)
 
     expect(await screen.findByText('Quiet One')).toBeInTheDocument()

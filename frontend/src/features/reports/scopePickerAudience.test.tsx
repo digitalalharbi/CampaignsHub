@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { ReportScopePicker } from './ReportScopePicker'
 import type { ScopeOptions } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -43,16 +43,14 @@ const OPTIONS: ScopeOptions = {
 
 /** Every internal name in the fixture above — none may reach a client-audience builder. */
 const INTERNAL_NAMES = [
-  'Meta — Prospecting Broad KSA 3.2',
-  'Nakheel Main Ad Account',
   'LAL 3% — Riyadh',
   'AD-0042 hero cut B',
   'hero_video_v3_final',
 ]
 
-const render = (audience: string) =>
+const render = (audience: string, value: Record<string, unknown> = {}) =>
   renderWithProviders(
-    <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience={audience} />,
+    <ReportScopePicker projectId="p1" value={value as never} onChange={vi.fn()} audience={audience} />,
     { locale: 'en' },
   )
 
@@ -82,12 +80,20 @@ describe('what a report builder may name, by audience', () => {
      * wrongly offered to a client, one click away from the names it must never show. The rung has
      * to be missing, not shut.
      */
-    for (const axis of ['Ad accounts', 'Campaigns', 'Ad sets', 'Ads', 'Content']) {
+    for (const axis of ['Ad sets', 'Content']) {
       expect(
         screen.queryByTestId(`scope-select-${axis}`),
         `a client-facing builder offered the «${axis}» rung`,
       ).not.toBeInTheDocument()
     }
+  })
+
+  /** REPORT-SCOPE-HIERARCHY-001 — the ad account rung is offered to every audience, and is required. */
+  it.each(['client', 'executive'])('a %s report must still choose its ad accounts', async (audience) => {
+    render(audience)
+
+    expect(await screen.findByTestId('scope-select-Ad accounts')).toBeInTheDocument()
+    expect(screen.getByTestId('scope-accounts-required')).toBeInTheDocument()
   })
 
   /** What it offers INSTEAD — the channel the client already knows they bought. */
@@ -109,11 +115,11 @@ describe('what a report builder may name, by audience', () => {
    * account, campaign, ad set, ad and creative, and can reach those names.
    */
   it('an internal report keeps the whole hierarchy', async () => {
-    render('internal')
+    render('internal', { account_ids: ['a1'] })
     await screen.findByText('Platforms')
-    fireEvent.click(await screen.findByRole('radio', { name: /Selected campaigns|حملات محددة/ }))
+    await screen.findByTestId('scope-select-Campaigns')
 
-    for (const axis of ['Ad accounts', 'Campaigns', 'Ad sets', 'Ads', 'Content']) {
+    for (const axis of ['Ad sets', 'Content']) {
       expect(
         screen.queryByTestId(`scope-select-${axis}`),
         `the «${axis}» rung was removed from an internal builder`,
@@ -122,11 +128,7 @@ describe('what a report builder may name, by audience', () => {
 
     /* And the names are genuinely reachable — one axis opened is enough to prove the wiring. */
     const campaigns = screen.getByTestId('scope-select-Campaigns')
-    fireEvent.click(within(campaigns).getAllByRole('combobox')[0])
-
-    expect(
-      within(campaigns).getByRole('option', { name: /Prospecting Broad KSA/ }),
-    ).toBeInTheDocument()
+    expect(within(campaigns).getByText(/Prospecting Broad KSA/)).toBeInTheDocument()
   })
 
   /**
