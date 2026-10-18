@@ -37,6 +37,7 @@ import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
+import { ClientNewRequestPage } from '@/features/requests/portal/ClientNewRequestPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
 import { ClientDashboardPage } from '@/features/requests/portal/ClientDashboardPage'
 import { ClientQuotesPage } from '@/features/requests/portal/ClientQuotesPage'
@@ -218,6 +219,7 @@ export const router = createBrowserRouter(withErrorBoundary([
     ? []
     : [{ path: '/influencers/*', element: <RequireInfluencersEnabled /> }]),
   { path: '/portal/requests', element: <ClientRequestsPage /> },
+  { path: '/portal/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
   { path: '/portal/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/quotes/:id', element: <ClientQuoteDetailPage /> },
@@ -247,6 +249,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   // The clean form. Static segments outrank `:clientSlug`, so `/portal/requests` stays the merged view.
   { path: '/portal/:clientSlug', element: <ClientDashboardPage /> },
   { path: '/portal/:clientSlug/requests', element: <ClientRequestsPage /> },
+  { path: '/portal/:clientSlug/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
   { path: '/portal/:clientSlug/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
