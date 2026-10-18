@@ -2,6 +2,9 @@ name: CI
 
 on:
   pull_request:
+  # GitHub's own merge queue (a repository-ruleset option) builds each queued PR on this event, with no
+  # token of ours involved. Inert until the ruleset enables it; see docs/MERGE_QUEUE.md.
+  merge_group:
   # The merge queue (merge-queue.yml) updates a PR's branch with the repository token, and a push made
   # with that token does not start a pull_request run. It starts this one instead, on the branch: the
   # check runs carry the same names on the same commit, so they satisfy the same required checks.
