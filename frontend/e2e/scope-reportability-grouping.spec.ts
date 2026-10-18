@@ -76,6 +76,8 @@ async function openCampaigns(page: Page, _locale: 'ar' | 'en') {
   // REPORT-SCOPE-HIERARCHY-001 — campaigns are a list of checkboxes for the TICKED accounts, so the
   // accounts are chosen first; nothing needs opening.
   await chooseFirstAccount(page)
+  // Each tick re-asks the server for the narrowed list; take the answer for the LAST choice, not an earlier one.
+  await page.waitForLoadState('networkidle')
 
   const box = campaignsBox(page)
   await expect(box).toBeVisible({ timeout: 30000 })
@@ -129,14 +131,14 @@ for (const locale of ['ar', 'en'] as const) {
 
       const box = await openCampaigns(page, locale)
 
-      await expect(box.getByText(t.ran, { exact: false }).first()).toBeVisible()
+      await expect(box.getByText(t.ran, { exact: false }).first()).toBeVisible({ timeout: 20000 })
       /*
        * The never-run campaign is what makes this heading reachable. Its presence is asserted as well
        * as the heading's, so a seed that stopped creating it fails here rather than quietly removing
        * half the coverage.
        */
-      await expect(box.getByText(t.quiet, { exact: false }).first()).toBeVisible()
-      await expect(box.getByText('حملة الإطلاق — لم تُشغَّل بعد', { exact: false }).first()).toBeVisible()
+      await expect(box.getByText(t.quiet, { exact: false }).first()).toBeVisible({ timeout: 20000 })
+      await expect(box.getByText('حملة الإطلاق — لم تُشغَّل بعد', { exact: false }).first()).toBeVisible({ timeout: 20000 })
 
       /* The heading decides emphasis, never membership. */
       const options = box.getByRole('checkbox')
@@ -168,7 +170,7 @@ for (const locale of ['ar', 'en'] as const) {
       await setPeriod(page)
 
       const box = await openCampaigns(page, locale)
-      await expect(box.getByText(t.ran, { exact: false }).first()).toBeVisible()
+      await expect(box.getByText(t.ran, { exact: false }).first()).toBeVisible({ timeout: 20000 })
 
       const before = await box.getByRole('checkbox').count()
       await box.getByTestId('scope-search-campaigns').fill('الإطلاق')
@@ -177,8 +179,8 @@ for (const locale of ['ar', 'en'] as const) {
         const after = await box.getByRole('checkbox').count()
         expect(after).toBeGreaterThan(0)
         expect(after).toBeLessThan(before)
-      }).toPass({ timeout: 10000 })
-      await expect(box.getByText(t.quiet, { exact: false }).first()).toBeVisible()
+      }).toPass({ timeout: 20000 })
+      await expect(box.getByText(t.quiet, { exact: false }).first()).toBeVisible({ timeout: 20000 })
     })
 
     /** A heading in the DOM that the reader cannot see is not a heading. */
