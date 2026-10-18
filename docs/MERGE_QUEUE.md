@@ -20,13 +20,13 @@ The queue never bypasses a failing check and never merges a head whose checks ar
 752
 ```
 
-## Why a token, and the smaller alternative
+## How a stale PR is refreshed without a secret
 
-`main` requires every PR to be up to date. Making a stale PR current means pushing to its branch, and a push made with the workflow's own `GITHUB_TOKEN` starts no `pull_request` run (GitHub's rule against workflows triggering workflows). A CI run started by dispatch instead is **not counted** by the PR — measured on #756: the checks existed on the commit and the PR reported none. So without something more, a stale PR needs a person's `git merge origin/main && git push`. Existing `GITHUB_TOKEN` permissions cannot change this; widening them does not either.
+`main` requires every PR to be up to date. The queue updates the branch with the workflow's own `GITHUB_TOKEN`. A push made with that token starts no `pull_request` run (GitHub's rule against workflows triggering workflows), so the queue starts `ci.yml` by dispatch instead. A dispatched run's check runs are **not counted** by the PR (measured on #756: the checks existed on the commit and the PR reported none), so its last job, `report-status`, posts that same run's real verdicts as **commit statuses** with the names branch protection requires (`backend`, `frontend`, `image`, `gate (…)`). A failed job posts a failure; nothing is invented and no check is skipped. The queue then reads the PR's own view of its checks and merges only when all six are green for that commit.
 
-Two ways to remove the manual step. Neither is done by this repository's code alone, because both are repository settings or credentials the Owner owns:
+If a PR is refreshed by hand (`git merge origin/main && git push`) the ordinary `pull_request` run does the same job, and no statuses are needed.
 
-1. **GitHub's native merge queue (preferred — no secret at all).** In Settings → Rules → the `main protection` ruleset, add **Require merge queue** (squash, group size 1, build concurrency 1, status-check timeout 90 minutes) and make `backend`, `frontend`, `image` and the three `gate` checks the required checks of the queue. `ci.yml` already runs on `merge_group`. GitHub then builds each PR on top of `main` itself, merges it when green, and this workflow becomes unnecessary.
-2. **`MERGE_QUEUE_TOKEN` (fallback).** A fine-grained personal access token, resource owner `digitalalharbi`, **only** the repository `CampaignsHub`, with: Contents **read and write**, Pull requests **read and write**, Workflows **read and write** (a branch update that brings in a changed `.github/workflows/*` file is refused without it), Metadata read. Nothing else — no Actions, Administration, or organisation scope is needed, because a merge made with a user token triggers the push-based deploy by itself. Store it as the repository secret `MERGE_QUEUE_TOKEN`; the workflow uses it when present and falls back to a warning when it is not.
+## Alternatives considered
 
-Until one of them exists, the queue still merges and reports; it just cannot refresh a stale PR.
+- **GitHub's native merge queue — not available here.** It is offered to repositories owned by an organisation; this repository is owned by a user account (`digitalalharbi`). `ci.yml` keeps a `merge_group` trigger so it works unchanged if the repository ever moves to an organisation.
+- **`MERGE_QUEUE_TOKEN` — not needed.** A personal access token would also work (a push made with it starts the normal run). Its minimum would be Contents, Pull requests and Workflows read/write on this repository only; the queue uses it automatically if the secret exists. Nothing requires one.

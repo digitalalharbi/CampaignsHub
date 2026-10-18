@@ -74,12 +74,13 @@ jobs:
             fi
 
             if [ "$merge" = "BEHIND" ]; then
-              if [ "$HAVE_QUEUE_TOKEN" = "true" ]; then
-                gh pr update-branch "$pr"
-                echo "#$pr was behind main: branch updated; its pull_request CI starts from that push. Waiting."
-                exit 0
+              gh pr update-branch "$pr"
+              if [ "$HAVE_QUEUE_TOKEN" != "true" ]; then
+                # A token-made push starts no pull_request run, so CI is started by dispatch; its
+                # `report-status` job posts the real verdicts as commit statuses the PR does count.
+                gh workflow run ci.yml --ref "$branch"
               fi
-              echo "::warning::#$pr is behind main and this run has no MERGE_QUEUE_TOKEN, so it cannot start CI that the pull request would count. Push the updated branch yourself (git merge origin/main && git push), or add the MERGE_QUEUE_TOKEN secret."
+              echo "#$pr was behind main: branch updated and CI started. Waiting."
               exit 0
             fi
 
