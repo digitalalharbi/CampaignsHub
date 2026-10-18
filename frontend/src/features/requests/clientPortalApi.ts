@@ -35,6 +35,17 @@ export interface PortalRequestCard {
 
 export const listPortalRequests = () => getData<{ requests: PortalRequestCard[] }>('/client/requests')
 
+/** CP-REQ-ONE-001 — open a request from inside the client's own space. */
+export interface NewPortalRequest {
+  type: string
+  message: string
+  priority?: 'low' | 'medium' | 'high'
+  project_id?: string
+  related?: { kind: 'campaign' | 'report' | 'invoice'; id: string }
+}
+export const createPortalRequest = (body: NewPortalRequest) =>
+  postData<{ reference: string; status: string; submitted_at: string | null }>('/client/requests', body)
+
 export interface PortalRequestDetail extends PortalRequestCard {
   timeline: { type: string; status: string | null; message: string | null; at: string | null }[]
   comments: { author: string; body: string; at: string | null }[]
