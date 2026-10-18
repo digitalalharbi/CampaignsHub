@@ -19,6 +19,7 @@ use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
+use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -97,7 +98,7 @@ final class ReportController extends Controller
         return $config;
     }
 
-    public function store(Request $request, AuditLogger $audit): JsonResponse
+    public function store(Request $request, AuditLogger $audit, string $project): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $data = $request->validate([
@@ -177,11 +178,13 @@ final class ReportController extends Controller
              * value cannot reach the generator — and so a scope that bounds nothing is stored as
              * null rather than as an empty object nobody can distinguish from «not chosen yet».
              *
-             * Ids are NOT validated against the project here: this endpoint creates a report for the
-             * project the route already names, and `ReportScopeController::update()` — the surface an
-             * operator actually picks with — is where a foreign id is filtered out.
+             * REPORT-SCOPE-HIERARCHY-001 — a NEW saved report names its ad accounts, exactly as a live
+             * link does: the accounts, the campaigns inside them and the ads inside those are verified
+             * against the project (422 on a foreign id) and an empty account list is refused, because
+             * «no choice» used to mean every account the project binds — several clients' in one case.
+             * Reports saved before this keep the scope they have; only creating or editing asks.
              */
-            'scope' => ($scope = ReportScope::fromArray($data['scope'] ?? null))->isUnbounded() ? null : $scope->toArray(),
+            'scope' => ($scope = ReportScope::fromArray(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
             'created_by' => $request->user()->id,
         ]);
 

@@ -281,6 +281,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * → period → metrics), rather than from an already-generated document.
      */
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
+    Route::get('reports/live/options/ads', [LiveReportBuilderController::class, 'ads'])->middleware('project.can:reports.view')->name('reports.live.options.ads');
     Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.live.store')
         ->middleware(['project.can:reports.manage', EnsureWithinPlanLimit::class.':reports_per_month']);
     Route::get('reports', [ReportController::class, 'index'])->middleware('project.can:reports.view')->name('reports.index');

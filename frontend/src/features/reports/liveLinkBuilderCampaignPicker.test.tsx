@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { LiveLinkBuilder } from './LiveLinkBuilder'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
@@ -69,6 +69,9 @@ describe('the report builder campaign picker', () => {
 
   const open = async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p-1" onClose={() => {}} />, { locale: 'en' })
+    await screen.findByTestId('live-builder-accounts')
+    // REPORT-SCOPE-HIERARCHY-001 — campaigns are listed under the accounts chosen first.
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all' }))
     await screen.findByTestId('live-builder-campaigns')
   }
 
@@ -95,10 +98,10 @@ describe('the report builder campaign picker', () => {
     expect(row).toContain('Retail — Meta')
   })
 
-  it('narrows the list to one ad account', async () => {
+  it('narrows the list to the selected ad accounts', async () => {
     await open()
 
-    fireEvent.change(screen.getByTestId('live-builder-campaign-account'), { target: { value: 'a-brand' } })
+    fireEvent.click(screen.getByTestId('live-builder-account-a-retail'))
 
     const rows = shown()
 
@@ -108,31 +111,53 @@ describe('the report builder campaign picker', () => {
     expect(rows.some((r) => r.includes('Always on'))).toBe(true)
   })
 
+  it('counts the selected accounts and says none is included by default', async () => {
+    renderWithProviders(<LiveLinkBuilder projectId="p-1" onClose={() => {}} />, { locale: 'en' })
+    await screen.findByTestId('live-builder-accounts')
+
+    expect(screen.getByTestId('live-builder-accounts-count').textContent).toContain('0 of 2')
+    expect(screen.getByTestId('live-builder-accounts-required')).toBeInTheDocument()
+    expect(screen.getByTestId('live-builder-pick-accounts')).toBeInTheDocument()
+    expect(screen.queryByTestId('live-builder-campaigns')).not.toBeInTheDocument()
+    expect(screen.getByTestId('live-link-create')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('live-builder-account-a-brand'))
+    expect(screen.getByTestId('live-builder-accounts-count').textContent).toContain('1 of 2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByTestId('live-builder-accounts-count').textContent).toContain('0 of 2')
+  })
+
   /**
-   * The filter narrows what is SHOWN and never what is SELECTED.
-   *
-   * An operator who ticks a campaign and then looks at another account has not changed their mind
-   * about the first one. Unselecting it on their behalf would put a report in front of a client with
-   * a campaign missing and nothing to say it had been dropped.
+   * Deselecting an account takes its campaigns with it: a campaign of an account that is no longer
+   * selected must not stay ticked, because the server refuses a campaign outside its account.
    */
-  it('keeps a selected campaign selected when the filter moves away from it', async () => {
+  it('drops a ticked campaign when its only account is deselected', async () => {
     await open()
 
     const eidRetail = within(screen.getByTestId('live-builder-campaigns'))
       .getByText(/Eid retail/)
       .closest('label') as HTMLElement
     fireEvent.click(within(eidRetail).getByRole('checkbox'))
-
     expect(screen.getByTestId('live-link-summary').textContent).toContain('1 campaign')
 
-    fireEvent.change(screen.getByTestId('live-builder-campaign-account'), { target: { value: 'a-brand' } })
-    expect(screen.getByTestId('live-link-summary').textContent).toContain('1 campaign')
+    fireEvent.click(screen.getByTestId('live-builder-account-a-retail'))
+    expect(screen.getByTestId('live-link-summary').textContent).not.toContain('1 campaign')
+  })
 
-    fireEvent.change(screen.getByTestId('live-builder-campaign-account'), { target: { value: '' } })
-    const back = within(screen.getByTestId('live-builder-campaigns'))
-      .getByText(/Eid retail/)
-      .closest('label') as HTMLElement
-    expect(within(back).getByRole<HTMLInputElement>('checkbox').checked).toBe(true)
+  it('sends the accounts, and the campaigns only under the account they were ticked for', async () => {
+    await open()
+    fireEvent.change(screen.getByTestId('live-link-name'), { target: { value: 'Razzah' } })
+
+    const eidBrand = within(screen.getByTestId('live-builder-campaigns')).getByText(/Eid brand/).closest('label') as HTMLElement
+    fireEvent.click(within(eidBrand).getByRole('checkbox'))
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    const body = vi.mocked(createLiveLink).mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(body.account_ids).toEqual(['a-brand', 'a-retail'])
+    expect(body.accounts).toEqual({ 'a-brand': { campaign_ids: ['c-1'] } })
+    expect(body).not.toHaveProperty('campaign_ids')
   })
 
   it('searches by campaign name', async () => {
@@ -174,6 +199,7 @@ describe('the report builder campaign picker', () => {
     expect(empty.textContent).toContain('No campaign matches this filter')
 
     fireEvent.click(within(empty).getByRole('button', { name: /Show all campaigns/ }))
-    expect(shown()).toHaveLength(CAMPAIGNS.length)
+    // «Entered by hand» belongs to no account, so no account selection reaches it.
+    expect(shown()).toHaveLength(CAMPAIGNS.length - 1)
   })
 })

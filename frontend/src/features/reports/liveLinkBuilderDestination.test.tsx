@@ -47,6 +47,7 @@ describe('the Link Report builder objective and destination filters', () => {
 
   const open = async () => {
     renderWithProviders(<LiveLinkBuilder projectId="p-1" onClose={() => {}} />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all' }))
     await screen.findByTestId('live-builder-campaigns')
   }
 
@@ -80,7 +81,8 @@ describe('the Link Report builder objective and destination filters', () => {
 
     await vi.waitFor(() => expect(createLiveLink).toHaveBeenCalled())
     const body = vi.mocked(createLiveLink).mock.calls[0][1] as Record<string, unknown>
-    expect(body.campaign_ids).toEqual(['c-1'])
+    expect(body.account_ids).toEqual(['a-hanka'])
+    expect(body.accounts).toEqual({ 'a-hanka': { campaign_ids: ['c-1'] } })
     expect(body.name).toBe('تقرير هنكا')
   })
 })

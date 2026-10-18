@@ -82,18 +82,31 @@ describe('the dependent report scope filters', () => {
     expect(onChange.mock.calls.at(-1)![0]).toEqual({ destinations: ['whatsapp'] })
   })
 
-  it('lists campaigns only under «Selected campaigns», and «All campaigns» clears the list', async () => {
+  /**
+   * REPORT-SCOPE-HIERARCHY-001 — campaigns exist only inside the accounts chosen above them, as
+   * visible checkboxes, and «clear» empties the selection back to «all of those accounts».
+   */
+  it('lists campaigns only once an account is chosen, and clear empties the selection', async () => {
     const onChange = vi.fn()
+    const { unmount } = renderWithProviders(
+      <ReportScopePicker projectId="p1" value={{}} onChange={onChange} audience="internal" />,
+      { locale: 'en' },
+    )
+
+    await screen.findByTestId('scope-select-Ad accounts')
+    expect(screen.queryByTestId('scope-select-Campaigns')).not.toBeInTheDocument()
+    unmount()
+
     renderWithProviders(
-      <ReportScopePicker projectId="p1" value={{ campaign_ids: ['c1'] }} onChange={onChange} audience="internal" />,
+      <ReportScopePicker projectId="p1" value={{ account_ids: ['a1'], campaign_ids: ['c1'] }} onChange={onChange} audience="internal" />,
       { locale: 'en' },
     )
 
     expect(await screen.findByTestId('scope-select-Campaigns')).toBeInTheDocument()
+    expect(screen.getByTestId('scope-count-campaigns')).toHaveTextContent('1 of')
 
-    fireEvent.click(screen.getByRole('radio', { name: 'All campaigns' }))
+    fireEvent.click(screen.getByTestId('scope-clear-campaigns'))
 
-    expect(onChange.mock.calls.at(-1)![0]).toEqual({})
-    await waitFor(() => expect(screen.queryByTestId('scope-select-Campaigns')).not.toBeInTheDocument())
+    expect(onChange.mock.calls.at(-1)![0]).toEqual({ account_ids: ['a1'] })
   })
 })

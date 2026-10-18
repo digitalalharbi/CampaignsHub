@@ -16,6 +16,10 @@ const sections = (slides: Array<{ type: string; visible?: boolean }>) =>
   slides.filter((s) => s.visible !== false).map((s) => s.type)
 
 async function generate(request: import('@playwright/test').APIRequestContext, projectId: string, form: string) {
+  // REPORT-SCOPE-HIERARCHY-001 — a saved report names its ad accounts; take the first this project offers.
+  const offered = await request.get(`/api/v1/projects/${projectId}/reports/scope/options`, { headers: API_HEADERS })
+  const account = ((await offered.json()).data?.accounts ?? [])[0]?.id as string | undefined
+  expect(account, 'the project offers no ad account').toBeTruthy()
   const created = await request.post(`/api/v1/projects/${projectId}/reports`, {
     // A write needs the CSRF header the app itself sends; API_HEADERS alone is a read contract.
     headers: await csrfHeaders(request),
@@ -27,6 +31,7 @@ async function generate(request: import('@playwright/test').APIRequestContext, p
       period_start: '2026-06-01',
       period_end: '2026-06-30',
       currency: 'SAR',
+      scope: { account_ids: [account] },
     },
   })
   expect(created.ok(), `creating the ${form} report failed: ${created.status()} ${await created.text()}`).toBe(true)
