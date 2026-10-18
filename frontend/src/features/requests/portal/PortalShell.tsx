@@ -86,11 +86,11 @@ export function PortalShell({
    * memory: `/login` bounced that user onward, a person with several workspaces reached the switcher,
    * and the switcher's request was refused by the session that no longer existed. The exit is the shared
    * complete one — server session, store, cache, owned storage — ending in a hard navigation to the
-   * sign-in page, so no stale guard can read what the exit had not yet cleared.
+   * sign-in page, so no stale guard can read what the exit had not yet cleared. The portal's own session
+   * is ended INSIDE that exit, after the barrier, so a request still in flight cannot write it back.
    */
   const signOut = async () => {
-    try { await portalLogout() } catch { /* the shared exit below ends the rest, and tolerates a failure of its own */ }
-    await signOutCompletely(qc, '/login')
+    await signOutCompletely(qc, '/login', portalLogout)
   }
 
   return (

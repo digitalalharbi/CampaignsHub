@@ -340,7 +340,7 @@ test.describe('the client portal, signing out', () => {
     await page.getByRole('button', { name: /خروج|sign out|log out/i }).first().click()
 
     await expect(page).toHaveURL(/\/login/, { timeout: 20_000 })
-    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByTestId('login-email')).toBeVisible({ timeout: 20_000 })
     await expect(page).not.toHaveURL(/\/switch/)
     await expect(page.locator('body')).not.toContainText(/تعذّر تحميل مساحات العمل|workspaces could not be loaded/i)
     // Stays put: a stale guard bouncing the visitor onward would leave /login within a moment.

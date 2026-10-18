@@ -3,9 +3,18 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { PortalShell } from './PortalShell'
 import { renderWithProviders } from '@/test/utils'
 import { useAuth } from '@/stores/auth'
+import { isSigningOut, resetSignOutBarrier } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
-vi.mock('../clientPortalApi', async (orig) => ({ ...(await orig<typeof import('../clientPortalApi')>()), portalLogout: vi.fn(() => Promise.resolve({ ok: true })) }))
+const seen = vi.hoisted(() => ({ barrierUpWhenPortalSessionEnded: null as boolean | null }))
+vi.mock('../clientPortalApi', async (orig) => ({
+  ...(await orig<typeof import('../clientPortalApi')>()),
+  portalLogout: vi.fn(async () => {
+    const { isSigningOut } = await import('@/lib/api/client')
+    seen.barrierUpWhenPortalSessionEnded = isSigningOut()
+    return { ok: true }
+  }),
+}))
 vi.mock('@/features/auth/api', async (orig) => ({ ...(await orig<typeof import('@/features/auth/api')>()), logout: vi.fn(() => Promise.resolve()) }))
 
 import { portalLogout } from '../clientPortalApi'
@@ -24,6 +33,8 @@ import { logout } from '@/features/auth/api'
 describe('signing out of the client portal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetSignOutBarrier()
+    seen.barrierUpWhenPortalSessionEnded = null
     useAuth.setState({ user: { id: 1, name: 'Client', email: 'c@x.test', is_platform_admin: false, permissions: [] } as unknown as AuthUser, status: 'authenticated' })
   })
 
@@ -36,6 +47,10 @@ describe('signing out of the client portal', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/login'))
     expect(portalLogout).toHaveBeenCalled()
+    // The portal's own session is ended INSIDE the shared exit, after the barrier is up: a request still in
+    // flight cannot then write the session back and bounce the visitor from /login into the portal.
+    expect(seen.barrierUpWhenPortalSessionEnded).toBe(true)
+    expect(isSigningOut()).toBe(true)
     expect(logout).toHaveBeenCalled()
     expect(useAuth.getState().user).toBeNull()
     expect(useAuth.getState().status).toBe('guest')
