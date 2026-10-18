@@ -58,6 +58,52 @@ final class ClientPortalIdentity
     }
 
     /**
+     * The projects this request is confined to, or null when it is not (CP-USERS-001).
+     *
+     * A client user may be limited to some of their client's projects — a marketing lead for one brand of
+     * several. That ceiling lives on the membership as project scopes, and it is a HARD one: the client
+     * space still resolves, but nothing inside it may be read beyond these projects. Null means «the whole
+     * space», which only the membership engine can say deliberately (no project scopes) and which the
+     * legacy token engine always says, because a token has never carried a project limit.
+     *
+     * @return list<string>|null
+     */
+    public function projectReach(Request $request, ?ClientPortalToken $token): ?array
+    {
+        $membership = $this->membershipFor($request, $token);
+
+        if ($membership === null) {
+            return null;
+        }
+
+        $ids = $membership->projectScopeIds();
+
+        return $ids === [] ? null : array_values($ids);
+    }
+
+    /**
+     * The client role that RESTRICTS this session — `client_viewer`, `client_approver` or `client_admin` — or
+     * null when nothing restricts it (CP-USERS-001).
+     *
+     * Only a role a person CHOSE restricts anybody. The legacy contact engine has never had one (the
+     * verified contact is the decision maker), and the memberships the migration and the seeders provisioned
+     * (`invited_by` null) carry `client_viewer` only because a row needs some role: reading it as a
+     * restriction would have turned every existing client who could reply and approve into a read-only
+     * account on the day this shipped. A membership granted or accepted through the agency's client-users
+     * flow records who granted it, and that is the one whose role is meant.
+     */
+    public function clientRole(Request $request, ?ClientPortalToken $token): ?string
+    {
+        if ($request->user() === null) {
+            return null;
+        }
+
+        $membership = $this->membershipFor($request, $token);
+
+        return $membership !== null && $membership->invited_by !== null ? (string) $membership->role : null;
+    }
+
+    /**
      * What each engine would answer for this request, side by side.
      *
      * The cutover is only safe when these agree for every user and every space. Comparing them at

@@ -442,7 +442,7 @@ final class BillingService
         return $items === [] ? null : $items;
     }
 
-    private function generateNumber(string $prefix): string
+    public function generateNumber(string $prefix): string
     {
         for ($i = 0; $i < 5; $i++) {
             $candidate = $prefix.'-'.date('Y').'-'.strtoupper(Str::random(8));

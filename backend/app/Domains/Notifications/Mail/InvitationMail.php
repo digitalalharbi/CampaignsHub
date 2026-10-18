@@ -46,7 +46,7 @@ final class InvitationMail extends Mailable
         $ar = $this->lang === 'ar';
 
         return new Envelope(subject: $ar
-            ? "CampaignsHub — دعوة للانضمام إلى {$this->workspace}"
+            ? "كامبينز هب — دعوة للانضمام إلى {$this->workspace}"
             : "CampaignsHub — You have been invited to join {$this->workspace}");
     }
 
@@ -57,10 +57,10 @@ final class InvitationMail extends Mailable
 
         $intro = $this->invitedBy !== ''
             ? ($ar
-                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على CampaignsHub، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
+                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
                 : "{$this->invitedBy} has invited you to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.")
             : ($ar
-                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على CampaignsHub، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
+                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
                 : "You have been invited to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.");
 
         $shell = MailShell::build(
@@ -120,6 +120,9 @@ final class InvitationMail extends Mailable
             'analyst' => ['محلل', 'الاطلاع على البيانات والتقارير وإنشاؤها، دون تعديل الحملات.'],
             'viewer' => ['مطّلع', 'الاطلاع على لوحات المتابعة والتقارير فقط.'],
             'member' => ['عضو فريق', 'العمل على المشاريع المسندة إليه داخل مساحة العمل.'],
+            'client_viewer' => ['مطّلع', 'الاطلاع على أداء حملاتك وتقاريرك فقط.'],
+            'client_approver' => ['معتمِد', 'الاطلاع على الأداء والتقارير، واعتماد العروض والرد على الطلبات والرسائل.'],
+            'client_admin' => ['مسؤول العميل', 'كل ما سبق، مع إدارة من يصل إلى بوابتك.'],
         ] : [
             'owner' => ['Account owner', 'Full control of the workspace, including the team, the subscription and billing.'],
             'admin' => ['Administrator', 'Manages projects, campaigns and the team, without access to subscription settings.'],
@@ -127,6 +130,9 @@ final class InvitationMail extends Mailable
             'analyst' => ['Analyst', 'Reads and builds reports and analysis, without changing campaigns.'],
             'viewer' => ['Viewer', 'Reads dashboards and reports only.'],
             'member' => ['Team member', 'Works on the projects assigned to them inside the workspace.'],
+            'client_viewer' => ['Viewer', 'Reads the performance of your campaigns and your reports only.'],
+            'client_approver' => ['Approver', 'Reads performance and reports, approves quotes, and replies to requests and messages.'],
+            'client_admin' => ['Client administrator', 'Everything above, and manages who can reach your portal.'],
         ];
 
         $known = $roles[$this->roleSlug] ?? null;

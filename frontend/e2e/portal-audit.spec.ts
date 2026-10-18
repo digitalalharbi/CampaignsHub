@@ -198,11 +198,18 @@ test.describe('the client portal', () => {
   test('every rail link opens a page that is not empty', async ({ page }) => {
     await page.goto('/portal')
     await expect(page.getByRole('navigation').first()).toBeVisible()
-
-    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/portal"]')
+    /*
+     * `/portal` now resolves the client's space and then redirects into it, so the rail is read only once
+     * its links have painted — a navigation element can exist a beat before they do, and reading the
+     * links in that gap found none on a slower browser.
+     */
+    const readHrefs = () => page.getByRole('navigation').first().locator('a[href^="/portal"]')
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+    // Polled rather than read once: the rail is re-drawn as the space resolves, and a single read can land
+    // between two draws (measured on WebKit: the links present at one instant and gone the next).
+    let hrefs: string[] = []
+    await expect.poll(async () => { hrefs = await readHrefs(); return hrefs.length }, { message: 'the client rail has no links', timeout: 20_000 }).toBeGreaterThan(3)
 
-    expect(hrefs.length, 'the client rail has no links').toBeGreaterThan(3)
 
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(railBudget(hrefs.length))
@@ -303,3 +310,42 @@ test.describe('the client portal, in depth', () => {
     expect(overflow, 'the client portal scrolls sideways on a phone').toBe(false)
   })
 })
+
+/**
+ * OWNER DEFECT 2026-10-18 — signing out of the client portal landed on `/switch` showing
+ * «تعذّر تحميل مساحات العمل». The exit ended the server session but left the signed-in user in the app,
+ * so `/login` bounced onward to a switcher whose request the dead session refused.
+ *
+ * ## Why this describe has its OWN session
+ *
+ * `AUTH.client` is one server-side session shared by every test that uses it, and signing out
+ * invalidates it: this test, run on the shared cookie, logged the client out for the rest of the run and
+ * every later client spec failed a long way from the cause (the responsive audit's /portal cases, on
+ * firefox and webkit). Signing in here creates a session this test owns and is free to destroy.
+ */
+test.describe('the client portal, signing out', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('lands on the sign-in page, never on the workspace switcher', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByTestId('login-email').fill('client@campaignshub.io')
+    await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20_000 })
+    await page.getByTestId('login-password').locator('input[type="password"]').fill('password')
+    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+    await expect(page).not.toHaveURL(/\/login$/, { timeout: 30_000 })
+
+    await page.goto('/portal')
+    await expect(page.getByRole('navigation').first().locator('a[href^="/portal"]').nth(3)).toBeVisible({ timeout: 20_000 })
+
+    await page.getByRole('button', { name: /خروج|sign out|log out/i }).first().click()
+
+    await expect(page).toHaveURL(/\/login/, { timeout: 20_000 })
+    await expect(page.getByTestId('login-email')).toBeVisible({ timeout: 20_000 })
+    await expect(page).not.toHaveURL(/\/switch/)
+    await expect(page.locator('body')).not.toContainText(/تعذّر تحميل مساحات العمل|workspaces could not be loaded/i)
+    // Stays put: a stale guard bouncing the visitor onward would leave /login within a moment.
+    await page.waitForTimeout(1500)
+    await expect(page).toHaveURL(/\/login/)
+  })
+})
+

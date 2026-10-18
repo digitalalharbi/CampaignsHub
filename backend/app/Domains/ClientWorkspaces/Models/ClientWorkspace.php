@@ -37,6 +37,24 @@ final class ClientWorkspace extends Model
         'archived_at' => 'datetime',
     ];
 
+    /**
+     * CP-ROUTING-001 — a client's slug is the first path segment under /portal, so it can never equal one of
+     * the portal's own pages (`requests`, `invoices`, …): `/portal/invoices` would stop meaning the invoice
+     * list. Guarded here, on the model, because workspaces are created in five places and the one that is
+     * forgotten is the one that produces the collision.
+     */
+    protected static function booted(): void
+    {
+        self::saving(static function (self $workspace): void {
+            if (in_array(strtolower((string) $workspace->slug), self::RESERVED_SLUGS, true)) {
+                $workspace->slug = $workspace->slug.'-client';
+            }
+        });
+    }
+
+    /** Mirrors `PORTAL_RESERVED_SEGMENTS` in the front end. */
+    public const RESERVED_SLUGS = ['clients', 'spaces', 'login', 'requests', 'quotes', 'invoices', 'messages', 'profile', 'files', 'campaigns', 'reports'];
+
     /** @return HasMany<Project, $this> */
     public function projects(): HasMany
     {

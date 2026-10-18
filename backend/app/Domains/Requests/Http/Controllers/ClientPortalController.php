@@ -9,18 +9,23 @@ use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Services\BillingService;
+use App\Domains\Billing\Services\InvoicePdf;
 use App\Domains\Branding\BrandingSpec;
 use App\Domains\Branding\Models\BrandingAsset;
 use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Services\PortalOverview;
+use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -54,6 +59,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -181,7 +187,7 @@ final class ClientPortalController
     }
 
     /** POST /client/logout */
-    public function logout(Request $request): JsonResponse
+    public function logout(Request $request, SessionRevocations $revocations): JsonResponse
     {
         $token = $this->resolveSession($request);
 
@@ -195,6 +201,18 @@ final class ClientPortalController
         // Both engines end together. Revoking one and leaving the other is how "I signed out" stops
         // being true while still looking like it worked.
         if (Auth::guard('web')->check()) {
+            /*
+             * OWNER DEFECT 102 — record the id BEFORE it is destroyed, exactly as `/auth/logout` does.
+             *
+             * This ended the session and recorded nothing, and the client's follow-up `/auth/logout` is
+             * answered 401 once the session is gone, so it never reached the controller that records it.
+             * A dashboard request still in flight then wrote its payload back under the same id and the
+             * visitor was bounced from /login straight back into the portal (ACCESS-EXIT-003).
+             */
+            if ($request->hasSession()) {
+                $revocations->revoke($request->session()->getId());
+            }
+
             Auth::guard('web')->logout();
 
             if ($request->hasSession()) {
@@ -211,7 +229,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
 
-        $requests = $this->contactScope($token)
+        $requests = $this->requestScope($token)
             ->with(['type', 'status'])->orderByDesc('submitted_at')->get()
             ->map(fn (ExternalRequest $r) => [
                 'reference' => $r->reference,
@@ -293,6 +311,7 @@ final class ClientPortalController
     public function reply(Request $request, string $reference): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $req = $this->resolveOwnedRequest($token, $reference);
 
         $data = $request->validate([
@@ -333,7 +352,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -359,6 +378,7 @@ final class ClientPortalController
     public function approveQuote(Request $request, string $quote): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedQuote($token, $quote);
 
@@ -378,6 +398,7 @@ final class ClientPortalController
     public function rejectQuote(Request $request, string $quote): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedQuote($token, $quote);
 
@@ -390,15 +411,21 @@ final class ClientPortalController
     }
 
     /** GET /client/invoices — the client's invoices with payment status (client-safe). */
+    /**
+     * INV-LIFECYCLE-001 — a draft or a reviewed invoice is the agency's working copy. The client sees an
+     * invoice when it is ISSUED, never before: an unreviewed figure shown to a client is a figure promised.
+     */
+    private const UNISSUED_INVOICE = ['draft', 'reviewed'];
+
     public function invoices(Request $request): JsonResponse
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
-            : $this->capped(Invoice::query()->whereIn('client_workspace_id', $ids)->latest('created_at'));
+            : $this->capped(Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->latest('created_at'));
 
         $invoices = $page['rows']->map(fn (Invoice $i) => $this->invoiceShape($i));
 
@@ -423,9 +450,25 @@ final class ClientPortalController
      * payment stays pending and the client sees an honest `awaiting_provider_credentials` state — never a fake
      * success. NOTHING is marked paid here (only a verified webhook settles).
      */
+    /** GET /client/invoices/{invoice}/pdf — the issued invoice as a document (INV-PDF-001). */
+    public function invoicePdf(Request $request, string $invoice): Response
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $record = $this->ownedInvoice($token, $invoice);
+        $pdf = app(InvoicePdf::class);
+        abort_unless($pdf->available(), 503, 'PDF rendering is not available.');
+
+        return response($pdf->render($record, (string) $request->query('lang', 'ar')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$record->number.'.pdf"',
+        ]);
+    }
+
     public function payInvoice(Request $request, string $invoice): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedInvoice($token, $invoice);
 
@@ -443,7 +486,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->wholeClientWorkspaceIds($token, 'messages');
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
@@ -485,8 +528,9 @@ final class ClientPortalController
     public function openThread(Request $request): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         abort_if($ids === [], 422, 'No client workspace is available to open a conversation.');
 
         $data = $request->validate([
@@ -514,6 +558,7 @@ final class ClientPortalController
     public function postThreadMessage(Request $request, string $thread): JsonResponse
     {
         $token = $this->requireSession($request);
+        $this->requireActor($token);
         $this->bindTenant($token);
         $model = $this->ownedThread($token, $thread);
 
@@ -562,7 +607,7 @@ final class ClientPortalController
         $this->bindTenant($token);
 
         // 1) Client-visible uploads on the client's own requests.
-        $requests = (clone $this->contactScope($token))->get(['id', 'reference']);
+        $requests = (clone $this->requestScope($token))->get(['id', 'reference']);
         $referenceById = $requests->pluck('reference', 'id');
         $requestIds = $requests->pluck('id')->all();
 
@@ -596,14 +641,15 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->visibleWorkspaceIds($token, 'campaigns');
+        $workspaces = $this->ownedWorkspaceModels($token);
 
         $page = $ids === []
             ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
-            : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->orderByDesc('created_at'));
+            : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->when($this->restrictedProjectIds($token) !== null, fn ($q) => $q->whereIn('project_id', $this->restrictedProjectIds($token)))->orderByDesc('created_at'));
 
         return response()->json(['data' => [
-            'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c))->values()->all(),
+            'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c, $workspaces))->values()->all(),
             'total' => $page['total'],
             'withheld' => $page['withheld'],
         ]]);
@@ -617,7 +663,7 @@ final class ClientPortalController
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
-        $projectIds = $this->ownedProjectIds($token);
+        $projectIds = $this->ownedProjectIds($token, 'reports');
         if ($projectIds === []) {
             return response()->json(['data' => ['reports' => []]]);
         }
@@ -655,14 +701,17 @@ final class ClientPortalController
      *
      * @return list<string>
      */
-    private function ownedProjectIds(ClientPortalToken $token): array
+    private function ownedProjectIds(ClientPortalToken $token, string $section = 'projects'): array
     {
-        $workspaceIds = $this->ownedWorkspaceIds($token);
+        $workspaceIds = $this->visibleWorkspaceIds($token, $section);
         if ($workspaceIds === []) {
             return [];
         }
 
+        $restricted = $this->restrictedProjectIds($token);
+
         return Project::query()->whereIn('client_workspace_id', $workspaceIds)
+            ->when($restricted !== null, fn ($q) => $q->whereIn('id', $restricted))
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
     }
 
@@ -681,17 +730,26 @@ final class ClientPortalController
      */
     private function clientDriveFiles(ClientPortalToken $token): Collection
     {
-        $workspaceIds = $this->ownedWorkspaceIds($token);
+        $workspaceIds = $this->visibleWorkspaceIds($token, 'files');
         if ($workspaceIds === []) {
             return collect();
         }
 
-        $projectIds = $this->ownedProjectIds($token);
+        $projectIds = $this->ownedProjectIds($token, 'files');
         $campaignIds = UnifiedCampaign::query()->whereIn('client_workspace_id', $workspaceIds)
+            ->when($this->restrictedProjectIds($token) !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
 
-        $linkIds = DriveLink::query()->where(function (Builder $q) use ($workspaceIds, $projectIds, $campaignIds): void {
-            $q->where(fn (Builder $w) => $w->where('scope', 'client')->whereIn('scope_id', $workspaceIds));
+        // A project-restricted user with nothing project-attributable to read has nothing to read: an empty
+        // OR-group would otherwise match every folder in the tenant.
+        if ($this->restrictedProjectIds($token) !== null && $projectIds === [] && $campaignIds === []) {
+            return collect();
+        }
+
+        $linkIds = DriveLink::query()->where(function (Builder $q) use ($token, $workspaceIds, $projectIds, $campaignIds): void {
+            if ($this->wholeSpaceOnly($token)) {
+                $q->where(fn (Builder $w) => $w->where('scope', 'client')->whereIn('scope_id', $workspaceIds));
+            }
             if ($projectIds !== []) {
                 $q->orWhere(fn (Builder $w) => $w->where('scope', 'project')->whereIn('scope_id', $projectIds));
             }
@@ -725,20 +783,26 @@ final class ClientPortalController
     }
 
     /** @return array<string,mixed> client-safe campaign: high-level fields + delivery metrics, NO cost fields. */
-    private function campaignShape(UnifiedCampaign $c): array
+    private function campaignShape(UnifiedCampaign $c, array $workspaces): array
     {
         // Reuse the SAME metrics engine (MetricsAggregator) the internal surfaces use, scoped to this campaign.
         $totals = $this->metrics->forCampaign((string) $c->getKey())
             ->totals(Carbon::now()->subDays(30), Carbon::now());
 
-        return [
+        $workspace = $workspaces[(string) $c->client_workspace_id] ?? null;
+        $shows = static fn (string $key): bool => $workspace !== null && PortalVisibility::allows($workspace, $key);
+
+        $shape = [
             'id' => (string) $c->getKey(),
-            'name' => $c->client_display_name ?: $c->name,
+            // CP-VISIBILITY-001 — the name is the agency's to show; hidden, the client still gets the
+            // objective and status, which describe the campaign without naming it.
+            'name' => $shows('campaign_names') ? ($c->client_display_name ?: $c->name) : null,
             'status' => $c->status,
             'objective' => $c->objective,
             'starts_on' => optional($c->starts_on)->toDateString(),
             'ends_on' => optional($c->ends_on)->toDateString(),
-            // High-level, client-safe metrics ONLY — spend/revenue/roas/cpa/cpc/cpm are deliberately omitted.
+            // High-level, client-safe metrics ONLY. Money appears below, and only when the agency has
+            // switched it on for this workspace.
             'metrics' => [
                 'impressions' => $totals['impressions'] ?? 0,
                 'clicks' => $totals['clicks'] ?? 0,
@@ -746,6 +810,22 @@ final class ClientPortalController
                 'ctr' => $totals['ctr'] ?? null,
             ],
         ];
+
+        /*
+         * Money, only on the Owner's say-so and only when it is whole. A total with withheld rows is
+         * absent (null), never a smaller number: Missing is not Zero, and a client reading 40% of the
+         * spend as the spend is a worse answer than none.
+         */
+        if ($shows('spend')) {
+            $shape['spend'] = ((int) ($totals['spend_withheld_rows'] ?? 0)) === 0 ? ($totals['spend'] ?? null) : null;
+            $shape['currency'] = ReportingCurrency::DEFAULT;
+        }
+        if ($shows('revenue')) {
+            $shape['revenue'] = ((int) ($totals['revenue_withheld_rows'] ?? 0)) === 0 ? ($totals['revenue'] ?? null) : null;
+            $shape['currency'] = ReportingCurrency::DEFAULT;
+        }
+
+        return $shape;
     }
 
     /** @return array<string,mixed> client-safe report + its active-share descriptor (never the raw token). */
@@ -855,6 +935,23 @@ final class ClientPortalController
      */
     private function ownedWorkspaceIds(ClientPortalToken $token): array
     {
+        /*
+         * CP-ARCH-001 — a MEMBERSHIP names its spaces; request rows do not.
+         *
+         * The list below was derived from the client ids on the contact's requests, which is the token
+         * engine's only evidence of reach. For a membership session that made a granted space invisible
+         * until somebody had submitted a request under that address: a client invited to their own
+         * workspace opened a portal with no campaigns, reports or figures in it. The membership already
+         * says which spaces are theirs (and `selectedSpaceId` still narrows to the one in the URL, 404
+         * for any other), so that is what is read.
+         */
+        $reach = $this->identity->reach(request(), $token);
+        if ($reach['engine'] === 'membership') {
+            $space = $this->selectedSpaceId($token);
+
+            return $space !== null ? (in_array($space, $reach['ids'], true) ? [$space] : []) : array_values($reach['ids']);
+        }
+
         return (clone $this->contactScope($token))
             ->whereNotNull('client_id')
             ->pluck('client_id')
@@ -862,9 +959,93 @@ final class ClientPortalController
             ->unique()->values()->all();
     }
 
-    private function ownedQuote(ClientPortalToken $token, string $id): Quote
+    /**
+     * A view-only client user reads and never acts (CP-USERS-001): no approving or paying, no replying, no
+     * opening or answering a conversation. An approver or an admin may, and so may the legacy contact engine,
+     * whose verified contact has always been the decision maker. Refused with 403 before anything is read.
+     */
+    private function requireActor(ClientPortalToken $token): void
+    {
+        abort_if($this->identity->clientRole(request(), $token) === 'client_viewer', 403, 'Your access to this portal is read-only.');
+    }
+
+    /**
+     * The projects this session is confined to, or null for the whole space (CP-USERS-001).
+     *
+     * @return list<string>|null
+     */
+    private function restrictedProjectIds(ClientPortalToken $token): ?array
+    {
+        return $this->identity->projectReach(request(), $token);
+    }
+
+    /**
+     * A project-restricted user reads project-attributable things only. Client-wide paperwork — invoices,
+     * quotes, conversations — belongs to the whole client, not to one of its projects, so it is not theirs.
+     */
+    private function wholeSpaceOnly(ClientPortalToken $token): bool
+    {
+        return $this->restrictedProjectIds($token) === null;
+    }
+
+    /**
+     * The owned workspaces, keyed by id. Read per call and never remembered: one controller instance serves
+     * several sessions in a process (queue, tests, Octane), and a remembered answer is another client's.
+     *
+     * @return array<string, ClientWorkspace>
+     */
+    private function ownedWorkspaceModels(ClientPortalToken $token): array
     {
         $ids = $this->ownedWorkspaceIds($token);
+
+        return $ids === [] ? [] : ClientWorkspace::query()->whereIn('id', $ids)->whereNull('archived_at')->get()
+            ->keyBy(fn (ClientWorkspace $w): string => (string) $w->getKey())->all();
+    }
+
+    /**
+     * The owned workspaces for which the agency lets THIS section be seen (CP-VISIBILITY-001).
+     *
+     * Asked on the server for every reader: a switched-off section is an empty or refused response, not
+     * a payload the page chooses not to draw. With several spaces merged, each is judged on its own, so
+     * one client's `invoices = off` cannot hide, or reveal, another's.
+     *
+     * @return list<string>
+     */
+    private function visibleWorkspaceIds(ClientPortalToken $token, string $section): array
+    {
+        return array_values(array_map('strval', array_keys(array_filter(
+            $this->ownedWorkspaceModels($token),
+            static fn (ClientWorkspace $w): bool => PortalVisibility::allows($w, $section),
+        ))));
+    }
+
+    /**
+     * `visibleWorkspaceIds` for sections that belong to the WHOLE client (billing, conversations): empty for
+     * a project-restricted user, who is confined to the projects they were given.
+     *
+     * @return list<string>
+     */
+    private function wholeClientWorkspaceIds(ClientPortalToken $token, string $section): array
+    {
+        return $this->wholeSpaceOnly($token) ? $this->visibleWorkspaceIds($token, $section) : [];
+    }
+
+    /**
+     * The owned workspaces that hide this section — to be excluded from a request-shaped query.
+     *
+     * @return list<string>
+     */
+    private function hiddenWorkspaceIds(ClientPortalToken $token, string $section): array
+    {
+        return array_values(array_map('strval', array_keys(array_filter(
+            $this->ownedWorkspaceModels($token),
+            static fn (ClientWorkspace $w): bool => ! PortalVisibility::allows($w, $section),
+        ))));
+    }
+
+    private function ownedQuote(ClientPortalToken $token, string $id): Quote
+    {
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Quote|null $quote */
         $quote = $ids === [] ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($quote === null, 404);
@@ -874,9 +1055,9 @@ final class ClientPortalController
 
     private function ownedInvoice(ClientPortalToken $token, string $id): Invoice
     {
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
-        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
         abort_if($invoice === null, 404);
 
         return $invoice;
@@ -884,7 +1065,7 @@ final class ClientPortalController
 
     private function ownedThread(ClientPortalToken $token, string $id): MessageThread
     {
-        $ids = $this->ownedWorkspaceIds($token);
+        $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         /** @var MessageThread|null $thread */
         $thread = $ids === [] ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($thread === null, 404);
@@ -1383,6 +1564,55 @@ final class ClientPortalController
     }
 
     /**
+     * GET /client/overview — the client's portfolio on the canonical numbers (CP-DASH-001).
+     *
+     * One space at a time: a portfolio that merged two clients' figures would be the cross-client
+     * leak the spaces exist to prevent, so a contact on several spaces must choose one (422 until
+     * they do) and a space the agency has switched `dashboard` off for answers 403.
+     */
+    public function overview(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $models = $this->ownedWorkspaceModels($token);
+        abort_if($models === [], 404);
+        abort_if(count($models) > 1, 422, 'Choose a client space first.');
+
+        /** @var ClientWorkspace $workspace */
+        $workspace = array_values($models)[0];
+        abort_unless(PortalVisibility::allows($workspace, 'dashboard'), 403, 'The dashboard is not available for this space.');
+
+        $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
+        $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);
+        abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay(), $this->restrictedProjectIds($token))]);
+    }
+
+    /**
+     * GET /client/visibility — what the agency lets THIS client see and do, per space (CP-VISIBILITY-001).
+     *
+     * Handed to the front end so navigation matches the server, and for nothing else: every reader above
+     * has already enforced the same map, so a client who ignores this answer gains nothing.
+     */
+    public function visibility(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $ids = $this->ownedWorkspaceIds($token);
+        $spaces = $ids === [] ? collect() : ClientWorkspace::query()->whereIn('id', $ids)->whereNull('archived_at')->orderBy('name')->get();
+
+        return response()->json(['data' => ['spaces' => $spaces->map(fn (ClientWorkspace $w) => [
+            'slug' => (string) $w->slug,
+            'mode' => (string) $w->mode,
+            'visibility' => PortalVisibility::visibilityFor($w),
+            'capabilities' => PortalVisibility::capabilitiesFor($w),
+        ])->values()->all()]]);
+    }
+
+    /**
      * Every client workspace this contact owns, IGNORING the selected space — the list a space can be
      * chosen from. Kept separate from `ownedWorkspaceIds()`, which is narrowed by that selection.
      *
@@ -1413,10 +1643,31 @@ final class ClientPortalController
             ->pluck('client_id')->map(fn ($id): string => (string) $id)->unique()->values()->all();
     }
 
+    /**
+     * The requests this client may see: the contact's scope, minus any workspace whose agency has switched
+     * the `requests` section off. A request not yet converted has no workspace and stays the submitter's.
+     *
+     * @return Builder<ExternalRequest>
+     */
+    private function requestScope(ClientPortalToken $token)
+    {
+        $hidden = $this->hiddenWorkspaceIds($token, 'requests');
+
+        $restricted = $this->restrictedProjectIds($token);
+
+        return $this->contactScope($token)->when(
+            $restricted !== null,
+            static fn ($q) => $q->whereIn('project_id', $restricted),
+        )->when(
+            $hidden !== [],
+            static fn ($q) => $q->where(static fn ($w) => $w->whereNull('client_id')->orWhereNotIn('client_id', $hidden)),
+        );
+    }
+
     private function resolveOwnedRequest(ClientPortalToken $token, string $reference): ExternalRequest
     {
         /** @var ExternalRequest|null $req */
-        $req = (clone $this->contactScope($token))->with(['type', 'status'])->where('reference', $reference)->first();
+        $req = (clone $this->requestScope($token))->with(['type', 'status'])->where('reference', $reference)->first();
         abort_if($req === null, 404); // not this client's request → 404 (non-revealing)
 
         return $req;

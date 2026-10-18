@@ -88,7 +88,7 @@ describe('LoginPage — the sign-in card', () => {
      * so the string could not change without changing the case that held it — which is what a
      * pinned string is for, and why it is updated here deliberately rather than loosened.
      */
-    expect(screen.getByText('سجّل الدخول إلى حسابك في CampaignsHub')).toBeInTheDocument()
+    expect(screen.getByText('سجّل الدخول إلى حسابك في كامبينز هب')).toBeInTheDocument()
   })
 
   /** Everything the card promises is on it, in one place, before anything is clicked. */

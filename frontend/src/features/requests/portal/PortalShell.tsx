@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { productName } from '@/lib/brand'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, Moon, Sun } from 'lucide-react'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
-import { PORTAL_NAV, PortalNav } from './portalNav'
+import { signOutCompletely } from '@/features/auth/signOut'
+import { PORTAL_MORE_ORDER, PORTAL_PRIMARY, PortalNav, useVisiblePortalNav } from './portalNav'
 import { useClientSpacePath } from './clientSpace'
 import { brandStyle, useClientBranding } from './useClientBranding'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
@@ -36,7 +37,6 @@ export function PortalShell({
   const toggleLocale = useUi((s) => s.toggleLocale)
   const toggleTheme = useUi((s) => s.toggleTheme)
   const ar = locale === 'ar'
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const spaceTo = useClientSpacePath()
   const branding = useClientBranding()
@@ -52,10 +52,12 @@ export function PortalShell({
    * Home, requests, campaigns and reports: what is happening and how it is going. Quotes, invoices,
    * messages, files and profile are in More — the paperwork, which is looked up rather than watched.
    */
-  const PRIMARY = ['', '/requests', '/campaigns', '/reports']
-  const tabs = PORTAL_NAV.filter((i) => PRIMARY.includes(i.to))
+  const visibleNav = useVisiblePortalNav()
+  const byTo = new Map(visibleNav.map((i) => [i.to, i]))
+  const tabs = PORTAL_PRIMARY.map((to) => byTo.get(to))
+    .filter((i): i is NonNullable<typeof i> => i !== undefined)
     .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
-  const moreItems = PORTAL_NAV.filter((i) => !PRIMARY.includes(i.to))
+  const moreItems = PORTAL_MORE_ORDER.map((to) => byTo.get(to)).filter((i): i is NonNullable<typeof i> => i !== undefined)
     .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
   // The primary mark if the agency uploaded one; otherwise the platform's own.
   const uploaded = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
@@ -77,10 +79,18 @@ export function PortalShell({
   const [brokenLogo, setBrokenLogo] = useState<string | null>(null)
   const logo = uploaded !== undefined && uploaded.url !== brokenLogo ? uploaded : undefined
 
+  /*
+   * OWNER DEFECT 2026-10-18 — leaving the portal went to `/switch` with «تعذّر تحميل مساحات العمل».
+   *
+   * This ended the portal session and navigated through the router, leaving the SPA's signed-in user in
+   * memory: `/login` bounced that user onward, a person with several workspaces reached the switcher,
+   * and the switcher's request was refused by the session that no longer existed. The exit is the shared
+   * complete one — server session, store, cache, owned storage — ending in a hard navigation to the
+   * sign-in page, so no stale guard can read what the exit had not yet cleared. The portal's own session
+   * is ended INSIDE that exit, after the barrier, so a request still in flight cannot write it back.
+   */
   const signOut = async () => {
-    try { await portalLogout() } catch { /* clearing the local session is enough to sign the user out */ }
-    qc.clear()
-    navigate('/login', { replace: true })
+    await signOutCompletely(qc, '/login', portalLogout)
   }
 
   return (
