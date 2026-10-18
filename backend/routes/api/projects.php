@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Agents\Http\Controllers\ActionProposalController;
+use App\Domains\Agents\Http\Controllers\AgentChatController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
@@ -286,6 +287,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue. Reading needs to see campaigns; putting a change
      * forward or deciding one needs to manage them, and the controller adds the tenant permission.
      */
+    // AGENTS-CENTER-001 — conversations with the six agents; replies are queued.
+    Route::get('agents', [AgentChatController::class, 'roles'])->middleware('project.can:campaigns.view')->name('agents.roles');
+    Route::get('agent-threads', [AgentChatController::class, 'threads'])->middleware('project.can:campaigns.view')->name('agent-threads.index');
+    Route::get('agent-threads/{thread}', [AgentChatController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-threads.show');
+    Route::post('agent-threads', [AgentChatController::class, 'send'])->middleware('project.can:campaigns.view')->name('agent-threads.send');
     // AGENTS-CLIENT-RULES-001 — goals, decision rules and gateway limits; the comparison agents start from.
     Route::get('agent-rules', [AgentRulesController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-rules.show');
     Route::put('agent-rules', [AgentRulesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-rules.update');

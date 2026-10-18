@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Models\Project;
+use Illuminate\Support\Str;
 
 /**
  * Every rule a proposal must satisfy, as codes.
@@ -42,7 +43,7 @@ final class ProposalRules
             $out[] = 'target_type_unknown';
         }
 
-        $account = ExternalAccount::withoutGlobalScopes()->find($p->external_account_id);
+        $account = Str::isUuid((string) $p->external_account_id) ? ExternalAccount::withoutGlobalScopes()->find($p->external_account_id) : null;
         $project = Project::withoutGlobalScopes()->find($p->project_id);
 
         if ($account === null || $project === null

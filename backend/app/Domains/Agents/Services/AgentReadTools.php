@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Agents\Services;
 
 use App\Domains\Agents\Models\ClientAgentRule;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -34,10 +35,21 @@ final class AgentReadTools
 
         $rows = $this->engine($project)->byCampaign($from, $to, $prevFrom, $prevTo);
 
+        // The platform's own ids and current daily budget: what propose_change needs to name a target.
+        $platform = ExternalCampaign::query()->where('project_id', $project->getKey())
+            ->whereIn('unified_campaign_id', array_filter(array_column($rows, 'campaign_id')))
+            ->get(['unified_campaign_id', 'provider', 'external_account_id', 'external_id', 'daily_budget'])
+            ->groupBy('unified_campaign_id');
+
         return [
             'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'previous' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
-            'campaigns' => array_values(array_map(fn (array $r): array => $this->slim($r), $rows)),
+            'campaigns' => array_values(array_map(fn (array $r): array => $this->slim($r) + [
+                'on_platform' => ($platform[$r['campaign_id'] ?? ''] ?? collect())->map(fn (ExternalCampaign $e): array => [
+                    'provider' => $e->provider, 'external_account_id' => (string) $e->external_account_id,
+                    'target_external_id' => $e->external_id, 'daily_budget' => $e->daily_budget,
+                ])->values()->all(),
+            ], $rows)),
         ];
     }
 

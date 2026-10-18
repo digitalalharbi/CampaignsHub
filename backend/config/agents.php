@@ -25,4 +25,23 @@ return [
      * @var list<class-string<\App\Domains\Agents\Contracts\ProposalExecutor>>
      */
     'executors' => [],
+
+    /*
+     * AGENTS-ENGINE-001 — which model each role uses, per provider. The plan gives the strongest model to
+     * the roles that decide and the fastest to the repetitive ones; an owner can override per tenant through
+     * the credential's `allowed_models`. Nothing outside this file names a model.
+     */
+    'models' => [
+        'anthropic' => [
+            'orchestrator' => 'claude-opus-5-5',
+            'campaign' => 'claude-opus-5-5',
+            'analyst' => 'claude-sonnet-5-5',
+            'creative' => 'claude-sonnet-5-5',
+            'leads' => 'claude-haiku-5-5',
+            'reports' => 'claude-haiku-5-5',
+        ],
+    ],
+
+    // The most tool round-trips one turn may take before it stops and says so.
+    'max_tool_rounds' => 8,
 ];
