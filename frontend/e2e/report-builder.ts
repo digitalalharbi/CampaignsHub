@@ -64,9 +64,9 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
     if (values.length === 0) continue
 
     // REPORT-SCOPE-HIERARCHY-001 — a saved report names its ad accounts, so take a project that has one.
-    // The richest one: these specs reconcile a platform table, which a one-platform report omits.
+    // The project with the most accounts, so the report covers as much as the seed offers.
     let chosen = ''
-    let most = 1 // at least two accounts: a one-platform report has no platform table to reconcile
+    let most = 0
     for (const v of values) {
       const r = await page.request.get(`/api/v1/projects/${v}/reports/scope/options`, { headers: API_HEADERS })
       const accounts = r.ok() ? ((await r.json()).data?.accounts ?? []) : []
@@ -139,8 +139,7 @@ export async function chooseFirstAccount(page: import('@playwright/test').Page):
   const box = page.locator('[data-kind="accounts"]')
   await expect(box, 'the project offers no ad account to build a report from').toBeVisible({ timeout: 20_000 })
   await box.getByRole('combobox').first().click()
-  // All of them: the exports drop the platform table for a one-platform report, and these specs
-  // reconcile that table, so they need the same breadth a report had before accounts were chosen.
+  // Every account the project offers, as a report covered before accounts were chosen.
   const trigger = box.getByRole('combobox').first()
   const options = page.getByRole('listbox').getByRole('option')
   const count = await options.count()
