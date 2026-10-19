@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { PortfolioPerformance } from './PortfolioPerformance'
 import { PortalNav } from './portalNav'
 import { ProviderMark } from '@/components/ProviderMark'
@@ -59,6 +59,40 @@ describe('PortfolioPerformance', () => {
 
     const marks = await screen.findAllByTestId('provider-mark')
     expect(marks.map((m) => m.getAttribute('data-provider'))).toEqual(['snapchat', 'tiktok', 'meta', 'google'])
+  })
+
+  /*
+   * CP-PARITY-001 — the period choice and the sparklines every other dashboard has: 7, 30 or 90 days
+   * asked of the same endpoint, and a spark under each delivery figure the trend carries — never under
+   * money, which the trend does not carry.
+   */
+  it('asks the endpoint for the chosen period and draws a spark under each delivery figure', async () => {
+    const trend = [
+      { date: '2026-10-15', impressions: 1000, clicks: 10, conversions: 1 },
+      { date: '2026-10-16', impressions: 1200, clicks: 14, conversions: 2 },
+      { date: '2026-10-17', impressions: 900, clicks: 9, conversions: null },
+    ]
+    vi.mocked(fetchPortalOverview).mockResolvedValue({ ...base, trend })
+    renderWithProviders(<PortfolioPerformance />, { locale: 'en' })
+
+    await screen.findByTestId('portfolio-kpi-impressions')
+    expect(fetchPortalOverview).toHaveBeenLastCalledWith({})
+    expect(screen.getByTestId('portfolio-range-30')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('portfolio-spark-impressions')).toBeInTheDocument()
+    expect(screen.getByTestId('portfolio-spark-conversions')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('portfolio-range-7'))
+    await waitFor(() => expect(fetchPortalOverview).toHaveBeenLastCalledWith({ from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }))
+    const { from, to } = vi.mocked(fetchPortalOverview).mock.calls.at(-1)![0] as { from: string; to: string }
+    expect((Date.parse(to) - Date.parse(from)) / 86_400_000).toBe(6)
+  })
+
+  it('draws no spark where the trend has fewer than two points', async () => {
+    vi.mocked(fetchPortalOverview).mockResolvedValue({ ...base, trend: [{ date: '2026-10-17', impressions: 900, clicks: 9, conversions: 1 }] })
+    renderWithProviders(<PortfolioPerformance />, { locale: 'en' })
+
+    await screen.findByTestId('portfolio-kpi-impressions')
+    expect(screen.queryByTestId('portfolio-spark-impressions')).toBeNull()
   })
 
   it('draws no money unless the server sent it', async () => {

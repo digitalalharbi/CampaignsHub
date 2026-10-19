@@ -61,6 +61,22 @@ describe('ClientCampaignsPage', () => {
     expect(screen.queryByText('paused')).not.toBeInTheDocument()
   })
 
+  /*
+   * CP-MOBILE-001 — a long Arabic name stays inside its card on a phone (truncated with the full name
+   * on hover), and a client with many campaigns gets them a page at a time, never one endless list.
+   */
+  it('keeps a long name inside its card and pages a long list', async () => {
+    const long = 'حملة اليوم الوطني السعودي الكبرى لعام ٢٠٢٦ للمتاجر الإلكترونية والفروع في جميع مناطق المملكة'
+    const many = Array.from({ length: 25 }, (_, i) => ({ ...campaign, id: `c${i}`, name: i === 0 ? long : `Campaign ${i}` }))
+    vi.mocked(listClientCampaigns).mockResolvedValue(page(many, { total: 140, last_page: 6 }))
+    renderWithProviders(<ClientCampaignsPage />, { locale: 'ar' })
+
+    const name = await screen.findByText(long)
+    expect(name.className).toMatch(/\btruncate\b/)
+    expect(name.className).toMatch(/\bmin-w-0\b/)
+    expect(screen.getAllByText(/^Campaign \d+$/)).toHaveLength(24)
+  })
+
   it('shows an honest empty state when there are no campaigns', async () => {
     vi.mocked(listClientCampaigns).mockResolvedValue(page([]))
     renderWithProviders(<ClientCampaignsPage />, { locale: 'en' })

@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Num } from '@/components/ui/Num'
 import { PortalTrend } from './PortalTrend'
+import { KpiSparkline } from '@/features/analytics/charts'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { sortByPlatform } from '@/lib/platforms'
@@ -61,7 +63,17 @@ export function PortfolioPerformance() {
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const spaceTo = useClientSpacePath()
-  const overview = useQuery({ queryKey: ['portal', 'overview'], queryFn: () => fetchPortalOverview(), retry: false })
+  /*
+   * CP-PARITY-001 — the period choice every other dashboard has. The endpoint always took `from` and
+   * `to`; the portal only ever asked for its default thirty days.
+   */
+  const [range, setRange] = useState<7 | 30 | 90>(30)
+  const overview = useQuery({
+    queryKey: ['portal', 'overview', range],
+    queryFn: () => fetchPortalOverview(range === 30 ? {} : periodOf(range)),
+    retry: false,
+    placeholderData: keepPreviousData,
+  })
 
   usePortalGuard(overview.isError, overview.error)
 
@@ -70,20 +82,52 @@ export function PortfolioPerformance() {
     return overview.isPending ? <div data-testid="portfolio-loading" className="mb-6 h-40 animate-pulse rounded-2xl bg-surface-secondary" /> : null
   }
 
-  return <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} />
+  return <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} range={range} onRange={setRange} refreshing={overview.isFetching} />
 }
 
-function Body({ data, t, ar, spaceTo }: { data: PortalOverview; t: typeof COPY.ar; ar: boolean; spaceTo: (s: string) => string }) {
+/** The last N days ending today, as the endpoint reads them (local calendar dates). */
+function periodOf(n: number): { from: string; to: string } {
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const to = new Date()
+  const from = new Date(to)
+  from.setDate(to.getDate() - (n - 1))
+
+  return { from: iso(from), to: iso(to) }
+}
+
+/** The series behind a primary figure, when the trend carries it (it carries delivery, never money). */
+function sparkOf(data: PortalOverview, key: string): number[] | null {
+  if (!['impressions', 'clicks', 'conversions'].includes(key)) return null
+  const points = (data.trend ?? []).map((p) => p[key as 'impressions' | 'clicks' | 'conversions']).filter((v): v is number => typeof v === 'number')
+
+  return points.length > 1 ? points : null
+}
+
+function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: PortalOverview; t: typeof COPY.ar; ar: boolean; spaceTo: (s: string) => string; range: 7 | 30 | 90; onRange: (r: 7 | 30 | 90) => void; refreshing: boolean }) {
   const money = 'spend' in data.kpis
   const primaryKeys = (money ? PRIMARY_WITH_MONEY : PRIMARY_NO_MONEY).filter((k) => k in data.kpis)
   const secondaryKeys = Object.keys(data.kpis).filter((k) => !(primaryKeys as readonly string[]).includes(k))
   const hasAnything = Object.values(data.kpis).some((v) => v !== null && v !== 0)
 
   return (
-    <section data-testid="portfolio-performance" className="mb-6">
+    <section data-testid="portfolio-performance" className={`mb-6 transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold text-text-primary">{t.title}</h2>
-        <p className="text-xs text-text-muted">
+        <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'} data-testid="portfolio-range">
+          {([7, 30, 90] as const).map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={range === n}
+              data-testid={`portfolio-range-${n}`}
+              onClick={() => onRange(n)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${range === n ? 'bg-brand-600 text-white' : 'border border-border text-text-secondary hover:bg-surface-hover'}`}
+            >
+              {days(n, ar ? 'ar' : 'en')}
+            </button>
+          ))}
+        </div>
+        <p className="w-full text-xs text-text-muted">
           {t.period(data.period.days)}
           {data.freshness.last_sync_at && <> · {t.synced} <Num>{new Date(data.freshness.last_sync_at).toISOString().slice(0, 16).replace('T', ' ')}</Num></>}
           {data.freshness.state && data.freshness.state !== 'fresh' && <> · <span className="text-warning">{t.stale}</span></>}
@@ -97,7 +141,13 @@ function Body({ data, t, ar, spaceTo }: { data: PortalOverview; t: typeof COPY.a
           {/* Three in a row at every width, phone included: the primary figures read as one glance, not a stack. */}
           <StatGrid columns="grid-cols-3">
             {primaryKeys.map((k) => (
-              <StatCard key={k} testid={`portfolio-kpi-${k}`} label={t.k[k] ?? k} value={<Num>{format(k, data.kpis[k], data.currency)}</Num>} />
+              <StatCard
+                key={k}
+                testid={`portfolio-kpi-${k}`}
+                label={t.k[k] ?? k}
+                value={<Num>{format(k, data.kpis[k], data.currency)}</Num>}
+                spark={sparkOf(data, k) ? <span data-testid={`portfolio-spark-${k}`} className="block"><KpiSparkline points={sparkOf(data, k)!} height={26} /></span> : undefined}
+              />
             ))}
           </StatGrid>
           {secondaryKeys.length > 0 && (
