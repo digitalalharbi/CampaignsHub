@@ -1,8 +1,8 @@
-# START HERE — 2026-10-19 (early morning) — #761 and #762 live; #759, #763 in CI
+# START HERE — 2026-10-19 (morning) — #759 SEC-DEPS VERIFIED; #763 then #764 then #760
 
 **Merged and deployed:** #761 AI Agents B1–B8 plus the five-area navigation (eae678d1, bundle index-tKxd01V-.js); #762 Batch A (acbbb0af, bundle index-CozBjL7H.js: OpenAI text cards, store assignment, pace marker, column picker, ECB source, guards).
 
-**In CI, merge in this order as each goes green and current:** #759 SEC-DEPS-001 (refreshed after a WebKit blank-page run — the browser broke, not the app) → #763 Batch B (email, portal paging and trend, weekly delivery sweep and overview, link edit and analytics, alert presets and visuals) → #760 queue fix (refresh it last; it extends docs/MERGE_QUEUE.md).
+**#759 merged and VERIFIED on Production (eec4eb65).** **In CI, merge in this order as each goes green and current:** #763 Batch B (email, portal paging and trend, weekly delivery sweep and overview, link edit and analytics, alert presets and visuals) → #760 queue fix (refresh it last; it extends docs/MERGE_QUEUE.md).
 
 **Batch C, pushed, no PR yet:** `feat/agents-openai-client` — OpenAI and Gemini model clients (AGENTS-ENGINE-001 now serves all three providers), the spend notes block (AGENTS-REPORT-NOTES-BLOCK-001, slide PDF open), and pause requests from a passed campaign limit (BUDGET-LIMITS-ACTIONS-001). Full Vitest 3649 and the agent, budget and report suites pass; run the full backend suite before its PR.
 
