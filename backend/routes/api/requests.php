@@ -93,6 +93,10 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/requests', [ClientPortalController::class, 'index'])->name('requests.index')
         ->middleware('throttle:120,1');
     // CP-REQ-ONE-001: a client opens a request from inside their space.
+    // CP-USERS-001 — a client admin manages their own viewers and approvers when the agency allowed it.
+    Route::get('/team', [ClientPortalController::class, 'team'])->name('team.index')->middleware('throttle:120,1');
+    Route::post('/team', [ClientPortalController::class, 'inviteTeamMember'])->middleware('throttle:10,1')->name('team.invite');
+    Route::delete('/team/{membership}', [ClientPortalController::class, 'removeTeamMember'])->middleware('throttle:10,1')->name('team.remove');
     Route::post('/requests', [ClientPortalController::class, 'store'])->name('requests.store')
         ->middleware('throttle:10,1');
     Route::get('/requests/{reference}', [ClientPortalController::class, 'show'])->name('requests.show')

@@ -196,3 +196,9 @@ Schedule::command('agents:run-routines daily_analysis')->dailyAt('08:45')->timez
 Schedule::command('agents:run-routines budget_guard')->cron('5 */2 * * *')->withoutOverlapping();
 Schedule::command('agents:run-routines creative_review')->cron('0 9 * * 0,3')->timezone('Asia/Riyadh')->withoutOverlapping();
 Schedule::command('agents:run-routines weekly_report')->cron('0 14 * * 4')->timezone('Asia/Riyadh')->withoutOverlapping();
+
+/*
+ * AUTO-RULES-001 — automated rules: every five minutes the due ones run (each rule keeps its own
+ * frequency and timezone). Changes go through the approval gateway; nothing here bypasses it.
+ */
+Schedule::command('automation:evaluate')->everyFiveMinutes()->withoutOverlapping();

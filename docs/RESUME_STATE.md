@@ -1,8 +1,20 @@
 # START HERE — 2026-10-19 (afternoon) — report builder control (Owner defect 106) on `feat/report-composition-control`
 
-**Open PRs, merge in this order as each goes green and current:** #765 Batch D (KPI hierarchy, client team, queue fix) → #766 Automated Rules R1+R2 (guard fix pushed: notification links `/automation`) → the report-composition PR from `feat/report-composition-control` (worktree `../ch-rcc`).
+**Merged today:** #765 Batch D (b3e9512f, deployed; Production bundle index-D1Hca_C_.js shows the four-primary KPI row and the compact exec-kpis-secondary strip on /r/JCPjOu7P4AB3zVXaze1wqO; /client/team answers 401) and #766 Automated Rules R1+R2 (23b513fc). **Open:** the report-composition PR from `feat/report-composition-control` (worktree `../ch-rcc`).
 
 **Report composition (Owner defect 106):** two levels — main sections (`ReportViews`: summary, dashboard, platforms, content, tables; stored as `views` in report section settings and in link settings; a link narrows, never widens; only the detailed product has them) and components (the registry; each carries `view`). A component no open view draws is hidden server-side, so its keys leave the JSON, print and files. `daily_records` is a registry section, an independent SHOW/HIDE switch, shown unless hidden (Owner clarification: nothing aggregated by default). Exports and the PDF carry the ledger exactly when it is shown; internal Raw Metrics leaves only when explicitly hidden. UI: `CompositionTree` in ReportSectionControls and LiveLinkBuilder; `offeredViews` in live/modes.ts; ExecutiveSummary platform cards fill the row and the funnel spans the grid when alone; ReportFooter is full width (notes beside a facts grid). Local proof on rcc-api/rcc-web (ports 8192/5292, campaignshub_preview): a link with Content off showed four tabs, no overflow at 375px. **Production proof pending** on the Owner's reference link after deploy.
+
+---
+
+# START HERE — 2026-10-19 (midday) — Batches A, B, C and SEC-DEPS live; Batch D open
+
+**Merged and deployed today:** #752, #754, #755, #759 (SEC-DEPS-001 VERIFIED), #761 (agents B1–B8, five-area navigation), #762 (Batch A), #763 (Batch B: email, portal paging, weekly delivery sweep and overview, link edit and analytics, alert presets and visuals), #764 (Batch C: OpenAI and Gemini agents, spend notes, pause requests from limits).
+
+**Batch D (`feat/kpi-hierarchy-live`)** carries: the queue fix that was #760 (behind_by detection, a re-read of the checks; #760 closed in its favour), the live summary KPI hierarchy, the client admin's own people (/client/team), the portal write inventory guard, the client rail e2e race fix, and a matrix pass that reclassified stale IN_PROGRESS and NOT_STARTED rows against main.
+
+**Open after D:** CP-MOBILE (phone checks), WD-EVIDENCE PDF appendix, CP-PARITY, UX-COMPACT-CHARTS, Snapchat Oct-2026 rows (undocumented fields — do not invent), AGENTS-EXEC-SNAPCHAT (Owner reversible test), AGENTS-CLIENT-PRODUCT (Owner plan decision), REAL-* acceptance rows (Owner sessions).
+
+**WebKit CI:** «WebKit encountered an internal error» on page.goto and a blank page with no DOM are the runner breaking; rerun the failed job when the PR is current with main (#759 and #764 both passed on rerun).
 
 ---
 

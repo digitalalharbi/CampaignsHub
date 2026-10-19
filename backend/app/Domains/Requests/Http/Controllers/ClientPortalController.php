@@ -16,6 +16,7 @@ use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Services\ClientPortalUsers;
 use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
@@ -98,6 +99,7 @@ final class ClientPortalController
         private readonly MetricsAggregator $metrics,
         private readonly PaidServiceCatalog $paidServices,
         private readonly ClientPortalIdentity $identity,
+        private readonly ClientPortalUsers $portalUsers,
     ) {}
 
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
@@ -455,6 +457,77 @@ final class ClientPortalController
         $model->update(['status' => 'rejected']);
 
         return response()->json(['data' => ['quote' => $this->quoteShape($model->refresh())]]);
+    }
+
+    /**
+     * CP-USERS-001 — a client admin manages their own people, when their agency allowed it.
+     *
+     * Three gates, all server-side: the session is a client_admin, it reaches the whole space (a
+     * project-restricted admin manages nobody), and the agency granted that workspace the team_admin
+     * capability (off by default). A client admin may add viewers and approvers only — never another admin,
+     * which stays the agency's grant — and may not remove themselves.
+     */
+    public function team(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        return response()->json(['data' => ['workspaces' => array_map(
+            fn (ClientWorkspace $w): array => ['id' => (string) $w->getKey(), 'name' => $w->name, 'people' => $this->portalUsers->list($w)],
+            $this->teamWorkspaces($request, $token),
+        )]]);
+    }
+
+    public function inviteTeamMember(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $data = $request->validate([
+            'client_workspace_id' => ['required', 'uuid'],
+            'email' => ['required', 'email:rfc', 'max:190'],
+            'role' => ['required', Rule::in(['client_viewer', 'client_approver'])],
+            'project_ids' => ['nullable', 'array'],
+            'project_ids.*' => ['uuid'],
+        ]);
+        $workspace = collect($this->teamWorkspaces($request, $token))->first(fn (ClientWorkspace $w): bool => (string) $w->getKey() === $data['client_workspace_id']);
+        abort_if($workspace === null, 404);
+
+        $result = $this->portalUsers->grantOrInvite($workspace, $data['email'], $data['role'], $data['project_ids'] ?? null, $request->user());
+
+        return response()->json(['data' => $result], $result['state'] === 'granted' ? 200 : 201);
+    }
+
+    public function removeTeamMember(Request $request, string $membership): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $self = Membership::query()->whereKey($membership)->value('user_id');
+        abort_if($self !== null && (int) $self === (int) $request->user()?->getKey(), 422, 'You cannot remove yourself.');
+
+        foreach ($this->teamWorkspaces($request, $token) as $workspace) {
+            $ids = collect($this->portalUsers->list($workspace))->pluck('membership_id')->filter()->all();
+            if (in_array($membership, $ids, true)) {
+                $this->portalUsers->revoke($workspace, $membership);
+
+                return response()->json(['data' => ['revoked' => true]]);
+            }
+        }
+        abort(404);
+    }
+
+    /** @return list<ClientWorkspace> the spaces this session may manage people in */
+    private function teamWorkspaces(Request $request, ClientPortalToken $token): array
+    {
+        abort_unless($this->identity->clientRole($request, $token) === 'client_admin', 403, 'Only a client admin manages people here.');
+        abort_unless($this->wholeSpaceOnly($token), 403, 'A project-restricted account manages nobody.');
+
+        $spaces = array_values(array_filter(
+            $this->ownedWorkspaceModels($token),
+            static fn (ClientWorkspace $w): bool => (PortalVisibility::capabilitiesFor($w)['team_admin'] ?? false) === true,
+        ));
+        abort_if($spaces === [], 403, 'Your agency manages the people of this portal.');
+
+        return $spaces;
     }
 
     /** GET /client/invoices — the client's invoices with payment status (client-safe). */
