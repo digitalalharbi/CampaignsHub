@@ -7,6 +7,7 @@ import { useProject } from '@/stores/project'
 vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   getEnvelope: vi.fn(),
+  ensureCsrfCookie: vi.fn().mockResolvedValue(undefined),
   postData: vi.fn(),
   deleteData: vi.fn(),
 }))
@@ -235,3 +236,42 @@ describe('creating a limit', () => {
     expect(vi.mocked(deleteData).mock.calls.at(-1)?.[0]).toBe('/projects/p1/spend-limits/l1')
   })
 })
+
+/** BUDGET-LIMITS-ACTIONS-001 — a passed campaign limit offers a pause request only where every gate opens. */
+describe('actions on a campaign limit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'proj' })
+    signInWith(['campaigns.view', 'campaigns.pause'])
+  })
+  afterEach(() => signOut())
+
+  const action = (provider: string, over: Record<string, unknown> = {}) => ({
+    provider, external_account_id: `acc-${provider}`, target_external_id: `ext-${provider}`, name: `Spring ${provider}`, status: 'active', can_propose: true, why_not: null, ...over,
+  })
+
+  it('asks for a pause on the platforms that allow it and says why the others cannot', async () => {
+    route([reading({ id: 'c1', scope: 'campaign', scope_id: 'u1', state: 'over', consumed: 120, amount: 100, actions: [action('meta'), action('linkedin', { can_propose: false, why_not: 'not_implemented' })] })])
+    vi.mocked(postData).mockResolvedValue({ id: 'p1', status: 'pending' } as never)
+
+    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('limit-action-linkedin-why')).toHaveTextContent('cannot be paused from here')
+    fireEvent.click(screen.getByTestId('limit-action-meta-ask'))
+
+    await waitFor(() => expect(postData).toHaveBeenCalledWith('/projects/proj/agent-proposals', expect.objectContaining({
+      provider: 'meta', target_external_id: 'ext-meta', action: 'pause', target_type: 'campaign',
+    })))
+    expect(await screen.findByTestId('spend-limit-c1-asked')).toHaveTextContent('Approvals')
+  })
+
+  it('offers nothing while the limit is within plan', async () => {
+    route([reading({ id: 'c2', scope: 'campaign', scope_id: 'u1', state: 'ok', actions: [action('meta')] })])
+
+    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('spend-limit-c2')).toBeInTheDocument()
+    expect(screen.queryByTestId('spend-limit-c2-actions')).toBeNull()
+  })
+})
+

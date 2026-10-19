@@ -48,7 +48,7 @@ final class ActionProposalController extends Controller
     /** A person may put a change forward too; it waits for somebody else to approve it. */
     public function store(Request $request, string $project): JsonResponse
     {
-        abort_unless($request->user()?->hasPermission('ai.use'), 403);
+        abort_unless($request->user() !== null, 403);
 
         $data = $request->validate([
             'provider' => ['required', 'string', 'max:40'],
@@ -60,6 +60,11 @@ final class ActionProposalController extends Controller
             'payload.daily_budget' => ['nullable', 'numeric'],
             'reason' => ['required', 'string', 'max:1000'],
         ]);
+        // Asking for a change needs the AI permission (a request from the Agent Center) or the permission the
+        // change itself needs (BUDGET-LIMITS-ACTIONS-001: a pause asked from a spend limit). Asking still
+        // changes nothing; approving needs another person.
+        $user = $request->user();
+        abort_unless($user->hasPermission('ai.use') || $user->hasPermission(ProposalAction::from($data['action'])->permission()), 403);
 
         $proposal = $this->service->propose(Project::query()->findOrFail($project), 'person', $request->user(), $data);
 

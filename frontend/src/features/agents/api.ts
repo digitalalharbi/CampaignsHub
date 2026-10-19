@@ -166,3 +166,9 @@ export async function setAutonomy(projectId: string, cls: string, enabled: boole
   await ensureCsrfCookie()
   return putData<AutonomyState>(`/projects/${projectId}/agent-autonomy`, { class: cls, enabled })
 }
+
+/** A person's request for one change; it waits in Approvals for someone else to decide. */
+export async function proposeChange(projectId: string, body: { provider: string; external_account_id: string; target_type: 'campaign' | 'ad_set'; target_external_id: string; action: 'pause' | 'resume' | 'set_daily_budget'; reason: string }) {
+  await ensureCsrfCookie()
+  return postData<Proposal>(`${base(projectId)}`, body)
+}
