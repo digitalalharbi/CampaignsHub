@@ -95,7 +95,7 @@ describe('the agent center', () => {
     vi.mocked(listAiCredentials).mockResolvedValue([{ id: 'k', provider: 'anthropic', credential_scope: 'tenant', masked_key: '••••abcd', status: 'active', last_used_at: null }])
     fireEvent.click(screen.getByTestId('agent-ai-key-save'))
 
-    await waitFor(() => expect(addAiCredential).toHaveBeenCalledWith('anthropic', 'sk-ant-test-abcd'))
+    await waitFor(() => expect(addAiCredential).toHaveBeenCalledWith('anthropic', 'sk-ant-test-abcd', undefined))
     expect(await screen.findByTestId('agent-ai-key-present')).toHaveTextContent('••••abcd')
     expect(screen.getByTestId('agent-ai-key-input')).toHaveValue('')
   })
@@ -121,5 +121,20 @@ describe('the agent center', () => {
   it('shows routines read-only without ai.manage', async () => {
     renderWithProviders(<AgentCenterPage />, { locale: 'ar' })
     expect(await screen.findByTestId('routine-budget_guard-toggle')).toBeDisabled()
+  })
+
+  it('asks for a model before it stores an OpenAI key, and names it with the key', async () => {
+    signInWith(['ai.view', 'ai.use', 'ai.manage'])
+    vi.mocked(addAiCredential).mockResolvedValue({ id: 'k', provider: 'openai', credential_scope: 'tenant', masked_key: '••••wxyz', status: 'active', last_used_at: null, allowed_models: ['model-x'] })
+
+    renderWithProviders(<AgentCenterPage />, { locale: 'en' })
+    fireEvent.change(await screen.findByTestId('agent-ai-key-provider'), { target: { value: 'openai' } })
+    fireEvent.change(screen.getByTestId('agent-ai-key-input'), { target: { value: 'sk-test-wxyz' } })
+    expect(screen.getByTestId('agent-ai-key-save')).toBeDisabled()
+
+    fireEvent.change(screen.getByTestId('agent-ai-key-model'), { target: { value: 'model-x' } })
+    fireEvent.click(screen.getByTestId('agent-ai-key-save'))
+
+    await waitFor(() => expect(addAiCredential).toHaveBeenCalledWith('openai', 'sk-test-wxyz', 'model-x'))
   })
 })

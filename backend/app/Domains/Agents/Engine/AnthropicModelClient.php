@@ -70,6 +70,15 @@ final class AnthropicModelClient implements ModelClient
      */
     private function replay(array $blocks): array
     {
+        // Another provider's turn in the same thread: its private blocks (Gemini thoughts) are not sent,
+        // and its extra keys are dropped from the neutral text and tool_use blocks.
+        $blocks = array_values(array_filter($blocks, static fn (array $b): bool => in_array($b['type'] ?? '', ['text', 'tool_use', 'thinking', 'redacted_thinking'], true)));
+        $blocks = array_map(static function (array $b): array {
+            unset($b['gemini_signature']);
+
+            return $b;
+        }, $blocks);
+
         return Message::fromArray([
             'id' => 'replay', 'type' => 'message', 'role' => 'assistant', 'model' => 'replay',
             'stop_reason' => null, 'stop_sequence' => null, 'content' => $blocks,

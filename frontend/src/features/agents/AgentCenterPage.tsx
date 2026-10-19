@@ -23,11 +23,21 @@ import { useUi } from '@/stores/ui'
 const REASONS: Record<string, { ar: string; en: string }> = {
   no_ai_credential: { ar: 'لا يوجد مفتاح ذكاء اصطناعي فعّال لهذه المساحة — أضِف مفتاح Anthropic أدناه.', en: 'There is no active AI key for this workspace — add an Anthropic key below.' },
   ai_token_limit_reached: { ar: 'بلغ استخدام الوكلاء حدّ الرموز الشهري لمفتاح هذه المساحة.', en: "The agents reached this workspace key's monthly token limit." },
+  model_not_configured: { ar: 'لم يُحدَّد نموذج لهذا المفتاح — اذكر النموذج في إعدادات المفتاح.', en: 'No model is set for this key — name the model in the key settings.' },
+  model_request_failed_401: { ar: 'رفض مزوّد الذكاء الاصطناعي المفتاح (401) — تحقّق من صحته.', en: 'The AI provider refused the key (401) — check it is valid.' },
+  model_request_failed_429: { ar: 'تجاوز المفتاح حدّ الاستخدام لدى المزوّد (429) — حاول لاحقًا.', en: 'The key hit the provider rate limit (429) — try again later.' },
   agent_turn_failed: { ar: 'تعذّر إكمال الرد. حاول مرة أخرى بعد قليل.', en: 'The reply could not be completed. Try again shortly.' },
   needs_lead_sources: { ar: 'يحتاج إلى ربط مصدر العملاء المحتملين (جدول أو واتساب) أولًا.', en: 'Needs a lead source (a sheet or WhatsApp) connected first.' },
 }
 
-const reason = (code: string | null, ar: boolean) => (code === null ? '' : REASONS[code] ? (ar ? REASONS[code].ar : REASONS[code].en) : code)
+const reason = (code: string | null, ar: boolean) => {
+  if (code === null) return ''
+  if (REASONS[code]) return ar ? REASONS[code].ar : REASONS[code].en
+  // Any other provider status is named as such rather than shown as a bare code.
+  const status = /^model_request_failed_(\d{3})$/.exec(code)?.[1]
+  if (status) return ar ? `رفض مزوّد الذكاء الاصطناعي الطلب (${status}).` : `The AI provider refused the request (${status}).`
+  return code
+}
 
 const TOOL_WORDS: Record<string, { ar: string; en: string }> = {
   list_campaigns: { ar: 'قرأ الحملات', en: 'Read the campaigns' },
@@ -230,28 +240,48 @@ function MessageRow({ m, ar }: { m: AgentMessage; ar: boolean }) {
 /** The tenant's AI key: entered once by the Owner, stored encrypted, only its last four shown. */
 function AiKeyCard({ ar }: { ar: boolean }) {
   const qc = useQueryClient()
+  const [provider, setProvider] = useState<'anthropic' | 'openai' | 'gemini'>('anthropic')
   const [secret, setSecret] = useState('')
+  const [model, setModel] = useState('')
   const keys = useQuery({ queryKey: ['ai-credentials'], queryFn: listAiCredentials, retry: false })
   const add = useMutation({
-    mutationFn: () => addAiCredential('anthropic', secret),
-    onSuccess: () => { setSecret(''); void qc.invalidateQueries({ queryKey: ['ai-credentials'] }) },
+    mutationFn: () => addAiCredential(provider, secret, model.trim() || undefined),
+    onSuccess: () => { setSecret(''); setModel(''); void qc.invalidateQueries({ queryKey: ['ai-credentials'] }) },
   })
-  const active = (keys.data ?? []).filter((k) => k.status === 'active' && k.provider === 'anthropic')
+  const active = (keys.data ?? []).filter((k) => k.status === 'active' && ['anthropic', 'openai', 'gemini'].includes(k.provider))
+  // Only Anthropic has a model per role configured by default; OpenAI and Gemini name theirs.
+  const needsModel = provider !== 'anthropic' && model.trim() === ''
 
   return (
     <Card className="space-y-2" data-testid="agent-ai-key">
       <p className="flex items-center gap-1 text-xs font-bold text-text-primary"><KeyRound size={13} aria-hidden />{ar ? 'مفتاح الذكاء الاصطناعي' : 'AI key'}</p>
       {active.length > 0 ? (
-        <p className="text-xs text-text-secondary" data-testid="agent-ai-key-present" dir="ltr">Anthropic · {active[0].masked_key}</p>
+        <ul className="space-y-0.5" data-testid="agent-ai-key-present">
+          {active.map((k) => (
+            <li key={k.id} className="text-xs text-text-secondary" dir="ltr">{k.provider === 'openai' ? 'OpenAI' : k.provider === 'gemini' ? 'Gemini' : 'Anthropic'} · {k.masked_key}{k.allowed_models?.length ? ` · ${k.allowed_models[0]}` : ''}</li>
+          ))}
+        </ul>
       ) : (
-        <p className="text-xs text-text-muted">{ar ? 'لا مفتاح Anthropic فعّال. الوكلاء لا يعملون بدونه.' : 'No active Anthropic key. The agents do not work without one.'}</p>
+        <p className="text-xs text-text-muted">{ar ? 'لا مفتاح فعّال. الوكلاء لا يعملون بدونه.' : 'No active key. The agents do not work without one.'}</p>
       )}
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (secret.length >= 8) add.mutate() }}>
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">{ar ? 'مفتاح Anthropic' : 'Anthropic key'}</span>
-          <input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="sk-ant-…" dir="ltr" data-testid="agent-ai-key-input" className="w-full rounded border border-border bg-surface px-2 py-1 text-xs" />
+      <form className="space-y-1.5" onSubmit={(e) => { e.preventDefault(); if (secret.length >= 8 && !needsModel) add.mutate() }}>
+        <label className="block">
+          <span className="sr-only">{ar ? 'المزوّد' : 'Provider'}</span>
+          <select value={provider} onChange={(e) => setProvider(e.target.value as 'anthropic' | 'openai' | 'gemini')} data-testid="agent-ai-key-provider" className="w-full rounded border border-border bg-surface px-2 py-1 text-xs">
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+          </select>
         </label>
-        <Button type="submit" size="sm" variant="secondary" disabled={secret.length < 8 || add.isPending} data-testid="agent-ai-key-save">{ar ? 'حفظ' : 'Save'}</Button>
+        <label className="block">
+          <span className="sr-only">{ar ? 'المفتاح' : 'Key'}</span>
+          <input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={provider === 'openai' ? 'sk-…' : provider === 'gemini' ? 'AIza…' : 'sk-ant-…'} dir="ltr" data-testid="agent-ai-key-input" className="w-full rounded border border-border bg-surface px-2 py-1 text-xs" />
+        </label>
+        <label className="block">
+          <span className="sr-only">{ar ? 'النموذج' : 'Model'}</span>
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider !== 'anthropic' ? (ar ? 'اسم النموذج (مطلوب)' : 'Model name (required)') : (ar ? 'اسم النموذج (اختياري)' : 'Model name (optional)')} dir="ltr" data-testid="agent-ai-key-model" className="w-full rounded border border-border bg-surface px-2 py-1 text-xs" />
+        </label>
+        <Button type="submit" size="sm" variant="secondary" disabled={secret.length < 8 || needsModel || add.isPending} data-testid="agent-ai-key-save">{ar ? 'حفظ' : 'Save'}</Button>
       </form>
       {add.isError && <p role="alert" className="text-xs text-danger">{toApiError(add.error).message}</p>}
     </Card>

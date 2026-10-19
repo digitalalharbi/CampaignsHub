@@ -18,7 +18,7 @@ use RuntimeException;
 final class ModelClientFactory
 {
     /** Providers whose client exists in this product. The others are configurable and say so. */
-    public const SUPPORTED = ['anthropic'];
+    public const SUPPORTED = ['anthropic', 'openai', 'gemini'];
 
     /** @return array{client: ModelClient, provider: string, model: string, token_limit: int|null} */
     public function for(Project $project, string $role): array
@@ -43,9 +43,19 @@ final class ModelClientFactory
             $model = (string) $allowed[0];
         }
 
+        // No model name is invented: a provider whose role has no configured model uses the key's first
+        // allowed model, and with neither the request is refused by name.
+        if ($model === '') {
+            throw new RuntimeException('model_not_configured');
+        }
+
         $client = app()->bound(ModelClient::class)
             ? app(ModelClient::class)
-            : new AnthropicModelClient($credential->revealSecret());
+            : match ($credential->provider) {
+                'openai' => new OpenAiModelClient($credential->revealSecret(), $credential->organization_id, $credential->project_external_id),
+                'gemini' => new GeminiModelClient($credential->revealSecret()),
+                default => new AnthropicModelClient($credential->revealSecret()),
+            };
 
         $credential->forceFill(['last_used_at' => now()])->save();
 

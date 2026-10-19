@@ -42,7 +42,7 @@ final class RunAgentTurnJob implements ShouldQueue
         } catch (Throwable $e) {
             // A named reason (no_ai_credential) is stored for the screen; anything else is a fault, logged
             // in full and shown only as a code, so no provider or database text reaches the page.
-            $named = preg_match('/^[a-z_]{3,60}$/', $e->getMessage()) === 1;
+            $named = preg_match('/^[a-z][a-z0-9_]{2,60}$/', $e->getMessage()) === 1;
             if (! $named) {
                 report($e);
             }

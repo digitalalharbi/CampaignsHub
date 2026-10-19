@@ -98,6 +98,7 @@ export async function sendToAgent(projectId: string, body: { agent?: string; thr
 export interface AiCredential {
   id: string
   provider: string
+  allowed_models?: string[]
   credential_scope: string
   masked_key: string
   status: string
@@ -106,9 +107,13 @@ export interface AiCredential {
 
 export const listAiCredentials = () => getData<AiCredential[]>('/ai/credentials')
 
-export async function addAiCredential(provider: string, secret: string) {
+export async function addAiCredential(provider: string, secret: string, model?: string) {
   await ensureCsrfCookie()
-  return postData<AiCredential>('/ai/credentials', { provider, secret, credential_scope: 'tenant', allowed_features: ['agents'] })
+  return postData<AiCredential>('/ai/credentials', {
+    provider, secret, credential_scope: 'tenant', allowed_features: ['agents'],
+    // The model the agents use with this key; required for OpenAI, where no default is assumed.
+    ...(model ? { allowed_models: [model] } : {}),
+  })
 }
 
 /* AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on. */
