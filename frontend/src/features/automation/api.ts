@@ -29,6 +29,9 @@ export interface AutomationRule extends RuleInput {
   next_run_at: string | null
   /** no_change_required | acted | matched_not_acted | failed */
   last_result: string | null
+  /** AUTO-RULES-AGENTS-009 — `agent` for a draft an agent saved (off, Monitor Only) until a person reviews it. */
+  origin?: 'person' | 'agent'
+  drafted_by_agent?: string | null
 }
 
 export interface Catalog {

@@ -25,7 +25,7 @@ final class AutomationRule extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'name', 'enabled', 'mode', 'level', 'scope', 'logic', 'conditions', 'action',
-        'schedule', 'cooldown_hours', 'min_spend', 'last_run_at', 'next_run_at', 'last_result', 'created_by', 'updated_by',
+        'schedule', 'cooldown_hours', 'min_spend', 'last_run_at', 'next_run_at', 'last_result', 'created_by', 'updated_by', 'origin', 'drafted_by_agent',
     ];
 
     protected $casts = [

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Branding\Services\SharedLinkBranding;
+use App\Domains\Delivery\Models\PlatformEvidence;
+use App\Domains\Delivery\Services\ReportEvidence;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
@@ -17,7 +19,9 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Print pipeline endpoints. `issue` (authenticated, gated) mints a short-lived one-time token bound to
@@ -105,6 +109,15 @@ final class ReportPrintController extends Controller
             $body['platform_drilldowns'] = $drilldowns;
         }
 
+        /*
+         * WD-EVIDENCE-001 — the platform screenshots the Owner chose to include, as the PDF's appendix.
+         * Fetched by the renderer through this token, like the logo; never a figure.
+         */
+        $evidence = app(ReportEvidence::class)->forPrint($report, fn (string $id): string => url("/api/v1/reports/print/{$token}/evidence/{$id}"));
+        if ($evidence !== []) {
+            $body['platform_evidence'] = $evidence;
+        }
+
         return ApiResponse::success([
             'report_id' => (string) $report->id,
             'name' => $report->name,
@@ -156,6 +169,23 @@ final class ReportPrintController extends Controller
         abort_unless($file !== null, 404);
 
         return $file;
+    }
+
+    /**
+     * WD-EVIDENCE-001 — one appendix image for a print token. Only a screenshot that belongs to THIS
+     * report's appendix is served; any other id is not found, whatever the token.
+     */
+    public function evidence(string $token, string $evidence, ReportEvidence $appendix): StreamedResponse
+    {
+        $ctx = Cache::get($this->key($token));
+        abort_if($ctx === null, 404, 'Print token invalid or expired.');
+        $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
+        abort_if($report === null, 404);
+
+        $row = $appendix->forReport($report)->first(fn (PlatformEvidence $e): bool => (string) $e->getKey() === $evidence);
+        abort_if($row === null || ! in_array($row->mime, ReportEvidence::IMAGE_MIMES, true), 404);
+
+        return Storage::disk($row->disk)->response($row->path, null, ['Content-Type' => $row->mime, 'Cache-Control' => 'private, no-store']);
     }
 
     private function key(string $token): string

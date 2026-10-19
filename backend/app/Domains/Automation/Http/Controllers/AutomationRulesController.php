@@ -12,6 +12,7 @@ use App\Domains\Automation\Models\AutomationRuleAction;
 use App\Domains\Automation\Models\AutomationRuleRun;
 use App\Domains\Automation\Services\RuleEvaluator;
 use App\Domains\Automation\Support\RuleCatalog;
+use App\Domains\Automation\Support\RuleInput;
 use App\Domains\Automation\Support\RuleSchedule;
 use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
 use App\Domains\Campaigns\Models\ExternalAdSet;
@@ -227,44 +228,7 @@ final class AutomationRulesController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
-        $metrics = array_keys(RuleCatalog::METRICS);
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:160'],
-            'enabled' => ['required', 'boolean'],
-            'mode' => ['required', Rule::in(AutomationRule::MODES)],
-            'level' => ['required', Rule::in(AutomationRule::LEVELS)],
-            'logic' => ['required', Rule::in(['all', 'any'])],
-            'scope' => ['nullable', 'array'],
-            'scope.platforms' => ['nullable', 'array'], 'scope.platforms.*' => ['string', 'max:30'],
-            'scope.account_ids' => ['nullable', 'array'], 'scope.account_ids.*' => ['uuid'],
-            'scope.campaign_ids' => ['nullable', 'array'], 'scope.campaign_ids.*' => ['uuid'],
-            'scope.ad_set_ids' => ['nullable', 'array'], 'scope.ad_set_ids.*' => ['uuid'],
-            'scope.ad_ids' => ['nullable', 'array'], 'scope.ad_ids.*' => ['uuid'],
-            'conditions' => ['required', 'array', 'min:1', 'max:10'],
-            'conditions.*.metric' => ['required', Rule::in($metrics)],
-            'conditions.*.operator' => ['required', Rule::in(RuleCatalog::OPERATORS)],
-            'conditions.*.window_days' => ['required', 'integer', Rule::in(RuleCatalog::WINDOWS)],
-            'conditions.*.value' => ['required'],
-            'action' => ['required', 'array'],
-            'action.type' => ['required', Rule::in(array_keys(RuleCatalog::ACTIONS))],
-            'action.percent' => ['nullable', 'numeric', 'min:1', 'max:50'],
-            'schedule' => ['required', 'array'],
-            'schedule.frequency' => ['required', Rule::in(array_keys(RuleCatalog::FREQUENCIES))],
-            'schedule.at' => ['nullable', 'regex:/^\d{2}:\d{2}$/'],
-            'schedule.timezone' => ['nullable', 'timezone'],
-            'cooldown_hours' => ['required', 'integer', 'min:1', 'max:720'],
-            'min_spend' => ['nullable', 'numeric', 'min:0'],
-        ]);
-        foreach ($data['conditions'] as $i => $c) {
-            $isStatus = RuleCatalog::METRICS[$c['metric']][2] === 'status';
-            abort_if($isStatus ? ! in_array($c['value'], ['active', 'paused'], true) || $c['operator'] !== 'eq' : ! is_numeric($c['value']), 422, "Condition {$i}: the value does not fit the metric.");
-        }
-        if (in_array($data['action']['type'], ['budget_increase', 'budget_decrease'], true)) {
-            abort_if(! isset($data['action']['percent']), 422, 'A budget change needs a percentage.');
-            abort_if($data['level'] === 'ad', 422, 'An ad has no budget of its own.');
-        }
-
-        return $data;
+        return RuleInput::validate($request->all());
     }
 
     /** @param array<string, mixed> $data */
@@ -290,6 +254,8 @@ final class AutomationRulesController extends Controller
             'scope' => $r->scope ?? (object) [], 'logic' => $r->logic, 'conditions' => $r->conditions, 'action' => $r->action, 'schedule' => $r->schedule,
             'cooldown_hours' => $r->cooldown_hours, 'min_spend' => $r->min_spend, 'last_run_at' => $r->last_run_at?->toIso8601String(),
             'next_run_at' => $r->next_run_at?->toIso8601String(), 'last_result' => $r->last_result,
+            // AUTO-RULES-AGENTS-009 — an agent's draft says so until a person deletes it.
+            'origin' => $r->origin ?? 'person', 'drafted_by_agent' => $r->drafted_by_agent,
         ];
     }
 

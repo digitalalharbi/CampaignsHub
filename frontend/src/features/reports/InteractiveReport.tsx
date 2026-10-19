@@ -1,6 +1,6 @@
 import type { FormatIntelligencePayload } from '@/features/content/api'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { sectionShown, withDailyRecordsSlides, withStreamsSlide } from './reportSections'
+import { sectionShown, withDailyRecordsSlides, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
 import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
@@ -62,6 +62,8 @@ export interface ReportSection {
 }
 
 export interface ReportData {
+  /** WD-EVIDENCE-001 — the PDF appendix's platform screenshots, from the print payload only. */
+  platform_evidence?: PrintEvidence[]
   /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention», already cut for this reader by the server. */
   attention?: AttentionItem[] | null
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
@@ -377,6 +379,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
   paged?: boolean
 }) {
   switch (slide.type) {
+    case '__evidence': return <EvidenceSlide data={data} index={slide.range?.[0] ?? 0} />
     case '__daily': return <DailyRecordsSlide data={data} range={slide.range} />
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
@@ -1788,6 +1791,32 @@ function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number,
     <div data-testid="report-daily-records">
       <Title sub="كل يوم في فترة التقرير">السجل اليومي</Title>
       <DataMetricTable columns={columns} rows={rows} />
+    </div>
+  )
+}
+
+/**
+ * WD-EVIDENCE-001 — one platform screenshot, a page of the appendix: which platform, which period, when
+ * it was captured and the Owner's note. Evidence for trust, never a figure; a PDF screenshot cannot be
+ * drawn on a page, so it is named instead.
+ */
+function EvidenceSlide({ data, index }: { data: ReportData; index: number }) {
+  const e = (data.platform_evidence ?? [])[index]
+  if (!e) return null
+  const period = e.period_start && e.period_end ? (e.period_start === e.period_end ? e.period_start : `${e.period_start} → ${e.period_end}`) : null
+
+  return (
+    <div data-testid={`report-evidence-${e.id}`} className="flex h-full min-h-0 flex-col gap-3">
+      <Title platform={e.provider} sub={[period, e.captured_at ? `التُقطت ${fmtDateTime(e.captured_at)}` : null].filter(Boolean).join(' · ')}>
+        {`لقطة من ${providerLabel(e.provider, 'ar')}`}
+      </Title>
+      {e.image && e.url ? (
+        <img src={e.url} alt={`لقطة من ${providerLabel(e.provider, 'ar')}`} className="mx-auto min-h-0 max-w-full flex-1 rounded-xl border border-border object-contain" />
+      ) : (
+        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">مرفق PDF: {e.name ?? '—'}</p>
+      )}
+      {e.note && <p className="text-sm text-text-secondary">{e.note}</p>}
+      <p className="text-[11px] text-text-muted">لقطة للاطلاع فقط — أرقام التقرير من بيانات المنصات المنظّمة، لا من هذه الصورة.</p>
     </div>
   )
 }

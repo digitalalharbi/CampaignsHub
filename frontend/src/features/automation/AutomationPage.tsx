@@ -137,7 +137,11 @@ export function AutomationPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         <p className="font-semibold text-text-primary">{r.name}</p>
-                        <Badge tone={r.mode === 'auto' ? 'warning' : r.mode === 'recommend' ? 'info' : 'neutral'}>{ar ? MODE_WORDS[r.mode].ar : MODE_WORDS[r.mode].en}</Badge>
+                        <span className="mt-0.5 flex flex-wrap gap-1">
+                          <Badge tone={r.mode === 'auto' ? 'warning' : r.mode === 'recommend' ? 'info' : 'neutral'}>{ar ? MODE_WORDS[r.mode].ar : MODE_WORDS[r.mode].en}</Badge>
+                          {/* AUTO-RULES-AGENTS-009 — an agent's suggestion, saved off until a person reviews it. */}
+                          {r.origin === 'agent' && <span data-testid={`automation-agent-draft-${r.id}`}><Badge tone="info">{ar ? 'مسودة من وكيل' : 'Agent draft'}</Badge></span>}
+                        </span>
                       </td>
                       <td className="max-w-xs px-3 py-2.5 text-text-secondary" data-testid={`automation-conditions-${r.id}`}>{conditionsSentence(catalog.data, r, ar)}</td>
                       <td className="px-3 py-2.5">{actionWord(catalog.data, r, ar)}</td>
