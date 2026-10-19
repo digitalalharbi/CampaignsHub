@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
+use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -50,7 +54,7 @@ final class SpendLimitController extends Controller
             ->orderBy('scope')
             ->orderBy('starts_on')
             ->get()
-            ->map(fn (SpendLimit $l): array => $this->governor->read($l, $today))
+            ->map(fn (SpendLimit $l): array => $this->governor->read($l, $today) + ['actions' => $this->actions($request, $project, $l)])
             ->all();
 
         return ApiResponse::success($limits, 'Spend limits.', [
@@ -64,6 +68,49 @@ final class SpendLimitController extends Controller
             'enforcement_note_ar' => 'يراقب كامبينز هب الإنفاق مقابل هذا الحد ويُنبّه — ولا يوقف عرض الإعلانات على أي منصة.',
             'today' => $today->toDateString(),
         ]);
+    }
+
+    /**
+     * BUDGET-LIMITS-ACTIONS-001 — what may be ASKED when a campaign runs past its limit, per platform.
+     *
+     * Only a campaign-scoped limit has an action, and only a pause: a project, platform or account limit
+     * has no single object the gateway's closed vocabulary can name. Each platform campaign says whether a
+     * pause may be proposed — the provider's write capability is implemented (WriteCapabilityRegistry),
+     * this person holds its permission, and approved actions are carried out for that provider
+     * (agents.execute_providers) — and if not, which of the three is missing. Proposing only files a
+     * request in Approvals; another person decides, and nothing here touches a platform.
+     *
+     * @return list<array{provider: string, external_account_id: string, target_external_id: string, name: ?string, status: ?string, can_propose: bool, why_not: ?string}>
+     */
+    private function actions(Request $request, string $project, SpendLimit $limit): array
+    {
+        if ($limit->scope !== SpendLimitScope::Campaign || $limit->scope_id === null) {
+            return [];
+        }
+        $user = $request->user();
+        $registry = collect(WriteCapabilityRegistry::entries())->where('capability', 'pause_resume')->keyBy('provider');
+
+        return ExternalCampaign::query()->where('project_id', $project)->where('unified_campaign_id', $limit->scope_id)
+            ->whereIn('external_account_id', BoundAccountVisibility::activeAccountIds($project))
+            ->get(['provider', 'external_account_id', 'external_id', 'name', 'status'])
+            ->map(function (ExternalCampaign $c) use ($user, $registry): array {
+                $provider = AdPlatforms::canonical((string) $c->provider);
+                $status = (string) ($registry[$provider]['status'] ?? WriteCapabilityRegistry::NOT_IMPLEMENTED);
+                $whyNot = match (true) {
+                    $c->status === 'paused' => 'already_paused',
+                    $status === WriteCapabilityRegistry::AWAITING_CREDENTIALS => 'awaiting_credentials',
+                    ! WriteCapabilityRegistry::allowed($provider, 'pause_resume', static fn (): bool => true) => 'not_implemented',
+                    ! ($user?->hasPermission('campaigns.pause') ?? false) => 'no_permission',
+                    ! in_array($provider, (array) config('agents.execute_providers', []), true) => 'execution_not_enabled_for_provider',
+                    default => null,
+                };
+
+                return [
+                    'provider' => $provider, 'external_account_id' => (string) $c->external_account_id,
+                    'target_external_id' => (string) $c->external_id, 'name' => $c->name, 'status' => $c->status,
+                    'can_propose' => $whyNot === null, 'why_not' => $whyNot,
+                ];
+            })->values()->all();
     }
 
     public function store(Request $request, string $project): JsonResponse

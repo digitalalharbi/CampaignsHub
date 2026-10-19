@@ -1,3 +1,4 @@
+import { ProviderMark } from '@/components/ProviderMark'
 import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -365,7 +366,8 @@ function PlatformComparison({
                   onClick={() => onSelect(selected === key ? null : key)}
                   className={`flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 font-semibold text-text-primary ${selected === key ? 'bg-brand-500/15' : 'hover:bg-surface-hover'}`}
                 >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(key) }} />
+                  {/* REPORT-PLATFORM-ICONS-001 — the one provider mark every table uses, in place of a bare colour dot. */}
+                  <ProviderMark provider={key} size={16} />
                   {providerLabel(key, ar ? 'ar' : 'en')}
                 </button>,
                 <span key="r" className="inline-flex items-center gap-2">
@@ -538,7 +540,7 @@ function OptimisationSteps({ payload, ar, onOpenContent }: { payload: LivePayloa
                   {working ? (ar ? 'ما ينجح' : 'Working') : (ar ? 'قيد التحسين' : 'Being optimised')}
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
-                  <span className="h-2 w-2 rounded-full" style={{ background: platformColor(canonicalPlatform(item.platform)) }} />
+                  <ProviderMark provider={canonicalPlatform(item.platform)} size={14} />
                   {providerLabel(canonicalPlatform(item.platform), ar ? 'ar' : 'en')}
                 </span>
               </div>

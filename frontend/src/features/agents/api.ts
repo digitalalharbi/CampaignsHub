@@ -98,6 +98,7 @@ export async function sendToAgent(projectId: string, body: { agent?: string; thr
 export interface AiCredential {
   id: string
   provider: string
+  allowed_models?: string[]
   credential_scope: string
   masked_key: string
   status: string
@@ -106,9 +107,13 @@ export interface AiCredential {
 
 export const listAiCredentials = () => getData<AiCredential[]>('/ai/credentials')
 
-export async function addAiCredential(provider: string, secret: string) {
+export async function addAiCredential(provider: string, secret: string, model?: string) {
   await ensureCsrfCookie()
-  return postData<AiCredential>('/ai/credentials', { provider, secret, credential_scope: 'tenant', allowed_features: ['agents'] })
+  return postData<AiCredential>('/ai/credentials', {
+    provider, secret, credential_scope: 'tenant', allowed_features: ['agents'],
+    // The model the agents use with this key; required for OpenAI, where no default is assumed.
+    ...(model ? { allowed_models: [model] } : {}),
+  })
 }
 
 /* AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on. */
@@ -160,4 +165,10 @@ export const getAutonomy = (projectId: string) => getData<AutonomyState>(`/proje
 export async function setAutonomy(projectId: string, cls: string, enabled: boolean) {
   await ensureCsrfCookie()
   return putData<AutonomyState>(`/projects/${projectId}/agent-autonomy`, { class: cls, enabled })
+}
+
+/** A person's request for one change; it waits in Approvals for someone else to decide. */
+export async function proposeChange(projectId: string, body: { provider: string; external_account_id: string; target_type: 'campaign' | 'ad_set'; target_external_id: string; action: 'pause' | 'resume' | 'set_daily_budget'; reason: string }) {
+  await ensureCsrfCookie()
+  return postData<Proposal>(`${base(projectId)}`, body)
 }

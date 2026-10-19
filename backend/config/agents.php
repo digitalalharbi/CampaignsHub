@@ -60,6 +60,13 @@ return [
             'leads' => 'claude-haiku-5-5',
             'reports' => 'claude-haiku-5-5',
         ],
+        /*
+         * OpenAI's model is the tenant's choice, never ours: set AGENTS_OPENAI_MODEL, or list the model in the
+         * key's allowed_models. With neither, an OpenAI key is refused with model_not_configured.
+         */
+        'openai' => array_fill_keys(['orchestrator', 'campaign', 'analyst', 'creative', 'leads', 'reports'], env('AGENTS_OPENAI_MODEL')),
+        // The same rule for Gemini: AGENTS_GEMINI_MODEL or the key's allowed_models, else model_not_configured.
+        'gemini' => array_fill_keys(['orchestrator', 'campaign', 'analyst', 'creative', 'leads', 'reports'], env('AGENTS_GEMINI_MODEL')),
     ],
 
     // The most tool round-trips one turn may take before it stops and says so.

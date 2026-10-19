@@ -37,6 +37,19 @@ export interface SpendLimitReading {
   state: SpendLimitState
   /** Why the figures are what they are: `comparable`, `partial`, `currency_mismatch`, … */
   basis: string
+  /** BUDGET-LIMITS-ACTIONS-001 — a campaign limit's platform campaigns and whether a pause may be ASKED for. */
+  actions?: LimitAction[]
+}
+
+export interface LimitAction {
+  provider: string
+  external_account_id: string
+  target_external_id: string
+  name: string | null
+  status: string | null
+  can_propose: boolean
+  /** not_implemented | awaiting_credentials | no_permission | execution_not_enabled_for_provider | already_paused */
+  why_not: string | null
 }
 
 export interface SpendLimitsPage {

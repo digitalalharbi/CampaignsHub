@@ -1,3 +1,15 @@
+# START HERE — 2026-10-19 (morning) — #759 SEC-DEPS VERIFIED; #763 then #764 then #760
+
+**Merged and deployed:** #761 AI Agents B1–B8 plus the five-area navigation (eae678d1, bundle index-tKxd01V-.js); #762 Batch A (acbbb0af, bundle index-CozBjL7H.js: OpenAI text cards, store assignment, pace marker, column picker, ECB source, guards).
+
+**#759 merged and VERIFIED on Production (eec4eb65).** **In CI, merge in this order as each goes green and current:** #763 Batch B (email, portal paging and trend, weekly delivery sweep and overview, link edit and analytics, alert presets and visuals) → #760 queue fix (refresh it last; it extends docs/MERGE_QUEUE.md).
+
+**Batch C, pushed, no PR yet:** `feat/agents-openai-client` — OpenAI and Gemini model clients (AGENTS-ENGINE-001 now serves all three providers), the spend notes block (AGENTS-REPORT-NOTES-BLOCK-001, slide PDF open), and pause requests from a passed campaign limit (BUDGET-LIMITS-ACTIONS-001). Full Vitest 3649 and the agent, budget and report suites pass; run the full backend suite before its PR.
+
+**Owner actions now possible on Production:** assign store 793298857 to Project 1 (Integrations); enter an AI key in the Agent Center (Anthropic, or OpenAI or Gemini with a model name); decide which plans include agents (B9).
+
+---
+
 # START HERE — 2026-10-19 (night) — queue proven on #752; agents B1–B8 in one PR
 
 **Merged and deployed today:** #754 (portal attention), #755 (weekly delivery and invoicing screens), #752 (TikTok Spark video url, main `8da35813`). The queue refreshed #752 by itself (update-branch plus dispatched CI plus report-status) and merged it — CI-MERGE-QUEUE-001.

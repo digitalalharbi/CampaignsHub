@@ -9,7 +9,13 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { money, moneyExact, num, percent } from '@/features/analytics/format'
 import { ChartCard, RatioBars, StatusMixBar } from '@/features/analytics/charts'
 import { providerLabel } from '@/features/campaigns/labels'
-import { useRemoveSpendLimit, useSpendLimits, type SpendLimitReading } from './spendLimitsApi'
+import { useRemoveSpendLimit, useSpendLimits, type LimitAction, type SpendLimitReading } from './spendLimitsApi'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { Button } from '@/components/ui/Button'
+import { toApiError } from '@/lib/api/client'
+import { usePortalPath } from '@/app/portalPath'
+import { proposeChange } from '@/features/agents/api'
 import { NewSpendLimitDialog } from './NewSpendLimitDialog'
 
 /**
@@ -347,6 +353,9 @@ function LimitCard({
             : `The pace is measured through ${limit.paced_through} — the last day with data — not through today.`}
         </p>
       )}
+      {(limit.state === 'approaching' || limit.state === 'over') && (limit.actions?.length ?? 0) > 0 && (
+        <LimitActions limit={limit} ar={ar} locale={locale} projectId={projectId} />
+      )}
       <p data-testid={`spend-limit-${limit.id}-projection`} className="mt-2 text-xs text-text-muted">
         {limit.projected_exhaustion.date !== null
           ? (ar
@@ -387,6 +396,60 @@ function LimitCard({
  * about a limit whose spend we could not read at all, and it would rank the limits we know least about
  * as the best-behaved ones. They are withheld and counted beneath the chart.
  */
+const WHY_NOT: Record<string, { ar: string; en: string }> = {
+  not_implemented: { ar: 'هذه المنصة لا تتيح الإيقاف من هنا', en: 'This platform cannot be paused from here' },
+  awaiting_credentials: { ar: 'بانتظار بيانات اعتماد المنصة', en: 'Waiting for the platform credentials' },
+  no_permission: { ar: 'لا تملك صلاحية الإيقاف', en: 'You may not pause campaigns' },
+  execution_not_enabled_for_provider: { ar: 'التنفيذ غير مفعّل لهذه المنصة', en: 'Execution is not enabled for this platform' },
+  already_paused: { ar: 'متوقفة أصلًا', en: 'Already paused' },
+}
+
+/**
+ * BUDGET-LIMITS-ACTIONS-001 — what may be ASKED for when a campaign runs past its limit. A pause request
+ * waits in Approvals for someone else; this page never changes a platform itself, and each platform that
+ * cannot be asked says why.
+ */
+function LimitActions({ limit, ar, locale, projectId }: { limit: SpendLimitReading; ar: boolean; locale: 'ar' | 'en'; projectId: string | null }) {
+  const portalTo = usePortalPath()
+  const qc = useQueryClient()
+  const ask = useMutation({
+    mutationFn: (a: LimitAction) => proposeChange(projectId!, {
+      provider: a.provider, external_account_id: a.external_account_id, target_type: 'campaign', target_external_id: a.target_external_id, action: 'pause',
+      reason: ar
+        ? `تجاوز حد الإنفاق: ${limit.consumed ?? '—'} من ${limit.amount} ${limit.currency} للفترة ${limit.period.from} → ${limit.period.to}.`
+        : `Spend limit ${limit.state === 'over' ? 'passed' : 'approaching'}: ${limit.consumed ?? '—'} of ${limit.amount} ${limit.currency} for ${limit.period.from} → ${limit.period.to}.`,
+    }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-proposals'] }),
+  })
+
+  return (
+    <div data-testid={`spend-limit-${limit.id}-actions`} className="mt-3 rounded-xl border border-border/70 p-2.5">
+      <p className="text-xs font-semibold text-text-primary">{ar ? 'طلب إيقاف (يحتاج موافقة شخص آخر)' : 'Ask for a pause (another person approves)'}</p>
+      <ul className="mt-1.5 space-y-1">
+        {(limit.actions ?? []).map((a) => (
+          <li key={`${a.provider}-${a.target_external_id}`} className="flex flex-wrap items-center justify-between gap-2 text-xs" data-testid={`limit-action-${a.provider}`}>
+            <span className="min-w-0 truncate text-text-secondary">{providerLabel(a.provider, locale)} · {a.name ?? a.target_external_id}</span>
+            {a.can_propose ? (
+              <Button size="sm" variant="secondary" disabled={ask.isPending || ask.isSuccess} onClick={() => ask.mutate(a)} data-testid={`limit-action-${a.provider}-ask`}>
+                {ar ? 'طلب إيقاف' : 'Ask to pause'}
+              </Button>
+            ) : (
+              <span className="text-text-muted" data-testid={`limit-action-${a.provider}-why`}>{a.why_not && WHY_NOT[a.why_not] ? (ar ? WHY_NOT[a.why_not].ar : WHY_NOT[a.why_not].en) : a.why_not}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {ask.isSuccess && (
+        <p className="mt-1.5 text-xs text-success" data-testid={`spend-limit-${limit.id}-asked`}>
+          {ar ? 'أُرسل الطلب إلى ' : 'Sent to '}
+          <Link to={portalTo('/agents/approvals')} className="font-semibold underline">{ar ? 'طلبات الموافقة' : 'Approvals'}</Link>
+        </p>
+      )}
+      {ask.isError && <p role="alert" className="mt-1.5 text-xs text-danger">{toApiError(ask.error).message}</p>}
+    </div>
+  )
+}
+
 function LimitPace({ limits, ar, locale }: { limits: SpendLimitReading[]; ar: boolean; locale: Locale }) {
   const drawable = limits
     .filter((l) => l.pace !== null && Number.isFinite(l.pace) && (l.pace as number) >= 0)

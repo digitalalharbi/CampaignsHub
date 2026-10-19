@@ -82,6 +82,10 @@ final class AgentToolbox
         if (! in_array($name, $allowed, true)) {
             return $this->error("The tool {$name} is not available to this agent.");
         }
+        if (isset($input['_invalid_arguments'])) {
+            // A provider returned arguments that were not valid JSON; nothing is run on a guess.
+            return $this->error('The arguments of this call were not valid JSON. Call the tool again with valid arguments.');
+        }
 
         try {
             $result = match ($name) {
