@@ -1,4 +1,4 @@
-import { getData, postData } from '@/lib/api/client'
+import { deleteData, getData, postData } from '@/lib/api/client'
 
 /**
  * Client Portal — Account API. Covers the verified client's billing (quotes + invoices + payments),
@@ -360,3 +360,26 @@ export function formatDate(iso: string | null | undefined): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-CA')
 }
+
+/* CP-USERS-001 — a client admin's own people, where the agency allowed it (403 everywhere else). */
+
+export interface PortalTeamPerson {
+  membership_id?: string
+  invitation_id?: string
+  name?: string | null
+  email: string | null
+  role: string
+  state: 'active' | 'invited'
+}
+
+export interface PortalTeam {
+  workspaces: Array<{ id: string; name: string; people: PortalTeamPerson[] }>
+}
+
+export const getPortalTeam = () => getData<PortalTeam>('/client/team')
+
+export const invitePortalPerson = (body: { client_workspace_id: string; email: string; role: 'client_viewer' | 'client_approver' }) =>
+  postData<{ state: string }>('/client/team', body)
+
+export const removePortalPerson = (membershipId: string) =>
+  deleteData<{ revoked: boolean }>(`/client/team/${encodeURIComponent(membershipId)}`)
