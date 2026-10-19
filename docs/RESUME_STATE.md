@@ -1,3 +1,17 @@
+# START HERE — 2026-10-19 (night) — queue proven on #752; agents B1–B8 in one PR
+
+**Merged and deployed today:** #754 (portal attention), #755 (weekly delivery and invoicing screens), #752 (TikTok Spark video url, main `8da35813`). The queue refreshed #752 by itself (update-branch plus dispatched CI plus report-status) and merged it — CI-MERGE-QUEUE-001.
+
+**Open, in this order (docs/MERGE_QUEUE.md on #760):** #760 (queue: behind_by detection plus a re-read of the checks; it extends the order) → #759 SEC-DEPS-001 (composer and npm audits clean; the anonymous Cache-Control ReDoS) → #761 AI Agents B1–B8 plus the five-area navigation. #760 is outside main's current list, so merge it by hand when green; after that the queue carries #759 and #761.
+
+**Agents:** see the AGENTS-* rows. B9 (client product) waits for the Owner's decision on which plans include agents. Production proof of any agent reply needs the Owner to enter an Anthropic key in the Agent Center's key card; executors need an Owner-approved reversible change on a live Meta or Google campaign.
+
+**Next prepared branches (open one at a time after #761):** `feat/openai-chat-card-text-preview` (main merged, full suites green), `feat/commerce-store-assignment`, `feat/brand-lockup-by-language`, `fix/quick-preview-trend-truth`, `feat/budget-pace-marker`, `feat/report-table-identity-r` → `feat/report-owner-columns`, `test/client-isolation-probe-r`, `feat/ecb-rate-source`, the email, alert and delivery branches, `feat/portal-trend`, `feat/portal-campaigns-paged`, `feat/report-link-analytics`, `test/guards-batch`. Batch small independent ones into one PR where they touch different areas — every merge costs every other PR an hour of browser gates.
+
+**Local test lanes:** run a backend suite with `DB_DATABASE=mediabuying_test_snap` (or another lane database) and never run a second suite or single test against the same database at the same time — doing so mid-suite produced 25 false failures tonight.
+
+---
+
 # START HERE — 2026-10-19 (late) — agents B1–B3 built; queue at #755
 
 **Queue:** #754 merged and deployed (bundle `index-D1LDtVlB.js` carries `portal-attention`). The queue halted at 21:56 on #755 because GitHub reported `UNKNOWN` while it was conflicting — the case `ci/queue-detect-behind` fixes; #755 was refreshed by hand. Its Firefox gate then failed on two specs that #755 does not touch (`live-link-builder`: a missed tick under load; `reports-phone-list`: the advertiser's default project moved to one with no reports). Both specs were hardened on #755's head `c6f3fb61` (re-press while unticked; open a project that has a report). Next: #752 (green, behind main), then open `ci/queue-detect-behind`. Scheduled queue runs were not observed between 21:20 and 22:33 UTC: GitHub drops `schedule` triggers under load, so the `workflow_run` trigger is what advances the queue.
