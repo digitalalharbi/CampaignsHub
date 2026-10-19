@@ -15,6 +15,7 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportColumns;
@@ -411,6 +412,9 @@ final class LiveReportBuilderController extends Controller
             'columns.*.*' => ['string', 'max:40'],
             'section_overrides' => ['sometimes', 'array'],
             'section_overrides.*' => [Rule::in(app(ReportSectionRegistry::class)->keys())],
+            // REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) a detailed link offers; absent is all.
+            'views' => ['sometimes', 'array', 'min:1'],
+            'views.*' => [Rule::in(ReportViews::VIEWS)],
         ]);
 
         /*
@@ -513,7 +517,7 @@ final class LiveReportBuilderController extends Controller
              * the level's full ON/OFF map, exactly as a saved report does (`ReportController`), and the
              * link narrows it from there.
              */
-            'section_settings' => $effective === null ? null : ['sections' => $effective],
+            'section_settings' => $this->sectionSettingsFor($effective, ReportViews::normalise($data['views'] ?? null)),
         ]);
 
         [$share, $raw] = $this->shares->create($report, [
@@ -597,5 +601,23 @@ final class LiveReportBuilderController extends Controller
             ->all();
 
         return [$accountIds, $campaigns, array_values(array_unique($ads))];
+    }
+
+    /**
+     * The new report's section settings: the level's map with the Owner's switches over it, and the
+     * main sections it offers (REPORT-COMPOSITION-CONTROL-001). Null when nobody chose anything, which
+     * is what a report with no stored settings has always meant.
+     *
+     * @param  array<string, bool>|null  $sections
+     * @param  list<string>|null  $views
+     * @return array<string, mixed>|null
+     */
+    private function sectionSettingsFor(?array $sections, ?array $views): ?array
+    {
+        if ($sections === null && $views === null) {
+            return null;
+        }
+
+        return ['sections' => $sections ?? []] + ($views === null ? [] : ['views' => $views]);
     }
 }

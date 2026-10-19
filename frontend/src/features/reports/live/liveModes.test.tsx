@@ -367,10 +367,11 @@ describe('a link left open stays live', () => {
 describe('the report levels are different products', () => {
   afterEach(() => vi.clearAllMocks())
 
-  const serve = (level: 'standard' | 'detailed') => vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => ({
+  const serve = (level: 'standard' | 'detailed', extra: Record<string, unknown> = {}) => vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => ({
     status: 200,
     envelope: { data: {
       ...payloadFor(opts.providers),
+      ...extra,
       detail_level: level,
       accounts: level === 'detailed' ? [{ account_id: 'a1', provider: 'meta', account_name: 'HENKA ads', spend: 700, impressions: 70_000, clicks: 2100, conversions: 40, cpa: 17.5 }] : [],
     } },
@@ -405,6 +406,35 @@ describe('the report levels are different products', () => {
     expect(within(tables).getByTestId('tables-days')).toBeInTheDocument()
     expect(within(tables).getByTestId('tables-content')).toBeInTheDocument()
     expect(within(tables).getByTestId('tables-accounts')).toHaveTextContent('HENKA ads')
+  })
+
+  /*
+   * REPORT-COMPOSITION-CONTROL-001 — the server names the main sections a link offers. Only those get
+   * tabs, a closed one cannot be reached by its address, a single one opens without a tab bar, and the
+   * daily ledger appears only when its own component is in the section list.
+   */
+  it('offers only the main sections the server names, and the ledger only when daily records are on', async () => {
+    serve('detailed', { report_views: ['summary', 'tables'], report_sections: ['kpis', 'platform_comparison', 'content_performance', 'account_breakdown'] })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
+
+    await screen.findByTestId('live-mode-summary')
+    const tabs = within(screen.getByTestId('live-modes')).getAllByRole('tab').map((t) => t.getAttribute('data-testid'))
+    expect(tabs).toEqual(['live-mode-tab-summary', 'live-mode-tab-tables'])
+    expect(screen.queryByTestId('live-mode-dashboard')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('live-mode-tab-tables'))
+    const tables = await screen.findByTestId('live-mode-tables')
+    expect(within(tables).queryByTestId('tables-days')).not.toBeInTheDocument()
+    expect(within(tables).getByTestId('tables-platforms')).toBeInTheDocument()
+  })
+
+  it('a single main section opens directly, with no tab bar', async () => {
+    serve('detailed', { report_views: ['tables'], report_sections: ['kpis', 'platform_comparison', 'daily_records'] })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+
+    const tables = await screen.findByTestId('live-mode-tables')
+    expect(screen.queryByTestId('live-modes')).not.toBeInTheDocument()
+    expect(within(tables).getByTestId('tables-days')).toBeInTheDocument()
   })
 
   it('the two levels share no composition: a standard report never contains the tables view', async () => {

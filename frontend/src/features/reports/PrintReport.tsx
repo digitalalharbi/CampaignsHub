@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { withStreamsSlide } from './reportSections'
+import { withDailyRecordsSlides, withStreamsSlide } from './reportSections'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
@@ -86,6 +86,7 @@ export function PrintReport() {
     for (let i = 0; i < (d.attention?.length ?? 0); i += ATTENTION_PER_PAGE) {
       visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
     }
+    withDailyRecordsSlides(visible, d)
     withStreamsSlide(visible, d)
     // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.
     return visible

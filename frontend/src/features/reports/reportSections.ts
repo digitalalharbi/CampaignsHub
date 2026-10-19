@@ -20,6 +20,7 @@ export type ReportSectionKey =
   | 'site_measurement'
   | 'recommendations'
   | 'detailed_tables'
+  | 'daily_records'
   | 'objective_breakdown'
   | 'advanced_segmentation'
   | 'account_breakdown'
@@ -50,3 +51,33 @@ export function withStreamsSlide<S extends { id: string; type: string; order: nu
 
   return slides
 }
+
+/**
+ * REPORT-COMPOSITION-CONTROL-001 — the daily ledger is printed only where the server NAMED it.
+ *
+ * Stricter than `sectionShown`, which reads an absent list as «everything»: a document resolved before
+ * the component existed never gains a page it did not have.
+ */
+export function dailyRecordsChosen(data: WithReportSections | null | undefined): boolean {
+  const list = data?.report_sections
+
+  return Array.isArray(list) && (list as string[]).includes('daily_records')
+}
+
+/** Days per deck page — a fixed page must never be cut by its edge (the print layout gate measures it). */
+export const DAILY_ROWS_PER_PAGE = 14
+
+/** The deck's daily-records pages, appended like the stream page, one per fourteen days. */
+export function withDailyRecordsSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & { timeseries?: unknown[] },
+): S[] {
+  if (!dailyRecordsChosen(data)) return slides
+  const days = data.timeseries?.length ?? 0
+  for (let i = 0; i < days; i += DAILY_ROWS_PER_PAGE) {
+    slides.push({ id: `__daily-${i}`, type: '__daily', order: 9997, visible: true, range: [i, i + DAILY_ROWS_PER_PAGE] } as S)
+  }
+
+  return slides
+}
+

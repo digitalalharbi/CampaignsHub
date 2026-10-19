@@ -1,3 +1,11 @@
+# START HERE — 2026-10-19 (afternoon) — report builder control (Owner defect 106) on `feat/report-composition-control`
+
+**Open PRs, merge in this order as each goes green and current:** #765 Batch D (KPI hierarchy, client team, queue fix) → #766 Automated Rules R1+R2 (guard fix pushed: notification links `/automation`) → the report-composition PR from `feat/report-composition-control` (worktree `../ch-rcc`).
+
+**Report composition (Owner defect 106):** two levels — main sections (`ReportViews`: summary, dashboard, platforms, content, tables; stored as `views` in report section settings and in link settings; a link narrows, never widens; only the detailed product has them) and components (the registry; each carries `view`). A component no open view draws is hidden server-side, so its keys leave the JSON, print and files. `daily_records` is a registry section, an independent SHOW/HIDE switch, shown unless hidden (Owner clarification: nothing aggregated by default). Exports and the PDF carry the ledger exactly when it is shown; internal Raw Metrics leaves only when explicitly hidden. UI: `CompositionTree` in ReportSectionControls and LiveLinkBuilder; `offeredViews` in live/modes.ts; ExecutiveSummary platform cards fill the row and the funnel spans the grid when alone; ReportFooter is full width (notes beside a facts grid). Local proof on rcc-api/rcc-web (ports 8192/5292, campaignshub_preview): a link with Content off showed four tabs, no overflow at 375px. **Production proof pending** on the Owner's reference link after deploy.
+
+---
+
 # START HERE — 2026-10-19 (morning) — #759 SEC-DEPS VERIFIED; #763 then #764 then #760
 
 **Merged and deployed:** #761 AI Agents B1–B8 plus the five-area navigation (eae678d1, bundle index-tKxd01V-.js); #762 Batch A (acbbb0af, bundle index-CozBjL7H.js: OpenAI text cards, store assignment, pace marker, column picker, ECB source, guards).
