@@ -54,6 +54,26 @@ export function ReportAdDetail({
   const preview = ad.preview ?? null
   const reading = readPreview(preview, ar)
 
+  /*
+   * REPORT-CONTENT-FULL-FRAME-001 (Owner, 2026-10-19) — a reel opened from a report shows the WHOLE frame.
+   *
+   * An unarmed player holds no file, so it never learns the film's shape, and a platform that sent no
+   * aspect left the stage `unknown` — a 288px strip a 9:16 reel is shrunk into. The cover the player
+   * already holds IS the film's frame, so it is measured here, before play, exactly as the browser
+   * measures a still; the stage then takes the right shape from the first paint.
+   */
+  const cover = reading.kind === 'video' ? reading.poster : null
+  useEffect(() => {
+    if (!cover || preview?.aspect || measured) return
+    let alive = true
+    const probe = new window.Image()
+    probe.onload = () => { if (alive && probe.naturalWidth > 0 && probe.naturalHeight > 0) onMeasured(probe.naturalWidth, probe.naturalHeight) }
+    probe.src = cover
+
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cover])
+
   /* Escape closes it: a modal a keyboard cannot leave is a trap, and this one opens on a phone. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -150,10 +170,11 @@ export function ReportAdDetail({
         {(() => {
           const shape: MediaAspect | null = preview?.aspect ?? measured
           // A story is a tall stage with the film at its own width — never a thin strip in a wide box.
-          const stage = shape === 'vertical' ? 'h-[62vh] max-h-[640px]' : shape === 'square' ? 'h-[46vh] max-h-[420px]' : 'h-72'
+          // An unmeasured shape gets room too (contain letterboxes a landscape asset harmlessly), never a strip.
+          const stage = shape === 'vertical' ? 'h-[64vh] max-h-[680px]' : shape === 'square' ? 'h-[48vh] max-h-[460px]' : shape === 'horizontal' ? 'h-72' : 'h-[56vh] max-h-[560px]'
 
           return (
-            <div data-testid="report-ad-detail-stage" data-shape={shape ?? 'unknown'} className={`flex items-center justify-center overflow-hidden rounded-xl bg-surface-secondary ${stage}`}>
+            <div data-testid="report-ad-detail-stage" data-shape={shape ?? 'unknown'} className={`flex shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-secondary ${stage}`}>
               {reading.kind === 'video' ? (
                 <CreativeVideoPlayer src={reading.src} poster={reading.poster} aspect={preview?.aspect ?? measured} bound="container" className="h-full w-full" onMeasured={onMeasured} />
               ) : (
