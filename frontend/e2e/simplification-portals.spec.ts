@@ -167,10 +167,15 @@ test.describe('the client portal leads with results, not paperwork', () => {
      * so the labels are polled until the section being asserted on is there — a section that is truly
      * absent still fails, after the timeout, naming itself.
      */
-    await expect.poll(async () => (await readLabels()).some((l) => /الحملات|Campaigns/.test(l)), {
+    // The labels asserted on are the ones the poll SAW: reading the rail a second time could catch it
+    // mid re-render (the switches arrive again) and find a section the poll had just found (WebKit CI).
+    let labels: string[] = []
+    await expect.poll(async () => {
+      labels = await readLabels()
+      return labels.some((l) => /الحملات|Campaigns/.test(l))
+    }, {
       message: 'campaigns is missing from the client rail', timeout: RAIL_PAINT_TIMEOUT,
     }).toBe(true)
-    const labels = await readLabels()
 
     const at = (re: RegExp) => labels.findIndex((l) => re.test(l))
     const campaigns = at(/الحملات|Campaigns/)
