@@ -684,21 +684,59 @@ final class ClientPortalController
      * GET /client/campaigns — the campaigns in the client's own workspace projects (read-only, client-safe).
      * NO internal cost fields (budget/spend/revenue/roas/cpa/cpc/cpm) — only high-level delivery metrics.
      */
+    /**
+     * GET /client/campaigns — paged, searchable and filterable ON THE SERVER (CP-SCALE-001).
+     *
+     * A client may run thirty to a hundred campaigns, and each row costs a metrics query, so the list is
+     * never fetched whole and never filtered in the browser: `page`, `per_page` (default 25, at most 50),
+     * `q` (name search — ignored when the agency hides campaign names, so a hidden name cannot be probed
+     * letter by letter), `status`, `objective` and `project`. The facets count the WHOLE visible set so the
+     * filters can say how many each would show.
+     */
     public function campaigns(Request $request): JsonResponse
     {
         $token = $this->requireSession($request);
         $this->bindTenant($token);
         $ids = $this->visibleWorkspaceIds($token, 'campaigns');
         $workspaces = $this->ownedWorkspaceModels($token);
+        $restricted = $this->restrictedProjectIds($token);
 
-        $page = $ids === []
-            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
-            : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->when($this->restrictedProjectIds($token) !== null, fn ($q) => $q->whereIn('project_id', $this->restrictedProjectIds($token)))->orderByDesc('created_at'));
+        $base = UnifiedCampaign::query()->whereIn('client_workspace_id', $ids === [] ? ['00000000-0000-0000-0000-000000000000'] : $ids)
+            ->when($restricted !== null, fn ($q) => $q->whereIn('project_id', $restricted));
+
+        $namesVisible = $ids !== [] && collect($ids)->every(fn (string $id): bool => isset($workspaces[$id]) && PortalVisibility::allows($workspaces[$id], 'campaign_names'));
+
+        $filtered = (clone $base)
+            ->when($request->filled('status'), fn ($q) => $q->where('status', (string) $request->query('status')))
+            ->when($request->filled('objective'), fn ($q) => $q->where('objective', (string) $request->query('objective')))
+            ->when($request->filled('project'), fn ($q) => $q->where('project_id', (string) $request->query('project')))
+            ->when($namesVisible && $request->filled('q'), function ($q) use ($request): void {
+                $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], mb_strtolower(trim((string) $request->query('q')))).'%';
+                $q->where(fn ($w) => $w->whereRaw('lower(name) like ?', [$term])->orWhereRaw('lower(client_display_name) like ?', [$term]));
+            });
+
+        $perPage = max(1, min(50, (int) $request->query('per_page', 25)));
+        $page = $filtered->orderByDesc('created_at')->orderBy('id')->paginate($perPage);
+
+        $facet = fn (string $column): array => (clone $base)->selectRaw("{$column} as k, count(*) as n")->groupBy($column)->pluck('n', 'k')->map(fn ($n): int => (int) $n)->all();
+        // Project names are only offered as a filter where the agency lets the client see its projects.
+        $projectsVisible = $ids !== [] && collect($ids)->every(fn (string $id): bool => isset($workspaces[$id]) && PortalVisibility::allows($workspaces[$id], 'projects'));
+        $projectNames = $projectsVisible ? Project::query()->whereIn('id', (clone $base)->distinct()->pluck('project_id')->filter()->all())->pluck('name', 'id') : collect();
+        $projectCounts = (clone $base)->selectRaw('project_id as k, count(*) as n')->groupBy('project_id')->pluck('n', 'k');
 
         return response()->json(['data' => [
-            'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c, $workspaces))->values()->all(),
-            'total' => $page['total'],
-            'withheld' => $page['withheld'],
+            'campaigns' => collect($page->items())->map(fn (UnifiedCampaign $c) => $this->campaignShape($c, $workspaces))->values()->all(),
+            'total' => $page->total(),
+            'withheld' => 0,
+            'page' => $page->currentPage(),
+            'per_page' => $page->perPage(),
+            'last_page' => $page->lastPage(),
+            'names_searchable' => $namesVisible,
+            'facets' => [
+                'status' => $facet('status'),
+                'objective' => $facet('objective'),
+                'projects' => $projectsVisible ? $projectCounts->map(fn ($n, $id): array => ['id' => (string) $id, 'name' => $projectNames[$id] ?? null, 'count' => (int) $n])->values()->all() : [],
+            ],
         ]]);
     }
 

@@ -15,6 +15,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -254,5 +255,97 @@ final class DeliveryPackTest extends TestCase
 
         $this->actingAs($this->owner, 'sanctum')->deleteJson("/api/v1/delivery/evidence/{$id}")->assertOk();
         Storage::disk('local')->assertMissing($path);
+    }
+
+    /** WD-SCHEDULE-001 — the weekly sweep prepares a draft for opted-in clients only, once per week. */
+    public function test_the_weekly_sweep_prepares_drafts_for_opted_in_clients_only_and_is_idempotent(): void
+    {
+        $other = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'Henka', 'slug' => 'henka', 'mode' => 'managed', 'status' => 'active']);
+        Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $other->id, 'name' => 'Other', 'status' => 'active']);
+        $this->workspace->forceFill(['settings' => ['delivery' => ['weekly' => true]]])->save();
+
+        $this->artisan('delivery:prepare-weekly', ['--date' => '2026-10-19'])->expectsOutputToContain('1 client(s) opted in, 1 pack(s) ensured.')->assertSuccessful();
+        $this->artisan('delivery:prepare-weekly', ['--date' => '2026-10-19'])->assertSuccessful();
+
+        $packs = DeliveryPack::withoutGlobalScopes()->get();
+        $this->assertCount(1, $packs, 'asking again for the same week must not create a second pack');
+        $this->assertSame((string) $this->project->id, (string) $packs[0]->project_id);
+        $this->assertSame('2026-10-12', $packs[0]->period_start->toDateString());
+        $this->assertSame('draft', $packs[0]->status, 'the sweep prepares; the Owner approves and sends');
+    }
+
+    /** DELIV-DASH-001 — one row per client, one next action, and the follow-up signal only where both facts hold. */
+    public function test_the_overview_names_one_next_action_and_flags_a_viewed_report_with_an_overdue_invoice(): void
+    {
+        $this->actingAs($this->owner, 'sanctum');
+        Carbon::setTestNow('2026-10-19 09:00:00');
+
+        // Nothing prepared for last week yet.
+        $row = $this->getJson('/api/v1/delivery/overview')->assertOk()->json('data.0');
+        $this->assertSame('Razzah', $row['client']);
+        $this->assertSame('prepare_pack', $row['next_action']);
+        $this->assertNull($row['pack']);
+
+        $this->bindTenant();
+        $pack = app(DeliveryPackService::class)->prepare($this->project, Carbon::parse('2026-10-19'), $this->owner);
+        $this->assertSame('review_pack', $this->getJson('/api/v1/delivery/overview')->json('data.0.next_action'), 'the report is not complete yet');
+
+        $this->bindTenant();
+        $this->complete($pack);
+        $this->assertSame('approve_pack', $this->getJson('/api/v1/delivery/overview')->json('data.0.next_action'));
+
+        $this->bindTenant();
+        app(DeliveryPackService::class)->approve($pack->fresh(), $this->owner);
+        $this->assertSame('send_pack', $this->getJson('/api/v1/delivery/overview')->json('data.0.next_action'));
+
+        $this->bindTenant();
+        app(DeliveryPackService::class)->markSent($pack->fresh());
+        $this->assertSame('none', $this->getJson('/api/v1/delivery/overview')->json('data.0.next_action'));
+
+        // An overdue invoice alone asks for a payment follow-up in its own right, but is not «viewed + overdue».
+        $this->bindTenant();
+        Invoice::create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->workspace->id, 'number' => 'INV-D-1', 'currency' => 'SAR',
+            'subtotal' => 1000, 'tax' => 150, 'total' => 1150, 'line_items' => [], 'amount_paid' => 150, 'status' => 'issued', 'due_date' => '2026-10-10', 'issued_at' => '2026-10-01',
+        ]);
+        $row = $this->getJson('/api/v1/delivery/overview')->json('data.0');
+        $this->assertSame('overdue', $row['invoice']['status']);
+        $this->assertEquals(1000, $row['invoice']['amount_due']);
+        $this->assertFalse($row['follow_up_required']);
+        $this->assertSame('follow_up_payment', $row['next_action']);
+        $this->assertSame('urgent', $row['visual']);
+
+        // Once the client has opened the report, it is a conversation to have.
+        $this->bindTenant();
+        $share = ReportShare::create([
+            'tenant_id' => $this->tenant->id, 'report_id' => $pack->report_id, 'token_hash' => hash('sha256', 'x'), 'allow_download' => false,
+            'view_count' => 1, 'last_viewed_at' => '2026-10-18 10:00:00',
+        ]);
+        $this->assertNotNull($share->id);
+        $row = $this->getJson('/api/v1/delivery/overview')->json('data.0');
+        $this->assertTrue($row['follow_up_required']);
+        $this->assertNotNull($row['last_viewed_at']);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_a_reader_without_billing_access_sees_the_delivery_side_but_no_invoice(): void
+    {
+        Invoice::create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->workspace->id, 'number' => 'INV-D-2', 'currency' => 'SAR',
+            'subtotal' => 100, 'tax' => 15, 'total' => 115, 'line_items' => [], 'amount_paid' => 0, 'status' => 'issued', 'due_date' => '2026-10-01', 'issued_at' => '2026-09-20',
+        ]);
+        $this->actingAs($this->readonly, 'sanctum');
+
+        $row = $this->getJson('/api/v1/delivery/overview')->assertOk()->json('data.0');
+
+        $this->assertNull($row['invoice']);
+        $this->assertFalse($row['follow_up_required']);
+    }
+
+    /** The tenant context is cleared after an HTTP request; direct service calls in the same test need it back. */
+    private function bindTenant(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
     }
 }

@@ -67,7 +67,7 @@ export function ClientDashboardPage() {
 
       <PortfolioPerformance />
 
-      <StatGrid>
+      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <PortalStat to={spaceTo('/requests')} icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
         <PortalStat to={spaceTo('/quotes')} icon={ScrollText} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
         <PortalStat to={spaceTo('/invoices')} icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />

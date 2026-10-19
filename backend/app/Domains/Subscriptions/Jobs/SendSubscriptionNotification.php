@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Jobs;
 
+use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Subscriptions\Models\SubscriptionNotification;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use Illuminate\Bus\Queueable;
@@ -134,16 +135,29 @@ final class SendSubscriptionNotification implements ShouldQueue
     }
 
     /**
-     * Plain text on purpose.
+     * Sent through the shared mail shell — EMAIL-TRANSACTIONAL-SET-001.
      *
-     * These are transactional messages about money and access; the body was rendered and stored at
-     * dispatch, and re-rendering it through a view here would reintroduce exactly the drift the stored
-     * body exists to prevent.
+     * This was `Mail::raw`, the one account message outside the brand shell, the footer and the plain-text
+     * alternative. The body is still the one rendered and stored at dispatch and is passed through
+     * unchanged as the message's text, so re-rendering cannot reintroduce the drift the stored body exists
+     * to prevent: only the frame around it is shared. The «why you received this» line says it is about
+     * the account, not a project the reader follows.
      */
     private function deliver(SubscriptionNotification $notification): void
     {
-        Mail::raw($notification->body, function ($message) use ($notification): void {
-            $message->to($notification->to_email)->subject($notification->subject);
-        });
+        $ar = $notification->locale !== 'en';
+        $worrying = in_array($notification->event, ['renewal_failed', 'past_due', 'suspended'], true);
+
+        Mail::to($notification->to_email)->send(new OperationalMail(
+            kind: 'billing',
+            severity: $worrying ? 'warning' : 'info',
+            title: $notification->subject,
+            detail: $notification->body,
+            context: $ar ? 'اشتراكك في كامبينز هب' : 'Your CampaignsHub subscription',
+            lang: $ar ? 'ar' : 'en',
+            path: $notification->tenant_id === null ? '/' : '/app/subscription',
+            action: $ar ? 'فتح اشتراكك' : 'Open your subscription',
+            why: $ar ? 'وصلتك هذه الرسالة لأنها تخص اشتراك حسابك في كامبينز هب.' : 'You are receiving this because it concerns your CampaignsHub account subscription.',
+        ));
     }
 }

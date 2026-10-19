@@ -33,7 +33,7 @@
                     <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $context }}</div>
                 @endif
                 <div style="font-size:18px; font-weight:800; color:#0b1a16; padding-top:4px; line-height:1.5;">{{ $title }}</div>
-                <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $detail }}</div>
+                <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px; white-space:pre-line;">{{ $detail }}</div>
             </td>
         </tr>
     </table>

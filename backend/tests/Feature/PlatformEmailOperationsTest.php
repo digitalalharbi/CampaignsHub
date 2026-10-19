@@ -222,4 +222,42 @@ final class PlatformEmailOperationsTest extends TestCase
             $this->assertArrayNotHasKey($forbidden, $row, "the ledger exposed «{$forbidden}»");
         }
     }
+
+    /** EMAIL-SETTINGS-PAGE-001 — sender, reply-to and last outcomes, and nothing that is a secret. */
+    public function test_the_transport_states_the_sender_and_the_last_outcomes_without_a_secret(): void
+    {
+        config(['mail.from.address' => 'no-reply@campaignshub.io', 'mail.from.name' => 'CampaignsHub', 'mail.mailers.smtp.password' => 'TOPSECRET', 'mail.mailers.smtp.username' => 'smtp-user']);
+        $this->delivery(['status' => 'sent', 'created_at' => '2026-10-16 10:00:00']);
+        $this->delivery(['status' => 'failed', 'error' => "Connection to smtp.example.com:587\n refused", 'created_at' => '2026-10-17 08:00:00']);
+
+        $res = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/admin/email/deliveries')->assertOk();
+        $transport = $res->json('data.transport');
+
+        $this->assertSame(['address' => 'no-reply@campaignshub.io', 'name' => 'CampaignsHub'], $transport['sender']);
+        $this->assertStringStartsWith('2026-10-16', $transport['last_success_at']);
+        $this->assertStringStartsWith('2026-10-17', $transport['last_failure']['at']);
+        $this->assertSame('password_reset', $transport['last_failure']['kind']);
+        $this->assertStringNotContainsString('TOPSECRET', $res->getContent());
+        $this->assertStringNotContainsString('smtp-user', $res->getContent());
+    }
+
+    /** The test message goes to the signed-in operator and is recorded, whatever the transport can do. */
+    public function test_a_test_message_goes_only_to_the_signed_in_operator_and_is_recorded(): void
+    {
+        $res = $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/admin/email/test', ['recipient' => 'victim@example.com', 'lang' => 'en'])->assertOk();
+
+        $this->assertSame('owner@campaignshub.io', $res->json('data.recipient'));
+        $row = DB::table('mail_deliveries')->where('kind', 'test')->first();
+        $this->assertNotNull($row);
+        $this->assertSame('owner@campaignshub.io', $row->recipient);
+        $this->assertSame(0, DB::table('mail_deliveries')->where('recipient', 'victim@example.com')->count());
+    }
+
+    public function test_the_test_message_is_closed_to_anybody_who_is_not_the_platform_owner(): void
+    {
+        $member = User::create(['name' => 'M', 'email' => 'm@acme.test', 'password' => 'secret123']);
+
+        $this->actingAs($member, 'sanctum')->postJson('/api/v1/admin/email/test')->assertStatus(403);
+    }
 }
