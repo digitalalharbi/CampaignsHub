@@ -488,8 +488,6 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
         locale={ar ? 'ar' : 'en'}
         facts={{
           updatedAt: data.generated_at ?? null,
-          // A saved report always shows spend, so it always carries the spend notes.
-          spendSources: (data.platforms ?? []).map((r) => String((r as { provider?: unknown }).provider ?? '')).filter(Boolean),
           period: data.period ?? null,
           currency: data.currency ?? null,
           timezone: data.timezone ?? 'Asia/Riyadh',
