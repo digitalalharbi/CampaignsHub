@@ -18,10 +18,11 @@ The queue never bypasses a failing check and never merges a head whose checks ar
 754
 755
 752
-760
 759
 761
 762
+763
+764
 ```
 
 ## How a stale PR is refreshed without a secret

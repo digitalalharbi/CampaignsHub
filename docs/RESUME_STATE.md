@@ -1,3 +1,15 @@
+# START HERE — 2026-10-19 (midday) — Batches A, B, C and SEC-DEPS live; Batch D open
+
+**Merged and deployed today:** #752, #754, #755, #759 (SEC-DEPS-001 VERIFIED), #761 (agents B1–B8, five-area navigation), #762 (Batch A), #763 (Batch B: email, portal paging, weekly delivery sweep and overview, link edit and analytics, alert presets and visuals), #764 (Batch C: OpenAI and Gemini agents, spend notes, pause requests from limits).
+
+**Batch D (`feat/kpi-hierarchy-live`)** carries: the queue fix that was #760 (behind_by detection, a re-read of the checks; #760 closed in its favour), the live summary KPI hierarchy, the client admin's own people (/client/team), the portal write inventory guard, the client rail e2e race fix, and a matrix pass that reclassified stale IN_PROGRESS and NOT_STARTED rows against main.
+
+**Open after D:** CP-MOBILE (phone checks), WD-EVIDENCE PDF appendix, CP-PARITY, UX-COMPACT-CHARTS, Snapchat Oct-2026 rows (undocumented fields — do not invent), AGENTS-EXEC-SNAPCHAT (Owner reversible test), AGENTS-CLIENT-PRODUCT (Owner plan decision), REAL-* acceptance rows (Owner sessions).
+
+**WebKit CI:** «WebKit encountered an internal error» on page.goto and a blank page with no DOM are the runner breaking; rerun the failed job when the PR is current with main (#759 and #764 both passed on rerun).
+
+---
+
 # START HERE — 2026-10-19 (morning) — #759 SEC-DEPS VERIFIED; #763 then #764 then #760
 
 **Merged and deployed:** #761 AI Agents B1–B8 plus the five-area navigation (eae678d1, bundle index-tKxd01V-.js); #762 Batch A (acbbb0af, bundle index-CozBjL7H.js: OpenAI text cards, store assignment, pace marker, column picker, ECB source, guards).
