@@ -9,6 +9,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Agents\Engine\ModelClient;
 use App\Domains\Agents\Engine\ModelTurn;
 use App\Domains\Agents\Models\ActionProposal;
+use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\AI\Models\AIProviderCredential;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -224,6 +225,21 @@ final class AgentEngineTest extends TestCase
 
         $this->assertSame('failed', $thread['status']);
         $this->assertSame('no_ai_credential', $thread['error']);
+        $this->assertCount(0, $this->model->calls);
+    }
+
+    public function test_the_key_s_monthly_token_limit_stops_the_next_call(): void
+    {
+        AIProviderCredential::withoutGlobalScopes()->update(['monthly_token_limit' => 10]);
+        $this->model->script([$this->toolTurn('get_rules', []), $this->textTurn('never reached')]);
+        // Every scripted turn reports usage; push this month over the ceiling with one earlier reply.
+        $old = AgentThread::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'agent_key' => 'analyst']);
+        AgentMessage::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'thread_id' => $old->getKey(), 'role' => 'assistant', 'content' => [], 'usage' => ['input_tokens' => 8, 'output_tokens' => 4]]);
+
+        $thread = $this->thread($this->send('Hello'));
+
+        $this->assertSame('failed', $thread['status']);
+        $this->assertSame('ai_token_limit_reached', $thread['error']);
         $this->assertCount(0, $this->model->calls);
     }
 

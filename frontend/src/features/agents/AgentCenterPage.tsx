@@ -22,6 +22,7 @@ import { useUi } from '@/stores/ui'
 /** Codes the server answers with, in words. Unknown codes are shown as codes, never invented. */
 const REASONS: Record<string, { ar: string; en: string }> = {
   no_ai_credential: { ar: 'لا يوجد مفتاح ذكاء اصطناعي فعّال لهذه المساحة — أضِف مفتاح Anthropic أدناه.', en: 'There is no active AI key for this workspace — add an Anthropic key below.' },
+  ai_token_limit_reached: { ar: 'بلغ استخدام الوكلاء حدّ الرموز الشهري لمفتاح هذه المساحة.', en: "The agents reached this workspace key's monthly token limit." },
   agent_turn_failed: { ar: 'تعذّر إكمال الرد. حاول مرة أخرى بعد قليل.', en: 'The reply could not be completed. Try again shortly.' },
   needs_lead_sources: { ar: 'يحتاج إلى ربط مصدر العملاء المحتملين (جدول أو واتساب) أولًا.', en: 'Needs a lead source (a sheet or WhatsApp) connected first.' },
 }

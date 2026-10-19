@@ -12,6 +12,8 @@ use App\Domains\Agents\Models\ClientAgentRule;
 use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
+use Illuminate\Support\Carbon;
+use RuntimeException;
 
 /**
  * AGENTS-ENGINE-001 — one turn of a conversation: the model reads, calls tools, and answers.
@@ -38,12 +40,16 @@ final class AgentConversation
             return $this->say($thread, 'This agent is not available yet: '.($role['why_disabled'] ?? 'unknown_agent').'.', 'system');
         }
 
-        ['client' => $client, 'model' => $model] = $this->models->for($project, $thread->agent_key);
+        ['client' => $client, 'model' => $model, 'token_limit' => $limit] = $this->models->for($project, $thread->agent_key);
         $system = AgentRoles::systemPrompt($thread->agent_key, (string) $project->name, $this->rulesSummary($project));
         $tools = $this->toolbox->specs($role['tools']);
 
         $rounds = (int) config('agents.max_tool_rounds', 8);
         for ($i = 0; $i <= $rounds; $i++) {
+            // The workspace's own monthly ceiling on its key, checked before EVERY call, not once per turn.
+            if ($limit !== null && $this->tokensThisMonth((string) $thread->tenant_id) >= $limit) {
+                throw new RuntimeException('ai_token_limit_reached');
+            }
             $turn = $client->respond($model, $system, $this->history($thread), $tools);
 
             AgentMessage::withoutGlobalScopes()->create([
@@ -127,6 +133,15 @@ final class AgentConversation
         }
 
         return $out;
+    }
+
+    /** Input plus output tokens the workspace's agents used since the first of this month (UTC). */
+    private function tokensThisMonth(string $tenantId): int
+    {
+        return (int) AgentMessage::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('role', 'assistant')
+            ->where('created_at', '>=', Carbon::now()->startOfMonth())
+            ->selectRaw("coalesce(sum(coalesce((usage->>'input_tokens')::bigint, 0) + coalesce((usage->>'output_tokens')::bigint, 0)), 0) as used")
+            ->value('used');
     }
 
     private function rulesSummary(Project $project): string
