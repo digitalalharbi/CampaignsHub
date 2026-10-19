@@ -7,9 +7,9 @@ import { useProject } from '@/stores/project'
 
 vi.mock('./api', () => ({
   listAgents: vi.fn(), listThreads: vi.fn(), getThread: vi.fn(), sendToAgent: vi.fn(),
-  listAiCredentials: vi.fn(), addAiCredential: vi.fn(),
+  listAiCredentials: vi.fn(), addAiCredential: vi.fn(), listRoutines: vi.fn(), setRoutine: vi.fn(),
 }))
-import { addAiCredential, getThread, listAgents, listAiCredentials, listThreads, sendToAgent } from './api'
+import { addAiCredential, getThread, listAgents, listAiCredentials, listRoutines, listThreads, sendToAgent, setRoutine, type AgentRoutineRow } from './api'
 
 const role = (key: AgentRole['key'], over: Partial<AgentRole> = {}): AgentRole => ({ key, ar: key, en: key, enabled: true, why_disabled: null, can_propose: false, ...over })
 const ROLES = [role('orchestrator'), role('campaign', { can_propose: true }), role('analyst'), role('creative'), role('leads', { enabled: false, why_disabled: 'needs_lead_sources' }), role('reports')]
@@ -24,6 +24,11 @@ const thread = (over: Partial<AgentThread> = {}): AgentThread => ({
   ...over,
 })
 
+const routine = (over: Partial<AgentRoutineRow> = {}): AgentRoutineRow => ({
+  key: 'budget_guard', agent: 'campaign', ar: 'حارس الميزانية', en: 'Budget guard', when_ar: 'كل ساعتين', when_en: 'Every two hours',
+  enabled: false, last_run_at: null, last_outcome: null, last_thread_id: null, ...over,
+})
+
 /** AGENTS-CENTER-001 — the screen shows what the server said and did; it never invents a reply. */
 describe('the agent center', () => {
   beforeEach(() => {
@@ -33,6 +38,7 @@ describe('the agent center', () => {
     vi.mocked(listAgents).mockResolvedValue({ agents: ROLES })
     vi.mocked(listThreads).mockResolvedValue({ threads: [] })
     vi.mocked(listAiCredentials).mockResolvedValue([])
+    vi.mocked(listRoutines).mockResolvedValue({ routines: [routine()] })
   })
   afterEach(() => signOut())
 
@@ -97,5 +103,23 @@ describe('the agent center', () => {
   it('links to the approvals queue', async () => {
     renderWithProviders(<AgentCenterPage />, { locale: 'en' })
     expect(await screen.findByTestId('agent-center-approvals')).toHaveAttribute('href', expect.stringContaining('/agents/approvals'))
+  })
+
+  it('switches a routine on for ai.manage and says why the last run was skipped', async () => {
+    signInWith(['ai.view', 'ai.use', 'ai.manage'])
+    vi.mocked(listRoutines).mockResolvedValue({ routines: [routine({ last_outcome: 'no_ai_credential' })] })
+    vi.mocked(setRoutine).mockResolvedValue({ routines: [routine({ enabled: true })] })
+
+    renderWithProviders(<AgentCenterPage />, { locale: 'en' })
+    expect(await screen.findByTestId('routine-budget_guard')).toHaveTextContent('skipped — no AI key')
+    fireEvent.click(screen.getByTestId('routine-budget_guard-toggle'))
+
+    await waitFor(() => expect(setRoutine).toHaveBeenCalledWith('proj', 'budget_guard', true))
+    await waitFor(() => expect(screen.getByTestId('routine-budget_guard-toggle')).toBeChecked())
+  })
+
+  it('shows routines read-only without ai.manage', async () => {
+    renderWithProviders(<AgentCenterPage />, { locale: 'ar' })
+    expect(await screen.findByTestId('routine-budget_guard-toggle')).toBeDisabled()
   })
 })

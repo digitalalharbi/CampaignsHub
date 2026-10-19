@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Agents\Http\Controllers\ActionProposalController;
 use App\Domains\Agents\Http\Controllers\AgentChatController;
+use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
@@ -287,6 +288,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue. Reading needs to see campaigns; putting a change
      * forward or deciding one needs to manage them, and the controller adds the tenant permission.
      */
+    // AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on.
+    Route::get('agent-routines', [AgentRoutinesController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-routines.index');
+    Route::put('agent-routines', [AgentRoutinesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-routines.update');
     // AGENTS-CENTER-001 — conversations with the six agents; replies are queued.
     Route::get('agents', [AgentChatController::class, 'roles'])->middleware('project.can:campaigns.view')->name('agents.roles');
     Route::get('agent-threads', [AgentChatController::class, 'threads'])->middleware('project.can:campaigns.view')->name('agent-threads.index');

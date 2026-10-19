@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 
 /**
  * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue.
@@ -109,4 +109,27 @@ export const listAiCredentials = () => getData<AiCredential[]>('/ai/credentials'
 export async function addAiCredential(provider: string, secret: string) {
   await ensureCsrfCookie()
   return postData<AiCredential>('/ai/credentials', { provider, secret, credential_scope: 'tenant', allowed_features: ['agents'] })
+}
+
+/* AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on. */
+
+export interface AgentRoutineRow {
+  key: 'daily_analysis' | 'budget_guard' | 'creative_review' | 'weekly_report'
+  agent: AgentRole['key']
+  ar: string
+  en: string
+  when_ar: string
+  when_en: string
+  enabled: boolean
+  last_run_at: string | null
+  /** queued | skipped_busy | no_ai_credential | model_unavailable */
+  last_outcome: string | null
+  last_thread_id: string | null
+}
+
+export const listRoutines = (projectId: string) => getData<{ routines: AgentRoutineRow[] }>(`/projects/${projectId}/agent-routines`)
+
+export async function setRoutine(projectId: string, routine: string, enabled: boolean) {
+  await ensureCsrfCookie()
+  return putData<{ routines: AgentRoutineRow[] }>(`/projects/${projectId}/agent-routines`, { routine, enabled })
 }

@@ -6,6 +6,7 @@ import {
   addAiCredential, getThread, listAgents, listAiCredentials, listThreads, sendToAgent,
   type AgentMessage, type AgentRole,
 } from './api'
+import { RoutinesCard } from './RoutinesCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -191,6 +192,7 @@ export function AgentCenterPage() {
               ))}
             </ul>
           </Card>
+          <RoutinesCard projectId={currentProjectId} ar={ar} canManage={canManage} onOpen={(id) => setThreadId(id)} />
           {canManage && <AiKeyCard ar={ar} />}
         </aside>
       </div>
