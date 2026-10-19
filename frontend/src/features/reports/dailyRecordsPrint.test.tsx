@@ -48,7 +48,7 @@ describe('the printed daily records', () => {
     expect(screen.queryByTestId('print-daily-records')).toBeNull()
   })
 
-  it('splits the deck into fixed pages of fourteen days', () => {
+  it('splits the deck into fixed pages of eight days', () => {
     const slides = withDailyRecordsSlides<Page>([], { report_sections: ['daily_records'], timeseries: days })
     expect(slides.map((s) => s.range)).toEqual([[0, DAILY_ROWS_PER_PAGE], [DAILY_ROWS_PER_PAGE, DAILY_ROWS_PER_PAGE * 2]])
     expect(withDailyRecordsSlides<Page>([], { report_sections: ['kpis'], timeseries: days })).toEqual([])

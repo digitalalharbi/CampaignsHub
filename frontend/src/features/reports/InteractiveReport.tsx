@@ -1763,7 +1763,7 @@ const NOTE_TONE: Record<string, { border: string; text: string; Icon: typeof Tri
  * REPORT-COMPOSITION-CONTROL-001 — «السجل اليومي», the day-by-day ledger, in the deck and its PDF.
  *
  * Present only when the report's section list names `daily_records` (off for a new client report),
- * fourteen days to a page. Money appears only where the document carries it: a link that hides spend
+ * eight days to a page. Money appears only where the document carries it: a link that hides spend
  * has no spend in its rows, and then the column is not drawn rather than drawn empty.
  */
 function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number, number] }) {

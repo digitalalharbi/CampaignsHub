@@ -64,10 +64,14 @@ export function dailyRecordsChosen(data: WithReportSections | null | undefined):
   return Array.isArray(list) && (list as string[]).includes('daily_records')
 }
 
-/** Days per deck page — a fixed page must never be cut by its edge (the print layout gate measures it). */
-export const DAILY_ROWS_PER_PAGE = 14
+/**
+ * Days per deck page — a fixed page must never be cut by its edge, and the print layout gate refuses a
+ * page it would have to shrink below 0.85. Fourteen days measured 0.839 on the CI Chromium (the PDF
+ * export failed); ten measured 0.91 locally, so eight leave a margin for the CI fonts.
+ */
+export const DAILY_ROWS_PER_PAGE = 8
 
-/** The deck's daily-records pages, appended like the stream page, one per fourteen days. */
+/** The deck's daily-records pages, appended like the stream page, one per eight days. */
 export function withDailyRecordsSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
   slides: S[],
   data: WithReportSections & { timeseries?: unknown[] },
