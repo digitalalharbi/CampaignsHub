@@ -1,3 +1,4 @@
+import { ProviderMark } from '@/components/ProviderMark'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -211,7 +212,9 @@ export function LivePlatformComparison({
 
   const built = {
     rows: rows.map((row) => [
-      <span key="name" className="font-semibold">
+      <span key="name" className="inline-flex items-center gap-1.5 font-semibold">
+        {/* REPORT-TABLES-IDENTITY-001 — a restrained mark beside the name, never instead of it. */}
+        <ProviderMark provider={String(row.provider ?? '')} size={18} />
         {onOpenPlatform && row.__silent !== true
           ? (
             <button
