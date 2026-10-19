@@ -69,6 +69,17 @@ final class InvitationController extends Controller
         return ApiResponse::success($this->service->preview($token), 'Invitation preview.');
     }
 
+    /** POST /invitations/accept-existing — claim an invitation while signed in as the invited, verified address. */
+    public function acceptExisting(Request $request): JsonResponse
+    {
+        $data = $request->validate(['token' => ['required', 'string']]);
+        $membership = $this->service->acceptExisting($data['token'], $request->user());
+
+        // The id lets the page switch straight into the agency just joined (the switcher refuses any
+        // membership that is not the caller's own).
+        return ApiResponse::success(['membership_id' => (string) $membership->getKey()], 'Invitation accepted.');
+    }
+
     /** POST /invitations/accept — accept, creating the user in the inviting workspace and signing them in. */
     public function accept(Request $request): JsonResponse
     {

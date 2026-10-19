@@ -31,7 +31,7 @@ final class TeamController extends Controller
         $tenantId = $this->tenantId();
 
         $roles = Role::where('tenant_id', $tenantId)->get(['id', 'name', 'slug']);
-        $users = self::inTenant($tenantId)->with('roles:id,name,slug')->get();
+        $users = self::inTenant($tenantId)->with(['roles' => fn ($q) => $q->where('roles.tenant_id', $tenantId)->select('roles.id', 'roles.name', 'roles.slug', 'roles.is_system')])->get();
 
         return ApiResponse::success([
             'members' => $users->map(fn (User $u) => [
@@ -190,12 +190,14 @@ final class TeamController extends Controller
         $data = $request->validate(['role' => ['required', 'string', 'exists:roles,slug']]);
 
         // Guard: never strip the last Owner of the Owner role.
-        if ($target->roles->contains('slug', 'tenant-owner') && $data['role'] !== 'tenant-owner') {
+        if ($target->rolesInCurrentTenant()->contains('slug', 'tenant-owner') && $data['role'] !== 'tenant-owner') {
             abort_if($this->ownerCount() <= 1, 422, 'Cannot change the role of the last Owner.');
         }
         $role = Role::where('tenant_id', $this->tenantId())->where('slug', $data['role'])->firstOrFail();
-        $before = $target->roles->pluck('slug')->all();
-        $target->roles()->sync([$role->id]);
+        $before = $target->rolesInCurrentTenant()->pluck('slug')->all();
+        // Only THIS tenant's roles are replaced: a person who also belongs to another agency keeps that role.
+        $target->roles()->detach(Role::where('tenant_id', $this->tenantId())->pluck('id')->all());
+        $target->roles()->syncWithoutDetaching([$role->id]);
 
         $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before], after: ['roles' => [$role->slug]]);
 
@@ -209,10 +211,16 @@ final class TeamController extends Controller
         abort_if($target->id === $request->user()->id, 422, 'You cannot disable your own account.');
 
         $disabling = $target->disabled_at === null;
-        if ($disabling && $target->roles->contains('slug', 'tenant-owner')) {
+        if ($disabling && $target->rolesInCurrentTenant()->contains('slug', 'tenant-owner')) {
             abort_if($this->activeOwnerCount() <= 1, 422, 'Cannot disable the last active Owner.');
         }
-        $target->forceFill(['disabled_at' => $disabling ? now() : null])->save();
+        if ($this->belongsElsewhere($target)) {
+            // Shared with another agency: suspend the membership HERE, never the account everywhere.
+            DB::table('memberships')->where('user_id', $target->id)->where('tenant_id', $this->tenantId())
+                ->update(['status' => $disabling ? 'suspended' : 'active', 'updated_at' => now()]);
+        } else {
+            $target->forceFill(['disabled_at' => $disabling ? now() : null])->save();
+        }
 
         $audit->log(action: $disabling ? 'settings.team.disabled' : 'settings.team.enabled', entityType: 'user', entityId: $target->uuid);
 
@@ -224,12 +232,18 @@ final class TeamController extends Controller
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $target = $this->member($user);
         abort_if($target->id === $request->user()->id, 422, 'You cannot remove your own account.');
-        if ($target->roles->contains('slug', 'tenant-owner')) {
+        if ($target->rolesInCurrentTenant()->contains('slug', 'tenant-owner')) {
             abort_if($this->ownerCount() <= 1, 422, 'Cannot remove the last Owner.');
         }
 
         $audit->log(action: 'settings.team.removed', entityType: 'user', entityId: $target->uuid, before: ['email' => $target->email]);
-        $target->delete();
+        if ($this->belongsElsewhere($target)) {
+            // Shared with another agency: leave THIS team, keep the account (and their access there).
+            $target->roles()->detach(Role::where('tenant_id', $this->tenantId())->pluck('id')->all());
+            DB::table('memberships')->where('user_id', $target->id)->where('tenant_id', $this->tenantId())->delete();
+        } else {
+            $target->delete();
+        }
 
         return ApiResponse::success(null, 'Member removed.');
     }
@@ -256,6 +270,12 @@ final class TeamController extends Controller
         return self::inTenant($this->tenantId())->where('uuid', $uuid)->with('roles:id,name,slug')->firstOrFail();
     }
 
+    /** Whether the person holds an active membership in any OTHER tenant. */
+    private function belongsElsewhere(User $target): bool
+    {
+        return DB::table('memberships')->where('user_id', $target->id)->where('tenant_id', '!=', $this->tenantId())->where('status', 'active')->exists();
+    }
+
     private function ownerCount(): int
     {
         return $this->ownerQuery()->count();
@@ -275,6 +295,8 @@ final class TeamController extends Controller
             ->where('memberships.tenant_id', $this->tenantId())
             ->where('memberships.status', 'active')
             ->where('roles.slug', 'tenant-owner')
+            // The role of THIS tenant: a person who owns another agency is not an owner here.
+            ->where('roles.tenant_id', $this->tenantId())
             // A user may hold several memberships in one tenant (different portals), which would
             // otherwise count one owner more than once and let the last owner be removed.
             ->distinct('users.id');

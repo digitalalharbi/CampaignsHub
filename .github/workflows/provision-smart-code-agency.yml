@@ -1,0 +1,41 @@
+name: Provision Smart Code Agency
+
+# AGENCY-PROVISION-001 — create the Smart Code agency tenant on Production and INVITE its owner.
+#
+# Owner directive 2026-10-19: Smart Code is a real, isolated agency tenant whose intended admin is
+# digital@smartcode.sa. Access is never assumed: the command issues an expiring, hashed-token
+# invitation (emailed to that address) and grants nothing. It creates no client, project, integration
+# or data, touches no existing tenant, prints no token, and is idempotent — re-running finds the
+# tenant and re-issues an invitation only while the owner has no access and none is pending.
+#
+# Manual only. The command is FIXED here exactly as the other production workflows fix theirs: there
+# is no input that becomes part of a command line.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Provision the agency on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # The application lives in a container; there is no `php` on the host's PATH.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan agency:provision "Smart Code" digital@smartcode.sa

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\ProvisionAgencyCommand;
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\RunAgentRoutines;
@@ -159,6 +160,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // PROD-PROVISION-001 — the reference data a production install cannot work without, and
         // which a deploy that only migrates never brings.
         ProvisionPlatformCommand::class,
+        ProvisionAgencyCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
