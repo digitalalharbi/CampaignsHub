@@ -209,4 +209,43 @@ final class ClientPortalUsersTest extends TestCase
         $this->actingAs($legacy);
         $this->postJson("/api/v1/client/quotes/{$quote->id}/approve", [], $this->spa)->assertStatus(201);
     }
+
+    /** CP-USERS-001 — a client admin manages their own viewers and approvers where the agency allowed it. */
+    public function test_a_client_admin_manages_viewers_and_approvers_but_not_admins_or_themselves(): void
+    {
+        $this->workspace->update(['settings' => ['portal' => ['capabilities' => ['team_admin' => true]]]]);
+        $boss = User::create(['name' => 'Boss', 'email' => 'boss@client.test', 'password' => 'x12345678']);
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url(), ['email' => 'boss@client.test', 'role' => 'client_admin'])->assertOk();
+        $own = (string) Membership::query()->where('user_id', $boss->id)->where('portal', 'portal')->value('id');
+
+        $this->actingAs($boss);
+        $this->getJson('/api/v1/client/team', $this->spa)->assertOk()->assertJsonPath('data.workspaces.0.id', (string) $this->workspace->id);
+        $this->postJson('/api/v1/client/team', ['client_workspace_id' => $this->workspace->id, 'email' => 'new@client.test', 'role' => 'client_viewer'], $this->spa)->assertCreated();
+        $this->postJson('/api/v1/client/team', ['client_workspace_id' => $this->workspace->id, 'email' => 'other@client.test', 'role' => 'client_admin'], $this->spa)->assertStatus(422);
+        $this->deleteJson("/api/v1/client/team/{$own}", [], $this->spa)->assertStatus(422);
+
+        $viewer = User::create(['name' => 'V', 'email' => 'v@client.test', 'password' => 'x12345678']);
+        $this->postJson('/api/v1/client/team', ['client_workspace_id' => $this->workspace->id, 'email' => 'v@client.test', 'role' => 'client_viewer'], $this->spa)->assertOk();
+        $vid = (string) Membership::query()->where('user_id', $viewer->id)->where('portal', 'portal')->value('id');
+        $this->deleteJson("/api/v1/client/team/{$vid}", [], $this->spa)->assertOk();
+        $this->assertSame(0, Membership::query()->where('user_id', $viewer->id)->where('portal', 'portal')->count());
+    }
+
+    public function test_without_the_agency_grant_or_as_a_non_admin_the_team_is_closed(): void
+    {
+        $this->workspace->update(['settings' => ['portal' => ['capabilities' => ['team_admin' => true]]]]);
+        $boss = User::create(['name' => 'Boss', 'email' => 'boss@client.test', 'password' => 'x12345678']);
+        $approver = User::create(['name' => 'A', 'email' => 'ap@client.test', 'password' => 'x12345678']);
+        $this->actingAs($this->owner, 'sanctum');
+        $this->postJson($this->url(), ['email' => 'boss@client.test', 'role' => 'client_admin'])->assertOk();
+        $this->postJson($this->url(), ['email' => 'ap@client.test', 'role' => 'client_approver'])->assertOk();
+
+        $this->actingAs($approver);
+        $this->getJson('/api/v1/client/team', $this->spa)->assertForbidden();
+
+        $this->workspace->update(['settings' => ['portal' => ['capabilities' => ['team_admin' => false]]]]);
+        $this->actingAs($boss);
+        $this->getJson('/api/v1/client/team', $this->spa)->assertForbidden();
+        $this->postJson('/api/v1/client/team', ['client_workspace_id' => $this->workspace->id, 'email' => 'x@client.test', 'role' => 'client_viewer'], $this->spa)->assertForbidden();
+    }
 }

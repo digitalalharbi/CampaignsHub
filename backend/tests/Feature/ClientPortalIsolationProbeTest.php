@@ -54,7 +54,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
         'api/v1/client/messages', 'api/v1/client/messages/{thread}', 'api/v1/client/overview',
         'api/v1/client/quotes', 'api/v1/client/quotes/{quote}', 'api/v1/client/reports', 'api/v1/client/requests',
         'api/v1/client/requests/{reference}', 'api/v1/client/requests/{reference}/files/{file}',
-        'api/v1/client/requests/{reference}/journey', 'api/v1/client/session', 'api/v1/client/spaces', 'api/v1/client/visibility',
+        'api/v1/client/requests/{reference}/journey', 'api/v1/client/session', 'api/v1/client/spaces', 'api/v1/client/team', 'api/v1/client/visibility',
     ];
 
     private array $spa = ['Origin' => 'http://localhost:5173'];
@@ -122,7 +122,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
     {
         $this->signInAsAlpha();
 
-        foreach (['campaigns', 'files', 'invoices', 'messages', 'overview', 'quotes', 'reports', 'requests', 'spaces', 'visibility', 'branding', 'session'] as $path) {
+        foreach (['campaigns', 'files', 'invoices', 'messages', 'overview', 'quotes', 'reports', 'requests', 'spaces', 'visibility', 'branding', 'session', 'team'] as $path) {
             $res = $this->getJson("/api/v1/client/{$path}", $this->spa);
 
             $this->assertContains($res->status(), [200, 403, 404], "/client/{$path} answered {$res->status()}");

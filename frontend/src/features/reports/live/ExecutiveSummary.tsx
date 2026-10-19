@@ -233,11 +233,33 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
     )
   }
 
+  const compact = (key: string) => {
+    const meta = reader.meta[key]
+    if (!meta) return null
+    const read = meta.format(t, payload, reader.asMoney, reader.count)
+    if (!cardHasFigure(key, read.text, payload)) return null
+
+    return (
+      <div key={key} className="min-w-0" data-testid={`exec-kpi-compact-${key}`}>
+        <dt className="text-[11px] text-text-muted">{metricLabel(meta, key, payload, ar)}</dt>
+        <dd className="tnum text-sm font-bold text-text-primary" title={read.exact ?? undefined}><Num>{read.text}</Num></dd>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <ComparisonWithheld payload={payload} ar={ar} />
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" data-testid="live-kpis">{keys.slice(0, 4).map(card)}</div>
-      {keys.length > 4 && <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" data-testid="exec-kpis-secondary">{keys.slice(4).map(card)}</div>}
+      {/*
+        REPORT-KPI-HIERARCHY-001 — four large primary cards, then the rest COMPACT: one strip of label and
+        figure, never a second row of equally large cards («never eight to ten equal cards»).
+      */}
+      {keys.length > 4 && (
+        <dl className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-border bg-surface px-3 py-2" data-testid="exec-kpis-secondary">
+          {keys.slice(4).map(compact)}
+        </dl>
+      )}
     </div>
   )
 }
