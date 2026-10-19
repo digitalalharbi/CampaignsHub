@@ -50,3 +50,32 @@ export function withStreamsSlide<S extends { id: string; type: string; order: nu
 
   return slides
 }
+
+/** WD-EVIDENCE-001 — one appendix screenshot as the print payload names it. */
+export interface PrintEvidence {
+  id: string
+  provider: string
+  period_start: string | null
+  period_end: string | null
+  captured_at: string | null
+  note: string | null
+  name: string | null
+  image: boolean
+  url: string | null
+}
+
+/**
+ * WD-EVIDENCE-001 — the PDF's appendix of platform screenshots: one fixed page each, after the report
+ * proper, present only when the server attached screenshots the Owner chose to include.
+ */
+export function withEvidenceSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: { platform_evidence?: PrintEvidence[] },
+): S[] {
+  ;(data.platform_evidence ?? []).forEach((_, i) => {
+    slides.push({ id: `__evidence-${i}`, type: '__evidence', order: 9999, visible: true, range: [i, i + 1] } as S)
+  })
+
+  return slides
+}
+

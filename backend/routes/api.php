@@ -129,6 +129,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/reports/print/{token}', [ReportPrintController::class, 'data'])->name('reports.print.data');
     // The mark that document carries, behind the same short-lived token — no asset id in the path.
     Route::get('/reports/print/{token}/logo', [ReportPrintController::class, 'logo'])->name('reports.print.logo');
+    // WD-EVIDENCE-001 — an appendix screenshot, fetched by the PDF renderer with its print token.
+    Route::get('/reports/print/{token}/evidence/{evidence}', [ReportPrintController::class, 'evidence'])->name('reports.print.evidence')->whereUuid('evidence');
     Route::get('/reports/print/{token}/logo/{role}', [ReportPrintController::class, 'logo'])
         ->whereIn('role', ['agency', 'client'])->name('reports.print.logo.role');
 
