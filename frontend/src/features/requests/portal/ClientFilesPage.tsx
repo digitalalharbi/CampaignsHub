@@ -50,7 +50,16 @@ export function ClientFilesPage() {
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-12 text-center text-text-muted"><FolderOpen size={26} /><span className="text-sm">{t.none}</span></div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
+        <>
+        {/*
+          CP-MOBILE-001 — a card per file on a phone. The table needs 560px and on a 375px screen became
+          a sideways scroll with the open button off the edge; below `sm` each file is a card with its
+          name, type, source, date and the open button, and the table returns from `sm` up.
+        */}
+        <ul data-testid="portal-files-cards" className="flex flex-col gap-2 sm:hidden">
+          {rows.map((f) => <FileCard key={`${f.source}-${f.id}`} file={f} t={t} />)}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-2xl border border-border bg-surface sm:block">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-surface-secondary text-xs text-text-secondary">
               <tr>
@@ -66,8 +75,31 @@ export function ClientFilesPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </PortalShell>
+  )
+}
+
+function FileCard({ file, t }: { file: PortalFile; t: typeof COPY.ar }) {
+  const isDrive = file.source === 'drive'
+  return (
+    <li data-testid={`portal-file-card-${file.id}`} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-border bg-surface p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-text-primary" title={file.name}>{file.name}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+          <span className="rounded-md bg-surface-secondary px-1.5 py-0.5 font-semibold text-text-secondary">{typeLabel(file.mime, t.unknown_type)}</span>
+          <span>{isDrive ? t.src_drive : t.src_request}</span>
+          <span className="tnum">{formatDate(fileModifiedAt(file))}</span>
+        </p>
+        {file.request_reference && <p className="mt-1 font-mono text-[11px] text-text-muted"><bdi>{file.request_reference}</bdi></p>}
+      </div>
+      {file.web_view_link && (
+        <a href={file.web_view_link} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-brand-600">
+          {t.open} <ExternalLink size={13} />
+        </a>
+      )}
+    </li>
   )
 }
 

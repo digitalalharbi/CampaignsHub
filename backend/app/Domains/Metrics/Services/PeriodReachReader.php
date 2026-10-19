@@ -9,6 +9,7 @@ use App\Domains\Metrics\Jobs\FetchPeriodReachJob;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\PeriodReach;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * REACH-PERIOD-001 — the provider's reach for a displayed scope and window, or nothing.
@@ -27,6 +28,23 @@ use Illuminate\Support\Carbon;
  */
 final class PeriodReachReader
 {
+    /*
+     * CAMPAIGN-INTELLIGENCE-HUB — «no N+1». A breakdown asks this once per row, and every row of one
+     * account and window wants the same stored answers, the same «was it ever asked», the same account
+     * and the same delivered-campaign list. They are read once per (account, window) for the life of
+     * the request (the reader is bound `scoped`), so a list of fifteen campaigns costs what a list of
+     * three does. The answers are identical to reading each one fresh.
+     */
+
+    /** @var array<string, Collection<int, PeriodReach>> */
+    private array $rows = [];
+
+    /** @var array<string, list<string>> */
+    private array $delivered = [];
+
+    /** @var array<string, true> */
+    private array $requested = [];
+
     /**
      * @param  list<array{account: string, campaign: string|null}>  $delivery  the (account, external campaign) pairs the scope's rows hold
      * @return array{reach: float, frequency: float|null}|null
@@ -65,36 +83,42 @@ final class PeriodReachReader
     /** The stored answer for this exact window, requesting it when it has never been asked. */
     private function stored(string $account, string $grain, Carbon $from, Carbon $to, ?string $campaignId = null): ?PeriodReach
     {
-        $query = PeriodReach::withoutGlobalScopes()
-            ->where('external_account_id', $account)
-            ->where('grain', $grain)
-            ->whereDate('date_from', $from->toDateString())
-            ->whereDate('date_to', $to->toDateString());
+        $all = $this->answers($account, $from, $to);
+        $row = $all->first(static fn (PeriodReach $r): bool => $r->grain === $grain
+            && ($campaignId === null || (string) $r->external_campaign_id === $campaignId));
 
-        if ($campaignId !== null) {
-            $query->where('external_campaign_id', $campaignId);
-        }
-
-        $row = $query->first();
-
-        if ($row === null && ! $this->askedFor($account, $from, $to)) {
+        if ($row === null && $all->isEmpty()) {
             $this->request($account, $from, $to);
         }
 
         return $row;
     }
 
-    private function askedFor(string $account, Carbon $from, Carbon $to): bool
+    /**
+     * Every stored answer for this account and exact window — what «was it ever asked» reads too: an
+     * account with any row for the window has been asked.
+     *
+     * @return Collection<int, PeriodReach>
+     */
+    private function answers(string $account, Carbon $from, Carbon $to): Collection
     {
-        return PeriodReach::withoutGlobalScopes()
+        $key = $account.'|'.$from->toDateString().'|'.$to->toDateString();
+
+        return $this->rows[$key] ??= PeriodReach::withoutGlobalScopes()
             ->where('external_account_id', $account)
             ->whereDate('date_from', $from->toDateString())
             ->whereDate('date_to', $to->toDateString())
-            ->exists();
+            ->get();
     }
 
     private function request(string $account, Carbon $from, Carbon $to): void
     {
+        $key = $account.'|'.$from->toDateString().'|'.$to->toDateString();
+        if (isset($this->requested[$key])) {
+            return;
+        }
+        $this->requested[$key] = true;
+
         $model = ExternalAccount::withoutGlobalScopes()->find($account);
 
         if ($model === null || ! app(PeriodReachFetcher::class)->supports($model, $from, $to)) {
@@ -112,13 +136,14 @@ final class PeriodReachReader
      */
     private function coversTheAccount(string $account, array $campaigns, Carbon $from, Carbon $to): bool
     {
-        $delivered = DailyMetric::withoutGlobalScopes()
+        $delivered = $this->delivered[$account.'|'.$from->toDateString().'|'.$to->toDateString()] ??= DailyMetric::withoutGlobalScopes()
             ->where('external_account_id', $account)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->whereNotNull('external_campaign_id')
             ->distinct()
             ->pluck('external_campaign_id')
             ->map(static fn ($id): string => (string) $id)
+            ->values()
             ->all();
 
         return array_diff($delivered, $campaigns) === [];
