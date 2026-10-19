@@ -64,6 +64,8 @@ export interface ClientDetail {
     view_reports: boolean
     manage_files: boolean
   }
+  /** CP-VISIBILITY-001 — what this client's portal shows and what its people may do, effective values. */
+  portal?: { mode: string; visibility: Record<string, boolean>; capabilities: Record<string, boolean> }
   overview: { projects: number; active_campaigns: number; draft_campaigns: number; open_requests: number }
   projects: { id: string; name: string; status: string; created_at: string | null }[]
   campaigns: { id: string; project_id: string; name: string; objective: string; status: string; budget: string | null; currency: string }[]

@@ -1,3 +1,40 @@
+# START HERE — 2026-10-19 (night) — queue proven on #752; agents B1–B8 in one PR
+
+**Merged and deployed today:** #754 (portal attention), #755 (weekly delivery and invoicing screens), #752 (TikTok Spark video url, main `8da35813`). The queue refreshed #752 by itself (update-branch plus dispatched CI plus report-status) and merged it — CI-MERGE-QUEUE-001.
+
+**Open, in this order (docs/MERGE_QUEUE.md on #760):** #760 (queue: behind_by detection plus a re-read of the checks; it extends the order) → #759 SEC-DEPS-001 (composer and npm audits clean; the anonymous Cache-Control ReDoS) → #761 AI Agents B1–B8 plus the five-area navigation. #760 is outside main's current list, so merge it by hand when green; after that the queue carries #759 and #761.
+
+**Agents:** see the AGENTS-* rows. B9 (client product) waits for the Owner's decision on which plans include agents. Production proof of any agent reply needs the Owner to enter an Anthropic key in the Agent Center's key card; executors need an Owner-approved reversible change on a live Meta or Google campaign.
+
+**Next prepared branches (open one at a time after #761):** `feat/openai-chat-card-text-preview` (main merged, full suites green), `feat/commerce-store-assignment`, `feat/brand-lockup-by-language`, `fix/quick-preview-trend-truth`, `feat/budget-pace-marker`, `feat/report-table-identity-r` → `feat/report-owner-columns`, `test/client-isolation-probe-r`, `feat/ecb-rate-source`, the email, alert and delivery branches, `feat/portal-trend`, `feat/portal-campaigns-paged`, `feat/report-link-analytics`, `test/guards-batch`. Batch small independent ones into one PR where they touch different areas — every merge costs every other PR an hour of browser gates.
+
+**Local test lanes:** run a backend suite with `DB_DATABASE=mediabuying_test_snap` (or another lane database) and never run a second suite or single test against the same database at the same time — doing so mid-suite produced 25 false failures tonight.
+
+---
+
+# START HERE — 2026-10-19 (late) — agents B1–B3 built; queue at #755
+
+**Queue:** #754 merged and deployed (bundle `index-D1LDtVlB.js` carries `portal-attention`). The queue halted at 21:56 on #755 because GitHub reported `UNKNOWN` while it was conflicting — the case `ci/queue-detect-behind` fixes; #755 was refreshed by hand. Its Firefox gate then failed on two specs that #755 does not touch (`live-link-builder`: a missed tick under load; `reports-phone-list`: the advertiser's default project moved to one with no reports). Both specs were hardened on #755's head `c6f3fb61` (re-press while unticked; open a project that has a report). Next: #752 (green, behind main), then open `ci/queue-detect-behind`. Scheduled queue runs were not observed between 21:20 and 22:33 UTC: GitHub drops `schedule` triggers under load, so the `workflow_run` trigger is what advances the queue.
+
+**AI Agents, stacked branches (open in this order, each after the one before merges):**
+`docs/ai-agents-backlog` → `feat/agents-approval-gateway` (B1, AGENTS-APPROVAL-GATEWAY-001) → `feat/agents-client-rules` (B2, CLIENT-RULES and TOOLS-READ) → `feat/agents-engine` (B3, AGENTS-ENGINE-001 PARTIAL and AGENTS-CENTER-001). B3 = the tool loop (`AgentConversation`), role tool lists (`AgentRoles`, `AgentToolbox`), the Anthropic client on the official `anthropic-ai/sdk`, threads and messages (replayed by a `seq` sequence), `RunAgentTurnJob`, `/projects/{p}/agents` and `/agent-threads`, and the Agent Center screen at `/app/agents` and `/agency/agents` with a masked AI-key card. AgentEngineTest 14, agentCenter.test 6; local preview proved the no-key path. **Production proof needs the Owner to enter an Anthropic key in the AI-key card** (no key is ever read back). OpenAI and Gemini keys are refused by the engine until their clients exist (row PARTIAL). Next batches: B4 executors (Meta first; Snapchat needs the Owner's reversible write test), B5 routines, B6 five-area navigation.
+
+**SEC-DEPS-001:** branch `fix/sec-deps-composer` (worktree `../ch-sec`): composer audit and npm audit both clean after patch and minor updates within the constraints; the anonymous-reachable one was symfony/http-foundation's Cache-Control ReDoS. Open it ahead of feature PRs once its full backend suite passes.
+
+**OpenAI chat-card text preview:** worktree `../ch-oai` merged main; tsc, Vitest 3609, pint and phpstan green; backend suite next, then PR.
+
+---
+
+# START HERE — 2026-10-19 — the AI Agents plan is in the backlog
+
+**One backlog.** The Owner's plan «نظام وكلاء إدارة الحملات — خطة البناء» was added as the section «AI Agents plan» at the end of `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` (AGENTS-* rows and NAV-FIVE-AREAS-001) and audited in `docs/AI_AGENTS_PLAN.md` (what exists and is reused, provider write capabilities checked against the providers' own documentation, the safety model, and batches B1–B9). Nothing earlier was replaced. Start with **B1, the approval gateway** (AGENTS-APPROVAL-GATEWAY-001): it needs no provider write and every later agent batch depends on it.
+
+**Audit facts a new session must not re-derive:** no `AdvertisingConnector` can write (read and sync only) — every executor is new work; `AIProviderCredential` already stores OpenAI / Anthropic / Gemini keys per tenant, client or project, so providers stay configurable; `daily_metrics` / `entity_daily_metrics` are the snapshots (do not add `metric_snapshots`); Snapchat's Marketing API can PATCH campaign `status` and `daily_budget_micro` (the MCP is read-only) but whether our stored token may write is unconfirmed (AGENTS-SNAP-WRITE-CONFIRM-001, an Owner-approved reversible test); LinkedIn and X grants are read-only; TikTok needs the app permission confirmed.
+
+**Merge order still in force:** #754 → #755 → #752, then `ci/queue-detect-behind` (so the refresh logic is proven on the next stale PR), then the prepared branches: `feat/commerce-store-assignment`, `feat/brand-lockup-by-language`, `feat/openai-chat-card-text-preview`, `feat/recs-overview-strip`, `fix/quick-preview-trend-truth`, `feat/budget-pace-marker`, `feat/report-table-identity-r` → `feat/report-owner-columns`, `test/client-isolation-probe-r`, `feat/ecb-rate-source`, the email branches (`feat/email-kpi-hierarchy`, `feat/transactional-mail-audit`, `feat/email-settings-diagnostics`, `test/email-web-metric-parity`), `test/guards-batch`, `test/weekly-digest-document`, `test/money-reconciliation-ladder`, the alert branches, `feat/delivery-weekly-schedule` and `feat/delivery-overview`, `feat/portal-trend`, `feat/portal-campaigns-paged`, `feat/report-link-analytics`. Older stack branches whose names appear in the 2026-10-17 list (portal-*, delivery-pack-core, client-invoicing-*) were squash-merged by #741: check with `git cherry` before reviving one.
+
+---
+
 # START HERE — 2026-10-18 (late) — resuming in a new Claude session
 
 **Git is the authority.** The merge queue is no longer a script in a session: it is `.github/workflows/merge-queue.yml`, ordered by `docs/MERGE_QUEUE.md` (every 15 minutes and after each CI run it updates the head PR, waits, or squash-merges and starts the deploy; a red check halts it, nothing is bypassed). The order is **#756 (P0 report scope) → #744 → #754 → #755 → #752**; #757 (the queue itself) is merged first, by hand, because it only changes a workflow and docs.
