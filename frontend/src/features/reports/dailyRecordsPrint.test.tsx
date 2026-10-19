@@ -50,7 +50,9 @@ describe('the printed daily records', () => {
 
   it('splits the deck into fixed pages of eight days', () => {
     const slides = withDailyRecordsSlides<Page>([], { report_sections: ['daily_records'], timeseries: days })
-    expect(slides.map((s) => s.range)).toEqual([[0, DAILY_ROWS_PER_PAGE], [DAILY_ROWS_PER_PAGE, DAILY_ROWS_PER_PAGE * 2]])
+    const expected = Array.from({ length: Math.ceil(days.length / DAILY_ROWS_PER_PAGE) }, (_, i) => [i * DAILY_ROWS_PER_PAGE, (i + 1) * DAILY_ROWS_PER_PAGE])
+    expect(slides.map((s) => s.range)).toEqual(expected)
+    expect(slides.length).toBeGreaterThan(1)
     expect(withDailyRecordsSlides<Page>([], { report_sections: ['kpis'], timeseries: days })).toEqual([])
   })
 })
