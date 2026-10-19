@@ -1,4 +1,4 @@
-import { ProviderMark } from '@/components/ProviderMark'
+import { ProviderMark, ProviderName } from '@/components/ProviderMark'
 import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -177,7 +177,10 @@ function PlatformCards({ payload, reader, ar, result, selected, onSelect }: { pa
       >
         <span className="block h-1.5" style={{ background: color }} aria-hidden />
         <span className="flex flex-col gap-1 p-3">
-          <span className="truncate text-sm font-bold text-text-primary">{title}</span>
+          {/* The platform's logo and name (Owner, 2026-10-19); «all platforms» is a word, not a platform. */}
+          <span className="flex min-w-0 text-sm font-bold text-text-primary">
+            {key === null ? <span className="truncate">{title}</span> : <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={20} />}
+          </span>
           <span className="tnum truncate text-xl font-extrabold text-text-primary"><Num>{num(value)}</Num></span>
           <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
           <span className="tnum mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">

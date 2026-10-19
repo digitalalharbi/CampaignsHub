@@ -1,7 +1,9 @@
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
-import { useEffect } from 'react'
+import { hasPlatformMark } from '@/components/brand/PlatformMark'
+import { ProviderName } from '@/components/ProviderMark'
+import { useEffect, type ReactNode } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
@@ -99,7 +101,18 @@ const KPI_LABELS: Record<string, string> = {
   cpa: 'Cost per Result', ctr: 'CTR', impressions: 'Impressions', clicks: 'Clicks',
 }
 
-function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
+/**
+ * Owner, 2026-10-19 — a platform in the printed document is its logo and its name. A string that is not a
+ * known platform (an ad account's name, «—») stays text; nothing is invented to fill a mark.
+ */
+function platformCell(raw: unknown): ReactNode {
+  const text = String(raw ?? '—')
+  const key = canonicalPlatform(text)
+
+  return hasPlatformMark(key) ? <ProviderName provider={key} locale="en" size={14} /> : text
+}
+
+function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   return (
     <table className="doc-table">
       <thead>
@@ -230,7 +243,7 @@ export function PrintDocument({
     ] as [string, string])
 
   const platformRows = (data.platforms ?? []).map((p: Row) => [
-    String(p.platform ?? p.name ?? '—'),
+    platformCell(p.platform ?? p.name ?? '—'),
     money(Number(p.spend ?? 0), currency),
     money(Number(p.revenue ?? 0), currency),
     nfmt(Number(p.results ?? 0)),
@@ -576,7 +589,7 @@ export function PrintDocument({
             {contribution && (
               <Table
                 head={['Platform', `Share of ${contribution.label_en.toLowerCase()}`]}
-                rows={contribution.rows.map((r) => [r.provider, r.share === null ? '—' : `${(r.share * 100).toFixed(1)}%`])}
+                rows={contribution.rows.map((r) => [platformCell(r.provider), r.share === null ? '—' : `${(r.share * 100).toFixed(1)}%`])}
               />
             )}
           </section>
@@ -618,7 +631,7 @@ export function PrintDocument({
             head={['Ad account', 'Platform', 'Spend', 'Results', 'Cost per result']}
             rows={((data as { accounts?: Array<Record<string, unknown>> }).accounts ?? []).map((a) => [
               String(a.account_name ?? 'Unnamed account'),
-              providerLabel(canonicalPlatform(String(a.provider ?? '')), 'en'),
+              platformCell(a.provider),
               moneyExact(typeof a.spend === 'number' ? a.spend : null, currency),
               typeof a.conversions === 'number' ? a.conversions.toLocaleString('en-US') : '—',
               moneyExact(typeof a.cpa === 'number' ? a.cpa : null, currency),
@@ -721,7 +734,7 @@ export function PrintDocument({
                       : <span className="doc-ad-absent">{ad.absence}</span>}
                   </td>
                   <td>{ad.name}</td>
-                  <td>{ad.provider}</td>
+                  <td>{platformCell(ad.provider)}</td>
                   <td>{ad.spend}</td>
                   <td>{ad.results}</td>
                 </tr>
@@ -813,7 +826,7 @@ export function PrintDocument({
           {rosterRows.length > 0 && (
             <Table
               head={['Creative', 'Platform', 'Spend', 'Impressions', 'Clicks', 'Results']}
-              rows={rosterRows.map((r) => [r.name, r.provider, r.spend, r.impressions, r.clicks, r.results])}
+              rows={rosterRows.map((r) => [r.name, platformCell(r.provider), r.spend, r.impressions, r.clicks, r.results])}
             />
           )}
         </section>
