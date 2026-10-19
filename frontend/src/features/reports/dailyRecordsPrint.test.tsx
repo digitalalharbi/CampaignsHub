@@ -21,6 +21,8 @@ const days = Array.from({ length: 20 }, (_, i) => ({ date: `2026-08-${String(i +
 const doc = (reportSections: string[] | undefined, timeseries: unknown[] = days) =>
   render(<PrintDocument data={{ period: { from: '2026-08-01', to: '2026-08-20' }, kpis: {}, summary: [], platforms: [], recommendations: [], outline: [], timeseries, ...(reportSections ? { report_sections: reportSections } : {}) } as never} currency="SAR" reportName="R" clientName="C" />)
 
+type Page = { id: string; type: string; order: number; visible: boolean; range?: [number, number] }
+
 describe('the printed daily records', () => {
   it('is printed only when the section list names it', () => {
     expect(dailyRecordsChosen({ report_sections: ['kpis', 'daily_records'] })).toBe(true)
@@ -47,8 +49,8 @@ describe('the printed daily records', () => {
   })
 
   it('splits the deck into fixed pages of fourteen days', () => {
-    const slides = withDailyRecordsSlides([], { report_sections: ['daily_records'], timeseries: days })
+    const slides = withDailyRecordsSlides<Page>([], { report_sections: ['daily_records'], timeseries: days })
     expect(slides.map((s) => s.range)).toEqual([[0, DAILY_ROWS_PER_PAGE], [DAILY_ROWS_PER_PAGE, DAILY_ROWS_PER_PAGE * 2]])
-    expect(withDailyRecordsSlides([], { report_sections: ['kpis'], timeseries: days })).toEqual([])
+    expect(withDailyRecordsSlides<Page>([], { report_sections: ['kpis'], timeseries: days })).toEqual([])
   })
 })
