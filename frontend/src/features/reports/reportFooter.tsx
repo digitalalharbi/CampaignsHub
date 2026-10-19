@@ -93,30 +93,42 @@ export function ReportFooter({ facts, locale, className = '' }: { facts: ReportF
   const [open, setOpen] = useState(false)
   const label = MORE_LABEL[locale]
 
+  /*
+   * REPORT-COMPOSITION-CONTROL-001 — a professional full-width footer, aligned with the report
+   * container (Owner defect 106): the methodology and spend notes on one side, the facts the reader
+   * checks — last update, period, currency, time zone, objective — as a labelled grid on the other.
+   * One column on a phone; side by side from `lg`. Still outside the report body: no heading and no
+   * fill, and not a section anybody can switch off.
+   */
   return (
-    <footer data-testid="report-footer" dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`report-footer mx-auto mt-8 max-w-3xl rounded-xl border border-border/60 px-4 py-3 text-center text-[11px] leading-relaxed text-text-muted ${className}`}>
-      <p data-testid="report-footer-note">
-        {REPORT_NOTE[locale]}{' '}
-        <button type="button" data-testid="report-footer-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="font-medium text-text-secondary underline underline-offset-2 hover:text-text-primary">
-          {open ? label.less : label.more}
-        </button>
-      </p>
-      {open && <p data-testid="report-footer-more" className="mt-1.5">{REPORT_NOTE_MORE[locale]}</p>}
-      {facts.spendSources && (
-        <p data-testid="report-footer-spend-notes" className="mt-1.5">
-          {spendNotesLine(facts.spendSources, locale)}
-        </p>
-      )}
-      {items.length > 0 && (
-        <p data-testid="report-footer-meta" className="mt-2 flex flex-wrap items-center justify-center gap-y-1 border-t border-border/50 pt-2">
-          {items.map(([itemLabel, value], i) => (
-            <span key={itemLabel} className="inline-flex items-center">
-              {i > 0 && <span aria-hidden className="mx-2.5 h-3 w-px bg-border" />}
-              <span>{itemLabel}: <bdi className="tnum">{value}</bdi></span>
-            </span>
-          ))}
-        </p>
-      )}
+    <footer data-testid="report-footer" dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`report-footer mt-8 w-full min-w-0 rounded-2xl border border-border/60 px-4 py-4 text-start text-[11px] leading-relaxed text-text-muted sm:px-5 ${className}`}>
+      <div className={`grid gap-4 ${items.length > 0 ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-8' : ''}`}>
+        <div className="min-w-0 space-y-1.5">
+          <p data-testid="report-footer-note">
+            {REPORT_NOTE[locale]}{' '}
+            <button type="button" data-testid="report-footer-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="font-medium text-text-secondary underline underline-offset-2 hover:text-text-primary">
+              {open ? label.less : label.more}
+            </button>
+          </p>
+          {open && <p data-testid="report-footer-more">{REPORT_NOTE_MORE[locale]}</p>}
+          {facts.spendSources && (
+            <p data-testid="report-footer-spend-notes">
+              {spendNotesLine(facts.spendSources, locale)}
+            </p>
+          )}
+        </div>
+        {items.length > 0 && (
+          <dl data-testid="report-footer-meta" className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border/50 pt-3 sm:grid-cols-3 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0">
+            {items.map(([itemLabel, value]) => (
+              // The period is the one long value (two dates and an arrow): it takes two columns and wraps, never an ellipsis.
+              <div key={itemLabel} className={`min-w-0 ${itemLabel === LABELS[locale].period ? 'col-span-2' : ''}`}>
+                <dt className="text-[10px] tracking-wide">{itemLabel}</dt>
+                <dd className="font-medium text-text-secondary [overflow-wrap:anywhere]"><bdi className="tnum">{value}</bdi></dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
     </footer>
   )
 }

@@ -15,7 +15,7 @@ import { FreshnessStrip } from './live/LiveSections'
 import { ContentView, DashboardView, PlatformsView, platformsOf, StandardView, SummaryView } from './live/LiveViews'
 import { TablesView } from './live/LiveTables'
 import { useLiveMetricReader } from './live/liveMetrics'
-import { levelOf, MODE_LABELS, modesFor, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
+import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 import { ReportFooter } from './reportFooter'
@@ -86,10 +86,12 @@ export function LiveSharedReport({
   const rawPlatform = search.get('platform')
 
   const levelRef = useRef<LiveLevel | null>(null)
+  // The opening view once the payload says which views this link offers.
+  const firstRef = useRef<LiveMode | null>(null)
   const navigate = useCallback((next: LiveMode, platform?: string | null) => {
     setSearch((prev) => {
       const params = new URLSearchParams(prev)
-      if (next === modesFor(form, levelRef.current)[0]) params.delete('view')
+      if (next === (firstRef.current ?? modesFor(form, levelRef.current)[0])) params.delete('view')
       else params.set('view', next)
       if (platform) params.set('platform', platform)
       else params.delete('platform')
@@ -123,16 +125,18 @@ export function LiveSharedReport({
   const level = levelOf(form, whole?.detail_level)
   levelRef.current = level
   const offered = modesFor(form, level)
-  const mode = readMode(search.get('view'), form, level)
   /*
    * REPORT-SECTION-SURFACES-001 — a view whose section the report does not carry is not offered:
    * the platform view reads the comparison's rows, the content view the content section.
    */
-  const offeredHere = whole === null ? offered : offered.filter((m) => (
+  const offeredHere = whole === null ? offered : offeredViews(offered, whole.report_views).filter((m) => (
     m === 'platforms' ? sectionShown(whole, 'platform_comparison')
       : m === 'content' ? sectionShown(whole, 'content_performance')
         : true
   ))
+  // REPORT-COMPOSITION-CONTROL-001 — the address names a view; only one this link offers opens.
+  const mode = whole === null ? readMode(search.get('view'), form, level) : (offeredHere.find((m) => m === search.get('view')) ?? offeredHere[0])
+  firstRef.current = offeredHere[0] ?? null
   const known = whole ? platformsOf(whole) : []
   const platform = ownsPlatformChoice(mode)
     ? (rawPlatform && known.includes(rawPlatform) ? rawPlatform : (mode === 'platforms' ? known[0] ?? null : null))
@@ -304,7 +308,7 @@ export function LiveSharedReport({
         {mode === 'summary' && <SummaryView payload={payload} {...common} />}
         {mode === 'standard' && <StandardView payload={payload} {...common} />}
         {mode === 'tables' && <TablesView payload={payload} reader={reader} locale={locale === 'ar' ? 'ar' : 'en'} onOpenContent={onOpenContent} />}
-        {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} onOpenPlatform={setDrawer} />}
+        {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} canGo={(m) => offeredHere.includes(m)} onOpenPlatform={setDrawer} />}
         {mode === 'platforms' && offeredHere.includes('platforms') && (
           <PlatformsView
             whole={payload}
@@ -312,7 +316,7 @@ export function LiveSharedReport({
             platform={platform}
             onPlatform={(p) => navigate('platforms', p)}
             narrowed={narrowed.load}
-            goToContent={(p) => navigate('content', p)}
+            goToContent={offeredHere.includes('content') ? (p) => navigate('content', p) : undefined}
           />
         )}
         {mode === 'content' && offeredHere.includes('content') && (

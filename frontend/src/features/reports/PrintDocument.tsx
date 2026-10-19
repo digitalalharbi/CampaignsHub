@@ -9,7 +9,7 @@ import { brand } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
 import { AttentionBlocks } from './AttentionBlocks'
-import { sectionShown, type ReportSectionKey } from './reportSections'
+import { dailyRecordsChosen, sectionShown, type ReportSectionKey } from './reportSections'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
 import { metricState } from '@/features/content/metrics'
@@ -622,6 +622,23 @@ export function PrintDocument({
               moneyExact(typeof a.spend === 'number' ? a.spend : null, currency),
               typeof a.conversions === 'number' ? a.conversions.toLocaleString('en-US') : '—',
               moneyExact(typeof a.cpa === 'number' ? a.cpa : null, currency),
+            ])}
+          />
+        </section>
+      )}
+
+      {/* REPORT-COMPOSITION-CONTROL-001 — the daily ledger, only where the report's section list names it. */}
+      {dailyRecordsChosen(data) && (data.timeseries ?? []).length > 0 && (
+        <section className="doc-section" data-testid="print-daily-records">
+          <h2>Daily Records</h2>
+          <Table
+            head={['Day', 'Impressions', 'Clicks', 'Results', ...((data.timeseries ?? []).some((d: Row) => typeof d.spend === 'number') ? ['Spend'] : [])]}
+            rows={[...(data.timeseries ?? [])].sort((a: Row, b: Row) => String(a.date ?? '').localeCompare(String(b.date ?? ''))).map((d: Row) => [
+              String(d.date ?? '—'),
+              typeof d.impressions === 'number' ? d.impressions.toLocaleString('en-US') : '—',
+              typeof d.clicks === 'number' ? d.clicks.toLocaleString('en-US') : '—',
+              typeof d.conversions === 'number' ? d.conversions.toLocaleString('en-US') : '—',
+              ...((data.timeseries ?? []).some((x: Row) => typeof x.spend === 'number') ? [moneyExact(typeof d.spend === 'number' ? d.spend : null, currency)] : []),
             ])}
           />
         </section>

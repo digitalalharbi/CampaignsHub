@@ -61,6 +61,18 @@ export function readMode(raw: string | null | undefined, form: LiveForm, level?:
   return offered.find((m) => m === raw) ?? offered[0]
 }
 
+/**
+ * REPORT-COMPOSITION-CONTROL-001 — the level's views, narrowed by the main sections the server says
+ * this link offers. A payload from before the control (no list) keeps every view, and a list that
+ * would leave nothing is ignored rather than leaving a reader with an empty page.
+ */
+export function offeredViews(offered: LiveMode[], reportViews?: string[] | null): LiveMode[] {
+  if (!Array.isArray(reportViews)) return offered
+  const kept = offered.filter((m) => reportViews.includes(m))
+
+  return kept.length > 0 ? kept : offered
+}
+
 /** Views that read the whole link rather than the client's platform chips — they pick a platform themselves. */
 export function ownsPlatformChoice(mode: LiveMode): boolean {
   return mode === 'platforms' || mode === 'content'

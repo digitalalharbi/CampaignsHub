@@ -163,6 +163,28 @@ describe('building a live client link', () => {
     expect(sent().section_overrides).toBeUndefined()
   })
 
+  /* REPORT-COMPOSITION-CONTROL-001 — the main sections are a level above the components, and only a detailed link has them. */
+  it('sends the detailed link\u2019s main sections', async () => {
+    await build()
+
+    fireEvent.click(await screen.findByTestId('live-link-level-detailed'))
+    fireEvent.click(await screen.findByTestId('live-link-section-view-toggle-content'))
+    fireEvent.click(screen.getByTestId('live-link-section-view-toggle-platforms'))
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect(sent().views).toEqual(['summary', 'dashboard', 'tables'])
+  })
+
+  it('sends no main sections for a link that has none to choose', async () => {
+    await build()
+
+    expect(screen.queryByTestId('live-link-section-view-toggle-tables')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('live-link-create'))
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect(sent().views).toBeUndefined()
+  })
+
   it('a section the summary form does not contain stays withheld and is sent as OFF', async () => {
     await build()
 

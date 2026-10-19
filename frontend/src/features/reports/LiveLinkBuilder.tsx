@@ -1,3 +1,4 @@
+import { CompositionTree, VIEW_KEYS, viewsBody, type ViewKey } from './CompositionTree'
 import { ColumnPicker } from './ColumnPicker'
 import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey, levelSections } from './reportSetupCatalog'
 import { useMemo, useState } from 'react'
@@ -206,6 +207,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * Reset when the level changes: a preset chosen after a switch is a new starting point.
    */
   const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>({})
+  // REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) of a detailed link; all on until the Owner closes one.
+  const [viewOn, setViewOn] = useState<Record<ViewKey, boolean>>(() => Object.fromEntries(VIEW_KEYS.map((v) => [v, true])) as Record<ViewKey, boolean>)
   const sectionOn = (key: string, defaultClient: boolean): boolean =>
     sectionChoice[key] ?? levelSections(level)[key] ?? defaultClient
   // REPORT-TABLES-OWNER-COLUMNS-001 — null means «every column», which is also what is sent.
@@ -232,6 +235,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
         ...(platformCols === null ? {} : { columns: { platforms: platformCols } }),
+        ...(level === 'detailed' && viewsBody(viewOn) !== null ? { views: viewsBody(viewOn) } : {}),
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
       }),
@@ -672,39 +676,41 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             permission, it is a CSS rule». So these are real choices about what the document
             contains, and the summary line below says so before the link is created.
           */}
-          <div className="rounded-xl border border-border p-3">
-            <p className="mb-2 text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير' : 'Report sections'}</p>
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {(registry.data?.sections ?? []).map((choice) => {
+          {/*
+            REPORT-COMPOSITION-CONTROL-001 — two levels: the main sections a detailed link offers as
+            tabs, and the components inside each. A summary or standard link is one composition, so
+            its components are grouped the same way without main-section switches.
+          */}
+          <div className="grid gap-2">
+            <p className="text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير ومكوّناتها' : 'Report sections and their components'}</p>
+            <CompositionTree
+              testid="live-link-section"
+              rows={registry.data?.sections ?? []}
+              ar={ar}
+              offersViews={level === 'detailed'}
+              viewState={(v) => (viewOn[v] ? 'on' : 'off')}
+              onView={(v, on) => setViewOn((prev) => ({ ...prev, [v]: on }))}
+              rowState={(row) => (form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(row.key) ? 'by-form' : undefined)}
+              control={(row) => {
+                const choice = (registry.data?.sections ?? []).find((c) => c.key === row.key)!
                 /* A summary does not contain this section, so the toggle cannot honour it. */
                 const withheld = form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(choice.key)
                 return (
-                  <label
-                    key={choice.key}
-                    data-testid={`live-link-section-row-${choice.key}`}
-                    data-withheld={withheld ? 'by-form' : undefined}
-                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${withheld ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-hover'}`}
-                  >
-                    <span>
-                      {ar ? choice.title_ar : choice.title_en}
-                      {withheld && (
-                        <span className="block text-[11px] text-text-muted">
-                          {ar ? 'في التقرير التفصيلي فقط' : 'In the detailed report only'}
-                        </span>
-                      )}
-                    </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {withheld && <span className="text-[11px] text-text-muted">{ar ? 'في التقرير التفصيلي فقط' : 'In the detailed report only'}</span>}
                     <input
                       type="checkbox"
+                      aria-label={ar ? choice.title_ar : choice.title_en}
                       data-testid={`live-link-section-${choice.key}`}
                       disabled={withheld}
                       checked={withheld ? false : sectionOn(choice.key, choice.default_client)}
                       onChange={(e) => setSectionChoice((prev) => ({ ...prev, [choice.key]: e.target.checked }))}
                       className="h-4 w-4 accent-brand-600"
                     />
-                  </label>
+                  </span>
                 )
-              })}
-            </div>
+              }}
+            />
           </div>
 
           <ColumnPicker value={platformCols} onChange={setPlatformCols} ar={ar} />

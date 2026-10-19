@@ -22,6 +22,7 @@ import {
   type ResolvedSectionRow,
   type SectionReason,
 } from './api'
+import { CompositionTree, VIEW_KEYS, type ViewKey, type ViewState } from './CompositionTree'
 
 /**
  * REPORT-SECTION-MODEL-001 — the operator's section switches for one report, with a preview.
@@ -59,8 +60,10 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   const linkKey = ['share-sections', projectId, reportId, level]
   const link = useQuery({ queryKey: linkKey, queryFn: () => getShareSections(projectId, reportId, level), enabled: level !== '' })
   const toggleLink = useMutation({
-    mutationFn: ({ section, on, money }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean } }) =>
-      updateShareSections(projectId, reportId, level, section === undefined ? {} : { [section]: on ?? false }, money ?? {}),
+    mutationFn: ({ section, on, money, views }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean }; views?: string[] | null }) =>
+      views === undefined
+        ? updateShareSections(projectId, reportId, level, section === undefined ? {} : { [section]: on ?? false }, money ?? {})
+        : updateShareSections(projectId, reportId, level, {}, {}, views),
     onSuccess: (next: ShareSectionsState) => {
       setError(null)
       qc.setQueryData(linkKey, next)
@@ -76,6 +79,12 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
 
   const toggle = useMutation({
     mutationFn: ({ section, on }: { section: string; on: boolean }) => updateReportSections(projectId, reportId, { sections: { [section]: on } }),
+    onSuccess: onSaved,
+    onError: onFailed,
+  })
+  // REPORT-COMPOSITION-CONTROL-001 — the report's main sections, saved like a switch.
+  const setViews = useMutation({
+    mutationFn: (views: string[] | null) => updateReportSections(projectId, reportId, { views }),
     onSuccess: onSaved,
     onError: onFailed,
   })
@@ -102,23 +111,43 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   const judged = linkData?.availability_judged ?? state.data.availability_judged
   const linkState = Object.fromEntries((linkData?.sections ?? []).map((r) => [r.key, r.state]))
   // The rows are always the registry list; only the preview follows the chosen level.
-  const main = state.data.resolved.filter((r) => !r.breakdown)
-  const breakdowns = state.data.resolved.filter((r) => r.breakdown)
-  const busy = toggle.isPending || fromTemplate.isPending
+  const rows = state.data.resolved
+  const busy = toggle.isPending || fromTemplate.isPending || setViews.isPending
   const title = (r: ResolvedSectionRow) => (ar ? r.title_ar : r.title_en)
+  const byKey = Object.fromEntries(rows.map((r) => [r.key, r]))
 
-  const row = (r: ResolvedSectionRow) => (
-    <li key={r.key} data-testid={`section-row-${r.key}`} className="flex items-center justify-between gap-3 py-1.5">
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-text-primary">{title(r)}</span>
-        {!onLink && effective[r.key] && !r.visible && r.reason && r.reason !== 'disabled_by_operator' && (
-          <span data-testid={`section-reason-${r.key}`} className="block text-[11px] text-text-muted">
-            {ar ? REASON[r.reason].ar : REASON[r.reason].en}
-          </span>
-        )}
-      </span>
+  /*
+   * REPORT-COMPOSITION-CONTROL-001 — the two levels. On the report, a main section is on unless the
+   * report narrowed it; on a link, a section the report closed is fixed («hidden by the report») and
+   * the rest are the link's own narrowing.
+   */
+  const reportViews: string[] = state.data.views ?? [...VIEW_KEYS]
+  const offersViews = onLink ? (linkData?.offers_views ?? false) : (state.data.offers_views ?? false)
+  const linkViews: string[] = linkData?.effective_views ?? reportViews
+  const viewState = (v: ViewKey): ViewState => {
+    if (!onLink) return reportViews.includes(v) ? 'on' : 'off'
+    if (!(linkData?.report_views ?? [...VIEW_KEYS]).includes(v)) return 'locked_off'
+
+    return linkViews.includes(v) ? 'on' : 'off'
+  }
+  const onView = (v: ViewKey, on: boolean) => {
+    const current = onLink ? linkViews : reportViews
+    const next = VIEW_KEYS.filter((k) => (k === v ? on : current.includes(k)))
+    const ceiling = onLink ? (linkData?.report_views ?? [...VIEW_KEYS]) : [...VIEW_KEYS]
+    const body = ceiling.every((k) => next.includes(k as ViewKey)) ? null : next
+    if (onLink) toggleLink.mutate({ views: body })
+    else setViews.mutate(body)
+  }
+
+  const control = (r: ResolvedSectionRow) => (
+    <span className="flex shrink-0 items-center gap-2">
+      {!onLink && effective[r.key] && !r.visible && r.reason && r.reason !== 'disabled_by_operator' && (
+        <span data-testid={`section-reason-${r.key}`} className="text-[11px] text-text-muted">
+          {ar ? REASON[r.reason].ar : REASON[r.reason].en}
+        </span>
+      )}
       {onLink && linkState[r.key] === 'hidden_by_report' ? (
-        <span data-testid={`section-link-hidden-by-report-${r.key}`} className="shrink-0 text-[11px] text-text-muted">
+        <span data-testid={`section-link-hidden-by-report-${r.key}`} className="text-[11px] text-text-muted">
           {ar ? 'مخفي في التقرير' : 'Hidden by the report'}
         </span>
       ) : (
@@ -130,7 +159,7 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
           onCheckedChange={(on) => (onLink ? toggleLink.mutate({ section: r.key, on }) : toggle.mutate({ section: r.key, on }))}
         />
       )}
-    </li>
+    </span>
   )
 
   return (
@@ -159,7 +188,16 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
             {ar ? 'يمكن للرابط إخفاء أقسام يعرضها التقرير فقط، لا إظهار ما يخفيه.' : 'A link can only hide sections the report shows — never show what it hides.'}
           </p>
         )}
-        <ul className="divide-y divide-border">{main.map(row)}</ul>
+        <CompositionTree
+          testid="section"
+          rows={rows}
+          ar={ar}
+          offersViews={offersViews}
+          viewState={viewState}
+          onView={onView}
+          viewDisabled={onLink ? toggleLink.isPending || !linkData : busy}
+          control={(row) => control(byKey[row.key])}
+        />
         {/*
           CLIENT-LIVE-LINK-SAFETY-001 — the financial figures this link shows, switchable after it was
           sent. Enforced on the payload (`HiddenMoney`): spend takes every cost-per, ROAS and budget
@@ -187,9 +225,6 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
             </ul>
           </>
         )}
-        <p className="mt-4 mb-1 text-xs font-bold text-text-muted">{ar ? 'تفصيلات اختيارية' : 'Optional breakdowns'}</p>
-        <ul className="divide-y divide-border">{breakdowns.map(row)}</ul>
-
         {!onLink && effective.advanced_segmentation && (
           <StreamsEditor projectId={projectId} reportId={reportId} saved={state.data.streams ?? []} ar={ar} onSaved={onSaved} onFailed={onFailed} />
         )}
