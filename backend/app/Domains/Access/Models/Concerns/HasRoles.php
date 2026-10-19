@@ -53,10 +53,41 @@ trait HasRoles
         $this->roles()->syncWithoutDetaching([$model->id]);
     }
 
+    /**
+     * The roles that count in the tenant this request is for.
+     *
+     * A person may hold roles in several tenants (an owner of two agencies, a freelancer on two
+     * rosters). Reading every role the user has made their permissions the UNION of all of them, so
+     * a limited role in one agency inherited the full owner role of another the moment both were
+     * held. When a tenant is bound — which every authenticated API request does — only that tenant's
+     * roles and the global (tenant-less) ones count. With none bound (the sign-in payload, before a
+     * membership is chosen) all roles are listed: that answer is only ever DISPLAYED, never
+     * authorised against, because every request that decides anything has a tenant.
+     *
+     * @return Collection<int,Role>
+     */
+    public function rolesInCurrentTenant(): Collection
+    {
+        return $this->currentTenantRolesQuery()->get();
+    }
+
+    /** @return BelongsToMany<Role, $this> */
+    private function currentTenantRolesQuery(): BelongsToMany
+    {
+        $current = app(TenantContext::class)->tenantId();
+
+        $query = $this->roles();
+        if ($current !== null) {
+            $query->where(fn ($w) => $w->whereNull('roles.tenant_id')->orWhere('roles.tenant_id', $current));
+        }
+
+        return $query;
+    }
+
     /** @return Collection<int,string> */
     public function permissionKeys(): Collection
     {
-        return $this->roles()
+        return $this->currentTenantRolesQuery()
             ->with('permissions:id,key')
             ->get()
             ->flatMap(fn (Role $role) => $role->permissions->pluck('key'))
@@ -75,6 +106,6 @@ trait HasRoles
 
     public function hasRole(string $slug): bool
     {
-        return $this->roles->contains(fn (Role $role) => $role->slug === $slug);
+        return $this->rolesInCurrentTenant()->contains(fn (Role $role) => $role->slug === $slug);
     }
 }
