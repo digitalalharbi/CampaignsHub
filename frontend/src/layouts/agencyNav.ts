@@ -1,4 +1,5 @@
 import {
+  Bot,
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
   Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Send, Settings, TrendingUp, Users, Lightbulb, Wallet } from 'lucide-react'
@@ -44,128 +45,72 @@ import type { NavGroup } from './SidebarNav'
  *
  * `agencyNavLeafPaths` is exported so a test can assert every destination survived the regrouping.
  */
+/*
+ * NAV-FIVE-AREAS-001 — five areas, named for the five jobs an operator does in a day.
+ *
+ *   Command Center      — what needs a person now: home, requests, tasks, conversations, alerts.
+ *   Campaign management — the things being run: projects, campaigns, content, links, spend limits.
+ *   AI agents           — the agents, their proposals waiting for approval, and the recommendations.
+ *   Analytics & reports — how it is going and what the client receives.
+ *   Business management — clients, money, connections, team and settings.
+ *
+ * REGROUPED, not redesigned: every destination, address, permission gate (`cap`) and label of the
+ * previous rail is here (the navGrouping guard pins the set), so no page, link or bookmark moved.
+ * NAV-IA-001 still holds inside the second area — the projects directory and the portfolio overview
+ * sit together and are named so neither reads as a version of the other.
+ */
 export const agencyNavGroups: readonly NavGroup[] = [
   {
-    key: 'overview',
-    ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard,
-    leaves: [{ to: '/agency/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard }],
-  },
-  {
-    key: 'clients',
-    ar: 'العملاء', en: 'Clients', icon: Building2,
-    leaves: [{ to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 }],
-  },
-  {
-    /*
-     * NAV-IA-001 — ONE projects category, and its children are short.
-     *
-     * «المشاريع» and «جميع المشاريع» sat side by side as siblings. Two entries whose labels differ
-     * by one word read as two versions of the same place, and the longer one reads as «the same
-     * thing, but more» — so a reader chooses by guessing. They are not two versions of anything:
-     * one is the operational directory of projects, the other is the agency's own portfolio scope.
-     *
-     * A parent that is a GROUP and not a destination says that: «المشاريع» names the subject, and
-     * «القائمة» and «الملخص» name the two ways of looking at it. Short, because a sidebar label is
-     * scanned and not read — «نظرة عامة على المشاريع» under a heading that already says المشاريع is
-     * the same word twice.
-     *
-     * PORTFOLIO-SCOPE-001 §36 is unchanged by the rename: the portfolio scope is still ENTERED by
-     * its own address, and the page itself still says «جميع المشاريع» where the figures are. What
-     * moved is the label on the rail, not the semantics of the scope.
-     */
-    key: 'projects',
-    ar: 'المشاريع', en: 'Projects', icon: FolderKanban,
+    key: 'command',
+    ar: 'مركز القيادة', en: 'Command Center', icon: LayoutDashboard,
     leaves: [
-      { to: '/agency/projects', ar: 'القائمة', en: 'List', icon: ListChecks },
-      { to: '/agency/portfolio', ar: 'الملخص', en: 'Overview', icon: Layers },
-    ],
-  },
-  {
-    key: 'campaigns',
-    /*
-     * What is actually running, and the creative in it. Content sat under «Work» beside requests,
-     * which put a design library next to an inbox.
-     *
-     * NAV-IA-001 — the heading names BOTH, so its first child stops repeating it. «Campaigns →
-     * Campaigns, Content» reads as a category with a stray extra item; «Campaigns & content» reads
-     * as what it is, and the two children are then the two halves rather than the subject and an
-     * afterthought.
-     */
-    ar: 'الحملات والمحتوى', en: 'Campaigns & content', icon: Megaphone,
-    leaves: [
-      { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
-      { to: '/agency/content', ar: 'المحتويات', en: 'Content', icon: Images },
-    ],
-  },
-  {
-    key: 'inbox',
-    // The queue: everything waiting on a person. Requests come in from clients, tasks are the
-    // agency's own, conversations are the thread with the client, alerts are the system asking for
-    // attention. They belong together because they get answered in one sitting.
-    ar: 'المهام والطلبات', en: 'Tasks & requests', icon: Inbox,
-    leaves: [
+      { to: '/agency/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
       { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
       { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
-      { to: '/agency/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2 },
       { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
       { to: '/agency/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing },
     ],
   },
   {
-    key: 'deliverables',
-    // What the client receives. Reports was the fourth item inside «Operations»; it is most of what
-    // an agency hands over, and it now has a heading that says so.
-    ar: 'التقارير والملفات', en: 'Reports & files', icon: BarChart3,
+    key: 'campaigns',
+    ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
     leaves: [
-      /*
-       * Analytics leads, because it is what a report is made OF. The agency portal has never had it:
-       * the API accepted agency operators on every metrics route, and only the link and the URL were
-       * missing, so the reader running media for five clients had no page to open.
-       */
+      { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
+      { to: '/agency/portfolio', ar: 'الملخص الشامل', en: 'Portfolio overview', icon: Layers },
+      { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
+      { to: '/agency/content', ar: 'المحتويات', en: 'Content', icon: Images },
+      { to: '/agency/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2 },
+      { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
+    ],
+  },
+  {
+    key: 'agents',
+    ar: 'الوكلاء الأذكياء', en: 'AI agents', icon: Bot,
+    leaves: [
+      { to: '/agency/agents', ar: 'مركز الوكلاء', en: 'Agent Center', icon: Bot },
+      { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
+    ],
+  },
+  {
+    key: 'analytics',
+    ar: 'التحليلات والتقارير', en: 'Analytics & reports', icon: BarChart3,
+    leaves: [
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
-      /*
-       * AGENCY-DECISION-SURFACES-001 — what to DO about the figures above, and the caps they run
-       * against. Both pages existed only on the advertiser portal; the agency operator, who runs
-       * more media than any advertiser, had neither.
-       */
-      { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
-      { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
       // DELIV-DASH-001 — every client's weekly delivery and billing, with the one next step.
       { to: '/agency/delivery', ar: 'التسليم الأسبوعي', en: 'Weekly delivery', icon: Send, cap: 'reports.view' },
     ],
   },
   {
-    key: 'finance',
+    key: 'business',
     // Two different pots, and confusing them is expensive: Client invoicing is what the agency's
-    // CLIENTS pay it, Agency subscription is what the agency pays CampaignsHub. The advertiser
-    // portal has only the second, because an advertiser has nobody to invoice.
-    ar: 'المالية', en: 'Finance', icon: Receipt,
+    // CLIENTS pay it, Agency subscription is what the agency pays CampaignsHub.
+    ar: 'إدارة الأعمال', en: 'Business management', icon: Building2,
     leaves: [
+      { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
       { to: '/agency/billing', ar: 'فواتير العملاء', en: 'Client invoicing', icon: Receipt },
       { to: '/agency/subscriptions', ar: 'اشتراك الوكالة', en: 'Agency subscription', icon: CreditCard },
-    ],
-  },
-  {
-    key: 'settings',
-    /*
-     * Setup, done rarely — so it is one heading at the bottom rather than two top-level entries.
-     *
-     * «الفريق والنطاقات / Team & scopes» is now «الفريق والصلاحيات / Team & permissions». A «scope»
-     * is what the code calls the restriction; a permission is what the person granting it thinks
-     * they are granting. The page and the mechanism are unchanged.
-     */
-    ar: 'الإعدادات', en: 'Settings', icon: Settings,
-    leaves: [
-      /*
-       * CONNECT-001 — connecting the agency's ad accounts.
-       *
-       * It lives under Settings rather than beside Campaigns because it is done once per account and
-       * then not thought about; what an operator opens daily is the campaigns those accounts feed.
-       * The page itself was reachable only under `/app` until now, so an agency operator had nowhere
-       * to press connect at all — the API had always allowed them.
-       */
       { to: '/agency/integrations', ar: 'ربط المنصات', en: 'Platform connections', icon: Plug, cap: 'integrations.manage' },
       { to: '/agency/team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users, cap: 'team.manage' },
       { to: '/agency/settings', ar: 'إعدادات الوكالة', en: 'Agency settings', icon: Settings },

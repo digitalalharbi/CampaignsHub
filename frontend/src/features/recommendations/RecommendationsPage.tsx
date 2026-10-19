@@ -46,6 +46,7 @@ const PRIORITY_TONE: Record<RecommendationPriority, 'danger' | 'warning' | 'info
 
 export function RecommendationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const portalTo = usePortalPath()
   const { currentProjectId } = useProject()
   const [status, setStatus] = useState('all')
   const [priority, setPriority] = useState('all')
@@ -207,6 +208,13 @@ export function RecommendationsPage() {
           )
           : undefined}
       />
+
+      {/* AGENTS-APPROVAL-GATEWAY-001 — the requests agents and colleagues have put forward, one press away. */}
+      <p className="text-xs">
+        <Link to={portalTo('/agents/approvals')} data-testid="approvals-link" className="font-semibold text-brand-700 hover:underline">
+          {ar ? 'طلبات الموافقة على التغييرات' : 'Approvals for proposed changes'}
+        </Link>
+      </p>
 
       {/*
         RECOMMENDATIONS-ACTION-CENTER-002 — what the PRODUCT noticed, above what people wrote.

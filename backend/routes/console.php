@@ -186,3 +186,13 @@ Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
  * Idempotent per project and week, so a late retry or a manual preparation cannot double it.
  */
 Schedule::command('delivery:prepare-weekly')->weeklyOn(1, '06:00')->timezone('Asia/Riyadh')->withoutOverlapping();
+
+/*
+ * AGENTS-ROUTINES-001 — the agent routines, each run only for projects that switched it on (each run
+ * spends the tenant's own model tokens). Times are the client's (Riyadh). A change an agent wants is a
+ * PROPOSAL in Approvals; no routine changes a campaign.
+ */
+Schedule::command('agents:run-routines daily_analysis')->dailyAt('08:45')->timezone('Asia/Riyadh')->withoutOverlapping();
+Schedule::command('agents:run-routines budget_guard')->cron('5 */2 * * *')->withoutOverlapping();
+Schedule::command('agents:run-routines creative_review')->cron('0 9 * * 0,3')->timezone('Asia/Riyadh')->withoutOverlapping();
+Schedule::command('agents:run-routines weekly_report')->cron('0 14 * * 4')->timezone('Asia/Riyadh')->withoutOverlapping();

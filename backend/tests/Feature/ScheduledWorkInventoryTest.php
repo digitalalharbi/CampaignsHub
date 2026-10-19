@@ -33,6 +33,8 @@ final class ScheduledWorkInventoryTest extends TestCase
      * somebody has to make deliberately, in a diff a reviewer can see.
      */
     private const EXPECTED = [
+        // AGENTS-ROUTINES-001 — four schedules of one command, each only for projects that opted in.
+        'agents:run-routines',
         'alerts:evaluate',
         'commerce:sync',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.

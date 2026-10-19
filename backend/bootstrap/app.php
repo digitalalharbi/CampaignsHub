@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
+use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
@@ -95,6 +96,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
+        RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
