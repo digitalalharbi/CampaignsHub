@@ -35,7 +35,7 @@ export interface AutomationRule extends RuleInput {
 }
 
 export interface Catalog {
-  metrics: Array<{ key: string; ar: string; en: string; kind: 'money' | 'ratio' | 'percent' | 'count' | 'days' | 'status' }>
+  metrics: Array<{ key: string; ar: string; en: string; kind: 'money' | 'ratio' | 'percent' | 'count' | 'days' | 'status'; /** The reported platform figures it is computed from; none for object facts (age, status). */ needs?: string[] }>
   operators: Operator[]
   windows: number[]
   actions: Array<{ key: string; ar: string; en: string; executable: boolean }>
@@ -74,6 +74,10 @@ const base = (p: string) => `/projects/${p}/automation`
 export const getCatalog = (p: string) => getData<Catalog>(`${base(p)}/catalog`)
 export const getSummary = (p: string, days = 7) => getData<Summary>(`${base(p)}/summary?days=${days}`)
 export const getTargets = (p: string) => getData<Targets>(`${base(p)}/targets`)
+
+/** AUTO-RULES-CONDITIONS-004 — which base figures each bound platform actually reported lately. */
+export interface MetricSupport { days: number; providers: Record<string, { has_data: boolean; reported: string[] }> }
+export const getMetricSupport = (p: string) => getData<MetricSupport>(`${base(p)}/metric-support`)
 export const listRules = (p: string) => getData<{ rules: AutomationRule[] }>(`${base(p)}/rules`)
 export const listActions = (p: string, ruleId?: string) => getData<{ actions: RuleActionRow[] }>(`${base(p)}/actions${ruleId ? `?rule_id=${encodeURIComponent(ruleId)}` : ''}`)
 export const listChanges = (p: string) => getData<{ changes: ChangeRow[] }>(`${base(p)}/change-log`)
