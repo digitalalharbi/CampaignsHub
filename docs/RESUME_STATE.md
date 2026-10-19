@@ -1,3 +1,13 @@
+# START HERE — 2026-10-19 (evening) — #767 and #768 in CI; batched branch `feat/portal-mobile-cards` ready for its PR
+
+**Open:** #767 report composition (Owner defect 106) — fixed the «السجل اليومي» PDF pages to eight days each after CI's Chromium measured fourteen at fit scale 0.839 (below the 0.85 readable floor; report-pdf-download.spec failed); locally that spec and six other report specs pass on Chromium (46 passed, exit 0). #768 Automated Rules R3 (agents list, explain and draft rules; drafts off and Monitor Only) plus the WD-EVIDENCE PDF appendix (a tall screenshot fits its page at 0.912; tokens serve only their own report's included images). Merge #767, then refresh and merge #768.
+
+**Next PR, pushed and waiting:** `feat/portal-mobile-cards` — CP-MOBILE-001 (Files cards; portal swept at 375px in Arabic and English, nine pages, no overflow), CP-PARITY-001 (portfolio period choice and KPI sparklines), REPORT-TITLE-METADATA-001 Production crawler evidence, and the CAMPAIGN-INTELLIGENCE-HUB N+1 fix (campaign list 177 queries for 15 campaigns → the same as for 3; 2248 metrics, analytics, report and portal tests pass). Open it after #768 merges.
+
+**Owner-only:** AI key in the Agent Center; a signed-in session for Production proofs (automation rules, agent drafts, evidence PDF, client portal); the Snapchat reversible write test (AGENTS-EXEC-SNAPCHAT-001 — the adapter exists, the executor is held to meta,google by AGENTS_EXECUTE_PROVIDERS); which plans include agents.
+
+---
+
 # START HERE — 2026-10-19 (midday) — Batches A, B, C and SEC-DEPS live; Batch D open
 
 **Merged and deployed today:** #752, #754, #755, #759 (SEC-DEPS-001 VERIFIED), #761 (agents B1–B8, five-area navigation), #762 (Batch A), #763 (Batch B: email, portal paging, weekly delivery sweep and overview, link edit and analytics, alert presets and visuals), #764 (Batch C: OpenAI and Gemini agents, spend notes, pause requests from limits).
