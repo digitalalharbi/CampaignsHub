@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Domains\Agents\Http\Controllers\ActionProposalController;
+use App\Domains\Agents\Http\Controllers\AgentAutonomyController;
+use App\Domains\Agents\Http\Controllers\AgentChatController;
+use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
+use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
@@ -280,6 +285,29 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * LIVEREP-002 — build a live client link from a choice (client → project → campaigns → platforms
      * → period → metrics), rather than from an already-generated document.
      */
+    /*
+     * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue. Reading needs to see campaigns; putting a change
+     * forward or deciding one needs to manage them, and the controller adds the tenant permission.
+     */
+    // AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on.
+    Route::get('agent-routines', [AgentRoutinesController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-routines.index');
+    Route::put('agent-routines', [AgentRoutinesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-routines.update');
+    // AGENTS-AUTONOMY-001 — the trust ladder and an owner's switch per action class.
+    Route::get('agent-autonomy', [AgentAutonomyController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-autonomy.show');
+    Route::put('agent-autonomy', [AgentAutonomyController::class, 'update'])->middleware('project.can:budget.manage')->name('agent-autonomy.update');
+    // AGENTS-CENTER-001 — conversations with the six agents; replies are queued.
+    Route::get('agents', [AgentChatController::class, 'roles'])->middleware('project.can:campaigns.view')->name('agents.roles');
+    Route::get('agent-threads', [AgentChatController::class, 'threads'])->middleware('project.can:campaigns.view')->name('agent-threads.index');
+    Route::get('agent-threads/{thread}', [AgentChatController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-threads.show');
+    Route::post('agent-threads', [AgentChatController::class, 'send'])->middleware('project.can:campaigns.view')->name('agent-threads.send');
+    // AGENTS-CLIENT-RULES-001 — goals, decision rules and gateway limits; the comparison agents start from.
+    Route::get('agent-rules', [AgentRulesController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-rules.show');
+    Route::put('agent-rules', [AgentRulesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-rules.update');
+    Route::get('agent-rules/compare', [AgentRulesController::class, 'compare'])->middleware('project.can:analytics.view')->name('agent-rules.compare');
+    Route::get('agent-proposals', [ActionProposalController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-proposals.index');
+    Route::post('agent-proposals', [ActionProposalController::class, 'store'])->middleware('project.can:campaigns.manage')->name('agent-proposals.store');
+    Route::post('agent-proposals/{proposal}/approve', [ActionProposalController::class, 'approve'])->middleware('project.can:campaigns.manage')->name('agent-proposals.approve');
+    Route::post('agent-proposals/{proposal}/reject', [ActionProposalController::class, 'reject'])->middleware('project.can:campaigns.manage')->name('agent-proposals.reject');
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
     Route::get('reports/live/options/ads', [LiveReportBuilderController::class, 'ads'])->middleware('project.can:reports.view')->name('reports.live.options.ads');
     Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.live.store')

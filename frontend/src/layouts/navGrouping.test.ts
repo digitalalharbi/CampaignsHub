@@ -67,6 +67,11 @@ const AGENCY_BEFORE = [
   '/agency/recommendations',
   '/agency/spend-limits',
   /*
+   * ADDED by AGENTS-CENTER-001, deliberately: the Agent Center sits beside Recommendations in both
+   * portals, because an agent's proposal and a recommendation are read by the same operator.
+   */
+  '/agency/agents',
+  /*
    * ADDED by PORTFOLIO-SCOPE-001 §36, deliberately.
    *
    * «جميع المشاريع» is an agency-level scope, and an agency is the reader it was built for: how many
