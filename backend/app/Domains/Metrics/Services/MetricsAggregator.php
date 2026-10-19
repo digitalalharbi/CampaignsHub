@@ -229,7 +229,24 @@ final class MetricsAggregator
             return $out;
         }
 
-        $found = app(PeriodReachReader::class)->forScope($this->delivery($group), (float) ($out['impressions'] ?? 0), $from, $to);
+        return $this->withPeriodReachFor($out, $this->delivery($group), $from, $to);
+    }
+
+    /**
+     * The same, with the row's delivery already read — for a breakdown that reads every row's delivery
+     * in one query.
+     *
+     * @param  array<string,mixed>  $out
+     * @param  list<array{account: string, campaign: string|null}>  $delivery
+     * @return array<string,mixed>
+     */
+    private function withPeriodReachFor(array $out, array $delivery, Carbon $from, Carbon $to): array
+    {
+        if (($out['reach'] ?? null) !== null) {
+            return $out;
+        }
+
+        $found = app(PeriodReachReader::class)->forScope($delivery, (float) ($out['impressions'] ?? 0), $from, $to);
 
         if ($found !== null) {
             $out['reach'] = $found['reach'];
@@ -1476,6 +1493,20 @@ final class MetricsAggregator
             ? $this->spendByCampaign($prevFrom, $prevTo)
             : null;
 
+        /*
+         * CAMPAIGN-INTELLIGENCE-HUB — «no N+1». Each row's period reach needs the (account, external
+         * campaign) pairs that row's figures came from; they are read here for every campaign in ONE
+         * query instead of one query per row, which made a fifteen-campaign list cost five queries a
+         * campaign on every load.
+         */
+        $deliveries = [];
+        foreach ($this->base($from, $to)->select('daily_metrics.unified_campaign_id', 'daily_metrics.external_account_id', 'daily_metrics.external_campaign_id')->distinct()->get() as $d) {
+            $deliveries[(string) $d->unified_campaign_id][] = [
+                'account' => (string) $d->external_account_id,
+                'campaign' => $d->external_campaign_id === null ? null : (string) $d->external_campaign_id,
+            ];
+        }
+
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source', 'unified_campaigns.status as status')
@@ -1603,9 +1634,9 @@ final class MetricsAggregator
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
                 'provider' => $r->provider,
-            ] + $this->withPeriodReach(
+            ] + $this->withPeriodReachFor(
                 $this->withDerived((array) $r),
-                $this->base($from, $to)->where('daily_metrics.unified_campaign_id', $r->campaign_id),
+                $deliveries[(string) $r->campaign_id] ?? [],
                 $from,
                 $to,
             ))
