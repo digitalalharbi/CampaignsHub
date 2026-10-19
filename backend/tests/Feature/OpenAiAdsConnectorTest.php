@@ -207,6 +207,23 @@ final class OpenAiAdsConnectorTest extends TestCase
         $this->assertSame(1, $connector->syncAds('acct_live_1')->count);
     }
 
+    /** OPENAI-CHAT-CARD-TEXT-001 — a chat card's title and body travel as copy, beside the retained payload. */
+    public function test_a_chat_cards_title_and_body_are_handed_over_as_copy(): void
+    {
+        $connector = $this->connector();
+        $method = new \ReflectionMethod($connector, 'creative');
+        $method->setAccessible(true);
+
+        $out = $method->invoke($connector, 'ad_1', ['id' => 'ad_1', 'name' => 'Card A', 'creative' => [
+            'type' => 'chat_card', 'title' => 'A title', 'body' => 'A body', 'file_id' => 'file_9', 'target_url' => 'https://shop.example',
+        ]]);
+
+        $this->assertSame('chat_card', $out['format']);
+        $this->assertSame('A title', $out['headline']);
+        $this->assertSame('A body', $out['body']);
+        $this->assertSame('file_9', $out['raw']['file_id']);
+    }
+
     private function connector(): OpenAiAdsConnector
     {
         return (new OpenAiAdsConnector)->withConnection($this->connection);

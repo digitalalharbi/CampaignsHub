@@ -236,6 +236,12 @@ final class ImportExternalStructure
                 'cards' => $creative['cards'] ?? null,
                 'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
                 'destination_url' => $creative['destination_url'] ?? null,
+                // OPENAI-CHAT-CARD-TEXT-001 — the copy, when the connector sent it. Only written when it
+                // was sent: a provider that sends none must not blank copy another writer stored.
+                ...array_filter([
+                    'headline' => is_string($creative['headline'] ?? null) && $creative['headline'] !== '' ? $creative['headline'] : null,
+                    'body' => is_string($creative['body'] ?? null) && $creative['body'] !== '' ? $creative['body'] : null,
+                ], static fn ($v) => $v !== null),
                 /*
                  * CONTENT-NOTHING-TO-DRAW-WHY-001 — the body the platform sent, kept.
                  *

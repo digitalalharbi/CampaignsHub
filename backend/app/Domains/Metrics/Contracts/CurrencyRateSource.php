@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Contracts;
 
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Metrics\Rates\EcbReferenceRates;
 use Illuminate\Support\Carbon;
 
 /**
@@ -15,8 +16,9 @@ use Illuminate\Support\Carbon;
  * what to do with a gap. Those belong to {@see CurrencyRateFeed}, so a
  * second source added later cannot quietly bring a second policy with it.
  *
- * No implementation ships in this repository. Choosing a publisher is a commercial decision — see
- * `config/fx.php` — and a default here would make it on the operator's behalf.
+ * No implementation is selected by default. One opt-in source ships ({@see EcbReferenceRates},
+ * free and keyless) and is used only when an operator names it in `FX_RATE_DRIVER`: choosing a publisher is a
+ * decision — see `config/fx.php` — and a default here would make it on the operator's behalf.
  */
 interface CurrencyRateSource
 {

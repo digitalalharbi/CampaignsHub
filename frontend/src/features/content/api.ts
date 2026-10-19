@@ -94,6 +94,12 @@ export interface CreativePreview {
   cards_reported?: boolean
   /** Cards whose link was refused for carrying a credential — counted, so «3 of 5» is sayable. */
   cards_withheld?: number
+  /**
+   * OPENAI-CHAT-CARD-TEXT-001 — the ad's own title and body, for a chat card whose image the platform
+   * will not give back. Null for every other creative. It never stands in for the picture: the state
+   * stays `unavailable`.
+   */
+  text?: { headline: string | null; body: string | null } | null
   /** Set only on a client link: whether the reader may zoom, and whether the asset may be downloaded. */
   can_zoom?: boolean
   can_download?: boolean

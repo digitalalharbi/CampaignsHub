@@ -17,7 +17,10 @@ use Illuminate\Support\Carbon;
  */
 final class StoreDiscovery
 {
-    public function __construct(private readonly CommerceConnectorRegistry $registry) {}
+    public function __construct(
+        private readonly CommerceConnectorRegistry $registry,
+        private readonly StoreAssignment $assignment,
+    ) {}
 
     public function discover(ProviderConnection $connection): int
     {
@@ -30,7 +33,7 @@ final class StoreDiscovery
         $stores = $connector->withConnection($connection)->fetchStores();
 
         foreach ($stores as $store) {
-            ExternalAccount::withoutGlobalScopes()->updateOrCreate(
+            $row = ExternalAccount::withoutGlobalScopes()->updateOrCreate(
                 [
                     'provider_connection_id' => $connection->getKey(),
                     'external_id' => $store['external_id'],
@@ -52,6 +55,13 @@ final class StoreDiscovery
                     'last_synced_at' => null, // discovered, not synced — those are different facts
                 ],
             );
+
+            /*
+             * COMMERCE-ASSIGN-001 — one project to serve is not a decision to ask for; two is.
+             * Both ways a store arrives (our connect button, and Salla's own install claimed here) end
+             * in this method, so both get it. A store already assigned is left exactly where it is.
+             */
+            $this->assignment->autoAssign($row);
         }
 
         $connection->forceFill(['last_health_check_at' => Carbon::now()])->save();

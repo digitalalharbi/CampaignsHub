@@ -335,6 +335,30 @@ final class LiveReportShareTest extends TestCase
     }
 
     /**
+     * REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's column choice travels in the live payload, and a
+     * link with no choice carries an empty list (every column), never a guess.
+     */
+    public function test_the_owners_column_choice_travels_in_the_live_payload(): void
+    {
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'settings' => ['columns' => ['platforms' => ['spend', 'clicks']]],
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->shared->id],
+                'providers' => ['meta'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()
+            ->assertJsonPath('data.columns.platforms', ['spend', 'clicks']);
+
+        $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk()
+            ->assertJsonPath('data.columns', []);
+    }
+
+    /**
      * REPORT-PERIOD-001 — the link's period KIND decides the window and its comparison.
      */
     public function test_a_weekly_link_is_the_iso_week_and_says_what_it_is_compared_with(): void

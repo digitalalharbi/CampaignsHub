@@ -125,9 +125,10 @@ final class StoreSyncer
          * operator can re-authorise the right one.
          */
         try {
+            $profiles = $connector->fetchStores();
             $reached = array_values(array_filter(array_map(
                 static fn (array $s): string => (string) ($s['external_id'] ?? ''),
-                $connector->fetchStores(),
+                $profiles,
             )));
         } catch (Throwable $e) {
             return $this->finish($run, SyncRunStatus::Failed->value, 0, 'The store could not identify itself: '.$e->getMessage().' Nothing was fetched.');
@@ -142,6 +143,30 @@ final class StoreSyncer
                     ? 'The authorisation names no store, so nothing was fetched. Re-authorise this store.'
                     : 'The authorisation reaches a different store than the one bound here, so nothing was fetched. Re-authorise this store, or bind the store the authorisation reaches.',
             );
+        }
+
+        /*
+         * COMMERCE-ASSIGN-001 — the store profile fills what the card shows.
+         *
+         * The call above already asked the platform who this store is, so its answer is kept rather
+         * than thrown away: a name (the card was blank for a store discovered with none), the
+         * currency and the domain. Only what the platform actually sent is written — an empty answer
+         * never blanks a value we already hold.
+         */
+        foreach ($profiles as $profile) {
+            if ((string) ($profile['external_id'] ?? '') !== (string) $store->external_id) {
+                continue;
+            }
+
+            $metadata = (array) $store->metadata;
+            if (is_string($profile['domain'] ?? null) && $profile['domain'] !== '') {
+                $metadata['domain'] = $profile['domain'];
+            }
+            $store->forceFill(array_filter([
+                'name' => is_string($profile['name'] ?? null) && trim($profile['name']) !== '' ? $profile['name'] : null,
+                'currency' => is_string($profile['currency'] ?? null) && $profile['currency'] !== '' ? $profile['currency'] : null,
+                'metadata' => $metadata,
+            ], static fn ($v) => $v !== null))->save();
         }
 
         $problems = [];

@@ -10,6 +10,7 @@ import {
   syncBinding,
 } from './api'
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
+import { ProjectStores } from '@/features/commerce/ProjectStores'
 import { ProjectSyncHistory } from './ProjectSyncHistory'
 import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from '@/features/tasks/labels'
 import { Alert } from '@/components/ui/Alert'
@@ -268,6 +269,9 @@ export function ProjectIntegrationsPage() {
           <Plug size={15} /> {lang === 'ar' ? 'إدارة مصادر البيانات' : 'Manage data sources'}
         </Button>
       </div>
+
+      {/* COMMERCE-ASSIGN-001 — the stores that feed this project, and the ones nobody has assigned. */}
+      {projectId && <ProjectStores projectId={projectId} />}
 
       {/* Bound accounts for THIS project */}
       <Card>

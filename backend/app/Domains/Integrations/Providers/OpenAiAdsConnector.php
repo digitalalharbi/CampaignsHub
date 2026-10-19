@@ -212,6 +212,10 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
         return array_filter([
             'external_id' => (string) ($creative['id'] ?? $adId),
             'name' => $this->stringOrNull($creative, 'title') ?? $this->stringOrNull($ad, 'name'),
+            // OPENAI-CHAT-CARD-TEXT-001 — the card's own words, kept as copy: the Ads API documents file
+            // UPLOAD and no retrieval, so for a card with a file the text is all the product can show.
+            'headline' => $this->stringOrNull($creative, 'title'),
+            'body' => $this->stringOrNull($creative, 'body'),
             /* OpenAI's documented ad creative. Not a story, not a video, not a carousel. */
             'format' => 'chat_card',
             'thumbnail_url' => $this->stringOrNull($creative, 'image_url'),
