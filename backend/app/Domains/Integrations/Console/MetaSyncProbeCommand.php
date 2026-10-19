@@ -183,8 +183,8 @@ final class MetaSyncProbeCommand extends Command
         $viaUser = $this->accountIds($rows);
         $this->line('   me/adaccounts : '.($viaUser === [] ? '(none)' : implode(', ', $viaUser)));
 
-        $this->businessAssets($http, $base, $granted, $viaUser);
-        $this->storedAccounts($connection, $viaUser);
+        $viaBusiness = $this->businessAssets($http, $base, $granted, $viaUser);
+        $this->storedAccounts($connection, $viaUser, $viaBusiness);
 
         if (! $this->option('sync')) {
             $this->info('   verdict       : the account answers. Re-run with --sync to write and prove fresh rows.');
@@ -213,8 +213,9 @@ final class MetaSyncProbeCommand extends Command
      *
      * @param  list<string>  $granted
      * @param  list<string>  $viaUser
+     * @return list<string> every account id a business edge listed (empty when the edges were not askable)
      */
-    private function businessAssets(PendingRequest $http, string $base, array $granted, array $viaUser): void
+    private function businessAssets(PendingRequest $http, string $base, array $granted, array $viaUser): array
     {
         $this->line('   ── business assets');
 
@@ -223,14 +224,14 @@ final class MetaSyncProbeCommand extends Command
             $this->line('                   edges cannot be read. An ad account reachable only through a Business Manager');
             $this->line('                   partner assignment is invisible to this token until the person is assigned to it.');
 
-            return;
+            return [];
         }
 
         $pages = 0;
         $businesses = $this->readEdge($http, $base.'/me/businesses', ['fields' => 'id', 'limit' => 200], 'businesses', $pages);
 
         if ($businesses === null) {
-            return;
+            return [];
         }
 
         $this->line('   businesses    : '.count($businesses).' reachable by this person');
@@ -270,7 +271,9 @@ final class MetaSyncProbeCommand extends Command
         $onlyBusiness = array_diff(array_keys($viaBusiness), $viaUser);
         $onlyUser = array_diff($viaUser, array_keys($viaBusiness));
 
-        $this->line('   in a business, NOT in me/adaccounts : '.count($onlyBusiness).' account(s)'.($onlyBusiness === [] ? '' : ' ← discovery cannot see these'));
+        // Not on the person's own edge. Discovery ALSO reads the business edges (see MetaConnector), so this
+        // is where an account is found, not a claim that it is missed — the stored section below says which.
+        $this->line('   in a business, NOT in me/adaccounts : '.count($onlyBusiness).' account(s)'.($onlyBusiness === [] ? '' : ' ← not on the person\'s own edge'));
 
         foreach ($onlyBusiness as $accountId) {
             foreach ($viaBusiness[$accountId] as $where) {
@@ -279,6 +282,8 @@ final class MetaSyncProbeCommand extends Command
         }
 
         $this->line('   in me/adaccounts, NOT in a business : '.count($onlyUser).' account(s)'.($onlyUser === [] ? '' : ' — '.implode(', ', $onlyUser)));
+
+        return array_values(array_map('strval', array_keys($viaBusiness)));
     }
 
     /**
@@ -289,8 +294,9 @@ final class MetaSyncProbeCommand extends Command
      * yet. Ids only.
      *
      * @param  list<string>  $viaUser
+     * @param  list<string>  $viaBusiness  account ids the business edges listed
      */
-    private function storedAccounts(ProviderConnection $connection, array $viaUser): void
+    private function storedAccounts(ProviderConnection $connection, array $viaUser, array $viaBusiness = []): void
     {
         $stored = ExternalAccount::withoutGlobalScopes()
             ->where('provider_connection_id', $connection->getKey())
@@ -313,6 +319,17 @@ final class MetaSyncProbeCommand extends Command
 
         $unfiled = array_diff($viaUser, $held);
         $this->line('   listed by Meta, not stored yet      : '.count($unfiled).' account(s)'.($unfiled === [] ? '' : ' — '.implode(', ', $unfiled)));
+
+        /*
+         * META-PARTNER-ACCOUNT-DISCOVERY-001 — the question the user-edge line above cannot answer: of the
+         * accounts only a BUSINESS edge lists (Partner-shared in, or owned), does this install hold each one?
+         * Ids only; a business NAME is a customer's and never reaches the log.
+         */
+        $businessOnly = array_values(array_diff($viaBusiness, $viaUser));
+        $businessHeld = array_values(array_intersect($businessOnly, $held));
+        $businessMissing = array_values(array_diff($businessOnly, $held));
+        $this->line('   business-edge accounts stored       : '.count($businessHeld).' of '.count($businessOnly).($businessHeld === [] ? '' : ' — '.implode(', ', $businessHeld)));
+        $this->line('   business-edge accounts NOT stored   : '.count($businessMissing).' account(s)'.($businessMissing === [] ? '' : ' — '.implode(', ', $businessMissing)));
     }
 
     /**

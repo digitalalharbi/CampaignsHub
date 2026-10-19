@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
@@ -174,12 +175,47 @@ final class MetaSyncProbeTest extends TestCase
         $this->artisan('integrations:meta-probe')
             ->expectsOutputToContain('1 reachable by this person')
             ->expectsOutputToContain('client_ad_accounts: 2 account(s) — 1234567890, 628943503215859')
-            ->expectsOutputToContain('in a business, NOT in me/adaccounts : 1 account(s) ← discovery cannot see these')
+            ->expectsOutputToContain('in a business, NOT in me/adaccounts : 1 account(s) ← not on the person\'s own edge')
             ->expectsOutputToContain('628943503215859  via client_ad_accounts of business 111222333444 (account_status=1)')
             ->expectsOutputToContain('in me/adaccounts, NOT in a business : 0 account(s)')
             ->doesntExpectOutputToContain('Hanka Company Secret')
             ->doesntExpectOutputToContain('hanka')
             ->assertSuccessful();
+    }
+
+    /**
+     * META-PARTNER-ACCOUNT-DISCOVERY-001 — the question the user-edge diff cannot answer: of the accounts ONLY a
+     * business lists, does this install hold each one? Said by id, in both directions.
+     */
+    public function test_it_says_whether_a_business_only_account_is_stored(): void
+    {
+        $connection = $this->connection();
+        $http = [
+            '*/me/permissions' => Http::response(['data' => [
+                ['permission' => 'ads_read', 'status' => 'granted'],
+                ['permission' => 'business_management', 'status' => 'granted'],
+            ]]),
+            '*/me/adaccounts*' => Http::response(['data' => [['account_id' => '1234567890', 'account_status' => 1]]]),
+            '*/me/businesses*' => Http::response(['data' => [['id' => '111222333444']]]),
+            '*/111222333444/owned_ad_accounts*' => Http::response(['data' => []]),
+            '*/111222333444/client_ad_accounts*' => Http::response(['data' => [
+                ['account_id' => '1234567890', 'account_status' => 1],
+                ['account_id' => '628943503215859', 'account_status' => 1],
+                ['account_id' => '700516165701913', 'account_status' => 1],
+            ]]),
+        ];
+        Http::fake($http);
+        $held = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(), 'provider' => 'meta', 'account_type' => 'ad_account',
+            'external_id' => 'act_628943503215859', 'name' => 'x', 'currency' => 'SAR', 'status' => 'active',
+        ]);
+
+        $this->artisan('integrations:meta-probe')
+            ->expectsOutputToContain('business-edge accounts stored       : 1 of 2 — 628943503215859')
+            ->expectsOutputToContain('business-edge accounts NOT stored   : 1 account(s) — 700516165701913')
+            ->assertSuccessful();
+
+        $held->delete();
     }
 
     /**
