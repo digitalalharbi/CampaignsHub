@@ -13,6 +13,7 @@ use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\AI\Models\AIProviderCredential;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -241,6 +242,34 @@ final class AgentEngineTest extends TestCase
         $this->assertSame('failed', $thread['status']);
         $this->assertSame('ai_token_limit_reached', $thread['error']);
         $this->assertCount(0, $this->model->calls);
+    }
+
+    public function test_the_creative_agent_reads_this_project_s_ads_and_copy_only(): void
+    {
+        $account = ExternalAccount::withoutGlobalScopes()->firstOrFail();
+        foreach ([[$this->project, 'Ramadan hook', 'Order before Eid'], [$this->other, 'Foreign ad', 'Not yours to read']] as [$project, $name, $body]) {
+            ExternalCreative::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'provider' => 'meta', 'external_account_id' => $account->id,
+                'external_creative_id' => uniqid('cr_'), 'name' => $name, 'format' => 'image', 'body' => $body, 'status' => 'active',
+            ]);
+        }
+        $this->model->script([$this->toolTurn('list_creatives', ['days' => 14]), $this->textTurn('Draft: …')]);
+
+        $this->send('Which ads are tired?', 'creative');
+
+        $this->assertContains('list_creatives', array_column($this->model->calls[0]['tools'], 'name'));
+        $result = collect($this->model->calls[1]['history'])->last()['blocks'][0];
+        $this->assertFalse($result['is_error']);
+        $this->assertStringContainsString('Order before Eid', $result['content']);
+        $this->assertStringNotContainsString('Not yours to read', $result['content']);
+    }
+
+    public function test_the_campaign_agent_does_not_hold_the_creative_tool(): void
+    {
+        $this->model->script([$this->textTurn('ok')]);
+        $this->send('Hi', 'campaign');
+
+        $this->assertNotContains('list_creatives', array_column($this->model->calls[0]['tools'], 'name'));
     }
 
     public function test_a_disabled_agent_answers_why_without_calling_a_model(): void

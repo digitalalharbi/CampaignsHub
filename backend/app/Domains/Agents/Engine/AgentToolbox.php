@@ -43,6 +43,7 @@ final class AgentToolbox
             'list_campaigns' => ['Campaigns of this project over the last N days, with spend, results, cost per result, ROAS and the previous period.', ['days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], []],
             'get_history' => ['Daily figures of one campaign over the last N days.', ['campaign_id' => ['type' => 'string'], 'days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], ['campaign_id']],
             'compare_targets' => ['Every campaign judged against the client\'s own targets (on_target, off_target, not_judged, no_figure).', ['days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], []],
+            'list_creatives' => ['The project\'s ads as the content library shows them, most-spent first, with each ad\'s copy, figures and fatigue verdict (fatigued, watch, stable, insufficient_data).', ['days' => ['type' => 'integer', 'minimum' => 7, 'maximum' => 90]], []],
             'get_rules' => ['The client\'s goals, decision rules, special days, forbidden words and the approval limits.', [], []],
             'propose_change' => ['Put forward ONE change for a person to approve: pause, resume or set_daily_budget on a campaign or ad set. It does not change anything by itself.', [
                 'provider' => ['type' => 'string'], 'external_account_id' => ['type' => 'string', 'description' => 'Needed only when the project has more than one account on that platform (see get_rules).'], 'target_type' => ['type' => 'string', 'enum' => ['campaign', 'ad_set']],
@@ -88,6 +89,7 @@ final class AgentToolbox
                 'get_history' => $this->history($project, $input),
                 'compare_targets' => $this->read->compareTargets($project, $this->days($input)),
                 'get_rules' => $this->rules($project),
+                'list_creatives' => $this->read->listCreatives($project, max(7, $this->days($input + ['days' => 14]))),
                 'propose_change' => $this->propose($project, $user, $agentKey, $input),
                 'ask_agent' => ['answer' => $askAgent === null ? 'Delegation is not available here.' : $askAgent((string) ($input['agent'] ?? ''), (string) ($input['question'] ?? ''))],
                 default => throw new InvalidArgumentException('Unknown tool.'),

@@ -41,12 +41,12 @@ TXT;
                 'brief' => 'You manage campaigns: decide whether to pause, resume or change a daily budget, and put each change forward with propose_change, with its reason and the figures behind it. A person approves it.',
             ],
             'analyst' => [
-                'ar' => 'المحلّل', 'en' => 'Analyst', 'tools' => $read, 'enabled' => true, 'why_disabled' => null,
+                'ar' => 'المحلّل', 'en' => 'Analyst', 'tools' => [...$read, 'list_creatives'], 'enabled' => true, 'why_disabled' => null,
                 'brief' => 'You analyse daily performance against the client\'s targets, spot anomalies and ad fatigue, and say which campaigns are above and below target. You are read-only.',
             ],
             'creative' => [
-                'ar' => 'وكيل الإبداع', 'en' => 'Creative Agent', 'tools' => $read, 'enabled' => true, 'why_disabled' => null,
-                'brief' => 'You review ad performance and suggest new copy, hooks and video ideas as drafts. Respect the client\'s forbidden words. Drafts only.',
+                'ar' => 'وكيل الإبداع', 'en' => 'Creative Agent', 'tools' => [...$read, 'list_creatives'], 'enabled' => true, 'why_disabled' => null,
+                'brief' => 'You review the ads with list_creatives: name the fatigued ones with their figures, and write new copy, hooks and video ideas as DRAFTS, each tied to the ad it replaces. Never use the client\'s forbidden words (get_rules). Drafts only: you publish nothing and change no ad.',
             ],
             'leads' => [
                 'ar' => 'وكيل العملاء المحتملين', 'en' => 'Leads Agent', 'tools' => [], 'enabled' => false,

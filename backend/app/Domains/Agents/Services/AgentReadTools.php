@@ -6,6 +6,9 @@ namespace App\Domains\Agents\Services;
 
 use App\Domains\Agents\Models\ClientAgentRule;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -22,7 +25,50 @@ use Illuminate\Support\Carbon;
  */
 final class AgentReadTools
 {
-    public function __construct(private readonly MetricsAggregator $metrics) {}
+    public function __construct(
+        private readonly MetricsAggregator $metrics,
+        private readonly CreativeRows $creatives,
+    ) {}
+
+    /**
+     * list_creatives (AGENTS-CREATIVE-001) — the project's ads as the content library shows them: the same
+     * `CreativeRows` figures and the same fatigue verdict, the most-spent first, with each ad's own copy so
+     * the Creative Agent can write drafts against it. Ad copy is advertiser text and reaches the model as
+     * data, never as instructions.
+     *
+     * @return array{window: array{from: string, to: string}, creatives: list<array<string, mixed>>, shown: int, of: int}
+     */
+    public function listCreatives(Project $project, int $days = 14, int $take = 20): array
+    {
+        [$from, $to] = $this->windows($days);
+
+        $query = ExternalCreative::query()->where('project_id', $project->getKey());
+        BoundAccountVisibility::apply($query, 'external_creatives');
+        $all = $query->limit(400)->get();
+
+        $rows = collect($this->creatives->present($all, $from, $to, withFatigue: true))
+            ->sortByDesc(static fn (array $r): float => (float) ($r['metrics']['spend'] ?? 0))
+            ->take($take);
+        $text = $all->keyBy(static fn (ExternalCreative $c): string => (string) $c->getKey());
+
+        return [
+            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'shown' => $rows->count(),
+            'of' => $all->count(),
+            'creatives' => $rows->map(static function (array $r) use ($text): array {
+                $c = $text[(string) $r['id']] ?? null;
+                $m = (array) ($r['metrics'] ?? []);
+
+                return [
+                    'id' => (string) $r['id'], 'name' => $r['name'] ?? null, 'provider' => $r['provider'] ?? null, 'format' => $r['format'] ?? null,
+                    'headline' => $c?->headline, 'body' => $c !== null && $c->body !== null ? mb_substr((string) $c->body, 0, 500) : null, 'cta' => $c?->cta,
+                    'spend' => $m['spend'] ?? null, 'impressions' => $m['impressions'] ?? null, 'clicks' => $m['clicks'] ?? null,
+                    'ctr' => $m['ctr'] ?? null, 'cpa' => $m['cpa'] ?? null, 'roas' => $m['roas'] ?? null, 'conversions' => $m['conversions'] ?? null,
+                    'fatigue' => isset($r['fatigue']) ? ['status' => $r['fatigue']['status'] ?? null, 'note' => $r['fatigue']['note_en'] ?? null, 'missing' => $r['fatigue']['missing'] ?? []] : null,
+                ];
+            })->values()->all(),
+        ];
+    }
 
     /**
      * list_campaigns — the project's campaigns over a window, with the previous window for trend.

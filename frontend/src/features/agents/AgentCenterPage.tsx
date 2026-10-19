@@ -34,6 +34,7 @@ const TOOL_WORDS: Record<string, { ar: string; en: string }> = {
   get_history: { ar: 'قرأ السجل اليومي', en: 'Read the daily history' },
   compare_targets: { ar: 'قارن بالأهداف', en: 'Compared with the targets' },
   get_rules: { ar: 'قرأ قواعد العميل', en: "Read the client's rules" },
+  list_creatives: { ar: 'قرأ الإعلانات وإجهادها', en: 'Read the ads and their fatigue' },
   propose_change: { ar: 'اقترح تغييرًا (بانتظار الموافقة)', en: 'Proposed a change (awaiting approval)' },
   ask_agent: { ar: 'سأل وكيلًا متخصصًا', en: 'Asked a specialist agent' },
 }
