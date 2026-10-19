@@ -79,6 +79,11 @@ const AGENCY_BEFORE = [
    */
   '/agency/agents',
   /*
+   * ADDED by AUTO-RULES-UI-010 (Owner correction 2026-10-19), deliberately and FIRST in the AI agents area:
+   * automated rules are the product, the conversation is secondary.
+   */
+  '/agency/automation',
+  /*
    * ADDED by PORTFOLIO-SCOPE-001 §36, deliberately.
    *
    * «جميع المشاريع» is an agency-level scope, and an agency is the reader it was built for: how many

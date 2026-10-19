@@ -36,6 +36,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // AGENTS-ROUTINES-001 — four schedules of one command, each only for projects that opted in.
         'agents:run-routines',
         'alerts:evaluate',
+        // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.
+        'automation:evaluate',
         'commerce:sync',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
         'delivery:prepare-weekly',

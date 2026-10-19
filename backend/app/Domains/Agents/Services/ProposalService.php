@@ -98,7 +98,8 @@ final class ProposalService
             after: ['agent' => $agentKey, 'action' => $proposal->action, 'status' => $proposal->status],
         );
 
-        if ($proposal->status === ActionProposal::PENDING && $by === null) {
+        // AUTO-RULES-001 — a rule in «recommend» mode asks for a person whatever the ladder allows.
+        if ($proposal->status === ActionProposal::PENDING && $by === null && ($input['allow_auto'] ?? true) === true) {
             return $this->runIfGranted($proposal);
         }
 

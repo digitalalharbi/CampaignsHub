@@ -1,4 +1,5 @@
 import {
+  Workflow,
   Bot,
   Layers,
   Link2,
@@ -68,6 +69,7 @@ export const appNavGroups: readonly NavGroup[] = [
     key: 'agents',
     ar: 'الوكلاء الأذكياء', en: 'AI agents', icon: Bot,
     leaves: [
+      { to: '/app/automation', ar: 'القواعد الآلية', en: 'Automated rules', icon: Workflow, ent: 'analytics' },
       { to: '/app/agents', ar: 'مركز الوكلاء', en: 'Agent Center', icon: Bot, ent: 'analytics' },
       { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
     ],
