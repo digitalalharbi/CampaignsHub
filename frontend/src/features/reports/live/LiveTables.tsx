@@ -1,6 +1,5 @@
-import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderName } from '@/components/ProviderMark'
 import { compact, percent } from '@/features/analytics/format'
-import { canonicalPlatform } from '@/lib/platforms'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { ChartCard } from '@/features/analytics/charts'
 import type { LivePayload } from '../api'
@@ -62,7 +61,7 @@ export function TablesView({
 
   const platHead = [ar ? 'المنصة' : 'Platform', results, ar ? 'تغيّر النتائج' : 'Results vs previous', ar ? 'الظهور' : 'Impressions', ar ? 'تغيّر الظهور' : 'Impressions vs previous', ar ? 'نسبة النقر' : 'CTR', ...(money ? [ar ? 'الإنفاق' : 'Spend', cost] : [])]
   const platRows = platforms.map((p) => [
-    providerLabel(canonicalPlatform(String(p.provider ?? '')), locale), compact(num(p, 'conversions')), delta(movement(p, 'conversions')),
+    <ProviderName provider={String(p.provider ?? '')} locale={locale} size={16} />, compact(num(p, 'conversions')), delta(movement(p, 'conversions')),
     compact(num(p, 'impressions')), delta(movement(p, 'impressions')), percent(num(p, 'ctr'), 2),
     ...(money ? [moneyCell(num(p, 'spend')), costCell(num(p, 'cpa'))] : []),
   ])
@@ -70,7 +69,7 @@ export function TablesView({
 
   const accHead = [ar ? 'الحساب الإعلاني' : 'Ad account', ar ? 'المنصة' : 'Platform', results, ar ? 'الظهور' : 'Impressions', ar ? 'النقرات' : 'Clicks', ...(money ? [ar ? 'الإنفاق' : 'Spend', cost] : [])]
   const accRows = accounts.map((a) => [
-    String(a.account_name ?? (ar ? 'حساب بلا اسم' : 'Unnamed account')), providerLabel(canonicalPlatform(String(a.provider ?? '')), locale),
+    String(a.account_name ?? (ar ? 'حساب بلا اسم' : 'Unnamed account')), <ProviderName provider={String(a.provider ?? '')} locale={locale} size={16} />,
     compact(num(a, 'conversions')), compact(num(a, 'impressions')), compact(num(a, 'clicks')),
     ...(money ? [moneyCell(num(a, 'spend')), costCell(num(a, 'cpa'))] : []),
   ])
@@ -80,7 +79,7 @@ export function TablesView({
   const conHead = [ar ? 'المحتوى' : 'Content', ar ? 'المنصة' : 'Platform', results, ar ? 'الظهور' : 'Impressions', ar ? 'النقرات' : 'Clicks', ...(money ? [ar ? 'الإنفاق' : 'Spend', cost] : [])]
   const conRows = roster.map((c) => [
     <button key="n" type="button" className="max-w-[16rem] truncate text-start font-semibold text-brand-600 hover:underline" onClick={() => onOpenContent(c)}>{c.name ?? '—'}</button>,
-    providerLabel(canonicalPlatform(String(c.provider ?? '')), locale),
+    <ProviderName provider={String(c.provider ?? '')} locale={locale} size={16} />,
     compact(num(conRow(c), 'conversions')), compact(num(conRow(c), 'impressions')), compact(num(conRow(c), 'clicks')),
     ...(money ? [moneyCell(num(conRow(c), 'spend')), costCell(num(conRow(c), 'cpa'))] : []),
   ])

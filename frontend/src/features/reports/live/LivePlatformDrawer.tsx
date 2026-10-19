@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ProviderName } from '@/components/ProviderMark'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -111,8 +112,7 @@ export function LivePlatformDrawer({
       >
         <header className="sticky -top-4 z-10 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2 sm:-top-5 sm:-mx-5 sm:px-5">
           <h2 className="flex min-w-0 items-center gap-2 truncate text-lg font-extrabold text-text-primary">
-            <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ background: platformColor(platform) }} aria-hidden />
-            {name}
+            <ProviderName provider={platform} locale={locale === 'ar' ? 'ar' : 'en'} size={24} />
           </h2>
           <button
             type="button"

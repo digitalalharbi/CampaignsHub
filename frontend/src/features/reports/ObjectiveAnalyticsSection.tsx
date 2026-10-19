@@ -1,4 +1,5 @@
 import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
@@ -115,8 +116,7 @@ function FamilyCard({ block, currency, ar, showContent }: { block: ObjectiveFami
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-secondary">
             {block.contribution.rows.map((r) => (
               <span key={r.provider} className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: platformColor(canonicalPlatform(r.provider)) }} aria-hidden />
-                {providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en')}
+                <ProviderName provider={r.provider} locale={ar ? 'ar' : 'en'} size={16} />
                 <Num className="tnum font-semibold text-text-primary">{r.share === null ? '—' : `${(r.share * 100).toFixed(1)}%`}</Num>
               </span>
             ))}

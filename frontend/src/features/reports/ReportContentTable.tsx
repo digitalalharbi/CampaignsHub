@@ -1,9 +1,9 @@
 import { MetricTable } from '@/components/ui/MetricTable'
+import { ProviderName } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { AdPoster } from '@/features/content/AdPoster'
 import { DeliveryBadge } from '@/features/content/DeliveryBadge'
 import { relevanceOf } from '@/features/campaigns/campaignRelevance'
-import { providerLabel } from '@/features/campaigns/labels'
 import type { Locale } from '@/stores/ui'
 import { figuresFor, type ReportAd } from './ReportAdsSection'
 
@@ -124,7 +124,7 @@ export function ReportContentTable({
           {identity}
         </button>
       ),
-      <span key="platform" className="text-text-secondary">{ad.provider ? providerLabel(ad.provider, locale) : '—'}</span>,
+      <span key="platform" className="text-text-secondary">{ad.provider ? <ProviderName provider={ad.provider} locale={locale === 'ar' ? 'ar' : 'en'} size={16} /> : '—'}</span>,
       /*
        * The same rule the library and its card read. A report that called a creative running while
        * the library called it stopped would be two answers about one row. Null facts read as «idle»

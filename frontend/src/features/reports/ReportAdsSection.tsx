@@ -1,4 +1,5 @@
 import { AdPoster } from '@/features/content/AdPoster'
+import { ProviderName } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { objectiveLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -762,7 +763,7 @@ export function ReportPlatformCreatives({
         >
           <div className="flex flex-wrap items-baseline gap-2">
             <span className="font-heading text-sm font-extrabold text-text-primary">
-              {providerLabel(canonicalPlatform(platform.provider), locale)}
+              <ProviderName provider={platform.provider} locale={locale === 'ar' ? 'ar' : 'en'} size={20} />
             </span>
             {typeof platform.candidates === 'number' && (
               <span className="text-[11px] text-text-muted">

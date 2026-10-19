@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { rowMoney } from '@/features/analytics/format'
@@ -430,7 +431,7 @@ export function PlatformsView({
             >
               <span className="block h-1.5" style={{ background: platformColor(p) }} aria-hidden />
               <span className="flex flex-col gap-1 p-3">
-                <span className="truncate text-sm font-bold text-text-primary">{providerLabel(p, locale)}</span>
+                <span className="flex min-w-0 text-sm font-bold text-text-primary"><ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={20} /></span>
                 <span className="tnum truncate text-lg font-extrabold text-text-primary">
                   <Num>{row ? rowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
                 </span>
@@ -611,8 +612,7 @@ export function ContentView({
               onClick={() => onPlatform(p)}
               className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-semibold transition-colors ${selected ? 'border-transparent bg-brand-600 text-white' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
             >
-              {p && <span className="inline-block h-2 w-2 rounded-full" style={{ background: platformColor(p) }} aria-hidden />}
-              {p ? providerLabel(p, locale) : (ar ? 'كل المنصات' : 'All platforms')}
+              {p ? <ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={16} /> : (ar ? 'كل المنصات' : 'All platforms')}
             </button>
           )
         })}

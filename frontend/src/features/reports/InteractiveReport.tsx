@@ -11,6 +11,7 @@ import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
 import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { ReportLinksSection } from './ReportLinksSection'
 import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderMark, ProviderName } from '@/components/ProviderMark'
 import { canonicalPlatform } from '@/lib/platforms'
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
@@ -516,7 +517,7 @@ function Title({ platform, children, sub }: { platform?: string; children: React
   return (
     <div className="mb-3">
       <div className="flex items-center gap-2">
-        {platform && <span className="h-3.5 w-3.5 rounded-full" style={{ background: platformColor(platform) }} />}
+        {platform && <ProviderMark provider={platform} size={26} />}
         <h2 className="text-2xl font-extrabold tracking-tight text-text-primary">{children}</h2>
       </div>
       {sub && <p className="mt-0.5 text-sm text-text-secondary">{sub}</p>}
@@ -697,7 +698,7 @@ export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
           <span>{meta.clientName ?? 'تقرير الأداء'}</span>
         </div>
         <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), 'ar')}</span>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold"><ProviderName provider={canonicalPlatform(p)} locale="ar" size={16} /></span>)}</div>
       </div>
       <div className="flex flex-wrap gap-4 text-sm opacity-90">
         <span>الفترة: <span className="tnum">{data.period.from} → {data.period.to}</span></span>

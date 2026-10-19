@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
+import { ProviderName } from '@/components/ProviderMark'
 import { AdPoster } from '@/features/content/AdPoster'
-import { providerLabel } from '@/features/campaigns/labels'
-import { platformColor } from '@/features/analytics/components'
 import { MetricLineChart } from '@/features/analytics/charts'
 import { canonicalPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
@@ -76,8 +75,7 @@ export function ContentTile({
         <div className="truncate text-sm font-bold text-text-primary" title={content.name ?? undefined}>{content.name ?? '—'}</div>
         {provider && (
           <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
-            <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: platformColor(provider) }} aria-hidden />
-            {providerLabel(provider, locale)}
+            <ProviderName provider={provider} locale={locale === 'ar' ? 'ar' : 'en'} size={16} />
           </div>
         )}
       </div>
