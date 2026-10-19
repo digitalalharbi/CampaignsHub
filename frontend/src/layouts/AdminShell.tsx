@@ -196,7 +196,7 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
-            CampaignsHub
+            {productName(ar ? 'ar' : 'en')}
           </span>
           <span data-testid="admin-scope-note" className="block truncate text-[11px] text-text-muted">
             {ar ? 'إدارة المنصة' : 'Platform administration'}

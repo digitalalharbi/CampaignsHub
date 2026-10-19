@@ -4,9 +4,11 @@ import { CampaignQuickPreview } from './CampaignQuickPreview'
 import type { CampaignRow } from './api'
 import { renderWithProviders } from '@/test/utils'
 
+const trend = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>> }))
+
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
-  useTimeseries: () => ({ data: [], isLoading: false, isError: false }),
+  useTimeseries: () => ({ data: trend.rows, isLoading: false, isError: false }),
 }))
 
 const row = (over: Partial<CampaignRow> = {}): CampaignRow => ({
@@ -85,5 +87,38 @@ describe('the campaign quick preview', () => {
     )
 
     expect(screen.getByTestId('campaign-quick-preview').textContent ?? '').not.toContain('sales')
+  })
+
+  /* REPORT-CHARTS-COMPLETE-001 — the sparkline is drawn only from honest days, and says what it is. */
+  describe('the spend sparkline', () => {
+    const open = () => renderWithProviders(
+      <CampaignQuickPreview row={row()} projectId="p1" range={{ from: '2026-09-01', to: '2026-09-30' }} onClose={() => {}} />,
+      { route: '/agency/analytics', locale: 'en' },
+    )
+
+    it('is drawn from real days and labelled', () => {
+      trend.rows = [{ date: '2026-09-01', spend: 100 }, { date: '2026-09-02', spend: 140 }, { date: '2026-09-03', spend: 120 }]
+      open()
+
+      expect(screen.getByTestId('campaign-quick-preview-trend')).toHaveTextContent('Daily spend')
+      expect(screen.getByRole('img', { name: 'Daily spend trend for the campaign' })).toBeInTheDocument()
+    })
+
+    it('is not drawn when the days carry no spend, instead of a flat line at zero', () => {
+      trend.rows = [{ date: '2026-09-01', spend: null }, { date: '2026-09-02', spend: null }]
+      open()
+
+      expect(screen.queryByTestId('campaign-quick-preview-trend')).not.toBeInTheDocument()
+    })
+
+    it('is not drawn when the money is withheld awaiting a rate', () => {
+      trend.rows = [
+        { date: '2026-09-01', spend: null, spend_withheld_rows: 1, spend_original: 50, money_original_currency: 'EUR', money_original_currencies: 1 },
+        { date: '2026-09-02', spend: null, spend_withheld_rows: 1, spend_original: 60, money_original_currency: 'EUR', money_original_currencies: 1 },
+      ]
+      open()
+
+      expect(screen.queryByTestId('campaign-quick-preview-trend')).not.toBeInTheDocument()
+    })
   })
 })

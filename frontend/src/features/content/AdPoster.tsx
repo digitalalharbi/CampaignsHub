@@ -103,6 +103,35 @@ export function AdPoster({
      * moves to the `title` rather than being cut down. Both come from the same reading, so the label
      * and the sentence cannot describe different absences.
      */
+    /*
+     * OPENAI-CHAT-CARD-TEXT-001 — the ad's own words, where its picture cannot be had.
+     *
+     * A ChatGPT Ads card holds an uploaded file the platform's API gives no way to read back, so it
+     * would otherwise be a grey box. Its title and body are the real creative, drawn as a text card
+     * that says plainly it is the text and not the image. `data-absence` still names the absence, so
+     * nothing reading the page mistakes this for a picture.
+     */
+    const copy = preview?.text
+    if (copy && (copy.headline || copy.body)) {
+      const key = provider ? canonicalPlatform(provider) : null
+      const color = key ? platformColor(key) : 'var(--brand-600)'
+
+      return (
+        <span
+          data-testid={testid ? `${testid}-absent` : undefined}
+          data-absence={reason}
+          data-cover="text-card"
+          title={absenceLabel(reading, ar)}
+          className={`relative flex flex-col justify-center gap-1 overflow-hidden rounded-lg border border-border bg-surface-secondary p-2.5 text-start ${className}`}
+        >
+          <span aria-hidden className="absolute inset-x-0 top-0 h-1.5" style={{ background: color }} />
+          {copy.headline && <span className="line-clamp-2 text-xs font-bold text-text-primary">{copy.headline}</span>}
+          {copy.body && <span className="line-clamp-4 text-[11px] leading-snug text-text-secondary">{copy.body}</span>}
+          <span className="text-[10px] font-semibold text-text-muted">{ar ? 'نص الإعلان — الصورة غير متاحة' : 'Ad text — image not available'}</span>
+        </span>
+      )
+    }
+
     // MEDIA-TRUTH-001 — a film the platform sent WITHOUT a cover frame still has one: its own first frame.
     // Drawn from the real video (metadata only, paused, muted), never invented; the typed cover below
     // is for the creative that has no media at all.
