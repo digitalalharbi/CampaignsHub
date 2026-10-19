@@ -9,7 +9,7 @@ import { brand } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
 import { AttentionBlocks } from './AttentionBlocks'
-import { dailyRecordsChosen, sectionShown, type ReportSectionKey } from './reportSections'
+import { dailyRecordsChosen, sectionShown, type PrintEvidence, type ReportSectionKey } from './reportSections'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
 import { metricState } from '@/features/content/metrics'
@@ -845,6 +845,24 @@ export function PrintDocument({
         REPORT-FOOTER-001 — no appendix section: one small muted footer, outside the numbered body, with the
         report's facts under it. It is not counted as a section and has no heading.
       */}
+      {/* WD-EVIDENCE-001 — the platform screenshots the Owner included, as the document's appendix. */}
+      {((data as { platform_evidence?: PrintEvidence[] }).platform_evidence ?? []).length > 0 && (
+        <section className="doc-section" data-testid="print-evidence">
+          <h2>Appendix: Platform Screenshots</h2>
+          <p>Shown for reference. Every figure in this report comes from the platforms' structured data, not from these images.</p>
+          {((data as { platform_evidence?: PrintEvidence[] }).platform_evidence ?? []).map((e) => (
+            <figure key={e.id} data-testid={`print-evidence-${e.id}`} style={{ breakInside: 'avoid', margin: '12px 0' }}>
+              {e.image && e.url ? <img src={e.url} alt={`${providerLabel(e.provider, 'en')} screenshot`} style={{ maxWidth: '100%', maxHeight: '180mm', objectFit: 'contain' }} /> : <p>PDF attachment: {e.name ?? '—'}</p>}
+              <figcaption>
+                {providerLabel(e.provider, 'en')}
+                {e.period_start && e.period_end ? ` · ${e.period_start} → ${e.period_end}` : ''}
+                {e.note ? ` · ${e.note}` : ''}
+              </figcaption>
+            </figure>
+          ))}
+        </section>
+      )}
+
       <footer className="doc-footnote" data-testid="print-document-footer">
         <p>{REPORT_NOTE.en}</p>
         {/* AGENTS-REPORT-NOTES-BLOCK-001 — this document prints spend, so it carries the spend notes. */}

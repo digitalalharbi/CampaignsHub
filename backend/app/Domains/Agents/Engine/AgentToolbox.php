@@ -9,12 +9,14 @@ use App\Domains\Agents\Services\AgentReadTools;
 use App\Domains\Agents\Services\ProposalService;
 use App\Domains\Agents\Support\ProposalAction;
 use App\Domains\Agents\Support\ProposalRules;
+use App\Domains\Automation\Services\AgentRuleTools;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -31,6 +33,7 @@ final class AgentToolbox
     public function __construct(
         private readonly AgentReadTools $read,
         private readonly ProposalService $proposals,
+        private readonly AgentRuleTools $rules,
     ) {}
 
     /**
@@ -50,6 +53,16 @@ final class AgentToolbox
                 'target_external_id' => ['type' => 'string'], 'action' => ['type' => 'string', 'enum' => ProposalAction::values()],
                 'daily_budget' => ['type' => 'number'], 'reason' => ['type' => 'string'],
             ], ['provider', 'target_external_id', 'action', 'reason']],
+            // AUTO-RULES-AGENTS-009 — the agents work on the Automated Rules, not beside them.
+            'list_automation_rules' => ['The project\'s Automated Rules: each rule\'s conditions, action, mode (monitor, recommend, auto), schedule, whether it is on, and its last result.', [], []],
+            'explain_rule_run' => ['Why a rule did what it did: its last three runs and, for the latest, every target with the figures the rule read, what it did (notified, proposed, executed, skipped, failed) and why.', ['rule_id' => ['type' => 'string']], ['rule_id']],
+            'draft_automation_rule' => ['Save a NEW rule as a draft for a person to review. It is always saved switched off and in Monitor Only; a person decides whether to switch it on and in which mode. Use the metrics, operators (gt, gte, lt, lte, eq), windows (1, 3, 7, 14, 30 days) and actions (notify, pause, resume, budget_increase, budget_decrease, bid_adjust) the platform supports.', [
+                'name' => ['type' => 'string'], 'level' => ['type' => 'string', 'enum' => ['campaign', 'ad_set', 'ad']], 'logic' => ['type' => 'string', 'enum' => ['all', 'any']],
+                'conditions' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['metric' => ['type' => 'string'], 'operator' => ['type' => 'string'], 'window_days' => ['type' => 'integer'], 'value' => ['type' => ['number', 'string']]], 'required' => ['metric', 'operator', 'window_days', 'value']]],
+                'action' => ['type' => 'object', 'properties' => ['type' => ['type' => 'string'], 'percent' => ['type' => 'number']], 'required' => ['type']],
+                'min_spend' => ['type' => 'number'], 'cooldown_hours' => ['type' => 'integer'],
+                'scope' => ['type' => 'object', 'properties' => ['platforms' => ['type' => 'array', 'items' => ['type' => 'string']]]],
+            ], ['name', 'conditions', 'action']],
             'ask_agent' => ['Ask a specialist agent (analyst, campaign, creative, reports) a question and get its answer.', [
                 'agent' => ['type' => 'string', 'enum' => ['analyst', 'campaign', 'creative', 'reports']], 'question' => ['type' => 'string'],
             ], ['agent', 'question']],
@@ -95,12 +108,18 @@ final class AgentToolbox
                 'get_rules' => $this->rules($project),
                 'list_creatives' => $this->read->listCreatives($project, max(7, $this->days($input + ['days' => 14]))),
                 'propose_change' => $this->propose($project, $user, $agentKey, $input),
+                'list_automation_rules' => $this->rules->list($project),
+                'explain_rule_run' => $this->rules->explain($project, (string) ($input['rule_id'] ?? '')),
+                'draft_automation_rule' => $this->rules->draft($project, $user, $agentKey, $input),
                 'ask_agent' => ['answer' => $askAgent === null ? 'Delegation is not available here.' : $askAgent((string) ($input['agent'] ?? ''), (string) ($input['question'] ?? ''))],
                 default => throw new InvalidArgumentException('Unknown tool.'),
             };
         } catch (HttpExceptionInterface|InvalidArgumentException $e) {
             // Our own refusals are worded for the model; anything else is a fault and stays in the logs.
             return $this->error(mb_substr($e->getMessage(), 0, 300));
+        } catch (ValidationException $e) {
+            // A draft that is not a valid rule: the builder's own messages, so the model can correct it.
+            return $this->error(mb_substr(implode(' ', $e->validator->errors()->all()), 0, 600));
         } catch (Throwable $e) {
             report($e);
 

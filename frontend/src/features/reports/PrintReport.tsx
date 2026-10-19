@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { withDailyRecordsSlides, withStreamsSlide } from './reportSections'
+import { withDailyRecordsSlides, withEvidenceSlides, withStreamsSlide } from './reportSections'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
@@ -88,6 +88,8 @@ export function PrintReport() {
     }
     withDailyRecordsSlides(visible, d)
     withStreamsSlide(visible, d)
+    // WD-EVIDENCE-001 — the platform screenshots close the deck, as its appendix.
+    withEvidenceSlides(visible, d)
     // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.
     return visible
   }, [payload])

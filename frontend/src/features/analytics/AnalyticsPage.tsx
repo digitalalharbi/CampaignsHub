@@ -632,6 +632,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           label={ar ? 'المشروع' : 'Project'}
           value={currentProjectId ?? ''}
           testid={`${surface}-project`}
+          // CLICK-STABLE-002 — its options are the projects query; fixed so the row does not reflow when they land.
+          settledWidth={isAnalysis ? 'w-48 max-w-full sm:w-56' : 'w-40'}
           options={[
             ...(currentProjectId ? [] : [{ value: '', label: ar ? 'لا مشروع' : 'No project' }]),
             ...projects.map((pr) => ({ value: pr.id, label: projectLabels.get(pr.id) ?? pr.name })),
