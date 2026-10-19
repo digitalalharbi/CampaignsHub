@@ -7,6 +7,7 @@ use App\Domains\Agents\Http\Controllers\AgentAutonomyController;
 use App\Domains\Agents\Http\Controllers\AgentChatController;
 use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
+use App\Domains\Automation\Http\Controllers\AutomationRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
@@ -295,6 +296,19 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // AGENTS-AUTONOMY-001 — the trust ladder and an owner's switch per action class.
     Route::get('agent-autonomy', [AgentAutonomyController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-autonomy.show');
     Route::put('agent-autonomy', [AgentAutonomyController::class, 'update'])->middleware('project.can:budget.manage')->name('agent-autonomy.update');
+    // AUTO-RULES-001 — automated rules: catalogue, summary, rules, dry run, run now, history, change log.
+    Route::get('automation/catalog', [AutomationRulesController::class, 'catalog'])->middleware('project.can:campaigns.view')->name('automation.catalog');
+    Route::get('automation/summary', [AutomationRulesController::class, 'summary'])->middleware('project.can:campaigns.view')->name('automation.summary');
+    Route::get('automation/rules', [AutomationRulesController::class, 'index'])->middleware('project.can:campaigns.view')->name('automation.rules.index');
+    Route::post('automation/rules', [AutomationRulesController::class, 'store'])->middleware('project.can:campaigns.manage')->name('automation.rules.store');
+    Route::put('automation/rules/{rule}', [AutomationRulesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('automation.rules.update');
+    Route::post('automation/rules/{rule}/toggle', [AutomationRulesController::class, 'toggle'])->middleware('project.can:campaigns.manage')->name('automation.rules.toggle');
+    Route::delete('automation/rules/{rule}', [AutomationRulesController::class, 'destroy'])->middleware('project.can:campaigns.manage')->name('automation.rules.destroy');
+    Route::post('automation/rules/{rule}/dry-run', [AutomationRulesController::class, 'dryRun'])->middleware('project.can:campaigns.view')->name('automation.rules.dry-run');
+    Route::post('automation/rules/{rule}/run', [AutomationRulesController::class, 'runNow'])->middleware('project.can:campaigns.manage')->name('automation.rules.run');
+    Route::get('automation/rules/{rule}/runs', [AutomationRulesController::class, 'runs'])->middleware('project.can:campaigns.view')->name('automation.rules.runs');
+    Route::get('automation/actions', [AutomationRulesController::class, 'actions'])->middleware('project.can:campaigns.view')->name('automation.actions');
+    Route::get('automation/change-log', [AutomationRulesController::class, 'changeLog'])->middleware('project.can:campaigns.view')->name('automation.change-log');
     // AGENTS-CENTER-001 — conversations with the six agents; replies are queued.
     Route::get('agents', [AgentChatController::class, 'roles'])->middleware('project.can:campaigns.view')->name('agents.roles');
     Route::get('agent-threads', [AgentChatController::class, 'threads'])->middleware('project.can:campaigns.view')->name('agent-threads.index');

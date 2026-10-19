@@ -6,6 +6,7 @@ use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
@@ -96,6 +97,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
+        EvaluateAutomationRules::class,
         RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
