@@ -7,7 +7,7 @@ import { PrintDocument } from './PrintDocument'
 import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
 import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
-import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, reportFooterItems, spendNotesLine } from './reportFooter'
 import { brand } from '@/lib/brand'
 
 const ATTENTION_PER_PAGE = 2
@@ -256,6 +256,8 @@ export function PrintReport() {
                   band is no taller than the single note it replaced (the layout gate measures the safe area above it). */}
               <div className="report-footer-note" data-testid="print-footer-note">
                 <p>{REPORT_NOTE.ar}</p>
+                {/* AGENTS-REPORT-NOTES-BLOCK-001 — once, on the last page: every other page keeps its footer height. */}
+                {i === total - 1 && <p data-testid="print-footer-spend-notes">{spendNotesLine(meta.platforms, 'ar')}</p>}
               </div>
               <div className="report-footer-meta">
                 <span className="report-footer-brand" data-testid="print-footer-meta">

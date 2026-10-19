@@ -103,3 +103,15 @@ describe('a film with no cover frame, on a printed drilldown', () => {
     expect(printAbsence(readPreview(film, true), true)).toContain('فيديو')
   })
 })
+
+/** AGENTS-REPORT-NOTES-BLOCK-001 — the printed document names its sources under the spend notes. */
+describe('the printed spend notes', () => {
+  it('are printed once, naming the report platforms', () => {
+    render(<PrintDocument data={base} reportName="R" currency="SAR" />)
+    const notes = screen.getByTestId('print-document-spend-notes')
+
+    expect(notes).toHaveTextContent('official invoices are the reference')
+    expect(notes).toHaveTextContent(/Data sources: TikTok, Meta\./)
+  })
+})
+

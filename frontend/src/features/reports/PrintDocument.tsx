@@ -831,7 +831,7 @@ export function PrintDocument({
       <footer className="doc-footnote" data-testid="print-document-footer">
         <p>{REPORT_NOTE.en}</p>
         {/* AGENTS-REPORT-NOTES-BLOCK-001 — this document prints spend, so it carries the spend notes. */}
-        <p data-testid="print-document-spend-notes">{spendNotesLine((data.platforms ?? []).map((p: Row) => String(p.provider ?? '')), 'en')}</p>
+        <p data-testid="print-document-spend-notes">{spendNotesLine((data.platforms ?? []).map((p: Row) => String(p.provider ?? p.platform ?? '')), 'en')}</p>
         <p>
           {reportFooterItems({
             updatedAt: typeof data.generated_at === 'string' ? data.generated_at : null,
