@@ -163,6 +163,14 @@ final class CommerceOAuthAndBoardTest extends TestCase
             ]]),
         ]);
 
+        // COMMERCE-ASSIGN-001 — with ONE project the store is assigned for the merchant (and read at
+        // once); this case is about discovery, so the workspace has two and nothing is chosen for it.
+        Project::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => Project::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->value('client_workspace_id'),
+            'name' => 'Second', 'status' => 'active',
+        ]);
+
         $state = $this->issueState('salla');
 
         $this->get("/api/v1/oauth/commerce/salla/callback?code=real-code&state={$state}")

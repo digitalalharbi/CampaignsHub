@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { X } from 'lucide-react'
 import type { CampaignRow, MetricFilters, Range } from './api'
+import { plotSeries, type SeriesRow } from './timeseriesMoney'
 import { useTimeseries } from './api'
 import { canonicalObjectiveLabel } from '@/features/campaigns/canonicalObjectives'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -57,7 +58,16 @@ export function CampaignQuickPreview({
    * rising or falling», and a reader who needs the shape opens the campaign.
    */
   const trend = useTimeseries(projectId, range, { ...filters, campaign: [row.campaign_id] })
-  const points = (trend.data ?? []).map((p) => ({ v: Number(p.spend ?? 0) }))
+  /*
+   * REPORT-CHARTS-COMPLETE-001 — the sparkline reads the money contract, not `p.spend ?? 0`.
+   *
+   * A day whose spend is withheld or absent used to be drawn at ZERO, so a campaign with unconverted
+   * money showed a line falling to the floor. Now a day with no honest figure is a gap, the line is
+   * drawn only when the whole window is in ONE unit (an axis carries one), and it says what it is.
+   */
+  const series = plotSeries((trend.data ?? []) as SeriesRow[], null, ar)
+  const points = series.rows.map((r) => ({ v: r.spend }))
+  const drawable = series.basis === 'converted' && points.filter((p) => p.v !== null).length > 1
 
   const spend = readMoney(row, 'spend', null, ar)
   const revenue = readMoney(row, 'revenue', null, ar)
@@ -115,13 +125,18 @@ export function CampaignQuickPreview({
           : <Figure label="ROAS" value={roas.value === null ? '—' : `${roas.value.toFixed(2)}×`} title={roas.note ?? undefined} />}
       </div>
 
-      {points.length > 1 && (
-        <div className="mt-3 h-10" data-testid="campaign-quick-preview-trend">
+      {drawable && (
+        <div className="mt-3" data-testid="campaign-quick-preview-trend">
+          <div className="mb-0.5 text-[10px] text-text-muted">
+            {ar ? 'الإنفاق اليومي' : 'Daily spend'}{series.currency ? ` · ${series.currency}` : ''}
+          </div>
+          <div className="h-10" role="img" aria-label={ar ? 'اتجاه الإنفاق اليومي للحملة' : 'Daily spend trend for the campaign'}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={points} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-              <Area type="monotone" dataKey="v" stroke="var(--color-accent)" fill="var(--color-accent)" fillOpacity={0.15} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Area type="monotone" dataKey="v" connectNulls={false} stroke="var(--color-accent)" fill="var(--color-accent)" fillOpacity={0.15} strokeWidth={1.5} dot={false} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
 

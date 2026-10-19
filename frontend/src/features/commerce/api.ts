@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, patchData, postData } from '@/lib/api/client'
 
 /**
  * COMMERCE-001 — the merchant's own Salla / Zid stores.
@@ -17,6 +17,9 @@ export interface StoreRow {
   id: string
   external_id: string
   name: string
+  /** COMMERCE-ASSIGN-001 — the project this store feeds, or null while nobody has chosen one. */
+  project_id: string | null
+  project_name: string | null
   domain: string | null
   currency: string | null
   /** When data last arrived. Null on a store that has been discovered but never synced. */
@@ -67,4 +70,15 @@ export async function startStoreOAuth(
 export async function syncStore(storeId: string): Promise<{ queued: number; window_start: string }> {
   await ensureCsrfCookie()
   return postData<{ queued: number; window_start: string }>(`/commerce/stores/${storeId}/sync`)
+}
+
+/**
+ * COMMERCE-ASSIGN-001 — point a store at a project, or detach it (`null`).
+ *
+ * A fresh assignment queues the first read on the server, so the card shows progress without a second
+ * request. A store of another client's workspace is refused (403) and another company's is a 404.
+ */
+export async function assignStore(storeId: string, projectId: string | null): Promise<StoreRow> {
+  await ensureCsrfCookie()
+  return patchData<StoreRow>(`/commerce/stores/${storeId}`, { project_id: projectId })
 }

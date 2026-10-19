@@ -13,6 +13,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -151,6 +152,34 @@ final class ReportShareTest extends TestCase
         $share = ReportShare::withoutGlobalScopes()->first();
         $this->assertSame(1, $share->view_count);
         $this->assertSame('view', $share->logs()->first()->action);
+    }
+
+    /**
+     * REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's column choice is stored resolved: unknown columns
+     * and tables are cut, the table's own order wins, and an unrestricted table is simply absent.
+     */
+    public function test_the_columns_an_owner_chooses_are_stored_resolved(): void
+    {
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares", [
+                'columns' => ['platforms' => ['ctr', 'spend', 'bogus', 'spend'], 'invented' => ['x']],
+            ])->assertCreated();
+
+        $share = ReportShare::withoutGlobalScopes()->latest('id')->first();
+
+        $this->assertSame(['platforms' => ['spend', 'ctr']], $share->settings['columns']);
+        $this->assertSame(['platforms' => ['spend', 'ctr']], ReportColumns::forShare($share)->toArray());
+    }
+
+    public function test_a_link_with_no_column_choice_publishes_every_column(): void
+    {
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares", [])
+            ->assertCreated();
+
+        $share = ReportShare::withoutGlobalScopes()->latest('id')->first();
+
+        $this->assertSame([], ReportColumns::forShare($share)->toArray());
     }
 
     public function test_password_gate(): void

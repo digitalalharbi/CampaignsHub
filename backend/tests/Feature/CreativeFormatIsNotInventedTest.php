@@ -77,6 +77,46 @@ final class CreativeFormatIsNotInventedTest extends TestCase
         $this->assertNull($huge->raw, 'a body too large for a row read on every card is dropped, not stored');
     }
 
+    /**
+     * OPENAI-CHAT-CARD-TEXT-001 — a ChatGPT Ads card whose picture cannot be read back shows its words.
+     *
+     * The Ads API documents uploading a file and attaching its id to a card, and no call that reads a
+     * file by id. So the image is out of reach by design: the card stays `unavailable` (no image is
+     * claimed) and carries the title and body it was written with.
+     */
+    public function test_a_chat_card_without_a_readable_image_carries_its_own_text(): void
+    {
+        $card = $this->import([
+            'external_id' => 'cc-1', 'name' => 'إذا محتار في هدية', 'format' => 'chat_card',
+            'headline' => 'إذا محتار في هدية', 'body' => 'خواتم وسبح بتصاميم راقية', 'raw' => ['type' => 'chat_card', 'file_id' => 'file_9'],
+        ]);
+
+        $this->assertSame('خواتم وسبح بتصاميم راقية', $card->body);
+
+        $preview = app(CreativePresenter::class)->preview($card);
+
+        $this->assertSame('unavailable', $preview['state'], 'the missing image is still stated, never papered over');
+        $this->assertNull($preview['image_url']);
+        $this->assertSame(['headline' => 'إذا محتار في هدية', 'body' => 'خواتم وسبح بتصاميم راقية'], $preview['text']);
+        $this->assertStringContainsString('no way to read back', $preview['note_en']);
+    }
+
+    /** Cards imported before the copy columns were written still hold the body in the retained payload. */
+    public function test_an_older_chat_card_is_read_from_its_retained_body(): void
+    {
+        $card = $this->import(['external_id' => 'cc-old', 'name' => 'Old card', 'format' => 'chat_card', 'raw' => ['type' => 'chat_card', 'body' => 'Text kept in the payload']]);
+
+        $this->assertNull($card->body);
+        $this->assertSame(['headline' => 'Old card', 'body' => 'Text kept in the payload'], app(CreativePresenter::class)->preview($card)['text']);
+    }
+
+    public function test_only_a_chat_card_gets_a_text_preview(): void
+    {
+        $image = $this->import(['external_id' => 'im-1', 'name' => 'A picture', 'format' => 'image']);
+
+        $this->assertNull(app(CreativePresenter::class)->preview($image)['text']);
+    }
+
     /** A creative whose connector stated no format is stored as «we do not know». */
     public function test_an_unstated_format_is_stored_as_null(): void
     {
