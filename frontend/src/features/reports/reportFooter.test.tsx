@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { InteractiveReport } from './InteractiveReport'
-import { REPORT_NOTE, REPORT_NOTE_MORE, ReportFooter, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, REPORT_NOTE_MORE, ReportFooter, reportFooterItems, spendNotesLine } from './reportFooter'
 
 /**
  * REPORT-FOOTER-001 — one subtle footer, the same on every surface; never a section.
@@ -71,3 +71,26 @@ describe('the report footer', () => {
     expect(screen.queryByText('كامل')).toBeNull()
   })
 })
+
+/** AGENTS-REPORT-NOTES-BLOCK-001 — the spend notes appear only where spend does, naming the sources. */
+describe('the spend notes block', () => {
+  it('names the sources, in the product platform order, when the report shows spend', () => {
+    render(<ReportFooter locale="en" facts={{ spendSources: ['meta', 'snapchat', 'meta'] }} />)
+
+    const notes = screen.getByTestId('report-footer-spend-notes')
+    expect(notes).toHaveTextContent("official invoices are the reference")
+    expect(notes).toHaveTextContent(/Data sources: Snapchat, Meta\./)
+  })
+
+  it('is absent when the report shows no spend', () => {
+    render(<ReportFooter locale="ar" facts={{ spendSources: null }} />)
+
+    expect(screen.queryByTestId('report-footer-spend-notes')).toBeNull()
+  })
+
+  it('reads in Arabic with the Arabic separator', () => {
+    expect(spendNotesLine(['tiktok', 'google'], 'ar')).toMatch(/الفواتير الرسمية/)
+    expect(spendNotesLine(['tiktok', 'google'], 'ar')).toContain('، ')
+  })
+})
+
