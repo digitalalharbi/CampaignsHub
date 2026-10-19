@@ -36,6 +36,7 @@ export const STATUS_WORDS: Record<string, { ar: string; en: string; tone: 'succe
   skipped_run_cap: { ar: 'تُخطّي — حدّ التشغيل', en: 'Skipped — run limit', tone: 'warning' },
   skipped_no_budget: { ar: 'تُخطّي — لا ميزانية يومية', en: 'Skipped — no daily budget', tone: 'neutral' },
   skipped_insufficient_data: { ar: 'بيانات غير كافية', en: 'Not enough data', tone: 'neutral' },
+  skipped_no_figure: { ar: 'لا يوجد رقم مُبلَّغ لهذا الكائن في الفترة', en: 'No figure reported for this object in the window', tone: 'warning' },
   unsupported_action: { ar: 'إجراء غير مدعوم', en: 'Action not supported', tone: 'warning' },
   unsupported_for_provider: { ar: 'المنصة لا تتيحه', en: 'Platform does not allow it', tone: 'warning' },
   unsupported_level: { ar: 'غير متاح لهذا المستوى', en: 'Not available at this level', tone: 'warning' },

@@ -240,6 +240,73 @@ final class AutomationRulesTest extends TestCase
         $this->assertSame('skipped_insufficient_data', collect($res->json('data.results'))->firstWhere('name', 'Loser')['status']);
     }
 
+    /** A platform that never sends revenue can never match a ROAS condition — and the history says «no figure». */
+    public function test_a_metric_the_platform_never_reported_is_not_judged_and_says_so(): void
+    {
+        $snap = $this->account($this->project, 'snapchat', 'sn_1');
+        $noRevenue = ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $snap->id, 'provider' => 'snapchat',
+            'external_id' => 'sn-'.random_int(1000, 9999), 'name' => 'Awareness', 'status' => 'active', 'currency' => 'USD', 'daily_budget' => 100,
+            'starts_at' => Carbon::now()->subDays(20),
+        ]);
+        foreach (['spend' => 200, 'impressions' => 40000, 'clicks' => 300] as $k => $v) {
+            foreach ([0, 1, 2] as $d) {
+                DailyMetric::withoutGlobalScopes()->create([
+                    'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $snap->id,
+                    'external_campaign_id' => $noRevenue->id, 'provider' => 'snapchat', 'metric_key' => $k, 'metric_date' => Carbon::now('Asia/Riyadh')->subDays($d)->toDateString(), 'value' => $v,
+                ]);
+            }
+        }
+
+        $id = $this->rule(['name' => 'Low ROAS', 'scope' => ['platforms' => ['snapchat']], 'conditions' => [['metric' => 'roas', 'operator' => 'lt', 'value' => 3, 'window_days' => 3]]])->json('data.id');
+        $row = collect($this->actingAs($this->owner)->postJson("/api/v1/projects/{$this->project->id}/automation/rules/{$id}/dry-run")->assertOk()->json('data.results'))->firstWhere('name', 'Awareness');
+
+        $this->assertFalse($row['matched']);
+        $this->assertSame('skipped_no_figure', $row['status'], 'no revenue was reported: the campaign was not judged, which is not the same as not matching');
+        $this->assertNull($row['metrics']['roas@3d']);
+    }
+
+    /** An unmeasured condition does not hide a measured one that already failed: that is an honest miss. */
+    public function test_a_measured_miss_is_still_just_not_matched(): void
+    {
+        $snap = $this->account($this->project, 'snapchat', 'sn_2');
+        $c = ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $snap->id, 'provider' => 'snapchat',
+            'external_id' => 'sn-'.random_int(1000, 9999), 'name' => 'Small', 'status' => 'active', 'currency' => 'USD', 'daily_budget' => 100,
+            'starts_at' => Carbon::now()->subDays(20),
+        ]);
+        foreach ([0, 1, 2] as $d) {
+            DailyMetric::withoutGlobalScopes()->create([
+                'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $snap->id,
+                'external_campaign_id' => $c->id, 'provider' => 'snapchat', 'metric_key' => 'spend', 'metric_date' => Carbon::now('Asia/Riyadh')->subDays($d)->toDateString(), 'value' => 5,
+            ]);
+        }
+
+        // Spend is 15 over three days (measured, fails «> 500»); ROAS has no figure (revenue never reported).
+        $id = $this->rule(['name' => 'Both', 'scope' => ['platforms' => ['snapchat']]])->json('data.id');
+        $row = collect($this->actingAs($this->owner)->postJson("/api/v1/projects/{$this->project->id}/automation/rules/{$id}/dry-run")->assertOk()->json('data.results'))->firstWhere('name', 'Small');
+
+        $this->assertSame('not_matched', $row['status']);
+    }
+
+    public function test_the_builder_learns_which_platforms_report_which_figures(): void
+    {
+        $this->account($this->project, 'tiktok', 'tt_1'); // bound, nothing synced yet
+        $other = Project::create(['client_workspace_id' => $this->project->client_workspace_id, 'name' => 'Other', 'status' => 'active']);
+        $theirs = $this->account($other, 'google', 'g_1');
+        $this->campaign($other, $theirs, 'Elsewhere', 100, 300);
+
+        $data = $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->project->id}/automation/metric-support")->assertOk()->json('data');
+
+        $this->assertSame(['has_data' => true, 'reported' => ['clicks', 'conversions', 'impressions', 'revenue', 'spend']], $data['providers']['meta']);
+        $this->assertSame(['has_data' => false, 'reported' => []], $data['providers']['tiktok'], 'a platform with nothing synced is not known, not unsupported');
+        $this->assertArrayNotHasKey('google', $data['providers'], 'another project\'s account never appears');
+
+        $catalog = collect($this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->project->id}/automation/catalog")->assertOk()->json('data.metrics'))->keyBy('key');
+        $this->assertSame(['revenue', 'spend'], $catalog['roas']['needs']);
+        $this->assertSame([], $catalog['age_days']['needs']);
+    }
+
     public function test_the_scheduler_runs_due_enabled_rules_and_books_the_next_run(): void
     {
         $on = $this->rule()->json('data.id');

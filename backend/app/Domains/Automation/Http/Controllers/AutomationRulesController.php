@@ -19,6 +19,7 @@ use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -83,6 +84,44 @@ final class AutomationRulesController extends Controller
             'campaigns' => $campaigns->map(fn ($c): array => ['id' => (string) $c->id, 'provider' => AdPlatforms::canonical((string) $c->provider), 'name' => $c->name, 'status' => $c->status, 'account_id' => (string) $c->external_account_id, 'daily_budget' => $c->daily_budget !== null ? (float) $c->daily_budget : null, 'currency' => $c->currency])->values()->all(),
             'ad_sets' => $sets->map(fn ($s): array => ['id' => (string) $s->id, 'name' => $s->name, 'status' => $s->status, 'campaign_id' => (string) $s->external_campaign_id])->values()->all(),
         ], 'Targets.');
+    }
+
+    /**
+     * Which platform figures each of the project's ad platforms actually reported lately — so the builder
+     * can say, before a rule is saved, that a platform in scope never reports what a condition needs.
+     *
+     * Per platform: `has_data` (anything reported in the window at all — a platform just connected has
+     * nothing yet, which is «not known», not «not supported») and `reported` (the base figure keys it sent).
+     * Only the project's actively bound ad accounts count, through the same visibility bound every metric
+     * read uses.
+     */
+    public function metricSupport(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        $days = max(7, min((int) $request->integer('days', 30), 90));
+        $accounts = ExternalAccount::query()->whereIn('id', BoundAccountVisibility::activeAccountIds($project) ?: ['00000000-0000-0000-0000-000000000000'])
+            ->where('account_type', 'ad_account')->get(['id', 'provider']);
+
+        $q = DailyMetric::withoutGlobalScopes()->where('project_id', $project)
+            ->whereIn('external_account_id', $accounts->modelKeys() ?: ['00000000-0000-0000-0000-000000000000'])
+            ->whereIn('metric_key', ['spend', 'impressions', 'clicks', 'conversions', 'revenue'])
+            ->whereNotNull('value')
+            ->whereBetween('metric_date', [Carbon::today()->subDays($days - 1)->toDateString(), Carbon::today()->toDateString()]);
+        BoundAccountVisibility::apply($q, 'daily_metrics');
+
+        $reported = [];
+        foreach ($q->select('provider', 'metric_key')->distinct()->get() as $row) {
+            $reported[AdPlatforms::canonical((string) $row->provider)][(string) $row->metric_key] = true;
+        }
+
+        $out = [];
+        foreach ($accounts->pluck('provider')->map(fn ($p) => AdPlatforms::canonical((string) $p))->unique()->sort()->values() as $provider) {
+            $keys = array_keys($reported[$provider] ?? []);
+            sort($keys);
+            $out[$provider] = ['has_data' => $keys !== [], 'reported' => $keys];
+        }
+
+        return ApiResponse::success(['days' => $days, 'providers' => (object) $out], 'Metric support.');
     }
 
     /** The cards at the top: what the rules did over the last N days, like the platform's own summary. */
