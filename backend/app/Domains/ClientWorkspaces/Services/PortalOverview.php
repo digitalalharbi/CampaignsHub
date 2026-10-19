@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Services;
 
+use App\Domains\Billing\Models\Invoice;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Requests\Models\ExternalRequest;
 use Illuminate\Support\Carbon;
 
 /**
@@ -105,6 +107,42 @@ final class PortalOverview
                 'total' => array_sum($byStatus),
                 'by_status' => $byStatus,
             ] : null,
+            'attention' => $this->attention($workspace, $v, $onlyProjectIds),
         ];
+    }
+
+    /**
+     * CP-DASH-001 — what is waiting on THIS client, counted from the records that say so.
+     *
+     * Each count exists only where the agency lets the client see that section, and an invoice count is
+     * absent for a user confined to some projects (client-wide paperwork is not theirs). A missing key
+     * means «not available to you», never zero.
+     *
+     * @param  array<string, bool>  $v
+     * @param  list<string>|null  $onlyProjectIds
+     * @return array<string, int>
+     */
+    private function attention(ClientWorkspace $workspace, array $v, ?array $onlyProjectIds): array
+    {
+        $out = [];
+
+        if ($v['requests']) {
+            $out['requests_waiting'] = ExternalRequest::query()
+                ->where('client_id', $workspace->getKey())
+                ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('project_id', $onlyProjectIds))
+                ->whereHas('status', fn ($q) => $q->where('key', 'waiting_client'))
+                ->count();
+        }
+
+        if ($v['invoices'] && $onlyProjectIds === null) {
+            $states = Invoice::query()->where('client_workspace_id', $workspace->getKey())
+                ->whereIn('status', ['issued', 'sent', 'partially_paid'])->get()
+                ->map(fn (Invoice $i): string => $i->displayStatus())->countBy();
+
+            $out['invoices_overdue'] = (int) ($states['overdue'] ?? 0);
+            $out['invoices_due'] = (int) ($states['due'] ?? 0) + (int) ($states['partially_paid'] ?? 0);
+        }
+
+        return $out;
     }
 }

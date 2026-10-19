@@ -17,6 +17,8 @@ import { ClassificationEditor } from './ClassificationEditor'
 import { campaignStatusLabel, objectiveLabel } from '@/features/campaigns/labels'
 import { projectStatusLabel } from '@/features/projects/ProjectsPage'
 import { TabBilling } from './TabBilling'
+import { TabDelivery } from './delivery/TabDelivery'
+import { TabPortal } from './portal/TabPortal'
 import { TabMessages } from './TabMessages'
 import { TabActivity } from './TabActivity'
 import { TabAnalytics } from './TabAnalytics'
@@ -30,7 +32,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { toApiError } from '@/lib/api/client'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'delivery' | 'portal' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
 export function ClientCommandCenterPage() {
   const portalTo = usePortalPath()
@@ -87,8 +89,10 @@ export function ClientCommandCenterPage() {
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
     { key: 'requests', label: t('tab_requests') },
+    ...(d.can.view_reports ? [{ key: 'delivery' as Tab, label: lang === 'ar' ? 'التسليم الأسبوعي' : 'Weekly delivery' }] : []),
     { key: 'billing' as Tab, label: lang === 'ar' ? 'الاشتراكات' : 'Billing' },
     { key: 'messages' as Tab, label: lang === 'ar' ? 'المحادثات' : 'Conversations' },
+    ...(d.can.manage_settings || d.can.manage_team ? [{ key: 'portal' as Tab, label: lang === 'ar' ? 'بوابة العميل' : 'Client portal' }] : []),
     ...(d.can.manage_team ? [{ key: 'team' as Tab, label: t('tab_team') }] : []),
     ...(d.can.manage_files ? [{ key: 'files' as Tab, label: t('tab_files') }] : []),
     { key: 'activity', label: t('tab_activity') },
@@ -185,7 +189,9 @@ export function ClientCommandCenterPage() {
 
           {tab === 'reports' && d.can.view_reports && <TabReports d={d} />}
 
-          {tab === 'billing' && <TabBilling clientId={d.id} />}
+          {tab === 'billing' && <TabBilling clientId={d.id} canManage={d.can.manage_settings} />}
+          {tab === 'delivery' && <TabDelivery clientId={d.id} projects={d.projects} />}
+          {tab === 'portal' && <TabPortal d={d} />}
           {tab === 'messages' && <TabMessages clientId={d.id} />}
           {tab === 'team' && d.can.manage_team && <TabTeam d={d} />}
 
