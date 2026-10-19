@@ -340,8 +340,6 @@ export function LiveSharedReport({
         locale={ar ? 'ar' : 'en'}
         facts={{
           updatedAt: computedAt.toISOString(),
-          // Only when this link shows spend (a client link hides it by default): no notes about hidden money.
-          spendSources: typeof payload.totals?.spend === 'number' ? payload.platforms.map((p) => p.provider) : null,
           period: payload.period,
           currency: unit || null,
           timezone: 'Asia/Riyadh',
