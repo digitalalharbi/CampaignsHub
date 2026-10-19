@@ -405,6 +405,10 @@ describe('the report levels are different products', () => {
     expect(within(tables).getByTestId('tables-platforms')).toBeInTheDocument()
     expect(within(tables).getByTestId('tables-days')).toBeInTheDocument()
     expect(within(tables).getByTestId('tables-content')).toBeInTheDocument()
+    // The roster nests figures under `metrics`; read flat, every cell was a dash.
+    const contentRow = within(within(tables).getByTestId('tables-content')).getAllByRole('row')[1]
+    expect(contentRow).toHaveTextContent('300')
+    expect(contentRow).toHaveTextContent('12')
     expect(within(tables).getByTestId('tables-accounts')).toHaveTextContent('HENKA ads')
   })
 

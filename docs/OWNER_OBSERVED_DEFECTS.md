@@ -193,3 +193,6 @@ The two proven root causes so far, both on the live estate rather than in a fixt
 
 Neither was visible from a database column, a presenter payload or a component test, which is why
 rows 1–12 stay open until the owner's own `/app/content` is seen.
+
+### 107 — The Tables view's «All content that ran» showed a dash in every figure (2026-10-19)
+Owner screenshot of a live link: every content row read «—» for results, impressions, clicks, spend and cost. Cause: the table read the roster's figures at the top level of each row, but the roster nests them under `metrics`. Fixed in LiveTables by flattening each roster row through `asContent` (the same function the content tiles use); liveModes.test.tsx now fails on the old component. Status: IMPLEMENTED_NOT_VERIFIED until a Production look at the live link after deploy.

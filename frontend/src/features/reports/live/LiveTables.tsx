@@ -6,6 +6,7 @@ import type { LivePayload } from '../api'
 import type { ReportAd } from '../ReportAdsSection'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
+import { asContent } from './LiveContent'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 type Row = Record<string, unknown>
@@ -41,7 +42,9 @@ export function TablesView({
   const days = (payload.timeseries ?? []) as Row[]
   const platforms = (payload.platforms ?? []) as Row[]
   const accounts = ((payload as { accounts?: Row[] }).accounts ?? []) as Row[]
-  const roster = (payload.ads_roster ?? []) as unknown as ReportAd[]
+  // The roster nests each creative's figures under `metrics`; the ranked lists carry them at the top level.
+  // Read flat, every figure was undefined and the whole table showed dashes (Owner defect, live link 2026-10-19).
+  const roster = (payload.ads_roster ?? []).map(asContent)
 
   const moneyCell = (v: number | null) => (v === null ? dash : reader.asMoney(v))
   const costCell = (v: number | null) => (v === null || v <= 0 ? dash : reader.asExactMoney(v))
