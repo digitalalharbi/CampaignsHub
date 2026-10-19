@@ -28,9 +28,13 @@ test.describe('the live client link an operator copies', () => {
     await dialog.locator('input[type="text"], input:not([type])').first().fill(`E2E link ${Date.now()}`)
     // REPORT-SCOPE-HIERARCHY-001 — a link names its ad accounts; the first one the project offers.
     const account = dialog.getByTestId('live-builder-accounts').getByRole('checkbox').first()
-    await account.click()
-    // A controlled input renders its tick after the click; wait for it rather than reading it at once.
-    await expect(account).toBeChecked({ timeout: 15000 })
+    // A controlled input renders its tick after the click. Under Firefox CI load a click can land while
+    // the row is still being laid out and miss, so press again only while it is NOT ticked — the
+    // assertion is unchanged: the tick must be there.
+    await expect(async () => {
+      if (!(await account.isChecked())) await account.click()
+      await expect(account).toBeChecked({ timeout: 3000 })
+    }).toPass({ timeout: 20000 })
     await dialog.getByRole('button', { name: /إنشاء الرابط|Create link/ }).click()
 
     const url = page.getByTestId('live-link-url')

@@ -1,0 +1,94 @@
+import { api, getData, patchData, postData, putData } from '@/lib/api/client'
+
+/** WD-PACK-001 — the weekly delivery, as the agency API answers it. */
+export interface PackReadiness {
+  report: string
+  undecided_recommendations: number
+  approved_recommendations: number
+  evidence: { included: boolean; count: number }
+  invoice: { included: boolean; status: string }
+  approved: boolean
+  ready_to_approve: boolean
+}
+
+export interface DeliveryPack {
+  id: string
+  client_workspace_id: string
+  project_id: string
+  report_id: string | null
+  invoice_id: number | null
+  period: { from: string; to: string }
+  status: 'draft' | 'approved' | 'sent'
+  components: Record<string, boolean>
+  approved_at: string | null
+  sent_at: string | null
+  readiness: PackReadiness
+  client?: string | null
+}
+
+export interface PackRecommendation {
+  id: string
+  platform: string | null
+  text_ar: string | null
+  text_en: string | null
+  proposed_action: string | null
+  priority: string | null
+  status: 'draft' | 'reviewed' | 'approved' | 'hidden' | 'rejected'
+  source: string | null
+}
+
+export interface PackEvidence {
+  id: string
+  provider: string
+  period_start: string
+  period_end: string
+  original_name: string
+  mime: string
+  size: number
+  note: string | null
+  include_in_report: boolean
+}
+
+export interface PackDetail extends DeliveryPack {
+  recommendations: PackRecommendation[]
+  evidence: PackEvidence[]
+}
+
+export const COMPONENT_KEYS = ['whatsapp', 'link', 'report_pdf', 'evidence', 'invoice_pdf', 'amount_due', 'spend'] as const
+
+export const listPacks = (clientId: string) => getData<DeliveryPack[]>(`/delivery/packs?client=${encodeURIComponent(clientId)}`)
+export const getPack = (id: string) => getData<PackDetail>(`/delivery/packs/${id}`)
+export const preparePack = (projectId: string) => postData<DeliveryPack>('/delivery/packs', { project_id: projectId })
+export const setComponents = (id: string, components: Record<string, boolean>) => putData<DeliveryPack>(`/delivery/packs/${id}/components`, { components })
+export const attachInvoice = (id: string, invoiceId: number) => postData<DeliveryPack>(`/delivery/packs/${id}/invoice`, { invoice_id: invoiceId })
+export const approvePack = (id: string) => postData<DeliveryPack>(`/delivery/packs/${id}/approve`)
+export const markPackSent = (id: string) => postData<DeliveryPack>(`/delivery/packs/${id}/sent`)
+export const whatsappText = (id: string, lang: 'ar' | 'en') => getData<{ text: string }>(`/delivery/packs/${id}/whatsapp?lang=${lang}`).then((d) => d.text)
+export const editRecommendation = (packId: string, annotationId: string, body: { text_ar?: string; text_en?: string }) =>
+  patchData<PackRecommendation>(`/delivery/packs/${packId}/recommendations/${annotationId}`, body)
+export const setRecommendationStatus = (projectId: string, reportId: string, annotationId: string, status: PackRecommendation['status']) =>
+  postData<PackRecommendation>(`/projects/${projectId}/reports/${reportId}/annotations/${annotationId}/status`, { status })
+
+export function uploadEvidence(input: {
+  clientId: string
+  projectId: string
+  provider: string
+  from: string
+  to: string
+  file: File
+  note?: string
+}) {
+  const form = new FormData()
+  form.set('client_workspace_id', input.clientId)
+  form.set('project_id', input.projectId)
+  form.set('provider', input.provider)
+  form.set('period_start', input.from)
+  form.set('period_end', input.to)
+  form.set('file', input.file)
+  if (input.note) form.set('note', input.note)
+
+  return api.post('/delivery/evidence', form).then((r) => r.data.data as PackEvidence)
+}
+
+export const deleteEvidence = (id: string) => api.delete(`/delivery/evidence/${id}`)
+export const evidenceFileUrl = (id: string) => `/api/v1/delivery/evidence/${id}/file`
