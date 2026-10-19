@@ -144,7 +144,7 @@ export function ExecutiveSummary({
 
       {(manyPlatforms && funnelShown) || coverageNeeded ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {manyPlatforms && funnelShown && <FunnelPanel payload={payload} ar={ar} />}
+          {manyPlatforms && funnelShown && <FunnelPanel payload={payload} ar={ar} wide={!coverageNeeded} />}
           {coverageNeeded && <CoverageStrip payload={payload} ar={ar} wide={!(manyPlatforms && funnelShown)} />}
         </div>
       ) : null}
@@ -194,10 +194,22 @@ function PlatformCards({ payload, reader, ar, result, selected, onSelect }: { pa
     )
   }
 
+  /*
+   * REPORT-COMPOSITION-CONTROL-001 — the cards fill the row. A fixed six-column grid left four cards
+   * in a narrow cluster with two empty slots beside them; the row now has exactly as many columns as
+   * cards (up to six), so the summary is as wide as the report under it.
+   */
+  const cards = rows.length + (rows.length > 1 ? 1 : 0)
+
   return (
     <section data-testid="exec-platform-cards" aria-label={ar ? 'ملخص المنصات' : 'Platforms summary'} className="flex flex-col gap-2">
       <h2 className="text-base font-extrabold text-text-primary">{ar ? 'ملخص المنصات' : 'Platforms summary'}</h2>
-      <div role="tablist" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div
+        role="tablist"
+        data-cards={cards}
+        className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(var(--cards-md),minmax(0,1fr))] xl:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
+        style={{ '--cards': Math.min(cards, 6), '--cards-md': cards <= 4 ? cards : 3 } as React.CSSProperties}
+      >
         {rows.length > 1 && card(null, ar ? 'كل المنصات' : 'All platforms', count(payload.totals?.[result]), count(payload.totals?.impressions), ctr(payload.totals ?? {}), null, 'var(--brand-600)')}
         {rows.map((p) => {
           const key = canonicalPlatform(p.provider)
@@ -420,12 +432,16 @@ function PlatformComparison({
 
 /* ─────────────────────────────── Funnel ─────────────────────────────── */
 
-function FunnelPanel({ payload, ar, narrow = false }: { payload: LivePayload; ar: boolean; narrow?: boolean }) {
+function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: LivePayload; ar: boolean; narrow?: boolean; wide?: boolean }) {
   // The stages without their cost: the client's funnel shows how far people went, not what each step cost.
   const stages = (payload.funnel ?? []).filter((s) => s.reported).map((s) => ({ ...s, cost_per: null }))
 
   return (
-    <div className={narrow ? 'lg:col-span-4' : 'lg:col-span-7'} data-testid="exec-funnel">
+    /*
+     * REPORT-COMPOSITION-CONTROL-001 — alone on its row the funnel spans the grid, aligned like the
+     * dashboard's «قمع الأداء»; it used to keep a seven-column width with nothing beside it.
+     */
+    <div className={narrow ? 'lg:col-span-4' : wide ? 'lg:col-span-12' : 'lg:col-span-7'} data-testid="exec-funnel" data-wide={wide ? 'true' : undefined}>
       <ChartCard title={ar ? 'من الظهور إلى النتيجة' : 'From impression to result'}>
         <ConversionFunnelChart stages={stages} ar={ar} />
       </ChartCard>

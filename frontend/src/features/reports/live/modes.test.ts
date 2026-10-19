@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modesFor, ownsPlatformChoice, readMode } from './modes'
+import { modesFor, offeredViews, ownsPlatformChoice, readMode } from './modes'
 
 describe('the live link modes', () => {
   it('offers a summary link nothing but the summary', () => {
@@ -37,5 +37,12 @@ describe('the live link modes', () => {
     expect(ownsPlatformChoice('content')).toBe(true)
     expect(ownsPlatformChoice('dashboard')).toBe(false)
     expect(ownsPlatformChoice('summary')).toBe(false)
+  })
+
+  it('narrows the level\u2019s views to the main sections the server names, never to nothing', () => {
+    const all = modesFor('detailed', 'detailed')
+    expect(offeredViews(all, undefined)).toEqual(all)
+    expect(offeredViews(all, ['tables', 'summary'])).toEqual(['summary', 'tables'])
+    expect(offeredViews(all, ['campaigns'])).toEqual(all)
   })
 })

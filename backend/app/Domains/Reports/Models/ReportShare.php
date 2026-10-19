@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Models;
 
+use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
@@ -172,6 +173,17 @@ final class ReportShare extends Model
             (array) (($this->settings ?? [])['section_overrides'] ?? []),
             static fn ($key): bool => is_string($key) && $key !== '',
         ));
+    }
+
+    /**
+     * REPORT-COMPOSITION-CONTROL-001 — the main sections this link offers, narrowing its report's;
+     * null (every link made before this) narrows nothing.
+     *
+     * @return list<string>|null
+     */
+    public function views(): ?array
+    {
+        return ReportViews::normalise((($this->settings ?? [])['views'] ?? null));
     }
 
     public function sectionVisibility(): ShareSections

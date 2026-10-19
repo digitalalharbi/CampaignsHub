@@ -1,10 +1,17 @@
-# START HERE — 2026-10-19 (evening) — #767 and #768 in CI; batched branch `feat/portal-mobile-cards` ready for its PR
+# START HERE — 2026-10-19 (night) — #765, #766, #767, #768 merged and deployed; #769 and the portal/N+1 branch open
 
-**Open:** #767 report composition (Owner defect 106) — fixed the «السجل اليومي» PDF pages to eight days each after CI's Chromium measured fourteen at fit scale 0.839 (below the 0.85 readable floor; report-pdf-download.spec failed); locally that spec and six other report specs pass on Chromium (46 passed, exit 0). #768 Automated Rules R3 (agents list, explain and draft rules; drafts off and Monitor Only) plus the WD-EVIDENCE PDF appendix (a tall screenshot fits its page at 0.912; tokens serve only their own report's included images). Merge #767, then refresh and merge #768.
+**Merged and deployed today, in order:** #765 Batch D (`b3e9512f`: four-primary KPI row, client team), #766 Automated Rules R1+R2 (`23b513fc`), #767 report composition (`a283fa0f`, Owner defect 106), #768 Automated Rules R3 plus the PDF evidence appendix (`51273207`).
 
-**Next PR, pushed and waiting:** `feat/portal-mobile-cards` — CP-MOBILE-001 (Files cards; portal swept at 375px in Arabic and English, nine pages, no overflow), CP-PARITY-001 (portfolio period choice and KPI sparklines), REPORT-TITLE-METADATA-001 Production crawler evidence, and the CAMPAIGN-INTELLIGENCE-HUB N+1 fix (campaign list 177 queries for 15 campaigns → the same as for 3; 2248 metrics, analytics, report and portal tests pass). Open it after #768 merges.
+**Verified on Production (served, not local):** on `/r/JCPjOu7P4AB3zVXaze1wqO` after #767 — a 960px container with the platform cards, the impression-to-result funnel and the footer all full width, the daily ledger shown by default (19 days), four tabs, no horizontal overflow at 375px on any tab, `report_views` in the payload. After #768 — the bundle carries the agent-draft badge and the evidence pages; `GET /reports/print/{bad token}/evidence/{id}` answers 404; `/projects/{p}/automation/rules` answers 401 without a session; health 200. Not provable without an Owner or client session: automation rule create and run, an agent draft, an evidence PDF, the client portal.
 
-**Owner-only:** AI key in the Agent Center; a signed-in session for Production proofs (automation rules, agent drafts, evidence PDF, client portal); the Snapchat reversible write test (AGENTS-EXEC-SNAPCHAT-001 — the adapter exists, the executor is held to meta,google by AGENTS_EXECUTE_PROVIDERS); which plans include agents.
+**Open:** #769 removes the spend-notes paragraph from every report footer (the Owner's request, 2026-10-19). Its WebKit gate failed once on `access-recovery.spec.ts:208` («Execution context was destroyed» on the second `page.evaluate` after sign-out); the spec passed 10 of 10 on WebKit locally and the PR touches nothing near it, so **no cause is claimed** — the branch was updated onto main and CI restarted. If that signature recurs, reproduce under load before touching the spec. Then `feat/portal-mobile-cards`: CP-MOBILE-001 (Files cards, portal swept at 375px in Arabic and English), CP-PARITY-001 (portfolio period choice and sparklines), REPORT-TITLE-METADATA-001 Production crawler evidence, and the campaign N+1 fix (177 queries for 15 campaigns down to the same as for 3).
+
+**Lessons recorded:** a new PDF slide must fit at scale 0.85 or the whole export fails (14 daily rows failed, 8 fit); a select filled by a query reflowed the dashboard filter bar and lost a click on Firefox (CLICK-STABLE-002, fixed with `settledWidth`); read exit codes, never `vitest | grep && push`.
+
+**Owner-only:** AI key in the Agent Center; a signed-in session for the Production proofs above; the Snapchat reversible write test (AGENTS-EXEC-SNAPCHAT-001 — the adapter exists, the executor is held to meta and google by AGENTS_EXECUTE_PROVIDERS); which plans include agents.
+
+---
+
 
 ---
 

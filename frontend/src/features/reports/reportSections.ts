@@ -20,6 +20,7 @@ export type ReportSectionKey =
   | 'site_measurement'
   | 'recommendations'
   | 'detailed_tables'
+  | 'daily_records'
   | 'objective_breakdown'
   | 'advanced_segmentation'
   | 'account_breakdown'
@@ -50,3 +51,65 @@ export function withStreamsSlide<S extends { id: string; type: string; order: nu
 
   return slides
 }
+
+/**
+ * REPORT-COMPOSITION-CONTROL-001 — the daily ledger is printed only where the server NAMED it.
+ *
+ * Stricter than `sectionShown`, which reads an absent list as «everything»: a document resolved before
+ * the component existed never gains a page it did not have.
+ */
+export function dailyRecordsChosen(data: WithReportSections | null | undefined): boolean {
+  const list = data?.report_sections
+
+  return Array.isArray(list) && (list as string[]).includes('daily_records')
+}
+
+/**
+ * Days per deck page — a fixed page must never be cut by its edge, and the print layout gate refuses a
+ * page it would have to shrink below 0.85. Fourteen days measured 0.839 on the CI Chromium (the PDF
+ * export failed); ten measured 0.91 locally, so eight leave a margin for the CI fonts.
+ */
+export const DAILY_ROWS_PER_PAGE = 8
+
+/** The deck's daily-records pages, appended like the stream page, one per eight days. */
+export function withDailyRecordsSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & { timeseries?: unknown[] },
+): S[] {
+  if (!dailyRecordsChosen(data)) return slides
+  const days = data.timeseries?.length ?? 0
+  for (let i = 0; i < days; i += DAILY_ROWS_PER_PAGE) {
+    slides.push({ id: `__daily-${i}`, type: '__daily', order: 9997, visible: true, range: [i, i + DAILY_ROWS_PER_PAGE] } as S)
+  }
+
+  return slides
+}
+
+/** WD-EVIDENCE-001 — one appendix screenshot as the print payload names it. */
+export interface PrintEvidence {
+  id: string
+  provider: string
+  period_start: string | null
+  period_end: string | null
+  captured_at: string | null
+  note: string | null
+  name: string | null
+  image: boolean
+  url: string | null
+}
+
+/**
+ * WD-EVIDENCE-001 — the PDF's appendix of platform screenshots: one fixed page each, after the report
+ * proper, present only when the server attached screenshots the Owner chose to include.
+ */
+export function withEvidenceSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: { platform_evidence?: PrintEvidence[] },
+): S[] {
+  ;(data.platform_evidence ?? []).forEach((_, i) => {
+    slides.push({ id: `__evidence-${i}`, type: '__evidence', order: 9999, visible: true, range: [i, i + 1] } as S)
+  })
+
+  return slides
+}
+

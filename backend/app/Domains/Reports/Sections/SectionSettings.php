@@ -22,8 +22,9 @@ final class SectionSettings
     /**
      * @param  array<string, bool>  $chosen
      * @param  list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}>  $streams
+     * @param  list<string>|null  $views  the main sections (`ReportViews`) — null is «every view»
      */
-    private function __construct(private readonly array $chosen, private readonly array $streams = []) {}
+    private function __construct(private readonly array $chosen, private readonly array $streams = [], private readonly ?array $views = null) {}
 
     /** @param array<string, mixed>|null $raw  the stored JSON, `{"sections": {"kpis": true, …}}` */
     public static function fromArray(?array $raw, ReportSectionRegistry $registry): self
@@ -37,7 +38,7 @@ final class SectionSettings
             }
         }
 
-        return new self($chosen, self::normaliseStreams($raw['streams'] ?? null));
+        return new self($chosen, self::normaliseStreams($raw['streams'] ?? null), ReportViews::normalise($raw['views'] ?? null));
     }
 
     /**
@@ -80,7 +81,23 @@ final class SectionSettings
     /** @param list<array<string, mixed>> $streams */
     public function withStreams(array $streams): self
     {
-        return new self($this->chosen, self::normaliseStreams($streams));
+        return new self($this->chosen, self::normaliseStreams($streams), $this->views);
+    }
+
+    /**
+     * REPORT-COMPOSITION-CONTROL-001 — the main sections this report offers; null is every one.
+     *
+     * @return list<string>|null
+     */
+    public function views(): ?array
+    {
+        return $this->views;
+    }
+
+    /** @param list<string>|null $views */
+    public function withViews(?array $views): self
+    {
+        return new self($this->chosen, $this->streams, ReportViews::normalise($views));
     }
 
     public static function none(): self
@@ -119,15 +136,21 @@ final class SectionSettings
             }
         }
 
-        return new self($chosen, $this->streams);
+        return new self($chosen, $this->streams, $this->views);
     }
 
-    /** @return array{sections: array<string, bool>, streams?: list<array<string, mixed>>} */
+    /** @return array{sections: array<string, bool>, streams?: list<array<string, mixed>>, views?: list<string>} */
     public function toArray(): array
     {
-        return $this->streams === []
-            ? ['sections' => $this->chosen]
-            : ['sections' => $this->chosen, 'streams' => $this->streams];
+        $out = ['sections' => $this->chosen];
+        if ($this->streams !== []) {
+            $out['streams'] = $this->streams;
+        }
+        if ($this->views !== null) {
+            $out['views'] = $this->views;
+        }
+
+        return $out;
     }
 
     /**

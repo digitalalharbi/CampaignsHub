@@ -320,6 +320,7 @@ export function FilterSelect({
   onChange,
   testid,
   width = 'min-w-36',
+  settledWidth,
 }: {
   label: string
   value: string
@@ -327,6 +328,16 @@ export function FilterSelect({
   onChange: (value: string) => void
   testid?: string
   width?: string
+  /**
+   * A FIXED width for a select whose options arrive after the first paint — CLICK-STABLE-002.
+   *
+   * A select is as wide as its longest option, so one filled by a query is narrow while it holds only
+   * a placeholder and widens when the real names land. On the dashboard that widening pushed the
+   * controls after it onto a second row ~200ms after they were visible: «More filters» jumped 900px
+   * and a click in that window opened nothing (measured on firefox, one run in five). Fixed from the
+   * first paint, the row is laid out once.
+   */
+  settledWidth?: string
 }) {
   const id = useId()
   const dense = useContext(DensityContext) === 'dense'
@@ -371,7 +382,7 @@ export function FilterSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`h-9 truncate rounded-xl border border-border bg-surface px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
-          dense ? 'max-w-40' : 'max-w-48 sm:max-w-none'
+          settledWidth ?? (dense ? 'max-w-40' : 'max-w-48 sm:max-w-none')
         }`}
       >
         {options.map((o) => (

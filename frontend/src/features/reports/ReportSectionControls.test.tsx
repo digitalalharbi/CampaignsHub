@@ -154,4 +154,34 @@ describe('ReportSectionControls', () => {
     await waitFor(() => expect(api.updateShareSections).toHaveBeenCalledWith('p1', 'r1', 'sh1', {}, { hide_spend: true }))
     await waitFor(() => expect(screen.getByTestId('section-link-hide_spend')).toHaveAttribute('aria-checked', 'false'))
   })
+
+  /* REPORT-COMPOSITION-CONTROL-001 — the report's main sections save like a switch, and the last one cannot be closed. */
+  it('saves the report\u2019s main sections and keeps at least one open', async () => {
+    vi.mocked(api.getReportSections).mockResolvedValue(state({ offers_views: true, views: ['summary', 'tables'] }))
+    vi.mocked(api.updateReportSections).mockResolvedValue(state({ offers_views: true, views: null }))
+    renderWithProviders(<ReportSectionControls projectId="p1" reportId="r1" />, { locale: 'en' })
+
+    expect(await screen.findByTestId('section-view-dashboard')).toHaveAttribute('data-state', 'off')
+    expect(screen.getByTestId('section-view-summary')).toHaveAttribute('data-state', 'on')
+    fireEvent.click(screen.getByTestId('section-view-toggle-dashboard'))
+    await waitFor(() => expect(api.updateReportSections).toHaveBeenCalledWith('p1', 'r1', { views: ['summary', 'dashboard', 'tables'] }))
+  })
+
+  it('on a link, a main section its report closed is fixed', async () => {
+    vi.mocked(api.listShares).mockResolvedValue([{ id: 'sh1', active: true, mode: 'live', created_at: '2026-09-01T00:00:00Z' }] as never)
+    vi.mocked(api.getShareSections).mockResolvedValue({
+      share_id: 'sh1', sections: [], resolved: [row('kpis', true, null)], visible: ['kpis'], availability_judged: false,
+      offers_views: true, report_views: ['summary', 'tables'], views: null, effective_views: ['summary', 'tables'],
+    })
+    vi.mocked(api.updateShareSections).mockResolvedValue({
+      share_id: 'sh1', sections: [], resolved: [row('kpis', true, null)], visible: ['kpis'], availability_judged: false,
+      offers_views: true, report_views: ['summary', 'tables'], views: ['tables'], effective_views: ['tables'],
+    })
+    renderWithProviders(<ReportSectionControls projectId="p1" reportId="r1" />, { locale: 'en' })
+
+    fireEvent.change(await screen.findByTestId('section-level'), { target: { value: 'sh1' } })
+    expect(await screen.findByTestId('section-view-locked-dashboard')).toHaveTextContent('Hidden by the report')
+    fireEvent.click(screen.getByTestId('section-view-toggle-summary'))
+    await waitFor(() => expect(api.updateShareSections).toHaveBeenCalledWith('p1', 'r1', 'sh1', {}, {}, ['tables']))
+  })
 })

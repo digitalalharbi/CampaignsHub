@@ -53,6 +53,15 @@ describe('the automated rules page', () => {
     expect(screen.getByTestId('automation-rule-r1')).toHaveTextContent('Recommend for approval')
   })
 
+  /* AUTO-RULES-AGENTS-009 — a rule an agent drafted says so until a person reviews it. */
+  it('marks an agent\u2019s draft, and only that rule', async () => {
+    vi.mocked(listRules).mockResolvedValue({ rules: [rule, { ...rule, id: 'r9', name: 'Drafted', enabled: false, mode: 'monitor', origin: 'agent', drafted_by_agent: 'campaign' }] })
+    renderWithProviders(<AutomationPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('automation-agent-draft-r9')).toHaveTextContent('مسودة من وكيل')
+    expect(screen.queryByTestId('automation-agent-draft-r1')).not.toBeInTheDocument()
+  })
+
   it('turns a rule off and shows a dry run without changing anything', async () => {
     vi.mocked(toggleRule).mockResolvedValue({ ...rule, enabled: false })
     vi.mocked(dryRunRule).mockResolvedValue({ run: {} as never, results: [{ provider: 'tiktok', name: 'Spring', external_id: '9', level: 'campaign', matched: true, status: 'would_pause', metrics: { 'spend@3d': 600, 'roas@3d': 1.5 }, before: null, after: null }] })

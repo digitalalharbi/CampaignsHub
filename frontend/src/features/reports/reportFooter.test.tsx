@@ -37,12 +37,19 @@ describe('the report footer', () => {
     expect(screen.queryByTestId('report-footer-more')).toBeNull()
   })
 
-  it('is one subtle centred frame outside the report body: no heading, no fill, and not a section', () => {
+  /*
+   * REPORT-COMPOSITION-CONTROL-001 (Owner defect 106) — the narrow centred box became a full-width
+   * footer aligned with the report container: notes beside a labelled facts grid, stacking on a phone.
+   */
+  it('is one full-width frame aligned with the report: no heading, no fill, and not a section', () => {
     const { container } = render(<ReportFooter locale="en" facts={facts} />)
     const footer = screen.getByTestId('report-footer')
 
     expect(container.querySelector('h1,h2,h3,h4')).toBeNull()
-    expect(footer.className).toMatch(/text-center/)
+    expect(footer.className).toMatch(/\bw-full\b/)
+    expect(footer.className).not.toMatch(/max-w-|mx-auto|text-center/)
+    expect(screen.getByTestId('report-footer-meta').tagName).toBe('DL')
+    expect(screen.getByTestId('report-footer-meta').querySelectorAll('dt')).toHaveLength(5)
     expect(footer.className).toMatch(/\bborder\b/)
     expect(footer.className).not.toMatch(/\bbg-surface|\bshadow-/)
     expect(footer.className).toMatch(/text-\[11px\]/)
