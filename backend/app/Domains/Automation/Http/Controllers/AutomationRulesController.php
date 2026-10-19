@@ -14,6 +14,10 @@ use App\Domains\Automation\Services\RuleEvaluator;
 use App\Domains\Automation\Support\RuleCatalog;
 use App\Domains\Automation\Support\RuleSchedule;
 use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
+use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -54,6 +58,30 @@ final class AutomationRulesController extends Controller
             'providers' => $support,
             'autonomy' => ['pause' => $ladder->activeGrant($row, 'pause') !== null, 'budget_decrease' => $ladder->activeGrant($row, 'budget_decrease') !== null],
         ], 'Catalog.');
+    }
+
+    /**
+     * What a rule's scope can name: the project's actively bound ad accounts and their platform campaigns
+     * and ad groups — the same ids RuleTargets reads, so a scope can only name the project's own objects.
+     */
+    public function targets(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        // Advertising accounts only: a store, an analytics property or a pixel bound to the project is not
+        // something a rule can pause or budget.
+        $accounts = ExternalAccount::query()->whereIn('id', BoundAccountVisibility::activeAccountIds($project) ?: ['00000000-0000-0000-0000-000000000000'])
+            ->where('account_type', 'ad_account')->get(['id', 'provider', 'name', 'external_id']);
+        $accountIds = $accounts->map(fn ($a) => (string) $a->id)->all();
+        $campaigns = ExternalCampaign::query()->where('project_id', $project)->whereIn('external_account_id', $accountIds ?: ['00000000-0000-0000-0000-000000000000'])
+            ->orderBy('name')->limit(1000)->get(['id', 'provider', 'name', 'status', 'external_account_id', 'daily_budget', 'currency']);
+        $sets = ExternalAdSet::query()->where('project_id', $project)->whereIn('external_campaign_id', $campaigns->modelKeys() ?: ['00000000-0000-0000-0000-000000000000'])
+            ->orderBy('name')->limit(2000)->get(['id', 'name', 'status', 'external_campaign_id']);
+
+        return ApiResponse::success([
+            'accounts' => $accounts->map(fn ($a): array => ['id' => (string) $a->id, 'provider' => AdPlatforms::canonical((string) $a->provider), 'name' => $a->name ?? $a->external_id])->values()->all(),
+            'campaigns' => $campaigns->map(fn ($c): array => ['id' => (string) $c->id, 'provider' => AdPlatforms::canonical((string) $c->provider), 'name' => $c->name, 'status' => $c->status, 'account_id' => (string) $c->external_account_id, 'daily_budget' => $c->daily_budget !== null ? (float) $c->daily_budget : null, 'currency' => $c->currency])->values()->all(),
+            'ad_sets' => $sets->map(fn ($s): array => ['id' => (string) $s->id, 'name' => $s->name, 'status' => $s->status, 'campaign_id' => (string) $s->external_campaign_id])->values()->all(),
+        ], 'Targets.');
     }
 
     /** The cards at the top: what the rules did over the last N days, like the platform's own summary. */

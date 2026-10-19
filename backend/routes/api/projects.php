@@ -298,6 +298,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::put('agent-autonomy', [AgentAutonomyController::class, 'update'])->middleware('project.can:budget.manage')->name('agent-autonomy.update');
     // AUTO-RULES-001 — automated rules: catalogue, summary, rules, dry run, run now, history, change log.
     Route::get('automation/catalog', [AutomationRulesController::class, 'catalog'])->middleware('project.can:campaigns.view')->name('automation.catalog');
+    Route::get('automation/targets', [AutomationRulesController::class, 'targets'])->middleware('project.can:campaigns.view')->name('automation.targets');
     Route::get('automation/summary', [AutomationRulesController::class, 'summary'])->middleware('project.can:campaigns.view')->name('automation.summary');
     Route::get('automation/rules', [AutomationRulesController::class, 'index'])->middleware('project.can:campaigns.view')->name('automation.rules.index');
     Route::post('automation/rules', [AutomationRulesController::class, 'store'])->middleware('project.can:campaigns.manage')->name('automation.rules.store');

@@ -1,4 +1,5 @@
 import {
+  Workflow,
   Bot,
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
@@ -87,6 +88,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
     key: 'agents',
     ar: 'الوكلاء الأذكياء', en: 'AI agents', icon: Bot,
     leaves: [
+      { to: '/agency/automation', ar: 'القواعد الآلية', en: 'Automated rules', icon: Workflow },
       { to: '/agency/agents', ar: 'مركز الوكلاء', en: 'Agent Center', icon: Bot },
       { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
     ],

@@ -8,6 +8,7 @@ use App\Domains\Automation\Models\AutomationRule;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Support\AdPlatforms;
 
@@ -22,7 +23,9 @@ final class RuleTargets
     public function for(AutomationRule $rule): array
     {
         $scope = (array) ($rule->scope ?? []);
-        $accounts = BoundAccountVisibility::activeAccountIds((string) $rule->project_id);
+        // Advertising accounts actively bound to the project — never a store, analytics property or pixel.
+        $accounts = ExternalAccount::withoutGlobalScopes()->whereIn('id', BoundAccountVisibility::activeAccountIds((string) $rule->project_id) ?: ['00000000-0000-0000-0000-000000000000'])
+            ->where('account_type', 'ad_account')->pluck('id')->map(fn ($v) => (string) $v)->all();
         if (! empty($scope['account_ids'])) {
             $accounts = array_values(array_intersect($accounts, array_map('strval', (array) $scope['account_ids'])));
         }

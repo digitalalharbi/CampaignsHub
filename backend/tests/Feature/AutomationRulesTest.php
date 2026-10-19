@@ -299,6 +299,23 @@ final class AutomationRulesTest extends TestCase
         $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->project->id}/automation/actions")->assertOk()->assertJsonPath('data.actions.0.status', 'proposed');
     }
 
+    public function test_the_builder_lists_only_this_project_s_bound_objects(): void
+    {
+        $other = Project::create(['client_workspace_id' => $this->project->client_workspace_id, 'name' => 'Other', 'status' => 'active']);
+        $this->campaign($other, $this->account($other, 'meta', 'act_9'), 'Foreign', 1, 1);
+
+        $data = $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->project->id}/automation/targets")->assertOk()->json('data');
+
+        $this->assertSame(['Loser', 'Tiny', 'Winner'], array_column($data['campaigns'], 'name'));
+        $this->assertSame(['act_1'], array_column($data['accounts'], 'name'));
+
+        // A store bound to the project is not an advertising account a rule can act on.
+        $store = $this->account($this->project, 'salla', 'store_1');
+        $store->forceFill(['account_type' => 'store'])->save();
+        $data = $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->project->id}/automation/targets")->assertOk()->json('data');
+        $this->assertSame(['act_1'], array_column($data['accounts'], 'name'));
+    }
+
     public function test_a_condition_value_must_fit_its_metric(): void
     {
         $this->rule(['conditions' => [['metric' => 'delivery_status', 'operator' => 'gt', 'value' => 'active', 'window_days' => 1]]])->assertStatus(422);
