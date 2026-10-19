@@ -90,18 +90,24 @@ jobs:
 
             # Check runs for THIS head only, by name; a name that is absent is not a pass.
             # The pull request's own view of its checks — what branch protection counts — not every run on the commit.
-            runs=$(gh pr view "$pr" --json statusCheckRollup --jq '[.statusCheckRollup[] | {name: (.name // .context), status: ((.status // "COMPLETED") | ascii_downcase), conclusion: ((.conclusion // .state // "") | ascii_downcase)}]')
-            pending=0
-            for need in "${REQUIRED[@]}"; do
-              row=$(jq -c --arg n "$need" '[.[] | select(.name==$n)] | last // empty' <<<"$runs")
-              if [ -z "$row" ]; then pending=1; echo "  $need: not reported yet"; continue; fi
-              status=$(jq -r .status <<<"$row"); concl=$(jq -r .conclusion <<<"$row")
-              if [ "$status" != "completed" ]; then pending=1; echo "  $need: $status"; continue; fi
-              if [ "$concl" != "success" ]; then
-                echo "::error::#$pr: '$need' finished '$concl'. The queue is halted — fix it or rerun the check."
-                exit 1
-              fi
-              echo "  $need: success"
+            # Read a few times: a run started by CI completing can arrive before the statuses that same
+            # CI run posted (report-status) are visible on the PR (observed on #752, 2026-10-19 00:50).
+            for attempt in 1 2 3 4; do
+              runs=$(gh pr view "$pr" --json statusCheckRollup --jq '[.statusCheckRollup[] | {name: (.name // .context), status: ((.status // "COMPLETED") | ascii_downcase), conclusion: ((.conclusion // .state // "") | ascii_downcase)}]')
+              pending=0
+              for need in "${REQUIRED[@]}"; do
+                row=$(jq -c --arg n "$need" '[.[] | select(.name==$n)] | last // empty' <<<"$runs")
+                if [ -z "$row" ]; then pending=1; echo "  $need: not reported yet"; continue; fi
+                status=$(jq -r .status <<<"$row"); concl=$(jq -r .conclusion <<<"$row")
+                if [ "$status" != "completed" ]; then pending=1; echo "  $need: $status"; continue; fi
+                if [ "$concl" != "success" ]; then
+                  echo "::error::#$pr: '$need' finished '$concl'. The queue is halted — fix it or rerun the check."
+                  exit 1
+                fi
+                echo "  $need: success"
+              done
+              [ "$pending" = 0 ] && break
+              [ "$attempt" -lt 4 ] && { echo "  (read $attempt: some checks not visible yet — reading again in 30s)"; sleep 30; } || true
             done
 
             if [ "$pending" = 1 ]; then echo "#$pr is still being checked. Waiting."; exit 0; fi
