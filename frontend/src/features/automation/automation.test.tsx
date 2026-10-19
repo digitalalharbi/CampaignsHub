@@ -89,6 +89,17 @@ describe('the automated rules page', () => {
     expect(within(builder).queryByTestId('rule-condition-support-0')).toBeNull()
   })
 
+  it('describes what was observed and never claims the platform does not support the metric', async () => {
+    renderWithProviders(<AutomationPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId(`automation-edit-${rule.id}`))
+    const builder = await screen.findByTestId('rule-builder')
+    const note = await within(builder).findByTestId('rule-condition-support-1')
+    expect(note).toHaveTextContent(/last 30 days/)
+    expect(note).toHaveTextContent(/missing, delayed, or not accessible/)
+    expect(note.textContent).not.toMatch(/unsupported|does not support|never report/i)
+  })
+
   it('says nothing about a platform that has no data yet — that is not known, not unsupported', async () => {
     vi.mocked(getMetricSupport).mockResolvedValue({ days: 30, providers: { tiktok: { has_data: false, reported: [] } } })
     renderWithProviders(<AutomationPage />, { locale: 'en' })

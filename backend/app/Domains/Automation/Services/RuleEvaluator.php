@@ -172,8 +172,8 @@ final class RuleEvaluator
 
         /*
          * A figure nobody measured is not a miss. When no condition was judged false and at least one had
-         * no figure — the platform does not report that metric for this object, or reported nothing in the
-         * window — the object was not judged, and the history says so instead of «not matched».
+         * no figure — nothing was reported for this object in the window (missing, delayed or inaccessible
+         * data, never a claim that the platform cannot supply the metric) — the object was not judged, and the history says so instead of «not matched».
          */
         if (! $matched && in_array(null, $results, true) && ! in_array(false, $results, true)) {
             return [false, $read, 'no_figure'];

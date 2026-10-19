@@ -43,12 +43,14 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
   const isBudget = f.action.type === 'budget_increase' || f.action.type === 'budget_decrease'
   const statusMetric = (k: string) => catalog.metrics.find((m) => m.key === k)?.kind === 'status'
   /*
-   * AUTO-RULES-CONDITIONS-004 — «only metrics each provider actually supports».
+   * AUTO-RULES-CONDITIONS-004 — judge only what an account reported, and say what was observed.
    *
-   * For a condition, the platforms in this rule's scope that HAVE reported data lately but never sent a
-   * figure the metric is computed from. A platform with no data at all yet is not named: that is «not
-   * known», and saying «unsupported» would be a claim nobody measured. The rule still saves — the
-   * engine simply never judges such an object, and its history says so.
+   * For a condition, the platforms in this rule's scope that HAVE reported data lately but sent no figure
+   * the metric is computed from in the window. This is an observation about the connected accounts, never
+   * a claim that the platform cannot supply the metric: the figure may be missing, delayed, behind an
+   * access the connection lacks, or simply not there yet (one account with no revenue says nothing about
+   * the platform). A platform with no data at all is not named. The rule still saves; the engine does
+   * not judge an object it has no figure for, and its history says so.
    */
   const lacking = (metric: string): string[] => {
     const needs = catalog.metrics.find((m) => m.key === metric)?.needs ?? []
@@ -118,9 +120,9 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
                   <button type="button" disabled={f.conditions.length === 1} onClick={() => setF((x) => ({ ...x, conditions: x.conditions.filter((_, j) => j !== i) }))} aria-label={ar ? 'حذف الشرط' : 'Remove condition'} className="justify-self-end rounded p-1 text-text-muted hover:text-danger disabled:opacity-40"><Trash2 size={15} /></button>
                   {lacking(c.metric).length > 0 && (
                     <p data-testid={`rule-condition-support-${i}`} className="col-span-full text-[11px] text-warning">
-                      {ar ? 'لا تُبلِّغ عن هذا الرقم: ' : 'Does not report this figure: '}
+                      {ar ? `لم يصل رقم لهذا الشرط خلال آخر ${support.data?.days ?? 30} يومًا من حسابات: ` : `No figure for this condition arrived from these accounts in the last ${support.data?.days ?? 30} days: `}
                       {lacking(c.metric).map((p) => platformLabel(p, ar)).join(ar ? '، ' : ', ')}
-                      {ar ? ' — لن تُقيَّم كائناتها بهذا الشرط.' : ' — its objects will not be judged by this condition.'}
+                      {ar ? ' — قد تكون البيانات غير متوفرة أو متأخرة أو غير متاحة لصلاحيات الحساب. الكائنات بلا رقم لا تُقيَّم ولا تُعدّ غير مطابقة.' : ' — the data may be missing, delayed, or not accessible to the account access. Objects with no figure are not judged and are not counted as not matched.'}
                     </p>
                   )}
                 </li>
