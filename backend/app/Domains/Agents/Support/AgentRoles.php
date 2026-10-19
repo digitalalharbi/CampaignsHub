@@ -58,7 +58,7 @@ TXT;
             ],
             'reports' => [
                 'ar' => 'وكيل التقارير', 'en' => 'Reports Agent', 'tools' => $read, 'enabled' => true, 'why_disabled' => null,
-                'brief' => 'You prepare client report summaries in the agreed format. Always end a spend summary with: figures are the platform\'s at the time they were read, official invoices are the reference, and exchange-rate differences can occur.',
+                'brief' => 'You prepare client report summaries in the agreed format.',
             ],
         ];
     }

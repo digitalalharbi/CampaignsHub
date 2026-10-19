@@ -104,14 +104,13 @@ describe('a film with no cover frame, on a printed drilldown', () => {
   })
 })
 
-/** AGENTS-REPORT-NOTES-BLOCK-001 — the printed document names its sources under the spend notes. */
-describe('the printed spend notes', () => {
-  it('are printed once, naming the report platforms', () => {
-    render(<PrintDocument data={base} reportName="R" currency="SAR" />)
-    const notes = screen.getByTestId('print-document-spend-notes')
+/** The Owner removed the spend-notes paragraph from every report footer (2026-10-19): the PDF carries none. */
+describe('the printed footer', () => {
+  it('carries no spend notes and no data-sources line', () => {
+    const { container } = render(<PrintDocument data={base} reportName="R" currency="SAR" />)
 
-    expect(notes).toHaveTextContent('official invoices are the reference')
-    expect(notes).toHaveTextContent(/Data sources: TikTok, Meta\./)
+    expect(screen.queryByTestId('print-document-spend-notes')).toBeNull()
+    expect(container.textContent).not.toContain('official invoices are the reference')
+    expect(container.textContent).not.toContain('Data sources')
   })
 })
-

@@ -18,6 +18,7 @@ use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Services\ScheduledRunRows;
@@ -57,6 +58,8 @@ class AppServiceProvider extends ServiceProvider
          * letting whichever scenario ran first pay for a check the second then read for free.
          */
         $this->app->scoped(CreativeDemoPolicy::class);
+        // CAMPAIGN-INTELLIGENCE-HUB — the reach reader memoises per (account, window) for one request.
+        $this->app->scoped(PeriodReachReader::class);
         $this->app->scoped(PresentationAudience::class);
         $this->app->scoped(RefusedCreativeAccess::class);
 
