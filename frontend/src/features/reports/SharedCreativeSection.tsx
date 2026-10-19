@@ -847,6 +847,8 @@ function SharedCreativeDetail({
               src={preview.video_url}
               poster={preview.thumbnail_url}
               durationHint={creative.duration_seconds}
+              // The platform's own shape: without it every film got a 16:9 box and a reel was a thin strip in it.
+              aspect={preview.aspect ?? null}
               className="w-full max-w-2xl"
             />
           ) : showing === 'image' && preview.image_url ? (
