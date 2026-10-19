@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Check, ShieldCheck, X } from 'lucide-react'
 import { decideProposal, listProposals, type Proposal } from './api'
 import { STATUS_WORDS, actionText, violationText } from './proposalCopy'
+import { AutonomyCard } from './AutonomyCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -98,6 +99,8 @@ export function ApprovalsPage() {
           </li>
         ))}
       </ul>
+
+      <AutonomyCard projectId={currentProjectId} ar={ar} />
 
       <p className="text-xs text-text-muted">
         <Link to={portalTo('/recommendations')} className="font-semibold text-brand-700 hover:underline">{ar ? 'العودة إلى التوصيات' : 'Back to recommendations'}</Link>

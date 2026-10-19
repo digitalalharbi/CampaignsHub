@@ -115,6 +115,16 @@ final class ProposalRules
         return $out;
     }
 
+    /** The target's daily budget as this product last read it, or null when unknown (AGENTS-AUTONOMY-001). */
+    public function currentDailyBudget(ActionProposal $p): ?float
+    {
+        $row = $p->target_type === 'campaign'
+            ? ExternalCampaign::withoutGlobalScopes()->where('project_id', $p->project_id)->where('external_account_id', $p->external_account_id)->where('external_id', $p->target_external_id)->first()
+            : ExternalAdSet::withoutGlobalScopes()->where('project_id', $p->project_id)->where('external_id', $p->target_external_id)->first();
+
+        return $row?->daily_budget === null ? null : (float) $row->daily_budget;
+    }
+
     /** @return array{max_increase_percent: float, daily_budget_ceiling: float|null} */
     public function limitsFor(Project $project): array
     {

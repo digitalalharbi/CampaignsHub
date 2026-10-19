@@ -20,6 +20,16 @@ return [
     'proposal_ttl_hours' => 72,
 
     /*
+     * AGENTS-AUTONOMY-001 — what a project's record must show before an owner may let pauses or budget
+     * decreases run without waiting. Read again at every automatic run.
+     */
+    'autonomy' => [
+        'min_days' => 30,
+        'min_decided' => 10,
+        'min_approval_rate' => 0.9,
+    ],
+
+    /*
      * Executors, by class name. The one executor carries an APPROVED proposal through the existing campaign
      * write path (CampaignWriteService) as its approver — no new route to a platform exists.
      *

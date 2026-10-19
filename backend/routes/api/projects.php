@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Agents\Http\Controllers\ActionProposalController;
+use App\Domains\Agents\Http\Controllers\AgentAutonomyController;
 use App\Domains\Agents\Http\Controllers\AgentChatController;
 use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
@@ -291,6 +292,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on.
     Route::get('agent-routines', [AgentRoutinesController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-routines.index');
     Route::put('agent-routines', [AgentRoutinesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-routines.update');
+    // AGENTS-AUTONOMY-001 — the trust ladder and an owner's switch per action class.
+    Route::get('agent-autonomy', [AgentAutonomyController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-autonomy.show');
+    Route::put('agent-autonomy', [AgentAutonomyController::class, 'update'])->middleware('project.can:budget.manage')->name('agent-autonomy.update');
     // AGENTS-CENTER-001 — conversations with the six agents; replies are queued.
     Route::get('agents', [AgentChatController::class, 'roles'])->middleware('project.can:campaigns.view')->name('agents.roles');
     Route::get('agent-threads', [AgentChatController::class, 'threads'])->middleware('project.can:campaigns.view')->name('agent-threads.index');

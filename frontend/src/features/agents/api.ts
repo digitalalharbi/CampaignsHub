@@ -133,3 +133,31 @@ export async function setRoutine(projectId: string, routine: string, enabled: bo
   await ensureCsrfCookie()
   return putData<{ routines: AgentRoutineRow[] }>(`/projects/${projectId}/agent-routines`, { routine, enabled })
 }
+
+/* AGENTS-AUTONOMY-001 — the trust ladder per action class, and an owner's switch. */
+
+export interface LadderClass {
+  class: 'pause' | 'budget_decrease'
+  eligible: boolean
+  decided: number
+  approved: number
+  rate: number | null
+  first_decided_at: string | null
+  days: number
+  failed_recent: number
+  /** history_days | decided_count | approval_rate | recent_failures */
+  needs: string[]
+  granted: boolean
+}
+
+export interface AutonomyState {
+  classes: LadderClass[]
+  requirements: { min_days: number; min_decided: number; min_approval_rate: number }
+}
+
+export const getAutonomy = (projectId: string) => getData<AutonomyState>(`/projects/${projectId}/agent-autonomy`)
+
+export async function setAutonomy(projectId: string, cls: string, enabled: boolean) {
+  await ensureCsrfCookie()
+  return putData<AutonomyState>(`/projects/${projectId}/agent-autonomy`, { class: cls, enabled })
+}

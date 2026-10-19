@@ -85,6 +85,10 @@ final class ProposalService
             $this->record($proposal, 'blocked', $by, note: implode(', ', $violations));
         } else {
             $this->record($proposal, 'proposed', $by, note: $proposal->reason);
+            if ($proposal->action === 'set_daily_budget') {
+                // What the budget was when asked, kept so the ladder can tell a decrease from a raise later.
+                $proposal->forceFill(['evidence' => [...(array) $proposal->evidence, 'current_daily_budget' => $this->rules->currentDailyBudget($proposal)]])->save();
+            }
         }
 
         $this->audit->log(
@@ -94,7 +98,39 @@ final class ProposalService
             after: ['agent' => $agentKey, 'action' => $proposal->action, 'status' => $proposal->status],
         );
 
+        if ($proposal->status === ActionProposal::PENDING && $by === null) {
+            return $this->runIfGranted($proposal);
+        }
+
         return $proposal;
+    }
+
+    /**
+     * AGENTS-AUTONOMY-001 — an AGENT's proposal in a class an owner granted, on a project whose record is
+     * still eligible, is approved in that owner's name with a note saying so; everything else waits. The
+     * owner must still hold the permissions an approval needs at that moment.
+     */
+    private function runIfGranted(ActionProposal $proposal): ActionProposal
+    {
+        $ladder = app(TrustLadder::class);
+        $class = $ladder->classOf($proposal);
+        $project = Project::withoutGlobalScopes()->find($proposal->project_id);
+        if ($class === null || $project === null) {
+            return $proposal;
+        }
+
+        $grant = $ladder->activeGrant($project, $class);
+        $owner = $grant !== null ? User::query()->find($grant->granted_by) : null;
+        if ($grant === null || $owner === null || ! $ladder->measure($project, $class)['eligible']) {
+            return $proposal;
+        }
+
+        try {
+            return $this->approve($proposal, $owner, 'auto: trust ladder');
+        } catch (HttpException) {
+            // The owner no longer holds the permission, or the proposal moved on: it waits for a person.
+            return $proposal->fresh() ?? $proposal;
+        }
     }
 
     /**
