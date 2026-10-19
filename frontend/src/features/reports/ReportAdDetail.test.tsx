@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { renderWithProviders } from '@/test/utils'
@@ -275,3 +275,76 @@ describe('the detail states a withheld spend the card already states', () => {
     expect(figures).toHaveTextContent(/412(\.50?)?\s*USD/)
   })
 })
+
+/*
+ * REPORT-CONTENT-FULL-FRAME-001 (Owner, 2026-10-19) — a reel opened from a report shows the whole frame.
+ *
+ * Measured in a browser, not inferred: with the content's trend chart below it, the stage — a column-flex
+ * child with `overflow-hidden` — was SHRUNK from its intended 512px to 312px (and the dialog never scrolled),
+ * leaving a 9:16 reel 175px wide. And a video whose platform sent no aspect left the stage `unknown`, a fixed
+ * 288px strip, because an unarmed player holds no file and so never measures it. jsdom cannot measure pixels,
+ * so these pin the two things that prevent it.
+ */
+describe('a tall reel in a report keeps its frame', () => {
+  const film = (over: Record<string, unknown> = {}) => ad({
+    preview: preview({ kind: 'video', image_url: null, video_url: 'https://cdn/reel.mp4', thumbnail_url: 'https://cdn/cover.jpg', ...over }),
+  })
+
+  it('never lets the dialog shrink the stage: the dialog scrolls instead', () => {
+    renderWithProviders(<ReportAdDetail ad={film()} currency="USD" locale="en" onClose={() => {}}>{<div>trend</div>}</ReportAdDetail>, { locale: 'en' })
+
+    const stage = screen.getByTestId('report-ad-detail-stage')
+    expect(stage.className).toMatch(/\bshrink-0\b/)
+    expect(stage.className).toMatch(/\boverflow-hidden\b/)
+  })
+
+  it('gives a film of unknown shape room, not a 288px strip', () => {
+    renderWithProviders(<ReportAdDetail ad={film()} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' })
+
+    const stage = screen.getByTestId('report-ad-detail-stage')
+    expect(stage).toHaveAttribute('data-shape', 'unknown')
+    expect(stage.className).not.toMatch(/\bh-72\b/)
+    expect(stage.className).toMatch(/h-\[56vh\]/)
+  })
+
+  it('learns a film\u2019s shape from its cover before it is played', async () => {
+    // Stand in for the browser's image decode: 1080 x 1920 is a story.
+    const real = window.Image
+    class Cover {
+      naturalWidth = 1080
+      naturalHeight = 1920
+      onload: (() => void) | null = null
+      set src(_v: string) { queueMicrotask(() => this.onload?.()) }
+    }
+    ;(window as unknown as { Image: unknown }).Image = Cover
+    try {
+      renderWithProviders(<ReportAdDetail ad={film()} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' })
+
+      await waitFor(() => expect(screen.getByTestId('report-ad-detail-stage')).toHaveAttribute('data-shape', 'vertical'))
+      expect(screen.getByTestId('report-ad-detail-stage').className).toMatch(/h-\[64vh\]/)
+    } finally {
+      ;(window as unknown as { Image: unknown }).Image = real
+    }
+  })
+
+  it('trusts the platform when it states the shape, and does not probe the cover', () => {
+    const real = window.Image
+    let probed = 0
+    class Cover {
+      naturalWidth = 0
+      naturalHeight = 0
+      onload: (() => void) | null = null
+      set src(_v: string) { probed++ }
+    }
+    ;(window as unknown as { Image: unknown }).Image = Cover
+    try {
+      renderWithProviders(<ReportAdDetail ad={film({ aspect: 'vertical' })} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' })
+
+      expect(probed).toBe(0)
+      expect(screen.getByTestId('report-ad-detail-stage')).toHaveAttribute('data-shape', 'vertical')
+    } finally {
+      ;(window as unknown as { Image: unknown }).Image = real
+    }
+  })
+})
+
