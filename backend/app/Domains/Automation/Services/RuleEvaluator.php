@@ -64,7 +64,11 @@ final class RuleEvaluator
                 $row = ['target' => $t, 'matched' => $matched, 'metrics' => $read, 'note' => $why];
 
                 if (! $matched) {
-                    $results[] = $row + ['status' => $why === null ? 'not_matched' : 'skipped_insufficient_data'];
+                    $results[] = $row + ['status' => match ($why) {
+                        null => 'not_matched',
+                        'no_figure' => 'skipped_no_figure',
+                        default => 'skipped_insufficient_data',
+                    }];
 
                     continue;
                 }
@@ -165,6 +169,15 @@ final class RuleEvaluator
         $matched = $rule->logic === 'any'
             ? in_array(true, $results, true)
             : $results !== [] && ! in_array(false, $results, true) && ! in_array(null, $results, true);
+
+        /*
+         * A figure nobody measured is not a miss. When no condition was judged false and at least one had
+         * no figure — the platform does not report that metric for this object, or reported nothing in the
+         * window — the object was not judged, and the history says so instead of «not matched».
+         */
+        if (! $matched && in_array(null, $results, true) && ! in_array(false, $results, true)) {
+            return [false, $read, 'no_figure'];
+        }
 
         return [$matched, $read, null];
     }

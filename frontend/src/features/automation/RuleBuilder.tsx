@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, X } from 'lucide-react'
-import { getTargets, saveRule, type AutomationRule, type Catalog, type RuleCondition, type RuleInput, type RuleLevel, type RuleMode } from './api'
+import { getMetricSupport, getTargets, saveRule, type AutomationRule, type Catalog, type RuleCondition, type RuleInput, type RuleLevel, type RuleMode } from './api'
 import { FREQ_WORDS, LEVEL_WORDS, MODE_WORDS, OP } from './ruleCopy'
 import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
@@ -26,6 +26,7 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
   const qc = useQueryClient()
   const [f, setF] = useState<RuleInput>(() => (rule ? { ...EMPTY, ...rule, scope: rule.scope ?? {} } : EMPTY))
   const targets = useQuery({ queryKey: ['automation-targets', projectId], queryFn: () => getTargets(projectId), retry: false })
+  const support = useQuery({ queryKey: ['automation-metric-support', projectId], queryFn: () => getMetricSupport(projectId), retry: false })
   const save = useMutation({
     mutationFn: () => saveRule(projectId, f, rule?.id),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['automation'] }); onClose() },
@@ -41,6 +42,25 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
   const adSets = (t?.ad_sets ?? []).filter((s) => campaigns.some((c) => c.id === s.campaign_id) && (!f.scope.campaign_ids?.length || f.scope.campaign_ids.includes(s.campaign_id)))
   const isBudget = f.action.type === 'budget_increase' || f.action.type === 'budget_decrease'
   const statusMetric = (k: string) => catalog.metrics.find((m) => m.key === k)?.kind === 'status'
+  /*
+   * AUTO-RULES-CONDITIONS-004 — «only metrics each provider actually supports».
+   *
+   * For a condition, the platforms in this rule's scope that HAVE reported data lately but never sent a
+   * figure the metric is computed from. A platform with no data at all yet is not named: that is «not
+   * known», and saying «unsupported» would be a claim nobody measured. The rule still saves — the
+   * engine simply never judges such an object, and its history says so.
+   */
+  const lacking = (metric: string): string[] => {
+    const needs = catalog.metrics.find((m) => m.key === metric)?.needs ?? []
+    if (needs.length === 0 || !support.data) return []
+    const inScope = f.scope.platforms?.length ? f.scope.platforms : platforms
+
+    return inScope.filter((p) => {
+      const s = support.data.providers[p]
+
+      return s !== undefined && s.has_data && needs.some((k) => !s.reported.includes(k))
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" role="dialog" aria-modal="true" aria-label={ar ? 'قاعدة آلية' : 'Automated rule'} data-testid="rule-builder">
@@ -96,6 +116,13 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
                     {catalog.windows.map((w) => <option key={w} value={w}>{ar ? `آخر ${days(w, 'ar')}` : `last ${days(w, 'en')}`}</option>)}
                   </select>
                   <button type="button" disabled={f.conditions.length === 1} onClick={() => setF((x) => ({ ...x, conditions: x.conditions.filter((_, j) => j !== i) }))} aria-label={ar ? 'حذف الشرط' : 'Remove condition'} className="justify-self-end rounded p-1 text-text-muted hover:text-danger disabled:opacity-40"><Trash2 size={15} /></button>
+                  {lacking(c.metric).length > 0 && (
+                    <p data-testid={`rule-condition-support-${i}`} className="col-span-full text-[11px] text-warning">
+                      {ar ? 'لا تُبلِّغ عن هذا الرقم: ' : 'Does not report this figure: '}
+                      {lacking(c.metric).map((p) => platformLabel(p, ar)).join(ar ? '، ' : ', ')}
+                      {ar ? ' — لن تُقيَّم كائناتها بهذا الشرط.' : ' — its objects will not be judged by this condition.'}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

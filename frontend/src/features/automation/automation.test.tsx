@@ -6,15 +6,15 @@ import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 
 vi.mock('./api', () => ({
-  getCatalog: vi.fn(), getSummary: vi.fn(), getTargets: vi.fn(), listRules: vi.fn(), listActions: vi.fn(), listChanges: vi.fn(),
+  getCatalog: vi.fn(), getSummary: vi.fn(), getTargets: vi.fn(), getMetricSupport: vi.fn(), listRules: vi.fn(), listActions: vi.fn(), listChanges: vi.fn(),
   saveRule: vi.fn(), toggleRule: vi.fn(), deleteRule: vi.fn(), dryRunRule: vi.fn(), runRuleNow: vi.fn(),
 }))
-import { dryRunRule, getCatalog, getSummary, getTargets, listActions, listRules, saveRule, toggleRule } from './api'
+import { dryRunRule, getCatalog, getMetricSupport, getSummary, getTargets, listActions, listRules, saveRule, toggleRule } from './api'
 
 const catalog: Catalog = {
   metrics: [
-    { key: 'spend', ar: 'الإنفاق', en: 'Spend', kind: 'money' }, { key: 'roas', ar: 'العائد', en: 'ROAS', kind: 'ratio' },
-    { key: 'cpa', ar: 'تكلفة النتيجة', en: 'Cost per result', kind: 'money' }, { key: 'delivery_status', ar: 'حالة العرض', en: 'Delivery status', kind: 'status' },
+    { key: 'spend', ar: 'الإنفاق', en: 'Spend', kind: 'money', needs: ['spend'] }, { key: 'roas', ar: 'العائد', en: 'ROAS', kind: 'ratio', needs: ['revenue', 'spend'] },
+    { key: 'cpa', ar: 'تكلفة النتيجة', en: 'Cost per result', kind: 'money', needs: ['spend', 'conversions'] }, { key: 'delivery_status', ar: 'حالة العرض', en: 'Delivery status', kind: 'status', needs: [] },
   ],
   operators: ['gt', 'gte', 'lt', 'lte', 'eq'], windows: [1, 3, 7, 14, 30],
   actions: [{ key: 'notify', ar: 'تنبيه', en: 'Notify', executable: false }, { key: 'pause', ar: 'إيقاف', en: 'Turn off', executable: true }, { key: 'budget_decrease', ar: 'خفض', en: 'Decrease daily budget', executable: true }, { key: 'bid_adjust', ar: 'مزايدة', en: 'Adjust bid', executable: false }],
@@ -39,6 +39,7 @@ describe('the automated rules page', () => {
     vi.mocked(getSummary).mockResolvedValue({ days: 7, all: 263, turn_on: 0, turn_off: 3, budget: 260, bid: 0, notified: 0, failed: 1, awaiting_approval: 4, rules_enabled: 5, rules_disabled: 0, rules_idle_30d: 0 })
     vi.mocked(listRules).mockResolvedValue({ rules: [rule] })
     vi.mocked(listActions).mockResolvedValue({ actions: [] })
+    vi.mocked(getMetricSupport).mockResolvedValue({ days: 30, providers: { tiktok: { has_data: true, reported: ['clicks', 'conversions', 'impressions', 'spend'] } } })
     vi.mocked(getTargets).mockResolvedValue({ accounts: [{ id: 'a1', provider: 'tiktok', name: 'Jood' }], campaigns: [{ id: 'c1', provider: 'tiktok', name: 'Spring', status: 'active', account_id: 'a1', daily_budget: 100, currency: 'SAR' }], ad_sets: [] })
   })
   afterEach(() => signOut())
@@ -75,6 +76,27 @@ describe('the automated rules page', () => {
     expect(row).toHaveTextContent('Spring')
     expect(row).toHaveTextContent('roas@3d: 1.5')
     expect(row).toHaveTextContent('Would ask: pause')
+  })
+
+  /* AUTO-RULES-CONDITIONS-004 — «only metrics each provider actually supports»: said before the rule is saved. */
+  it('names the platforms in scope that never report what a condition needs, and accuses none it has not heard from', async () => {
+    renderWithProviders(<AutomationPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId(`automation-edit-${rule.id}`))
+    const builder = await screen.findByTestId('rule-builder')
+    // Condition 0 is Spend (reported); condition 1 is ROAS, which needs revenue — TikTok never sent any.
+    await waitFor(() => expect(within(builder).getByTestId('rule-condition-support-1')).toHaveTextContent(/TikTok/))
+    expect(within(builder).queryByTestId('rule-condition-support-0')).toBeNull()
+  })
+
+  it('says nothing about a platform that has no data yet — that is not known, not unsupported', async () => {
+    vi.mocked(getMetricSupport).mockResolvedValue({ days: 30, providers: { tiktok: { has_data: false, reported: [] } } })
+    renderWithProviders(<AutomationPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId(`automation-edit-${rule.id}`))
+    const builder = await screen.findByTestId('rule-builder')
+    await within(builder).findByTestId('rule-condition-1')
+    expect(within(builder).queryByTestId('rule-condition-support-1')).toBeNull()
   })
 
   it('builds a rule with scope, AND/OR conditions, a budget action and a mode', async () => {

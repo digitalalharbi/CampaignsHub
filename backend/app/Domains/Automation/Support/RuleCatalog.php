@@ -33,6 +33,35 @@ final class RuleCatalog
         'delivery_status' => ['حالة العرض', 'Delivery status', 'status'],
     ];
 
+    /**
+     * The reported platform figures each metric is computed from (`daily_metrics` keys).
+     *
+     * A rule may only be judged on what a platform actually reports: ROAS needs both revenue and spend,
+     * so a platform that sends no revenue can never match a ROAS condition. Metrics read from the object
+     * itself (its age, its status, its daily budget) need no reported figure. The trend metrics need the
+     * figures of the metric they compare.
+     *
+     * @var array<string, list<string>>
+     */
+    public const NEEDS = [
+        'spend' => ['spend'],
+        'cpa' => ['spend', 'conversions'],
+        'cpc' => ['spend', 'clicks'],
+        'cpm' => ['spend', 'impressions'],
+        'revenue' => ['revenue'],
+        'roas' => ['revenue', 'spend'],
+        'ctr' => ['clicks', 'impressions'],
+        'conversions' => ['conversions'],
+        'impressions' => ['impressions'],
+        'clicks' => ['clicks'],
+        'budget_utilization' => ['spend'],
+        'age_days' => [],
+        'spend_change_pct' => ['spend'],
+        'cpa_change_pct' => ['spend', 'conversions'],
+        'roas_change_pct' => ['revenue', 'spend'],
+        'delivery_status' => [],
+    ];
+
     public const OPERATORS = ['gt', 'gte', 'lt', 'lte', 'eq'];
 
     public const WINDOWS = [1, 3, 7, 14, 30];
@@ -53,7 +82,7 @@ final class RuleCatalog
     public static function forBuilder(): array
     {
         return [
-            'metrics' => array_map(static fn (string $k, array $m): array => ['key' => $k, 'ar' => $m[0], 'en' => $m[1], 'kind' => $m[2]], array_keys(self::METRICS), self::METRICS),
+            'metrics' => array_map(static fn (string $k, array $m): array => ['key' => $k, 'ar' => $m[0], 'en' => $m[1], 'kind' => $m[2], 'needs' => self::NEEDS[$k] ?? []], array_keys(self::METRICS), self::METRICS),
             'operators' => self::OPERATORS,
             'windows' => self::WINDOWS,
             'actions' => array_map(static fn (string $k, array $a): array => ['key' => $k, 'ar' => $a[0], 'en' => $a[1], 'executable' => $a[2] !== null], array_keys(self::ACTIONS), self::ACTIONS),
