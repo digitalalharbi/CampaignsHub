@@ -38,22 +38,32 @@ describe('the report footer', () => {
   })
 
   /*
-   * REPORT-COMPOSITION-CONTROL-001 (Owner defect 106) — the narrow centred box became a full-width
-   * footer aligned with the report container: notes beside a labelled facts grid, stacking on a phone.
+   * REPORT-FOOTER-IN-SYSTEM-CARD-001 (Owner, 2026-10-19) — the report ends like the product: the note in the
+   * same card the Analytics page uses, and the facts underneath as their own row of matching cards.
    */
-  it('is one full-width frame aligned with the report: no heading, no fill, and not a section', () => {
+  it('is the in-system note card with the facts as their own row beneath it', () => {
     const { container } = render(<ReportFooter locale="en" facts={facts} />)
     const footer = screen.getByTestId('report-footer')
+    const card = screen.getByTestId('report-footer-note-card')
+    const meta = screen.getByTestId('report-footer-meta')
 
     expect(container.querySelector('h1,h2,h3,h4')).toBeNull()
     expect(footer.className).toMatch(/\bw-full\b/)
     expect(footer.className).not.toMatch(/max-w-|mx-auto|text-center/)
-    expect(screen.getByTestId('report-footer-meta').tagName).toBe('DL')
-    expect(screen.getByTestId('report-footer-meta').querySelectorAll('dt')).toHaveLength(5)
-    expect(footer.className).toMatch(/\bborder\b/)
-    expect(footer.className).not.toMatch(/\bbg-surface|\bshadow-/)
-    expect(footer.className).toMatch(/text-\[11px\]/)
-    expect(footer.className).toMatch(/text-text-muted/)
+    // The very classes PerformanceNotice's compact card carries — not a look-alike.
+    expect(card.className).toMatch(/rounded-xl/)
+    expect(card.className).toMatch(/\bborder\b/)
+    expect(card.className).toMatch(/bg-surface-secondary/)
+    expect(card.querySelector('svg')).not.toBeNull()
+    expect(screen.getByTestId('report-footer-note').className).toMatch(/text-\[13px\]/)
+    expect(screen.getByTestId('report-footer-toggle').className).toMatch(/text-brand-600/)
+    // The facts are a separate row AFTER the card, one matching card each — not inside it.
+    expect(card.contains(meta)).toBe(false)
+    expect(card.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const cards = screen.getAllByTestId('report-footer-fact')
+    expect(cards).toHaveLength(5)
+    expect(meta.querySelectorAll('dt')).toHaveLength(5)
+    cards.forEach((c) => expect(c.className).toMatch(/rounded-xl.*border.*bg-surface-secondary|border.*bg-surface-secondary/))
     expect(screen.queryByText('منهجية التقرير وملاحظات البيانات')).toBeNull()
   })
 

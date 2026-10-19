@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown, Info } from 'lucide-react'
 import { objectiveLabel } from '@/features/campaigns/labels'
 
 /**
@@ -44,7 +45,7 @@ const LABELS = {
 export function reportFooterItems(facts: ReportFooterFacts, locale: 'ar' | 'en'): Array<[string, string]> {
   const t = LABELS[locale]
   const items: Array<[string, string | null]> = [
-    [t.updated, facts.updatedAt ? formatStamp(facts.updatedAt, locale) : null],
+    [t.updated, facts.updatedAt ? formatStamp(facts.updatedAt) : null],
     [t.period, facts.period?.from && facts.period?.to ? (facts.period.from === facts.period.to ? facts.period.from : `${facts.period.from} → ${facts.period.to}`) : null],
     [t.currency, facts.currency || null],
     [t.timezone, facts.timezone || null],
@@ -54,14 +55,19 @@ export function reportFooterItems(facts: ReportFooterFacts, locale: 'ar' | 'en')
   return items.filter((i): i is [string, string] => i[1] !== null && i[1] !== '')
 }
 
-function formatStamp(iso: string, locale: 'ar' | 'en'): string {
+/**
+ * `2026-10-19 21:17` — the same ISO shape the period uses, so the two read as one family, in both
+ * languages and with Latin digits. The long Arabic locale form («2026/10/19، 21:17») wrapped onto two
+ * lines inside a card; this one cannot.
+ */
+function formatStamp(iso: string): string {
   const d = new Date(iso)
 
   if (Number.isNaN(d.getTime())) return iso
 
-  const ar = locale === 'ar'
+  const two = (n: number) => String(n).padStart(2, '0')
 
-  return d.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`
 }
 
 export function ReportFooter({ facts, locale, className = '' }: { facts: ReportFooterFacts; locale: 'ar' | 'en'; className?: string }) {
@@ -70,36 +76,54 @@ export function ReportFooter({ facts, locale, className = '' }: { facts: ReportF
   const label = MORE_LABEL[locale]
 
   /*
-   * REPORT-COMPOSITION-CONTROL-001 — a professional full-width footer, aligned with the report
-   * container (Owner defect 106): the methodology note on one side, the facts the reader
-   * checks — last update, period, currency, time zone, objective — as a labelled grid on the other.
-   * One column on a phone; side by side from `lg`. Still outside the report body: no heading and no
-   * fill, and not a section anybody can switch off.
+   * REPORT-FOOTER-IN-SYSTEM-CARD-001 (Owner, 2026-10-19) — the report ends the way the product does.
+   *
+   * The note is the SAME card the Analytics and Dashboard pages end with (`PerformanceNotice`, compact):
+   * `rounded-xl border bg-surface-secondary`, the info mark, one 13px sentence, a green «معرفة المزيد»
+   * with its chevron. The report's facts — last update, period, currency, time zone, objective — are not
+   * crammed into that card or beside it: they are their OWN row underneath, one matching card per fact,
+   * so the time, the currency and the details read as independent, consistent items.
+   *
+   * Still outside the report body: no heading, not a section anybody can switch off.
    */
   return (
-    <footer data-testid="report-footer" dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`report-footer mt-8 w-full min-w-0 rounded-2xl border border-border/60 px-4 py-4 text-start text-[11px] leading-relaxed text-text-muted sm:px-5 ${className}`}>
-      <div className={`grid gap-4 ${items.length > 0 ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-8' : ''}`}>
-        <div className="min-w-0 space-y-1.5">
-          <p data-testid="report-footer-note">
-            {REPORT_NOTE[locale]}{' '}
-            <button type="button" data-testid="report-footer-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="font-medium text-text-secondary underline underline-offset-2 hover:text-text-primary">
+    <footer data-testid="report-footer" dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`report-footer mt-8 grid w-full min-w-0 gap-2 ${className}`}>
+      <div data-testid="report-footer-note-card" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5">
+        <div className="flex items-start gap-2">
+          <Info size={15} className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p data-testid="report-footer-note" className="text-[13px] leading-relaxed text-text-secondary">{REPORT_NOTE[locale]}</p>
+            {open && (
+              <p data-testid="report-footer-more" className="mt-2 border-t border-border pt-2 text-[13px] leading-relaxed text-text-secondary">{REPORT_NOTE_MORE[locale]}</p>
+            )}
+            <button
+              type="button"
+              data-testid="report-footer-toggle"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+            >
               {open ? label.less : label.more}
+              <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
             </button>
-          </p>
-          {open && <p data-testid="report-footer-more">{REPORT_NOTE_MORE[locale]}</p>}
+          </div>
         </div>
-        {items.length > 0 && (
-          <dl data-testid="report-footer-meta" className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border/50 pt-3 sm:grid-cols-3 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0">
-            {items.map(([itemLabel, value]) => (
-              // The period is the one long value (two dates and an arrow): it takes two columns and wraps, never an ellipsis.
-              <div key={itemLabel} className={`min-w-0 ${itemLabel === LABELS[locale].period ? 'col-span-2' : ''}`}>
-                <dt className="text-[10px] tracking-wide">{itemLabel}</dt>
-                <dd className="font-medium text-text-secondary [overflow-wrap:anywhere]"><bdi className="tnum">{value}</bdi></dd>
-              </div>
-            ))}
-          </dl>
-        )}
       </div>
+      {items.length > 0 && (
+        <dl data-testid="report-footer-meta" className="flex min-w-0 flex-wrap gap-2">
+          {items.map(([itemLabel, value]) => (
+            <div
+              key={itemLabel}
+              data-testid="report-footer-fact"
+              // The period (two dates and an arrow) is the long one: it grows and wraps, never an ellipsis.
+              className={`min-w-[8.5rem] rounded-xl border border-border bg-surface-secondary px-3.5 py-2 ${itemLabel === LABELS[locale].period ? 'flex-[2_1_14rem]' : 'flex-1'}`}
+            >
+              <dt className="text-[11px] text-text-muted">{itemLabel}</dt>
+              <dd className="mt-0.5 text-[13px] font-semibold text-text-primary [overflow-wrap:anywhere]"><bdi className="tnum">{value}</bdi></dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </footer>
   )
 }
