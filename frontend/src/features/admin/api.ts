@@ -826,7 +826,16 @@ export interface EmailLedger {
   page: number
   per_page: number
   by_state: Record<string, number>
-  transport: { state: 'awaiting_credentials' | 'sandbox' | 'live'; provider_configured: boolean; driver: string }
+  transport: {
+    state: 'awaiting_credentials' | 'sandbox' | 'live'
+    provider_configured: boolean
+    driver: string
+    /** EMAIL-SETTINGS-PAGE-001 — addresses and timestamps only; the server never sends a credential. */
+    sender?: { address: string; name: string }
+    reply_to?: string
+    last_success_at?: string | null
+    last_failure?: { at: string; kind: string; error: string } | null
+  }
   available_states: string[]
 }
 
@@ -844,6 +853,10 @@ export function fetchEmailLedger(params: {
   }
   return getData<EmailLedger>(`/admin/email/deliveries${q.size > 0 ? `?${q}` : ''}`)
 }
+
+/** One message to the signed-in operator, recorded in the ledger whatever the transport can do. */
+export const sendTestEmail = (lang: 'ar' | 'en') =>
+  postData<{ state: string; recipient: string }>('/admin/email/test', { lang })
 
 export function fetchEmailPreviews(): Promise<{ keys: string[]; locales: string[] }> {
   return getData('/admin/email/previews')

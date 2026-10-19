@@ -4,7 +4,7 @@ import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
-import { deleteData, getData, postData, putData } from '@/lib/api/client'
+import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
 import type { FormatIntelligencePayload } from '@/features/content/api'
 import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
@@ -127,6 +127,9 @@ export interface ShareRow {
   created_at: string | null
   /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
   mode: 'live' | 'snapshot'
+  /** How much of the report this link is; null means the report's own. */
+  form?: 'executive_summary' | 'detailed' | null
+  sections?: { previous_comparison?: boolean } & Record<string, boolean | undefined>
   scope: {
     project_id?: string
     campaign_ids?: string[]
@@ -275,6 +278,41 @@ export const renewShare = (p: string, reportId: string, shareId: string, expires
 
 export const shareLogs = (p: string, reportId: string, shareId: string) =>
   getData<ShareAccessLog[]>(`${base(p)}/${reportId}/shares/${shareId}/logs`)
+
+/**
+ * REPORT-LINK-EDIT-IN-PLACE-001 — change a published link without changing its URL.
+ *
+ * The server keeps the token, the URL and the mode; what is sent here replaces only what is named.
+ */
+export interface ShareEdit {
+  allow_download?: boolean
+  watermark?: boolean
+  hide_spend?: boolean
+  hide_revenue?: boolean
+  hide_campaign_names?: boolean
+  form?: 'executive_summary' | 'detailed' | null
+  password?: string
+  clear_password?: boolean
+  expires_at?: string
+  clear_expiry?: boolean
+  /** Named switches only; the server merges them over the link's existing ones. */
+  sections?: Record<string, boolean>
+}
+
+export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>
+  patchData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}`, body)
+
+/** REPORT-LINK-ANALYTICS-001 — Owner-only: counts and dates, never an address. */
+export interface ShareAnalytics {
+  views: number
+  unique_views: number
+  first_viewed_at: string | null
+  last_viewed_at: string | null
+  downloads: number
+}
+
+export const shareAnalytics = (p: string, reportId: string, shareId: string) =>
+  getData<ShareAnalytics>(`${base(p)}/${reportId}/shares/${shareId}/analytics`)
 
 export interface ShareAccessLog {
   action: string

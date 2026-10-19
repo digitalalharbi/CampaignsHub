@@ -2004,7 +2004,7 @@ function SnapshotAge({ data }: { data: ReportData }) {
   return (
     <p className="mb-3 text-xs text-text-secondary" data-testid="report-snapshot-age">
       {live ? (
-        'تقرير رابط — الأرقام محسوبة الآن من أحدث البيانات'
+        'الأرقام محسوبة الآن من أحدث البيانات'
       ) : (
         <>
           لقطة بتاريخ{' '}

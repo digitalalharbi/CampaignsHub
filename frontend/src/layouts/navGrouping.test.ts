@@ -67,6 +67,13 @@ const AGENCY_BEFORE = [
   '/agency/recommendations',
   '/agency/spend-limits',
   /*
+   * ADDED by DELIV-DASH-001, deliberately.
+   *
+   * The weekly delivery is the agency's own work (preparing, approving and sending a client's report and
+   * watching their invoice), so it has no advertiser counterpart; the route is agency-only.
+   */
+  '/agency/delivery',
+  /*
    * ADDED by AGENTS-CENTER-001, deliberately: the Agent Center sits beside Recommendations in both
    * portals, because an agent's proposal and a recommendation are read by the same operator.
    */

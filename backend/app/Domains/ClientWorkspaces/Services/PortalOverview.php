@@ -108,7 +108,31 @@ final class PortalOverview
                 'by_status' => $byStatus,
             ] : null,
             'attention' => $this->attention($workspace, $v, $onlyProjectIds),
+            'trend' => $this->trend((array) ($data['timeseries'] ?? [])),
         ];
+    }
+
+    /**
+     * CP-DASH-001 — the delivery curve: one point per day that HAS data, never a zero for a day that has none.
+     *
+     * Only the delivery metrics a client is always allowed (impressions, clicks, conversions). Money never
+     * rides in the curve: whether a client may see spend is the agency's decision, and a daily series of it
+     * would be a second place to get that decision wrong. A day absent from the series is a gap on the chart,
+     * not a drop to zero, and a figure the platform did not report stays null rather than 0.
+     *
+     * @param  list<array<string,mixed>>  $series
+     * @return list<array{date: string, impressions: ?float, clicks: ?float, conversions: ?float}>
+     */
+    private function trend(array $series): array
+    {
+        $num = static fn (mixed $v): ?float => is_numeric($v) ? (float) $v : null;
+
+        return array_values(array_map(static fn (array $p): array => [
+            'date' => (string) $p['date'],
+            'impressions' => $num($p['impressions'] ?? null),
+            'clicks' => $num($p['clicks'] ?? null),
+            'conversions' => $num($p['conversions'] ?? null),
+        ], array_filter($series, static fn ($p): bool => is_array($p) && isset($p['date']))));
     }
 
     /**

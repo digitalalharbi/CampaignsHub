@@ -9,6 +9,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Delivery\Models\PlatformEvidence;
+use App\Domains\Delivery\Services\DeliveryOverview;
 use App\Domains\Delivery\Services\DeliveryPackService;
 use App\Domains\Delivery\Services\PlatformEvidenceService;
 use App\Domains\Projects\Models\Project;
@@ -55,6 +56,41 @@ final class DeliveryController extends Controller
         $names = ClientWorkspace::query()->whereIn('id', $rows->pluck('client_workspace_id')->unique()->all())->pluck('name', 'id');
 
         return ApiResponse::success($rows->map(fn (DeliveryPack $p): array => $this->shape($p) + ['client' => $names[$p->client_workspace_id] ?? null])->all(), 'Delivery packs.');
+    }
+
+    /**
+     * GET /delivery/overview — DELIV-DASH-001, one row per client the operator can reach.
+     *
+     * Invoice facts appear only for a reader who may see billing for that client; the rest of the row
+     * (the report side) is the weekly delivery's own, gated by reports.view.
+     */
+    public function overview(Request $request, DeliveryOverview $overview): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('reports.view'), 403);
+
+        $rows = ClientWorkspace::query()->where('status', 'active')->whereNull('archived_at')->orderBy('name')->get()
+            ->filter(function (ClientWorkspace $c) use ($request): bool {
+                try {
+                    $this->access->assert($request->user(), 'reports.view', $c);
+
+                    return true;
+                } catch (\Throwable) {
+                    return false;
+                }
+            })
+            ->map(function (ClientWorkspace $c) use ($request, $overview): array {
+                try {
+                    $this->access->assert($request->user(), 'billing.view', $c);
+                    $billing = true;
+                } catch (\Throwable) {
+                    $billing = false;
+                }
+
+                return $overview->row($c, null, $billing);
+            })
+            ->values()->all();
+
+        return ApiResponse::success($rows, 'Delivery overview.');
     }
 
     /** POST /delivery/packs — prepare the previous week for a project. */

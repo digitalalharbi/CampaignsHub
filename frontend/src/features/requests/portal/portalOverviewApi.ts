@@ -12,6 +12,8 @@ export interface PortalOverview {
   campaigns: { total: number; by_status: Record<string, number> } | null
   /** What is waiting on this client. A missing key means «not available to you», never zero. */
   attention?: { requests_waiting?: number; invoices_overdue?: number; invoices_due?: number }
+  /** One point per day that has data; a day with none is absent (a gap), and an unreported figure is null. */
+  trend?: Array<{ date: string; impressions: number | null; clicks: number | null; conversions: number | null }>
 }
 
 export interface PortalSpaceVisibility {
