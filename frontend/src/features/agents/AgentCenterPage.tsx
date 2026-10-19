@@ -187,7 +187,7 @@ export function AgentCenterPage() {
             <ul className="space-y-1">
               {ownThreads.map((t) => (
                 <li key={t.id}>
-                  <button type="button" onClick={() => setThreadId(t.id)} className={`w-full truncate rounded px-2 py-1 text-start text-xs ${t.id === threadId ? 'bg-brand-50 font-semibold text-brand-800' : 'text-text-secondary hover:bg-surface-muted'}`}>
+                  <button type="button" onClick={() => setThreadId(t.id)} className={`w-full truncate rounded px-2 py-1 text-start text-xs ${t.id === threadId ? 'bg-brand-50 font-semibold text-brand-800' : 'text-text-secondary hover:bg-surface-secondary'}`}>
                     {t.title ?? t.id}
                   </button>
                 </li>
@@ -220,7 +220,7 @@ function MessageRow({ m, ar }: { m: AgentMessage; ar: boolean }) {
   const mine = m.role === 'user'
   return (
     <li className={`flex ${mine ? 'justify-end' : 'justify-start'}`} data-testid={`agent-message-${m.role}`}>
-      <p dir="auto" className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${mine ? 'bg-brand-600 text-white' : m.role === 'system' ? 'bg-[var(--warning-background)] text-warning' : 'bg-surface-muted text-text-primary'}`}>
+      <p dir="auto" className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${mine ? 'bg-brand-600 text-white' : m.role === 'system' ? 'bg-[var(--warning-background)] text-warning' : 'bg-surface-secondary text-text-primary'}`}>
         {m.text}
       </p>
     </li>

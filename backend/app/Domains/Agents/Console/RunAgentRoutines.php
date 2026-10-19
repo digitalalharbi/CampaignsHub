@@ -11,6 +11,7 @@ use App\Domains\Agents\Models\AgentRoutine;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Agents\Support\AgentRoutineCatalog;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
@@ -79,6 +80,8 @@ final class RunAgentRoutines extends Command
             $started++;
         }
 
+        // The number of conversations started is what this run did; the ops page shows it.
+        app(ScheduledRunRows::class)->report($started);
         $this->info("{$key}: {$started} started.");
 
         return self::SUCCESS;
