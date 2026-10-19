@@ -658,52 +658,69 @@ const ACCENTS: Record<string, string> = {
   leads: 'var(--purple)', cpl: 'var(--teal)', landing_page_views: 'var(--info)',
 }
 
+/*
+ * REPORT-COVER-SHARE-CARD-001 — the cover is the link-share card at slide size.
+ *
+ * The card a client sees when the link is pasted (ShareCardRenderer, og-card.blade.php) is the one
+ * cover they praised: a light ground, the CLIENT's mark whole in a panel of its own, the report's
+ * title large beside it, the period under it, and the kicker with the preparer on a footer row. The
+ * deck cover was a gradient with two small chips; the first page of the PDF contradicted the card
+ * that led to it. Same composition now, same rules: no figures on the cover, and a missing mark is
+ * the name, never an empty box. The panel shows the client's mark, then the preparer's.
+ */
 export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
   const ar = useUi((s) => s.locale) === 'ar'
+  const mark = meta.clientLogoUrl ?? (meta.clientName === undefined ? meta.agencyLogoUrl : null)
+  const subject = meta.clientName ?? meta.agencyName ?? productName(ar ? 'ar' : 'en')
+  const long = meta.reportName.length > 26
 
   return (
-    <div className="report-cover flex h-full min-h-[380px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-600 to-brand-700 p-8 text-white">
-      <div className="flex items-center justify-between">
-        {/*
-          REPORT BRANDING — the issuing agency's mark where it has one, its name where it has none. The
-          chip is white so a dark logo stays legible on the brand gradient; a logo that fails to load
-          hides itself and the name beside it stands.
-        */}
-        {/*
-          REPORT-IDENTITY-001 — the mark is labelled with its ROLE.
+    <div className="report-cover relative flex h-full min-h-[380px] flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-border bg-surface p-8 text-text-primary sm:p-10">
+      <span aria-hidden className="pointer-events-none absolute -top-24 h-64 w-64 rounded-full opacity-15 [inset-inline-end:-6rem]" style={{ background: 'var(--warning)' }} />
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 w-2 [inset-inline-start:0]" style={{ background: 'var(--brand-600)' }} />
+      {meta.isDemo && <span className="absolute top-4 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary [inset-inline-end:1rem]">بيانات تجريبية · Demo</span>}
 
-          Both marks were already here: the preparer's top-left, the subject's above the title. What
-          the cover did not say is which is which — two logos with a name under each is a layout, not
-          an answer, and «who made this» is one of the two facts a client's report establishes before
-          any figure.
+      <div className="relative grid min-w-0 flex-1 items-center gap-8 sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+        <div data-testid="report-cover-client" className="flex min-w-0 flex-col items-center gap-2">
+          <div className="flex aspect-square w-full max-w-[17rem] items-center justify-center rounded-3xl border-2 border-border bg-white p-5 shadow-lg">
+            {mark ? (
+              <img src={mark} alt="" data-testid="report-cover-client-logo" onError={hideBrokenLogo} className="h-full w-full object-contain" />
+            ) : (
+              <span className="text-center text-2xl font-extrabold leading-snug text-brand-600">{subject}</span>
+            )}
+          </div>
+          {/* Only when there IS a subject: «مقدم إلى» above an agency's own report names nobody. */}
+          <span className="sr-only">
+            {meta.clientName !== undefined && (ar ? 'مقدم إلى ' : 'Prepared for ')}
+            {meta.clientName ?? subject}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-text-secondary">
+            {meta.clientName !== undefined ? (ar ? 'مقدم إلى' : 'Prepared for') : (ar ? 'تقرير الأداء' : 'Performance report')}
+            {meta.clientName !== undefined && <span className="ms-2 text-text-primary">{meta.clientName}</span>}
+          </div>
+          <h1 data-testid="report-cover-title" className={`mt-2 line-clamp-2 text-balance font-extrabold leading-tight ${long ? 'text-4xl' : 'text-5xl'}`}>{meta.reportName}</h1>
+          <p className="tnum mt-4 text-xl font-medium text-text-secondary"><bdi dir="ltr">{data.period.from} → {data.period.to}</bdi></p>
+          {meta.platforms.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="inline-flex items-center rounded-full border border-border bg-surface-secondary px-2.5 py-1 text-xs font-semibold"><ProviderName provider={canonicalPlatform(p)} locale="ar" size={16} /></span>)}</div>
+          )}
+        </div>
+      </div>
+
+      <div className="relative flex flex-wrap items-center justify-between gap-3 text-sm text-text-secondary">
+        <span>{ar ? 'تقرير أداء الحملات المدفوعة' : 'Paid campaign performance'}{data.objective ? ` · ${OBJECTIVE_LABEL[data.objective] ?? data.objective}` : ''} · {data.currency}</span>
+        {/*
+          REPORT-IDENTITY-001 — the preparer is labelled with its ROLE, and a mark that fails to load
+          hides itself while the name beside it stands.
         */}
-        <span data-testid="report-cover-agency" className="inline-flex items-center gap-2 rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">
-          <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{ar ? 'من إعداد' : 'Prepared by'}</span>
-          {meta.agencyLogoUrl && (
-            <img src={meta.agencyLogoUrl} alt="" data-testid="report-cover-agency-logo" onError={hideBrokenLogo} className="h-6 w-auto max-w-[120px] rounded bg-white object-contain p-0.5" />
+        <span data-testid="report-cover-agency" className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-secondary px-3 py-1 font-bold text-text-primary">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted">{ar ? 'من إعداد' : 'Prepared by'}</span>
+          {meta.agencyLogoUrl && meta.agencyLogoUrl !== mark && (
+            <img src={meta.agencyLogoUrl} alt="" data-testid="report-cover-agency-logo" onError={hideBrokenLogo} className="h-6 w-auto max-w-[120px] object-contain" />
           )}
           {meta.agencyName ?? productName(ar ? 'ar' : 'en')}
         </span>
-        {meta.isDemo && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">بيانات تجريبية · Demo</span>}
-      </div>
-      <div>
-        <div data-testid="report-cover-client" className="flex items-center gap-2 text-sm opacity-90">
-          {/* Only when there IS a subject: «مقدم إلى» above an agency's own report names nobody. */}
-          {meta.clientName !== undefined && (
-            <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{ar ? 'مقدم إلى' : 'Prepared for'}</span>
-          )}
-          {meta.clientLogoUrl && (
-            <img src={meta.clientLogoUrl} alt="" data-testid="report-cover-client-logo" onError={hideBrokenLogo} className="h-9 w-auto max-w-[160px] rounded bg-white object-contain p-1" />
-          )}
-          <span>{meta.clientName ?? 'تقرير الأداء'}</span>
-        </div>
-        <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold"><ProviderName provider={canonicalPlatform(p)} locale="ar" size={16} /></span>)}</div>
-      </div>
-      <div className="flex flex-wrap gap-4 text-sm opacity-90">
-        <span>الفترة: <span className="tnum">{data.period.from} → {data.period.to}</span></span>
-        {data.objective && <span>الهدف: {OBJECTIVE_LABEL[data.objective] ?? data.objective}</span>}
-        <span>العملة: {data.currency}</span>
       </div>
     </div>
   )
