@@ -120,7 +120,7 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
                   <button type="button" disabled={f.conditions.length === 1} onClick={() => setF((x) => ({ ...x, conditions: x.conditions.filter((_, j) => j !== i) }))} aria-label={ar ? 'حذف الشرط' : 'Remove condition'} className="justify-self-end rounded p-1 text-text-muted hover:text-danger disabled:opacity-40"><Trash2 size={15} /></button>
                   {lacking(c.metric).length > 0 && (
                     <p data-testid={`rule-condition-support-${i}`} className="col-span-full text-[11px] text-warning">
-                      {ar ? `لم يصل رقم لهذا الشرط خلال آخر ${support.data?.days ?? 30} يومًا من حسابات: ` : `No figure for this condition arrived from these accounts in the last ${support.data?.days ?? 30} days: `}
+                      {ar ? `لم يصل رقم لهذا الشرط خلال آخر ${days(support.data?.days ?? 30, 'ar')} من حسابات: ` : `No figure for this condition arrived from these accounts in the last ${days(support.data?.days ?? 30, 'en')}: `}
                       {lacking(c.metric).map((p) => platformLabel(p, ar)).join(ar ? '، ' : ', ')}
                       {ar ? ' — قد تكون البيانات غير متوفرة أو متأخرة أو غير متاحة لصلاحيات الحساب. الكائنات بلا رقم لا تُقيَّم ولا تُعدّ غير مطابقة.' : ' — the data may be missing, delayed, or not accessible to the account access. Objects with no figure are not judged and are not counted as not matched.'}
                     </p>
