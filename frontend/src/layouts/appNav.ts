@@ -37,76 +37,54 @@ import type { NavGroup } from './SidebarNav'
  * `appNavLeafPaths` is exported so a test can assert what this rail offers, and
  * `frontend/src/layouts/portalNav.test.ts` asserts it is not the agency's.
  */
+/*
+ * NAV-FIVE-AREAS-001 — the same five areas as the agency rail, holding only the advertiser's own
+ * destinations (REG-001: no clients, requests, conversations or client invoicing here). Regrouped,
+ * not redesigned: every address, entitlement (`ent`) and page is unchanged.
+ */
 export const appNavGroups: readonly NavGroup[] = [
   {
-    key: 'overview',
-    ar: 'لوحة التحكم', en: 'Dashboard', icon: LayoutDashboard,
-    leaves: [{ to: '/app/dashboard', ar: 'لوحة التحكم', en: 'Dashboard', icon: LayoutDashboard, ent: 'dashboard' }],
-  },
-  {
-    /*
-     * NAV-IA-001 — ONE projects category, and its children are short.
-     *
-     * «المشاريع» and «جميع المشاريع» were siblings in «العمل». Two entries whose labels differ by one
-     * word read as two versions of the same place, so a reader chooses by guessing — and they are
-     * not two versions of anything: one is the directory of projects, the other is the portfolio
-     * scope. A parent that is a GROUP rather than a destination says so, and the children are named
-     * for the two ways of looking rather than repeating the subject.
-     *
-     * PORTFOLIO-SCOPE-001 §36 is untouched: the scope is still entered by its own address and the
-     * page still says «جميع المشاريع» where the figures are.
-     */
-    key: 'projects',
-    ar: 'المشاريع', en: 'Projects', icon: FolderKanban,
+    key: 'command',
+    ar: 'مركز القيادة', en: 'Command Center', icon: LayoutDashboard,
     leaves: [
-      { to: '/app/projects', ar: 'القائمة', en: 'List', icon: ListChecks, ent: 'projects' },
-      { to: '/app/portfolio', ar: 'الملخص', en: 'Overview', icon: Layers, ent: 'projects' },
+      { to: '/app/dashboard', ar: 'لوحة التحكم', en: 'Dashboard', icon: LayoutDashboard, ent: 'dashboard' },
+      { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
+      { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
     ],
   },
   {
-    key: 'work',
-    ar: 'العمل', en: 'Work', icon: Megaphone,
+    key: 'campaigns',
+    ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
     leaves: [
+      { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
+      { to: '/app/portfolio', ar: 'الملخص الشامل', en: 'Portfolio overview', icon: Layers, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
-      /*
-       * UX-NAV-001 — tasks and files sit with the work they belong to.
-       *
-       * They were an «التشغيل» group of their own, which asked the reader to hold a distinction the
-       * product does not actually make: a task is about a campaign and a file is attached to one.
-       * A group whose label is a category rather than a destination costs a guess on every visit.
-       */
-      { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
-      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
       { to: '/app/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2, ent: 'campaigns' },
-    ],
-  },
-  {
-    key: 'performance',
-    ar: 'الأداء', en: 'Performance', icon: TrendingUp,
-    leaves: [
-      { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
-      { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
-      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
-      { to: '/app/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, ent: 'analytics' },
-      { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
       { to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' },
     ],
   },
   {
-    key: 'settings',
-    /*
-     * UX-NAV-001 — everything you SET UP once, in one place.
-     *
-     * Integrations were in «التشغيل» and the subscription was a group of one called «الاشتراك».
-     * Neither is something an operator visits while working: they are configuration, entered
-     * deliberately and left alone. Two rail entries and a disclosure triangle for that is more
-     * chrome than the sections are worth, and it pushed the daily destinations further down.
-     *
-     * Connecting a platform is the FIRST thing a new workspace does, so it leads the group rather
-     * than sitting under the workspace's own preferences.
-     */
-    ar: 'الإعدادات', en: 'Settings', icon: Settings,
+    key: 'agents',
+    ar: 'الوكلاء الأذكياء', en: 'AI agents', icon: Bot,
+    leaves: [
+      { to: '/app/agents', ar: 'مركز الوكلاء', en: 'Agent Center', icon: Bot, ent: 'analytics' },
+      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
+    ],
+  },
+  {
+    key: 'analytics',
+    ar: 'التحليلات والتقارير', en: 'Analytics & reports', icon: BarChart3,
+    leaves: [
+      { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
+      { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
+      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
+    ],
+  },
+  {
+    key: 'business',
+    // Connecting a platform is the FIRST thing a new workspace does, so it leads the area.
+    ar: 'إدارة الأعمال', en: 'Business management', icon: Settings,
     leaves: [
       { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
       { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
@@ -115,5 +93,4 @@ export const appNavGroups: readonly NavGroup[] = [
   },
 ]
 
-/** Every destination the advertiser rail offers. The flat rail had exactly these. */
 export const appNavLeafPaths: readonly string[] = appNavGroups.flatMap((g) => g.leaves.map((l) => l.to))

@@ -17,6 +17,12 @@ import type { NavGroup } from './SidebarNav'
  * A parent that is a GROUP and not a destination says exactly that, and its children are named for
  * the two ways of LOOKING rather than repeating the subject.
  *
+ * ## NAV-FIVE-AREAS-001 (2026-10-19)
+ *
+ * The Owner's five areas put the projects directory and the portfolio overview inside «إدارة الحملات».
+ * The rule survives the move: the two still sit together, side by side, and are named so that neither
+ * reads as «the same thing, but more» — «المشاريع» is the directory, «الملخص الشامل» the overview.
+ *
  * ## What is NOT being changed
  *
  * PORTFOLIO-SCOPE-001 §36 — the portfolio scope is still entered by its own address, and the page
@@ -29,18 +35,28 @@ const rails: Array<[string, readonly NavGroup[], string]> = [
 ]
 
 describe('the projects category', () => {
-  it.each(rails)('%s has exactly one projects group, holding both destinations', (_name, groups, prefix) => {
-    const projects = groups.filter((g) => g.leaves.some((l) => l.to === `${prefix}/projects`))
+  it.each(rails)('%s keeps both project destinations in one area, side by side', (_name, groups, prefix) => {
+    const holding = groups.filter((g) => g.leaves.some((l) => l.to === `${prefix}/projects` || l.to === `${prefix}/portfolio`))
 
-    expect(projects, 'the two project destinations are in different groups').toHaveLength(1)
-    expect(projects[0]!.leaves.map((l) => l.to)).toEqual([`${prefix}/projects`, `${prefix}/portfolio`])
+    expect(holding, 'the two project destinations are in different areas').toHaveLength(1)
+    const paths = holding[0]!.leaves.map((l) => l.to)
+    expect(paths.indexOf(`${prefix}/portfolio`) - paths.indexOf(`${prefix}/projects`), 'the overview does not follow the directory').toBe(1)
   })
 
-  it.each(rails)('%s names the children for the view, not for the subject', (_name, groups, prefix) => {
-    const group = groups.find((g) => g.leaves.some((l) => l.to === `${prefix}/projects`))!
+  it.each(rails)('%s names the two so neither reads as a version of the other', (_name, groups, prefix) => {
+    const leaves = groups.flatMap((g) => g.leaves)
+    const directory = leaves.find((l) => l.to === `${prefix}/projects`)!
+    const overview = leaves.find((l) => l.to === `${prefix}/portfolio`)!
 
-    expect(group.leaves.map((l) => l.ar)).toEqual(['القائمة', 'الملخص'])
-    expect(group.leaves.map((l) => l.en)).toEqual(['List', 'Overview'])
+    expect([directory.ar, overview.ar]).toEqual(['المشاريع', 'الملخص الشامل'])
+    expect([directory.en, overview.en]).toEqual(['Projects', 'Portfolio overview'])
+    // The sibling pair NAV-IA-001 removed must not return.
+    expect(leaves.map((l) => l.ar)).not.toContain('جميع المشاريع')
+  })
+
+  it.each(rails)('%s is organised in the five areas', (_name, groups) => {
+    expect(groups.map((g) => g.key)).toEqual(['command', 'campaigns', 'agents', 'analytics', 'business'])
+    expect(groups.map((g) => g.ar)).toEqual(['مركز القيادة', 'إدارة الحملات', 'الوكلاء الأذكياء', 'التحليلات والتقارير', 'إدارة الأعمال'])
   })
 
   /**
