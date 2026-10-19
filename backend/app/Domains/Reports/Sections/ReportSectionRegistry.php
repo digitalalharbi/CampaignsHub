@@ -65,12 +65,14 @@ final class ReportSectionRegistry
                 titleEn: 'Key metrics',
                 payloadKeys: ['kpis', 'totals', 'delta', 'deltas', 'previous', 'metrics', 'metric_set', 'reported', 'conversions_basis', 'timeseries'],
                 slideTypes: ['comparison'],
+                view: 'summary',
             ),
             new ReportSection(
                 key: 'trends',
                 titleAr: 'الاتجاهات عبر الفترة',
                 titleEn: 'Trends over the period',
                 payloadKeys: ['timeseries', 'platform_series'],
+                view: 'dashboard',
             ),
             new ReportSection(
                 key: 'platform_comparison',
@@ -78,6 +80,7 @@ final class ReportSectionRegistry
                 titleEn: 'Platform comparison',
                 payloadKeys: ['platforms', 'platform_notes', 'reported_by_platform'],
                 slideTypes: ['platform_comparison', 'platform_performance', 'platform_notes', 'platform_screenshot'],
+                view: 'platforms',
             ),
             new ReportSection(
                 key: 'budget_pacing',
@@ -85,6 +88,7 @@ final class ReportSectionRegistry
                 titleEn: 'Budget & pacing',
                 payloadKeys: ['budget'],
                 slideTypes: ['budget'],
+                view: 'dashboard',
             ),
             new ReportSection(
                 key: 'funnel',
@@ -92,6 +96,7 @@ final class ReportSectionRegistry
                 titleEn: 'Funnel',
                 payloadKeys: ['funnel', 'funnel_spend', 'store_funnel'],
                 slideTypes: ['funnel'],
+                view: 'dashboard',
             ),
             new ReportSection(
                 key: 'content_performance',
@@ -102,6 +107,7 @@ final class ReportSectionRegistry
                     'ads_absent_reason', 'top_creatives', 'worst_creatives', 'creatives_in_scope', 'creatives_withheld', 'creative_level',
                 ],
                 slideTypes: ['ads', 'top_creatives'],
+                view: 'content',
             ),
             /*
              * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
@@ -122,6 +128,7 @@ final class ReportSectionRegistry
                 titleEn: 'Client site measurement',
                 payloadKeys: ['site_measurement'],
                 clientDefault: false,
+                view: 'dashboard',
             ),
             new ReportSection(
                 key: 'recommendations',
@@ -130,6 +137,7 @@ final class ReportSectionRegistry
                 // REPORT-RECOMMENDATION-BLOCKS-001 — `attention` is the «what needs attention» blocks.
                 payloadKeys: ['findings', 'observations', 'recommendations', 'next_steps', 'attention'],
                 slideTypes: ['observations', 'recommendations', 'next_steps'],
+                view: 'summary',
             ),
             new ReportSection(
                 key: 'detailed_tables',
@@ -138,6 +146,25 @@ final class ReportSectionRegistry
                 payloadKeys: ['platforms', 'campaigns', 'ad_sets'],
                 slideTypes: ['campaigns'],
                 clientDefault: false,
+                view: 'tables',
+            ),
+            /*
+             * REPORT-COMPOSITION-CONTROL-001 — «إظهار السجل اليومي», a component of its own.
+             *
+             * The day-by-day ledger (the Tables view's daily table, the files' daily rows) used to ride
+             * on `trends`, so it could not be shown or hidden on its own. It is an independent SHOW/HIDE
+             * switch like every display section: on unless the Owner hides it, so no report or link
+             * loses a table it had, and nothing is aggregated away by default.
+             *
+             * It owns `timeseries` jointly with the KPIs and the trend: the series leaves the payload
+             * only when none of the three is shown, because a chart drawn from it is the chart itself.
+             */
+            new ReportSection(
+                key: 'daily_records',
+                titleAr: 'السجل اليومي',
+                titleEn: 'Daily records',
+                payloadKeys: ['timeseries'],
+                view: 'tables',
             ),
             /*
              * REPORT-ACCOUNT-BREAKDOWN-001 — the ad ACCOUNTS, as their own section.
@@ -155,6 +182,7 @@ final class ReportSectionRegistry
                 slideTypes: ['accounts'],
                 clientDefault: false,
                 breakdown: true,
+                view: 'tables',
             ),
             new ReportSection(
                 key: 'objective_breakdown',
@@ -164,6 +192,7 @@ final class ReportSectionRegistry
                 // and contribution; the per-path leaders stay for payloads built before it.
                 payloadKeys: ['objective_leaders', 'objective_analytics'],
                 breakdown: true,
+                view: 'dashboard',
             ),
             /*
              * Advanced segmentation is OFF for every client-facing report unless an operator turns it
@@ -178,6 +207,7 @@ final class ReportSectionRegistry
                 slideTypes: ['objective_performance'],
                 clientDefault: false,
                 breakdown: true,
+                view: 'dashboard',
             ),
         ];
     }
@@ -192,6 +222,9 @@ final class ReportSectionRegistry
 
         // A trend is a line; one point is not one.
         $this->availableWhen('trends', 'two_points', static fn (SectionContext $c): bool => count($c->rows('timeseries')) >= 2);
+
+        // A ledger with no day in it is not a section.
+        $this->availableWhen('daily_records', 'has_days', static fn (SectionContext $c): bool => $c->rows('timeseries') !== []);
 
         $this->availableWhen('platform_comparison', 'has_platforms', static fn (SectionContext $c): bool => $c->rows('platforms') !== []);
 

@@ -8,6 +8,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
+use App\Domains\Reports\Sections\ResolvedSections;
 use App\Domains\Reports\Support\ReportIdentity;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
@@ -427,6 +428,15 @@ final class ReportExporter
             }
         }
 
+        // REPORT-COMPOSITION-CONTROL-001 — the daily ledger, only where the `daily_records` component is shown.
+        if (self::dailyRecordsChosen($data)) {
+            $put([]);
+            $put(['Daily Records', ...array_slice(self::DAILY_HEAD, 1)]);
+            foreach (self::dailyRows($data) as $row) {
+                $put(array_map(static fn ($v) => $v ?? '', $row));
+            }
+        }
+
         // Methodology & metadata manifest appended once (never repeated per data row).
         $put([]);
         $put(['Methodology & Notes / المنهجية والملاحظات']);
@@ -553,10 +563,22 @@ final class ReportExporter
                 $data['recommendations'] ?? [],
             ));
             $add('Data Quality', ['Check', 'Result'], $this->dataQualityRows($data));
+        }
+        /*
+         * REPORT-COMPOSITION-CONTROL-001 — the day-by-day ledger is the `daily_records` component, so
+         * the sheet leaves only where somebody HID it: a report with days whose resolved list does not
+         * name the component. An internal report keeps its source data otherwise — including a period
+         * with no days, and a payload resolved before the component existed.
+         */
+        if ($audience === 'internal' && self::dailyRecordsShown($data)) {
             $add('Raw Metrics', ['Date', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'], array_map(
                 fn ($t) => [$t['date'] ?? '', $t['spend'] ?? null, $t['revenue'] ?? null, $t['conversions'] ?? null, $t['roas'] ?? null, $t['cpa'] ?? null],
                 $data['timeseries'] ?? [],
             ));
+        }
+        // The client's own ledger, when the Owner chose to show it: the same days the Tables view lists.
+        if ($audience !== 'internal' && self::dailyRecordsChosen($data)) {
+            $add('Daily Records', self::DAILY_HEAD, self::dailyRows($data));
         }
         if (! empty($data['funnel']) && $audience !== 'executive') {
             $add('Funnel', ['Stage', 'Count', 'Step Rate', 'Cost Per'], array_map(
@@ -615,6 +637,44 @@ final class ReportExporter
      * @param  list<string>  $head
      * @param  list<array<int,mixed>>  $rows
      */
+    /** The daily ledger's columns — the Tables view's, in the same order. */
+    private const DAILY_HEAD = ['Date', 'Impressions', 'Clicks', 'Results', 'Spend'];
+
+    /**
+     * Shown AND stated: a client file carries the ledger only when the resolved list names it, so a
+     * payload from before the component (no list) never gains a sheet it did not have.
+     *
+     * @param  array<string,mixed>  $data
+     */
+    private static function dailyRecordsChosen(array $data): bool
+    {
+        $shown = $data[ResolvedSections::PAYLOAD_KEY] ?? null;
+
+        return is_array($shown) && in_array('daily_records', $shown, true) && ($data['timeseries'] ?? []) !== [];
+    }
+
+    /**
+     * A withheld figure is an empty cell, never a zero — the rule every other sheet here follows.
+     *
+     * @param  array<string,mixed>  $data
+     * @return list<list<mixed>>
+     */
+    private static function dailyRows(array $data): array
+    {
+        return array_values(array_map(
+            static fn ($t): array => [$t['date'] ?? '', $t['impressions'] ?? null, $t['clicks'] ?? null, $t['conversions'] ?? null, $t['spend'] ?? null],
+            array_filter((array) ($data['timeseries'] ?? []), 'is_array'),
+        ));
+    }
+
+    /** @param array<string,mixed> $data */
+    private static function dailyRecordsShown(array $data): bool
+    {
+        $shown = $data[ResolvedSections::PAYLOAD_KEY] ?? null;
+
+        return ! is_array($shown) || in_array('daily_records', $shown, true) || ($data['timeseries'] ?? []) === [];
+    }
+
     private function xlsxSheet(Spreadsheet $book, string $title, array $head, array $rows): void
     {
         $sheet = $book->createSheet();

@@ -40,6 +40,11 @@ final class ReportSection
          * @var list<string>
          */
         public readonly array $slideTypes = [],
+        /**
+         * REPORT-COMPOSITION-CONTROL-001 — the main section (`ReportViews::VIEWS`) the builder groups
+         * this component under. Grouping only: which views may DRAW it is `ReportViews::DRAWS`.
+         */
+        public readonly string $view = 'dashboard',
     ) {}
 
     public function defaultFor(string $audience): bool
@@ -57,6 +62,7 @@ final class ReportSection
             'breakdown' => $this->breakdown,
             'default_client' => $this->clientDefault,
             'default_internal' => $this->internalDefault,
+            'view' => $this->view,
         ];
     }
 }

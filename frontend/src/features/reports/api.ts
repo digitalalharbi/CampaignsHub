@@ -358,6 +358,8 @@ export interface StoreFunnelPayload {
 export interface LivePayload {
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
+  /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
+  report_views?: string[]
   /** REPORT-SECTION-STREAMS-001 — present only with advanced segmentation on and streams defined. */
   business_streams?: BusinessStreamRow[]
   business_streams_cover_total?: boolean
@@ -942,6 +944,8 @@ export interface ResolvedSectionRow {
   title_ar: string
   title_en: string
   breakdown: boolean
+  /** REPORT-COMPOSITION-CONTROL-001 — the main section this component is grouped under. */
+  view?: string
   visible: boolean
   reason: SectionReason | null
   because: string | null
@@ -952,6 +956,10 @@ export interface ReportSectionsState {
   audience: string
   chosen: Record<string, boolean>
   streams: BusinessStreamDefinition[]
+  /** REPORT-COMPOSITION-CONTROL-001 — the main sections the report offers; null is every one. */
+  views?: string[] | null
+  /** Whether this is the multi-view detailed product (summary and standard are one composition). */
+  offers_views?: boolean
   effective: Record<string, boolean>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -969,7 +977,7 @@ export interface BusinessStreamDefinition {
   account_ids: string[]
 }
 
-export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[] }) =>
+export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
   putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
@@ -984,6 +992,11 @@ export interface ShareSectionsState {
   hide_spend?: boolean
   hide_revenue?: boolean
   sections: Array<{ key: string; title_ar: string; title_en: string; breakdown: boolean; state: LinkSectionState }>
+  /** REPORT-COMPOSITION-CONTROL-001 — the report's main sections, the link's own narrowing, and the result. */
+  report_views?: string[] | null
+  views?: string[] | null
+  effective_views?: string[]
+  offers_views?: boolean
   resolved: ResolvedSectionRow[]
   visible: string[]
   availability_judged: boolean
@@ -996,10 +1009,12 @@ export interface SectionRegistryRow {
   breakdown: boolean
   default_client: boolean
   default_internal: boolean
+  /** REPORT-COMPOSITION-CONTROL-001 — the main section the builder groups it under. */
+  view?: string
 }
 
 export const reportSectionRegistry = (p: string) =>
-  getData<{ sections: SectionRegistryRow[]; reasons: string[] }>(`${base(p)}/sections`)
+  getData<{ sections: SectionRegistryRow[]; views?: Array<{ key: string; title_ar: string; title_en: string }>; reasons: string[] }>(`${base(p)}/sections`)
 
 export const getShareSections = (p: string, reportId: string, shareId: string) =>
   getData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`)
@@ -1010,4 +1025,5 @@ export const updateShareSections = (
   shareId: string,
   sections: Record<string, boolean>,
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
-) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money })
+  views?: string[] | null,
+) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }) })

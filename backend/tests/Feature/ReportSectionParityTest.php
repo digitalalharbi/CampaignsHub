@@ -40,7 +40,7 @@ final class ReportSectionParityTest extends TestCase
 
     private UnifiedCampaign $campaign;
 
-    private const VISIBLE = ['kpis', 'platform_comparison', 'funnel', 'recommendations', 'objective_breakdown'];
+    private const VISIBLE = ['kpis', 'platform_comparison', 'funnel', 'recommendations', 'daily_records', 'objective_breakdown'];
 
     protected function setUp(): void
     {

@@ -153,6 +153,7 @@ final class ResolvedSections
                 'title_ar' => $entry['section']->titleAr,
                 'title_en' => $entry['section']->titleEn,
                 'breakdown' => $entry['section']->breakdown,
+                'view' => $entry['section']->view,
                 'visible' => $entry['visible'],
                 'reason' => $entry['reason'],
                 'because' => $entry['because'],

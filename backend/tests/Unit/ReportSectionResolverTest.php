@@ -68,7 +68,7 @@ final class ReportSectionResolverTest extends TestCase
     {
         $this->assertSame([
             'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'site_measurement', 'recommendations', 'detailed_tables', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
+            'site_measurement', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

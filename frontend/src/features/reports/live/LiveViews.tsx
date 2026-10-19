@@ -239,9 +239,12 @@ export function DashboardView({
   locale,
   onOpenContent,
   goTo,
+  canGo = () => true,
   onOpenPlatform,
 }: Common & {
   goTo: (mode: 'content' | 'platforms', platform?: string) => void
+  /** REPORT-COMPOSITION-CONTROL-001 — a link to a view this link does not offer is not drawn. */
+  canGo?: (mode: 'content' | 'platforms') => boolean
   /** REPORT-DRILLDOWN-001 — the comparison's rows open a platform drawer where the link offers it. */
   onOpenPlatform?: (provider: string) => void
 }) {
@@ -263,9 +266,11 @@ export function DashboardView({
             locale={ar ? 'ar' : 'en'}
             onOpenPlatform={payload.breakdowns?.platform_drilldown === false ? undefined : onOpenPlatform}
           />
-          <div className="mt-1 flex justify-end">
-            <GoTo testid="live-goto-platforms" ar={ar} label={ar ? 'كل منصة على حدة' : 'Each platform on its own'} onClick={() => goTo('platforms')} />
-          </div>
+          {canGo('platforms') && (
+            <div className="mt-1 flex justify-end">
+              <GoTo testid="live-goto-platforms" ar={ar} label={ar ? 'كل منصة على حدة' : 'Each platform on its own'} onClick={() => goTo('platforms')} />
+            </div>
+          )}
         </div>
       )}
       {/*
@@ -281,7 +286,7 @@ export function DashboardView({
       {sectionOn(payload, 'content_performance') && (
         <section className="flex flex-col gap-5">
           <div>
-            <SectionTitle action={<GoTo testid="live-goto-content" ar={ar} label={ar ? 'كل المحتوى' : 'All content'} onClick={() => goTo('content')} />}>
+            <SectionTitle action={canGo('content') ? <GoTo testid="live-goto-content" ar={ar} label={ar ? 'كل المحتوى' : 'All content'} onClick={() => goTo('content')} /> : undefined}>
               {ar ? 'أفضل المحتوى' : 'Best content'}
             </SectionTitle>
             <ReportAdsSection
@@ -388,7 +393,8 @@ export function PlatformsView({
   platform: string | null
   onPlatform: (p: string) => void
   narrowed: LiveLoad
-  goToContent: (platform: string) => void
+  /** Absent when the link does not offer the Content view (REPORT-COMPOSITION-CONTROL-001). */
+  goToContent?: (platform: string) => void
 }) {
   const ar = locale === 'ar'
   const platforms = platformsOf(whole)
@@ -481,7 +487,8 @@ function PlatformDetail({
   wholeRow: LivePayload['platforms'][number] | undefined
   totalSpend: number
   totalResults: number
-  goToContent: (platform: string) => void
+  /** Absent when the link does not offer the Content view (REPORT-COMPOSITION-CONTROL-001). */
+  goToContent?: (platform: string) => void
 }) {
   const ar = locale === 'ar'
   const { spendChartable } = useSpendCharting(payload, currency)
@@ -540,7 +547,7 @@ function PlatformDetail({
             locale={locale}
             onOpen={onOpenContent}
             ranked
-            action={<GoTo testid="live-platform-goto-content" ar={ar} label={ar ? 'كل محتوى المنصة' : 'All content on this platform'} onClick={() => goToContent(platform)} />}
+            action={goToContent ? <GoTo testid="live-platform-goto-content" ar={ar} label={ar ? 'كل محتوى المنصة' : 'All content on this platform'} onClick={() => goToContent(platform)} /> : undefined}
             empty={ar ? 'لا يوجد محتوى بأرقام على هذه المنصة في هذه الفترة.' : 'No content with figures on this platform in this period.'}
           />
           <ContentStrip

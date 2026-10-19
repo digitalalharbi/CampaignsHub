@@ -110,7 +110,8 @@ export function TablesView({
         </Block>
       )}
 
-      {sectionShown(payload, 'trends') && (
+      {/* REPORT-COMPOSITION-CONTROL-001 — the ledger is its own component, off for a new client report. */}
+      {sectionShown(payload, 'daily_records') && (
         <Block title={ar ? 'السجل اليومي' : 'Day-by-day record'} testid="tables-days" empty={days.length === 0}>
           <MetricTable head={dayHead} rows={dayRows} values={dayValues} initialSort={{ column: 0, dir: 'desc' }} />
         </Block>

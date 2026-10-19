@@ -1,6 +1,6 @@
 import type { FormatIntelligencePayload } from '@/features/content/api'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { sectionShown, withStreamsSlide, type PrintEvidence } from './reportSections'
+import { sectionShown, withDailyRecordsSlides, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
 import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
@@ -380,6 +380,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
 }) {
   switch (slide.type) {
     case '__evidence': return <EvidenceSlide data={data} index={slide.range?.[0] ?? 0} />
+    case '__daily': return <DailyRecordsSlide data={data} range={slide.range} />
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
@@ -445,6 +446,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       .sort((a, b) => a.order - b.order)
     // The story ends with what needs attention — a page only when the server sent something to show.
     if ((data.attention?.length ?? 0) > 0) visible.push(ATTENTION_SLIDE)
+    withDailyRecordsSlides(visible, data)
     withStreamsSlide(visible, data)
     return visible
   }, [data])
@@ -1760,6 +1762,41 @@ const NOTE_TONE: Record<string, { border: string; text: string; Icon: typeof Tri
  *
  * Sorted by spend, because the operator's first question about a roster is where the money went.
  */
+/**
+ * REPORT-COMPOSITION-CONTROL-001 — «السجل اليومي», the day-by-day ledger, in the deck and its PDF.
+ *
+ * Present only when the report's section list names `daily_records` (off for a new client report),
+ * eight days to a page. Money appears only where the document carries it: a link that hides spend
+ * has no spend in its rows, and then the column is not drawn rather than drawn empty.
+ */
+function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number, number] }) {
+  const all = [...(data.timeseries ?? [])].sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')))
+  const days = range ? all.slice(range[0], range[1]) : all
+  const money = all.some((d) => typeof d.spend === 'number')
+  const numberOf = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+  const columns: Column[] = [
+    { key: 'date', label: 'اليوم', kind: 'text' },
+    { key: 'impressions', label: 'الظهور', kind: 'number' },
+    { key: 'clicks', label: 'النقرات', kind: 'number' },
+    { key: 'results', label: 'النتائج', kind: 'number' },
+    ...(money ? [{ key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency ?? null } as Column] : []),
+  ]
+  const rows: TableRow[] = days.map((d) => ({
+    date: String(d.date ?? '—'),
+    impressions: numberOf(d.impressions),
+    clicks: numberOf(d.clicks),
+    results: numberOf(d.conversions),
+    ...(money ? { spend: numberOf(d.spend) } : {}),
+  }))
+
+  return (
+    <div data-testid="report-daily-records">
+      <Title sub="كل يوم في فترة التقرير">السجل اليومي</Title>
+      <DataMetricTable columns={columns} rows={rows} />
+    </div>
+  )
+}
+
 /**
  * WD-EVIDENCE-001 — one platform screenshot, a page of the appendix: which platform, which period, when
  * it was captured and the Owner's note. Evidence for trust, never a figure; a PDF screenshot cannot be

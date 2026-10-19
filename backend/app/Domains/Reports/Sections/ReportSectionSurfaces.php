@@ -36,16 +36,48 @@ final class ReportSectionSurfaces
         private readonly ReportSectionRegistry $registry,
     ) {}
 
-    /** The report's saved choices, narrowed by the link's flags when there is a link. */
+    /**
+     * The report's saved choices, narrowed by the link's flags when there is a link — and by the main
+     * sections it offers: a component no enabled view draws is hidden like an unticked one
+     * (REPORT-COMPOSITION-CONTROL-001), so a tab switched off takes its data with it.
+     */
     public function settingsFor(Report $report, ?ReportShare $share = null): SectionSettings
     {
         $settings = $report->sectionSettings();
 
-        if ($share === null) {
-            return $settings;
+        $off = $share === null ? [] : array_keys($this->hiddenByLink($share));
+        foreach (ReportViews::undrawn($this->viewsFor($report, $share), $this->registry->keys()) as $key) {
+            $off[] = $key;
         }
 
-        return $settings->narrowedBy(array_fill_keys(array_keys($this->hiddenByLink($share)), false), $this->registry);
+        return $off === [] ? $settings : $settings->narrowedBy(array_fill_keys($off, false), $this->registry);
+    }
+
+    /**
+     * REPORT-COMPOSITION-CONTROL-001 — the main sections this report (narrowed by the link) offers,
+     * or null when it offers every one.
+     *
+     * Only the DETAILED product has main sections — a summary and a standard report are one
+     * composition each, with no tabs — so for those the answer is always null and nothing narrows.
+     *
+     * @return list<string>|null
+     */
+    public function viewsFor(Report $report, ?ReportShare $share = null): ?array
+    {
+        if (! $this->offersViews($report, $share)) {
+            return null;
+        }
+
+        return ReportViews::narrow($report->sectionSettings()->views(), $share?->views());
+    }
+
+    /** Whether this report (as this link sends it) is the multi-view detailed product. */
+    public function offersViews(Report $report, ?ReportShare $share = null): bool
+    {
+        $form = $share !== null ? $share->formOr($report->form) : (string) ($report->form ?? 'detailed');
+        $level = ((array) ($report->config ?? []))['detail_level'] ?? null;
+
+        return ! ($form === 'executive_summary' || $level === 'summary' || $level === 'standard');
     }
 
     /**
@@ -111,6 +143,8 @@ final class ReportSectionSurfaces
     {
         $context = $this->contextFor($report, $share, $surface, $audience, $form);
         $payload = $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
+        // The tabs a reader is offered, named by the server like the sections are.
+        $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
 
         return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
     }

@@ -15,12 +15,14 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportSectionResolver;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
+use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Sections\SectionContext;
 use App\Domains\Reports\Sections\SectionSettings;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -53,6 +55,8 @@ final class ReportSectionController extends Controller
 
         return ApiResponse::success([
             'sections' => array_map(static fn ($s): array => $s->toArray(), $this->registry->all()),
+            // REPORT-COMPOSITION-CONTROL-001 — the main sections; each section's `view` groups it under one.
+            'views' => ReportViews::catalogue(),
             'reasons' => [
                 ReportSectionResolver::DISABLED_BY_OPERATOR,
                 ReportSectionResolver::UNSUPPORTED,
@@ -84,7 +88,9 @@ final class ReportSectionController extends Controller
         $sections = $this->validatedSections($request, ($base ?? $before)['sections']);
         $streams = $this->validatedStreams($request, $project, ($base ?? $before)['streams'] ?? []);
 
-        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams], $this->registry)->toArray();
+        $views = $this->validatedViews($request, ($base ?? $before)['views'] ?? null);
+
+        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams, 'views' => $views], $this->registry)->toArray();
         $model->save();
 
         /*
@@ -151,6 +157,14 @@ final class ReportSectionController extends Controller
         }
         $settings['sections'] = $flags;
         $settings['section_overrides'] = array_values(array_intersect($this->registry->keys(), array_keys($hidden)));
+        // REPORT-COMPOSITION-CONTROL-001 — the link's main sections, narrowing the report's.
+        $viewsBefore = ReportViews::normalise($settings['views'] ?? null);
+        $views = $this->validatedViews($request, $viewsBefore);
+        if ($views === null) {
+            unset($settings['views']);
+        } else {
+            $settings['views'] = $views;
+        }
         $link->settings = $settings;
 
         /*
@@ -172,8 +186,8 @@ final class ReportSectionController extends Controller
             action: 'report.shared_link_sections_updated',
             entityType: ReportShare::class,
             entityId: (string) $link->getKey(),
-            before: ['hidden' => $before, ...$moneyBefore],
-            after: ['hidden' => $settings['section_overrides'], 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
+            before: ['hidden' => $before, 'views' => $viewsBefore, ...$moneyBefore],
+            after: ['hidden' => $settings['section_overrides'], 'views' => $views, 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
         );
 
         return ApiResponse::success($this->shareShape($model, $link->fresh() ?? $link), 'Link sections saved.');
@@ -213,6 +227,11 @@ final class ReportSectionController extends Controller
             'resolved' => $resolved->toArray(),
             'visible' => $resolved->visible(),
             'availability_judged' => $resolved->availabilityJudged,
+            // REPORT-COMPOSITION-CONTROL-001 — what the report offers, what this link chose, and the result.
+            'report_views' => $report->sectionSettings()->views(),
+            'views' => $link->views(),
+            'effective_views' => $surfaces->viewsFor($report, $link) ?? ReportViews::VIEWS,
+            'offers_views' => $surfaces->offersViews($report, $link),
         ];
     }
 
@@ -275,6 +294,30 @@ final class ReportSectionController extends Controller
         }
 
         return SectionSettings::fromArray(['sections' => $merged], $this->registry)->toArray()['sections'];
+    }
+
+    /**
+     * REPORT-COMPOSITION-CONTROL-001 — the submitted main sections, or the stored ones when none
+     * were sent. `null` submitted explicitly resets to «every view»; an empty list is refused, since a
+     * report with no main section has nothing to open on.
+     *
+     * @param  list<string>|null  $current
+     * @return list<string>|null
+     */
+    private function validatedViews(Request $request, ?array $current): ?array
+    {
+        if (! $request->exists('views')) {
+            return $current;
+        }
+        if ($request->input('views') === null) {
+            return null;
+        }
+        $request->validate([
+            'views' => ['array', 'min:1'],
+            'views.*' => [Rule::in(ReportViews::VIEWS)],
+        ]);
+
+        return ReportViews::normalise($request->input('views'));
     }
 
     /**
@@ -408,6 +451,9 @@ final class ReportSectionController extends Controller
             'audience' => $audience,
             'chosen' => $settings->toArray()['sections'],
             'streams' => $settings->streams(),
+            // REPORT-COMPOSITION-CONTROL-001 — null is «every main section», which is what an untouched report offers.
+            'views' => $settings->views(),
+            'offers_views' => app(ReportSectionSurfaces::class)->offersViews($report),
             'effective' => $settings->effective($this->registry, $audience),
             'resolved' => $resolved->toArray(),
             'visible' => $resolved->visible(),
