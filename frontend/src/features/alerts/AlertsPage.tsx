@@ -269,8 +269,12 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Summary — status of the alert ledger at a glance. */}
-      <div className="grid grid-cols-4 gap-2">
+      {/*
+        Summary — status of the alert ledger at a glance. Two columns on a phone: four cards at 343px
+        pushed «Resolved» 3px past the edge (simplification-appearance, chromium phone). The base
+        grid-cols-2 is minmax(0,1fr) per column, so a long label truncates inside its card instead.
+      */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
         {/*
           ALERTS-COPY-001 — «تحتاج إجراء» under a zero, in the brand tone that means «look here».
           The same defect as «متوقفة 0 / تحتاج مراجعة» on Campaigns: a caption asserting that action
