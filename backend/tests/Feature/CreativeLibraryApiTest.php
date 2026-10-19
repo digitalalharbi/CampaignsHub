@@ -324,6 +324,26 @@ final class CreativeLibraryApiTest extends TestCase
     }
 
     /**
+     * CONTENT-ALL-DISCOVERABLE-001 — the library is the ALL-content view, not a ranking.
+     *
+     * Every creative in reach is listed and counted: the best, the worst and the one that has not reported a
+     * figure yet. Top and needs-improvement are the Creative Pulse's job, computed from these same rows.
+     */
+    public function test_the_library_lists_every_creative_not_only_the_ranked_ones(): void
+    {
+        $best = $this->creative(['name' => 'Best']);
+        $worst = $this->creative(['name' => 'Worst']);
+        $this->creative(['name' => 'Silent']);   // no figures at all
+        $this->day($best, now()->subDays(2)->toDateString(), ['spend' => 100, 'impressions' => 9000, 'clicks' => 400, 'conversions' => 10, 'revenue' => 900]);
+        $this->day($worst, now()->subDays(2)->toDateString(), ['spend' => 100, 'impressions' => 9000, 'clicks' => 10, 'conversions' => 0, 'revenue' => 0]);
+
+        $res = $this->actingAs($this->operator, 'sanctum')->getJson($this->url($this->window()))->assertOk();
+
+        $this->assertSame(['Best', 'Silent', 'Worst'], collect($res->json('data.creatives'))->pluck('name')->sort()->values()->all());
+        $this->assertSame(3, $res->json('data.total'));
+    }
+
+    /**
      * A platform link carrying a credential is withheld — never passed to a browser.
      *
      * Several providers sign asset URLs with a parameter derived from the access token. Rendering one
