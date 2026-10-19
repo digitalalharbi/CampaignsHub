@@ -323,7 +323,7 @@ final class RuleEvaluator
             'title' => "Rule «{$rule->name}» matched: ".($t['name'] ?? $t['external_id']),
             'message' => $this->describe($read).($type !== 'notify' ? ' — action: '.$type.' (monitor only).' : ''),
             'source' => 'automation', 'entity_type' => 'automation_rule', 'entity_id' => (string) $rule->getKey(),
-            'action_url' => '/app/automation', 'dedup_extra' => $t['external_id'],
+            'action_url' => '/automation', 'dedup_extra' => $t['external_id'],
         ]);
     }
 
