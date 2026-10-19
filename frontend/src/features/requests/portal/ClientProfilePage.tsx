@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Mail, Phone, ShieldCheck } from 'lucide-react'
 import { portalSession } from '../clientPortalApi'
 import { PortalShell } from './PortalShell'
+import { PortalTeamSection } from './PortalTeamSection'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
@@ -48,6 +49,7 @@ export function ClientProfilePage() {
           </p>
         </div>
       )}
+      <PortalTeamSection ar={ar} />
     </PortalShell>
   )
 }

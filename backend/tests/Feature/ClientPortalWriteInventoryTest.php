@@ -14,8 +14,9 @@ use Tests\TestCase;
  * invoice. Each of those is gated three ways in ClientPortalController: the section's visibility for the
  * workspace (through the owned-* resolvers and requestScope), the session's role (requireActor refuses a
  * client_viewer), and for a NEW request the create_requests capability. The capabilities that would let a
- * client change a platform — integration_admin, campaign_writes, pause_launch, budget_writes, team_admin —
- * have NO portal endpoint at all, which is the strongest form of «denied».
+ * client change a platform — integration_admin, campaign_writes, pause_launch, budget_writes —
+ * have NO portal endpoint at all, which is the strongest form of «denied». team_admin is the one capability
+ * with an endpoint, and it reaches the client's own people only.
  *
  * So a new write route under /client fails this test until somebody names its gate here — which is the
  * review the requirement asks for.
@@ -34,6 +35,9 @@ final class ClientPortalWriteInventoryTest extends TestCase
         'POST api/v1/client/quotes/{quote}/approve' => 'ownedQuote (invoices visibility, whole space) + not a viewer',
         'POST api/v1/client/quotes/{quote}/reject' => 'ownedQuote (invoices visibility, whole space) + not a viewer',
         'POST api/v1/client/invoices/{invoice}/pay' => 'ownedInvoice (invoices visibility, issued only) + not a viewer',
+        // CP-USERS-001 — the client's OWN people, not a platform: client_admin + whole space + team_admin capability.
+        'POST api/v1/client/team' => 'client_admin + whole space + team_admin capability; viewers and approvers only',
+        'DELETE api/v1/client/team/{membership}' => 'client_admin + whole space + team_admin capability; never themselves',
     ];
 
     public function test_every_portal_write_is_reviewed_and_none_changes_a_platform(): void
@@ -55,7 +59,7 @@ final class ClientPortalWriteInventoryTest extends TestCase
         $this->assertSame($reviewed, $writes, 'a client-portal write route changed: name its gate in REVIEWED (or remove the stale entry)');
 
         foreach ($writes as $w) {
-            $this->assertDoesNotMatchRegularExpression('#campaign|budget|pause|integration|connect|team#i', $w, "the portal must not reach a platform write: {$w}");
+            $this->assertDoesNotMatchRegularExpression('#campaign|budget|pause|integration|connect#i', $w, "the portal must not reach a platform write: {$w}");
         }
     }
 }
