@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace App\Domains\Commerce\Http\Controllers;
 
-use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Commerce\Models\CommerceAbandonedCart;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
+use App\Domains\Commerce\Services\StoreAssignment;
+use App\Domains\Commerce\Services\StoreSyncQueue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -141,29 +143,42 @@ final class StoreController extends Controller
         }
 
         $days = (int) $request->integer('days', 14);
+        $run = app(StoreSyncQueue::class)->queue($model, $days, 'store_page');
         $from = Carbon::now()->subDays(max(1, min($days, 180)))->startOfDay();
-
-        $run = new IntegrationSyncRun;
-        $run->forceFill([
-            'tenant_id' => $model->tenant_id,
-            'provider_connection_id' => $model->provider_connection_id,
-            'type' => 'commerce',
-            'status' => 'queued',
-            'started_at' => Carbon::now(),
-        ])->save();
-
-        SyncStoreJob::dispatch(
-            (string) $model->getKey(),
-            $from->toDateString(),
-            Carbon::now()->endOfDay()->toDateString(),
-            ['source' => 'store_page', 'run_id' => (string) $run->getKey()],
-        );
 
         return ApiResponse::success(
             ['queued' => 1, 'window_start' => $from->toDateString(), 'run_id' => (string) $run->getKey()],
             'Store sync queued.',
             status: 202,
         );
+    }
+
+    /**
+     * PATCH /commerce/stores/{store} — assign the store to a project, or detach it (`project_id: null`).
+     *
+     * Tenant-scoped through the model, so another company's store is a 404; the project must belong to
+     * the same workspace as the store (403 otherwise). The change is audited and a fresh assignment
+     * queues the first read.
+     */
+    public function update(Request $request, string $store): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        $data = $request->validate(['project_id' => ['present', 'nullable', 'uuid']]);
+
+        /** @var ExternalAccount|null $model */
+        $model = ExternalAccount::query()->where('account_type', 'store')->find($store);
+        abort_if($model === null, 404, 'Store not found.');
+
+        $project = null;
+        if ($data['project_id'] !== null) {
+            $project = Project::query()->find($data['project_id']);
+            abort_if($project === null, 404, 'Project not found.');
+        }
+
+        app(StoreAssignment::class)->assign($model, $project);
+
+        return ApiResponse::success($this->storeArray($model->fresh() ?? $model), 'Store updated.');
     }
 
     /** @return array<string,mixed> */
@@ -175,9 +190,14 @@ final class StoreController extends Controller
             ->latest('started_at')
             ->first();
 
+        $projectId = app(AccountAssignment::class)->projectIdFor($store);
+
         return [
             'id' => $store->getKey(),
             'external_id' => $store->external_id,
+            // COMMERCE-ASSIGN-001 — where this store feeds, or null: the card asks for a project.
+            'project_id' => $projectId,
+            'project_name' => $projectId === null ? null : Project::withoutGlobalScopes()->whereKey($projectId)->value('name'),
             'name' => $store->name,
             'domain' => $store->metadata['domain'] ?? null,
             'currency' => $store->currency,
