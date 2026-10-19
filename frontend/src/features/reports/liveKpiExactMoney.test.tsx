@@ -186,3 +186,22 @@ describe('the cost per order in the direct-vs-blended split', () => {
     expect(blended.getByText(/18\.40/), 'the blended cost per order was rounded').toBeInTheDocument()
   })
 })
+
+/** REPORT-KPI-HIERARCHY-001 — four large cards lead; anything beyond them is compact, never a second equal row. */
+describe('the live report KPI hierarchy', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('keeps four primary cards and shows the rest compactly', async () => {
+    const many = { ...stated, totals: { ...stated.totals, ctr: 0.6, cpc: 0.25, cpm: 1.52, reach: 900_000, frequency: 7.8 }, metrics: ['spend', 'cpa', 'conversions', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm'] }
+    vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: many } } as never)
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=summary', locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const primary = screen.getByTestId('live-kpis')
+    expect(primary.children.length).toBeLessThanOrEqual(4)
+    const secondary = await screen.findByTestId('exec-kpis-secondary')
+    expect(secondary.tagName).toBe('DL')
+    expect(within(secondary).getAllByRole('definition').length).toBeGreaterThan(0)
+  })
+})
+
