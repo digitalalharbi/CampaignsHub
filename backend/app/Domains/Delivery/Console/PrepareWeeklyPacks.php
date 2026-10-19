@@ -6,6 +6,7 @@ namespace App\Domains\Delivery\Console;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Services\DeliveryPackService;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
@@ -52,6 +53,8 @@ final class PrepareWeeklyPacks extends Command
             }
         }
 
+        // The packs this sweep ensured — what the ops page shows as the run's rows.
+        app(ScheduledRunRows::class)->report($prepared);
         $this->line(sprintf('  %d client(s) opted in, %d pack(s) ensured.', $workspaces->count(), $prepared));
 
         return self::SUCCESS;

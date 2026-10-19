@@ -205,7 +205,7 @@ final class PlatformEmailController extends Controller
             recipient: (string) $user->email,
             mail: new OperationalMail(
                 kind: 'message', severity: 'info',
-                title: $lang === 'ar' ? 'رسالة اختبار من CampaignsHub' : 'A test message from CampaignsHub',
+                title: $lang === 'ar' ? 'رسالة اختبار من كامبينز هب' : 'A test message from CampaignsHub',
                 detail: $lang === 'ar' ? 'وصلتك هذه الرسالة لأن مشرف المنصة طلب اختبار إرسال البريد.' : 'You received this because a platform operator asked to test outgoing mail.',
                 context: 'CampaignsHub',
                 lang: $lang,

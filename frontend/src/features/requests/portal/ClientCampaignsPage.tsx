@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Megaphone, Search } from 'lucide-react'
 import { formatDate, formatNumber, listClientCampaigns, type PortalCampaign } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
+import { Num } from '@/components/ui/Num'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { campaignStatusLabel, objectiveLabel } from '@/features/campaigns/labels'
@@ -157,7 +158,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-1.5">
       <dt className="text-text-muted">{label}</dt>
-      <dd className="tnum font-bold text-text-primary" dir="ltr">{value}</dd>
+      <dd className="tnum font-bold text-text-primary"><Num>{value}</Num></dd>
     </div>
   )
 }
