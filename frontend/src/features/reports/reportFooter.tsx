@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { objectiveLabel } from '@/features/campaigns/labels'
-import { platformLabel, sortPlatforms } from '@/lib/platforms'
 
 /**
  * REPORT-FOOTER-001 — the ONE footer every report surface ends with.
@@ -24,27 +23,6 @@ export const REPORT_NOTE_MORE = {
   en: 'Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
 } as const
 
-/**
- * AGENTS-REPORT-NOTES-BLOCK-001 — what every report that SHOWS SPEND says about its money: where the
- * figures came from and when, that the platforms' invoices are the reference, and that conversion moves
- * them. A report that shows no spend (the default for a client link) carries none of it, so the notes
- * never hint at money the reader was not shown.
- */
-export const SPEND_NOTES = {
-  ar: 'الأرقام كما أبلغت عنها المنصات وقت قراءتها، والفواتير الرسمية الصادرة من المنصات هي المرجع، وقد تظهر فروق بسبب تحويل العملات.',
-  en: "Figures are the platforms' own at the time they were read; the platforms' official invoices are the reference, and currency conversion can cause differences.",
-} as const
-
-const SOURCES_LABEL = { ar: 'مصادر البيانات', en: 'Data sources' } as const
-
-/** The notes as one line, for surfaces that print rather than render a footer (the print document). */
-export function spendNotesLine(sources: readonly string[], locale: 'ar' | 'en'): string {
-  const named = sortPlatforms(Array.from(new Set(sources.filter(Boolean)))).map((p) => platformLabel(p, locale === 'ar'))
-  return named.length > 0
-    ? `${SPEND_NOTES[locale]} ${SOURCES_LABEL[locale]}: ${named.join(locale === 'ar' ? '، ' : ', ')}.`
-    : SPEND_NOTES[locale]
-}
-
 const MORE_LABEL = { ar: { more: 'معرفة المزيد', less: 'إخفاء' }, en: { more: 'Learn more', less: 'Hide' } } as const
 
 export interface ReportFooterFacts {
@@ -55,8 +33,6 @@ export interface ReportFooterFacts {
   timezone?: string | null
   /** The objective the campaigns were bought for, where the report states ONE. */
   objective?: string | null
-  /** Set only when the report shows spend: the notes block appears, naming these platforms as sources. */
-  spendSources?: string[] | null
 }
 
 const LABELS = {
@@ -95,7 +71,7 @@ export function ReportFooter({ facts, locale, className = '' }: { facts: ReportF
 
   /*
    * REPORT-COMPOSITION-CONTROL-001 — a professional full-width footer, aligned with the report
-   * container (Owner defect 106): the methodology and spend notes on one side, the facts the reader
+   * container (Owner defect 106): the methodology note on one side, the facts the reader
    * checks — last update, period, currency, time zone, objective — as a labelled grid on the other.
    * One column on a phone; side by side from `lg`. Still outside the report body: no heading and no
    * fill, and not a section anybody can switch off.
@@ -111,11 +87,6 @@ export function ReportFooter({ facts, locale, className = '' }: { facts: ReportF
             </button>
           </p>
           {open && <p data-testid="report-footer-more">{REPORT_NOTE_MORE[locale]}</p>}
-          {facts.spendSources && (
-            <p data-testid="report-footer-spend-notes">
-              {spendNotesLine(facts.spendSources, locale)}
-            </p>
-          )}
         </div>
         {items.length > 0 && (
           <dl data-testid="report-footer-meta" className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border/50 pt-3 sm:grid-cols-3 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0">
