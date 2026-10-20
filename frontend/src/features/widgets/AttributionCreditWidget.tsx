@@ -11,7 +11,8 @@ import { DataState } from './DataState'
 interface CreditChannel {
   channel: string
   kind: 'platform' | 'influencer' | 'other' | 'unattributed'
-  models: Record<string, { orders: number; revenue: number }>
+  /** `revenue` is absent from what a client link receives: money stays under the link's own hide flags. */
+  models: Record<string, { orders: number; revenue?: number }>
 }
 
 export interface CreditModels {
@@ -60,7 +61,6 @@ const CHANNEL_LABEL: Record<string, { en: string; ar: string }> = {
  */
 export function AttributionCreditWidget({ projectId, range }: { projectId: string; range: { from: string; to: string } }) {
   const ar = useUi((u) => u.locale) === 'ar'
-  const [model, setModel] = useState<string | null>(null)
   const q = useQuery({
     queryKey: ['attribution-credit', projectId, range.from, range.to],
     queryFn: () => getData<AttributionPayload>(`/projects/${projectId}/metrics/attribution?from=${range.from}&to=${range.to}`),
@@ -80,6 +80,15 @@ export function AttributionCreditWidget({ projectId, range }: { projectId: strin
       </ChartCard>
     )
   }
+
+  return <AttributionCreditView credit={credit} />
+}
+
+/** The drawing, given its data. The agency widget and the client report both use it. */
+export function AttributionCreditView({ credit }: { credit: CreditModels }) {
+  const ar = useUi((u) => u.locale) === 'ar'
+  const [model, setModel] = useState<string | null>(null)
+  const title = ar ? 'الإسناد حسب القناة' : 'Attribution by channel'
 
   const active = model !== null && credit.models.includes(model) ? model : (credit.models[0] ?? 'linear')
   const labelOf = (c: string) => CHANNEL_LABEL[c]?.[ar ? 'ar' : 'en'] ?? c

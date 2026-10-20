@@ -151,33 +151,37 @@ final class WidgetRegistryTest extends TestCase
         $this->assertSame('module_off', $w['reason']);
     }
 
-    public function test_a_shared_links_layout_can_hide_a_widget_but_never_show_one_the_project_hides(): void
+    public function test_a_shared_link_shows_nothing_until_told_to_and_never_what_the_project_forbids(): void
     {
         $this->module('advanced_tracking', true);
         $this->module('attribution_intelligence', true);
         $layouts = app(WidgetLayouts::class);
+        // The project allows link activity on client links and forbids the attribution widget there.
         $layouts->save((string) $this->tenant->id, 'project', (string) $this->project->id, 'report', [
             ['key' => 'link_opens', 'visible' => true, 'order' => 1, 'size' => 'full'],
             ['key' => 'attribution_credit', 'visible' => false, 'order' => 2, 'size' => 'full'],
         ], null);
-        $share = (string) Str::uuid();
-        $layouts->save((string) $this->tenant->id, 'share_link', $share, 'report', [
-            ['key' => 'link_opens', 'visible' => false, 'order' => 1, 'size' => 'full'],
-            ['key' => 'attribution_credit', 'visible' => true, 'order' => 2, 'size' => 'full'],
+        $untouched = (string) Str::uuid();
+        $enabled = (string) Str::uuid();
+        $layouts->save((string) $this->tenant->id, 'share_link', $enabled, 'report', [
+            ['key' => 'link_opens', 'visible' => true, 'order' => 5, 'size' => 'half'],
+            ['key' => 'attribution_credit', 'visible' => true, 'order' => 6, 'size' => 'half'],
         ], null);
 
         $tenant = Tenant::query()->findOrFail($this->tenant->id);
         app(TenantContext::class)->setTenantId((string) $tenant->id);
         $project = Project::query()->findOrFail($this->project->id);
-        $resolved = collect($layouts->resolve($tenant, $project, 'report', $share))->keyBy('key');
-        $withoutLink = collect($layouts->resolve($tenant, $project, 'report'))->keyBy('key');
+        $forUntouched = collect($layouts->resolve($tenant, $project, 'report', $untouched))->keyBy('key');
+        $forEnabled = collect($layouts->resolve($tenant, $project, 'report', $enabled))->keyBy('key');
         app(TenantContext::class)->forget();
 
-        $this->assertFalse($resolved['link_opens']['visible']);
-        $this->assertSame('hidden_by_link', $resolved['link_opens']['reason']);
-        $this->assertFalse($resolved['attribution_credit']['visible'], 'the link cannot show what the project hides');
-        $this->assertSame('hidden_by_project', $resolved['attribution_credit']['reason']);
-        $this->assertTrue($withoutLink['link_opens']['visible'], 'without the link the project layout stands');
+        $this->assertFalse($forUntouched['link_opens']['visible'], 'a link that was never told to show it shows nothing, though the project allows it');
+        $this->assertSame('hidden_by_link', $forUntouched['link_opens']['reason']);
+
+        $this->assertTrue($forEnabled['link_opens']['visible']);
+        $this->assertSame(5, $forEnabled['link_opens']['order'], 'the link\'s own order and width win');
+        $this->assertFalse($forEnabled['attribution_credit']['visible'], 'the link cannot show what the project forbids');
+        $this->assertSame('hidden_by_project', $forEnabled['attribution_credit']['reason']);
     }
 
     public function test_unknown_widgets_duplicates_and_sizes_are_refused_and_nothing_is_stored(): void
