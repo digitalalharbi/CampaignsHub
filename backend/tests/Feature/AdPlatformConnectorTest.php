@@ -1440,7 +1440,8 @@ final class AdPlatformConnectorTest extends TestCase
         return app(TokenVault::class)->open(
             tenantId: $this->tenant->id,
             provider: $provider,
-            tokens: new OAuthTokens('AT-secret', 'RT', $expiresAt ?? Carbon::now()->addDay()),
+            // X signs with OAuth 1.0a, so its stored token set carries the token secret beside the token.
+            tokens: new OAuthTokens('AT-secret', 'RT', $expiresAt ?? Carbon::now()->addDay(), null, $provider === 'x' ? ['token_secret' => 'TS-secret'] : []),
             connectionName: $provider,
         );
     }

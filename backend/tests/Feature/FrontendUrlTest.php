@@ -71,7 +71,7 @@ final class FrontendUrlTest extends TestCase
     /**
      * The one that cost money: the payment callback.
      *
-     * Moyasar returns the customer to whatever `callback_url` the invoice carried. Pointed at the
+     * Moyasar returns the customer to the invoice's `success_url`. Pointed at the
      * API host, somebody who had just paid landed on a 404 — with the payment taken and no way back
      * into the product.
      */

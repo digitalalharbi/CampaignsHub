@@ -170,12 +170,25 @@ return [
              */
         ],
 
+        /*
+         * OAUTH1-X-001 — the X Ads API is OAuth 1.0a, not OAuth 2.0.
+         *
+         * X's own Ads API documentation: «All HTTP calls to the Ads API must include an Authorization
+         * request header (using OAuth 1.0a)». This entry described the OAuth 2.0 PKCE flow of the
+         * general X API v2 — a different credential for a different API — so a connection made through
+         * it would have exchanged, discovered nothing and read nothing. The three-legged flow is
+         * `request_token` → `authenticate` → `access_token`; the tokens never expire and are not
+         * refreshed. `client_id` / `client_secret` hold the app's API Key and API Secret (consumer
+         * key and secret); the env names are unchanged so an existing deployment keeps working.
+         */
         'x' => [
             'label' => 'X Ads API',
-            'authorize_url' => 'https://x.com/i/oauth2/authorize',
-            'token_url' => 'https://api.x.com/2/oauth2/token',
+            'oauth_version' => '1.0a',
+            'request_token_url' => 'https://api.x.com/oauth/request_token',
+            'authorize_url' => 'https://api.x.com/oauth/authenticate',
+            'token_url' => 'https://api.x.com/oauth/access_token',
             'api_base' => 'https://ads-api.x.com/12',
-            'scopes' => ['tweet.read', 'users.read', 'offline.access'],
+            'scopes' => [],
             'client_id' => env('X_ADS_CLIENT_ID'),
             'client_secret' => env('X_ADS_CLIENT_SECRET'),
         ],

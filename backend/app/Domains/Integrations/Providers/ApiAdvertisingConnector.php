@@ -8,6 +8,7 @@ use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Contracts\AdvertisingConnector;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\OAuth1;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
@@ -417,6 +418,20 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
                 'LinkedIn-Version' => (string) $creds->get('version'),
                 'X-Restli-Protocol-Version' => '2.0.0',
             ]),
+
+            /*
+             * OAUTH1-X-001 — the X Ads API signs every request with OAuth 1.0a (HMAC-SHA1).
+             *
+             * The token secret was stored beside the access token at connection time. A token set
+             * without one is a connection made before this flow existed, which cannot sign anything;
+             * it is refused by name rather than sent as a bearer token X would not accept.
+             */
+            'x' => $request->withRequestMiddleware(OAuth1::signer(
+                (string) $creds->get('client_id'),
+                (string) $creds->get('client_secret'),
+                $tokens->accessToken,
+                (string) ($tokens->raw['token_secret'] ?? throw new RuntimeException('This X connection predates OAuth 1.0a and cannot sign requests. Reconnect X Ads.')),
+            )),
 
             default => $request->withToken($tokens->accessToken),
         };

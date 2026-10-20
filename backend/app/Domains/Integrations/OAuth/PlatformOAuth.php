@@ -7,6 +7,8 @@ namespace App\Domains\Integrations\OAuth;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -32,6 +34,8 @@ final class PlatformOAuth
 {
     /** The providers consenting at Google's own authorisation server — see the note below. */
     private const GOOGLE_CONSENT = ['google', 'ga4'];
+
+    private const OAUTH1_PREFIX = 'ads-oauth1:';
 
     /**
      * The URL to send somebody to in order to authorise us.
@@ -148,7 +152,94 @@ final class PlatformOAuth
      */
     public function callbackCodeParameter(PlatformCredentials $creds): string
     {
-        return $creds->platform === 'tiktok' ? 'auth_code' : 'code';
+        return match ($creds->platform) {
+            'tiktok' => 'auth_code',
+            // OAuth 1.0a returns the verifier, not a code.
+            'x' => 'oauth_verifier',
+            default => 'code',
+        };
+    }
+
+    /** OAUTH1-X-001 — the X Ads API is OAuth 1.0a (three-legged): no code, no PKCE, no refresh. */
+    public function usesOAuth1(PlatformCredentials $creds): bool
+    {
+        return $creds->platform === 'x';
+    }
+
+    /**
+     * Step one of the three-legged flow: ask X for a request token and return the URL the customer
+     * must be sent to. The request token's secret and our state are kept server-side, keyed by the
+     * request token (the only thing X hands back to the callback), for the life of the state.
+     */
+    public function beginOAuth1(PlatformCredentials $creds, string $state): string
+    {
+        $this->assertConfigured($creds);
+
+        $url = (string) $creds->get('request_token_url');
+        $response = PlatformHttp::client($creds->platform)->asForm()->withHeaders([
+            'Authorization' => OAuth1::header('POST', $url, [], (string) $creds->get('client_id'), (string) $creds->get('client_secret'), null, null, ['oauth_callback' => $creds->redirectUri()]),
+        ])->post($url);
+
+        parse_str($response->body(), $body);
+
+        if ($response->failed() || ($body['oauth_token'] ?? '') === '' || ($body['oauth_token_secret'] ?? '') === '' || ($body['oauth_callback_confirmed'] ?? '') !== 'true') {
+            throw new RuntimeException($creds->label().' refused the request token ('.$response->status().'): '.$this->briefly($response->body()));
+        }
+
+        Cache::put(self::OAUTH1_PREFIX.hash('sha256', (string) $body['oauth_token']), [
+            'secret' => Crypt::encryptString((string) $body['oauth_token_secret']),
+            'state' => $state,
+        ], now()->addMinutes((int) config('ad_platforms.state_ttl_minutes', 15)));
+
+        return $creds->authorizeUrl().'?'.http_build_query(['oauth_token' => (string) $body['oauth_token']]);
+    }
+
+    /** The state a request token was issued under — read once, so a callback can be replayed at most once. */
+    public function stateForRequestToken(string $requestToken): ?string
+    {
+        $held = $requestToken === '' ? null : Cache::get(self::OAUTH1_PREFIX.hash('sha256', $requestToken));
+
+        return is_array($held) && is_string($held['state'] ?? null) ? $held['state'] : null;
+    }
+
+    /**
+     * Step three: trade the request token and the verifier for the user's access token and secret.
+     * The request token is consumed whatever the outcome.
+     */
+    public function exchangeOAuth1(PlatformCredentials $creds, string $requestToken, string $verifier): OAuthTokens
+    {
+        $this->assertConfigured($creds);
+
+        $key = self::OAUTH1_PREFIX.hash('sha256', $requestToken);
+        $held = Cache::pull($key);
+
+        if (! is_array($held) || ! is_string($held['secret'] ?? null)) {
+            throw new RuntimeException($creds->label().' authorisation expired or was already used. Start the connection again.');
+        }
+
+        $url = $creds->tokenUrl();
+        $response = PlatformHttp::client($creds->platform)->asForm()->withHeaders([
+            'Authorization' => OAuth1::header('POST', $url, ['oauth_verifier' => $verifier], (string) $creds->get('client_id'), (string) $creds->get('client_secret'), $requestToken, Crypt::decryptString($held['secret']), ['oauth_verifier' => $verifier]),
+        ])->post($url, ['oauth_verifier' => $verifier]);
+
+        parse_str($response->body(), $body);
+
+        if ($response->failed() || ($body['oauth_token'] ?? '') === '' || ($body['oauth_token_secret'] ?? '') === '') {
+            throw new ProviderRequestRefused(
+                $creds->label().' refused the access token ('.$response->status().'): '.$this->briefly($response->body()),
+                $response->status(),
+                [],
+            );
+        }
+
+        return new OAuthTokens(
+            accessToken: (string) $body['oauth_token'],
+            raw: array_filter([
+                'token_secret' => (string) $body['oauth_token_secret'],
+                'user_id' => isset($body['user_id']) ? (string) $body['user_id'] : null,
+                'screen_name' => isset($body['screen_name']) ? (string) $body['screen_name'] : null,
+            ]),
+        );
     }
 
     /** Exchange the code a platform sent back for tokens. */

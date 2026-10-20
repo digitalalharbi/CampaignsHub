@@ -396,32 +396,32 @@ final class ProviderCatalogue
             label: 'X Ads API',
             labelAr: 'واجهة إكس الإعلانية',
             fields: [
-                ProviderField::plain('client_id', 'OAuth 2.0 Client ID', 'معرّف عميل OAuth 2.0',
-                    'X developer portal → your project → app → Keys and tokens',
-                    'بوابة مطوّري إكس ← مشروعك ← التطبيق ← المفاتيح والرموز'),
-                ProviderField::secret('client_secret', 'OAuth 2.0 Client Secret', 'سر عميل OAuth 2.0',
+                ProviderField::plain('client_id', 'API Key (consumer key)', 'مفتاح الواجهة (Consumer Key)',
+                    'X developer console → your app → Keys and tokens → API Key',
+                    'منصة مطوّري إكس ← تطبيقك ← المفاتيح والرموز ← API Key'),
+                ProviderField::secret('client_secret', 'API Key Secret (consumer secret)', 'سر مفتاح الواجهة (Consumer Secret)',
                     'Same page, shown once at creation',
                     'الصفحة نفسها، ويُعرض مرة واحدة عند الإنشاء'),
             ],
-            scopes: ['tweet.read', 'users.read', 'offline.access'],
-            // The one provider here whose authorisation is refused outright without a code challenge.
-            usesPkce: true,
-            supportsRefresh: true,
-            tokenNote: 'PKCE is mandatory: the authorise call carries a `code_challenge` and the token call '
-                .'must present the matching `code_verifier`, so the verifier has to survive the whole '
-                .'round trip. `offline.access` is what makes a refresh token available at all.',
-            tokenNoteAr: 'استخدام PKCE إلزامي: يحمل رابط الموافقة `code_challenge` ويجب أن يقدّم طلب الرمز '
-                .'قيمة `code_verifier` المطابقة، لذا يجب أن تبقى محفوظة طوال الرحلة. و`offline.access` هو ما يتيح رمز التجديد أصلًا.',
+            scopes: [],
+            // OAUTH1-X-001 — the Ads API is OAuth 1.0a: no PKCE, no refresh token (access tokens do not expire).
+            usesPkce: false,
+            supportsRefresh: false,
+            tokenNote: 'The Ads API uses OAuth 1.0a (HMAC-SHA1), not OAuth 2.0: the connection runs the three-legged '
+                .'flow (request token, authorise, access token) and every call is signed with the API secret and the '
+                .'user\'s token secret. Tokens do not expire, so there is nothing to refresh; revoking the app in X ends the connection.',
+            tokenNoteAr: 'تستخدم واجهة إكس الإعلانية OAuth 1.0a (HMAC-SHA1) لا OAuth 2.0: يمرّ الربط بالمسار ثلاثي الأطراف '
+                .'(رمز الطلب ثم الموافقة ثم رمز الوصول) وكل استدعاء يُوقَّع بسر الواجهة وسر رمز المستخدم. الرموز لا تنتهي فلا تجديد، وإلغاء التطبيق في إكس ينهي الربط.',
             webhooks: WebhookSupport::PollingOnly,
             webhookSignatureHeader: null,
             prerequisites: [
                 'An X developer account with Ads API access approved — a separate application from the standard developer account.',
-                'An app with OAuth 2.0 enabled (type: Web App) and the callback URI below registered.',
+                'A developer app with Ads API access approved (submit the Ads API Access Form for that app), and the callback URI below registered as one of its callback URLs.',
                 'The authorising user must hold access to the ads account in X Ads Manager.',
             ],
             prerequisitesAr: [
                 'حساب مطوّر في إكس مع اعتماد الوصول إلى Ads API — وهو طلب منفصل عن حساب المطوّر العادي.',
-                'تطبيق مع تفعيل OAuth 2.0 (نوع: تطبيق ويب) وتسجيل رابط العودة أدناه.',
+                'تطبيق مطوّر معتمد له وصول Ads API (يُقدَّم نموذج طلب الوصول لذلك التطبيق) مع تسجيل رابط العودة أدناه ضمن روابط العودة للتطبيق.',
                 'المستخدم الذي يمنح الموافقة يجب أن يملك صلاحية على الحساب الإعلاني في مدير إعلانات إكس.',
             ],
             docsUrl: 'https://developer.x.com/en/docs/x-ads-api',
