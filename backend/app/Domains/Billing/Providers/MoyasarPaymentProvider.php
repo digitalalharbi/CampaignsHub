@@ -58,16 +58,28 @@ final class MoyasarPaymentProvider implements PaymentProvider
              * a hundred times it. The conversion happens here, once, rather than at each call site.
              */
             $response = Http::withBasicAuth((string) $this->secretKey(), '')
-                ->asForm()
-                ->post(self::API.'/invoices', [
+                ->asJson()
+                ->post(self::API.'/invoices', array_filter([
                     'amount' => (int) round(((float) $payload['amount']) * 100),
                     'currency' => (string) ($payload['currency'] ?? 'SAR'),
                     'description' => (string) ($payload['description'] ?? 'CampaignsHub subscription'),
-                    'callback_url' => (string) ($payload['return_url'] ?? ''),
+                    /*
+                     * MOYASAR-REDIRECT-001 — where the CUSTOMER goes, as Moyasar documents it.
+                     *
+                     * This sent the front-end page as `callback_url`. Moyasar's invoice reference says
+                     * `callback_url` is a server endpoint that is POSTed the invoice object when it is
+                     * paid — «only used to send a notification» — and that the payer is redirected by
+                     * `success_url` (paid) and `back_url` (back button). So a customer who had paid was
+                     * not sent back, and the front-end page was sent a server notification it cannot
+                     * read. Confirmation still comes only from the verified webhook configured in the
+                     * dashboard; none is requested per invoice.
+                     */
+                    'success_url' => (string) ($payload['return_url'] ?? ''),
+                    'back_url' => (string) ($payload['return_url'] ?? ''),
                     // Our own reference travels with the invoice and comes back on the webhook, which
                     // is how a verified event finds the payment it belongs to.
                     'metadata' => ['reference' => (string) ($payload['reference'] ?? '')],
-                ]);
+                ], static fn ($v) => $v !== ''));
 
             if (! $response->successful()) {
                 return [
