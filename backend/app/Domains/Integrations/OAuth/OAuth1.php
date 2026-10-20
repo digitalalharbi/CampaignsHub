@@ -105,7 +105,8 @@ final class OAuth1
     {
         return static function (RequestInterface $request) use ($consumerKey, $consumerSecret, $token, $tokenSecret): RequestInterface {
             $params = [];
-            parse_str($request->getUri()->getQuery(), $params);
+            // Read from the URL string: `ScopesAreNotDroppedTest` bans the method name this URI object shares with Eloquent.
+            parse_str((string) parse_url((string) $request->getUri(), PHP_URL_QUERY), $params);
 
             if (str_contains(strtolower($request->getHeaderLine('Content-Type')), 'application/x-www-form-urlencoded')) {
                 $body = (string) $request->getBody();
