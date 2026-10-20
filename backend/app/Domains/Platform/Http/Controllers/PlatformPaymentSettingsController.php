@@ -47,6 +47,7 @@ final class PlatformPaymentSettingsController extends Controller
             'currency' => (string) config('subscriptions.currency'),
             'providers' => [
                 $this->describeMoyasar(),
+                $this->describeTap(),
                 $this->describeStripe(),
             ],
             /*
@@ -103,6 +104,9 @@ final class PlatformPaymentSettingsController extends Controller
             'description' => 'CampaignsHub connection test',
             'reference' => 'connection-test:'.now()->timestamp,
             'return_url' => Frontend::origin().'/admin/settings',
+            // Some gateways (Tap) will not open an intent without a named, addressable customer: the
+            // operator running the test is that customer, and nothing is charged.
+            'customer' => ['name' => (string) $request->user()->name, 'email' => (string) $request->user()->email],
         ]);
 
         $reachable = ($result['status'] ?? '') === 'created';
@@ -138,12 +142,16 @@ final class PlatformPaymentSettingsController extends Controller
         return ApiResponse::success([
             'provider' => $provider,
             'url' => rtrim((string) config('app.url'), '/')."/api/v1/payments/webhook/{$provider}",
-            'authentication' => $provider === 'moyasar'
-                ? 'A shared secret carried in the body as `secret_token`, set from MOYASAR_WEBHOOK_TOKEN.'
-                : 'An HMAC-SHA256 signature in the `Stripe-Signature` header, set from STRIPE_WEBHOOK_SECRET.',
-            'events' => $provider === 'moyasar'
-                ? ['payment_paid', 'payment_failed', 'payment_refunded']
-                : ['checkout.session.completed', 'payment_intent.succeeded', 'payment_intent.payment_failed', 'charge.refunded'],
+            'authentication' => match ($provider) {
+                'moyasar' => 'A shared secret carried in the body as `secret_token`, set from MOYASAR_WEBHOOK_TOKEN.',
+                'tap' => 'An HMAC-SHA256 signature in the `hashstring` header, keyed with TAP_SECRET_KEY.',
+                default => 'An HMAC-SHA256 signature in the `Stripe-Signature` header, set from STRIPE_WEBHOOK_SECRET.',
+            },
+            'events' => match ($provider) {
+                'moyasar' => ['payment_paid', 'payment_failed', 'payment_refunded'],
+                'tap' => ['charge (CAPTURED, FAILED, DECLINED, CANCELLED…)'],
+                default => ['checkout.session.completed', 'payment_intent.succeeded', 'payment_intent.payment_failed', 'charge.refunded'],
+            },
         ], 'Webhook configuration.');
     }
 
@@ -158,9 +166,11 @@ final class PlatformPaymentSettingsController extends Controller
     {
         $this->providerOr404($provider);
 
-        $variables = $provider === 'moyasar'
-            ? ['MOYASAR_SECRET_KEY', 'MOYASAR_PUBLISHABLE_KEY', 'MOYASAR_WEBHOOK_TOKEN']
-            : ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET'];
+        $variables = match ($provider) {
+            'moyasar' => ['MOYASAR_SECRET_KEY', 'MOYASAR_PUBLISHABLE_KEY', 'MOYASAR_WEBHOOK_TOKEN'],
+            'tap' => ['TAP_SECRET_KEY', 'TAP_PUBLISHABLE_KEY'],
+            default => ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET'],
+        };
 
         return ApiResponse::success([
             'provider' => $provider,
@@ -197,6 +207,28 @@ final class PlatformPaymentSettingsController extends Controller
                 ['key' => 'MOYASAR_WEBHOOK_TOKEN', 'present' => $this->filled(config('services.moyasar.webhook_token'))],
             ],
             'webhook_url' => rtrim((string) config('app.url'), '/').'/api/v1/payments/webhook/moyasar',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function describeTap(): array
+    {
+        $adapter = $this->providers->for('tap');
+
+        return [
+            'provider' => 'tap',
+            'label' => ['ar' => 'تاب', 'en' => 'Tap Payments'],
+            'role' => 'alternative',
+            'is_default' => config('subscriptions.default') === 'tap',
+            'status' => $adapter->isConfigured() ? 'live' : 'awaiting_credentials',
+            'available' => $adapter->isConfigured(),
+            'environment' => $this->environmentOf((string) config('services.tap.secret_key')),
+            // One secret: Tap signs its webhooks with the secret key itself.
+            'requires' => [
+                ['key' => 'TAP_SECRET_KEY', 'present' => $this->filled(config('services.tap.secret_key'))],
+                ['key' => 'TAP_PUBLISHABLE_KEY', 'present' => $this->filled(config('services.tap.publishable_key'))],
+            ],
+            'webhook_url' => rtrim((string) config('app.url'), '/').'/api/v1/payments/webhook/tap',
         ];
     }
 
@@ -244,7 +276,7 @@ final class PlatformPaymentSettingsController extends Controller
 
     private function providerOr404(string $provider)
     {
-        abort_unless(in_array($provider, ['moyasar', 'stripe'], true), 404);
+        abort_unless(in_array($provider, ['moyasar', 'tap', 'stripe'], true), 404);
 
         return $this->providers->for($provider);
     }
