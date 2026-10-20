@@ -6,6 +6,8 @@ namespace App\Domains\Commerce\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Commerce\Install\SallaInstalls;
+use App\Domains\Commerce\Install\SallaMagicLink;
+use App\Domains\Commerce\Install\SallaOnboarding;
 use App\Domains\Commerce\Services\StoreDiscovery;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderKind;
@@ -18,6 +20,7 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
@@ -149,6 +152,32 @@ final class StoreOAuthController extends Controller
                 $claim = app(SallaInstalls::class)->fromCode((string) $request->query('code'));
             } catch (Throwable $e) {
                 return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
+            }
+
+            /*
+             * SALLA-ONBOARD-001 — try to finish the install without asking anything of the merchant.
+             *
+             * The pending install is turned into a workspace, a project and a connected store when Salla says
+             * enough to do so safely, and the merchant is handed a single-use sign-in link. Whatever it cannot
+             * decide stays a pending install for the claim page below — the path that always worked.
+             */
+            try {
+                $install = app(SallaInstalls::class)->preview($claim);
+                $result = $install === null ? null : app(SallaOnboarding::class)->handle($install, $claim);
+            } catch (Throwable $e) {
+                $result = null;
+            }
+
+            if ($result !== null && $result['user'] !== null) {
+                $audit->log(action: 'salla.install.'.$result['outcome'], entityType: User::class, entityId: (string) $result['user']->getKey(), after: ['store' => $result['store']]);
+
+                return redirect()->to(url('/api/v1/salla/enter').'?'.http_build_query(['t' => SallaMagicLink::issue($result['user'], (string) $result['store'])]));
+            }
+            if ($result !== null && $result['outcome'] === 'entered') {
+                return redirect()->away(Frontend::origin().'/login?salla=signin');
+            }
+            if ($result !== null && in_array($result['outcome'], ['provisioned', 'attached'], true)) {
+                return redirect()->away(Frontend::origin().'/login?salla=connected');
             }
 
             return redirect()->away(Frontend::origin().'/app/store-install?'.http_build_query(['provider' => 'salla', 'claim' => $claim]));
