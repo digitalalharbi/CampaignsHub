@@ -172,6 +172,27 @@ final class ReportShareTest extends TestCase
         $this->assertSame(['platforms' => ['spend', 'ctr']], ReportColumns::forShare($share)->toArray());
     }
 
+    /** The Tables view's accounts, content and day tables are choosable too, each cut to its own known columns. */
+    public function test_the_other_tables_columns_are_stored_resolved_too(): void
+    {
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares", [
+                'columns' => [
+                    'content' => ['cost', 'results', 'ctr', 'platform'],
+                    'accounts' => ['spend'],
+                    'days' => ['results', 'results', 'bogus'],
+                ],
+            ])->assertCreated();
+
+        $share = ReportShare::withoutGlobalScopes()->latest('id')->first();
+
+        $this->assertSame(
+            ['accounts' => ['spend'], 'content' => ['platform', 'results', 'cost'], 'days' => ['results']],
+            ReportColumns::forShare($share)->toArray(),
+            'a column the table does not have is cut, and the table\'s own order wins',
+        );
+    }
+
     public function test_a_link_with_no_column_choice_publishes_every_column(): void
     {
         $this->actingAs($this->owner, 'sanctum')

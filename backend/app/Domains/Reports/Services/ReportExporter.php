@@ -67,7 +67,52 @@ final class ReportExporter
 
         // REPORT-SECTION-SURFACES-001 — the file carries the same section set as the page and the PDF,
         // narrowed by the link's own switches when a link produced it.
+        // The same call carries `report_columns` (REPORT-TABLES-OWNER-COLUMNS-001) for a link's file.
         return $this->sections->apply($data, $report, $share, 'export');
+    }
+
+    /**
+     * Which picker key each exported column answers to, per table. A column with no key here (revenue,
+     * ROAS, share, campaign…) is not something the Owner can choose, so a table the Owner RESTRICTED
+     * leaves it out; a table they did not restrict keeps every column, as it always did. The first
+     * column — the row's name — is never a choice.
+     */
+    private const COLUMN_KEYS = [
+        'platforms' => ['spend' => 'spend', 'conversions' => 'results', 'cpa' => 'cost', 'ctr' => 'ctr'],
+        'content' => ['platform' => 'platform', 'impressions' => 'impressions', 'clicks' => 'clicks', 'conversions' => 'results', 'spend' => 'spend', 'cpa' => 'cost'],
+        'days' => ['impressions' => 'impressions', 'clicks' => 'clicks', 'results' => 'results', 'spend' => 'spend'],
+    ];
+
+    /**
+     * Cut a table to the Owner's column choice, identically for CSV and XLSX.
+     *
+     * Hiding a column is a display decision: money a link withholds is already null in `$data`, so
+     * choosing the spend column on such a link still publishes no spend.
+     *
+     * @param  array<string,mixed>  $data
+     * @param  list<string>  $head
+     * @param  list<array<int,mixed>>  $rows
+     * @return array{0: list<string>, 1: list<array<int,mixed>>}
+     */
+    private static function chosenColumns(array $data, string $table, array $head, array $rows): array
+    {
+        $chosen = $data['report_columns'][$table] ?? null;
+        if (! is_array($chosen)) {
+            return [$head, $rows];
+        }
+
+        $keep = [];
+        foreach ($head as $i => $label) {
+            $key = self::COLUMN_KEYS[$table][strtolower($label)] ?? null;
+            if ($i === 0 || ($key !== null && in_array($key, $chosen, true))) {
+                $keep[] = $i;
+            }
+        }
+
+        return [
+            array_map(static fn (int $i) => $head[$i], $keep),
+            array_map(static fn (array $row) => array_map(static fn (int $i) => $row[$i] ?? null, $keep), $rows),
+        ];
     }
 
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
@@ -293,9 +338,13 @@ final class ReportExporter
             $put([$k, is_numeric($v) ? $v : ($v ?? '')]);
         }
         $put([]);
-        $put(['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share']);
-        foreach (($data['platforms'] ?? []) as $p) {
-            $put([$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? '']);
+        [$platHead, $platRows] = self::chosenColumns($data, 'platforms', ['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share'], array_map(
+            static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? ''],
+            array_values((array) ($data['platforms'] ?? [])),
+        ));
+        $put($platHead);
+        foreach ($platRows as $row) {
+            $put($row);
         }
         /*
          * The objective split — the same spend, divided by what it was bought for.
@@ -409,30 +458,32 @@ final class ReportExporter
          */
         if (! empty($data['creatives'])) {
             $put([]);
-            $put(['Creatives', 'platform', 'campaign', 'objective', 'path', 'type', ...self::CREATIVE_COLUMNS]);
-            foreach ($data['creatives'] as $c) {
-                $put([
+            [$creativeHead, $creativeRows] = self::chosenColumns($data, 'content', ['Creatives', 'platform', 'campaign', 'objective', 'path', 'type', ...self::CREATIVE_COLUMNS], array_map(
+                static fn ($c) => [
                     $c['name'] ?? '—',
                     $c['provider'] ?? '',
                     $c['campaign_name'] ?? '',
                     $c['objective'] ?? '',
                     $c['path'] ?? '',
                     $c['preview']['kind'] ?? '',
-                    ...array_map(
-                        // A withheld metric is an EMPTY cell, never a zero: a spreadsheet zero is a
-                        // measurement, and this one would be a measurement the operator hid.
-                        static fn (string $key) => $c['metrics'][$key] ?? '',
-                        self::CREATIVE_COLUMNS,
-                    ),
-                ]);
+                    // A withheld metric is an EMPTY cell, never a zero: a spreadsheet zero is a
+                    // measurement, and this one would be a measurement the operator hid.
+                    ...array_map(static fn (string $key) => $c['metrics'][$key] ?? '', self::CREATIVE_COLUMNS),
+                ],
+                array_values((array) $data['creatives']),
+            ));
+            $put($creativeHead);
+            foreach ($creativeRows as $row) {
+                $put($row);
             }
         }
 
         // REPORT-COMPOSITION-CONTROL-001 — the daily ledger, only where the `daily_records` component is shown.
         if (self::dailyRecordsChosen($data)) {
             $put([]);
-            $put(['Daily Records', ...array_slice(self::DAILY_HEAD, 1)]);
-            foreach (self::dailyRows($data) as $row) {
+            [$dayHead, $dayRows] = self::chosenColumns($data, 'days', ['Daily Records', ...array_slice(self::DAILY_HEAD, 1)], self::dailyRows($data));
+            $put($dayHead);
+            foreach ($dayRows as $row) {
                 $put(array_map(static fn ($v) => $v ?? '', $row));
             }
         }
@@ -496,10 +547,14 @@ final class ReportExporter
 
         $ps = $book->createSheet();
         $ps->setTitle('Platforms');
-        $ps->fromArray(['Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA', 'CTR', 'Share'], null, 'A1');
+        [$platHead, $platRows] = self::chosenColumns($data, 'platforms', ['Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA', 'CTR', 'Share'], array_map(
+            static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? null, $p['revenue'] ?? null, $p['conversions'] ?? null, $p['roas'] ?? null, $p['cpa'] ?? null, $p['ctr'] ?? null, $p['spend_share'] ?? null],
+            array_values((array) ($data['platforms'] ?? [])),
+        ));
+        $ps->fromArray($platHead, null, 'A1');
         $row = 2;
-        foreach (($data['platforms'] ?? []) as $p) {
-            $ps->fromArray([$p['provider'] ?? '', $p['spend'] ?? null, $p['revenue'] ?? null, $p['conversions'] ?? null, $p['roas'] ?? null, $p['cpa'] ?? null, $p['ctr'] ?? null, $p['spend_share'] ?? null], null, "A{$row}");
+        foreach ($platRows as $platRow) {
+            $ps->fromArray($platRow, null, "A{$row}");
             $row++;
         }
 
@@ -578,7 +633,8 @@ final class ReportExporter
         }
         // The client's own ledger, when the Owner chose to show it: the same days the Tables view lists.
         if ($audience !== 'internal' && self::dailyRecordsChosen($data)) {
-            $add('Daily Records', self::DAILY_HEAD, self::dailyRows($data));
+            [$dayHead, $dayRows] = self::chosenColumns($data, 'days', self::DAILY_HEAD, self::dailyRows($data));
+            $add('Daily Records', $dayHead, $dayRows);
         }
         if (! empty($data['funnel']) && $audience !== 'executive') {
             $add('Funnel', ['Stage', 'Count', 'Step Rate', 'Cost Per'], array_map(
@@ -596,20 +652,17 @@ final class ReportExporter
          * still in the file. What the client cannot see must not be in the bytes they were sent.
          */
         if (! empty($data['creatives'])) {
-            $add(
-                'Creatives',
-                ['Creative', 'Platform', 'Campaign', 'Objective', 'Path', 'Type', ...self::CREATIVE_COLUMNS],
-                array_map(static fn ($c) => [
-                    $c['name'] ?? '—',
-                    $c['provider'] ?? '',
-                    $c['campaign_name'] ?? '',
-                    $c['objective'] ?? '',
-                    $c['path'] ?? '',
-                    $c['preview']['kind'] ?? '',
-                    // null, not 0 — a withheld or unreported figure leaves the cell empty.
-                    ...array_map(static fn (string $key) => $c['metrics'][$key] ?? null, self::CREATIVE_COLUMNS),
-                ], $data['creatives']),
-            );
+            [$creativeHead, $creativeRows] = self::chosenColumns($data, 'content', ['Creative', 'Platform', 'Campaign', 'Objective', 'Path', 'Type', ...self::CREATIVE_COLUMNS], array_map(static fn ($c) => [
+                $c['name'] ?? '—',
+                $c['provider'] ?? '',
+                $c['campaign_name'] ?? '',
+                $c['objective'] ?? '',
+                $c['path'] ?? '',
+                $c['preview']['kind'] ?? '',
+                // null, not 0 — a withheld or unreported figure leaves the cell empty.
+                ...array_map(static fn (string $key) => $c['metrics'][$key] ?? null, self::CREATIVE_COLUMNS),
+            ], array_values((array) $data['creatives'])));
+            $add('Creatives', $creativeHead, $creativeRows);
         }
 
         $notes = $book->createSheet();
