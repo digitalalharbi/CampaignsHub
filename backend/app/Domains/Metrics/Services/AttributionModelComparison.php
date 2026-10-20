@@ -113,7 +113,7 @@ final class AttributionModelComparison
         $recordedBy = isset($creditConfig['recorded_by']) ? Carbon::parse((string) $creditConfig['recorded_by']) : null;
         $journeys = $credit === null ? [] : (new OrderJourneys)->forOrders($tenantId, $projectId, $live, $credit['lookback_days'], $recordedBy);
         $creditRows = [];
-        $creditCoverage = ['orders_credited' => 0, 'orders_with_verified_touchpoints' => 0, 'orders_without_evidence' => 0, 'orders_excluded_fully_refunded' => 0];
+        $creditCoverage = ['orders_credited' => 0, 'orders_with_verified_touchpoints' => 0, 'orders_without_evidence' => 0, 'orders_excluded_fully_refunded' => 0, 'orders_with_withheld_revenue' => 0];
         $pathCounts = [];
         $multiTouch = 0;
         $withCustomer = 0;
@@ -137,6 +137,10 @@ final class AttributionModelComparison
                 } else {
                     $touches = $journeys[(string) $order->getKey()] ?? [];
                     $creditCoverage['orders_credited']++;
+                    // Credited as an order, but its revenue cannot be stated (no trustworthy rate): the revenue figures are short by it, and say so.
+                    if ($net === null) {
+                        $creditCoverage['orders_with_withheld_revenue']++;
+                    }
                     $creditCoverage[$touches === [] ? 'orders_without_evidence' : 'orders_with_verified_touchpoints']++;
                     foreach ($credit['models'] as $model) {
                         foreach (AttributionCredit::split($model, $touches, $order->placed_at ?? $to, $credit) as $channel => $share) {

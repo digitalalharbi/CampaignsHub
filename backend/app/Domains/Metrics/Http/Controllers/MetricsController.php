@@ -21,6 +21,7 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Settings\AttributionSettings;
 use App\Domains\Metrics\Support\EntityScope;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -1157,7 +1158,7 @@ final class MetricsController extends Controller
         abort_if($tenantId === '' || $projectId === '', 400, 'No active project.');
 
         return ApiResponse::success(
-            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request))
+            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request), app(AttributionSettings::class)->creditConfig($tenantId, $projectId))
                 /*
                  * This report compares what the platforms reported against what the store confirmed,
                  * and only ONE of those two sides has a campaign on it. Narrowing the platform side
