@@ -9,11 +9,13 @@ use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\PaymentAttempt;
 use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Models\Quote;
+use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Support\Frontend;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -236,6 +238,17 @@ final class BillingService
             'amount' => $outstanding,
             'currency' => $invoice->currency,
             'idempotency_key' => $idempotencyKey,
+            /*
+             * PAY-INVOICE-001 — what every adapter reads, which this path never sent.
+             *
+             * The adapters take `reference` (our key, echoed back on the verified event so it can find
+             * its payment), `description` and `return_url`; this call passed only `idempotency_key`, so
+             * on Moyasar and Tap the reference came back empty and the paid event could not be matched
+             * to the invoice it settled. Callers may still override any of them.
+             */
+            'reference' => $idempotencyKey,
+            'description' => 'Invoice '.$invoice->number,
+            'return_url' => Frontend::origin().'/portal',
         ], $payload));
 
         $payment->forceFill([
@@ -292,11 +305,23 @@ final class BillingService
         }
 
         $paymentRef = $result['payment_id'] ?? null;
-        $payment = $this->matchPayment($provider, $paymentRef !== null ? (string) $paymentRef : null);
+        $payment = $this->matchPayment(
+            $provider,
+            $paymentRef !== null ? (string) $paymentRef : null,
+            isset($result['reference']) ? (string) $result['reference'] : null,
+        );
 
         if ($payment !== null) {
             $event->tenant_id = $payment->tenant_id;
-            $this->applyVerifiedTransition($payment, (string) ($result['status'] ?? 'processing'), $result);
+
+            // PAY-INVOICE-001 — a «paid» the adapter cannot attest by signature is re-asked of the gateway.
+            if (($result['status'] ?? null) === 'paid' && $payment->status !== 'paid' && ! $adapter->confirmsPayloadIntegrity()) {
+                $result = $this->confirmedAgainstGateway($payment, $adapter, $result);
+            }
+
+            if ($result !== null) {
+                $this->applyVerifiedTransition($payment, (string) ($result['status'] ?? 'processing'), $result);
+            }
         }
 
         $event->save();
@@ -310,6 +335,43 @@ final class BillingService
      *
      * @param  array<string,mixed>  $result
      */
+    /**
+     * PAY-INVOICE-001 — the subscription path's PAY-CONFIRM-001, for an agency's own invoices.
+     *
+     * Moyasar's webhook proves the sender knew a token; Tap's signature leaves our reference out. Neither
+     * is the gateway's word about the money, so before an invoice is settled the charge is read back
+     * from the gateway over our own connection and must be paid, for this invoice's amount, in its
+     * currency, under our reference. No answer (null) settles nothing; a different answer wins over the
+     * event; a charge that does not match is recorded as failed rather than settled.
+     *
+     * @param  array<string,mixed>  $result
+     * @return array<string,mixed>|null the figures to settle on, or null to settle nothing
+     */
+    private function confirmedAgainstGateway(Payment $payment, PaymentProvider $adapter, array $result): ?array
+    {
+        $id = (string) ($result['payment_id'] ?? '');
+        $fetched = $id === '' ? null : $adapter->fetchPayment($id);
+
+        if ($fetched === null || ($fetched['status'] ?? null) !== 'paid') {
+            return null;
+        }
+
+        $reference = (string) ($fetched['reference'] ?? '');
+        $matches = $reference === (string) $payment->idempotency_key
+            && strtoupper((string) ($fetched['currency'] ?? '')) === strtoupper((string) $payment->currency)
+            && is_numeric($fetched['amount'] ?? null)
+            && abs((float) $fetched['amount'] - (float) $payment->amount) < 0.005;
+
+        if (! $matches) {
+            $payment->forceFill(['status' => 'failed', 'error' => 'The confirmed charge does not match what was invoiced.'])->save();
+            $this->recordAttempt($payment, 'amount_mismatch', ['expected' => (string) $payment->amount, 'received' => $fetched['amount'] ?? null, 'currency' => $fetched['currency'] ?? null]);
+
+            return null;
+        }
+
+        return ['status' => 'paid'] + $result;
+    }
+
     private function applyVerifiedTransition(Payment $payment, string $status, array $result): void
     {
         $providerPaymentId = isset($result['payment_id']) ? (string) $result['payment_id'] : $payment->provider_payment_id;
@@ -380,17 +442,28 @@ final class BillingService
     }
 
     /** Locate the payment a verified webhook refers to, across tenants (provider session or payment id). */
-    private function matchPayment(string $provider, ?string $reference): ?Payment
+    /**
+     * The payment a verified event belongs to: by the gateway's own ids, or — because a gateway's payment id
+     * is not its session or invoice id (Moyasar) — by the reference WE sent and it echoed back.
+     */
+    private function matchPayment(string $provider, ?string $paymentId, ?string $reference = null): ?Payment
     {
-        if ($reference === null || $reference === '') {
+        $paymentId = $paymentId === '' ? null : $paymentId;
+        $reference = $reference === '' ? null : $reference;
+
+        if ($paymentId === null && $reference === null) {
             return null;
         }
 
         return Payment::withoutGlobalScope(TenantScope::class)
             ->where('provider', $provider)
-            ->where(function ($query) use ($reference): void {
-                $query->where('provider_session_id', $reference)
-                    ->orWhere('provider_payment_id', $reference);
+            ->where(function ($query) use ($paymentId, $reference): void {
+                if ($paymentId !== null) {
+                    $query->orWhere('provider_session_id', $paymentId)->orWhere('provider_payment_id', $paymentId);
+                }
+                if ($reference !== null) {
+                    $query->orWhere('idempotency_key', $reference);
+                }
             })
             ->first();
     }
