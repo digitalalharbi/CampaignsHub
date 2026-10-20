@@ -49,6 +49,6 @@ final class ShortLinkHopController extends Controller
                 ->header('X-Robots-Tag', 'noindex');
         }
 
-        return redirect()->away($link?->destination ?: Frontend::origin().'/', 302);
+        return redirect()->away(($link?->getAttribute('tracked_destination') ?? $link?->destination) ?: Frontend::origin().'/', 302);
     }
 }
