@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\ShortLinks\Services;
 
+use App\Domains\Metrics\Touchpoints\TouchpointLinker;
+use App\Domains\Metrics\Touchpoints\TouchpointRecorder;
 use App\Domains\ShortLinks\Models\ShortLink;
 use App\Domains\ShortLinks\Models\ShortLinkHop;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -14,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 /**
  * SHORT-LINKS-001 — minting a slug, and serving the hop.
  *
@@ -98,7 +101,7 @@ final class ShortLinkHops
          * count cannot hold (when, whether a person, which destination). Off unless the workspace turned
          * advanced tracking on, and a failure here is swallowed by the recorder.
          */
-        app(TrackingRecorder::class)->record([
+        $event = app(TrackingRecorder::class)->record([
             'tenant_id' => (string) $link->tenant_id,
             'project_id' => $link->project_id === null ? null : (string) $link->project_id,
             'event_type' => $link->mode === ShortLink::MODE_LANDING ? TrackingEvent::SHORT_LINK_OPEN : TrackingEvent::SHORT_LINK_REDIRECT,
@@ -110,6 +113,10 @@ final class ShortLinkHops
             'occurred_at' => $now,
             'consent_state' => 'not_required',
         ], $request);
+
+        if ($event !== null && ! $event->is_bot) {
+            $this->touchpoint($link, $event, $now);
+        }
 
         return $link;
     }
@@ -160,6 +167,59 @@ final class ShortLinkHops
      * `location /l/` block in `deploy/nginx-spa.conf`, which exists for exactly this and is the one
      * part of this feature that is not deployed by pushing code.
      */
+    /**
+     * TOUCHPOINT-EVIDENCE-001 — a person's click on a plain link becomes marketing evidence an order can later prove.
+     *
+     * Only for a PLAIN link (not WhatsApp: a chat message cannot carry anything to a store), in redirect mode, with
+     * a project, and only for a click that did not announce itself as a machine. The click gets a token minted
+     * here and written into the destination as `ch_tid` (and `utm_content` when the link has none), so that if the
+     * store later records an order carrying that token, the order can be linked to this click by evidence nobody
+     * else could have produced. The destination host and path are untouched: only a query parameter is added, in
+     * the open, which is ordinary campaign tagging and not a different place.
+     *
+     * The response a visitor receives never depends on who they are — a machine gets the same redirect, only
+     * without a token, because it is not recorded as a person's click.
+     */
+    private function touchpoint(ShortLink $link, TrackingEvent $event, Carbon $at): void
+    {
+        if ($link->kind !== ShortLink::KIND_LINK || $link->mode !== ShortLink::MODE_REDIRECT || $link->project_id === null) {
+            return;
+        }
+
+        try {
+            $token = Str::lower(Str::random(20));
+            app(TouchpointRecorder::class)->record((string) $link->tenant_id, (string) $link->project_id, [
+                'source_type' => 'smart_link_click',
+                'source_ref' => (string) $event->getKey(),
+                'channel' => 'smart_link',
+                'smart_link_id' => (string) $link->getKey(),
+                'tracking_token' => $token,
+                'occurred_at' => $at,
+                'consent_state' => 'not_required',
+            ]);
+            $link->setAttribute('tracked_destination', self::withToken((string) $link->destination, $token));
+        } catch (Throwable $e) {
+            Log::warning('smart link touchpoint not recorded', ['short_link_id' => (string) $link->getKey(), 'reason' => $e->getMessage()]);
+        }
+    }
+
+    /** The destination with our click token added to its query, everything else as it was. */
+    public static function withToken(string $destination, string $token): string
+    {
+        $parts = parse_url($destination);
+        if ($parts === false || ! in_array($parts['scheme'] ?? '', ['http', 'https'], true) || ! isset($parts['host'])) {
+            return $destination;
+        }
+
+        parse_str($parts['query'] ?? '', $query);
+        $query[TouchpointLinker::TOKEN_PARAM] = $token;
+        $query['utm_content'] ??= $token;
+
+        $out = $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '').($parts['path'] ?? '');
+
+        return $out.'?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986).(isset($parts['fragment']) ? '#'.$parts['fragment'] : '');
+    }
+
     public function shareUrl(ShortLink $link): string
     {
         return Frontend::origin().'/l/'.$link->slug;
