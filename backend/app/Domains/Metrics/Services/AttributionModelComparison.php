@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Metrics\Touchpoints\OrderJourneys;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -29,6 +30,12 @@ use Illuminate\Support\Collection;
  * - Paths: the same lookback, so a customer of three years does not drag a three-year path behind
  *   every order. First touch alone reaches back to the very first order: it is the acquisition.
  * - Platform-claimed and GA4 sit beside these as the other layers, never added to them.
+ *
+ * ATTRIB-CREDIT-001 — separate from all of the above, and only when a configuration is passed: the fractional
+ * models in {@see AttributionCredit} share each order across its VERIFIED MARKETING TOUCHPOINTS (recorded clicks
+ * linked to the order by exact evidence, see {@see OrderJourneys}). Earlier orders are never touches there;
+ * everything above stays order-history analysis and is labelled as such. Without a configuration nothing below
+ * changes, so switching the feature off never moves an existing report.
  */
 final class AttributionModelComparison
 {
@@ -42,9 +49,10 @@ final class AttributionModelComparison
     /**
      * @param  Collection<int,CommerceOrder>  $orders  the window's orders as ProjectOrders loaded them
      * @param  list<array<string,mixed>>  $platforms  the per-platform rows AttributionTransparency built
+     * @param  array<string,mixed>|null  $creditConfig  {@see AttributionCredit::config()} plus an optional `recorded_by` cut-off; null leaves the fractional models off
      * @return array<string,mixed>
      */
-    public function build(bool $hasStore, string $tenantId, string $projectId, Collection $orders, Carbon $to, array $platforms): array
+    public function build(bool $hasStore, string $tenantId, string $projectId, Collection $orders, Carbon $to, array $platforms, ?array $creditConfig = null): array
     {
         $basis = [
             'basis_ar' => 'كل لمسة هنا طلبٌ سجّله المتجر بدليله: رابط UTM أو معرّف نقر أو حملة أو كوبون مؤثر. الزيارات بين الطلبات لا يراها المتجر، فلا يُقسَّم أي طلب بين القنوات. أول لمسة هي أول طلب للعميل مع المتجر، والمساعدة والمسارات تقرأ طلبات آخر '.self::LOOKBACK_DAYS.' يومًا قبل كل طلب.',
@@ -101,6 +109,11 @@ final class AttributionModelComparison
             'assisted' => ['orders' => 0, 'revenue' => 0.0],
             'evidence' => ['click_id' => 0, 'utm' => 0, 'coupon' => 0],
         ];
+        $credit = $creditConfig === null ? null : AttributionCredit::config($creditConfig);
+        $recordedBy = isset($creditConfig['recorded_by']) ? Carbon::parse((string) $creditConfig['recorded_by']) : null;
+        $journeys = $credit === null ? [] : (new OrderJourneys)->forOrders($tenantId, $projectId, $live, $credit['lookback_days'], $recordedBy);
+        $creditRows = [];
+        $creditCoverage = ['orders_credited' => 0, 'orders_with_verified_touchpoints' => 0, 'orders_without_evidence' => 0, 'orders_excluded_fully_refunded' => 0];
         $pathCounts = [];
         $multiTouch = 0;
         $withCustomer = 0;
@@ -116,6 +129,23 @@ final class AttributionModelComparison
             }
             $revenue = $net ?? 0.0;
             $currency ??= $order->currency;
+
+            if ($credit !== null) {
+                if ($net !== null && $net <= 0.0) {
+                    // A fully refunded order is not a sale to share out.
+                    $creditCoverage['orders_excluded_fully_refunded']++;
+                } else {
+                    $touches = $journeys[(string) $order->getKey()] ?? [];
+                    $creditCoverage['orders_credited']++;
+                    $creditCoverage[$touches === [] ? 'orders_without_evidence' : 'orders_with_verified_touchpoints']++;
+                    foreach ($credit['models'] as $model) {
+                        foreach (AttributionCredit::split($model, $touches, $order->placed_at ?? $to, $credit) as $channel => $share) {
+                            $creditRows[$channel][$model]['orders'] = ($creditRows[$channel][$model]['orders'] ?? 0.0) + $share;
+                            $creditRows[$channel][$model]['revenue'] = ($creditRows[$channel][$model]['revenue'] ?? 0.0) + $share * $revenue;
+                        }
+                    }
+                }
+            }
 
             $first = $last;
             $before = [];
@@ -226,6 +256,7 @@ final class AttributionModelComparison
             'unavailable_reason' => null,
             ...$basis,
             'currency' => $currency,
+            ...($credit === null ? [] : ['credit_models' => $this->creditBlock($credit, $creditRows, $creditCoverage, $recordedBy)]),
             'channels' => [...$platformRows, ...$others],
             'paths' => [
                 'distinct' => count($pathCounts),
@@ -240,6 +271,42 @@ final class AttributionModelComparison
                 'share_with_customer' => $live->count() > 0 ? round($withCustomer / $live->count(), 4) : null,
                 'revenue_withheld_orders' => $withheld,
             ],
+        ];
+    }
+
+    /**
+     * @param  array{models: list<string>, lookback_days: int, half_life_days: int, weights: array<string,float>}  $credit
+     * @param  array<string, array<string, array{orders: float, revenue: float}>>  $rows  channel => model => share
+     * @param  array<string,int>  $coverage
+     * @return array<string,mixed>
+     */
+    private function creditBlock(array $credit, array $rows, array $coverage, ?Carbon $recordedBy): array
+    {
+        $channels = [];
+        foreach ($rows as $channel => $models) {
+            $channels[] = [
+                'channel' => $channel,
+                'kind' => $channel === AttributionCredit::UNATTRIBUTED ? 'unattributed' : ($channel === OrderTouch::INFLUENCER ? 'influencer' : (in_array($channel, AdPlatforms::ORDER, true) ? 'platform' : 'other')),
+                'models' => array_map(static fn (array $m): array => ['orders' => round($m['orders'], 4), 'revenue' => round($m['revenue'], 2)], $models),
+            ];
+        }
+        // Evidence first, the absence of it last, and a stable order inside each so a rebuilt report reads the same.
+        usort($channels, static fn (array $a, array $b): int => [$a['kind'] === 'unattributed' ? 1 : 0, $a['channel']] <=> [$b['kind'] === 'unattributed' ? 1 : 0, $b['channel']]);
+
+        return [
+            'version' => AttributionCredit::VERSION,
+            'evidence_basis' => 'verified_marketing_touchpoints',
+            'models' => $credit['models'],
+            'lookback_days' => $credit['lookback_days'],
+            'half_life_days' => $credit['half_life_days'],
+            'weights' => $credit['weights'],
+            'recorded_by' => $recordedBy?->toIso8601String(),
+            'coverage' => $coverage + [
+                'share_with_verified_touchpoints' => $coverage['orders_credited'] > 0 ? round($coverage['orders_with_verified_touchpoints'] / $coverage['orders_credited'], 4) : null,
+            ],
+            'channels' => $channels,
+            'basis_en' => 'Each model shares one order across the marketing touchpoints recorded for it and proven by exact evidence (a platform click id, or a token in the link). Earlier orders are never touchpoints. An order with no such evidence stays unattributed.',
+            'basis_ar' => 'يوزّع كل نموذج الطلب الواحد على نقاط التماس التسويقية المسجّلة له والمثبتة بدليل دقيق (معرّف نقر من المنصة أو رمز في الرابط). الطلبات السابقة ليست نقاط تماس أبدًا. الطلب بلا دليل يبقى غير منسوب.',
         ];
     }
 }
