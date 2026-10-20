@@ -35,7 +35,7 @@ interface Shared {
    */
   form?: 'executive_summary' | 'detailed'
   branding?: { name: string | null; logo_url: string | null; accent: string | null }
-  settings: { allow_download: boolean; watermark: boolean }
+  settings: { allow_download: boolean; watermark: boolean; trace_mark?: string | null }
   /**
    * §15.12 — what this link may show about the content, stated before anything is drawn.
    *
@@ -260,7 +260,7 @@ export function PublicReport() {
 
         {state === 'ready' && report && (
           <div className="relative">
-            {report.settings.watermark && <ReportWatermark locale={locale} />}
+            {report.settings.watermark && <ReportWatermark locale={locale} trace={report.settings.trace_mark ?? null} />}
             <div className="relative z-[1]">
               <h1 className="mb-2 font-heading text-xl font-extrabold tracking-tight sm:text-2xl">{report.name}</h1>
 

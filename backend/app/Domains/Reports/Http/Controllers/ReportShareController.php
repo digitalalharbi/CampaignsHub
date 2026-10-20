@@ -14,6 +14,7 @@ use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ShareSections;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -153,8 +154,7 @@ final class ReportShareController extends Controller
     public function revoke(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.share'), 403);
-        $this->findReport($report);
-        $model = ReportShare::findOrFail($share);
+        $model = $this->findShare($this->findReport($report), $share);
         $model->update(['revoked_at' => Carbon::now()]);
         $audit->log(action: 'report.shared_link_revoked', entityType: ReportShare::class, entityId: (string) $model->id);
 
@@ -175,8 +175,7 @@ final class ReportShareController extends Controller
     public function renew(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.share'), 403);
-        $this->findReport($report);
-        $model = ReportShare::findOrFail($share);
+        $model = $this->findShare($this->findReport($report), $share);
         abort_if($model->revoked_at !== null, 409, 'A revoked link cannot be renewed — create a new one.');
 
         $data = $request->validate(['expires_at' => ['required', 'date', 'after:now']]);
@@ -201,7 +200,7 @@ final class ReportShareController extends Controller
     {
         abort_unless($request->user()->hasPermission('reports.share'), 403);
         $model = $this->findReport($report);
-        $link = ReportShare::findOrFail($share);
+        $link = $this->findShare($model, $share);
         abort_unless((string) $link->report_id === (string) $model->id, 404);
         abort_if($link->revoked_at !== null, 409, 'A revoked link cannot be edited.');
 
@@ -287,19 +286,46 @@ final class ReportShareController extends Controller
     public function analytics(Request $request, string $project, string $report, string $share): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.share'), 403);
-        $this->findReport($report);
+        $model = $this->findShare($this->findReport($report), $share);
 
-        return ApiResponse::success(app(ShareAnalytics::class)->for(ReportShare::findOrFail($share)), 'Link analytics.');
+        return ApiResponse::success(app(ShareAnalytics::class)->for($model), 'Link analytics.');
     }
 
     public function logs(Request $request, string $project, string $report, string $share): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.share'), 403);
-        $this->findReport($report);
-        $model = ReportShare::findOrFail($share);
+        $model = $this->findShare($this->findReport($report), $share);
         $logs = $model->logs()->latest()->limit(100)->get(['action', 'ip', 'user_agent', 'detail', 'created_at']);
 
         return ApiResponse::success($logs, 'Access logs.');
+    }
+
+    /**
+     * IP-TRACE-001 — which link did this copy come from?
+     *
+     * The Owner reads a reference (REF XXXXX-XXXXX) off a leaked page, PDF or spreadsheet and asks here.
+     * The answer is the link — its report, who issued it, when, whether it is still live and how it was
+     * opened — which is enough to decide whom to ask, revoke it, or issue a replacement. It names no
+     * recipient because the system never knew one: a link is not a person. Scoped to this project and
+     * tenant by the same lookups every other share route uses.
+     */
+    public function trace(Request $request, string $project, string $mark): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        abort_unless(preg_match('/^[A-Z0-9]{5}-?[A-Z0-9]{5}$/i', $mark) === 1, 422, 'Not a link reference.');
+
+        $normalised = strtoupper(strlen($mark) === 10 ? substr($mark, 0, 5).'-'.substr($mark, 5) : $mark);
+        $share = ReportShare::query()->where('trace_mark', $normalised)->first();
+        $report = $share === null ? null : Report::query()->find($share->report_id);
+        abort_if($share === null || $report === null || (string) $report->project_id !== $project, 404, 'No link carries that reference.');
+
+        $creator = $share->created_by === null ? null : User::query()->find($share->created_by);
+
+        return ApiResponse::success($this->shape($share) + [
+            'report_id' => (string) $report->id,
+            'report_name' => $report->name,
+            'created_by' => $creator?->name,
+        ], 'Link traced.');
     }
 
     /**
@@ -430,6 +456,20 @@ final class ReportShareController extends Controller
         ))));
     }
 
+    /**
+     * IP-AUDIT-001 — a link is looked up THROUGH its report.
+     *
+     * These routes carry both ids, and the share was read by its own id alone: tenant-scoped, but not
+     * bound to the report (and so the project) the caller had just been authorised for. Anyone allowed
+     * to manage reports in one project could revoke, renew, edit or read the access log of a link that
+     * belongs to another report by presenting that link's id under their own report's address. Tying
+     * the lookup to the report closes it; a mismatch is a 404, the same as an id that does not exist.
+     */
+    private function findShare(Report $report, string $id): ReportShare
+    {
+        return ReportShare::query()->where('report_id', $report->getKey())->findOrFail($id);
+    }
+
     private function findReport(string $id): Report
     {
         $r = Report::query()->find($id);
@@ -455,6 +495,8 @@ final class ReportShareController extends Controller
             'hide_revenue' => $s->hide_revenue,
             'hide_campaign_names' => $s->hide_campaign_names,
             'watermark' => $s->watermark,
+            // IP-TRACE-001 — the opaque reference the page, the PDF and the files of this link carry.
+            'trace_mark' => $s->trace_mark,
             'password_protected' => $s->password_hash !== null,
             'view_count' => $s->view_count,
             'last_viewed_at' => $s->last_viewed_at?->toIso8601String(),

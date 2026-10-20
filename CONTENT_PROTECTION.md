@@ -22,6 +22,17 @@ sensitive pages, plus a corner "Confidential" chip. It refreshes over time. Purp
 capture is **traceable to the person who viewed it**. Non-obstructive to reading; configurable per
 tenant/page.
 
+### Link reference (IP-TRACE-001) — traceable without a person in it
+Every shared report link is born with an opaque, random, unique reference (`REF XXXXX-XXXXX`). It names a
+**link**, never a recipient: the system does not know who a link was forwarded to, so nothing about a person
+can appear in it. It is drawn small (8px, faint, `aria-hidden`) in a corner of every page of a watermarked
+link and of its PDF, and written into the manifest of the CSV and the spreadsheet built from the link (the
+«Reference / المرجع» row). The PDF's reference is minted by the server into the print token, never read from
+the URL. The Owner who issued the link asks which link a copy came from (`GET /projects/{p}/report-links/trace/{ref}`,
+permission `reports.share`, scoped to the project and tenant) and gets the link, its report, its issuer, whether
+it is still live and how it was opened — enough to ask the right person, revoke it or reissue. It is a trace,
+not a claim that a copy cannot be taken.
+
 ### Deterrence layers (opt-in policies)
 - Hide sensitive values / mask API identifiers.
 - Disable context menu / text selection in specific regions (deterrence).
@@ -50,3 +61,15 @@ tenant/page.
 Protection here = **watermarking + deterrence + strict permissions + signed/expiring sharing +
 access logging + server-side secrecy**. It raises the cost and traces the source of a leak. It does
 not, and cannot, make screen capture impossible — and we say so.
+
+## Audits that keep it honest (IP-AUDIT-001)
+- **Browser bundle.** A test reads every shipped source file as a stranger would: no credential-shaped string,
+  no private key, no `VITE_` variable that is really a secret (Vite inlines every one), no server-only client
+  imported, and no production source maps in the build configuration.
+- **Public API surface.** `PublicSurfaceInventoryTest` records every `/api` route that has no authentication
+  middleware; a new one fails the suite until it is added with a reason, and no operator-workspace prefix may
+  appear on it.
+- **Link scope.** A shared link is looked up through its report on every owner action (revoke, renew, edit,
+  analytics, access log); presenting another report's link id under this report's address is a 404.
+- **Server-side only.** Provider credentials, signing secrets and the rules that decide, optimise or attribute
+  stay in the backend; the browser receives results, never the credential or the algorithm.

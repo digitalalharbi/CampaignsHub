@@ -777,6 +777,11 @@ final class ReportExporter
         $txt = fn (string $k): ?string => data_get($sec, "{$k}.{$loc}") ?? data_get($sec, "{$k}.ar");
 
         $rows = [];
+        // IP-TRACE-001 — a file built from a shared link names that link's opaque reference, so a leaked copy
+        // can be matched to it. No recipient, no personal data: it identifies the LINK.
+        if (! empty($data['report_trace'])) {
+            $rows[] = ['Reference / المرجع', (string) $data['report_trace']];
+        }
         if ($enabled('full') && $txt('full')) {
             $rows[] = ['Disclaimer / إخلاء المسؤولية', (string) $txt('full')];
         }

@@ -38,4 +38,21 @@ describe('the report watermark', () => {
     expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true')
     expect(container.firstElementChild).toHaveClass('pointer-events-none')
   })
+
+  /*
+   * IP-TRACE-001 — the mark that traces a copy to a LINK, not a person: small, inert, in the reader's
+   * own reading direction, and absent when no reference was supplied.
+   */
+  it('draws the link reference small and inert, and nothing when there is none', () => {
+    const { container, unmount } = renderWithProviders(<ReportWatermark locale="en" trace="ZH4JF-JYEX5" />, { locale: 'en' })
+    const mark = screen.getByTestId('report-trace-mark')
+    expect(mark).toHaveTextContent('REF ZH4JF-JYEX5')
+    expect(mark).toHaveAttribute('dir', 'ltr')
+    expect(mark).toHaveClass('select-none')
+    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+    unmount()
+
+    renderWithProviders(<ReportWatermark locale="en" />, { locale: 'en' })
+    expect(screen.queryByTestId('report-trace-mark')).toBeNull()
+  })
 })

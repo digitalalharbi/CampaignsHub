@@ -148,6 +148,10 @@ final class ReportSectionSurfaces
         $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
         // built from a link (page, print, file). Absent means every column.
+        // IP-TRACE-001 — the link's opaque reference travels with every file built from it (CSV, XLSX manifest, print).
+        if ($share !== null && $share->trace_mark !== null) {
+            $payload['report_trace'] = $share->trace_mark;
+        }
         if ($share !== null && ($chosen = ReportColumns::forShare($share)->toArray()) !== []) {
             $payload['report_columns'] = $chosen;
         }
