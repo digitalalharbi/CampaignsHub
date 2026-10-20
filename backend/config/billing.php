@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Billing\Providers\MoyasarPaymentProvider;
 use App\Domains\Billing\Providers\NullPaymentProvider;
 use App\Domains\Billing\Providers\StripePaymentProvider;
+use App\Domains\Billing\Providers\TapPaymentProvider;
 
 return [
     /*
@@ -35,6 +36,7 @@ return [
          * payment adapter" has to mean to be worth anything.
          */
         'moyasar' => MoyasarPaymentProvider::class,
+        'tap' => TapPaymentProvider::class,
         'stripe' => StripePaymentProvider::class,
         'null' => NullPaymentProvider::class,
     ],

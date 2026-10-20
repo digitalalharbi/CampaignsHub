@@ -82,6 +82,12 @@ return [
         'webhook_token' => env('MOYASAR_WEBHOOK_TOKEN'),
     ],
 
+    // PAY-TAP-001 — Tap Payments. One secret: it also signs the webhook.
+    'tap' => [
+        'secret_key' => env('TAP_SECRET_KEY'),
+        'publishable_key' => env('TAP_PUBLISHABLE_KEY'),
+    ],
+
     'stripe' => [
         'secret_key' => env('STRIPE_SECRET_KEY'),
         'publishable_key' => env('STRIPE_PUBLISHABLE_KEY'),

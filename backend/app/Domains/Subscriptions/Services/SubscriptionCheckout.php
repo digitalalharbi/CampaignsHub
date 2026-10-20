@@ -12,7 +12,9 @@ use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Models\User;
 use App\Support\Frontend;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -316,6 +318,8 @@ final class SubscriptionCheckout
                 'description' => $this->describe($purpose, $planCode),
                 'reference' => $idempotencyKey,
                 'return_url' => Frontend::origin().'/signup/status',
+                // Some gateways (Tap) will not open a charge without a named, addressable customer.
+                'customer' => $this->customerFor($registration, $tenant),
             ]);
 
         /*
@@ -375,6 +379,29 @@ final class SubscriptionCheckout
      * @param  array<string,mixed>  $payload
      * @return array{session_id: ?string, checkout_url: ?string, status: string, error: ?string}
      */
+    /**
+     * Who is paying, as far as this install knows: the applicant for a registration charge, the
+     * workspace owner for a renewal or plan change. Empty fields stay empty — an adapter that needs
+     * them refuses the attempt rather than being handed an invented address.
+     *
+     * @return array{name: string, email: string}
+     */
+    private function customerFor(?RegistrationRequest $registration, ?Tenant $tenant): array
+    {
+        if ($registration !== null) {
+            return ['name' => (string) $registration->name, 'email' => (string) $registration->email];
+        }
+
+        $owner = $tenant === null ? null : User::query()
+            ->whereIn('id', Membership::query()->where('tenant_id', $tenant->getKey())->where('status', 'active')->pluck('user_id'))
+            ->orderBy('id')->first();
+
+        return [
+            'name' => $owner !== null ? (string) $owner->name : ($tenant !== null ? (string) $tenant->name : ''),
+            'email' => $owner !== null ? (string) $owner->email : '',
+        ];
+    }
+
     private function takeFromSavedCard(
         PaymentProvider $adapter,
         SubscriptionPaymentMethod $method,

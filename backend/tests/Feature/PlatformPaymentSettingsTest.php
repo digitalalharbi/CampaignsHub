@@ -73,12 +73,13 @@ final class PlatformPaymentSettingsTest extends TestCase
         config([
             'services.moyasar.secret_key' => null, 'services.moyasar.webhook_token' => null,
             'services.stripe.secret_key' => null, 'services.stripe.webhook_secret' => null,
+            'services.tap.secret_key' => null,
         ]);
 
         $data = $this->settings();
         $providers = collect($data['providers']);
 
-        $this->assertSame(['moyasar', 'stripe'], $providers->pluck('provider')->all());
+        $this->assertSame(['moyasar', 'tap', 'stripe'], $providers->pluck('provider')->all());
         $this->assertSame('primary', $providers->firstWhere('provider', 'moyasar')['role']);
         $this->assertSame('alternative', $providers->firstWhere('provider', 'stripe')['role']);
 
