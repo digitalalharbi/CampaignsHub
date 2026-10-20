@@ -126,6 +126,8 @@ final class ReportPrintController extends Controller
             'audience' => $audience,
             // Read from the minted context, not from the request — see ChromiumPdfRenderer::issueToken.
             'watermark' => (bool) ($ctx['watermark'] ?? false),
+            // IP-TRACE-001 — minted by the server with the token, never read from the URL.
+            'trace' => isset($ctx['trace']) && is_string($ctx['trace']) ? $ctx['trace'] : null,
             'currency' => $report->currency,
             'locale' => $report->reportLocale(),
             'is_demo' => (bool) $report->is_demo,

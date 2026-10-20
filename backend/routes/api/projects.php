@@ -397,6 +397,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
     Route::patch('reports/{report}/shares/{share}', [ReportShareController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.shares.update');
     Route::get('reports/{report}/shares/{share}/analytics', [ReportShareController::class, 'analytics'])->middleware('project.can:reports.view')->name('reports.shares.analytics');
+    // IP-TRACE-001 — which link a leaked copy came from, by the reference it carries.
+    Route::get('report-links/trace/{mark}', [ReportShareController::class, 'trace'])->middleware(['project.can:reports.view', 'throttle:30,1'])->name('reports.shares.trace');
     Route::get('reports/{report}/shares/{share}/logs', [ReportShareController::class, 'logs'])->middleware('project.can:reports.view')->name('reports.shares.logs');
     // REPORT-DRILLDOWN-001 — the live link's platform and content drill-downs, as its recipient sees them.
     Route::get('reports/{report}/shares/{share}/live/platform/{provider}', [LiveDrilldownController::class, 'platform'])->middleware('project.can:reports.view')->name('reports.shares.live.platform')->whereUuid(['report', 'share'])->where('provider', '[a-z_]{2,32}');

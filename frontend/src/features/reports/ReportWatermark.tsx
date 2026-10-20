@@ -30,8 +30,15 @@ import type { Locale } from '@/stores/ui'
  * XLSX and CSV are deliberately out of scope — a spreadsheet has no page to mark, and the export
  * manifest already carries the attribution.
  */
-export function ReportWatermark({ locale, mode = 'page' }: {
+export function ReportWatermark({ locale, mode = 'page', trace = null }: {
   locale: Locale
+  /**
+   * IP-TRACE-001 — the link's opaque reference (XXXXX-XXXXX), drawn small in a corner of every page.
+   * It names a LINK, never a person, so a leaked copy can be matched to the link it came from by the
+   * Owner who issued it. Faint and 8px: it does not touch reading, and it is not a claim that a copy
+   * cannot be taken — only that one can be traced.
+   */
+  trace?: string | null
   /**
    * How the mark is positioned — and the two layouts genuinely need different mechanisms.
    *
@@ -77,6 +84,15 @@ export function ReportWatermark({ locale, mode = 'page' }: {
       <span className="rotate-[-25deg] text-[80px] font-extrabold text-text-primary/5">
         {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}
       </span>
+      {trace && (
+        <span
+          data-testid="report-trace-mark"
+          dir="ltr"
+          className="absolute bottom-2 end-3 select-none text-[8px] font-medium tracking-widest text-text-primary/25"
+        >
+          REF {trace}
+        </span>
+      )}
     </div>
   )
 }

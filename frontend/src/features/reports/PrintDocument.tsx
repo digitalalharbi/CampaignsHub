@@ -183,6 +183,7 @@ export function PrintDocument({
   clientName,
   identity,
   watermark = false,
+  trace = null,
   reportLocale,
 }: {
   data: ReportData
@@ -193,6 +194,8 @@ export function PrintDocument({
   clientName?: string
   /** Asked for by the share and minted by the server; see `ReportWatermark`. */
   watermark?: boolean
+  /** IP-TRACE-001 — see `ReportWatermark`. */
+  trace?: string | null
   /**
    * BRANDING-RENDER-EVIDENCE-001 — whose report this is, resolved by `headerIdentity()`.
    *
@@ -469,7 +472,7 @@ export function PrintDocument({
         identity it sits behind; a mark in one script over a credit in another would read as two
         products.
       */}
-      {watermark && <ReportWatermark locale="ar" mode="flow" />}
+      {watermark && <ReportWatermark locale="ar" mode="flow" trace={trace} />}
 
       {/* Title block */}
       <header className="doc-cover">

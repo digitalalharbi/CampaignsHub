@@ -144,6 +144,8 @@ final class PublicReportController extends Controller
             'settings' => [
                 'allow_download' => $share->allow_download,
                 'watermark' => $share->watermark,
+                // IP-TRACE-001 — an opaque link reference, shown small on a watermarked page; no personal data.
+                'trace_mark' => $share->watermark ? $share->trace_mark : null,
             ],
             /*
              * What this link may show about the content, stated up front.

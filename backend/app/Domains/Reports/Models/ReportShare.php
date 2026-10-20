@@ -26,7 +26,7 @@ final class ReportShare extends Model
     protected $fillable = [
         'tenant_id', 'report_id', 'mode', 'form', 'token_hash', 'password_hash', 'allow_download',
         'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'settings', 'scope',
-        'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'created_by', 'is_demo',
+        'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'created_by', 'is_demo', 'trace_mark',
     ];
 
     protected $hidden = ['token_hash', 'password_hash'];
@@ -55,6 +55,37 @@ final class ReportShare extends Model
      * link that SELECTS spend shows spend, and the legacy flag keeps its meaning only for links that
      * did not select it (snapshots, and live links built without the metric).
      */
+    /**
+     * IP-TRACE-001 — every link is born with an opaque reference (XXXXX-XXXXX).
+     *
+     * It is what an exported file or a watermarked page carries so a leaked copy can be matched to the
+     * link it came from. Random and unique: it says nothing about the recipient and nothing about the
+     * report, and the public never receives anything else that could be traced to a person.
+     */
+    protected static function booted(): void
+    {
+        self::creating(function (self $share): void {
+            if (($share->trace_mark ?? '') === '') {
+                $share->trace_mark = self::newTraceMark();
+            }
+        });
+    }
+
+    public static function newTraceMark(): string
+    {
+        $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+        do {
+            $mark = '';
+            for ($i = 0; $i < 10; $i++) {
+                $mark .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+            }
+            $mark = substr($mark, 0, 5).'-'.substr($mark, 5);
+        } while (self::withoutGlobalScopes()->where('trace_mark', $mark)->exists());
+
+        return $mark;
+    }
+
     protected function hideSpend(): Attribute
     {
         return Attribute::make(

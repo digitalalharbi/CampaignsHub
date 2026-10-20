@@ -151,6 +151,8 @@ final class ChromiumPdfRenderer
                  * the PDF. The id rides the cache entry, never the URL, for the reason `audience` does.
                  */
                 'share_id' => $share?->getKey() === null ? null : (string) $share->getKey(),
+                // IP-TRACE-001 — the link's opaque reference, drawn small on every page beside the watermark.
+                'trace' => $share?->trace_mark,
             ],
             300,
         );
