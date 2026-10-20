@@ -236,6 +236,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // WIDGET-REGISTRY-001 — which widgets a surface shows for this project, resolved on the server.
     Route::get('widgets/{surface}', [WidgetLayoutController::class, 'show'])->middleware('project.can:analytics.view')->name('widgets.show');
     Route::put('widgets/{surface}', [WidgetLayoutController::class, 'update'])->middleware('project.can:reports.manage')->name('widgets.update');
+    // WIDGET-REGISTRY-001 — which widgets ONE shared link shows a client; off until the link is told to show them.
+    Route::get('reports/{report}/shares/{share}/widgets', [WidgetLayoutController::class, 'share'])->middleware('project.can:reports.view')->name('reports.shares.widgets.show')->whereUuid(['report', 'share']);
+    Route::put('reports/{report}/shares/{share}/widgets', [WidgetLayoutController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.widgets.update')->whereUuid(['report', 'share']);
     // TRACKING-SUMMARY-001 — recorded link activity, from the day advanced tracking was switched on.
     Route::get('tracking/summary', [TrackingSummaryController::class, 'show'])->middleware(['module:advanced_tracking', 'project.can:analytics.view'])->name('tracking.summary');
     // ATTRIB-CREDIT-001 — this project's fractional attribution rules; refused unless the module is switched on here.
