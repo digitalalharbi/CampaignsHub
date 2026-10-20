@@ -1,0 +1,41 @@
+name: Production Readiness
+
+# PROD-READINESS-001 — what is missing or wrong in Production's configuration, by name and never by value.
+#
+# Runs `php artisan production:check` inside the backend container. It reports the SHAPE of each setting
+# (present, absent, test key, live key, placeholder) and what a customer would hit because of it — payment
+# gateway credentials, webhook secrets, the mail transport, debug mode, URLs, queue and cache drivers. It
+# prints no secret, changes nothing and sends nothing. Manual only; the command is fixed here, so there is no
+# input that becomes part of a command line.
+#
+# Use it before entering credentials (to see exactly which names are missing) and after (to see that the
+# pairs match and no test key sits in production).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check Production configuration on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # The command exits non-zero on a failure; the report is what matters, so print it and carry on.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan production:check || true

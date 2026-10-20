@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Reports\Support\ClientContentName;
+
 /**
  * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the line between what a client's money DID and how it was
  * arranged.
@@ -136,7 +138,8 @@ final class ClientEntityBoundary
                 $ad['ads'] = self::ads($ad['ads']);
             }
 
-            return $ad;
+            // REPORT-CLIENT-TECHNICAL-NAMES-001 — the platform's hash or UUID is not part of a content's name for a client.
+            return ClientContentName::onRow($ad);
         }, $ads);
     }
 
@@ -181,7 +184,7 @@ final class ClientEntityBoundary
                 $row['ads'],
             );
 
-            return $row;
+            return ClientContentName::onRow($row);
         }, $rows);
     }
 
