@@ -25,6 +25,8 @@ interface PrintPayload {
    * from a query string is a mark removable by the person it exists to deter.
    */
   watermark?: boolean
+  /** IP-TRACE-001 — the link's opaque reference, minted with the token like `watermark`. */
+  trace?: string | null
   audience: string
   currency: string
   is_demo: boolean
@@ -171,6 +173,7 @@ export function PrintReport() {
         // slide deck. The document layout was the one surface never given it.
         identity={headerIdentity(payload.branding, 'ar')}
         watermark={payload.watermark ?? false}
+        trace={payload.trace ?? null}
       />
     )
   }
@@ -205,7 +208,7 @@ export function PrintReport() {
             deck is printed one section per page, so the mark belongs per section — and `.report-slide`
             is already `position: relative`, which is what the overlay positions against.
           */}
-          {payload.watermark && <ReportWatermark locale="ar" />}
+          {payload.watermark && <ReportWatermark locale="ar" trace={payload.trace ?? null} />}
           <div className="report-slide-inner">
             {/*
               `paged` — this is a fixed A4 slide, not a scrolling page.
