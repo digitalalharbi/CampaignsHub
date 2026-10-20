@@ -91,4 +91,17 @@ final class RefusalCarriesItsIdentifiersTest extends TestCase
         $this->assertStringContainsString('502', $reason);
         $this->assertStringContainsString('upstream exploded', $reason);
     }
+
+    /** X sends a list of `errors`, not an `error` object; its sentence and code must survive. */
+    public function test_an_x_refusal_keeps_its_listed_sentence_and_code(): void
+    {
+        $reason = PlatformHttp::reason($this->response([
+            'errors' => [['code' => 'UNAUTHORIZED_ACCESS', 'message' => 'This request is not authorized for this account.']],
+            'request' => ['params' => []],
+        ], 401));
+
+        $this->assertStringContainsString('not authorized for this account', $reason);
+        $this->assertStringContainsString('UNAUTHORIZED_ACCESS', $reason);
+        $this->assertStringNotContainsString('HTTP 401', $reason);
+    }
 }
