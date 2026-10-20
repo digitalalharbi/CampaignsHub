@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\AttributionCredit;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -206,6 +207,71 @@ final class AttributionModelComparisonTest extends TestCase
         $this->assertSame(0, $rows['google']['assisted']['orders'], 'an order 400 days back is outside the lookback');
         $this->assertSame(1, $rows['snapchat']['assisted']['orders']);
         $this->assertSame(['snapchat', 'meta'], $m['paths']['rows'][0]['steps']);
+    }
+
+    /**
+     * ATTRIB-CREDIT-001 — the fractional models share each order across the touches the store recorded, and
+     * never create or lose a sale. Without a configuration nothing changes.
+     */
+    public function test_the_credit_models_share_each_order_and_leave_the_existing_answer_untouched(): void
+    {
+        $store = $this->storeAccount();
+        $this->conversions('meta', 1, 300);
+        $this->conversions('google', 1, 300);
+        $c = $this->customer($store);
+        $this->order('g-old', 200, $store, $this->campaign('google'), clickProvider: 'google', method: 'utm_campaign_id', customer: $c, daysAgo: 10);
+        $this->order('m-new', 300, $store, $this->campaign('meta'), clickProvider: 'meta', method: 'utm_campaign_id', customer: $c);
+
+        $plain = $this->build();
+        $this->assertArrayNotHasKey('credit_models', $plain['model_comparison']);
+        foreach ($plain['model_comparison']['channels'] as $channel) {
+            $this->assertArrayNotHasKey('credit', $channel);
+        }
+
+        $with = app(AttributionTransparency::class)->build(
+            $this->tenant->id, $this->project->id, Carbon::today()->subDays(7), Carbon::today(), [], ['models' => ['linear', 'last_non_direct', 'position_based']],
+        )['model_comparison'];
+
+        // The existing figures are identical with and without the configuration.
+        $strip = static fn (array $channels): array => array_map(static function (array $c): array {
+            unset($c['credit']);
+
+            return $c;
+        }, $channels);
+        $this->assertEquals($plain['model_comparison']['channels'], $strip($with['channels']));
+
+        $this->assertSame(AttributionCredit::VERSION, $with['credit_models']['version']);
+        $rows = collect($with['channels'])->keyBy('channel');
+
+        // Two touches, 300 of revenue: linear splits it evenly; last non-direct gives it all to Meta.
+        $this->assertSame(0.5, $rows['meta']['credit']['linear']['orders']);
+        $this->assertSame(150.0, $rows['meta']['credit']['linear']['revenue']);
+        $this->assertSame(0.5, $rows['google']['credit']['linear']['orders']);
+        $this->assertSame(1.0, $rows['meta']['credit']['last_non_direct']['orders']);
+        $this->assertArrayNotHasKey('last_non_direct', $rows['google']['credit']);
+
+        // Every model adds back up to the one order and its 300.
+        foreach (['linear', 'last_non_direct', 'position_based'] as $model) {
+            $orders = array_sum(array_map(static fn (array $c): float => $c['credit'][$model]['orders'] ?? 0.0, $with['channels']));
+            $revenue = array_sum(array_map(static fn (array $c): float => $c['credit'][$model]['revenue'] ?? 0.0, $with['channels']));
+            $this->assertEqualsWithDelta(1.0, $orders, 0.0001, $model);
+            $this->assertEqualsWithDelta(300.0, $revenue, 0.01, $model);
+        }
+    }
+
+    public function test_an_order_with_no_evidence_stays_unattributed_in_every_credit_model(): void
+    {
+        $store = $this->storeAccount();
+        $this->order('x1', 100, $store, null, method: 'none');
+
+        $with = app(AttributionTransparency::class)->build(
+            $this->tenant->id, $this->project->id, Carbon::today()->subDays(7), Carbon::today(), [], [],
+        )['model_comparison'];
+        $rows = collect($with['channels'])->keyBy('channel');
+
+        foreach (AttributionCredit::MODELS as $model) {
+            $this->assertSame(1.0, $rows['unattributed']['credit'][$model]['orders'], $model);
+        }
     }
 
     private function customer(ExternalAccount $store): CommerceCustomer

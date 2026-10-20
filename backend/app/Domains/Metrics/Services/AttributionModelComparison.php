@@ -29,6 +29,11 @@ use Illuminate\Support\Collection;
  * - Paths: the same lookback, so a customer of three years does not drag a three-year path behind
  *   every order. First touch alone reaches back to the very first order: it is the acquisition.
  * - Platform-claimed and GA4 sit beside these as the other layers, never added to them.
+ *
+ * ATTRIB-CREDIT-001 — when a credit configuration is passed, the same touches are ALSO shared by the
+ * fractional models in {@see AttributionCredit} (linear, position-based, time-decay, custom-weighted,
+ * last non-direct). They are an addition under a `credit` key: without a configuration nothing below
+ * changes by a digit, so switching the feature off never moves an existing report.
  */
 final class AttributionModelComparison
 {
@@ -42,9 +47,10 @@ final class AttributionModelComparison
     /**
      * @param  Collection<int,CommerceOrder>  $orders  the window's orders as ProjectOrders loaded them
      * @param  list<array<string,mixed>>  $platforms  the per-platform rows AttributionTransparency built
+     * @param  array<string,mixed>|null  $creditConfig  a configuration for {@see AttributionCredit::config()}; null leaves the fractional models off
      * @return array<string,mixed>
      */
-    public function build(bool $hasStore, string $tenantId, string $projectId, Collection $orders, Carbon $to, array $platforms): array
+    public function build(bool $hasStore, string $tenantId, string $projectId, Collection $orders, Carbon $to, array $platforms, ?array $creditConfig = null): array
     {
         $basis = [
             'basis_ar' => 'كل لمسة هنا طلبٌ سجّله المتجر بدليله: رابط UTM أو معرّف نقر أو حملة أو كوبون مؤثر. الزيارات بين الطلبات لا يراها المتجر، فلا يُقسَّم أي طلب بين القنوات. أول لمسة هي أول طلب للعميل مع المتجر، والمساعدة والمسارات تقرأ طلبات آخر '.self::LOOKBACK_DAYS.' يومًا قبل كل طلب.',
@@ -101,6 +107,8 @@ final class AttributionModelComparison
             'assisted' => ['orders' => 0, 'revenue' => 0.0],
             'evidence' => ['click_id' => 0, 'utm' => 0, 'coupon' => 0],
         ];
+        $credit = $creditConfig === null ? null : AttributionCredit::config($creditConfig);
+        $creditRows = [];
         $pathCounts = [];
         $multiTouch = 0;
         $withCustomer = 0;
@@ -119,6 +127,7 @@ final class AttributionModelComparison
 
             $first = $last;
             $before = [];
+            $beforeTouches = [];
             if ($order->commerce_customer_id !== null && isset($paths[(string) $order->commerce_customer_id])) {
                 $withCustomer++;
                 $since = $order->placed_at?->copy()->subDays(self::LOOKBACK_DAYS);
@@ -133,6 +142,18 @@ final class AttributionModelComparison
                     }
                     if ($since === null || ($step['at'] !== null && $step['at']->gte($since))) {
                         $before[] = $step['channel'];
+                        $beforeTouches[] = ['channel' => $step['channel'], 'at' => $step['at']];
+                    }
+                }
+            }
+
+            if ($credit !== null) {
+                $touches = [...$beforeTouches, ['channel' => $last, 'at' => $order->placed_at]];
+                foreach ($credit['models'] as $model) {
+                    foreach (AttributionCredit::split($model, $touches, $order->placed_at, $credit) as $channel => $share) {
+                        $creditRows[$channel][$model]['orders'] = ($creditRows[$channel][$model]['orders'] ?? 0.0) + $share;
+                        $creditRows[$channel][$model]['revenue'] = ($creditRows[$channel][$model]['revenue'] ?? 0.0) + $share * $revenue;
+                        $rows[$channel] ??= $row();
                     }
                 }
             }
@@ -204,6 +225,10 @@ final class AttributionModelComparison
                 'first_touch' => ['orders' => $r['first_touch']['orders'], 'revenue' => round($r['first_touch']['revenue'], 2)],
                 'assisted' => ['orders' => $r['assisted']['orders'], 'revenue' => round($r['assisted']['revenue'], 2)],
                 'evidence' => $r['evidence'],
+                ...($credit === null ? [] : ['credit' => array_map(
+                    static fn (array $m): array => ['orders' => round($m['orders'], 4), 'revenue' => round($m['revenue'], 2)],
+                    $creditRows[$channel] ?? [],
+                )]),
                 // The other layers, beside — never added. Null when the layer does not exist for this channel.
                 'platform_claimed_orders' => $p === null ? null : $p['platform_reported_orders'],
                 'claim_includes_view_through' => $p === null ? null : ($p['attribution']['includes_view_through'] ?? null),
@@ -226,6 +251,16 @@ final class AttributionModelComparison
             'unavailable_reason' => null,
             ...$basis,
             'currency' => $currency,
+            ...($credit === null ? [] : ['credit_models' => [
+                'version' => AttributionCredit::VERSION,
+                'models' => $credit['models'],
+                'lookback_days' => $credit['lookback_days'],
+                'half_life_days' => $credit['half_life_days'],
+                'weights' => $credit['weights'],
+                'include_unattributed' => $credit['include_unattributed'],
+                'basis_en' => 'Each model shares one whole order across the touches the store recorded for that customer (earlier orders with evidence, then this order). Shares add up to the order, so no model creates or loses a sale. An order with no evidence stays unattributed.',
+                'basis_ar' => 'يوزّع كل نموذج الطلب الواحد كاملًا على اللمسات التي سجّلها المتجر لهذا العميل (طلبات سابقة بدليلها ثم هذا الطلب). مجموع الحصص يساوي الطلب، فلا ينشئ نموذج مبيعات ولا يفقدها. الطلب بلا دليل يبقى غير منسوب.',
+            ]]),
             'channels' => [...$platformRows, ...$others],
             'paths' => [
                 'distinct' => count($pathCounts),
