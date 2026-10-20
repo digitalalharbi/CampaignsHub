@@ -40,6 +40,7 @@ use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use App\Domains\Tracking\Http\Controllers\TrackingSummaryController;
+use App\Domains\Widgets\Http\Controllers\WidgetLayoutController;
 use Illuminate\Support\Facades\Route;
 
 // Project management (tenant-scoped; not project-context-bound).
@@ -232,6 +233,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-005: Platform-Reported vs Store-Confirmed, the attribution window each figure
     // was collected under, and what may be summed — the platforms' claims never are.
     Route::get('metrics/attribution', [MetricsController::class, 'attribution'])->name('metrics.attribution');
+    // WIDGET-REGISTRY-001 — which widgets a surface shows for this project, resolved on the server.
+    Route::get('widgets/{surface}', [WidgetLayoutController::class, 'show'])->middleware('project.can:analytics.view')->name('widgets.show');
+    Route::put('widgets/{surface}', [WidgetLayoutController::class, 'update'])->middleware('project.can:reports.manage')->name('widgets.update');
     // TRACKING-SUMMARY-001 — recorded link activity, from the day advanced tracking was switched on.
     Route::get('tracking/summary', [TrackingSummaryController::class, 'show'])->middleware(['module:advanced_tracking', 'project.can:analytics.view'])->name('tracking.summary');
     // ATTRIB-CREDIT-001 — this project's fractional attribution rules; refused unless the module is switched on here.
