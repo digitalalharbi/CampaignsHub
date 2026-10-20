@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
+use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
@@ -38,6 +39,7 @@ use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
+use App\Domains\Tracking\Http\Controllers\TrackingSummaryController;
 use Illuminate\Support\Facades\Route;
 
 // Project management (tenant-scoped; not project-context-bound).
@@ -230,6 +232,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-005: Platform-Reported vs Store-Confirmed, the attribution window each figure
     // was collected under, and what may be summed — the platforms' claims never are.
     Route::get('metrics/attribution', [MetricsController::class, 'attribution'])->name('metrics.attribution');
+    // TRACKING-SUMMARY-001 — recorded link activity, from the day advanced tracking was switched on.
+    Route::get('tracking/summary', [TrackingSummaryController::class, 'show'])->middleware(['module:advanced_tracking', 'project.can:analytics.view'])->name('tracking.summary');
+    // ATTRIB-CREDIT-001 — this project's fractional attribution rules; refused unless the module is switched on here.
+    Route::get('attribution-settings', [AttributionSettingsController::class, 'show'])->middleware(['module:attribution_intelligence', 'project.can:analytics.view'])->name('attribution-settings.show');
+    Route::put('attribution-settings', [AttributionSettingsController::class, 'update'])->middleware(['module:attribution_intelligence', 'project.can:reports.manage'])->name('attribution-settings.update');
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
 
