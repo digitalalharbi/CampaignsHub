@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { ShareWidgetsPanel } from '@/features/widgets/ShareWidgetsPanel'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { updateShare, type ShareEdit, type ShareRow } from './api'
@@ -67,6 +68,7 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
           <Row k="hide_revenue" label={t.revenue} />
           <Row k="hide_campaign_names" label={t.names} />
         </div>
+        <ShareWidgetsPanel projectId={projectId} reportId={reportId} shareId={share.id} />
         <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
           <span>{t.previous}</span>
           <input

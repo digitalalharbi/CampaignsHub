@@ -11,12 +11,13 @@ export interface TrackingSummary {
   period: { from: string; to: string; timezone: string }
   tracking_since: string | null
   opens: number
-  machine_opens: number
-  series: Array<{ period: string; opens: number; devices: number }>
-  by_type: Record<string, number>
+  /** The agency's diagnostics below are absent from what a client link receives. */
+  machine_opens?: number
+  series: Array<{ period: string; opens: number; devices?: number }>
+  by_type?: Record<string, number>
   by_destination: Record<string, number>
-  top_links: Array<{ id: string; slug: string | null; destination_host: string | null; opens: number }>
-  basis: { counts: string; unique_basis: string; includes_sales: boolean }
+  top_links?: Array<{ id: string; slug: string | null; destination_host: string | null; opens: number }>
+  basis: { counts: string; unique_basis?: string; includes_sales: boolean }
 }
 
 const DESTINATIONS: Record<string, { en: string; ar: string }> = {
@@ -42,19 +43,27 @@ export function LinkActivityWidget({ projectId, range }: { projectId: string; ra
     retry: false,
   })
 
-  const title = ar ? 'نشاط الروابط' : 'Link activity'
-
-  if (q.isLoading) return <ChartCard title={title}><Skeleton className="h-48" /></ChartCard>
+  if (q.isLoading) return <ChartCard title={ar ? 'نشاط الروابط' : 'Link activity'}><Skeleton className="h-48" /></ChartCard>
   if (q.isError || !q.data) {
     return (
-      <ChartCard title={title}>
+      <ChartCard title={ar ? 'نشاط الروابط' : 'Link activity'}>
         <EmptyState title={ar ? 'تعذّر تحميل نشاط الروابط' : 'Link activity could not be loaded'} />
       </ChartCard>
     )
   }
 
-  const s = q.data
+  return <LinkActivityView summary={q.data} />
+}
+
+/**
+ * The drawing, given its data. The agency widget and the client report both use it; `client` removes what is the
+ * agency's alone (machine opens, the per-day device note, the per-link list).
+ */
+export function LinkActivityView({ summary: s, client = false }: { summary: TrackingSummary; client?: boolean }) {
+  const ar = useUi((u) => u.locale) === 'ar'
+  const title = ar ? 'نشاط الروابط' : 'Link activity'
   const empty = s.state === 'no_events'
+  const top = s.top_links ?? []
 
   return (
     <ChartCard
@@ -75,17 +84,21 @@ export function LinkActivityWidget({ projectId, range }: { projectId: string; ra
           <div className="space-y-4" data-testid="link-activity">
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
-                <dt className="text-[11px] text-text-muted">{ar ? 'فتحات بشرية' : 'Human opens'}</dt>
+                <dt className="text-[11px] text-text-muted">{client ? (ar ? 'مرات فتح الروابط' : 'Link opens') : (ar ? 'فتحات بشرية' : 'Human opens')}</dt>
                 <dd className="mt-0.5 text-lg font-bold text-text-primary" data-testid="link-activity-opens"><Num>{String(s.opens)}</Num></dd>
               </div>
-              <div className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
-                <dt className="text-[11px] text-text-muted">{ar ? 'فتحات آلية مستبعدة' : 'Machine opens left out'}</dt>
-                <dd className="mt-0.5 text-lg font-bold text-text-primary" data-testid="link-activity-machines"><Num>{String(s.machine_opens)}</Num></dd>
-              </div>
-              <div className="col-span-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 sm:col-span-1">
-                <dt className="text-[11px] text-text-muted">{ar ? 'أجهزة يوميًا (تقديري)' : 'Devices per day (estimate)'}</dt>
-                <dd className="mt-0.5 text-sm text-text-secondary">{ar ? 'لا يُجمع عبر الأيام' : 'never added across days'}</dd>
-              </div>
+              {!client && s.machine_opens !== undefined && (
+                <>
+                  <div className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
+                    <dt className="text-[11px] text-text-muted">{ar ? 'فتحات آلية مستبعدة' : 'Machine opens left out'}</dt>
+                    <dd className="mt-0.5 text-lg font-bold text-text-primary" data-testid="link-activity-machines"><Num>{String(s.machine_opens)}</Num></dd>
+                  </div>
+                  <div className="col-span-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 sm:col-span-1">
+                    <dt className="text-[11px] text-text-muted">{ar ? 'أجهزة يوميًا (تقديري)' : 'Devices per day (estimate)'}</dt>
+                    <dd className="mt-0.5 text-sm text-text-secondary">{ar ? 'لا يُجمع عبر الأيام' : 'never added across days'}</dd>
+                  </div>
+                </>
+              )}
             </dl>
 
             <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -107,9 +120,9 @@ export function LinkActivityWidget({ projectId, range }: { projectId: string; ra
               </div>
             </div>
 
-            {s.top_links.length > 0 && (
+            {!client && top.length > 0 && (
               <ol className="space-y-1" data-testid="link-activity-top">
-                {s.top_links.slice(0, 5).map((l) => (
+                {top.slice(0, 5).map((l) => (
                   <li key={l.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1 text-sm">
                     <span className="min-w-0 truncate text-text-primary" dir="ltr">/l/{l.slug ?? '—'} <span className="text-text-muted">→ {l.destination_host ?? '—'}</span></span>
                     <span className="shrink-0 font-bold"><Num>{String(l.opens)}</Num></span>

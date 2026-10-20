@@ -20,8 +20,10 @@ use InvalidArgumentException;
  *      off is `module_off`, listed (so an owner can see what they could switch on) on the agency surfaces and absent
  *      on the client-facing one;
  *   3. the project's own layout may hide a widget, reorder it, or resize it;
- *   4. a shared link's layout may hide a widget the project shows. It can never show one the project hides, because
- *      a link narrows a report and never widens it.
+ *   4. on a SHARED LINK (the client-facing surface, with a link given) the project's layout is a permission, not a
+ *      choice: a widget shows only if the project allows it AND the link's owner switched it on. A link can never show
+ *      one the project forbids, and shows none until it is told to — otherwise every link shared before a project
+ *      enabled anything would start showing it the moment the project did.
  *
  * Hiding a widget hides a picture. It never edits, removes or recomputes the figures underneath it; the figures a
  * hidden widget would have drawn are still in every total that was there before.
@@ -82,18 +84,33 @@ final class WidgetLayouts
                 $reason = 'module_off';
             }
 
-            if (isset($projectItems[$key])) {
+            if ($shareId !== null && $clientFacing) {
+                /*
+                 * A SHARED LINK is the strictest case, and it is opt-in. The project can forbid a widget on client
+                 * links (a layout entry with visible false) and otherwise allows it; the link itself shows nothing
+                 * until its owner switches a widget on. Otherwise every link shared before a project enabled
+                 * anything would start showing it the moment the project did, to people who were never told.
+                 */
+                $allowed = ! isset($projectItems[$key]) || $projectItems[$key]['visible'];
+                $enabled = isset($linkItems[$key]) && $linkItems[$key]['visible'];
+                if (isset($linkItems[$key])) {
+                    $order = $linkItems[$key]['order'];
+                    $size = $linkItems[$key]['size'];
+                } elseif (isset($projectItems[$key])) {
+                    $order = $projectItems[$key]['order'];
+                    $size = $projectItems[$key]['size'];
+                }
+                if ($reason === null) {
+                    $visible = $allowed && $enabled;
+                    $reason = ! $allowed ? 'hidden_by_project' : (! $enabled ? 'hidden_by_link' : null);
+                }
+            } elseif (isset($projectItems[$key])) {
                 $order = $projectItems[$key]['order'];
                 $size = $projectItems[$key]['size'];
                 if ($reason === null) {
                     $visible = $projectItems[$key]['visible'];
                     $reason = $visible ? null : 'hidden_by_project';
                 }
-            }
-
-            if ($shareId !== null && isset($linkItems[$key]) && $linkItems[$key]['visible'] === false && $reason !== 'module_off') {
-                $visible = false;
-                $reason = 'hidden_by_link';
             }
 
             $out[] = [
