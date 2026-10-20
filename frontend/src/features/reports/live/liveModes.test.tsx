@@ -413,6 +413,37 @@ describe('the report levels are different products', () => {
   })
 
   /*
+   * REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's column choice reaches every table of the Tables view, the
+   * row's name column is never a choice, and a link that hides spend publishes no spend or cost column even
+   * when the choice lists them.
+   */
+  it('shows only the columns the Owner chose in the accounts, content and day tables, and never a hidden money column', async () => {
+    serve('detailed', { columns: { accounts: ['spend', 'results'], content: ['results', 'cost'], days: ['clicks'], platforms: ['results'] } })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=tables' })
+
+    const tables = await screen.findByTestId('live-mode-tables')
+    const heads = (id: string) => within(within(tables).getByTestId(id)).getAllByRole('columnheader').map((h) => h.textContent ?? '')
+    expect(heads('tables-accounts').join('|')).toMatch(/Ad account.*Results.*Spend/)
+    expect(heads('tables-accounts').join('|')).not.toMatch(/Impressions|Clicks|Platform/)
+    expect(heads('tables-content').join('|')).toMatch(/Content.*Results.*Cost per result/)
+    expect(heads('tables-content').join('|')).not.toMatch(/Spend|Impressions|Platform/)
+    expect(heads('tables-days').join('|')).toMatch(/Day.*Clicks/)
+    expect(heads('tables-days').join('|')).not.toMatch(/Impressions|Spend|Results/)
+    expect(heads('tables-platforms').join('|')).not.toMatch(/Spend|CTR|Cost/)
+  })
+
+  it('publishes every column when the Owner chose none, and still no money when the link hides spend', async () => {
+    serve('detailed', { columns: {}, totals: { spend: null, impressions: 100_000, clicks: 3000, conversions: 50 } })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=tables' })
+
+    const tables = await screen.findByTestId('live-mode-tables')
+    const heads = (id: string) => within(within(tables).getByTestId(id)).getAllByRole('columnheader').map((h) => h.textContent ?? '')
+    expect(heads('tables-content').join('|')).toMatch(/Results.*Impressions.*Clicks/)
+    expect(heads('tables-content').join('|')).not.toMatch(/Spend|Cost per result/)
+    expect(heads('tables-accounts').join('|')).not.toMatch(/Spend|Cost per result/)
+  })
+
+  /*
    * REPORT-COMPOSITION-CONTROL-001 — the server names the main sections a link offers. Only those get
    * tabs, a closed one cannot be reached by its address, a single one opens without a tab bar, and the
    * daily ledger appears only when its own component is in the section list.
