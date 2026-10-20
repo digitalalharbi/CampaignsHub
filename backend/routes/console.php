@@ -72,6 +72,9 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes();
  */
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
 
+// SALLA-ONBOARD-001 — a store uninstalled 30 days ago has its synced data removed (the retention the merchant is promised).
+Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverlapping();
+
 /*
  * Structure discovery (STRUCT-001) — campaigns, ad sets, ads and creatives.
  *

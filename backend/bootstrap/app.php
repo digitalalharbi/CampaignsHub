@@ -12,6 +12,7 @@ use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
+use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Delivery\Console\PrepareWeeklyPacks;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
@@ -150,6 +151,7 @@ return Application::configure(basePath: dirname(__DIR__))
         CloseAbandonedSyncRunsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        PurgeUninstalledStoresCommand::class,
         // GA4-INTEGRATION-001 — the measurement sweep: a selected Analytics property's days, in the
         // property's own calendar. Only properties somebody bound to a project are read.
         SyncMeasurementCommand::class,

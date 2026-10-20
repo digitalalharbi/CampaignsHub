@@ -118,7 +118,9 @@ final class IntegrationWebhookController extends Controller
         if ($definition->key === 'salla' && ! $result['duplicate']) {
             match ((string) ($payload['event'] ?? '')) {
                 'app.store.authorize' => app(SallaInstalls::class)->onAuthorize($payload),
+                'app.installed' => app(SallaInstalls::class)->onInstalled($payload),
                 'app.uninstalled' => app(SallaInstalls::class)->onUninstall($payload),
+                'app.subscription.started', 'app.subscription.renewed', 'app.subscription.expired', 'app.subscription.canceled' => app(SallaInstalls::class)->onSubscription($payload, (string) $payload['event']),
                 default => null,
             };
         }
