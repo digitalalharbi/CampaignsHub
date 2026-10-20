@@ -219,6 +219,20 @@ export function ShortLinksPage() {
     },
   })
 
+  /*
+   * CAP-REGISTRY-001 — the module is switched off for this organisation. Say so, and where to turn it on, instead of an
+   * empty library that looks like «no links». The links already printed keep working: only the management is off.
+   */
+  const moduleOff = (links.error as { response?: { status?: number; data?: { errors?: { module?: string } } } } | null)?.response?.data?.errors?.module === 'smart_links'
+  if (moduleOff) {
+    return (
+      <EmptyState
+        title={ar ? 'الروابط الذكية متوقفة لهذه المنظمة' : 'Smart links are switched off for this organisation'}
+        description={ar ? 'الروابط المنشورة سابقًا تعمل كما هي. لتفعيل الإدارة: الإعدادات ← الوحدات.' : 'Links already shared keep working. To manage them again, switch the module on in Settings → Modules.'}
+      />
+    )
+  }
+
   const rows = links.data?.data ?? []
   const meta = links.data?.meta
   const recordingSince = meta?.recording_since ?? null
