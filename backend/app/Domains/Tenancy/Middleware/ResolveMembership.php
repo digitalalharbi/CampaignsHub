@@ -6,8 +6,10 @@ namespace App\Domains\Tenancy\Middleware;
 
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\MembershipSelector;
 use App\Domains\Tenancy\Services\PortalResolver;
+use App\Domains\Tenancy\Support\ReviewAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -58,6 +60,13 @@ final class ResolveMembership
         if ($membership !== null) {
             $this->memberships->set($membership);
             $this->tenants->setTenantId($membership->tenant_id);
+
+            // SALLA-REVIEW-001 — a review workspace is restricted, rate-limited, audited and expires.
+            // The tenant is read in full here: the relation on a resolved membership may carry only a few columns.
+            $denied = app(ReviewAccess::class)->deny($request, $user, Tenant::query()->find($membership->tenant_id));
+            if ($denied !== null) {
+                return $denied;
+            }
 
             return $next($request);
         }

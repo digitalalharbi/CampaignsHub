@@ -23,6 +23,18 @@ declare(strict_types=1);
 
 return [
 
+    /*
+     * SALLA-ONBOARD-001 — whether Salla's word about an email is enough to sign an EXISTING account in.
+     *
+     * Salla vouches for the email of the person who completes its authorisation. For a brand-new account that
+     * is the whole basis of the install; for an account that already exists (and may have a password and other
+     * workspaces) it is a trust decision, so it has a switch. Off: an existing account's store is still attached
+     * but the person signs in the ordinary way.
+     */
+    'onboarding' => [
+        'trust_email' => (bool) env('SALLA_TRUST_EMAIL', true),
+    ],
+
     'platforms' => [
 
         'salla' => [

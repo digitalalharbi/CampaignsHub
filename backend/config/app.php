@@ -2,6 +2,12 @@
 
 return [
 
+    // SALLA-REVIEW-001 — when the review workspace's access ends (any date string); empty means 14 days from provisioning.
+    'review_expires_at' => env('REVIEW_EXPIRES_AT'),
+
+    // The review account's password: supplied by the environment only, never committed, never printed.
+    'salla_review_password' => env('SALLA_REVIEW_PASSWORD'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Name

@@ -1,6 +1,7 @@
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
 **Reconciliation 2026-10-20:** META-PARTNER-ACCOUNT-DISCOVERY-001 VERIFIED on Production (probe run 39438154237: 628943503215859 stored via a business client edge; ads_management not granted on the Meta token). Seven SNAP-OCT26 rows, AGENTS, REAL and CP-NO-CREDENTIALS rows moved from NOT_STARTED to BLOCKED_OPERATIONAL_EVIDENCE with their exact condition; CP-AGENCY-WS-001 is PARTIAL (mail). Open PRs: #783 (Salla, waiting on a WebKit rerun) and #784 (X error parsing), both chained to merge.
+**Salla onboarding + review (#783 merged and deployed as 7b6590ab; migration ran; Production routes answer 302/302):** store-initiated installs provision a workspace and sign the owner in through a single-use link (`GET /api/v1/salla/open` → Salla authorize → `/api/v1/salla/enter?t=…`); uninstall revokes and purges after 30 days; `salla:review` builds the isolated reviewer workspace (needs SALLA_REVIEW_PASSWORD, optional REVIEW_EXPIRES_AT). Migration `2026_10_20_140000_provider_connection_uninstalled_at`. Not VERIFIED until a real install on store 793298857.
 
 **Merged and deployed (main 3d09b23e):** #770 (client portal mobile/parity, campaigns N+1, crawler evidence), #771 (rules say what was observed, never "unsupported"), #772 (Meta probe), #773 (report footer card, full-frame reel preview, platform logos, share-card cover, content-table fix — defect 107), #774 (Smart Code agency provisioning, verified-owner invitation, per-agency role isolation).
 

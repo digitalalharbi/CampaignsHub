@@ -39,6 +39,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.
         'automation:evaluate',
         'commerce:sync',
+        // SALLA-ONBOARD-001 — a Salla store uninstalled 30 days ago has its synced data removed (the retention promised to the merchant).
+        'commerce:purge-uninstalled',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
         'delivery:prepare-weekly',
         'fx:rates',

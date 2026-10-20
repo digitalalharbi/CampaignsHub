@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Domains\Commerce\Http\Controllers\SallaEntryController;
 use App\Domains\Commerce\Http\Controllers\StoreController;
 use App\Domains\Commerce\Http\Controllers\StoreOAuthController;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -26,6 +30,15 @@ Route::get('oauth/commerce/{provider}/callback', [StoreOAuthController::class, '
  */
 Route::get('commerce/store-installs/{claim}', [StoreOAuthController::class, 'installPreview'])
     ->middleware('throttle:30,1')->name('commerce.installs.preview');
+
+/*
+ * SALLA-ONBOARD-001 — the «Open app» door and the single-use sign-in link it ends in. Public, throttled, and
+ * `enter` carries its own session middleware: the browser arrives as a top-level navigation from the callback
+ * with no Origin header, so Sanctum's stateful detection would not start a session for it.
+ */
+Route::get('salla/open', [SallaEntryController::class, 'open'])->middleware('throttle:30,1')->name('salla.open');
+Route::middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class, 'throttle:20,1'])
+    ->get('salla/enter', [SallaEntryController::class, 'enter'])->name('salla.enter');
 
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     // Start the authorisation. Returns a URL rather than a 302, because the caller is an SPA doing
