@@ -106,7 +106,7 @@ final class PlatformPaymentSettingsController extends Controller
             'return_url' => Frontend::origin().'/admin/settings',
             // Some gateways (Tap) will not open an intent without a named, addressable customer: the
             // operator running the test is that customer, and nothing is charged.
-            'customer' => ['name' => (string) ($request->user()?->name ?? 'CampaignsHub'), 'email' => (string) ($request->user()?->email ?? '')],
+            'customer' => ['name' => (string) $request->user()->name, 'email' => (string) $request->user()->email],
         ]);
 
         $reachable = ($result['status'] ?? '') === 'created';
