@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Platform\Services;
 
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Facades\Config;
 
 /**
@@ -56,6 +58,7 @@ final class ProductionReadiness
         $this->checkPayments($production);
         $this->checkRecurringBilling($production);
         $this->checkMail();
+        $this->checkAdPlatforms();
         $this->checkExchangeRates();
 
         $failures = count(array_filter($this->findings, fn (array $f) => $f['level'] === 'fail'));
@@ -270,6 +273,55 @@ final class ProductionReadiness
      * shortens. But a deployment taking real traffic with no rate source will withhold real figures,
      * and that is worth an operator seeing in the pipeline rather than in a client's report.
      */
+    /**
+     * PROD-READINESS-001 — which ad platforms can connect at all, by name, and which are half set up.
+     *
+     * An ad platform's app credentials are a set (an id and a secret, plus a developer token or a
+     * version for some). Having SOME of them is a misconfiguration that fails every connection with a
+     * message that names none of them, so it is a failure; having NONE is the ordinary «awaiting
+     * credentials» state, listed once as a warning so the Owner sees exactly which platforms cannot yet
+     * connect. Names only, never a value.
+     */
+    private function checkAdPlatforms(): void
+    {
+        $awaiting = [];
+
+        foreach (AdPlatforms::ORDER as $platform) {
+            try {
+                $creds = PlatformCredentials::for($platform);
+                // Only the app's own identity counts: a key with a built-in default (LinkedIn's API version, a
+                // Meta configuration id) is present on an empty install and would make every platform «half set up».
+                $identity = ['client_id', 'client_secret', 'app_id', 'app_secret', 'developer_token'];
+                $required = array_values(array_intersect($creds->requires(), $identity));
+                $missing = array_values(array_intersect($creds->missing(), $identity));
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if ($required === []) {
+                continue;
+            }
+
+            if (count($missing) === count($required)) {
+                $awaiting[] = $platform;
+            } elseif ($missing !== []) {
+                $this->fail(
+                    "ad_platforms.{$platform}",
+                    "«{$platform}» has some of its app credentials but not all (missing: ".implode(', ', $missing).') — every connection attempt would fail.',
+                    'Supply the missing values from the platform\'s developer console, or remove the partial ones.',
+                );
+            }
+        }
+
+        if ($awaiting !== []) {
+            $this->warn(
+                'ad_platforms.awaiting_credentials',
+                'These ad platforms hold no app credentials, so no customer can connect them yet: '.implode(', ', $awaiting).'.',
+                'Add each platform\'s app credentials (see docs/INTEGRATION_CREDENTIALS_CHECKLIST.md) when its approval is in hand.',
+            );
+        }
+    }
+
     private function checkExchangeRates(): void
     {
         $driver = Config::get('fx.rates.driver');
