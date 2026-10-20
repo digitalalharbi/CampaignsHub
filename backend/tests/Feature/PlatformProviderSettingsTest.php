@@ -130,9 +130,10 @@ final class PlatformProviderSettingsTest extends TestCase
             'nothing belonging to a customer may be asked for as a platform credential',
         );
 
-        // X is the only one of the eight whose authorisation is refused outright without PKCE.
+        // X's Ads API is OAuth 1.0a (OAUTH1-X-001): no PKCE, no refresh.
         $x = collect($response->json('data.providers'))->firstWhere('key', 'x');
-        $this->assertTrue($x['uses_pkce']);
+        $this->assertFalse($x['uses_pkce']);
+        $this->assertFalse($x['supports_refresh']);
         $this->assertFalse($google['uses_pkce']);
 
         // Commerce providers are not advertising platforms and are not described as though they were.
@@ -512,6 +513,46 @@ final class PlatformProviderSettingsTest extends TestCase
                 && ! array_key_exists('code', $body)
                 && ! str_contains($request->url(), 'app-secret-5678');
         });
+    }
+
+    /** OAUTH1-X-001 — X is probed with a signed request-token call, never an authorisation code. */
+    public function test_x_is_probed_with_a_signed_request_token_call(): void
+    {
+        app(ProviderConfigurationService::class)->save('x', ['client_id' => 'x-key-1234', 'client_secret' => 'x-secret-5678']);
+        Http::fake(['api.x.com/oauth/request_token' => Http::response('oauth_token=T&oauth_token_secret=S&oauth_callback_confirmed=true')]);
+
+        $res = $this->actingAs($this->owner, 'sanctum')->postJson('/api/v1/admin/settings/integrations/providers/x/test')->assertOk();
+        $res->assertJsonPath('data.passed', true);
+        $this->assertStringNotContainsString('x-secret-5678', (string) $res->json('data.message'));
+        $this->assertStringContainsString('Ads API', (string) $res->json('data.message'));
+
+        Http::assertSent(function ($request): bool {
+            $auth = $request->header('Authorization')[0] ?? '';
+
+            return $request->url() === 'https://api.x.com/oauth/request_token'
+                && str_contains($auth, 'oauth_consumer_key="x-key-1234"')
+                && str_contains($auth, 'oauth_callback=')
+                && ! str_contains($auth, 'x-secret-5678')
+                && ! array_key_exists('code', $request->data());
+        });
+    }
+
+    public function test_x_says_which_half_is_wrong(): void
+    {
+        app(ProviderConfigurationService::class)->save('x', ['client_id' => 'x-key-1234', 'client_secret' => 'x-secret-5678']);
+        $post = fn () => $this->actingAs($this->owner, 'sanctum')->postJson('/api/v1/admin/settings/integrations/providers/x/test')->assertOk();
+
+        // One fake with a sequence: later Http::fake() calls merge and the first match wins.
+        Http::fake(['api.x.com/*' => Http::sequence()
+            ->push('{"errors":[{"code":32,"message":"Could not authenticate you."}]}', 401)
+            ->push('{"errors":[{"code":415,"message":"Callback URL not approved for this client application."}]}', 403)]);
+        $bad = $post();
+        $bad->assertJsonPath('data.passed', false);
+        $this->assertStringContainsString('does not recognise', (string) $bad->json('data.message'));
+
+        $cb = $post();
+        $cb->assertJsonPath('data.passed', false);
+        $this->assertStringContainsString('callback URL is not registered', (string) $cb->json('data.message'));
     }
 
     /**

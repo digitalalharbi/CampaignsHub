@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Configuration;
 
 use App\Domains\Integrations\Catalogue\ProviderAuth;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\OAuth\OAuth1;
 use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -155,6 +156,25 @@ final class ProviderProbe
             ]);
         }
 
+        /*
+         * OAUTH1-X-001 — X gets the probe its flow supports: ask for a request token.
+         *
+         * The Ads API is OAuth 1.0a, so there is no authorisation-code grant to refuse. `request_token`
+         * is the first leg of the three-legged flow: it needs only the API key and secret and the
+         * callback URL, grants nothing and involves no user — a valid pair is answered with a throwaway
+         * token, a wrong one with «Could not authenticate you», and a pair whose callback is not
+         * registered on the app with «Callback URL not approved». The token it returns is never read.
+         */
+        if ($provider === 'x') {
+            $url = (string) config('ad_platforms.platforms.x.request_token_url');
+
+            return $client->asForm()->withHeaders([
+                'Authorization' => OAuth1::header('POST', $url, [], (string) ($values['client_id'] ?? ''), (string) ($values['client_secret'] ?? ''), null, null, [
+                    'oauth_callback' => ProviderCatalogue::get('x')->redirectUri(),
+                ]),
+            ])->post($url);
+        }
+
         $grant = [
             'grant_type' => 'authorization_code',
             'code' => self::IMPOSSIBLE_CODE,
@@ -187,6 +207,10 @@ final class ProviderProbe
 
         if ($provider === 'tiktok') {
             return $this->interpretTikTok($response);
+        }
+
+        if ($provider === 'x') {
+            return $this->interpretX($response);
         }
 
         $body = strtolower($response->body());
@@ -242,6 +266,47 @@ final class ProviderProbe
             'passed' => false,
             'inconclusive' => true,
             'message' => 'The provider\'s answer did not say whether the app was recognised; check the credentials by connecting an account: '.$reason,
+        ];
+    }
+
+    /**
+     * X's request-token answer (OAUTH1-X-001): a body of `oauth_token=…&oauth_callback_confirmed=true` is a
+     * recognised app with an approved callback; a JSON error names what is wrong.
+     *
+     * @return array{passed:bool,message:string,inconclusive?:bool}
+     */
+    private function interpretX(Response $response): array
+    {
+        $body = $response->body();
+        parse_str($body, $form);
+
+        if ($response->successful() && ($form['oauth_callback_confirmed'] ?? '') === 'true' && ($form['oauth_token'] ?? '') !== '') {
+            return [
+                'passed' => true,
+                'message' => 'X recognised this API key and secret and approved the callback URL. That is all this proves: not that the '
+                    .'app has been approved for the Ads API, and not that any advertiser has authorised it. Those are proven when someone '
+                    .'connects and their ad accounts list.',
+            ];
+        }
+
+        $lower = strtolower($body);
+
+        if (str_contains($lower, 'callback') && (str_contains($lower, 'not approved') || str_contains($lower, 'not whitelisted') || str_contains($lower, 'not registered'))) {
+            return [
+                'passed' => false,
+                'message' => 'X recognised the API key and secret but the callback URL is not registered on the app. Add '
+                    .ProviderCatalogue::get('x')->redirectUri().' to the app\'s callback URLs in the X developer console.',
+            ];
+        }
+
+        if ($response->status() === 401 || str_contains($lower, 'could not authenticate') || str_contains($lower, 'invalid_client')) {
+            return ['passed' => false, 'message' => 'X does not recognise this API key and secret (HTTP '.$response->status().').'];
+        }
+
+        return [
+            'passed' => false,
+            'inconclusive' => true,
+            'message' => 'X\'s answer did not say whether the app was recognised (HTTP '.$response->status().'); check the credentials by connecting an account.',
         ];
     }
 
