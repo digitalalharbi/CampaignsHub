@@ -1,4 +1,5 @@
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { selectColumns } from './reportColumns'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { hasPlatformMark } from '@/components/brand/PlatformMark'
@@ -607,7 +608,7 @@ export function PrintDocument({
       {prints.platforms && (
         <section className="doc-section">
           <h2>{heading('platforms', 'Platform Performance')}</h2>
-          <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
+          <Table {...selectColumns(data.report_columns?.platforms, ['', 'spend', '', 'results', ''], ['Platform', 'Spend', 'Revenue', 'Results', 'ROAS'], platformRows)} />
         </section>
       )}
       <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
@@ -645,14 +646,18 @@ export function PrintDocument({
         <section className="doc-section" data-testid="print-daily-records">
           <h2>Daily Records</h2>
           <Table
-            head={['Day', 'Impressions', 'Clicks', 'Results', ...((data.timeseries ?? []).some((d: Row) => typeof d.spend === 'number') ? ['Spend'] : [])]}
-            rows={[...(data.timeseries ?? [])].sort((a: Row, b: Row) => String(a.date ?? '').localeCompare(String(b.date ?? ''))).map((d: Row) => [
+            {...selectColumns(
+              data.report_columns?.days,
+              ['', 'impressions', 'clicks', 'results', 'spend'],
+              ['Day', 'Impressions', 'Clicks', 'Results', ...((data.timeseries ?? []).some((d: Row) => typeof d.spend === 'number') ? ['Spend'] : [])],
+              [...(data.timeseries ?? [])].sort((a: Row, b: Row) => String(a.date ?? '').localeCompare(String(b.date ?? ''))).map((d: Row) => [
               String(d.date ?? '—'),
               typeof d.impressions === 'number' ? d.impressions.toLocaleString('en-US') : '—',
               typeof d.clicks === 'number' ? d.clicks.toLocaleString('en-US') : '—',
               typeof d.conversions === 'number' ? d.conversions.toLocaleString('en-US') : '—',
               ...((data.timeseries ?? []).some((x: Row) => typeof x.spend === 'number') ? [moneyExact(typeof d.spend === 'number' ? d.spend : null, currency)] : []),
-            ])}
+              ]),
+            )}
           />
         </section>
       )}
@@ -825,8 +830,12 @@ export function PrintDocument({
           </p>
           {rosterRows.length > 0 && (
             <Table
-              head={['Creative', 'Platform', 'Spend', 'Impressions', 'Clicks', 'Results']}
-              rows={rosterRows.map((r) => [r.name, platformCell(r.provider), r.spend, r.impressions, r.clicks, r.results])}
+              {...selectColumns(
+                data.report_columns?.content,
+                ['', 'platform', 'spend', 'impressions', 'clicks', 'results'],
+                ['Creative', 'Platform', 'Spend', 'Impressions', 'Clicks', 'Results'],
+                rosterRows.map((r) => [r.name, platformCell(r.provider), r.spend, r.impressions, r.clicks, r.results]),
+              )}
             />
           )}
         </section>
