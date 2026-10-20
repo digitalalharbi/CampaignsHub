@@ -88,6 +88,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/requests/meta',
         'GET api/v1/requests/track/{token}',
         'GET api/v1/requests/track/{token}/files/{file}',
+        'GET api/v1/salla/enter',
+        'GET api/v1/salla/open',
         'GET api/v1/subscriptions/invoices/shared/{token}',
         'GET api/v1/webhooks/{kind}/{provider}',
         'POST api/v1/auth/email-code/start',
