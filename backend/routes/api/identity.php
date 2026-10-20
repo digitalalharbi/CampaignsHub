@@ -159,6 +159,7 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
 Route::prefix('invitations')->name('invitations.')->group(function (): void {
     Route::get('/{token}', [InvitationController::class, 'preview'])->name('preview')->middleware('throttle:30,1');
     Route::post('/accept', [InvitationController::class, 'accept'])->name('accept')->middleware('throttle:10,1');
+    Route::post('/accept-existing', [InvitationController::class, 'acceptExisting'])->name('accept-existing')->middleware(['auth:sanctum', 'throttle:10,1']);
 });
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('app/team/invitations')->name('app.team.invitations.')->group(function (): void {
     Route::get('/', [InvitationController::class, 'index'])->name('index');

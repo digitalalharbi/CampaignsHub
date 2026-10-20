@@ -22,7 +22,7 @@ final class UserResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        $role = $this->roles->first();
+        $role = $this->rolesInCurrentTenant()->first();
 
         return [
             'id' => $this->uuid,
