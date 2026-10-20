@@ -18,7 +18,9 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -105,6 +107,63 @@ final class OperationalReadinessTest extends TestCase
         $this->assertSame('healthy', $res->json('data.verdict'));
         $this->assertSame('up', $res->json('data.processes.queue.state'));
         $this->assertSame('up', $res->json('data.processes.scheduler.state'));
+    }
+
+    private function mailRow(string $status, string $at, ?string $error = null): void
+    {
+        DB::table('mail_deliveries')->insert([
+            'id' => (string) Str::uuid(), 'kind' => 'invitation', 'recipient' => 'x@example.test', 'locale' => 'ar',
+            'template' => 'mail.invitation', 'transport' => 'smtp', 'status' => $status, 'error' => $error,
+            'created_at' => $at, 'updated_at' => $at,
+        ]);
+    }
+
+    /** MAIL-HEALTH-001 — seven weeks of refused SMTP logins read as healthy; now the newest real attempt decides. */
+    public function test_a_failing_mail_transport_degrades_the_verdict_and_says_why(): void
+    {
+        app(OperationalReadiness::class)->markScheduler();
+        app(OperationalReadiness::class)->markQueue();
+        $this->mailRow('sent', now()->subDays(3)->toDateTimeString());
+        $this->mailRow('failed', now()->subHour()->toDateTimeString(), 'Failed to authenticate on SMTP server with username "info@x.test" ... 535 5.7.8');
+
+        $res = $this->actingAs($this->platformOwner(), 'sanctum')->getJson('/api/v1/admin/operational-status');
+
+        $this->assertSame('degraded', $res->json('data.verdict'));
+        $this->assertSame('failing', $res->json('data.mail.state'));
+        $this->assertStringContainsString('535', (string) $res->json('data.mail.last_failure'));
+        $this->assertNotNull($res->json('data.mail.last_sent_at'));
+    }
+
+    public function test_mail_that_recovered_reads_ok_and_no_real_attempt_reads_unknown_not_healthy(): void
+    {
+        app(OperationalReadiness::class)->markScheduler();
+        app(OperationalReadiness::class)->markQueue();
+        $owner = $this->platformOwner();
+
+        $this->assertSame('unknown', $this->actingAs($owner, 'sanctum')->getJson('/api/v1/admin/operational-status')->json('data.mail.state'));
+
+        // Sandbox and skipped rows are not attempts at a real transport.
+        $this->mailRow('sandbox', now()->subHour()->toDateTimeString());
+        $this->assertSame('unknown', $this->actingAs($owner, 'sanctum')->getJson('/api/v1/admin/operational-status')->json('data.mail.state'));
+
+        $this->mailRow('failed', now()->subDays(2)->toDateTimeString(), 'refused');
+        $this->mailRow('sent', now()->subMinutes(5)->toDateTimeString());
+        $res = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/admin/operational-status');
+        $this->assertSame('ok', $res->json('data.mail.state'));
+        $this->assertSame('healthy', $res->json('data.verdict'));
+    }
+
+    /** A failure older than the fortnight is history, not a current fault. */
+    public function test_an_old_failure_does_not_degrade_anything(): void
+    {
+        app(OperationalReadiness::class)->markScheduler();
+        app(OperationalReadiness::class)->markQueue();
+        $this->mailRow('failed', now()->subDays(40)->toDateTimeString(), 'refused');
+
+        $res = $this->actingAs($this->platformOwner(), 'sanctum')->getJson('/api/v1/admin/operational-status');
+
+        $this->assertSame('unknown', $res->json('data.mail.state'));
+        $this->assertSame('healthy', $res->json('data.verdict'));
     }
 
     /**

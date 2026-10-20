@@ -99,6 +99,7 @@ final class OperationalReadiness
         $serving = $this->serving();
         $scheduler = $this->heartbeat(self::SCHEDULER_HEARTBEAT, $now);
         $queue = $this->heartbeat(self::QUEUE_HEARTBEAT, $now);
+        $mail = $this->mail($now);
 
         return [
             'serving' => $serving,
@@ -115,6 +116,7 @@ final class OperationalReadiness
                 ],
             ],
             'queue_depth' => $this->queueDepth(),
+            'mail' => $mail,
             /*
              * Everything above is a claim about this deployment, so the verdict is only as good as its
              * weakest part — and it is stated rather than left for the reader to assemble from three
@@ -123,10 +125,40 @@ final class OperationalReadiness
              */
             'verdict' => match (true) {
                 ! $serving['ready'] => 'down',
-                $scheduler['state'] === 'down' || $queue['state'] === 'down' => 'degraded',
+                $scheduler['state'] === 'down' || $queue['state'] === 'down' || $mail['state'] === 'failing' => 'degraded',
                 $scheduler['state'] === 'never_seen' || $queue['state'] === 'never_seen' => 'unverified',
                 default => 'healthy',
             },
+        ];
+    }
+
+    /**
+     * MAIL-HEALTH-001 — is transactional mail actually leaving?
+     *
+     * Every invitation and verification email failed for seven weeks (SMTP login refused) and nothing
+     * said so: the ledger recorded each failure honestly, on a page nobody was looking at. This turns
+     * the ledger into a verdict. The newest REAL attempt in the last fortnight decides — `failed` is
+     * failing, `sent` is ok — and a fortnight with no real attempt is `unknown`, not healthy: an install
+     * that sends nothing proves nothing. `sandbox`, `skipped` and `awaiting_credentials` rows are not
+     * attempts at a real transport and are ignored.
+     *
+     * @return array{state:string, last_failure_at:?string, last_failure:?string, last_sent_at:?string}
+     */
+    private function mail(Carbon $now): array
+    {
+        $since = $now->copy()->subDays(14);
+        $latest = DB::table('mail_deliveries')->whereIn('status', ['sent', 'failed'])->where('created_at', '>=', $since)
+            ->orderByDesc('created_at')->first(['status', 'created_at', 'error']);
+        $lastFailure = DB::table('mail_deliveries')->where('status', 'failed')->where('created_at', '>=', $since)
+            ->orderByDesc('created_at')->first(['created_at', 'error']);
+        $lastSent = DB::table('mail_deliveries')->where('status', 'sent')->where('created_at', '>=', $since)->max('created_at');
+
+        return [
+            'state' => $latest === null ? 'unknown' : ($latest->status === 'failed' ? 'failing' : 'ok'),
+            'last_failure_at' => $lastFailure === null ? null : Carbon::parse((string) $lastFailure->created_at)->toIso8601String(),
+            // The transport's own words, trimmed: enough to tell an auth refusal from a timeout.
+            'last_failure' => $lastFailure === null || $lastFailure->error === null ? null : mb_substr((string) preg_replace('/\s+/', ' ', (string) $lastFailure->error), 0, 160),
+            'last_sent_at' => $lastSent === null ? null : Carbon::parse((string) $lastSent)->toIso8601String(),
         ];
     }
 
