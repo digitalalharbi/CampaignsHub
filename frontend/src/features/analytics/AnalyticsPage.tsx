@@ -147,6 +147,8 @@ import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { SiteAnalyticsTab } from './SiteAnalyticsTab'
 import { AttributionPanel } from './AttributionPanel'
+import { WidgetSurface } from '@/features/widgets/WidgetSurface'
+import { useWidgetLayout } from '@/features/widgets/api'
 import { AdPoster } from '@/features/content/AdPoster'
 import { usePortalPath } from '@/app/portalPath'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
@@ -313,6 +315,15 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * and no explanation — it is CARRIED to the surface that has that tab.
    */
   const isAnalysis = surface === 'analytics'
+  /*
+   * WIDGET-REGISTRY-001 — the «Links & attribution» tab exists only for a project where at least one of its widgets'
+   * modules is on. Everyone else keeps exactly the tabs they had.
+   */
+  const widgetLayout = useWidgetLayout(isAnalysis ? currentProjectId : null, 'analytics')
+  const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.reason !== 'module_off')
+  const tabGroups = hasWidgetTab
+    ? TAB_GROUPS.map((g) => (g.key === 'conversion' ? { ...g, tabs: [...g.tabs, { id: 'links', ar: 'الروابط والإسناد', en: 'Links & attribution' }] } : g))
+    : TAB_GROUPS
   const tab = isAnalysis ? urlTab : 'performance'
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
@@ -716,7 +727,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
          */
         className="flex snap-x snap-mandatory items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
       >
-        {TAB_GROUPS.map((group, index) => (
+        {tabGroups.map((group, index) => (
           <div key={group.key} className="flex items-end">
             {index > 0 && <span aria-hidden className="mx-2 mb-2 h-4 w-px shrink-0 bg-border" />}
             <div className="flex items-end gap-0.5">
@@ -772,6 +783,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'live' && <LiveOperatingTab projectId={currentProjectId} />}
+        {tab === 'links' && hasWidgetTab && <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />}
         </>
       )}
 
@@ -809,7 +821,18 @@ type OverviewTabProps = TabProps & { objective: string; surface: Surface }
 function PerformanceTab({ projectId, range, filters, objective, surface }: OverviewTabProps) {
   const data = useOverviewData({ projectId, range, filters, objective })
 
-  return surface === 'dashboard' ? <DashboardOverview {...data} /> : <AnalyticsOverview {...data} />
+  /*
+   * WIDGET-REGISTRY-001 — the Dashboard's configurable widgets sit BELOW the overview it always had. A project where no
+   * widget's module is on gets no widget area at all, so its Dashboard is the page it was.
+   */
+  return surface === 'dashboard'
+    ? (
+      <>
+        <DashboardOverview {...data} />
+        <WidgetSurface projectId={projectId} surface="dashboard" range={range} />
+      </>
+    )
+    : <AnalyticsOverview {...data} />
 }
 
 
