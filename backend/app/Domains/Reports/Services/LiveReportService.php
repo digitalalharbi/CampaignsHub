@@ -323,6 +323,8 @@ final class LiveReportService
             'ads_weakest' => ClientEntityBoundary::ads($built['worst']),
             'creatives_in_scope' => $built['creatives_in_scope'],
             'creatives_withheld' => $built['creatives_withheld'],
+            // Content the Owner took off this link: totals still include it. See ReportAds::for.
+            'creatives_hidden' => $built['creatives_hidden'],
             'form' => $this->formFor($share),
         ];
     }

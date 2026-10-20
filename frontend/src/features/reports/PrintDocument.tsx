@@ -349,6 +349,7 @@ export function PrintDocument({
   const isSummary = String(data.form ?? 'detailed') === 'executive_summary'
   const inScope = Number(data.creatives_in_scope ?? 0)
   const withheld = Number(data.creatives_withheld ?? 0)
+  const hiddenByOwner = Number(data.creatives_hidden ?? 0)
   const rosterRows = isSummary
     ? []
     : (data.ads_roster ?? []).map((row) => ({
@@ -831,6 +832,11 @@ export function PrintDocument({
             {withheld > 0 ? ` — ${inScope - withheld} listed here, ${withheld} not shown` : ''}
             {isSummary ? '. This is an executive summary; the full list is in the detailed report.' : '.'}
           </p>
+          {hiddenByOwner > 0 && (
+            <p data-testid="print-content-hidden">
+              {hiddenByOwner} {hiddenByOwner === 1 ? 'creative' : 'creatives'} hidden by the report owner on this link — the totals in this document include them.
+            </p>
+          )}
           {rosterRows.length > 0 && (
             <Table
               {...selectColumns(
