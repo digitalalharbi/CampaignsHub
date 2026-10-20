@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Sections;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\ReportColumns;
 
 /**
  * The one call every surface makes to apply a report's sections — REPORT-SECTION-SURFACES-001.
@@ -145,6 +146,11 @@ final class ReportSectionSurfaces
         $payload = $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
         // The tabs a reader is offered, named by the server like the sections are.
         $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
+        // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
+        // built from a link (page, print, file). Absent means every column.
+        if ($share !== null && ($chosen = ReportColumns::forShare($share)->toArray()) !== []) {
+            $payload['report_columns'] = $chosen;
+        }
 
         return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
     }

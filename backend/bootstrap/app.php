@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\MailDiagnoseCommand;
 use App\Console\Commands\ProvisionAgencyCommand;
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
@@ -161,6 +162,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // which a deploy that only migrates never brings.
         ProvisionPlatformCommand::class,
         ProvisionAgencyCommand::class,
+        MailDiagnoseCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

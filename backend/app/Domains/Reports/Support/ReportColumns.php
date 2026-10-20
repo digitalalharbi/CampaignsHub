@@ -26,6 +26,11 @@ final class ReportColumns
     /** @var array<string, list<string>> table => its choosable columns, in display order */
     public const TABLES = [
         'platforms' => ['spend', 'results', 'cost', 'impressions', 'clicks', 'ctr'],
+        // The Tables view's other three tables (REPORT-TABLES-OWNER-COLUMNS-001, second batch). The name
+        // column — the account, the content, the day — is never a choice.
+        'accounts' => ['platform', 'results', 'impressions', 'clicks', 'spend', 'cost'],
+        'content' => ['platform', 'results', 'impressions', 'clicks', 'spend', 'cost'],
+        'days' => ['impressions', 'clicks', 'results', 'spend'],
     ];
 
     /** @param array<string, list<string>> $chosen only the tables the Owner restricted */

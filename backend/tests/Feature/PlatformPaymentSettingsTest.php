@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -73,12 +74,13 @@ final class PlatformPaymentSettingsTest extends TestCase
         config([
             'services.moyasar.secret_key' => null, 'services.moyasar.webhook_token' => null,
             'services.stripe.secret_key' => null, 'services.stripe.webhook_secret' => null,
+            'services.tap.secret_key' => null,
         ]);
 
         $data = $this->settings();
         $providers = collect($data['providers']);
 
-        $this->assertSame(['moyasar', 'stripe'], $providers->pluck('provider')->all());
+        $this->assertSame(['moyasar', 'tap', 'stripe'], $providers->pluck('provider')->all());
         $this->assertSame('primary', $providers->firstWhere('provider', 'moyasar')['role']);
         $this->assertSame('alternative', $providers->firstWhere('provider', 'stripe')['role']);
 
@@ -158,6 +160,22 @@ final class PlatformPaymentSettingsTest extends TestCase
             ->postJson('/api/v1/admin/settings/integrations/payments/stripe/test')
             ->assertStatus(422)
             ->assertJsonPath('meta.status', 'awaiting_credentials');
+    }
+
+    /** PAY-TAP-001 — the connection test opens an intent for the operator as the customer, which Tap requires. */
+    public function test_the_tap_connection_test_names_the_operator_as_the_customer_and_charges_nothing(): void
+    {
+        config(['services.tap.secret_key' => 'sk_test_tap']);
+        Http::fake(['api.tap.company/v2/charges' => Http::response(['id' => 'chg_t', 'status' => 'INITIATED', 'transaction' => ['url' => 'https://checkout.payments.tap.company?mode=page&token=t']], 200)]);
+
+        $this->actingAs($this->owner(), 'sanctum')
+            ->postJson('/api/v1/admin/settings/integrations/payments/tap/test')
+            ->assertOk()
+            ->assertJsonPath('data.reachable', true);
+
+        Http::assertSent(fn ($r): bool => $r->url() === 'https://api.tap.company/v2/charges'
+            && $r->data()['customer']['email'] === 'owner@paysettings.test'
+            && (float) $r->data()['amount'] === 1.0);
     }
 
     public function test_an_unknown_provider_is_not_found(): void

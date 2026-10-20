@@ -213,6 +213,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     sectionChoice[key] ?? levelSections(level)[key] ?? defaultClient
   // REPORT-TABLES-OWNER-COLUMNS-001 — null means «every column», which is also what is sent.
   const [platformCols, setPlatformCols] = useState<string[] | null>(null)
+  const [otherCols, setOtherCols] = useState<Record<'accounts' | 'content' | 'days', string[] | null>>({ accounts: null, content: null, days: null })
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -234,7 +235,14 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
-        ...(platformCols === null ? {} : { columns: { platforms: platformCols } }),
+        ...(() => {
+          const columns: Record<string, string[]> = {
+            ...(platformCols === null ? {} : { platforms: platformCols }),
+            ...Object.fromEntries(Object.entries(otherCols).filter((e): e is [string, string[]] => e[1] !== null)),
+          }
+
+          return Object.keys(columns).length === 0 ? {} : { columns }
+        })(),
         ...(level === 'detailed' && viewsBody(viewOn) !== null ? { views: viewsBody(viewOn) } : {}),
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
@@ -714,6 +722,9 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           </div>
 
           <ColumnPicker value={platformCols} onChange={setPlatformCols} ar={ar} />
+          {(['accounts', 'content', 'days'] as const).map((table) => (
+            <ColumnPicker key={table} table={table} value={otherCols[table]} onChange={(next) => setOtherCols((c) => ({ ...c, [table]: next }))} ar={ar} />
+          ))}
 
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
             <span>{ar ? 'إخفاء الإنفاق عن العميل' : 'Hide spend from the client'}</span>

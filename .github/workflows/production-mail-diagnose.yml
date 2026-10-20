@@ -1,0 +1,35 @@
+name: Production Mail Diagnose
+
+# MAIL-DIAGNOSE-001 — why did a transactional message (an agency invitation, a verification code) not arrive?
+#
+# Read-only. `mail:diagnose` prints the mail configuration's shape (driver, host, port, whether a username and a
+# password exist — never their values) and the last recorded deliveries with the transport's own error text and
+# a masked recipient. It sends nothing and writes nothing. Manual only; the command is fixed here.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Diagnose mail on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan mail:diagnose --limit=10

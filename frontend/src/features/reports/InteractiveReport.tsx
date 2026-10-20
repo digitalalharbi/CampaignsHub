@@ -69,6 +69,8 @@ export interface ReportData {
   attention?: AttentionItem[] | null
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table; absent = every column. */
+  report_columns?: Record<string, string[]>
   /**
    * CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», the same answer in every document.
    *

@@ -161,7 +161,7 @@ final class ProductionReadiness
             $this->fail('subscriptions.default', "The subscription gateway is «{$provider}», which settles nothing real — customers would be activated without money moving, or unable to pay at all.", 'Set SUBSCRIPTION_PROVIDER=moyasar and supply its credentials.');
         }
 
-        foreach (['moyasar' => ['secret_key', 'publishable_key', 'webhook_token'], 'stripe' => ['secret_key', 'publishable_key', 'webhook_secret']] as $gateway => $keys) {
+        foreach (['moyasar' => ['secret_key', 'publishable_key', 'webhook_token'], 'stripe' => ['secret_key', 'publishable_key', 'webhook_secret'], 'tap' => ['secret_key', 'publishable_key', 'secret_key']] as $gateway => $keys) {
             [$secretKey, $publishableKey, $webhookKey] = $keys;
 
             $secret = Config::get("services.{$gateway}.{$secretKey}");

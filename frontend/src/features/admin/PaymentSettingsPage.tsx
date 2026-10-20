@@ -25,7 +25,7 @@ import { useUi } from '@/stores/ui'
 const COPY = {
   ar: {
     title: 'وسائل الدفع',
-    subtitle: 'ميسر هي البوابة الرسمية والأساسية، وسترايب بوابة بديلة. المفاتيح تُدار من بيئة التشغيل ولا تُخزَّن هنا.',
+    subtitle: 'ميسر هي البوابة الرسمية والأساسية، وتاب وسترايب بوابتان بديلتان. المفاتيح تُدار من بيئة التشغيل ولا تُخزَّن هنا.',
     primary: 'المزوّد الأساسي', alternative: 'مزوّد بديل', isDefault: 'الافتراضي',
     live: 'مفعّل', awaiting: 'بانتظار بيانات الاعتماد',
     envSandbox: 'بيئة اختبار (Sandbox)', envLive: 'بيئة إنتاج (Live)', envUnset: 'لا توجد مفاتيح',
@@ -47,7 +47,7 @@ const COPY = {
   },
   en: {
     title: 'Payment methods',
-    subtitle: 'Moyasar is the official, primary gateway; Stripe is the alternative. Keys are managed in the environment and are never stored here.',
+    subtitle: 'Moyasar is the official, primary gateway; Tap Payments and Stripe are alternatives. Keys are managed in the environment and are never stored here.',
     primary: 'Primary provider', alternative: 'Alternative provider', isDefault: 'Default',
     live: 'Live', awaiting: 'Awaiting credentials',
     envSandbox: 'Sandbox keys', envLive: 'Live keys', envUnset: 'No keys',

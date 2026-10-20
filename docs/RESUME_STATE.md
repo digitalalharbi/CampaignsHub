@@ -1,3 +1,19 @@
+# START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
+
+**Merged and deployed (main 3d09b23e):** #770 (client portal mobile/parity, campaigns N+1, crawler evidence), #771 (rules say what was observed, never "unsupported"), #772 (Meta probe), #773 (report footer card, full-frame reel preview, platform logos, share-card cover, content-table fix — defect 107), #774 (Smart Code agency provisioning, verified-owner invitation, per-agency role isolation).
+
+**Production evidence:** defect 107 — content table VERIFIED on the Hanka link (15 rows with real figures); creative preview VERIFIED in the in-app Chromium at 375 and 1280 px (vertical 1081x1920, 1152x2048, 941x1672 and square 1080x1080 all show the whole frame); real iOS Safari = BLOCKED_OPERATIONAL_EVIDENCE. Meta probe: all 8 business-edge accounts stored, none undiscoverable. Smart Code: tenant `5a72eddd-e0c6-4e4b-95e9-919de37d17ae` (slug smart-code) CREATED on Production (workflow run 39358237249), empty; owner invitation for digital@smartcode.sa issued but its mail delivery reported «failed».
+
+**Open PRs:** #775 (REPORT-TABLES-OWNER-COLUMNS-001: column choice reaches accounts, content, daily tables, CSV, XLSX, PDF) and #776 (Tap Payments adapter PAY-TAP-001 + read-only `mail:diagnose` and its workflow). Merge order: #775, then #776 (`gh pr update-branch` after each merge; strict protection).
+
+**Next, in order:** after #776 deploys, dispatch `production-mail-diagnose.yml` and read why the invitation failed (config shape and the transport's own error; no secrets printed); fix the transport (an Owner credential if SMTP is missing), then re-run `provision-smart-code-agency.yml` (idempotent; an undelivered unexpired invitation blocks re-issue for 72 h). Acceptance by the holder of digital@smartcode.sa is a separate Owner action. If mail stays broken, a platform-admin «show the claim link once» path is the fallback — weaker proof of address ownership, so only with the Owner's say.
+
+**X Ads (INTEGRATION-X-001, X-ADS-READY-001): BLOCKED_EXTERNAL_CREDENTIALS, nothing speculative added.** The connector (accounts, campaigns, line items, promoted tweets, insights) and OAuth 2.0 PKCE exist. Unconfirmed from public sources: whether the Ads API accepts OAuth 2.0 user context or still requires OAuth 1.0a — it can only be settled with a real X app that has Ads API access, so the first connection is the test; if X refuses the bearer token the adapter needs a signed OAuth 1.0a path. Needs the Owner's X developer app with Ads API access.
+
+**Payments:** Moyasar (primary) and Stripe existed; Tap added (BLOCKED_EXTERNAL_CREDENTIALS: needs TAP_SECRET_KEY, sandbox first, webhook URL /api/v1/payments/webhook/tap). Further Saudi gateways (PayTabs, HyperPay, Tabby, Tamara) are NOT written: their request and signature details could not be confirmed from public documentation in this session and a guessed adapter would be fabrication. The port is ready for them once their docs and sandbox keys are in hand.
+
+---
+
 # START HERE — 2026-10-19 (night) — #765, #766, #767, #768 merged and deployed; #769 and the portal/N+1 branch open
 
 **Merged and deployed today, in order:** #765 Batch D (`b3e9512f`: four-primary KPI row, client team), #766 Automated Rules R1+R2 (`23b513fc`), #767 report composition (`a283fa0f`, Owner defect 106), #768 Automated Rules R3 plus the PDF evidence appendix (`51273207`).
