@@ -12,6 +12,7 @@ use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Services\PortalResolver;
+use App\Domains\Tenancy\Support\ReviewAccess;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -156,6 +157,9 @@ final class AuthController extends Controller
         $suspended = $user->disabled_at !== null
             || (! $user->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($user));
         abort_if($suspended, 403, __('auth.unavailable'));
+
+        // SALLA-REVIEW-001 — a reviewer whose access has ended is told so, not that «the account is not available».
+        abort_if(! $user->is_platform_admin && ReviewAccess::endedFor($user), 403, ReviewAccess::ENDED_MESSAGE);
     }
 
     /** Current authenticated user — used by the SPA to restore its session on load. */
@@ -253,6 +257,8 @@ final class AuthController extends Controller
             ]);
         }
         $this->assertActive($user);
+        // SALLA-REVIEW-001 — a review account is never issued an API token (this route has no tenant context to restrict it by).
+        abort_if(ReviewAccess::isReviewer($user), 403, 'API tokens are not available in the Salla review account.');
 
         $token = $user->createToken((string) $request->input('device_name', 'api'))->plainTextToken;
 

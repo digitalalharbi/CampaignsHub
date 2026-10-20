@@ -7,6 +7,7 @@ namespace App\Domains\Accounts\Services;
 use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Support\ReviewAccess;
 
 /**
  * What a workspace may see and do — the frontend renders navigation from `nav()`, the backend guards
@@ -157,6 +158,8 @@ final class AccountEntitlements
             'module_switcher' => $this->showModuleSwitcher($tenant),
             'nav' => $this->nav($tenant, $portal),
             'subscription_plan' => $tenant->subscription_plan,
+            // SALLA-REVIEW-001 — a review workspace says so, and when it ends, so every page can wear the banner.
+            'review' => ReviewAccess::settingsOf($tenant) === null ? null : ['label' => ReviewAccess::LABEL] + ReviewAccess::settingsOf($tenant),
             /*
              * What was granted rather than bought, stated as itself.
              *

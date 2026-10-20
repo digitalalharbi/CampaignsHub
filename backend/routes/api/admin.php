@@ -17,6 +17,7 @@ use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
+use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
 use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
@@ -63,6 +64,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * would reintroduce exactly what it removes.
          */
         Route::get('/scheduled-work', ScheduledWorkController::class)->name('scheduled-work');
+
+        // SALLA-REVIEW-001 — one-click revoke and extend for the app-store review workspace.
+        Route::get('/review-accounts', [PlatformReviewAccountController::class, 'index'])->name('review-accounts.index');
+        Route::post('/review-accounts/{tenant}/extend', [PlatformReviewAccountController::class, 'extend'])->middleware('throttle:30,1')->name('review-accounts.extend');
+        Route::post('/review-accounts/{tenant}/revoke', [PlatformReviewAccountController::class, 'revoke'])->middleware('throttle:30,1')->name('review-accounts.revoke');
 
         Route::get('/tenants', [PlatformTenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
