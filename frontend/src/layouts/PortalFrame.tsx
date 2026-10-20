@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { ReviewBanner } from '@/components/ReviewBanner'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
 import { MOBILE_TAB_BAR_CLEARANCE, MobileTabBar, type MobileMoreGroup, type MobileTab } from './MobileTabBar'
 
@@ -125,6 +126,7 @@ export function PortalFrame({
         * 375px alike.
         */}
       <div className="flex min-w-0 flex-1 flex-col">
+        <ReviewBanner />
         {header}
 
         {/*

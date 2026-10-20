@@ -7,6 +7,7 @@ namespace App\Domains\Commerce\Install;
 use App\Domains\Commerce\Models\PendingStoreInstall;
 use App\Domains\Commerce\Services\StoreDiscovery;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -14,6 +15,7 @@ use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Support\PlatformHttp;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -86,6 +88,7 @@ final class SallaInstalls
 
         $connection = $this->connectionFor($merchant);
         if ($connection !== null) {
+            $connection->forceFill(['uninstalled_at' => null])->save();
             $this->vault->open(
                 tenantId: (string) $connection->tenant_id,
                 provider: self::PROVIDER,
@@ -101,7 +104,23 @@ final class SallaInstalls
     }
 
     /**
-     * `app.uninstalled` — the merchant removed the app: the connection stops, and nothing waits.
+     * `app.installed` — Salla says the app now exists on a store.
+     *
+     * The tokens arrive by the authorisation (`app.store.authorize`, or the browser callback), so this carries
+     * nothing to act on; a reinstall of a store this product knows clears its uninstalled mark so the retention
+     * clock stops.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    public function onInstalled(array $payload): void
+    {
+        $merchant = $this->merchantOf($payload);
+        $this->connectionFor((string) $merchant)?->forceFill(['uninstalled_at' => null])->save();
+    }
+
+    /**
+     * `app.uninstalled` — the merchant removed the app: the connection stops, its tokens are revoked, the store
+     * stops syncing, and the data is kept for the retention period (`commerce:purge-uninstalled`, 30 days).
      *
      * @param  array<string,mixed>  $payload
      */
@@ -113,13 +132,85 @@ final class SallaInstalls
         }
 
         $connection = $this->connectionFor($merchant);
-        $connection?->forceFill(['status' => 'revoked', 'last_error' => 'The app was uninstalled from the Salla store.'])->save();
+        if ($connection !== null) {
+            $connection->forceFill([
+                'status' => 'revoked',
+                'last_error' => 'The app was uninstalled from the Salla store.',
+                'uninstalled_at' => Carbon::now(),
+            ])->save();
+
+            // The tokens stop working at Salla; keeping them here would be keeping a dead key. What stays is the
+            // connection row and the synced data, for the retention period.
+            $credential = IntegrationCredential::withoutGlobalScopes()->find($connection->credential_id);
+            $credential?->forceFill([
+                'encrypted_payload' => json_encode(['access_token' => '', 'refresh_token' => null, 'expires_at' => null, 'scope' => null, 'raw' => []]),
+                'status' => 'revoked',
+                'expires_at' => null,
+            ])->save();
+        }
 
         PendingStoreInstall::query()
             ->where('provider', self::PROVIDER)
             ->where('merchant_id', $merchant)
             ->whereNull('claimed_at')
             ->delete();
+    }
+
+    /**
+     * `app.subscription.started | renewed | expired | canceled` — the merchant's plan for THIS app, recorded on
+     * the tenant that owns the store.
+     *
+     * Salla's payload for these events is not documented in the pages available when this was written (only the
+     * event names and the merchant id are), so only those are read. The status is recorded in the tenant's
+     * settings and shown as the plan label; it does not cut access, because what an expired Salla subscription
+     * should entitle is a product decision and not something to infer from an event name.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    public function onSubscription(array $payload, string $event): void
+    {
+        $merchant = $this->merchantOf($payload);
+        $connection = $merchant === null ? null : $this->connectionFor($merchant);
+        $tenant = $connection === null ? null : Tenant::withoutGlobalScopes()->find($connection->tenant_id);
+        if ($tenant === null) {
+            return;
+        }
+
+        $status = match ($event) {
+            'app.subscription.started', 'app.subscription.renewed' => 'active',
+            'app.subscription.expired' => 'expired',
+            'app.subscription.canceled' => 'canceled',
+            default => null,
+        };
+        if ($status === null) {
+            return;
+        }
+
+        $settings = (array) ($tenant->settings ?? []);
+        $settings['salla_subscription'] = ['status' => $status, 'event' => $event, 'at' => Carbon::now()->toIso8601String()];
+        $tenant->forceFill([
+            'settings' => $settings,
+            'subscription_plan' => $status === 'active' ? 'salla-subscribed' : 'salla-'.$status,
+        ])->save();
+    }
+
+    /** The connection that already owns this Salla merchant, if any — a store belongs to exactly one tenant. */
+    public function connectionForMerchant(string $merchant): ?ProviderConnection
+    {
+        return $this->connectionFor($merchant);
+    }
+
+    /** New tokens for a connection that already exists (a reinstall or a re-entry), and the retention clock cleared. */
+    public function renew(ProviderConnection $connection, OAuthTokens $tokens): void
+    {
+        $connection->forceFill(['uninstalled_at' => null])->save();
+        $this->vault->open(
+            tenantId: (string) $connection->tenant_id,
+            provider: self::PROVIDER,
+            tokens: $tokens,
+            connectionName: (string) $connection->connection_name,
+            clientWorkspaceId: $connection->client_workspace_id === null ? null : (string) $connection->client_workspace_id,
+        );
     }
 
     /** What a claim page may show before anybody signs in: the store, never the tokens. */

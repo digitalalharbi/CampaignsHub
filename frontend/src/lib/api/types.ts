@@ -50,6 +50,8 @@ export interface AccountEntitlements {
   module_switcher: boolean
   nav: string[]
   subscription_plan: string | null
+  /** SALLA-REVIEW-001 — present only on the app-store review workspace; every page wears its banner. */
+  review?: { label: string; active: boolean; expires_at: string | null } | null
   onboarding: { completed: boolean; step: string }
 }
 
