@@ -393,4 +393,30 @@ describe('the roster of everything that ran', () => {
     })
     expect((opened[0].preview as { image_url?: string }).image_url).toBe('https://cdn.test/second.jpg')
   })
+
+  /** REPORT-OWNER-CONTROLS-ALL-001 — content the Owner took off the link is counted, never silently absent. */
+  describe('creatives hidden by the owner', () => {
+    it('says how many are hidden and that the totals include them (English)', () => {
+      renderWithProviders(<ReportCreativeRoster roster={many(3)} inScope={3} withheld={0} hidden={2} locale="en" form="detailed" />)
+      const note = screen.getByTestId('report-roster-hidden')
+      expect(note.textContent).toContain('2 creatives')
+      expect(note.textContent).toContain('totals on this page include them')
+    })
+
+    it('says it in Arabic, and the note is not in the document direction of the English one', () => {
+      renderWithProviders(<ReportCreativeRoster roster={many(3)} inScope={3} withheld={0} hidden={1} locale="ar" form="detailed" />)
+      expect(screen.getByTestId('report-roster-hidden').textContent).toContain('الإجماليات')
+    })
+
+    it('says nothing when nothing is hidden', () => {
+      renderWithProviders(<ReportCreativeRoster roster={many(3)} inScope={3} withheld={0} hidden={0} locale="en" form="detailed" />)
+      expect(screen.queryByTestId('report-roster-hidden')).toBeNull()
+    })
+
+    it('still says it when every creative is hidden and no list remains', () => {
+      renderWithProviders(<ReportCreativeRoster roster={[]} inScope={0} withheld={0} hidden={4} locale="en" form="detailed" />)
+      expect(screen.getByTestId('report-roster-hidden').textContent).toContain('4 creatives')
+      expect(screen.queryByTestId('report-roster')).toBeNull()
+    })
+  })
 })

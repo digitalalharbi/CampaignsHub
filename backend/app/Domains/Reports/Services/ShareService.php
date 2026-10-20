@@ -227,6 +227,8 @@ final class ShareService
         // §15.12 — the creative rows reach the file only if the link may show them.
         if ($share->creativeVisibility()->creatives) {
             $data['creatives'] = app(SharedCreativeView::class)->library($share, ['per_page' => 48])['creatives'];
+            // Content the Owner took off this link: the file's totals still include it, and the file says so.
+            $data['creatives_hidden'] = app(SharedCreativeView::class)->hiddenCount($share);
         }
 
         return $data;

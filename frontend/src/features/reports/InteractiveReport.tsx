@@ -163,6 +163,8 @@ export interface ReportData {
   ads_roster?: RosterRow[]
   creatives_in_scope?: number | null
   creatives_withheld?: number | null
+  /** REPORT-OWNER-CONTROLS-ALL-001 — creatives the Owner took off this link; the totals still include them. */
+  creatives_hidden?: number | null
   /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
   form?: string | null
   /** The five-step reading of the ranked grid — absent where no range could be read. */
@@ -1138,6 +1140,7 @@ function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }
         roster={data.ads_roster}
         inScope={data.creatives_in_scope}
         withheld={data.creatives_withheld}
+        hidden={data.creatives_hidden}
         currency={data.currency ?? null}
         locale={ar ? 'ar' : 'en'}
         form={data.form}

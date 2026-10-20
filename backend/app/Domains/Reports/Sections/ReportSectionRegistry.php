@@ -104,7 +104,7 @@ final class ReportSectionRegistry
                 titleEn: 'Content performance',
                 payloadKeys: [
                     'ads', 'ads_level', 'ads_groups', 'ads_platform_groups', 'ads_roster', 'ads_weakest', 'ads_reading',
-                    'ads_absent_reason', 'top_creatives', 'worst_creatives', 'creatives_in_scope', 'creatives_withheld', 'creative_level',
+                    'ads_absent_reason', 'top_creatives', 'worst_creatives', 'creatives_in_scope', 'creatives_withheld', 'creatives_hidden', 'creative_level',
                 ],
                 slideTypes: ['ads', 'top_creatives'],
                 view: 'content',

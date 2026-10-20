@@ -69,6 +69,7 @@ export function ReportCreativeRoster({
   roster,
   inScope,
   withheld,
+  hidden,
   currency,
   locale,
   form,
@@ -80,6 +81,11 @@ export function ReportCreativeRoster({
   inScope?: number | null
   /** And how many of those this document does not list. */
   withheld?: number | null
+  /**
+   * REPORT-OWNER-CONTROLS-ALL-001 — creatives the report's owner took off THIS link. They are in every total
+   * on the page and in none of its lists, and the page says so rather than leave content that adds up to less.
+   */
+  hidden?: number | null
   /** MONEY-USD-001 — the currency these figures were measured in. Null prints no currency. */
   currency?: string | null
   locale: Locale
@@ -118,8 +124,17 @@ export function ReportCreativeRoster({
    * The ads section above already prints WHY the window is empty, in its own words, and a second
    * heading over a second empty state would tell the reader the same absence twice.
    */
+  const hiddenCount = Math.max(0, hidden ?? 0)
+  const hiddenNote = hiddenCount > 0 && (
+    <p data-testid="report-roster-hidden" className="text-xs text-text-secondary">
+      {ar
+        ? `${countedCreatives(hiddenCount, locale)} أخفاها صاحب التقرير عن هذا الرابط — الإجماليات في هذه الصفحة تشملها.`
+        : `${countedCreatives(hiddenCount, locale)} hidden by the report owner on this link — the totals on this page include them.`}
+    </p>
+  )
+
   if (scope === 0 || rows.length === 0) {
-    return null
+    return hiddenNote || null
   }
 
   const summary = form === 'executive_summary' || countOnly
@@ -144,6 +159,7 @@ export function ReportCreativeRoster({
           )}
         </p>
       </div>
+      {hiddenNote}
 
       {/*
         A summary states the count and withholds the list.

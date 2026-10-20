@@ -481,6 +481,7 @@ export interface LivePayload {
   ads_weakest?: ReportAd[]
   creatives_in_scope?: number | null
   creatives_withheld?: number | null
+  creatives_hidden?: number | null
   /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
   form?: string | null
   /**
