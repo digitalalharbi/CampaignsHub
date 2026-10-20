@@ -74,6 +74,7 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/reports/print/{token}/logo/{role}',
         'GET api/v1/reports/shared/{token}',
         'GET api/v1/reports/shared/{token}/attribution',
+        'GET api/v1/reports/shared/{token}/widgets',
         'GET api/v1/reports/shared/{token}/branding',
         'GET api/v1/reports/shared/{token}/branding/logo',
         'GET api/v1/reports/shared/{token}/branding/logo/{role}',

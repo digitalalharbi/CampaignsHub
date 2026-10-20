@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Capabilities\Capabilities;
 use App\Domains\Accounts\Capabilities\CapabilitySwitch;
+use App\Domains\Audit\Models\AuditLog;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Actions\ImportStoreData;
 use App\Domains\Commerce\Models\CommerceOrder;
@@ -18,6 +19,9 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Touchpoints\MarketingTouchpoint;
 use App\Domains\Metrics\Touchpoints\OrderTouchpointLink;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\ShortLinks\Models\ShortLink;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -409,6 +413,163 @@ final class EvidenceChainTest extends TestCase
 
         $this->turnOn('advanced_tracking', false);
         $this->as()->getJson("/api/v1/projects/{$this->project->id}/tracking/summary")->assertForbidden()->assertJsonPath('errors.module', 'advanced_tracking');
+    }
+
+    // ── the last link: the CLIENT REPORT ─────────────────────────────────────────────────────────────────
+
+    /** @return array{0: Report, 1: ReportShare, 2: string} */
+    private function sharedReport(array $opts = []): array
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $report = Report::create([
+            'project_id' => $this->project->id, 'name' => 'R', 'type' => 'executive', 'status' => 'completed', 'currency' => 'USD',
+            'period_start' => '2026-10-14', 'period_end' => '2026-10-21', 'data' => ['period' => ['from' => '2026-10-14', 'to' => '2026-10-21']],
+        ]);
+        [$share, $raw] = app(ShareService::class)->create($report, $opts, null);
+        app(TenantContext::class)->forget();
+
+        return [$report, $share, $raw];
+    }
+
+    private function linkWidgets(Report $report, ReportShare $share, array $items)
+    {
+        return $this->as()->putJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/shares/{$share->id}/widgets", ['items' => $items]);
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function clientWidgets(string $raw): array
+    {
+        return $this->getJson("/api/v1/reports/shared/{$raw}/widgets")->assertOk()->json('data.widgets');
+    }
+
+    public function test_a_client_link_shows_no_widgets_until_its_owner_switches_them_on_even_when_the_data_exists(): void
+    {
+        $this->chooseModels();
+        $this->order('o-1', $this->click($this->link()));
+        [, , $raw] = $this->sharedReport();
+
+        $this->assertSame([], $this->clientWidgets($raw), 'modules on, events recorded, models chosen, and still nothing until the link says so');
+    }
+
+    public function test_the_client_gets_link_activity_cut_down_to_what_a_client_may_see(): void
+    {
+        $link = $this->link();
+        $this->click($link);
+        $this->click($link);
+        $this->click($link, 'Googlebot/2.1');
+        [$report, $share, $raw] = $this->sharedReport();
+
+        $this->linkWidgets($report, $share, [['key' => 'link_opens', 'visible' => true, 'order' => 1, 'size' => 'full']])->assertOk();
+
+        $widgets = $this->clientWidgets($raw);
+        $this->assertCount(1, $widgets);
+        $w = $widgets[0];
+        $this->assertSame('link_opens', $w['key']);
+        $this->assertSame(2, $w['data']['opens']);
+        $this->assertSame('2026-10-21', $w['data']['tracking_since']);
+        $this->assertFalse($w['data']['basis']['includes_sales']);
+
+        // The agency's diagnostics are not in the client's payload at all.
+        $json = (string) json_encode($w);
+        foreach (['machine_opens', 'devices', 'top_links', 'by_type', $link->slug, 'store.example', 'is_bot', 'visitor'] as $internal) {
+            $this->assertStringNotContainsString($internal, $json, "the client payload carries {$internal}");
+        }
+    }
+
+    public function test_the_client_gets_attribution_with_orders_only_and_the_unattributed_share_kept(): void
+    {
+        $this->chooseModels(['linear', 'last_click']);
+        $this->order('o-tracked', $this->click($this->link()), total: 250.0);
+        $this->order('o-untracked', 'https://store.example/product', total: 100.0);
+        [$report, $share, $raw] = $this->sharedReport();
+        $this->linkWidgets($report, $share, [['key' => 'attribution_credit', 'visible' => true, 'order' => 1, 'size' => 'full']])->assertOk();
+
+        $w = $this->clientWidgets($raw)[0];
+
+        $this->assertSame('attribution_credit', $w['key']);
+        $rows = collect($w['data']['channels'])->keyBy('channel');
+        $this->assertEqualsWithDelta(1.0, $rows['smart_link']['models']['linear']['orders'], 0.0001);
+        $this->assertEqualsWithDelta(1.0, $rows['unattributed']['models']['linear']['orders'], 0.0001, 'the orders with no evidence are shown, not folded away');
+        $this->assertSame(1, $w['data']['coverage']['orders_without_evidence']);
+        $this->assertStringNotContainsString('"revenue"', (string) json_encode($w), 'money stays under the link\'s own hide flags and is not in this payload');
+        $this->assertArrayHasKey('orders_with_withheld_revenue', $w['data']['coverage'], 'the disclosure about withheld revenue is kept');
+        $this->assertStringNotContainsString('recorded_by', (string) json_encode($w));
+    }
+
+    public function test_a_widget_the_project_forbids_or_whose_module_is_off_or_whose_link_is_narrower_is_never_returned(): void
+    {
+        $link = $this->link();
+        $this->click($link);
+        [$report, $share, $raw] = $this->sharedReport();
+        $this->linkWidgets($report, $share, [['key' => 'link_opens', 'visible' => true]])->assertOk();
+        $this->assertCount(1, $this->clientWidgets($raw));
+
+        // 1. The project forbids it on client links.
+        $this->as()->putJson("/api/v1/projects/{$this->project->id}/widgets/report", ['items' => [['key' => 'link_opens', 'visible' => false]]])->assertOk();
+        $this->assertSame([], $this->clientWidgets($raw));
+        $resolved = collect($this->as()->getJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/shares/{$share->id}/widgets")->assertOk()->json('data.widgets'))->keyBy('key');
+        $this->assertSame('hidden_by_project', $resolved['link_opens']['reason'], 'the owner is told why, so they are not left believing a client can see it');
+        $this->as()->putJson("/api/v1/projects/{$this->project->id}/widgets/report", ['items' => [['key' => 'link_opens', 'visible' => true]]])->assertOk();
+        $this->assertCount(1, $this->clientWidgets($raw));
+
+        // 2. The module is switched off.
+        $this->turnOn('advanced_tracking', false);
+        $this->assertSame([], $this->clientWidgets($raw));
+        $this->turnOn('advanced_tracking', true);
+        $this->assertCount(1, $this->clientWidgets($raw));
+
+        // 3. A link narrower than its project: the touchpoints and the store ledger are project-wide, so it shows none.
+        [$narrowReport, $narrow, $narrowRaw] = $this->sharedReport(['scope' => ['project_id' => $this->project->id, 'account_ids' => [(string) Str::uuid()]]]);
+        $this->linkWidgets($narrowReport, $narrow, [['key' => 'link_opens', 'visible' => true]])->assertOk();
+        $this->assertSame([], $this->clientWidgets($narrowRaw));
+    }
+
+    public function test_each_link_has_its_own_widgets_and_a_revoked_or_password_protected_link_is_still_closed(): void
+    {
+        $this->click($this->link());
+        [$report, $one, $rawOne] = $this->sharedReport();
+        [, $two, $rawTwo] = $this->sharedReport();
+        $this->linkWidgets($report, $one, [['key' => 'link_opens', 'visible' => true]])->assertOk();
+
+        $this->assertCount(1, $this->clientWidgets($rawOne));
+        $this->assertSame([], $this->clientWidgets($rawTwo), 'switching a widget on for one link does not touch another');
+
+        [$lockedReport, $locked, $rawLocked] = $this->sharedReport(['password' => 'open-sesame']);
+        $this->linkWidgets($lockedReport, $locked, [['key' => 'link_opens', 'visible' => true]])->assertOk();
+        $this->getJson("/api/v1/reports/shared/{$rawLocked}/widgets")->assertStatus(401);
+        $this->withHeaders(['X-Report-Password' => 'open-sesame'])->getJson("/api/v1/reports/shared/{$rawLocked}/widgets")->assertOk();
+
+        $one->forceFill(['revoked_at' => now()])->save();
+        $this->getJson("/api/v1/reports/shared/{$rawOne}/widgets")->assertNotFound();
+        $this->getJson('/api/v1/reports/shared/not-a-real-token/widgets')->assertNotFound();
+    }
+
+    public function test_changing_a_links_widgets_needs_reports_manage_stays_inside_the_workspace_and_is_audited(): void
+    {
+        $this->click($this->link());
+        [$report, $share] = $this->sharedReport();
+        $this->linkWidgets($report, $share, [['key' => 'link_opens', 'visible' => true, 'order' => 3, 'size' => 'half']])->assertOk();
+
+        $log = AuditLog::withoutGlobalScopes()->where('action', 'widgets.link_layout_changed')->where('tenant_id', $this->tenant->id)->first();
+        $this->assertNotNull($log);
+        $this->assertTrue($log->after['items'][0]['visible']);
+
+        // Unknown widgets are refused and nothing is stored.
+        $this->linkWidgets($report, $share, [['key' => 'teleporter', 'visible' => true]])->assertStatus(422);
+
+        // Another workspace's owner cannot read or change this link's widgets.
+        $other = Tenant::create(['name' => 'B', 'slug' => 'oth-'.uniqid(), 'status' => 'active', 'enabled_modules' => ['paid_media']]);
+        app(TenantContext::class)->setTenantId((string) $other->id);
+        $role = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $stranger = User::create(['name' => 'S', 'email' => uniqid().'@s.test', 'password' => 'secret1234']);
+        $stranger->assignRole($role);
+        app(GrantMembership::class)->execute(new MembershipGrant(user: $stranger, tenant: $other, portal: Portal::App, role: 'owner'));
+        app(TenantContext::class)->forget();
+
+        $url = "/api/v1/projects/{$this->project->id}/reports/{$report->id}/shares/{$share->id}/widgets";
+        $this->actingAs($stranger, 'sanctum')->withHeaders(self::SPA)->getJson($url)->assertStatus(404);
+        $this->actingAs($stranger, 'sanctum')->withHeaders(self::SPA)->putJson($url, ['items' => []])->assertStatus(404);
     }
 
     public function test_the_settings_refuse_what_the_engine_cannot_run_and_say_why(): void
