@@ -68,7 +68,15 @@ final class ReportExporter
         // REPORT-SECTION-SURFACES-001 — the file carries the same section set as the page and the PDF,
         // narrowed by the link's own switches when a link produced it.
         // The same call carries `report_columns` (REPORT-TABLES-OWNER-COLUMNS-001) for a link's file.
-        return $this->sections->apply($data, $report, $share, 'export');
+        $applied = $this->sections->apply($data, $report, $share, 'export');
+
+        // REPORT-OWNER-CONTROLS-ALL-001 — the note about content the Owner took off the link travels with the
+        // creative list it explains: shown while that list is, gone with it.
+        if (! empty($applied['creatives']) && isset($data['creatives_hidden'])) {
+            $applied['creatives_hidden'] = $data['creatives_hidden'];
+        }
+
+        return $applied;
     }
 
     /**
@@ -781,6 +789,10 @@ final class ReportExporter
         // can be matched to it. No recipient, no personal data: it identifies the LINK.
         if (! empty($data['report_trace'])) {
             $rows[] = ['Reference / المرجع', (string) $data['report_trace']];
+        }
+        // REPORT-OWNER-CONTROLS-ALL-001 — the Owner took creatives off this link; the totals above still include them.
+        if ((int) ($data['creatives_hidden'] ?? 0) > 0) {
+            $rows[] = ['Content not shown / محتوى غير معروض', (int) $data['creatives_hidden'].' — totals include it / الإجماليات تشمله'];
         }
         if ($enabled('full') && $txt('full')) {
             $rows[] = ['Disclaimer / إخلاء المسؤولية', (string) $txt('full')];

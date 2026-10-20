@@ -86,7 +86,7 @@ final class ReportAds
     /**
      * @param  array<string, mixed>  $filters  `project_ids`, `providers`, `campaign_ids` — the scope
      * @param  string  $form  `executive_summary` curates; anything else is the full report
-     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, platform_groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_unmeasured: int, creatives_withheld: int}
+     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, platform_groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_unmeasured: int, creatives_withheld: int, creatives_hidden: int}
      */
     public function for(string $objective, Carbon $from, Carbon $to, array $filters = [], string $form = 'detailed', bool $liveMedia = false): array
     {
@@ -109,6 +109,29 @@ final class ReportAds
          * totals made one unit ago.
          */
         $inScope = (clone $query)->count();
+
+        /*
+         * REPORT-OWNER-CONTROLS-ALL-001 — how many creatives the OWNER took off this link.
+         *
+         * An excluded creative leaves every content list, and nothing else: the link's totals are read
+         * from campaign and platform figures that still include what it spent. Without a count the page
+         * shows content that adds up to less than its headline and says nothing about the difference,
+         * which a reader can only take for an error. The count is taken against the same scope without
+         * the exclusion, so an id outside this link's project or tenant counts for nothing.
+         */
+        $hidden = 0;
+        $excluded = array_values(array_filter(
+            (array) ($filters['excluded_creative_ids'] ?? []),
+            static fn ($id): bool => is_string($id) && $id !== '',
+        ));
+        if ($excluded !== []) {
+            $unfiltered = ExternalCreative::query();
+            $this->creatives->applyFilters($unfiltered, array_diff_key($filters, ['excluded_creative_ids' => true]) + [
+                'from' => $from->toDateString(),
+                'to' => $to->toDateString(),
+            ]);
+            $hidden = $unfiltered->whereIn('external_creatives.id', $excluded)->count();
+        }
 
         /*
          * CONTENT-MEASURED-FIRST-001 §B — a report lists what the PERIOD measured.
@@ -221,6 +244,7 @@ final class ReportAds
                 'creatives_in_scope' => $inScope,
                 'creatives_unmeasured' => $unmeasured,
                 'creatives_withheld' => $inScope,
+                'creatives_hidden' => $hidden,
             ];
         }
 
@@ -343,9 +367,9 @@ final class ReportAds
 
         return $ranked === []
             ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope,
-                'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld]
+                'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld, 'creatives_hidden' => $hidden]
             : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope,
-                'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld];
+                'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld, 'creatives_hidden' => $hidden];
     }
 
     /**

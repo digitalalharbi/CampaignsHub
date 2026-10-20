@@ -108,6 +108,7 @@ final class SharedCreativeView
             'applied' => self::clientApplied($applied),
             'available' => $this->available($share),
             'permissions' => $visibility->toArray(),
+            'hidden' => $this->hiddenCount($share),
         ];
     }
 
@@ -362,7 +363,7 @@ final class SharedCreativeView
      *
      * @param  array<string, mixed>  $applied
      */
-    private function bounded(ReportShare $share, array $applied): Builder
+    private function bounded(ReportShare $share, array $applied, bool $ignoreExclusions = false): Builder
     {
         $ceiling = $this->ceiling($share);
 
@@ -386,10 +387,28 @@ final class SharedCreativeView
             'search' => $applied['search'],
             'creative_ids' => $ceiling['creative_ids'],
             'creative_group_ids' => $ceiling['creative_group_ids'],
-            'excluded_creative_ids' => $ceiling['excluded_creative_ids'],
+            'excluded_creative_ids' => $ignoreExclusions ? [] : $ceiling['excluded_creative_ids'],
         ]);
 
         return $query;
+    }
+
+    /**
+     * REPORT-OWNER-CONTROLS-ALL-001 — how many creatives inside this link's ceiling its Owner took off it.
+     *
+     * Counted against the same ceiling WITHOUT the exclusions, so an id from another project or tenant
+     * counts for nothing. A file or page that omits content its totals still include says so with this.
+     */
+    public function hiddenCount(ReportShare $share): int
+    {
+        $excluded = $this->ceiling($share)['excluded_creative_ids'];
+        if ($excluded === []) {
+            return 0;
+        }
+
+        return $this->bounded($share, $this->enter($share, []), ignoreExclusions: true)
+            ->whereIn('external_creatives.id', $excluded)
+            ->count();
     }
 
     /**
