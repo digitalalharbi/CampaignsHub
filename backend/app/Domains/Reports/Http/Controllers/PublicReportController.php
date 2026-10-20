@@ -17,6 +17,7 @@ use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportIdentity;
+use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Support\ApiResponse;
@@ -382,6 +383,29 @@ final class PublicReportController extends Controller
             ),
             'Shared attribution.',
         );
+    }
+
+    /**
+     * WIDGET-REGISTRY-001 — the widgets this link shows, with data cut down for a client.
+     *
+     * Its own address, like the attribution section's: with no widget visible there is nothing in the document to
+     * strip and nothing here to answer, so a link whose owner hid them cannot leak them through a payload that never
+     * held them. The layout is resolved on the server (the project's choice, narrowed by the link's), and only what
+     * both show is returned.
+     */
+    public function widgets(Request $request, string $token, SharedWidgetData $widgets): JsonResponse
+    {
+        [$share, $error] = $this->open($request, $token);
+        if ($error !== null) {
+            return $error;
+        }
+
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        if (! $report || $report->status !== 'completed') {
+            return ApiResponse::error('التقرير غير متاح.', status: 404);
+        }
+
+        return ApiResponse::success(['widgets' => $widgets->forShare($share, $report)], 'Shared widgets.');
     }
 
     public function creatives(Request $request, string $token, SharedCreativeView $creatives): JsonResponse

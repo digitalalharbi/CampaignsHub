@@ -9,6 +9,7 @@ import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { clientBlurb } from './reportProduct'
 import { SharedAttributionSection } from './SharedAttributionSection'
+import { SharedWidgetsSection } from '@/features/widgets/SharedWidgetsSection'
 import { SharedCreativeSection } from './SharedCreativeSection'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
@@ -302,6 +303,8 @@ export function PublicReport() {
                 recorded 640?», for the links whose operator chose to give it.
               */}
               {report.sections?.attribution && <SharedAttributionSection token={token} password={accepted} />}
+              {/* WIDGET-REGISTRY-001 — the widgets this link's owner switched on; renders nothing for a link with none. */}
+              <SharedWidgetsSection token={token} password={accepted} />
               {report.mode !== 'live' && report.creatives?.creatives && (
                 <SharedCreativeSection
                   token={token}
