@@ -593,7 +593,12 @@ final class ClientPortalController
         $model = $this->ownedInvoice($token, $invoice);
 
         try {
-            $payment = $this->billing->startPayment($model);
+            // PAY-INVOICE-001 — the person paying is the customer a gateway such as Tap needs; a session with
+            // no signed-in user names nobody, and that gateway then refuses rather than being handed an invented address.
+            $payer = $request->user();
+            $payment = $this->billing->startPayment($model, $payer === null ? [] : [
+                'payload' => ['customer' => ['name' => (string) $payer->name, 'email' => (string) $payer->email]],
+            ]);
         } catch (InvalidArgumentException $e) {
             return response()->json(['data' => ['error' => $e->getMessage()]], 422);
         }
