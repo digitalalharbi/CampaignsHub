@@ -163,6 +163,18 @@ final class PlatformHttp
             $sentence = $error['message'];
         }
 
+        /*
+         * X answers `{"errors":[{"code":"…","message":"…"}],"request":{…}}` — a list, not an `error`
+         * object — so its own sentence used to be lost to the 200-character body fallback below. Read
+         * the first entry's words, and carry every entry's code, in the provider's own terms.
+         */
+        $listed = is_array($body['errors'] ?? null) ? array_values(array_filter($body['errors'], is_array(...))) : [];
+
+        if ($sentence === null && isset($listed[0]['message']) && is_string($listed[0]['message']) && $listed[0]['message'] !== '') {
+            $sentence = $listed[0]['message'];
+            $error = $listed[0] + $error;
+        }
+
         if ($sentence === null) {
             return 'HTTP '.$response->status().': '.mb_substr(trim($response->body()), 0, 200);
         }
