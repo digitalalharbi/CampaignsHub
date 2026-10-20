@@ -221,6 +221,40 @@ final class ProductionReadinessTest extends TestCase
         $this->assertContains('services.moyasar.secret_key', $this->failedKeys());
     }
 
+    /** PROD-READINESS-001 — a half-configured ad platform fails by NAME of the missing value; an unconfigured one is one listed warning. */
+    public function test_a_half_configured_ad_platform_fails_and_an_unconfigured_one_is_listed(): void
+    {
+        $this->productionConfig([
+            'ad_platforms.platforms.x.client_id' => 'x-key',
+            'ad_platforms.platforms.x.client_secret' => null,
+            'ad_platforms.platforms.snapchat.client_id' => null,
+            'ad_platforms.platforms.snapchat.client_secret' => null,
+        ]);
+
+        $report = (new ProductionReadiness)->run();
+        $byKey = array_column($report['findings'], null, 'key');
+
+        $this->assertSame('fail', $byKey['ad_platforms.x']['level']);
+        $this->assertStringContainsString('client_secret', $byKey['ad_platforms.x']['message']);
+        $this->assertStringNotContainsString('x-key', json_encode($report['findings']), 'no value is ever printed');
+        $this->assertStringContainsString('snapchat', $byKey['ad_platforms.awaiting_credentials']['message']);
+        $this->assertArrayNotHasKey('ad_platforms.snapchat', $byKey, 'having none is not a misconfiguration');
+        $this->assertFalse($report['ready']);
+    }
+
+    public function test_a_fully_configured_ad_platform_is_neither_failed_nor_listed(): void
+    {
+        $this->productionConfig([
+            'ad_platforms.platforms.x.client_id' => 'x-key',
+            'ad_platforms.platforms.x.client_secret' => 'x-secret',
+        ]);
+
+        $byKey = array_column((new ProductionReadiness)->run()['findings'], null, 'key');
+
+        $this->assertArrayNotHasKey('ad_platforms.x', $byKey);
+        $this->assertStringNotContainsString('x,', ($byKey['ad_platforms.awaiting_credentials']['message'] ?? '').',');
+    }
+
     /** The test key in a development environment is exactly right, and must not be nagged about. */
     public function test_a_test_key_outside_production_is_correct(): void
     {
