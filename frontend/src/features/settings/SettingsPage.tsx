@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell } from 'lucide-react'
+import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell, Blocks } from 'lucide-react'
 import { GeneralTab } from './tabs/GeneralTab'
 import { DisclaimerTab } from './tabs/DisclaimerTab'
 import { TeamTab } from './tabs/TeamTab'
@@ -11,6 +11,7 @@ import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
 import { ProjectsTab } from './tabs/ProjectsTab'
+import { ModulesTab } from './tabs/ModulesTab'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 
@@ -34,6 +35,7 @@ export const SETTINGS_TABS = [
   { id: 'security', ar: 'الأمان', en: 'Security', icon: ShieldCheck },
   { id: 'branding', ar: 'الهوية', en: 'Branding', icon: Palette },
   { id: 'disclaimer', ar: 'الملاحظات والمنهجية', en: 'Notes & methodology', icon: FileText },
+  { id: 'modules', ar: 'الوحدات', en: 'Modules', icon: Blocks },
 ] as const
 
 const TABS = SETTINGS_TABS
@@ -164,6 +166,7 @@ export function SettingsPage({ only, title, subtitle, navigation = true }: Props
           {tab === 'security' && <SecurityTab />}
           {tab === 'branding' && <BrandingTab />}
           {tab === 'projects' && <ProjectsTab />}
+          {tab === 'modules' && <ModulesTab />}
         </div>
       </div>
     </div>

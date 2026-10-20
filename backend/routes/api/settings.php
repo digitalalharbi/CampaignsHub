@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Accounts\Http\Controllers\CapabilityController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
@@ -27,6 +28,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
      * this group they were unreachable from the only console that renders them, and reachable by every
      * tenant administrator — who could rewrite the platform's own front page.
      */
+
+    // CAP-REGISTRY-001 — which modules this workspace has and where each is switched on or off.
+    Route::get('capabilities', [CapabilityController::class, 'index'])->name('capabilities.index');
+    Route::put('capabilities/{module}', [CapabilityController::class, 'update'])->name('capabilities.update');
+    Route::delete('capabilities/{module}', [CapabilityController::class, 'destroy'])->name('capabilities.destroy');
 
     // Branding.
     Route::get('branding', [BrandingController::class, 'show'])->name('branding.show');
