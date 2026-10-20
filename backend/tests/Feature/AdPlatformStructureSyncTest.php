@@ -941,7 +941,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $connection = app(TokenVault::class)->open(
             tenantId: $this->tenant->id,
             provider: $provider,
-            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)),
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30), null, $provider === 'x' ? ['token_secret' => 'TS'] : []),
             connectionName: $provider,
         );
 

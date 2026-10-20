@@ -166,7 +166,9 @@ final class AdPlatformOAuthController extends Controller
 
         return ApiResponse::success([
             'provider' => $creds->platform,
-            'authorization_url' => $this->oauth->authorizationUrl($creds, $state, $verifier),
+            'authorization_url' => $this->oauth->usesOAuth1($creds)
+                ? $this->oauth->beginOAuth1($creds, $state)
+                : $this->oauth->authorizationUrl($creds, $state, $verifier),
             'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
         ], 'Authorization URL issued.');
     }
@@ -211,11 +213,17 @@ final class AdPlatformOAuthController extends Controller
             $creds = PlatformCredentials::forMeta(MetaCredentialProfile::Live);
         } else {
             // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
-            if ($request->has('error')) {
+            // (OAuth 1.0a reports a refusal as `denied=<request token>`.)
+            if ($request->has('error') || $request->has('denied')) {
                 return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
             }
 
-            $record = AuthorizationState::claim((string) $request->query('state', ''), $creds->platform);
+            // OAuth 1.0a hands back only the request token; the state we issued is looked up by it.
+            $stateValue = $this->oauth->usesOAuth1($creds)
+                ? (string) $this->oauth->stateForRequestToken((string) $request->query('oauth_token', ''))
+                : (string) $request->query('state', '');
+
+            $record = AuthorizationState::claim($stateValue, $creds->platform);
 
             if ($record === null) {
                 // Deliberately vague to the browser, because this is the branch an attacker sees.
@@ -242,11 +250,13 @@ final class AdPlatformOAuthController extends Controller
         try {
             // The verifier comes out of the RECORD, never the query string — the same rule as the
             // tenant and the workspace, and for the same reason: nothing in this request is trusted.
-            $tokens = $this->oauth->exchangeCode(
-                $creds,
-                $code,
-                isset($record['code_verifier']) ? (string) $record['code_verifier'] : null,
-            );
+            $tokens = $this->oauth->usesOAuth1($creds)
+                ? $this->oauth->exchangeOAuth1($creds, (string) $request->query('oauth_token', ''), $code)
+                : $this->oauth->exchangeCode(
+                    $creds,
+                    $code,
+                    isset($record['code_verifier']) ? (string) $record['code_verifier'] : null,
+                );
 
             $connection = $this->vault->open(
                 tenantId: $tenantId,

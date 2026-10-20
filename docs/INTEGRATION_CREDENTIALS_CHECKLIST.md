@@ -123,7 +123,7 @@ not read a state for your install out of this table.
 | Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` — **no manager (MCC) account id** (GADS-MCC-001) |
 | TikTok Ads | `TIKTOK_ADS_APP_ID` · `TIKTOK_ADS_APP_SECRET` |
 | Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
-| X Ads | `X_ADS_CLIENT_ID` · `X_ADS_CLIENT_SECRET` |
+| X Ads | `X_ADS_CLIENT_ID` (the app's **API Key**) · `X_ADS_CLIENT_SECRET` (the **API Key Secret**) — OAuth 1.0a: the Ads API accepts no OAuth 2.0 token. Needs a developer app with the **Ads API Access Form** approved for that app and the callback URL registered on it. |
 | LinkedIn Ads | `LINKEDIN_ADS_CLIENT_ID` · `LINKEDIN_ADS_CLIENT_SECRET` · `LINKEDIN_ADS_VERSION` |
 | ChatGPT Ads (OpenAI Advertiser API) | **Nothing.** Optional `OPENAI_ADS_API_BASE` only, which overrides the documented host — see below |
 
