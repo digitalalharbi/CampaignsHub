@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderName } from '@/components/ProviderMark'
 import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyState, rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
-import { platformColor } from '@/features/analytics/components'
 import { ratio } from '@/features/analytics/format'
 import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
@@ -63,8 +63,7 @@ export function ObjectiveLeaders({ payload, ar, reader }: { payload: LivePayload
                       <span aria-hidden>{mark} </span>{kind === 'strongest' ? (ar ? 'الأقوى' : 'Strongest') : (ar ? 'الأضعف' : 'Weakest')}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 truncate text-sm font-bold text-text-primary">
-                      <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: platformColor(key) }} aria-hidden />
-                      {providerLabel(key, ar ? 'ar' : 'en')}
+                      <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={18} />
                     </div>
                     <div className="tnum mt-1 text-lg font-extrabold text-text-primary">
                       <Num>{value(leader?.metric ?? path.metric, leader?.value)}</Num>

@@ -2,9 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
-import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
-import { canonicalPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import type { ReportAd } from './ReportAdsSection'
@@ -261,14 +260,14 @@ export function LiveSharedReport({
                 data-testid={`live-platform-${p}`}
                 aria-pressed={providers.includes(p)}
                 onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
-                className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                className={`inline-flex items-center rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                   providers.includes(p)
                     ? 'border-transparent text-white'
                     : 'border-border text-text-secondary hover:bg-surface-hover'
                 }`}
                 style={providers.includes(p) ? { background: platformColor(p) } : undefined}
               >
-                {providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
+                <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={16} />
               </button>
             ))}
           </div>

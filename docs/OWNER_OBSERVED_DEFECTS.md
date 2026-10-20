@@ -193,3 +193,10 @@ The two proven root causes so far, both on the live estate rather than in a fixt
 
 Neither was visible from a database column, a presenter payload or a component test, which is why
 rows 1–12 stay open until the owner's own `/app/content` is seen.
+
+### 107 — The Tables view's «All content that ran» showed a dash in every figure (2026-10-19)
+Owner screenshot of a live link: every content row read «—» for results, impressions, clicks, spend and cost. Cause: the table read the roster's figures at the top level of each row, but the roster nests them under `metrics`. Fixed in LiveTables by flattening each roster row through `asContent` (the same function the content tiles use); liveModes.test.tsx now fails on the old component. Status: IMPLEMENTED_NOT_VERIFIED until a Production look at the live link after deploy.
+
+Production acceptance, 2026-10-20 (deployed b6976954, Owner's Hanka report /r/iVFz1QlsUaCRTZdlRkeilR), recorded separately for the two parts:
+- **Content table: VERIFIED on Production.** The Tables view's «All content that ran» lists 15 rows with real results, impressions, clicks, spend and cost (for example 57 results, 21.1K impressions, 328 clicks, 86 USD, 1.51 USD); no row is all dashes. Rows that genuinely carry no result (no leads reported) still show «—», nothing is filled in.
+- **Content preview: VERIFIED on Production in the in-app Chromium at 375px and 1280px; real iOS Safari is BLOCKED_OPERATIONAL_EVIDENCE.** Seven Meta creatives (four vertical ratios up to 1152x2048, one square) opened showing the whole frame at the file's own ratio with object-fit contain and no horizontal overflow. No physical iPhone or Safari was available to the session, so the Safari claim is not made.
