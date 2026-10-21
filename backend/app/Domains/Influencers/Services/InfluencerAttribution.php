@@ -10,6 +10,9 @@ use App\Domains\Influencers\Models\InfluencerDeliverable;
 use App\Domains\Influencers\Models\InfluencerDeliverableResult;
 use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Domains\Tracking\Models\TrackingEvent;
+use App\Domains\Tracking\Services\TrackingRecorder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -87,7 +90,7 @@ final class InfluencerAttribution
      * An inactive or unknown code resolves to null and the caller sends the visitor somewhere
      * neutral. Nothing is created, and no tenant data leaks into a public response.
      */
-    public function resolveAndCount(string $code): ?InfluencerTrackingAsset
+    public function resolveAndCount(string $code, ?Request $request = null): ?InfluencerTrackingAsset
     {
         $asset = InfluencerTrackingAsset::query()
             ->withoutGlobalScope(TenantScope::class)
@@ -106,6 +109,18 @@ final class InfluencerAttribution
             ->withoutGlobalScope(TenantScope::class)
             ->whereKey($asset->getKey())
             ->update(['clicks' => DB::raw('clicks + 1'), 'last_clicked_at' => Carbon::now()]);
+
+        // TRACKING-EVENTS-001 — the same click as a measured event (evidence, not a count). Off unless advanced tracking is on.
+        app(TrackingRecorder::class)->record([
+            'tenant_id' => (string) $asset->tenant_id,
+            'event_type' => TrackingEvent::INFLUENCER_LINK_CLICK,
+            'subject_type' => 'influencer_asset',
+            'subject_id' => (string) $asset->getKey(),
+            'source' => 'influencer_link',
+            'destination_type' => 'external_url',
+            'destination_host' => (string) parse_url((string) $asset->destination_url, PHP_URL_HOST),
+            'consent_state' => 'not_required',
+        ], $request);
 
         return $asset->refresh();
     }

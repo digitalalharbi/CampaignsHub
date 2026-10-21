@@ -123,6 +123,8 @@ export interface ShareRow {
   last_viewed_at: string | null
   expires_at: string | null
   revoked_at: string | null
+  /** REPORT-LINK-PAUSE-001 — set while the link is switched off; the link keeps its URL, settings and history. */
+  paused_at?: string | null
   logs_count: number | null
   created_at: string | null
   /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
@@ -146,6 +148,10 @@ export interface CreatedShare extends ShareRow {
 export const listShares = (p: string, reportId: string) => getData<ShareRow[]>(`${base(p)}/${reportId}/shares`)
 export const createShare = (p: string, reportId: string, opts: Record<string, unknown>) =>
   postData<CreatedShare>(`${base(p)}/${reportId}/shares`, opts)
+export const pauseShare = (p: string, reportId: string, shareId: string) =>
+  postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/pause`)
+export const resumeShare = (p: string, reportId: string, shareId: string) =>
+  postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/resume`)
 export const revokeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
 
@@ -305,14 +311,25 @@ export const updateShare = (p: string, reportId: string, shareId: string, body: 
 /** REPORT-LINK-ANALYTICS-001 — Owner-only: counts and dates, never an address. */
 export interface ShareAnalytics {
   views: number
+  /** Distinct DEVICES (address and browser together) — an estimate of people, never a count of them. */
   unique_views: number
   first_viewed_at: string | null
   last_viewed_at: string | null
   downloads: number
+  /** REPORT-LINK-ANALYTICS-002 — opens beyond a device's first. Absent from an older server. */
+  repeat_visits?: number
+  /** Opens that announced themselves as machines (link previews, crawlers) and were left out of `views`. */
+  bot_opens?: number
+  unique_basis?: 'device_estimate'
+  granularity?: 'day' | 'week' | 'month'
+  period?: { from: string; to: string }
+  series?: Array<{ period: string; views: number; devices: number }>
 }
 
-export const shareAnalytics = (p: string, reportId: string, shareId: string) =>
-  getData<ShareAnalytics>(`${base(p)}/${reportId}/shares/${shareId}/analytics`)
+export type ShareGranularity = 'day' | 'week' | 'month'
+
+export const shareAnalytics = (p: string, reportId: string, shareId: string, granularity: ShareGranularity = 'day') =>
+  getData<ShareAnalytics>(`${base(p)}/${reportId}/shares/${shareId}/analytics${granularity === 'day' ? '' : `?granularity=${granularity}`}`)
 
 export interface ShareAccessLog {
   action: string

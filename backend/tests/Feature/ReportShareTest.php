@@ -241,6 +241,66 @@ final class ReportShareTest extends TestCase
         }
     }
 
+    /**
+     * REPORT-LINK-ANALYTICS-002 — the trend, the repeat opens and what was left out as a machine, each in the
+     * report's own day, with the empty days present so a chart is continuous.
+     */
+    public function test_the_trend_is_bucketed_in_the_reports_own_day_and_says_what_the_unique_count_is(): void
+    {
+        $this->report->forceFill(['timezone' => 'Asia/Riyadh'])->save();
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $log = function (string $ip, string $ua, string $utc) use ($share): void {
+            DB::table('report_share_access_logs')->insert(['id' => (string) Str::uuid(), 'share_id' => $share->id, 'action' => 'view', 'ip' => $ip, 'user_agent' => $ua, 'created_at' => Carbon::parse($utc, 'UTC')]);
+        };
+        $chrome = 'Mozilla/5.0 Chrome/120';
+        $log('1.1.1.1', $chrome, '2026-10-10 09:00:00');
+        $log('1.1.1.1', $chrome, '2026-10-10 10:00:00');          // the same device twice
+        $log('2.2.2.2', 'Mozilla/5.0 Safari/17', '2026-10-10 21:30:00'); // 00:30 on the 11th in Riyadh
+        $log('3.3.3.3', 'WhatsApp/2.23', '2026-10-12 09:00:00');   // a preview fetch: not counted
+        $log('1.1.1.1', $chrome, '2026-10-13 09:00:00');
+
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}/analytics?from=2026-10-09&to=2026-10-13";
+        $data = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data');
+
+        $this->assertSame(4, $data['views']);
+        $this->assertSame(2, $data['unique_views']);
+        $this->assertSame(2, $data['repeat_visits'], 'four human opens by two devices');
+        $this->assertSame(1, $data['bot_opens']);
+        $this->assertSame('device_estimate', $data['unique_basis']);
+        $this->assertSame('day', $data['granularity']);
+
+        $byDay = collect($data['series'])->keyBy('period');
+        $this->assertSame(['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13'], $byDay->keys()->all(), 'empty days are present');
+        $this->assertSame(0, $byDay['2026-10-09']['views']);
+        $this->assertSame(2, $byDay['2026-10-10']['views']);
+        $this->assertSame(1, $byDay['2026-10-11']['views'], 'an open at 00:30 local belongs to the day the client lived it in');
+        $this->assertSame(0, $byDay['2026-10-12']['views'], 'the preview fetch is not a view');
+        $this->assertSame(1, $byDay['2026-10-13']['views']);
+        $this->assertSame(4, array_sum(array_column($data['series'], 'views')), 'the series adds up to the total');
+        $this->assertStringNotContainsString('1.1.1.1', (string) json_encode($data));
+    }
+
+    public function test_the_weekly_and_monthly_trends_group_and_a_bad_granularity_is_refused(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        foreach (['2026-09-30 09:00:00', '2026-10-05 09:00:00', '2026-10-06 09:00:00'] as $i => $when) {
+            DB::table('report_share_access_logs')->insert(['id' => (string) Str::uuid(), 'share_id' => $share->id, 'action' => 'view', 'ip' => "9.9.9.$i", 'user_agent' => 'Mozilla/5.0 Chrome/120', 'created_at' => Carbon::parse($when, 'UTC')]);
+        }
+        $base = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}/analytics";
+        $as = $this->actingAs($this->owner, 'sanctum');
+
+        $month = collect($as->getJson($base.'?granularity=month&from=2026-09-01&to=2026-10-31')->assertOk()->json('data.series'))->keyBy('period');
+        $this->assertSame(1, $month['2026-09-01']['views']);
+        $this->assertSame(2, $month['2026-10-01']['views']);
+
+        $week = collect($as->getJson($base.'?granularity=week&from=2026-09-28&to=2026-10-11')->assertOk()->json('data.series'))->keyBy('period');
+        $this->assertSame(1, $week['2026-09-28']['views'], 'Monday 28 September starts the week of the 30th');
+        $this->assertSame(2, $week['2026-10-05']['views']);
+
+        $as->getJson($base.'?granularity=hour')->assertStatus(422);
+        $as->getJson($base.'?from=not-a-date')->assertStatus(422);
+    }
+
     public function test_link_analytics_are_not_available_without_the_share_permission(): void
     {
         [$share] = app(ShareService::class)->create($this->report, [], null);
@@ -348,6 +408,38 @@ final class ReportShareTest extends TestCase
         [$share2, $raw2] = app(ShareService::class)->create($this->report, [], null);
         $share2->update(['revoked_at' => Carbon::now()]);
         $this->getJson("/api/v1/reports/shared/{$raw2}")->assertStatus(404);
+    }
+
+    /** REPORT-LINK-PAUSE-001 — pausing switches the SAME link off and resuming brings it back untouched. */
+    public function test_a_paused_link_stops_opening_and_resumes_as_the_same_link(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+
+        $this->actingAs($this->owner, 'sanctum');
+        $this->postJson("{$url}/pause")->assertOk()->assertJsonPath('data.active', false)->assertJsonPath('data.revoked_at', null);
+        $this->assertNotNull($this->postJson("{$url}/pause")->assertOk()->json('data.paused_at'), 'pausing twice changes nothing');
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertStatus(404);
+
+        $this->postJson("{$url}/resume")->assertOk()->assertJsonPath('data.active', true)->assertJsonPath('data.paused_at', null);
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+    }
+
+    public function test_a_revoked_link_can_be_neither_paused_nor_resumed_and_a_viewer_cannot_pause(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+
+        $viewer = User::create(['name' => 'V', 'email' => 'v3@a.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
+        $this->actingAs($viewer, 'sanctum')->postJson("{$url}/pause")->assertForbidden();
+
+        $share->update(['revoked_at' => now()]);
+        $this->actingAs($this->owner, 'sanctum');
+        $this->postJson("{$url}/pause")->assertStatus(409);
+        $this->postJson("{$url}/resume")->assertStatus(409);
+        $this->assertNull($share->fresh()->paused_at);
     }
 
     /**
