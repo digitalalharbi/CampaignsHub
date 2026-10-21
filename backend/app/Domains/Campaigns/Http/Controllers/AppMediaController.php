@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Http\Controllers;
 
+use App\Domains\Campaigns\Services\CoverCache;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -47,9 +49,20 @@ final class AppMediaController
         'webp' => 'image/webp',
     ];
 
+    /** TIKTOK-MEDIA-002 — a creative's cached cover; the name is a keyed hash, so a path is not guessable. */
+    public function cover(Request $request, string $path): BinaryFileResponse
+    {
+        return $this->serve($request, Storage::disk(CoverCache::DISK)->path(CoverCache::ROOT), $path, 'public, max-age=86400');
+    }
+
     public function show(Request $request, string $path): BinaryFileResponse
     {
-        $root = realpath(storage_path('app/'.self::ROOT));
+        return $this->serve($request, storage_path('app/'.self::ROOT), $path, null);
+    }
+
+    private function serve(Request $request, string $rootDir, string $path, ?string $cacheControl): BinaryFileResponse
+    {
+        $root = realpath($rootDir);
         $file = $root === false ? false : realpath($root.'/'.$path);
 
         /*
@@ -72,6 +85,9 @@ final class AppMediaController
         $response->setAutoLastModified();
 
         // `prepare()` is what reads the Range header and turns the answer into a 206.
+        if ($cacheControl !== null) {
+            $response->headers->set('Cache-Control', $cacheControl);
+        }
         $response->prepare($request);
 
         return $response;
