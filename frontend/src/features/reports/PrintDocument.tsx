@@ -113,6 +113,39 @@ function platformCell(raw: unknown): ReactNode {
   return hasPlatformMark(key) ? <ProviderName provider={key} locale="en" size={14} /> : text
 }
 
+/** WIDGET-REGISTRY-001 — a link's widgets as print tables. Fractions are kept: they are credit shares, not whole orders. */
+function printedWidgets(data: ReportData): Array<{ key: string; title: string; head: string[]; rows: ReactNode[][]; note: string }> {
+  const list = (data as unknown as { widgets?: Array<{ key: string; data: Record<string, unknown> }> }).widgets ?? []
+  const out: Array<{ key: string; title: string; head: string[]; rows: ReactNode[][]; note: string }> = []
+
+  for (const w of list) {
+    if (w.key === 'link_opens') {
+      const series = (w.data.series as Array<{ period: string; opens: number }> | undefined) ?? []
+      out.push({
+        key: w.key,
+        title: 'Link Activity',
+        head: ['Period', 'Opens'],
+        rows: [...series.map((p) => [p.period, p.opens] as ReactNode[]), ['Total', Number(w.data.opens ?? 0)]],
+        note: `Measured since ${String(w.data.tracking_since ?? '—')}. Link opens, not sales.`,
+      })
+    }
+    if (w.key === 'attribution_credit') {
+      const models = (w.data.models as string[] | undefined) ?? []
+      const channels = (w.data.channels as Array<{ channel: string; models: Record<string, { orders: number }> }> | undefined) ?? []
+      const cov = (w.data.coverage as Record<string, number> | undefined) ?? {}
+      out.push({
+        key: w.key,
+        title: 'Attribution by Channel',
+        head: ['Channel', ...models],
+        rows: channels.map((c) => [c.channel, ...models.map((m) => c.models[m]?.orders ?? '')] as ReactNode[]),
+        note: `Orders tied to verified evidence only; ${cov.orders_without_evidence ?? 0} order(s) have none and stay unattributed. A click is not a purchase.`,
+      })
+    }
+  }
+
+  return out
+}
+
 function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   return (
     <table className="doc-table">
@@ -849,6 +882,18 @@ export function PrintDocument({
           )}
         </section>
       )}
+
+      {/*
+        WIDGET-REGISTRY-001 — the widgets the link shows on the web, as the same tables the spreadsheet carries.
+        Only what the server put in the document: a link whose owner switched nothing on prints nothing here.
+      */}
+      {printedWidgets(data).map((w) => (
+        <section key={w.key} className="doc-section" data-testid={`print-widget-${w.key}`}>
+          <h2>{w.title}</h2>
+          <Table head={w.head} rows={w.rows} />
+          <p>{w.note}</p>
+        </section>
+      ))}
 
       {/* Recommendations */}
       {prints.recommendations && (
