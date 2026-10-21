@@ -101,9 +101,10 @@ final class AttributionTransparency
 
     /**
      * @param  list<string>  $providers  empty = every platform
+     * @param  array<string,mixed>|null  $creditConfig  ATTRIB-CREDIT-001 — null (the default) leaves the fractional models off and the answer unchanged
      * @return array<string,mixed>
      */
-    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, array $providers = []): array
+    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, array $providers = [], ?array $creditConfig = null): array
     {
         /*
          * COMMERCE-TZ-001 — the same window the funnel uses, measured on the same clock.
@@ -173,7 +174,7 @@ final class AttributionTransparency
             // ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the same evidence the reconciliation reads.
             // CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the same claim-versus-store pair, split across the window.
             'disagreement' => $this->disagreement->build($hasStore, $projectId, $window['from_date'], $window['to_date'], $loaded['orders'], $providers),
-            'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms),
+            'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms, $creditConfig),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
             'measurement' => [
                 'label_ar' => 'ما قاسه الموقع (GA4)',
