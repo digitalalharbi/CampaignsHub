@@ -98,6 +98,9 @@ export const updateShortLinkMessage = (id: string, message: string) =>
 
 export const disableShortLink = (id: string) => postData<ShortLink>(`/short-links/${id}/disable`, {})
 
+/** SHORT-LINK-RESUME-001 — the same slug resumes; nothing is minted and the counters continue. */
+export const enableShortLink = (id: string) => postData<ShortLink>(`/short-links/${id}/enable`, {})
+
 /**
  * SHORT-LINKS-001 — remove it from the library.
  *
