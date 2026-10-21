@@ -168,6 +168,8 @@ export const router = createBrowserRouter(withErrorBoundary([
     // LEGAL-001 — the operational policies every OAuth review and every data subject asks for.
     'retention', 'subprocessors', 'account-deletion', 'data-requests', 'acceptable-use',
     'subscriptions-refunds', 'oauth-disclosure', 'system-status',
+    // LEGAL-DISCLOSURE-001 — the documented business relationships, public and sessionless.
+    'business-disclosure',
   ].map((slug) => ({ path: `/${slug}`, element: <PublicInfoPage /> })),
 
   // Public services catalogue, read from the taxonomy engine (never a bundled array).

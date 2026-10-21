@@ -34,6 +34,43 @@ const EN_UPDATED = 'Last updated: 7 August 2026'
 
 export const AR_OPERATIONAL: LegalDoc[] = [
   {
+    slug: 'business-disclosure',
+    title: 'الإفصاح عن العلاقات التجارية الموثّقة',
+    updated: 'آخر تحديث: 21 أكتوبر 2026',
+    disclaimer: AR_DISCLAIMER,
+    intro: 'صفحة عامة تُعرّف بالعلاقات التجارية الموثّقة بين كامبينز هب وجهات أخرى، بالأسماء القانونية وبالصفة الفعلية لكل علاقة كما هي موثّقة لدى المنصة — لا أكثر ولا أقل.',
+    sections: [
+      {
+        heading: 'الجهة المشغّلة لكامبينز هب',
+        body: [
+          'الجهة المشغّلة لهذه المنصة هي الجهة المسمّاة في أعلى هذه الصفحة وفي سياسة الخصوصية وشروط الاستخدام. لا تغيّر هذه الصفحة شيئًا من ذلك، ولا تُسمّي أي جهة أخرى مالكًا أو مشغّلًا للمنصة.',
+        ],
+      },
+      {
+        heading: 'العلاقات التجارية الموثّقة',
+        body: [
+          'شركة حنكة الترويج للخدمات التسويقية شخص واحد',
+          'الصفة الموثّقة: عميل مُعلن لدى كامبينز هب. تُدار حملاتها الإعلانية وتُقرأ تقاريرها عبر المنصة بتفويضها، وقد منحت كامبينز هب صفة الشريك المُخوَّل على حساباتها الإعلانية لدى منصات الإعلان التي اختارت ربطها.',
+          'ما لا تعنيه هذه العلاقة: شركة حنكة ليست مالكة لمنصة كامبينز هب ولا مشغّلة لها، ولا تُمثّلها قانونيًا، ولا يُنشر أي محتوى أو يُنفق أي مبلغ باسمها إلا بتفويضها الموثّق.',
+        ],
+      },
+      {
+        heading: 'كيف تُوثَّق العلاقة',
+        bullets: [
+          'تفويض صريح من الجهة نفسها عبر رحلة الربط الرسمية لكل منصة إعلانية (OAuth)، أو عبر مشاركة الحساب الإعلاني مع كامبينز هب بصفة شريك من داخل أدوات المنصة الإعلانية.',
+          'مساحة عمل خاصة بالعميل داخل كامبينز هب، لا يصل إليها غير من فوّضه العميل.',
+          'سجل تدقيق لكل إجراء يُتّخذ على حساباتها، يُتاح للعميل عند الطلب.',
+        ],
+      },
+      {
+        heading: 'التحقق والتواصل',
+        body: [
+          'للتحقق من أي علاقة واردة في هذه الصفحة أو لطلب تصحيحها، تواصل مع الجهة المشغّلة على بريد التواصل المذكور في أسفل الصفحة. تُحدَّث هذه الصفحة عند تغيّر أي علاقة موثّقة، ويُذكر تاريخ آخر تحديث أعلاها.',
+        ],
+      },
+    ],
+  },
+  {
     slug: 'retention',
     title: 'سياسة الاحتفاظ بالبيانات',
     updated: AR_UPDATED,
@@ -330,6 +367,43 @@ export const AR_OPERATIONAL: LegalDoc[] = [
 ]
 
 export const EN_OPERATIONAL: LegalDoc[] = [
+  {
+    slug: 'business-disclosure',
+    title: 'Disclosure of documented business relationships',
+    updated: 'Last updated: 21 October 2026',
+    disclaimer: EN_DISCLAIMER,
+    intro: 'A public page naming the documented business relationships between CampaignsHub and other parties — by legal name, and by the actual capacity each relationship has on record. Nothing more, nothing less.',
+    sections: [
+      {
+        heading: 'Who operates CampaignsHub',
+        body: [
+          'The operator of this platform is the party named at the top of this page and in the Privacy Policy and Terms of Use. This page changes none of that, and names no other party as the owner or operator of the platform.',
+        ],
+      },
+      {
+        heading: 'Documented business relationships',
+        body: [
+          'شركة حنكة الترويج للخدمات التسويقية شخص واحد (Hanka Promotion for Marketing Services, a one-person company)',
+          'Documented capacity: an advertising client of CampaignsHub. Its advertising campaigns are managed and its reports read through the platform under its authorisation, and it has granted CampaignsHub authorised-partner access to the advertising accounts it chose to connect on the ad platforms.',
+          'What this relationship is not: Hanka does not own or operate CampaignsHub, does not represent it legally, and nothing is published or spent in its name without its documented authorisation.',
+        ],
+      },
+      {
+        heading: 'How a relationship is documented',
+        bullets: [
+          'Explicit authorisation by the party itself, through each ad platform’s official connection flow (OAuth) or by sharing the advertising account with CampaignsHub as a partner from inside the ad platform’s own tools.',
+          'A client workspace of its own inside CampaignsHub, reachable only by the people the client authorised.',
+          'An audit trail of every action taken on its accounts, available to the client on request.',
+        ],
+      },
+      {
+        heading: 'Verification and contact',
+        body: [
+          'To verify any relationship on this page or to request a correction, contact the operator at the contact address at the foot of the page. This page is updated whenever a documented relationship changes, and the date of the last update is shown above.',
+        ],
+      },
+    ],
+  },
   {
     slug: 'retention',
     title: 'Data retention policy',
