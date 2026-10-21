@@ -283,7 +283,8 @@ final class CreativePresenter
          */
         $image = $this->safe($creative->asset_url);
         $video = $this->safe($creative->video_url);
-        $thumb = $this->safe($creative->thumbnail_url);
+        // TIKTOK-MEDIA-002 — cached cover first, the provider's live link second, the honest absence last.
+        $thumb = CoverCache::urlFor($creative) ?? $this->safe($creative->thumbnail_url);
 
         $blocked = $this->wasWithheld($creative);
 

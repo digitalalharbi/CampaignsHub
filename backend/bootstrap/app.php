@@ -13,6 +13,7 @@ use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
+use App\Domains\Campaigns\Console\RefreshCreativeCoversCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
 use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
@@ -109,6 +110,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,
         PrepareWeeklyPacks::class,
+        RefreshCreativeCoversCommand::class,
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.
         RenderMailPreviews::class,
