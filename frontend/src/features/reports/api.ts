@@ -326,6 +326,19 @@ export interface ShareAnalytics {
   series?: Array<{ period: string; views: number; devices: number }>
 }
 
+/**
+ * REPORT-BEST-NOT-SPEND-001 — the metric the headline lists rest on and, when the scope mixed
+ * objectives, the family they were taken from. Never spend: a spend order is no judgement.
+ */
+export interface AdsBasis {
+  family: string | null
+  metric: string | null
+  label_ar: string | null
+  label_en: string | null
+  family_label_ar: string | null
+  family_label_en: string | null
+}
+
 export type ShareGranularity = 'day' | 'week' | 'month'
 
 export const shareAnalytics = (p: string, reportId: string, shareId: string, granularity: ShareGranularity = 'day') =>
@@ -496,6 +509,8 @@ export interface LivePayload {
   ads_roster?: RosterRow[]
   /** The weakest content, ranked on the same objective metric as `ads`, from the same list. */
   ads_weakest?: ReportAd[]
+  /** REPORT-BEST-NOT-SPEND-001 — what the headline lists are ordered on; absent from an older server. */
+  ads_basis?: AdsBasis | null
   creatives_in_scope?: number | null
   creatives_withheld?: number | null
   creatives_hidden?: number | null
@@ -710,6 +725,7 @@ export interface LivePlatformPayload {
   shares: { spend: LiveShare | null; outcome: LiveShare & { metric: string } }
   ads: ReportAd[]
   ads_weakest: ReportAd[]
+  ads_basis?: AdsBasis | null
   breakdowns: { platform_drilldown: boolean; content_drilldown: boolean }
 }
 
