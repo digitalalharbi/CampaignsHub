@@ -328,13 +328,14 @@ export function AnalyticsPage({ surface = 'analytics', entity }: { surface?: Sur
    */
   const isAnalysis = surface === 'analytics'
   /*
-   * WIDGET-REGISTRY-001 — the «Links & attribution» tab exists only for a project where at least one of its widgets'
-   * modules is on. Everyone else keeps exactly the tabs they had. (Not asked for on the independent ad-group and ad pages.)
+   * WIDGET-REGISTRY-001 — the «Insights» tab exists only for a project where at least one widget is shown (an advanced
+   * module switched on, or a core widget chosen in Settings → Widgets). Everyone else keeps exactly the tabs they had.
+   * (Not asked for on the independent ad-group and ad pages.)
    */
   const widgetLayout = useWidgetLayout(isAnalysis && !entity ? currentProjectId : null, 'analytics')
-  const hasWidgetTab = isAnalysis && !entity && (widgetLayout.data?.widgets ?? []).some((w) => w.reason !== 'module_off')
+  const hasWidgetTab = isAnalysis && !entity && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
   const tabGroups = hasWidgetTab
-    ? TAB_GROUPS.map((g) => (g.key === 'conversion' ? { ...g, tabs: [...g.tabs, { id: 'links', ar: 'الروابط والإسناد', en: 'Links & attribution' }] } : g))
+    ? TAB_GROUPS.map((g) => (g.key === 'conversion' ? { ...g, tabs: [...g.tabs, { id: 'links', ar: 'رؤى إضافية', en: 'Insights' }] } : g))
     : TAB_GROUPS
   const tab = entity ? (entity === 'ad_set' ? 'ad_sets' : 'ads') : isAnalysis ? urlTab : 'performance'
   const portalTo = usePortalPath()

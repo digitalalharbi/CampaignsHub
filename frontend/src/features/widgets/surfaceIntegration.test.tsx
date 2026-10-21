@@ -41,11 +41,11 @@ describe('widgets on the Dashboard and Analytics', () => {
   })
   afterEach(() => signOut())
 
-  it('adds the Links & attribution tab only where a widget module is on, and shows the analytics surface under it', async () => {
+  it('adds the Insights tab only where a widget module is on, and shows the analytics surface under it', async () => {
     vi.mocked(useWidgetLayout).mockReturnValue(layout([null, 'module_off']) as never)
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
-    const tab = await screen.findByRole('tab', { name: 'Links & attribution' })
+    const tab = await screen.findByRole('tab', { name: 'Insights' })
     fireEvent.click(tab)
     expect(await screen.findByTestId('stub-surface-analytics')).toBeTruthy()
   })
@@ -55,7 +55,7 @@ describe('widgets on the Dashboard and Analytics', () => {
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
     await screen.findAllByRole('tab')
-    expect(screen.queryByRole('tab', { name: 'Links & attribution' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Insights' })).toBeNull()
     expect(screen.queryByTestId('stub-surface-analytics')).toBeNull()
   })
 

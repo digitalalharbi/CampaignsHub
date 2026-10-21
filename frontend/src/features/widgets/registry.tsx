@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react'
 import { AttributionCreditWidget } from './AttributionCreditWidget'
+import { CommerceOutcomesWidget } from './CommerceOutcomesWidget'
 import { LinkActivityWidget } from './LinkActivityWidget'
+import { ReportViewsWidget } from './ReportViewsWidget'
 
 export interface WidgetProps {
   projectId: string
@@ -17,4 +19,6 @@ export interface WidgetProps {
 export const WIDGET_COMPONENTS: Record<string, ComponentType<WidgetProps>> = {
   link_opens: LinkActivityWidget,
   attribution_credit: AttributionCreditWidget,
+  report_views: ReportViewsWidget,
+  commerce_outcomes: CommerceOutcomesWidget,
 }

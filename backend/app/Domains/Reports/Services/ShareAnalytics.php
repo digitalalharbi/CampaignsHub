@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\DB;
 final class ShareAnalytics
 {
     /** Substrings that identify an automated fetch of the link rather than a person opening it. */
-    private const BOT_MARKERS = ['bot', 'crawl', 'spider', 'preview', 'whatsapp', 'facebookexternalhit', 'slack', 'telegram', 'linkedinbot', 'embedly', 'curl', 'wget'];
+    public const BOT_MARKERS = ['bot', 'crawl', 'spider', 'preview', 'whatsapp', 'facebookexternalhit', 'slack', 'telegram', 'linkedinbot', 'embedly', 'curl', 'wget'];
 
     /** @return array{views: int, unique_views: int, first_viewed_at: ?string, last_viewed_at: ?string, downloads: int} */
     private const GRANULARITIES = ['day' => ['days' => 30, 'step' => 'P1D'], 'week' => ['days' => 84, 'step' => 'P7D'], 'month' => ['days' => 365, 'step' => 'P1M']];
@@ -45,11 +45,7 @@ final class ShareAnalytics
      */
     public function for(ReportShare $share, ?Carbon $from = null, ?Carbon $to = null, string $granularity = 'day'): array
     {
-        $views = DB::table('report_share_access_logs')->where('share_id', $share->getKey())->where('action', 'view');
-
-        foreach (self::BOT_MARKERS as $marker) {
-            $views->whereRaw("lower(coalesce(user_agent, '')) not like ?", ['%'.$marker.'%']);
-        }
+        $views = self::humanOnly(DB::table('report_share_access_logs')->where('share_id', $share->getKey())->where('action', 'view'));
 
         $row = (clone $views)->selectRaw(
             "count(*) as views, count(distinct md5(coalesce(ip, '') || '|' || coalesce(user_agent, '') || '|' || ?)) as unique_views, min(created_at) as first_at, max(created_at) as last_at",
@@ -78,6 +74,24 @@ final class ShareAnalytics
             'bot_opens' => max(0, $all - (int) ($row->views ?? 0)),
             'unique_basis' => 'device_estimate',
         ] + $trend;
+    }
+
+    /**
+     * Leave out the opens that announced themselves as machines — link previews, crawlers, command-line tools.
+     *
+     * One definition for the per-link analytics and the project-level summary, so the two can never disagree about
+     * what counts as a person. A user agent is a claim: «not matched here» means «did not announce itself».
+     *
+     * @param  Builder  $query
+     * @return Builder
+     */
+    public static function humanOnly($query)
+    {
+        foreach (self::BOT_MARKERS as $marker) {
+            $query->whereRaw("lower(coalesce(user_agent, '')) not like ?", ['%'.$marker.'%']);
+        }
+
+        return $query;
     }
 
     /**

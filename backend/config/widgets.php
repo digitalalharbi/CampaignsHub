@@ -13,7 +13,8 @@ declare(strict_types=1);
  * surface it is not even listed.
  *
  * `defaults`: whether the widget is visible, in what order and how wide, per surface, before anyone configured
- * anything. A widget that sits behind an explicit module therefore appears on no existing dashboard until that
+ * anything. On the `report` surface `visible` means ALLOWED ON CLIENT LINKS: the project's layout is a permission there
+ * and each shared link still shows nothing until its owner switches a widget on. A widget that sits behind an explicit module therefore appears on no existing dashboard until that
  * module is switched on.
  *
  * `kind` names the drawing, not the data: trend | bars | donut | funnel | kpis | table | gallery.
@@ -30,7 +31,28 @@ return [
             'defaults' => [
                 'dashboard' => ['visible' => true, 'order' => 40, 'size' => 'half'],
                 'analytics' => ['visible' => true, 'order' => 10, 'size' => 'full'],
-                'report' => ['visible' => false, 'order' => 40, 'size' => 'full'],
+                'report' => ['visible' => true, 'order' => 40, 'size' => 'full'],
+            ],
+        ],
+        'report_views' => [
+            'kind' => 'trend',
+            'module' => null,
+            'surfaces' => ['dashboard', 'analytics'],
+            'title' => ['en' => 'Report link opens', 'ar' => 'فتح روابط التقارير'],
+            // A widget of the core product is opt-in: a project that never chose it keeps the page it had.
+            'defaults' => [
+                'dashboard' => ['visible' => false, 'order' => 60, 'size' => 'half'],
+                'analytics' => ['visible' => false, 'order' => 30, 'size' => 'half'],
+            ],
+        ],
+        'commerce_outcomes' => [
+            'kind' => 'kpis',
+            'module' => 'commerce_intelligence',
+            'surfaces' => ['dashboard', 'analytics'],
+            'title' => ['en' => 'Store outcomes', 'ar' => 'نتائج المتجر'],
+            'defaults' => [
+                'dashboard' => ['visible' => false, 'order' => 70, 'size' => 'half'],
+                'analytics' => ['visible' => false, 'order' => 40, 'size' => 'half'],
             ],
         ],
         'attribution_credit' => [
@@ -41,7 +63,7 @@ return [
             'defaults' => [
                 'dashboard' => ['visible' => true, 'order' => 50, 'size' => 'half'],
                 'analytics' => ['visible' => true, 'order' => 20, 'size' => 'full'],
-                'report' => ['visible' => false, 'order' => 50, 'size' => 'full'],
+                'report' => ['visible' => true, 'order' => 50, 'size' => 'full'],
             ],
         ],
     ],
