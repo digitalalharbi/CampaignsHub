@@ -15,6 +15,7 @@
 **Queue state:** #791 WebKit overflow on /agency/analytics was a grid without `grid-cols-1 … [&>*]:min-w-0` around the anomaly table (reproduced in Playwright WebKit locally; main is clean) — fix pushed; #792 WebKit rerun; #796 Firefox rerun (flaky short-links click); #797 merged with main. Scripts: `serial.sh` / `after-opened.sh` in ch-scripts.
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
+<<<<<<< HEAD
 **Owner correction 2026-10-21 (late): nothing is dropped.** Custom slugs and expiry are required (the later tracking directive wins over SHORT-LINKS-001's exclusion) — SMART-LINK-001; link-in-bio — BIO-PAGE-001; Thunder-style presets — ATTRIB-PRESETS-001 (after C1); per-member show/hide — MEMBER-VISIBILITY-001. All NOT_STARTED, to be built after the current queue drains; the queue itself (#793 → #795 → #798 → adv-home → ops-hub → delivery → C1 → C2 → #796 → #797 → bulk → analytics-3 → resume → QR) is finished first.
 
 **2026-10-21 late:** #791 (`6581b224`, DASH-ANOMALY-001) MERGED and DEPLOYED — served bundle `index-B1-8dEr1.js` carries `anomaly-sort-date`. serial chain now on 793 → 795 → 798.
@@ -33,6 +34,11 @@
 **Short links (feat/short-link-resume, SHORT-LINK-RESUME-001):** a disabled link resumes at the same address; expiry and custom slugs were NOT added because SHORT-LINKS-001 records the Owner's explicit exclusion while the 2026-10-21 tracking directive asks for them — an Owner decision, recorded in the matrix row. Based on main; open its PR after the queue.
 
 >>>>>>> 329afb23 (A disabled short link resumes at the same address (SHORT-LINK-RESUME-001))
+||||||| parent of 865ca813 (Every short link has a QR code drawn in the browser, downloadable as SVG or PNG (SHORT-LINK-QR-001))
+=======
+**Short-link QR (feat/short-link-qr, SHORT-LINK-QR-001):** a QR code per link, drawn in the browser (`qrcode-generator`, zero dependencies), SVG/PNG download; based on main, independent of the resume branch. Open its PR after the queue; Production acceptance = scan a real code with a phone and see the click.
+
+>>>>>>> 865ca813 (Every short link has a QR code drawn in the browser, downloadable as SVG or PNG (SHORT-LINK-QR-001))
 **Marketing-OS program (Owner directive 2026-10-20), Batch B started:** capability registry CAP-REGISTRY-001 on branch feat/capability-registry (config/capabilities.php, Capabilities::resolve, capability_switches, /settings/capabilities, `module:` middleware, Settings → Modules). Audit of what already exists (attribution comparison, short links, influencers, leads, GA4 layer, one Recharts layer): the real gaps are smart-link slugs/expiry/QR/UTM templates, linear/position/time-decay attribution, bio pages, tracking health, product/cohort analytics, waterfall/sankey. Open: #785 (docs), #786 (content exclusion).
 
 **Salla onboarding + review (branch feat/salla-onboarding):** store-initiated installs provision a workspace and sign the owner in through a single-use link (`GET /api/v1/salla/open` → Salla authorize → `/api/v1/salla/enter?t=…`); uninstall revokes and purges after 30 days; `salla:review` builds the isolated reviewer workspace (needs SALLA_REVIEW_PASSWORD, optional REVIEW_EXPIRES_AT). Migration `2026_10_20_140000_provider_connection_uninstalled_at`. Not VERIFIED until a real install on store 793298857.
