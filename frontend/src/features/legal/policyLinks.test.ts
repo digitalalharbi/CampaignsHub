@@ -75,7 +75,7 @@ describe('policy placement', () => {
     const ROUTED = [
       'privacy', 'terms', 'data-processing', 'cookies', 'security', 'about', 'contact', 'support', 'faq',
       'retention', 'subprocessors', 'account-deletion', 'data-requests', 'acceptable-use',
-      'subscriptions-refunds', 'oauth-disclosure', 'system-status',
+      'subscriptions-refunds', 'oauth-disclosure', 'system-status', 'business-disclosure',
     ]
 
     for (const key of ALL_POLICY_KEYS) {
