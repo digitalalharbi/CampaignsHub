@@ -166,7 +166,7 @@ none of them has is a credential, and a credential is not something code can sup
 | # | Provider | State | What is needed |
 |---|---|---|---|
 | 1 | Meta Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | App id + secret |
-| 2 | Google Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | Client id + secret + developer token + login customer id |
+| 2 | Google Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | OAuth client id + secret in a Cloud project with production API access; developer token legacy/optional; manager paths discovered per account |
 | 3 | TikTok Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | App id + secret |
 | 4 | Snapchat Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | Client id + secret only — the organisation is discovered from each customer's own token (SNAP-ORG-001) |
 | 5 | X Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | Client id + secret |

@@ -77,8 +77,8 @@ final class ProviderConfigurationService
     /**
      * Which required values are absent — the exact list the setup screen shows.
      *
-     * Names rather than a boolean, because «awaiting credentials» is not actionable and
-     * «ينقص: developer_token» is.
+     * Names rather than a boolean, because «awaiting credentials» is not actionable while the exact
+     * name of a currently required field is.
      *
      * @return list<string>
      */

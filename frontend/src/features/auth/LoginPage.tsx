@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react'
-import { emailCodeStart, emailCodeVerify, login, phoneSignInStart, phoneSignInVerify, signInMethod } from './api'
+import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, login, phoneSignInStart, phoneSignInVerify, signInMethod, startOAuth } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { AuthShell } from './AuthShell'
 import { OtpField } from './OtpField'
@@ -78,6 +78,8 @@ const COPY = {
     phoneHint: 'سنرسل رمز تحقق إلى هذا الرقم.',
     phoneInvalid: 'أدخل رقم جوال صحيحًا.',
     continue: 'متابعة',
+    google: 'المتابعة عبر Google',
+    providerUnavailable: 'بانتظار إعداد Google',
   },
   en: {
     title: 'Welcome back',
@@ -110,6 +112,8 @@ const COPY = {
     phoneHint: 'We will send a verification code to this number.',
     phoneInvalid: 'Enter a valid mobile number.',
     continue: 'Continue',
+    google: 'Continue with Google',
+    providerUnavailable: 'Google setup is pending',
   },
 } as const
 
@@ -138,6 +142,12 @@ export function LoginPage() {
   const status = useAuth((s) => s.status)
   const { locale } = useUi()
   const c = COPY[locale]
+  const oauthProviders = useQuery({ queryKey: ['oauth', 'providers'], queryFn: fetchOAuthProviders })
+  const google = oauthProviders.data?.find((provider) => provider.provider === 'google')
+  const googleSignIn = useMutation({
+    mutationFn: () => startOAuth('google', { redirect: null }),
+    onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
+  })
   const ar = locale === 'ar'
 
   /*
@@ -440,6 +450,26 @@ export function LoginPage() {
               onClick={askForCode}
             >
               <Mail size={17} /> {c.sendCode}
+            </Button>
+
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-[13px] text-text-secondary">OAuth</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <Button
+              type="button"
+              data-testid="login-google"
+              variant="secondary"
+              className="w-full"
+              size="lg"
+              loading={googleSignIn.isPending}
+              disabled={!google?.available}
+              onClick={() => googleSignIn.mutate()}
+            >
+              <span aria-hidden="true" className="font-bold">G</span>
+              {google?.available ? c.google : c.providerUnavailable}
             </Button>
 
             {/*

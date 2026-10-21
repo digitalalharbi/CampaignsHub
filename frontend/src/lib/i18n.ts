@@ -103,6 +103,9 @@ const dictionary = {
     revoke_other_sessions: 'إبطال الجلسات الأخرى',
     awaiting_external_dependency: 'بانتظار اعتماد خارجي',
     two_factor_auth: 'المصادقة الثنائية',
+    connected_sign_in_accounts: 'حسابات تسجيل الدخول المرتبطة',
+    connected_sign_in_accounts_hint: 'اربط حساب Google فقط بعد تسجيل الدخول إلى كامبينز هب.',
+    connected: 'مربوط',
     number_format_latin: 'أرقام لاتينية (123)',
     number_format_arabic: 'أرقام عربية (١٢٣)',
     // Internal requests dashboard
@@ -565,6 +568,9 @@ const dictionary = {
     revoke_other_sessions: 'Revoke other sessions',
     awaiting_external_dependency: 'Awaiting external dependency',
     two_factor_auth: 'Two-factor authentication',
+    connected_sign_in_accounts: 'Connected sign-in accounts',
+    connected_sign_in_accounts_hint: 'Link Google only after signing in to CampaignsHub.',
+    connected: 'Connected',
     number_format_latin: 'Latin digits (123)',
     number_format_arabic: 'Arabic digits (١٢٣)',
     // Internal requests dashboard

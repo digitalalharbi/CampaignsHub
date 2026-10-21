@@ -12,10 +12,9 @@ namespace App\Domains\Integrations\Review;
  * Because the eight reviews are not variations of one another, and a generic list would be wrong in
  * both directions at once — omitting what a platform requires, and demanding what it does not.
  *
- *  - **Google** approves the OAuth consent screen and the developer token on SEPARATE tracks, and
- *    requires domain ownership verified in Search Console before either. A basic-access developer
- *    token is granted quickly and then rate-limits so hard the product is unusable, so «approved» has
- *    to distinguish basic from standard.
+ *  - **Google** reviews the OAuth consent screen and grants Google Ads API access to the Google Cloud
+ *    project that owns the OAuth client. Domain ownership must be verified in Search Console, and
+ *    production accounts require Explorer, Basic or Standard project access rather than Test access.
  *  - **Meta** wants Business Verification of the legal entity before advanced permissions, and reviews
  *    each permission individually with a screencast of it in use.
  *  - **TikTok** approves the app itself, and the sandbox works with a whitelist of advertiser ids —
@@ -115,14 +114,11 @@ final class ReviewCatalogue
                     'جوجل ترفض شاشة الموافقة قبل إثبات ملكية النطاق المستخدم في الروابط.',
                     'Google will not approve the consent screen until the domain in the URLs is verified.'),
                 self::item('oauth_consent_screen', 'declared', 'مراجعة شاشة موافقة OAuth', 'OAuth consent screen review',
-                    'تُراجَع بشكل منفصل عن الرمز المطوّر، ويجب أن تنشر النطاقات المطلوبة ومبرراتها.',
-                    'Reviewed separately from the developer token, and must publish the scopes requested and why.'),
-                self::item('developer_token_basic', 'declared', 'رمز مطوّر Google Ads — وصول أساسي', 'Google Ads developer token — basic access',
-                    'بدونه تُرفض كل استدعاءات API مهما كان OAuth صحيحًا.',
-                    'Without it every API call is refused, however correct the OAuth is.'),
-                self::item('developer_token_standard', 'declared', 'ترقية الرمز إلى وصول قياسي', 'Developer token upgraded to standard access',
-                    'الوصول الأساسي يخنق المعدل لدرجة تجعل المنتج غير صالح للاستخدام على حساب حقيقي.',
-                    'Basic access throttles so hard the product is unusable against a real account.'),
+                    'يجب نشر النطاقات المطلوبة ومبرراتها قبل إتاحة التطبيق للمستخدمين الخارجيين.',
+                    'The requested scopes and their justification must be published before external users can consent.'),
+                self::item('cloud_project_production_access', 'declared', 'وصول مشروع Google Cloud إلى حسابات الإنتاج', 'Google Cloud project production access',
+                    'مستوى Test يصل إلى حسابات الاختبار فقط؛ يلزم Explorer أو Basic أو Standard للوصول إلى حسابات الإنتاج.',
+                    'Test access reaches test accounts only; Explorer, Basic or Standard is required for production accounts.'),
                 self::item('demo_reviewer_account', 'declared', 'حساب تجريبي للمراجع', 'Demo account for the reviewer',
                     'يطلب المراجع حسابًا يدخل به ليرى الصلاحيات مستخدمة فعلًا.',
                     'The reviewer asks for an account they can sign into and see the scopes in use.'),

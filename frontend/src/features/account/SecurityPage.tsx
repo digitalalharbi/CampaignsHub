@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Monitor, ShieldCheck } from 'lucide-react'
-import { getSessions, logoutOtherSessions } from './api'
+import { getOAuthIdentities, getSessions, logoutOtherSessions, startOAuthLink } from './api'
 import { PhoneCredentialCard } from './PhoneCredential'
 import { Button } from '@/components/ui/Button'
 import { PasswordInput } from '@/components/ui/form'
@@ -12,6 +12,12 @@ export function SecurityPage() {
   const t = useT()
   const [password, setPassword] = useState('')
   const sessions = useQuery({ queryKey: ['me', 'sessions'], queryFn: getSessions })
+  const identities = useQuery({ queryKey: ['me', 'oauth-identities'], queryFn: getOAuthIdentities })
+  const google = identities.data?.find((provider) => provider.provider === 'google')
+  const linkGoogle = useMutation({
+    mutationFn: () => startOAuthLink('google'),
+    onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
+  })
 
   const revoke = useMutation({
     mutationFn: () => logoutOtherSessions(password),
@@ -68,6 +74,27 @@ export function SecurityPage() {
           and the number decides how THIS person signs in and how their account is recovered.
         */}
         <PhoneCredentialCard />
+
+        <section className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-bold text-text-primary">{t('connected_sign_in_accounts')}</h2>
+          <p className="mt-1 text-xs text-text-muted">{t('connected_sign_in_accounts_hint')}</p>
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-border p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-secondary font-bold text-text-primary">G</div>
+            <div>
+              <div className="text-sm font-semibold text-text-primary">Google</div>
+              <div className="text-xs text-text-muted">{google?.linked ? google.email ?? t('connected') : t('not_connected')}</div>
+            </div>
+            <Button
+              className="ms-auto"
+              variant="secondary"
+              disabled={!google?.available || google?.linked}
+              loading={linkGoogle.isPending}
+              onClick={() => linkGoogle.mutate()}
+            >
+              {google?.linked ? t('connected') : google?.available ? t('connect') : t('awaiting_external_dependency')}
+            </Button>
+          </div>
+        </section>
 
         {/* Two-factor — honestly gated until the external verification/mailer is wired. */}
         <section className="rounded-2xl border border-border bg-surface p-5">

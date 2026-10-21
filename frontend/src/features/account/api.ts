@@ -82,3 +82,21 @@ export const confirmPhone = (verification_id: string, code: string) =>
   postData<{ phone: string; confirmed: boolean }>('/me/phone/confirm', { verification_id, code })
 
 export const revokePhoneCredential = () => deleteData<{ confirmed: boolean }>('/me/phone')
+
+export interface OAuthIdentityProvider {
+  provider: string
+  label: { en: string; ar: string }
+  available: boolean
+  status: string
+  linked: boolean
+  email: string | null
+  linked_at: string | null
+}
+
+export const getOAuthIdentities = async () => {
+  const { providers } = await getData<{ providers: OAuthIdentityProvider[] }>('/auth/oauth/identities')
+  return providers
+}
+
+export const startOAuthLink = (provider: string) =>
+  postData<{ authorize_url: string }>(`/auth/oauth/${provider}/link`)

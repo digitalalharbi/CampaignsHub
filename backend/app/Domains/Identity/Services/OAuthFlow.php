@@ -35,8 +35,14 @@ final class OAuthFlow
      *
      * @return array{url: string, state: string}
      */
-    public function begin(Request $request, string $provider, ?string $portal, ?string $redirect): array
-    {
+    public function begin(
+        Request $request,
+        string $provider,
+        ?string $portal,
+        ?string $redirect,
+        string $intent = 'login',
+        int|string|null $userId = null,
+    ): array {
         $definition = $this->registry->definition($provider);
 
         if ($definition === null || ! $this->registry->isConfigured($provider)) {
@@ -58,6 +64,8 @@ final class OAuthFlow
             // neither is trusted for authorisation, exactly as on the password path.
             'portal' => $portal,
             'redirect' => $redirect,
+            'intent' => $intent,
+            'user_id' => $userId,
         ]);
 
         $query = [
@@ -87,7 +95,7 @@ final class OAuthFlow
      * Refuses a `state` that does not match the stored one, which is the case that matters: a
      * callback nobody in this browser asked for.
      *
-     * @return array{provider: string, verifier: string, nonce: string, portal: ?string, redirect: ?string}
+     * @return array{provider: string, verifier: string, nonce: string, portal: ?string, redirect: ?string, intent: string, user_id: int|string|null}
      */
     public function consume(Request $request, string $provider, string $state): array
     {
@@ -109,6 +117,8 @@ final class OAuthFlow
             'nonce' => (string) $pending['nonce'],
             'portal' => $pending['portal'] ?? null,
             'redirect' => $pending['redirect'] ?? null,
+            'intent' => (string) ($pending['intent'] ?? 'login'),
+            'user_id' => $pending['user_id'] ?? null,
         ];
     }
 
