@@ -16,7 +16,15 @@
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 **Owner correction 2026-10-21 (late): nothing is dropped.** Custom slugs and expiry are required (the later tracking directive wins over SHORT-LINKS-001's exclusion) — SMART-LINK-001; link-in-bio — BIO-PAGE-001; Thunder-style presets — ATTRIB-PRESETS-001 (after C1); per-member show/hide — MEMBER-VISIBILITY-001. All NOT_STARTED, to be built after the current queue drains; the queue itself (#793 → #795 → #798 → adv-home → ops-hub → delivery → C1 → C2 → #796 → #797 → bulk → analytics-3 → resume → QR) is finished first.
+||||||| parent of 1e8831b5 (A short link may carry a chosen slug, an expiry and UTM tags — each optional, each off by default (SMART-LINK-001))
+**Legal business disclosure (Owner 2026-10-21, feat/business-disclosure, LEGAL-DISCLOSURE-001):** public /business-disclosure page names حنكة by exact legal name as an advertising client that authorised CampaignsHub as a partner on its connected ad accounts — never as owner/operator. Terms, Privacy and homepage untouched. Open its PR right after the report-truth PR; verify the public URL after deploy; the Production operator identity must be published for the operator line to name the operator.
+=======
+**SMART-LINK-001 built (feat/smart-links, 2026-10-22):** chosen slug, expiry, UTM — each optional, off by default, behind a closed disclosure; backend 44/44, frontend 23/23. Based on main; open its PR after the chain. The same row ID also exists on feat/short-link-resume as NOT_STARTED — keep THIS row when the two meet. BIO-PAGE-001 next, then ATTRIB-PRESETS-001 (after C1), MEMBER-VISIBILITY-001.
+
+**Legal business disclosure (Owner 2026-10-21, feat/business-disclosure, LEGAL-DISCLOSURE-001):** public /business-disclosure page names حنكة by exact legal name as an advertising client that authorised CampaignsHub as a partner on its connected ad accounts — never as owner/operator. Terms, Privacy and homepage untouched. Open its PR right after the report-truth PR; verify the public URL after deploy; the Production operator identity must be published for the operator line to name the operator.
+>>>>>>> 1e8831b5 (A short link may carry a chosen slug, an expiry and UTM tags — each optional, each off by default (SMART-LINK-001))
 
 **2026-10-21 late:** #791 (`6581b224`, DASH-ANOMALY-001) MERGED and DEPLOYED — served bundle `index-B1-8dEr1.js` carries `anomaly-sort-date`. serial chain now on 793 → 795 → 798.
 

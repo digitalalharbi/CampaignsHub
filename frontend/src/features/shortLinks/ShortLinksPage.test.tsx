@@ -56,6 +56,35 @@ describe('the short-link utility', () => {
     await waitFor(() => expect(enableShortLink).toHaveBeenCalledWith('sl1'))
   })
 
+  /** SMART-LINK-001 — the extras are there when asked for, and nowhere until then. */
+  it('offers a chosen slug, an expiry and UTM tags behind a closed disclosure, and sends only what was filled', async () => {
+    vi.mocked(createShortLink).mockResolvedValue({ ...LINK, slug: 'summer-sale', custom_slug: true } as never)
+    renderWithProviders(<ShortLinksPage />, { locale: 'en' })
+    await screen.findByTestId('short-link-advanced-toggle')
+    expect(screen.queryByTestId('short-link-slug')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('short-link-kind-link'))
+    fireEvent.click(screen.getByTestId('short-link-advanced-toggle'))
+    fireEvent.change(screen.getByTestId('short-link-slug'), { target: { value: 'Summer Sale!' } })
+    expect(screen.getByTestId('short-link-slug')).toHaveValue('summersale')
+    expect(screen.getByTestId('short-link-slug-preview')).toHaveTextContent('/l/summersale')
+    fireEvent.change(screen.getByTestId('short-link-utm_source'), { target: { value: 'tiktok' } })
+    fireEvent.change(screen.getByLabelText(/Link/, { selector: 'input' }), { target: { value: 'https://example.com/offer' } })
+    fireEvent.click(screen.getByTestId('short-link-submit'))
+
+    await waitFor(() => expect(createShortLink).toHaveBeenCalledWith('link', 'https://example.com/offer', undefined, { slug: 'summersale', utm: { utm_source: 'tiktok' } }))
+  })
+
+  it('names an expired link and shows a coming expiry on a live one', async () => {
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [
+      { ...LINK, id: 'a', slug: 'aaaaaaa', state: 'expired', expires_at: '2026-10-01T23:59:59+03:00' },
+      { ...LINK, id: 'b', slug: 'bbbbbbb', state: 'active', expires_at: '2026-12-31T23:59:59+03:00' },
+    ], meta: {} } as never)
+    renderWithProviders(<ShortLinksPage />, { locale: 'ar' })
+    expect(await screen.findByTestId('short-link-expired-a')).toHaveTextContent('منتهٍ')
+    expect(screen.getByTestId('short-link-expiry-b')).toHaveTextContent('2026-12-31')
+  })
+
   it('offers exactly two kinds, and nothing technical', async () => {
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
