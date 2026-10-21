@@ -242,6 +242,46 @@ final class ReportShareTest extends TestCase
     }
 
     /**
+     * REPORT-LINK-ANALYTICS-003 — the drawn window against the equal window before it, in the report's own days,
+     * and the link's own state beside the figures: a paused link says so and since when.
+     */
+    public function test_the_window_is_compared_with_the_one_before_it_and_the_link_states_itself(): void
+    {
+        $this->report->forceFill(['timezone' => 'Asia/Riyadh'])->save();
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $log = function (string $action, string $ip, string $utc) use ($share): void {
+            DB::table('report_share_access_logs')->insert(['id' => (string) Str::uuid(), 'share_id' => $share->id, 'action' => $action, 'ip' => $ip, 'user_agent' => 'Mozilla/5.0 Chrome/120', 'created_at' => Carbon::parse($utc, 'UTC')]);
+        };
+        // The earlier window (Oct 5–9): three opens by two devices, one download.
+        $log('view', '1.1.1.1', '2026-10-05 09:00:00');
+        $log('view', '1.1.1.1', '2026-10-07 09:00:00');
+        $log('view', '2.2.2.2', '2026-10-09 20:30:00'); // 23:30 Riyadh — still the 9th, still the earlier window
+        $log('download', '2.2.2.2', '2026-10-09 10:00:00');
+        // The drawn window (Oct 10–14): two opens by one device, no download.
+        $log('view', '3.3.3.3', '2026-10-10 09:00:00');
+        $log('view', '3.3.3.3', '2026-10-13 09:00:00');
+        $log('view', '4.4.4.4', '2026-10-09 21:30:00'); // 00:30 on the 10th in Riyadh — the drawn window
+
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}/analytics?from=2026-10-10&to=2026-10-14";
+        $data = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data');
+
+        $this->assertSame('active', $data['state']);
+        $this->assertNull($data['state_since']);
+        $this->assertSame(['from' => '2026-10-10', 'to' => '2026-10-14', 'views' => 3, 'devices' => 2, 'downloads' => 0], $data['comparison']['current']);
+        $this->assertSame(['from' => '2026-10-05', 'to' => '2026-10-09', 'views' => 3, 'devices' => 2, 'downloads' => 1], $data['comparison']['previous']);
+
+        $share->forceFill(['paused_at' => Carbon::parse('2026-10-15 08:00:00', 'UTC')])->save();
+        $data = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data');
+        $this->assertSame('paused', $data['state']);
+        $this->assertSame('2026-10-15T08:00:00+00:00', $data['state_since']);
+
+        $share->forceFill(['paused_at' => null, 'expires_at' => Carbon::parse('2026-10-16 00:00:00', 'UTC')])->save();
+        Carbon::setTestNow('2026-10-20 00:00:00');
+        $this->assertSame('expired', $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data.state'));
+        Carbon::setTestNow();
+    }
+
+    /**
      * REPORT-LINK-ANALYTICS-002 — the trend, the repeat opens and what was left out as a machine, each in the
      * report's own day, with the empty days present so a chart is continuous.
      */
