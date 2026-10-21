@@ -7,6 +7,7 @@ namespace App\Domains\Accounts\Capabilities;
 use App\Domains\Accounts\Services\AccountEntitlements;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Models\Tenant;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * CAP-REGISTRY-001 — the one answer to «is this module available here?».
@@ -103,6 +104,22 @@ final class Capabilities
         }
 
         return $out;
+    }
+
+    /**
+     * A counter that moves whenever a switch for this workspace changes, so anything that caches an answer can
+     * put it in its key and never read an answer older than the last change.
+     */
+    public function version(string $tenantId): int
+    {
+        return (int) Cache::get('capabilities:version:'.$tenantId, 0);
+    }
+
+    public function bump(string $tenantId): void
+    {
+        $key = 'capabilities:version:'.$tenantId;
+        Cache::add($key, 0);
+        Cache::increment($key);
     }
 
     public function allows(string $module, Tenant $tenant, ?string $clientId = null, ?string $projectId = null): bool
