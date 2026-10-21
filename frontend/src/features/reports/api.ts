@@ -324,6 +324,11 @@ export interface ShareAnalytics {
   granularity?: 'day' | 'week' | 'month'
   period?: { from: string; to: string }
   series?: Array<{ period: string; views: number; devices: number }>
+  /** REPORT-LINK-ANALYTICS-003 — the link's own state beside its figures, and when it entered it. */
+  state?: 'active' | 'paused' | 'revoked' | 'expired'
+  state_since?: string | null
+  /** The drawn window against the equal window just before it, in the report's own days. */
+  comparison?: { current: ShareWindow; previous: ShareWindow }
 }
 
 /**
@@ -338,6 +343,8 @@ export interface AdsBasis {
   family_label_ar: string | null
   family_label_en: string | null
 }
+
+export interface ShareWindow { from: string; to: string; views: number; devices: number; downloads: number }
 
 export type ShareGranularity = 'day' | 'week' | 'month'
 
