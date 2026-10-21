@@ -243,6 +243,10 @@ final class ImportExternalStructure
                 ...array_filter([
                     'headline' => is_string($creative['headline'] ?? null) && $creative['headline'] !== '' ? $creative['headline'] : null,
                     'body' => is_string($creative['body'] ?? null) && $creative['body'] !== '' ? $creative['body'] : null,
+                    // TIKTOK-MEDIA-001 — the file's own dimensions and length, only when the connector sent them.
+                    'width' => is_int($creative['width'] ?? null) ? $creative['width'] : null,
+                    'height' => is_int($creative['height'] ?? null) ? $creative['height'] : null,
+                    'duration_seconds' => is_numeric($creative['duration_seconds'] ?? null) ? (float) $creative['duration_seconds'] : null,
                 ], static fn ($v) => $v !== null),
                 /*
                  * CONTENT-NOTHING-TO-DRAW-WHY-001 — the body the platform sent, kept.
