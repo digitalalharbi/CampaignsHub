@@ -36,7 +36,7 @@ test('recommendations: rail link, chooser on a fresh visit, a click lands on the
 test('spend limits: rail link, chooser on a fresh visit, a click lands on the limits', async ({ page }) => {
   await freshVisit(page, '/agency/spend-limits')
   await expect(page.getByText('الصفحة غير موجودة')).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'حدود الإنفاق' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'الميزانية' })).toBeVisible()
 
   const chooser = page.getByTestId('project-chooser')
   await expect(chooser).toBeVisible({ timeout: 20_000 })

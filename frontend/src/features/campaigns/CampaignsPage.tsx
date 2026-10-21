@@ -199,6 +199,18 @@ export function CampaignsPage() {
   }
 
   const [modalOpen, setModalOpen] = useState(false)
+  /*
+   * NAV-TAXONOMY-001 — «إطلاق الحملات» in the rail is this page with its builder open (`?launch=1`). The builder is the
+   * same one the «new campaign» button opens; the address only says «open it», and closing it removes the parameter so
+   * Back and a reload do not reopen it. Someone without `campaigns.create` is not shown a builder they cannot submit;
+   * they are told why instead.
+   */
+  const [launch, setLaunch] = useUrlState('launch', '')
+  const launching = launch === '1'
+  const closeBuilder = () => {
+    setModalOpen(false)
+    if (launching) setLaunch('')
+  }
   const range = useLastNDaysRange(days)
 
   /*
@@ -1511,7 +1523,12 @@ export function CampaignsPage() {
         </nav>
       )}
 
-      <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} projectId={projectId} />
+      <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
+      {launching && !canCreate && (
+        <p role="status" data-testid="launch-not-permitted" className="mt-3 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
+          {ar ? 'إطلاق الحملات يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
+        </p>
+      )}
     </div>
   )
 }
