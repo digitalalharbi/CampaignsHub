@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { PortfolioPage } from './PortfolioPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
@@ -170,5 +170,37 @@ describe('the portfolio page', () => {
 
     expect(await screen.findByTestId('portfolio-project-providers-p1')).toHaveTextContent('snapchat')
     expect(screen.queryByTestId('portfolio-project-providers-p2')).toBeNull()
+  })
+
+  /* ADV-HOME-001 — the advertiser is never told it is looking at «the agency». */
+  it('speaks to an advertiser as an advertiser, and to an agency as an agency', async () => {
+    const { unmount } = renderWithProviders(<PortfolioPage />, { locale: 'ar', route: '/app/portfolio' })
+    expect(await screen.findByText(/كل مشاريعك في مكان واحد/)).toBeInTheDocument()
+    expect(screen.queryByText(/نظرة عامة على الوكالة/)).toBeNull()
+    unmount()
+
+    renderWithProviders(<PortfolioPage />, { locale: 'ar', route: '/agency/portfolio' })
+    expect(await screen.findByText(/نظرة عامة على الوكالة/)).toBeInTheDocument()
+  })
+
+  it('as the dashboard home, states the figures without a second page title and opens a project in place', async () => {
+    const open = vi.fn()
+    renderWithProviders(<PortfolioPage home onOpenProject={open} />, { locale: 'en', route: '/app/dashboard' })
+
+    const kpis = within(await screen.findByTestId('portfolio-home-kpis'))
+    expect(kpis.getByTestId('portfolio-projects-total')).toHaveTextContent('3')
+    expect(kpis.getByTestId('portfolio-attention-total')).toHaveTextContent('2')
+    expect(screen.queryByTestId('portfolio-intro')).toBeNull()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+
+    fireEvent.click(screen.getByTestId('portfolio-open-dashboard-p2'))
+    expect(open).toHaveBeenCalledWith('p2')
+  })
+
+  it('offers no in-place opening on the portfolio page itself', async () => {
+    renderWithProviders(<PortfolioPage />, { locale: 'en', route: '/app/portfolio' })
+
+    await screen.findByTestId('portfolio-projects-total')
+    expect(screen.queryByTestId('portfolio-open-dashboard-p1')).toBeNull()
   })
 })

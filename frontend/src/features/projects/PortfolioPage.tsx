@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/Badge'
 import { PeriodLabel, SectionHeader } from '@/components/patterns/Status'
 import { CoverageMatrix, RankedBars, Sparkline, StateDistribution } from '@/components/patterns/Visuals'
 import { platformColor } from '@/features/analytics/components'
-import { usePortalPath } from '@/app/portalPath'
+import { usePortalBase, usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -51,6 +51,10 @@ const COPY = {
     title: 'المشاريع',
     scope: 'جميع المشاريع',
     lead: 'نظرة عامة على الوكالة — كل مشروع تملك صلاحية الوصول إليه.',
+    leadApp: 'كل مشاريعك في مكان واحد — كل مشروع تملك صلاحية الوصول إليه.',
+    homeTitle: 'نظرة عامة على مشاريعك',
+    homeQuestion: 'أين تقف مشاريعك، وأيها يحتاج متابعة — افتح أي مشروع لعرض لوحته.',
+    openDashboard: 'افتح اللوحة',
     projects: 'المشاريع',
     active: 'نشطة',
     attention: 'تحتاج متابعة',
@@ -87,6 +91,10 @@ const COPY = {
     title: 'Projects',
     scope: 'All projects',
     lead: 'The agency at a glance — every project you may reach.',
+    leadApp: 'All your projects in one place — every project you may reach.',
+    homeTitle: 'Your projects at a glance',
+    homeQuestion: 'Where your projects stand and which need attention — open any project for its dashboard.',
+    openDashboard: 'Open dashboard',
     projects: 'Projects',
     active: 'Active',
     attention: 'Need attention',
@@ -136,11 +144,20 @@ const ATTENTION_TONE = {
   stale: 'warning',
 } as const
 
-export function PortfolioPage() {
+/**
+ * ADV-HOME-001 — `home` is the advertiser dashboard before a project is chosen.
+ *
+ * That screen was a bare project chooser: an advertiser with two projects never saw a figure until
+ * they picked one, while the agency's home showed its whole book at once. The same overview now
+ * stands there, under the dashboard's own heading (so no second page title), and each project row
+ * opens that project's dashboard in place rather than leaving for its integrations.
+ */
+export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean; onOpenProject?: (id: string) => void } = {}) {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
   const t = COPY[locale]
   const portalPath = usePortalPath()
+  const agency = usePortalBase() === '/agency'
 
   const overview = useQuery({
     queryKey: ['portfolio-overview'],
@@ -201,27 +218,10 @@ export function PortfolioPage() {
 
   return (
     <section className="space-y-4">
-      <PageIntro
-        testid="portfolio-intro"
-        title={t.title}
-        badges={
-          <>
-            <Badge tone="neutral" data-testid="portfolio-scope">
-              <Layers size={12} aria-hidden /> {t.scope}
-            </Badge>
-            <Badge tone={data.attention.total > 0 ? 'warning' : 'success'} data-testid="portfolio-health">
-              {data.attention.total > 0 ? `${t.attention}: ${data.attention.total}` : t.healthy}
-            </Badge>
-          </>
-        }
-        purpose={t.lead}
-        meta={
-          <>
-            <PeriodLabel from={data.period.from} to={data.period.to} testId="portfolio-period" />
-            <DataFreshness lastSyncAt={freshest} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="portfolio-freshness" />
-          </>
-        }
-        kpis={
+      {home ? (
+        <div data-testid="portfolio-home">
+          <SectionHeader title={t.homeTitle} question={t.homeQuestion} testId="portfolio-home-header" />
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 [&>*]:min-w-0" data-testid="portfolio-home-kpis">
           <>
             <StatCard
               label={t.projects}
@@ -262,8 +262,73 @@ export function PortfolioPage() {
               testid="portfolio-spend"
             />
           </>
-        }
-      />
+          </div>
+        </div>
+      ) : (
+        <PageIntro
+          testid="portfolio-intro"
+          title={t.title}
+          badges={
+            <>
+              <Badge tone="neutral" data-testid="portfolio-scope">
+                <Layers size={12} aria-hidden /> {t.scope}
+              </Badge>
+              <Badge tone={data.attention.total > 0 ? 'warning' : 'success'} data-testid="portfolio-health">
+                {data.attention.total > 0 ? `${t.attention}: ${data.attention.total}` : t.healthy}
+              </Badge>
+            </>
+          }
+          purpose={agency ? t.lead : t.leadApp}
+          meta={
+            <>
+              <PeriodLabel from={data.period.from} to={data.period.to} testId="portfolio-period" />
+              <DataFreshness lastSyncAt={freshest} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="portfolio-freshness" />
+            </>
+          }
+          kpis={
+            <>
+              <StatCard
+                label={t.projects}
+                value={data.projects.total.toLocaleString('en-US')}
+                hint={`${active.toLocaleString('en-US')} ${t.active}`}
+                tone="brand"
+                dot
+                testid="portfolio-projects-total"
+              />
+              <StatCard
+                label={t.attention}
+                value={data.attention.total.toLocaleString('en-US')}
+                tone={data.attention.total > 0 ? 'warning' : 'success'}
+                dot
+                testid="portfolio-attention-total"
+              />
+              <StatCard
+                label={t.campaigns}
+                value={campaigns.total.toLocaleString('en-US')}
+                tone="neutral"
+                dot
+                testid="portfolio-campaigns-total"
+              />
+              {/*
+                Spend is the one KPI that cannot be a single number, so it states the leading currency
+                and how many others exist rather than a sum that would be a lie.
+              */}
+              <StatCard
+                label={t.spend}
+                value={
+                  data.spend.by_currency.length === 0
+                    ? '—'
+                    : `${Math.round(data.spend.by_currency[0]!.spend).toLocaleString('en-US')} ${data.spend.by_currency[0]!.currency}`
+                }
+                hint={data.spend.comparable ? undefined : t.notComparable}
+                tone="neutral"
+                dot
+                testid="portfolio-spend"
+              />
+            </>
+          }
+        />
+      )}
 
       {data.projects.total === 0 ? (
         /*
@@ -505,6 +570,16 @@ export function PortfolioPage() {
                     />
                   </span>
 
+                  {home && onOpenProject && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenProject(p.id)}
+                      data-testid={`portfolio-open-dashboard-${p.id}`}
+                      className="shrink-0 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500"
+                    >
+                      {t.openDashboard}
+                    </button>
+                  )}
                   <Link
                     to={portalPath(`/projects/${p.id}/integrations`)}
                     className="shrink-0 text-xs font-bold text-brand-600 hover:underline"
