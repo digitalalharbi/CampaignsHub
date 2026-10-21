@@ -111,8 +111,8 @@ export function CommerceOutcomesWidget({ projectId, range }: { projectId: string
         {coverage.orders_with_money_withheld > 0 && (
           <p data-testid="commerce-withheld" className="text-xs text-text-muted">
             {ar
-              ? `إيراد ${coverage.orders_with_money_withheld} طلبًا محجوب لغياب سعر صرف موثوق، وهو غير مشمول في الإجمالي.`
-              : `${coverage.orders_with_money_withheld} order(s) have revenue withheld — no trustworthy exchange rate — and are missing from the total.`}
+              ? `طلبات إيرادها محجوب لغياب سعر صرف موثوق، وغير مشمولة في الإجمالي: ${coverage.orders_with_money_withheld}`
+              : `Orders with revenue withheld (no trustworthy exchange rate), missing from the total: ${coverage.orders_with_money_withheld}`}
           </p>
         )}
       </div>
