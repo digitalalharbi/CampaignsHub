@@ -20,6 +20,7 @@ const COPY = {
     title: 'تعديل الرابط', hint: 'الرابط نفسه يبقى كما هو — يظهر التغيير للعميل عند فتحه المرة القادمة.',
     download: 'السماح بالتنزيل', watermark: 'علامة مائية', spend: 'إخفاء الإنفاق', revenue: 'إخفاء الإيرادات', names: 'إخفاء أسماء الحملات',
     columns: 'أعمدة الجداول المنشورة', form: 'مستوى التقرير', formAsIs: 'كما هو التقرير', formExec: 'ملخص تنفيذي', formDetailed: 'تقرير تفصيلي',
+    accountNames: 'إظهار أسماء الحسابات الإعلانية (أسماء تقنية — مخفية افتراضيًا)', form: 'مستوى التقرير', formAsIs: 'كما هو التقرير', formExec: 'ملخص تنفيذي', formDetailed: 'تقرير تفصيلي',
     password: 'كلمة مرور جديدة', clearPassword: 'إزالة كلمة المرور', expiry: 'تاريخ انتهاء جديد', clearExpiry: 'بلا انتهاء',
     previous: 'إظهار مقارنة الفترة السابقة للعميل', save: 'حفظ التعديل', cancel: 'إلغاء', protectedNow: 'محمي بكلمة مرور حالياً',
   },
@@ -27,6 +28,7 @@ const COPY = {
     title: 'Edit link', hint: 'The link itself stays exactly as it is — the client sees the change the next time they open it.',
     download: 'Allow download', watermark: 'Watermark', spend: 'Hide spend', revenue: 'Hide revenue', names: 'Hide campaign names',
     columns: 'Published table columns', form: 'Report level', formAsIs: 'As the report is', formExec: 'Executive summary', formDetailed: 'Detailed report',
+    accountNames: 'Show ad-account names (technical names — hidden by default)', form: 'Report level', formAsIs: 'As the report is', formExec: 'Executive summary', formDetailed: 'Detailed report',
     password: 'New password', clearPassword: 'Remove the password', expiry: 'New expiry date', clearExpiry: 'Never expires',
     previous: 'Show the previous-period comparison to the client', save: 'Save changes', cancel: 'Cancel', protectedNow: 'Currently password-protected',
   },
@@ -70,6 +72,17 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
           <Row k="hide_campaign_names" label={t.names} />
         </div>
         <ShareWidgetsPanel projectId={projectId} reportId={reportId} shareId={share.id} />
+        {/* REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — technical ad-account names are off for a client unless the Owner says so. */}
+        <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+          <span>{t.accountNames}</span>
+          <input
+            type="checkbox"
+            data-testid="edit-account-names"
+            checked={edit.sections?.account_names ?? share.sections?.account_names ?? false}
+            onChange={(e) => setEdit((x) => ({ ...x, sections: { ...(x.sections ?? {}), account_names: e.target.checked } }))}
+            className="h-4 w-4 accent-brand-600"
+          />
+        </label>
         <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
           <span>{t.previous}</span>
           <input

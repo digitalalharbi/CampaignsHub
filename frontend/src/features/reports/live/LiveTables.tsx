@@ -102,7 +102,8 @@ export function TablesView({
   ], platforms)
 
   const accTable = build<Row>('accounts', [
-    { key: 'name', head: ar ? 'الحساب الإعلاني' : 'Ad account', cell: (a) => String(a.account_name ?? (ar ? 'حساب بلا اسم' : 'Unnamed account')), value: (a) => String(a.account_name ?? '') },
+    // REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — a withheld name arrives as «حساب ميتا 1» with an English twin; the real name only when the Owner enabled it.
+    { key: 'name', head: ar ? 'الحساب الإعلاني' : 'Ad account', cell: (a) => String((!ar && a.account_name_withheld ? a.account_name_en : null) ?? a.account_name ?? (ar ? 'حساب بلا اسم' : 'Unnamed account')), value: (a) => String(a.account_name ?? '') },
     { key: 'platform', head: ar ? 'المنصة' : 'Platform', cell: (a) => <ProviderName provider={String(a.provider ?? '')} locale={locale} size={16} />, value: (a) => String(a.provider ?? '') },
     metricCol('results', results, 'conversions', (a) => a),
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (a) => a),
