@@ -125,3 +125,7 @@ cd frontend && npm run gate > gate.log 2>&1; REAL_GATE_EXIT=$?
 
 `REAL_GATE_EXIT` must be captured on its own line. Piping the gate into `tail` gives you `tail`'s
 exit code, which is always 0, and that has produced a false green in this repository before.
+
+## Permanent execution guard — read FIRST, every session
+
+`docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md` is the Owner's cumulative requirements index and completion gate. Every session: `git fetch`; read the guard, `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` (the only status ledger), `docs/OWNER_OBSERVED_DEFECTS.md` and `docs/RESUME_STATE.md`; reconcile ALL open rows and PRs, not only the latest message; then execute the next highest-value bounded batch (code → tests → CI → merge → deploy → real Production verification → update the EXISTING ledger rows). A later explicit Owner correction overrides only the precise part it contradicts. Never mark VERIFIED without Production evidence; never redo VERIFIED work.
