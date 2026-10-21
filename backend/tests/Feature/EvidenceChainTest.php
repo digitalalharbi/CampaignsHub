@@ -21,6 +21,7 @@ use App\Domains\Metrics\Touchpoints\OrderTouchpointLink;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\ShortLinks\Models\ShortLink;
 use App\Domains\Tenancy\Actions\GrantMembership;
@@ -34,6 +35,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 /**
@@ -570,6 +572,73 @@ final class EvidenceChainTest extends TestCase
         $url = "/api/v1/projects/{$this->project->id}/reports/{$report->id}/shares/{$share->id}/widgets";
         $this->actingAs($stranger, 'sanctum')->withHeaders(self::SPA)->getJson($url)->assertStatus(404);
         $this->actingAs($stranger, 'sanctum')->withHeaders(self::SPA)->putJson($url, ['items' => []])->assertStatus(404);
+    }
+
+    // ── the same widgets in the FILES a link produces ────────────────────────────────────────────────────
+
+    /** @return array{0: Report, 1: array<string,mixed>} the report carrying the link's download document */
+    private function downloadDocumentFor(Report $report, ReportShare $share): array
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $fresh = Report::withoutGlobalScopes()->findOrFail($report->getKey());
+        $document = app(ShareService::class)->downloadDocument($fresh, $share);
+        $fresh->data = $document;
+
+        return [$fresh, $document];
+    }
+
+    public function test_the_csv_and_the_spreadsheet_carry_the_same_widgets_the_page_shows_and_nothing_more(): void
+    {
+        $this->chooseModels(['linear']);
+        $link = $this->link();
+        $sent = $this->click($link);
+        $this->click($link, 'Googlebot/2.1');
+        $this->order('o-1', $sent);
+        $this->order('o-2', 'https://store.example/product');
+        [$report, $share, $raw] = $this->sharedReport(['allow_download' => true]);
+        $this->linkWidgets($report, $share, [
+            ['key' => 'link_opens', 'visible' => true, 'order' => 1, 'size' => 'full'],
+            ['key' => 'attribution_credit', 'visible' => true, 'order' => 2, 'size' => 'full'],
+        ])->assertOk();
+
+        $page = collect($this->clientWidgets($raw))->keyBy('key');
+        [$withDoc, $document] = $this->downloadDocumentFor($report, $share);
+        $this->assertEquals($page->pluck('data', 'key')->all(), collect($document['widgets'])->pluck('data', 'key')->all(), 'the document holds exactly what the page was given');
+
+        $csv = app(ReportExporter::class)->render($withDoc, 'csv', $share);
+        $this->assertStringContainsString('Link activity / نشاط الروابط', $csv);
+        $this->assertStringContainsString('2026-10-21,1', $csv, 'the human open is a row; the machine open is not');
+        $this->assertStringContainsString('"Total opens / إجمالي الفتحات",1', $csv);
+        $this->assertStringContainsString('Attribution by channel / الإسناد حسب القناة', $csv);
+        $this->assertStringContainsString('smart_link,1', $csv);
+        $this->assertStringContainsString('unattributed,1', $csv);
+        $this->assertStringContainsString('"Orders without evidence / طلبات بلا دليل",1', $csv);
+        // The orders were worth 250 and 250: no amount of money reaches this file (the disclosure about withheld revenue is a count, not an amount).
+        foreach (['machine', $link->slug, 'store.example', '250'] as $internal) {
+            $this->assertStringNotContainsStringIgnoringCase($internal, $csv, "the file carries {$internal}");
+        }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'widgets_').'.xlsx';
+        file_put_contents($tmp, app(ReportExporter::class)->render($withDoc, 'xlsx', $share));
+        $book = IOFactory::load($tmp);
+        @unlink($tmp);
+        $this->assertNotNull($book->getSheetByName('Link activity'));
+        $this->assertNotNull($book->getSheetByName('Attribution'));
+        $this->assertContains('smart_link', array_column($book->getSheetByName('Attribution')->toArray(), 0));
+    }
+
+    public function test_a_link_with_no_widgets_switched_on_produces_files_with_no_widget_tables(): void
+    {
+        $this->chooseModels(['linear']);
+        $this->order('o-1', $this->click($this->link()));
+        [$report, $share] = $this->sharedReport(['allow_download' => true]);
+
+        [$withDoc, $document] = $this->downloadDocumentFor($report, $share);
+        $this->assertSame([], $document['widgets']);
+
+        $csv = app(ReportExporter::class)->render($withDoc, 'csv', $share);
+        $this->assertStringNotContainsString('Link activity', $csv);
+        $this->assertStringNotContainsString('Attribution by channel', $csv);
     }
 
     public function test_the_settings_refuse_what_the_engine_cannot_run_and_say_why(): void

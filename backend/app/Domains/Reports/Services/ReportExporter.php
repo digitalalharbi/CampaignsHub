@@ -486,6 +486,16 @@ final class ReportExporter
             }
         }
 
+        // WIDGET-REGISTRY-001 — the widgets the link shows on the web, as the same tables: file and page do not differ.
+        foreach (self::widgetTables($data) as $table) {
+            $put([]);
+            $put([$table['title']]);
+            $put($table['head']);
+            foreach ($table['rows'] as $row) {
+                $put($row);
+            }
+        }
+
         // REPORT-COMPOSITION-CONTROL-001 — the daily ledger, only where the `daily_records` component is shown.
         if (self::dailyRecordsChosen($data)) {
             $put([]);
@@ -673,6 +683,11 @@ final class ReportExporter
             $add('Creatives', $creativeHead, $creativeRows);
         }
 
+        // WIDGET-REGISTRY-001 — one sheet per widget the link shows, the same tables the CSV carries.
+        foreach (self::widgetTables($data) as $table) {
+            $this->xlsxSheet($book, $table['sheet'], $table['head'], $table['rows']);
+        }
+
         $notes = $book->createSheet();
         $notes->setTitle('Methodology & Notes');
         $notes->fromArray(['المنهجية والملاحظات', ''], null, 'A1');
@@ -698,6 +713,57 @@ final class ReportExporter
      * @param  list<string>  $head
      * @param  list<array<int,mixed>>  $rows
      */
+    /**
+     * WIDGET-REGISTRY-001 — the tables a link's widgets become in a file.
+     *
+     * Built ONLY from `$data['widgets']`, which `ShareService::downloadDocument` fills from the same client-safe
+     * data the web report receives, so the spreadsheet cannot show a widget the page does not, nor more of one. An
+     * absent or empty list yields no table and no sheet. The orders are credit SHARES, so fractions are kept:
+     * rounding them to whole orders would turn an attribution model into a different model.
+     *
+     * @param  array<string,mixed>  $data
+     * @return list<array{title: string, sheet: string, head: list<string>, rows: list<list<mixed>>}>
+     */
+    private static function widgetTables(array $data): array
+    {
+        $out = [];
+        foreach ((array) ($data['widgets'] ?? []) as $widget) {
+            if (! is_array($widget) || ! is_array($widget['data'] ?? null)) {
+                continue;
+            }
+            $d = $widget['data'];
+
+            if (($widget['key'] ?? null) === 'link_opens') {
+                $rows = [];
+                foreach ((array) ($d['series'] ?? []) as $point) {
+                    $rows[] = [(string) ($point['period'] ?? ''), (int) ($point['opens'] ?? 0)];
+                }
+                $rows[] = ['Total opens / إجمالي الفتحات', (int) ($d['opens'] ?? 0)];
+                $rows[] = ['Measured since / يُقاس منذ', (string) ($d['tracking_since'] ?? '')];
+                $rows[] = ['Basis / الأساس', 'Link opens, not sales / فتحات الروابط وليست مبيعات'];
+                $out[] = ['title' => 'Link activity / نشاط الروابط', 'sheet' => 'Link activity', 'head' => ['Period', 'Opens'], 'rows' => $rows];
+            }
+
+            if (($widget['key'] ?? null) === 'attribution_credit') {
+                $models = array_values(array_map('strval', (array) ($d['models'] ?? [])));
+                $rows = [];
+                foreach ((array) ($d['channels'] ?? []) as $c) {
+                    $rows[] = [(string) ($c['channel'] ?? ''), ...array_map(static fn (string $m) => $c['models'][$m]['orders'] ?? '', $models)];
+                }
+                $cov = (array) ($d['coverage'] ?? []);
+                $rows[] = [];
+                $rows[] = ['Orders with verified touchpoints / طلبات بدليل مُتحقَّق', (int) ($cov['orders_with_verified_touchpoints'] ?? 0)];
+                $rows[] = ['Orders without evidence / طلبات بلا دليل', (int) ($cov['orders_without_evidence'] ?? 0)];
+                $rows[] = ['Fully refunded orders not shared out / طلبات مستردة بالكامل لم توزّع', (int) ($cov['orders_excluded_fully_refunded'] ?? 0)];
+                $rows[] = ['Orders with withheld revenue / طلبات إيرادها محجوب', (int) ($cov['orders_with_withheld_revenue'] ?? 0)];
+                $rows[] = ['Basis / الأساس', 'Orders tied to verified evidence only; a click is not a purchase / طلبات مرتبطة بدليل مُتحقَّق فقط؛ النقرة ليست عملية شراء'];
+                $out[] = ['title' => 'Attribution by channel / الإسناد حسب القناة', 'sheet' => 'Attribution', 'head' => ['Channel', ...$models], 'rows' => $rows];
+            }
+        }
+
+        return $out;
+    }
+
     /** The daily ledger's columns — the Tables view's, in the same order. */
     private const DAILY_HEAD = ['Date', 'Impressions', 'Clicks', 'Results', 'Spend'];
 
