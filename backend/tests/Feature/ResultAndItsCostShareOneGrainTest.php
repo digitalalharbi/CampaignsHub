@@ -184,14 +184,16 @@ final class ResultAndItsCostShareOneGrainTest extends TestCase
         [$numerator, $denominator] = $row['ratio_inputs']['cpa'] ?? [null, null];
 
         /*
-         * Both nulls is the correct answer for this row — the displayed denominator is zero, so
-         * there is no ratio and nothing for an aggregate to pool. Asserting it rather than skipping
-         * is what stops a future change quietly recording the ad grain's three here while the card
-         * still says none.
+         * CREATIVE-GRAIN-ZERO-001 (Owner defect 114, 2026-10-21) — the creative grain's zero beside the
+         * ads' three, over the same days, is the platform saying «not at this grain»: the card shows
+         * the three, and the ratio's denominator IS the three the card shows. The invariant this test
+         * guards is unchanged — the denominator recorded is the figure displayed — only the displayed
+         * figure is now the measured count rather than the unmeasured zero.
          */
-        $this->assertNull($denominator, 'a denominator was recorded for a ratio the card cannot show');
-        $this->assertNull($numerator);
-        $this->assertNull($row['cpa'] ?? null);
+        $this->assertSame(3.0, (float) $row['conversions']);
+        $this->assertSame(3.0, (float) $denominator, 'the denominator recorded is not the figure the card shows');
+        $this->assertEqualsWithDelta(38.36, (float) $numerator, 0.001);
+        $this->assertEqualsWithDelta(12.79, (float) $row['cpa'], 0.01);
     }
 
     /**
@@ -229,6 +231,19 @@ final class ResultAndItsCostShareOneGrainTest extends TestCase
 
         $row = $this->figures($creative);
 
+        if ($resultKey === 'conversions') {
+            /*
+             * CREATIVE-GRAIN-ZERO-001 — a RESULT the creative grain answered with a zero while its ads
+             * measured a count is taken from the ads, cost and all, from that one grain (Owner defect
+             * 114: Snapchat's creative grain says 0 for purchases it does not break down).
+             */
+            $this->assertSame(3.0, (float) $row[$resultKey], 'the ads’ measured count was not stated');
+            $this->assertEqualsWithDelta(12.79, (float) $row[$costKey], 0.01, 'the cost did not follow the count to the ad grain');
+
+            return;
+        }
+
+        // Delivery-type figures are reported on every grain, so a zero there is the creative’s own and keeps no cost.
         $this->assertSame(0.0, (float) ($row[$resultKey] ?? -1), 'the creative grain’s measured zero was overwritten');
         $this->assertNull(
             $row[$costKey] ?? null,
@@ -334,15 +349,14 @@ final class ResultAndItsCostShareOneGrainTest extends TestCase
         $total = $metrics->aggregate(array_values($rows));
 
         $this->assertNotNull($total);
-        $this->assertSame(5.0, (float) $total['conversions'], 'the group counted a different number of results');
-
         /*
-         * 88.36 of spend across the two, but only 50 of it bought results anything could measure, so
-         * the pooled cost is 50 ÷ 5. Pooling 88.36 ÷ 5 would charge the clean creative for the other
-         * one's unmeasurable spend; pooling 88.36 ÷ 8 would invent three results the card never
-         * shows.
+         * CREATIVE-GRAIN-ZERO-001 — the first creative now states its ads' three (its card shows
+         * three), so the group counts eight, and the pooled cost is the pooled spend over the pooled
+         * results each row actually stated: 88.36 ÷ 8. The invariant stands: nothing is pooled that a
+         * row could not state, and the denominator is the results the total actually counted.
          */
-        $this->assertEqualsWithDelta(10.0, (float) $total['cpa'], 0.01, 'the group pooled across grains');
+        $this->assertSame(8.0, (float) $total['conversions'], 'the group counted a different number of results');
+        $this->assertEqualsWithDelta(88.36 / 8, (float) $total['cpa'], 0.01, 'the group pooled across grains');
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────────────────────────
