@@ -1,5 +1,7 @@
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
+**2026-10-21 late:** #791 (`6581b224`, DASH-ANOMALY-001) MERGED and DEPLOYED — served bundle `index-B1-8dEr1.js` carries `anomaly-sort-date`. serial chain now on 793 → 795 → 798.
+
 **Short links (feat/short-link-resume, SHORT-LINK-RESUME-001):** a disabled link resumes at the same address; expiry and custom slugs were NOT added because SHORT-LINKS-001 records the Owner's explicit exclusion while the 2026-10-21 tracking directive asks for them — an Owner decision, recorded in the matrix row. Based on main; open its PR after the queue.
 
 **Marketing-OS program (Owner directive 2026-10-20), Batch B started:** capability registry CAP-REGISTRY-001 on branch feat/capability-registry (config/capabilities.php, Capabilities::resolve, capability_switches, /settings/capabilities, `module:` middleware, Settings → Modules). Audit of what already exists (attribution comparison, short links, influencers, leads, GA4 layer, one Recharts layer): the real gaps are smart-link slugs/expiry/QR/UTM templates, linear/position/time-decay attribution, bio pages, tracking health, product/cohort analytics, waterfall/sankey. Open: #785 (docs), #786 (content exclusion).
