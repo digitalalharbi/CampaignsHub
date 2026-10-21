@@ -29,9 +29,9 @@ use Throwable;
  *
  * Three endpoints and one honest answer:
  *
- *   - `providers` is PUBLIC and says which providers are usable. The sign-in page renders every one
- *     of them either way, so a provider that has not been set up appears as unavailable with the
- *     reason on it rather than as a button that redirects into an error nobody can explain.
+ *   - `providers` is PUBLIC and says which providers are usable. The sign-in page advertises only
+ *     usable providers, so an installation without credentials has no dead control that redirects
+ *     into an error nobody can explain.
  *   - `start` mints the PKCE verifier, `state` and `nonce`, and hands back the authorize URL.
  *   - `callback` is where the provider returns. It verifies `state`, exchanges the code with the
  *     verifier, checks the `nonce`, and then applies the portal rule that the password path applies:

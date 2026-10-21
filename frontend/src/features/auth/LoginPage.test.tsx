@@ -62,6 +62,17 @@ describe('LoginPage — the sign-in card', () => {
     expect(screen.getByTestId('login-google')).toHaveTextContent('Continue with Google')
     expect(startOAuth).not.toHaveBeenCalled()
   })
+
+  it('does not advertise Google when the server reports it unavailable', async () => {
+    vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
+      { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
+    ])
+
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await waitFor(() => expect(fetchOAuthProviders).toHaveBeenCalled())
+    expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
+  })
   afterEach(() => { signOut(); vi.clearAllMocks() })
 
   it('offers no portal choice at all', () => {

@@ -109,9 +109,9 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         ->middleware('throttle:6,1');
 
     /*
-     * Social sign-in (LOGIN-004). `providers` is public so the sign-in page can render each one's
-     * real state — Live, or Awaiting Credentials — instead of offering a button that cannot work.
-     * `start` and `callback` are public too: they ARE the sign-in.
+     * Social sign-in (LOGIN-004). `providers` is public so the sign-in page can use each provider's
+     * real state — Live, or Awaiting Credentials — and omit an action that cannot work. `start` and
+     * `callback` are public too: they ARE the sign-in.
      */
     Route::get('/oauth/providers', [OAuthController::class, 'providers'])->name('oauth.providers');
 

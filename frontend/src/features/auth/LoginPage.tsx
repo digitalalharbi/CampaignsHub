@@ -79,7 +79,6 @@ const COPY = {
     phoneInvalid: 'أدخل رقم جوال صحيحًا.',
     continue: 'متابعة',
     google: 'المتابعة عبر Google',
-    providerUnavailable: 'بانتظار إعداد Google',
   },
   en: {
     title: 'Welcome back',
@@ -113,7 +112,6 @@ const COPY = {
     phoneInvalid: 'Enter a valid mobile number.',
     continue: 'Continue',
     google: 'Continue with Google',
-    providerUnavailable: 'Google setup is pending',
   },
 } as const
 
@@ -144,6 +142,7 @@ export function LoginPage() {
   const c = COPY[locale]
   const oauthProviders = useQuery({ queryKey: ['oauth', 'providers'], queryFn: fetchOAuthProviders })
   const google = oauthProviders.data?.find((provider) => provider.provider === 'google')
+  const googleAvailable = google?.available === true
   const googleSignIn = useMutation({
     mutationFn: () => startOAuth('google', { redirect: null }),
     onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
@@ -440,37 +439,40 @@ export function LoginPage() {
               <span className="h-px flex-1 bg-border" />
             </div>
 
-            <Button
-              type="button"
-              data-testid="login-request-code"
-              variant="secondary"
-              className="w-full"
-              size="lg"
-              loading={requestCode.isPending || startCode.isPending}
-              onClick={askForCode}
-            >
-              <Mail size={17} /> {c.sendCode}
-            </Button>
+            {/*
+              Keep the optional provider in the existing secondary-action row. Adding a second
+              separator and a full-width row pushed the 1366x768 sign-in page below the viewport.
+              An unconfigured provider is omitted: there is no useful action for a visitor to take,
+              and the server remains the authority that decides when the capability is available.
+            */}
+            <div className={googleAvailable ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'grid grid-cols-1 gap-3'}>
+              <Button
+                type="button"
+                data-testid="login-request-code"
+                variant="secondary"
+                className="w-full"
+                size="lg"
+                loading={requestCode.isPending || startCode.isPending}
+                onClick={askForCode}
+              >
+                <Mail size={17} /> {c.sendCode}
+              </Button>
 
-            <div className="my-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-[13px] text-text-secondary">OAuth</span>
-              <span className="h-px flex-1 bg-border" />
+              {googleAvailable && (
+                <Button
+                  type="button"
+                  data-testid="login-google"
+                  variant="secondary"
+                  className="w-full"
+                  size="lg"
+                  loading={googleSignIn.isPending}
+                  onClick={() => googleSignIn.mutate()}
+                >
+                  <span aria-hidden="true" className="font-bold">G</span>
+                  {c.google}
+                </Button>
+              )}
             </div>
-
-            <Button
-              type="button"
-              data-testid="login-google"
-              variant="secondary"
-              className="w-full"
-              size="lg"
-              loading={googleSignIn.isPending}
-              disabled={!google?.available}
-              onClick={() => googleSignIn.mutate()}
-            >
-              <span aria-hidden="true" className="font-bold">G</span>
-              {google?.available ? c.google : c.providerUnavailable}
-            </Button>
 
             {/*
               A statement of practice, not a claim about this request.

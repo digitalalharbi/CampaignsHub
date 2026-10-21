@@ -251,7 +251,7 @@ test.describe('signing in', () => {
 
 
   /**
-   * No third party stands between somebody and their own account (LOGIN-CARD-001).
+   * An unavailable third party is not advertised as a way into an account (LOGIN-CARD-001).
    *
    * This test used to assert the opposite: that Google and Apple were offered, disabled, and honest
    * about having no credentials. Honest, and still the wrong thing to show — an unconfigured button
@@ -261,7 +261,7 @@ test.describe('signing in', () => {
    * The OAuth ENDPOINTS are untouched and still covered by their own tests. What changed is that the
    * sign-in card does not advertise them.
    */
-  test('the sign-in card offers no third-party button', async ({ page }) => {
+  test('the sign-in card hides unavailable third-party providers', async ({ page }) => {
     await page.goto('/login')
 
     await expect(page.getByTestId('login-email')).toBeVisible()

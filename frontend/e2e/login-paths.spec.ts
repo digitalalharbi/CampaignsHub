@@ -28,12 +28,12 @@ test.describe('the sign-in box offers one door', () => {
   })
 
   /**
-   * The card carries both routes, and no third-party button (LOGIN-CARD-001).
+   * The card carries both routes and hides unavailable third-party providers (LOGIN-CARD-001).
    *
    * The absence half matters as much as the presence half: a social button here would hand a fifth
    * party the ability to decide who gets into this product, and none of them is configured.
    */
-  test('the card carries both routes, and no social button', async ({ page }) => {
+  test('the card carries both routes and hides unavailable social providers', async ({ page }) => {
     await page.goto('/login')
     await switchToEnglish(page)
 
