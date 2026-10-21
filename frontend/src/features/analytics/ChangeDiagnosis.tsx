@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { MetricTable } from '@/components/ui/MetricTable'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { StatCard } from '@/components/ui/StatCard'
 import { Explainer } from '@/components/ui/Explainer'
@@ -736,57 +737,34 @@ function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoi
         </div>
       )}
 
-      {/* `min-w-0` + `max-w-full`: WebKit sizes an overflow-x-auto box by its table's min-width unless told it may shrink — the sweep caught /agency/analytics scrolling sideways at 390px. */}
-      <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-border" data-testid="change-timeline">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead className="bg-surface-secondary text-xs text-text-muted">
-            <tr>
-              <th className="px-3 py-2 text-start font-semibold">
-                <button type="button" onClick={() => setSort('date')} aria-pressed={sort === 'date'} data-testid="anomaly-sort-date">{ar ? 'اليوم' : 'Day'}</button>
-              </th>
-              <th className="px-3 py-2 text-start font-semibold">{ar ? 'المؤشر' : 'Metric'}</th>
-              <th className="px-3 py-2 text-end font-semibold">{ar ? 'الفعلي' : 'Actual'}</th>
-              <th className="px-3 py-2 text-end font-semibold">{ar ? 'المرجع' : 'Reference'}</th>
-              <th className="px-3 py-2 text-end font-semibold">{ar ? 'التغيّر' : 'Change'}</th>
-              <th className="px-3 py-2 text-start font-semibold">
-                <button type="button" onClick={() => setSort('deviation')} aria-pressed={sort === 'deviation'} data-testid="anomaly-sort-deviation">{ar ? 'الشدّة' : 'Severity'}</button>
-              </th>
-              <th className="px-3 py-2 text-start font-semibold">{ar ? 'النطاق' : 'Scope'}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((p) => {
-              const sev = SEVERITY[severityOf(p.deviation)]
-              const pct = p.baseline !== 0 ? (p.value - p.baseline) / Math.abs(p.baseline) : null
-              const Arrow = p.direction === 'up' ? ArrowUpRight : ArrowDownRight
-
-              return (
-                <tr key={`${p.date}-${p.metric}`} className="border-t border-border" data-testid={`anomaly-row-${p.date}-${p.metric}`}>
-                  <td className="px-3 py-2"><span dir="ltr" className="tnum font-semibold text-text-primary">{p.date}</span></td>
-                  <td className="px-3 py-2 text-text-secondary">{metricLabel(p.metric, ar)}</td>
-                  <td className="px-3 py-2 text-end">
-                    <span dir="ltr" title={exactFor(p.metric, currency)(p.value)} className={`tnum font-bold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}>
-                      {formatFor(p.metric, currency)(p.value)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-end"><span dir="ltr" className="tnum text-text-muted">{formatFor(p.metric, currency)(p.baseline)}</span></td>
-                  <td className="px-3 py-2 text-end">
-                    <span dir="ltr" className={`tnum inline-flex items-center gap-0.5 font-semibold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}>
-                      <Arrow size={13} aria-hidden />
-                      {pct === null ? '—' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${sev.cls}`} title={ar ? `${Math.abs(p.deviation).toFixed(1)} وحدة انحراف عن وسيط الأيام السابقة` : `${Math.abs(p.deviation).toFixed(1)} robust units from the median of the days before`}>
-                      {ar ? sev.ar : sev.en}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-text-muted">{ar ? 'المشروع' : 'Project'}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      {/*
+        The analytical-table primitive, not a hand-rolled table: `MetricTable` owns numeric alignment under RTL
+        (TABLE-NUMERIC-ALIGNMENT-001) and the horizontal scroll. The order is chosen by the two controls above the
+        table — a day order or a severity order — so the primitive receives the rows already sorted.
+      */}
+      <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label={ar ? 'الترتيب' : 'Order'}>
+        <span className="text-text-muted">{ar ? 'الترتيب:' : 'Order:'}</span>
+        <button type="button" onClick={() => setSort('date')} aria-pressed={sort === 'date'} data-testid="anomaly-sort-date" className={`rounded-lg border px-2 py-0.5 font-bold ${sort === 'date' ? 'border-brand-600 text-brand-600' : 'border-border text-text-secondary'}`}>{ar ? 'اليوم' : 'Day'}</button>
+        <button type="button" onClick={() => setSort('deviation')} aria-pressed={sort === 'deviation'} data-testid="anomaly-sort-deviation" className={`rounded-lg border px-2 py-0.5 font-bold ${sort === 'deviation' ? 'border-brand-600 text-brand-600' : 'border-border text-text-secondary'}`}>{ar ? 'الشدّة' : 'Severity'}</button>
+      </div>
+      <div className="min-w-0 max-w-full" data-testid="change-timeline">
+        <MetricTable
+          head={[ar ? 'اليوم' : 'Day', ar ? 'المؤشر' : 'Metric', ar ? 'الفعلي' : 'Actual', ar ? 'المرجع' : 'Reference', ar ? 'التغيّر' : 'Change', ar ? 'الشدّة' : 'Severity', ar ? 'النطاق' : 'Scope']}
+          rows={shown.map((p) => {
+            const sev = SEVERITY[severityOf(p.deviation)]
+            const pct = p.baseline !== 0 ? (p.value - p.baseline) / Math.abs(p.baseline) : null
+            const Arrow = p.direction === 'up' ? ArrowUpRight : ArrowDownRight
+            return [
+              <span key="d" dir="ltr" className="tnum font-semibold text-text-primary" data-testid={`anomaly-row-${p.date}-${p.metric}`}>{p.date}</span>,
+              <span key="m" className="text-text-secondary">{metricLabel(p.metric, ar)}</span>,
+              <span key="v" dir="ltr" title={exactFor(p.metric, currency)(p.value)} className={`tnum font-bold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}>{formatFor(p.metric, currency)(p.value)}</span>,
+              <span key="b" dir="ltr" className="tnum text-text-muted">{formatFor(p.metric, currency)(p.baseline)}</span>,
+              <span key="c" dir="ltr" className={`tnum inline-flex items-center gap-0.5 font-semibold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}><Arrow size={13} aria-hidden />{pct === null ? '—' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`}</span>,
+              <span key="s" className={`rounded-full px-2 py-0.5 text-xs font-bold ${sev.cls}`} title={ar ? `${Math.abs(p.deviation).toFixed(1)} وحدة انحراف عن وسيط الأيام السابقة` : `${Math.abs(p.deviation).toFixed(1)} deviation units from the median of the days before`}>{ar ? sev.ar : sev.en}</span>,
+              <span key="p" className="text-xs text-text-muted">{ar ? 'المشروع' : 'Project'}</span>,
+            ]
+          })}
+        />
       </div>
       {rows.length > 10 && (
         <button type="button" onClick={() => setShowAll((v) => !v)} className="text-xs font-semibold text-brand-600 hover:underline" data-testid="anomaly-show-all">
