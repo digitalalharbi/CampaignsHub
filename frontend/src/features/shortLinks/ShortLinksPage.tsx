@@ -11,7 +11,7 @@ import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytic
 import { StatCard } from '@/components/ui/StatCard'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
-import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
+import { createShortLink, deleteShortLink, disableShortLink, enableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -50,6 +50,8 @@ const COPY = {
     clicks: 'نقرة',
     disabled: 'موقوف',
     disable: 'إيقاف',
+    enable: 'تفعيل',
+    disabled_hint: 'الرابط لا يُحوّل الآن؛ عنوانه محفوظ ويعود بالتفعيل.',
     delete: 'حذف',
     delete_confirm: 'تأكيد الحذف',
     delete_cancel: 'إلغاء',
@@ -87,6 +89,8 @@ const COPY = {
     clicks: 'clicks',
     disabled: 'Disabled',
     disable: 'Disable',
+    enable: 'Enable',
+    disabled_hint: 'The link does not resolve now; its address is kept and returns on enable.',
     delete: 'Delete',
     delete_confirm: 'Confirm delete',
     delete_cancel: 'Cancel',
@@ -196,6 +200,12 @@ export function ShortLinksPage() {
 
   const disable = useMutation({
     mutationFn: (id: string) => disableShortLink(id),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['short-links'] }),
+  })
+
+  /* SHORT-LINK-RESUME-001 — the mirror of disable: the same address resumes, nothing is minted. */
+  const enable = useMutation({
+    mutationFn: (id: string) => enableShortLink(id),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['short-links'] }),
   })
 
@@ -420,12 +430,14 @@ export function ShortLinksPage() {
                 <div className="flex items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>
                   <span className="tnum text-xs text-text-secondary">{l.clicks} {t.clicks}</span>
-                  {!l.is_active && <Badge tone="warning">{t.disabled}</Badge>}
+                  {!l.is_active && <Badge tone="warning" data-testid={`short-link-state-${l.id}`}>{t.disabled}</Badge>}
                   <Button variant="secondary" onClick={() => void copy(l.short_url)} aria-label={t.copy}>
                     {copied === l.short_url ? <Check size={14} /> : <Copy size={14} />}
                   </Button>
-                  {l.is_active && (
-                    <Button variant="secondary" onClick={() => disable.mutate(l.id)}>{t.disable}</Button>
+                  {l.is_active ? (
+                    <Button variant="secondary" onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => enable.mutate(l.id)} disabled={enable.isPending} data-testid={`short-link-enable-${l.id}`}>{t.enable}</Button>
                   )}
                   {confirming === l.id ? (
                     <>

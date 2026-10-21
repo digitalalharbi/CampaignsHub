@@ -224,6 +224,45 @@ final class ShortLinkTest extends TestCase
         $this->assertSame(0, (int) ShortLink::query()->where('slug', $slug)->value('clicks'), 'a disabled link counted a click');
     }
 
+    /**
+     * SHORT-LINK-RESUME-001 — a disabled link resumes at the SAME address, and its counter continues.
+     *
+     * Nothing is minted: the slug people already hold is the one that works again, and the clicks
+     * counted before the pause and after it are one series.
+     */
+    public function test_a_disabled_link_resumes_at_the_same_address_and_its_counter_continues(): void
+    {
+        $created = $this->create('link', 'https://example.com/offer')->assertCreated();
+        $id = $created->json('data.id');
+        $slug = $created->json('data.slug');
+
+        $this->get('/l/'.$slug)->assertRedirect('https://example.com/offer');
+        $this->actingAs($this->operator, 'sanctum')->postJson("/api/v1/short-links/{$id}/disable")->assertOk();
+        $this->get('/l/'.$slug)->assertRedirect(Frontend::origin().'/');
+
+        $resumed = $this->actingAs($this->operator, 'sanctum')->postJson("/api/v1/short-links/{$id}/enable")->assertOk();
+        $this->assertTrue($resumed->json('data.is_active'));
+        $this->assertSame($slug, $resumed->json('data.slug'), 'the same address resumes');
+
+        $this->get('/l/'.$slug)->assertRedirect('https://example.com/offer');
+        $this->assertSame(2, (int) ShortLink::query()->where('slug', $slug)->value('clicks'), 'the counter continues across the pause');
+    }
+
+    public function test_enabling_requires_the_permission(): void
+    {
+        $created = $this->create('link', 'https://example.com/offer')->assertCreated();
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'RO', 'slug' => 'ro-'.uniqid()]);
+        $role->givePermissionTo('campaigns.view');
+        $reader = User::create([
+            'name' => 'RO', 'email' => 'ro-'.uniqid().'@s.test',
+            'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
+        ]);
+        $this->grantMembership($reader, $this->tenant);
+        $reader->assignRole($role);
+
+        $this->actingAs($reader, 'sanctum')->postJson('/api/v1/short-links/'.$created->json('data.id').'/enable')->assertForbidden();
+    }
+
     // ---- The slug ------------------------------------------------------------------------------
 
     /**

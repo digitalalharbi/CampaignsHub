@@ -73,6 +73,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('short-links/{link}/history', [ShortLinkController::class, 'history'])->middleware('module:smart_links')->name('short-links.history');
     Route::patch('short-links/{link}', [ShortLinkController::class, 'update'])->middleware('module:smart_links')->name('short-links.update');
     Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->middleware('module:smart_links')->name('short-links.disable');
+    Route::post('short-links/{link}/enable', [ShortLinkController::class, 'enable'])->middleware('module:smart_links')->name('short-links.enable');
     /* Delete removes it from the library; disable only stops it resolving — see the controller. */
     Route::delete('short-links/{link}', [ShortLinkController::class, 'destroy'])->middleware('module:smart_links')->name('short-links.destroy');
 
