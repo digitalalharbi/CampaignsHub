@@ -137,9 +137,9 @@ final class AttributionController extends Controller
      * erroring — the person holding the link is a stranger who did nothing wrong, and a 404 tells
      * them only that the brand looks broken.
      */
-    public function redirect(string $code): RedirectResponse
+    public function redirect(Request $request, string $code): RedirectResponse
     {
-        $asset = $this->attribution->resolveAndCount($code);
+        $asset = $this->attribution->resolveAndCount($code, $request);
 
         $fallback = Frontend::origin().'/';
 

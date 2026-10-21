@@ -9,6 +9,7 @@ use App\Domains\ShortLinks\Services\ShortLinkHops;
 use App\Http\Controllers\Controller;
 use App\Support\Frontend;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
@@ -34,9 +35,9 @@ final class ShortLinkHopController extends Controller
      * the stored https destination; `landing` mode is one page that states the destination and offers
      * it as a button. There is no chain, no script redirect and no second destination.
      */
-    public function redirect(string $slug): RedirectResponse|Response
+    public function redirect(Request $request, string $slug): RedirectResponse|Response
     {
-        $link = $this->hops->resolveAndCount($slug);
+        $link = $this->hops->resolveAndCount($slug, $request);
 
         if ($link !== null && $link->mode === ShortLink::MODE_LANDING) {
             return response()

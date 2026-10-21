@@ -288,7 +288,18 @@ final class ReportShareController extends Controller
         abort_unless($request->user()->hasPermission('reports.share'), 403);
         $model = $this->findShare($this->findReport($report), $share);
 
-        return ApiResponse::success(app(ShareAnalytics::class)->for($model), 'Link analytics.');
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d'],
+            'granularity' => ['nullable', 'in:day,week,month'],
+        ]);
+
+        return ApiResponse::success(app(ShareAnalytics::class)->for(
+            $model,
+            $request->filled('from') ? Carbon::parse((string) $request->query('from')) : null,
+            $request->filled('to') ? Carbon::parse((string) $request->query('to')) : null,
+            (string) $request->query('granularity', 'day'),
+        ), 'Link analytics.');
     }
 
     public function logs(Request $request, string $project, string $report, string $share): JsonResponse
