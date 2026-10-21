@@ -21,6 +21,7 @@ import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecyc
 import { campaignEfficiency, campaignHeadline, campaignReturn, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
 import { CAMPAIGN_COLUMNS, CAMPAIGN_PRESETS, columnLabel, presetOf, readCampaignColumns, rememberCampaignColumns, type CampaignPreset } from './campaignColumns'
 import { CampaignViewsBar } from './CampaignViewsBar'
+import { BulkCampaignActions } from './BulkCampaignActions'
 import { readMetric, SPECS } from '@/features/analytics/metricCatalog'
 import type { SavedView } from '@/features/dashboard/savedViews'
 import { Columns3 } from 'lucide-react'
@@ -196,6 +197,9 @@ export function CampaignsPage() {
    */
   const [columns, setColumnsState] = useState<string[]>(() => readCampaignColumns())
   const [choosingColumns, setChoosingColumns] = useState(false)
+  /* CAMPAIGNS-TABLE-002 — rows ticked for a bulk pause/resume; cleared when the list changes under them. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const toggleSelected = (id: string) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   const setColumns = (keys: string[]) => { setColumnsState(keys); rememberCampaignColumns(keys) }
   const applyPreset = (name: Exclude<CampaignPreset, 'custom'>) => setColumns([...CAMPAIGN_PRESETS[name].columns])
   const toggleColumn = (key: string) => setColumns(columns.includes(key) ? columns.filter((k) => k !== key) : [...columns, key])
@@ -1462,10 +1466,21 @@ export function CampaignsPage() {
                   onApply={applySavedView}
                   ar={ar}
                 />
+                <BulkCampaignActions
+                  projectId={projectId}
+                  selected={shownCampaigns.filter((c) => selectedIds.includes(c.id)).map((c) => ({ id: c.id, name: c.name }))}
+                  onClear={() => setSelectedIds([])}
+                  ar={ar}
+                />
               </div>
               <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm" data-testid="campaigns-table">
                 <thead>
                   <tr className="border-b border-border text-xs text-text-muted">
+                    <th className="p-3 text-start">
+                      <input type="checkbox" aria-label={ar ? 'تحديد الكل' : 'Select all'} data-testid="campaigns-select-all"
+                        checked={shownCampaigns.length > 0 && shownCampaigns.every((c) => selectedIds.includes(c.id))}
+                        onChange={(e) => setSelectedIds(e.target.checked ? shownCampaigns.map((c) => c.id) : [])} />
+                    </th>
                     <SortableHeader id="name" label={ar ? 'الحملة' : 'Campaign'} sort={sort} dir={dir} onSort={applySort} ar={ar} />
                     <th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th>
                     <th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th>
@@ -1495,6 +1510,7 @@ export function CampaignsPage() {
                     }
                     return (
                       <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
+                        <td className="p-3"><input type="checkbox" aria-label={c.name} checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} data-testid={`campaigns-select-${c.id}`} /></td>
                         <td className="p-3 font-semibold">
                           <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
                         </td>
