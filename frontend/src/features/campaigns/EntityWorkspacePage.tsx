@@ -15,6 +15,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import type { EntityRow } from '@/features/analytics/api'
+import { days as countedDays } from '@/lib/counted'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 
@@ -124,7 +125,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
         <FilterChips
           label={ar ? 'الفترة' : 'Period'}
           value={String(days)}
-          options={PERIODS.map((d) => ({ value: String(d), label: ar ? `${d} يوم` : `${d} days` }))}
+          options={PERIODS.map((d) => ({ value: String(d), label: countedDays(d, ar ? 'ar' : 'en') }))}
           onChange={(v) => setDays(Number(v) as (typeof PERIODS)[number])}
           testid={`entity-period-${level}`}
         />
