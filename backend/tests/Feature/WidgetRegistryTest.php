@@ -105,12 +105,33 @@ final class WidgetRegistryTest extends TestCase
         $this->assertNull($w['link_opens']['reason']);
         $this->assertTrue($w['attribution_credit']['visible']);
 
-        // The client-facing surface lists only what is on, and nothing is on by default there.
+        // On the client-facing surface the project's layout is a permission: allowed by default, and each link still shows nothing until switched on.
         $report = $this->widgets('report');
-        $this->assertFalse($report['link_opens']['visible']);
+        $this->assertTrue($report['link_opens']['visible']);
 
         $this->module('advanced_tracking', false);
         $this->assertArrayNotHasKey('link_opens', $this->widgets('report'), 'a widget whose module is off is not even listed to a client');
+    }
+
+    public function test_core_widgets_are_opt_in_so_a_project_that_chose_nothing_keeps_the_page_it_had(): void
+    {
+        $w = $this->widgets('dashboard');
+        foreach (['report_views', 'commerce_outcomes'] as $core) {
+            $this->assertFalse($w[$core]['visible'], "{$core} is hidden until chosen");
+            $this->assertNull($w[$core]['reason'], "{$core} is not blocked, only not chosen");
+        }
+        // Not offered on the client surface at all: report link opens are the agency's own diagnostic.
+        $this->assertArrayNotHasKey('report_views', $this->widgets('report'));
+        $this->assertArrayNotHasKey('commerce_outcomes', $this->widgets('report'));
+
+        $this->as()->putJson("/api/v1/projects/{$this->project->id}/widgets/dashboard", ['items' => [['key' => 'report_views', 'visible' => true, 'order' => 1, 'size' => 'half']]])->assertOk();
+        $this->assertTrue($this->widgets('dashboard')['report_views']['visible']);
+
+        // Commerce outcomes sit behind a module that is on by default; switching that module off removes it whatever was chosen.
+        $this->as()->putJson("/api/v1/projects/{$this->project->id}/widgets/dashboard", ['items' => [['key' => 'commerce_outcomes', 'visible' => true, 'order' => 1, 'size' => 'half']]])->assertOk();
+        $this->assertTrue($this->widgets('dashboard')['commerce_outcomes']['visible']);
+        $this->module('commerce_intelligence', false);
+        $this->assertSame('module_off', $this->widgets('dashboard')['commerce_outcomes']['reason']);
     }
 
     public function test_an_owner_can_hide_reorder_and_resize_and_the_choice_is_saved_audited_and_per_project(): void
@@ -124,7 +145,8 @@ final class WidgetRegistryTest extends TestCase
         ]])->assertOk();
 
         $order = collect($this->as()->getJson("/api/v1/projects/{$this->project->id}/widgets/dashboard")->json('data.widgets'))->keyBy('key');
-        $this->assertSame(['attribution_credit', 'link_opens'], $order->keys()->all(), 'ordered by the saved order');
+        $this->assertSame(['attribution_credit', 'link_opens'], array_values(array_intersect($order->keys()->all(), ['attribution_credit', 'link_opens'])), 'ordered by the saved order');
+        $this->assertSame('attribution_credit', $order->keys()->first(), 'the widget saved first comes first');
         $this->assertTrue($order['attribution_credit']['visible']);
         $this->assertSame('full', $order['attribution_credit']['size']);
         $this->assertFalse($order['link_opens']['visible']);

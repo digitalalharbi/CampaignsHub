@@ -27,6 +27,7 @@ use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\LiveDrilldownController;
 use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
+use App\Domains\Reports\Http\Controllers\ProjectReportViewsController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
@@ -233,6 +234,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-005: Platform-Reported vs Store-Confirmed, the attribution window each figure
     // was collected under, and what may be summed — the platforms' claims never are.
     Route::get('metrics/attribution', [MetricsController::class, 'attribution'])->name('metrics.attribution');
+    // REPORT-VIEWS-001 — how often this project's shared report links were opened, across all of them.
+    Route::get('report-views/summary', [ProjectReportViewsController::class, 'show'])->middleware('project.can:reports.view')->name('report-views.summary');
     // WIDGET-REGISTRY-001 — which widgets a surface shows for this project, resolved on the server.
     Route::get('widgets/{surface}', [WidgetLayoutController::class, 'show'])->middleware('project.can:analytics.view')->name('widgets.show');
     Route::put('widgets/{surface}', [WidgetLayoutController::class, 'update'])->middleware('project.can:reports.manage')->name('widgets.update');

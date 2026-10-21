@@ -316,13 +316,13 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    */
   const isAnalysis = surface === 'analytics'
   /*
-   * WIDGET-REGISTRY-001 — the «Links & attribution» tab exists only for a project where at least one of its widgets'
-   * modules is on. Everyone else keeps exactly the tabs they had.
+   * WIDGET-REGISTRY-001 — the «Insights» tab exists only for a project where at least one widget is shown (an advanced
+   * module switched on, or a core widget chosen in Settings → Widgets). Everyone else keeps exactly the tabs they had.
    */
   const widgetLayout = useWidgetLayout(isAnalysis ? currentProjectId : null, 'analytics')
-  const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.reason !== 'module_off')
+  const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
   const tabGroups = hasWidgetTab
-    ? TAB_GROUPS.map((g) => (g.key === 'conversion' ? { ...g, tabs: [...g.tabs, { id: 'links', ar: 'الروابط والإسناد', en: 'Links & attribution' }] } : g))
+    ? TAB_GROUPS.map((g) => (g.key === 'conversion' ? { ...g, tabs: [...g.tabs, { id: 'links', ar: 'رؤى إضافية', en: 'Insights' }] } : g))
     : TAB_GROUPS
   const tab = isAnalysis ? urlTab : 'performance'
   const [providers, setProviders] = useUrlList('provider')
