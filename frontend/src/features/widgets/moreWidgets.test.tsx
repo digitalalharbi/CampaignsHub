@@ -96,7 +96,7 @@ describe('CommerceOutcomesWidget', () => {
     vi.mocked(client.getData).mockResolvedValue(funnel({ coverage: { stores: 1, orders_with_money_withheld: 3, orders_in_window: 30 } }))
     renderWithProviders(<CommerceOutcomesWidget projectId="p" range={range} />, { locale: 'en' })
 
-    expect((await screen.findByTestId('commerce-withheld')).textContent).toContain('3 order(s) have revenue withheld')
+    expect((await screen.findByTestId('commerce-withheld')).textContent).toContain('Orders with revenue withheld (no trustworthy exchange rate), missing from the total: 3')
   })
 })
 

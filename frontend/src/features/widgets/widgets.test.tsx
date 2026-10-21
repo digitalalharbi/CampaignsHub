@@ -194,8 +194,8 @@ describe('AttributionCreditWidget', () => {
     renderWithProviders(<AttributionCreditWidget projectId="p" range={range} />, { locale: 'en' })
 
     const notes = (await screen.findByTestId('attribution-credit-notes')).textContent ?? ''
-    expect(notes).toContain('1 fully refunded order(s) are not shared out')
-    expect(notes).toContain('Revenue of 1 order(s) is withheld')
+    expect(notes).toContain('Fully refunded orders not shared out: 1')
+    expect(notes).toContain('Orders with revenue withheld (no trustworthy exchange rate): 1')
     expect(notes).toContain('A click is not a purchase')
   })
 
