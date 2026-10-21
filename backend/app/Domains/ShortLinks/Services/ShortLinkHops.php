@@ -268,6 +268,47 @@ final class ShortLinkHops
         return Frontend::origin().'/l/'.$link->slug;
     }
 
+    /**
+     * BIO-PAGE-001 — what the bio view draws: the title, the subtitle, and the buttons whose links are
+     * still live (active, not expired, not deleted, same tenant). A button whose link went away is
+     * not drawn — a dead button on a page people reach from a profile is worse than a shorter page.
+     *
+     * @return array{title: string, subtitle: ?string, buttons: list<array{label: string, href: string, whatsapp: bool}>}
+     */
+    public function bioPage(ShortLink $page): array
+    {
+        $bio = is_array($page->bio) ? $page->bio : [];
+        $wanted = array_values(array_filter(array_map(static fn ($b) => is_array($b) ? (string) ($b['short_link_id'] ?? '') : '', $bio['buttons'] ?? [])));
+        $links = $wanted === [] ? collect() : ShortLink::query()
+            ->withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $page->tenant_id)
+            ->whereIn('id', $wanted)
+            ->where('is_active', true)
+            ->where('kind', '!=', ShortLink::KIND_BIO)
+            ->get()
+            ->filter(fn (ShortLink $l): bool => ! $l->isExpired())
+            ->keyBy(fn (ShortLink $l): string => (string) $l->getKey());
+
+        $buttons = [];
+        foreach ($bio['buttons'] ?? [] as $b) {
+            $link = is_array($b) ? $links->get((string) ($b['short_link_id'] ?? '')) : null;
+            if ($link === null) {
+                continue;
+            }
+            $buttons[] = [
+                'label' => trim((string) ($b['label'] ?? '')) ?: ($link->kind === ShortLink::KIND_WHATSAPP ? 'واتساب' : (string) parse_url((string) $link->destination, PHP_URL_HOST)),
+                'href' => $this->shareUrl($link),
+                'whatsapp' => $link->kind === ShortLink::KIND_WHATSAPP,
+            ];
+        }
+
+        return [
+            'title' => trim((string) ($bio['title'] ?? '')) ?: 'روابطنا',
+            'subtitle' => trim((string) ($bio['subtitle'] ?? '')) ?: null,
+            'buttons' => $buttons,
+        ];
+    }
+
     /** @return string the slug pattern the route accepts, kept beside the alphabet that produces it */
     public static function slugPattern(): string
     {

@@ -16,6 +16,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -346,6 +347,62 @@ final class ShortLinkTest extends TestCase
         $res = $this->createWith(['utm' => ['utm_source' => 'tiktok']])->assertCreated();
         $this->assertNull($res->json('data.utm'));
         $this->assertStringNotContainsString('utm_', (string) ShortLink::query()->find($res->json('data.id'))?->destination);
+    }
+
+    // ---- BIO-PAGE-001 — a page of buttons, each another short link, on the same hop ----------------
+
+    public function test_a_bio_page_lists_its_live_buttons_as_short_links_and_counts_its_own_opens(): void
+    {
+        $wa = $this->create('whatsapp', '966500000011')->assertCreated()->json('data.id');
+        $site = $this->create('link', 'https://example.com/shop')->assertCreated()->json('data');
+        $off = $this->create('link', 'https://example.com/old')->assertCreated()->json('data.id');
+        $this->actingAs($this->operator, 'sanctum')->postJson("/api/v1/short-links/{$off}/disable")->assertOk();
+
+        $page = $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/short-links/bio', [
+            'title' => 'روابط ريسانو', 'subtitle' => 'كل ما تحتاجه في مكان واحد', 'slug' => 'resano',
+            'buttons' => [
+                ['short_link_id' => $wa, 'label' => 'تواصل عبر واتساب'],
+                ['short_link_id' => $site['id']],
+                ['short_link_id' => $off, 'label' => 'عرض قديم'],
+            ],
+        ])->assertCreated();
+
+        $this->assertSame('bio', $page->json('data.kind'));
+        $this->assertSame('resano', $page->json('data.slug'));
+        $this->assertCount(3, $page->json('data.bio.buttons'));
+
+        $html = $this->get('/l/resano')->assertOk()->assertHeader('X-Robots-Tag', 'noindex')->getContent();
+        $this->assertStringContainsString('روابط ريسانو', $html);
+        $this->assertStringContainsString('تواصل عبر واتساب', $html);
+        $this->assertStringContainsString(Frontend::origin().'/l/'.$site['slug'], $html, 'a button is the other link\'s own hop');
+        $this->assertStringContainsString('example.com', $html, 'an unlabelled button is named by its destination host');
+        $this->assertStringNotContainsString('عرض قديم', $html, 'a disabled link is not a button');
+        $this->assertStringNotContainsString('wa.me', $html, 'the page never bypasses the hops');
+
+        $this->assertSame(1, (int) ShortLink::query()->where('slug', 'resano')->value('clicks'), 'an open of the page is counted on the page');
+    }
+
+    public function test_a_bio_page_refuses_foreign_links_and_pages_of_pages_and_keeps_its_slug_on_update(): void
+    {
+        $mine = $this->create('link', 'https://example.com/a')->assertCreated()->json('data.id');
+        $page = $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/short-links/bio', [
+            'title' => 'صفحة', 'buttons' => [['short_link_id' => $mine]],
+        ])->assertCreated();
+
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/short-links/bio', [
+            'title' => 'ماز', 'buttons' => [['short_link_id' => $page->json('data.id')]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['buttons']);
+
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/short-links/bio', [
+            'title' => 'غريب', 'buttons' => [['short_link_id' => (string) Str::uuid()]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['buttons']);
+
+        $updated = $this->actingAs($this->operator, 'sanctum')->patchJson('/api/v1/short-links/bio/'.$page->json('data.id'), [
+            'title' => 'صفحة جديدة', 'buttons' => [['short_link_id' => $mine, 'label' => 'المتجر']],
+        ])->assertOk();
+        $this->assertSame($page->json('data.slug'), $updated->json('data.slug'));
+        $this->assertSame('المتجر', $updated->json('data.bio.buttons.0.label'));
+        $this->assertStringContainsString('صفحة جديدة', $this->get('/l/'.$page->json('data.slug'))->getContent());
     }
 
     // ---- The slug ------------------------------------------------------------------------------
