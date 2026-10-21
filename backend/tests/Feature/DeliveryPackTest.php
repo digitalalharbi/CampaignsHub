@@ -11,11 +11,13 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Delivery\Models\PlatformEvidence;
 use App\Domains\Delivery\Services\DeliveryPackService;
+use App\Domains\Delivery\Services\DeliveryTasks;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -272,6 +274,67 @@ final class DeliveryPackTest extends TestCase
         $this->assertSame((string) $this->project->id, (string) $packs[0]->project_id);
         $this->assertSame('2026-10-12', $packs[0]->period_start->toDateString());
         $this->assertSame('draft', $packs[0]->status, 'the sweep prepares; the Owner approves and sends');
+    }
+
+    /** DELIVERY-TASK-001 — one review task per pack, however many times the week is prepared. */
+    public function test_a_prepared_pack_opens_exactly_one_review_task_bound_to_it(): void
+    {
+        $this->workspace->forceFill(['settings' => ['delivery' => ['weekly' => true]]])->save();
+        $this->artisan('delivery:prepare-weekly', ['--date' => '2026-10-19'])->assertSuccessful();
+        $this->artisan('delivery:prepare-weekly', ['--date' => '2026-10-19'])->assertSuccessful();
+        $pack = DeliveryPack::withoutGlobalScopes()->firstOrFail();
+        app(DeliveryPackService::class)->prepare($this->project, Carbon::parse('2026-10-19'), $this->owner);
+
+        $tasks = Task::withoutGlobalScopes()->get();
+        $this->assertCount(1, $tasks, 'the sweep, a re-run and a person preparing the same week must not add a second task');
+        $task = $tasks[0];
+        $this->assertSame(DeliveryTasks::SOURCE, $task->meta['source']);
+        $this->assertSame((string) $pack->id, $task->meta['delivery_pack_id']);
+        $this->assertSame((string) $this->tenant->id, (string) $task->tenant_id);
+        $this->assertSame((string) $this->workspace->id, (string) $task->client_workspace_id);
+        $this->assertSame('todo', $task->status);
+        $this->assertSame('2026-10-19', $task->due_date->toDateString(), 'due the day after the week it covers');
+        $this->assertStringContainsString('Razzah', $task->title);
+    }
+
+    /** Only «marked sent» — which needs an approved pack — closes the task; approval alone does not. */
+    public function test_the_review_task_closes_only_when_the_pack_is_marked_sent(): void
+    {
+        $pack = $this->pack();
+        $this->complete($pack);
+        $service = app(DeliveryPackService::class);
+
+        $service->approve($pack->fresh(), $this->owner);
+        $this->assertSame('todo', DeliveryTasks::find($pack)?->status, 'approved is not delivered');
+
+        $service->markSent($pack->fresh());
+        $task = DeliveryTasks::find($pack);
+        $this->assertSame('completed', $task?->status);
+        $this->assertSame('delivery_pack.sent', $task?->meta['closed_by']);
+    }
+
+    public function test_a_review_task_someone_cancelled_is_left_cancelled_when_the_pack_is_sent(): void
+    {
+        $pack = $this->pack();
+        $this->complete($pack);
+        DeliveryTasks::find($pack)?->forceFill(['status' => 'cancelled'])->save();
+        $service = app(DeliveryPackService::class);
+        $service->approve($pack->fresh(), $this->owner);
+        $service->markSent($pack->fresh());
+
+        $this->assertSame('cancelled', DeliveryTasks::find($pack)?->status);
+    }
+
+    public function test_the_tasks_board_names_the_pack_a_task_came_from(): void
+    {
+        $pack = $this->pack();
+
+        $row = collect($this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/tasks')->assertOk()->json('data'))->first();
+        $this->assertSame('delivery', $row['source']['kind']);
+        $this->assertSame((string) $pack->id, $row['source']['id']);
+        $this->assertSame((string) $this->workspace->id, $row['source']['client_workspace_id']);
+        $this->assertSame('draft', $row['source']['status']);
+        $this->assertSame('2026-10-05 → 2026-10-11', $row['source']['period']);
     }
 
     /** DELIV-DASH-001 — one row per client, one next action, and the follow-up signal only where both facts hold. */

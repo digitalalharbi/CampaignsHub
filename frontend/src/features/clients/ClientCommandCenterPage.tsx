@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { getClient } from './api'
@@ -41,7 +41,10 @@ export function ClientCommandCenterPage() {
   const ar = lang === 'ar'
   const locale = lang
   const { clientId = '' } = useParams()
-  const [tab, setTab] = useState<Tab>('overview')
+  /* DELIVERY-TASK-001 — a weekly-delivery task links straight to this client's delivery tab. Only that tab is
+     addressable: the others are a reader's own navigation, not something another page links to. */
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(params.get('tab') === 'delivery' ? 'delivery' : 'overview')
   const [editing, setEditing] = useState(false)
   const query = useQuery({ queryKey: ['app', 'client', clientId], queryFn: () => getClient(clientId) })
 
@@ -190,7 +193,7 @@ export function ClientCommandCenterPage() {
           {tab === 'reports' && d.can.view_reports && <TabReports d={d} />}
 
           {tab === 'billing' && <TabBilling clientId={d.id} canManage={d.can.manage_settings} />}
-          {tab === 'delivery' && <TabDelivery clientId={d.id} projects={d.projects} />}
+          {tab === 'delivery' && d.can.view_reports && <TabDelivery clientId={d.id} projects={d.projects} />}
           {tab === 'portal' && <TabPortal d={d} />}
           {tab === 'messages' && <TabMessages clientId={d.id} />}
           {tab === 'team' && d.can.manage_team && <TabTeam d={d} />}

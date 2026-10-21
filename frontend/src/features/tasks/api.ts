@@ -22,7 +22,10 @@ export interface Task {
   created_by?: number | null
   assignee_name?: string | null
   created_by_name?: string | null
-  source?: { kind: 'alert'; id: string; title: string; severity: string; status: string } | { kind: string }
+  source?:
+    | { kind: 'alert'; id: string; title: string; severity: string; status: string }
+    | { kind: 'delivery'; id: string; client_workspace_id: string; status: string; period: string }
+    | { kind: string }
 }
 
 export const TASK_STATUSES: TaskStatus[] = [
