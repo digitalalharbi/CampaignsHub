@@ -52,8 +52,8 @@ import type { NavGroup } from './SidebarNav'
  * نظرة عامة · المشاريع · إطلاق الحملات · الحملات · المجموعات · الإعلانات.
  *
  * Regrouped and renamed, never removed: every address this rail offered before is still here (navGrouping.test.ts
- * proves it). Two are new addresses onto existing pages: «إطلاق الحملات» opens the campaign builder that already
- * lives on the Campaigns page; «المجموعات» / «الإعلانات» opened the Analytics ad-set and ad tabs until
+ * proves it). «إطلاق الحملات» opened the internal campaign draft form until LAUNCH-001 gave it a page of its own
+ * (/launch) that publishes on the platforms' APIs; «المجموعات» / «الإعلانات» opened the Analytics ad-set and ad tabs until
  * ADV-CAMPAIGN-TABLES-001 gave each rung an operational table of its own (/ad-groups, /ads). Approvals, which had a
  * page and no entry, now has one.
  */
@@ -64,7 +64,7 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, ent: 'dashboard' },
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
-      { to: '/app/campaigns?launch=1', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket, ent: 'campaigns' },
+      { to: '/app/launch', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket, ent: 'campaigns' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
       { to: '/app/ad-groups', ar: 'المجموعات', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
       { to: '/app/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal, ent: 'analytics' },

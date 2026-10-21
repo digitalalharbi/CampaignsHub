@@ -13,6 +13,7 @@ import { RecommendationsPage } from '@/features/recommendations/RecommendationsP
 import { AgentCenterPage } from '@/features/agents/AgentCenterPage'
 import { AutomationPage } from '@/features/automation/AutomationPage'
 import { EntityWorkspacePage } from '@/features/campaigns/EntityWorkspacePage'
+import { LaunchPage } from '@/features/launch/LaunchPage'
 import { ApprovalsPage } from '@/features/agents/ApprovalsPage'
 import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
 import { ExecutiveOpsPage } from '@/features/crm/ExecutiveOpsPage'
@@ -357,6 +358,8 @@ export const router = createBrowserRouter(withErrorBoundary([
                     { path: 'design', element: <DesignSystemPage /> },
           { path: 'campaigns', element: <CampaignsPage /> },
           /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
+          /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
+          { path: 'launch', element: <LaunchPage /> },
           { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
           { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
@@ -594,6 +597,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'analytics', element: <AnalyticsPage /> },
             { path: 'campaigns', element: <CampaignsPage /> },
             /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
+            /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
+            { path: 'launch', element: <LaunchPage /> },
             { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
             { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
