@@ -77,20 +77,18 @@ export function ShortLinkQr({ url, slug, ar, onClose }: { url: string; slug: str
       onClose={onClose}
       title={ar ? 'رمز QR للرابط' : 'QR code for the link'}
       size="sm"
-      footer={(
-        <>
-          <Button variant="secondary" onClick={downloadSvg} data-testid="short-link-qr-svg"><Download size={14} aria-hidden /> SVG</Button>
-          <Button variant="secondary" onClick={downloadPng} data-testid="short-link-qr-png"><Download size={14} aria-hidden /> PNG</Button>
-          <Button onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>
-        </>
-      )}
+      footer={<Button onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>}
     >
       <div className="flex flex-col items-center gap-3" data-testid="short-link-qr" data-modules={n}>
         <svg viewBox={`0 0 ${size} ${size}`} width={240} height={240} role="img" aria-label={url} shapeRendering="crispEdges" className="rounded-lg bg-white">
           <rect width="100%" height="100%" fill="#fff" />
           {modules.map((row, r) => row.map((dark, c) => (dark ? <rect key={`${r}-${c}`} x={(c + QUIET) * CELL} y={(r + QUIET) * CELL} width={CELL} height={CELL} fill="#000" /> : null)))}
         </svg>
-        <code dir="ltr" className="text-xs text-text-secondary">{url}</code>
+        <code dir="ltr" className="max-w-full break-all text-center text-xs text-text-secondary">{url}</code>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button variant="secondary" onClick={downloadSvg} data-testid="short-link-qr-svg"><Download size={14} aria-hidden /> {ar ? 'تنزيل SVG' : 'Download SVG'}</Button>
+          <Button variant="secondary" onClick={downloadPng} data-testid="short-link-qr-png"><Download size={14} aria-hidden /> {ar ? 'تنزيل PNG' : 'Download PNG'}</Button>
+        </div>
         <p className="text-center text-xs text-text-muted">
           {ar ? 'يُولَّد الرمز هنا من العنوان نفسه؛ لا يُرسل شيء لأي خدمة. مسحه يفتح الرابط القصير ويُحتسب كنقرة.' : 'Generated here from the address itself; nothing is sent to any service. Scanning opens the short link and counts as a click.'}
         </p>
