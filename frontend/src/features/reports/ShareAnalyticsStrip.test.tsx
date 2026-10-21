@@ -63,6 +63,39 @@ describe('ShareAnalyticsStrip', () => {
     expect(screen.getByTestId('share-grain-week').getAttribute('aria-pressed')).toBe('true')
   })
 
+  /** REPORT-LINK-ANALYTICS-003 — the link's own state beside its figures, and the window against the one before. */
+  it('names a paused link as paused since when, and compares the window with the one before it', async () => {
+    vi.mocked(shareAnalytics).mockResolvedValue({
+      views: 3, unique_views: 2, first_viewed_at: '2026-10-10T09:00:00Z', last_viewed_at: '2026-10-13T09:00:00Z', downloads: 2,
+      state: 'paused', state_since: '2026-10-15T08:00:00Z',
+      comparison: {
+        current: { from: '2026-10-10', to: '2026-10-14', views: 3, devices: 2, downloads: 2 },
+        previous: { from: '2026-10-05', to: '2026-10-09', views: 2, devices: 2, downloads: 0 },
+      },
+    })
+    renderWithProviders(<ShareAnalyticsStrip projectId="p" reportId="r" shareId="s" />, { locale: 'ar' })
+
+    const state = await screen.findByTestId('share-state')
+    expect(state).toHaveAttribute('data-state', 'paused')
+    expect(state).toHaveTextContent('الرابط متوقف')
+    expect(state).toHaveTextContent(/15.?\/10.?\/2026/)
+    expect(screen.getByTestId('share-analytics')).toHaveTextContent('التنزيلات')
+
+    const cmp = screen.getByTestId('share-comparison')
+    expect(cmp).toHaveTextContent('2026-10-10 → 2026-10-14 مقابل 2026-10-05 → 2026-10-09')
+    expect(screen.getByTestId('share-compare-views')).toHaveTextContent('+50%')
+    expect(screen.getByTestId('share-compare-devices')).toHaveTextContent('0%')
+    expect(screen.getByTestId('share-compare-downloads')).toHaveTextContent('+∞')
+  })
+
+  it('draws neither a state nor a comparison from an older server that sends none', async () => {
+    vi.mocked(shareAnalytics).mockResolvedValue({ views: 1, unique_views: 1, first_viewed_at: null, last_viewed_at: null, downloads: 0 })
+    renderWithProviders(<ShareAnalyticsStrip projectId="p" reportId="r" shareId="s" />, { locale: 'en' })
+    await screen.findByTestId('share-analytics')
+    expect(screen.queryByTestId('share-state')).toBeNull()
+    expect(screen.queryByTestId('share-comparison')).toBeNull()
+  })
+
   it('draws no chart for a link nobody has opened, and the Arabic strip names devices as an estimate', async () => {
     vi.mocked(shareAnalytics).mockResolvedValue({
       views: 0, unique_views: 0, first_viewed_at: null, last_viewed_at: null, downloads: 0, repeat_visits: 0, bot_opens: 0,
