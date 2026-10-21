@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -37,6 +38,8 @@ final class ProjectMembershipController extends Controller
             'role' => $m->role,
             'status' => $m->status,
             'expires_at' => optional($m->expires_at)->toIso8601String(),
+            // MEMBER-VISIBILITY-001 — what this membership withholds, so the team page can show and change it.
+            'denied' => array_values((array) ($m->denied ?? [])),
         ]);
 
         return ApiResponse::success($members, 'Project team retrieved.');
@@ -74,6 +77,9 @@ final class ProjectMembershipController extends Controller
             'role' => ['sometimes', Rule::in(self::ROLES)],
             'status' => ['sometimes', Rule::in(['invited', 'active', 'suspended', 'expired', 'removed'])],
             'permissions' => ['nullable', 'array'],
+            // MEMBER-VISIBILITY-001 — capabilities this member must not have here, catalogue names only.
+            'denied' => ['nullable', 'array'],
+            'denied.*' => ['string', Rule::in(ProjectCapability::ALL)],
             'expires_at' => ['nullable', 'date'],
         ]);
 
@@ -89,9 +95,9 @@ final class ProjectMembershipController extends Controller
             abort_if($otherAdmins === 0, 422, 'Cannot demote or suspend the last admin of the project.');
         }
 
-        $before = $member->only(['role', 'status']);
+        $before = $member->only(['role', 'status', 'denied']);
         $member->update($validated);
-        $audit->log(action: 'project.member.updated', entityType: ProjectMembership::class, entityId: (string) $member->id, before: $before, after: $member->only(['role', 'status']));
+        $audit->log(action: 'project.member.updated', entityType: ProjectMembership::class, entityId: (string) $member->id, before: $before, after: $member->only(['role', 'status', 'denied']));
 
         return ApiResponse::success(['id' => $member->id, 'role' => $member->role, 'status' => $member->status], 'Member updated.');
     }
