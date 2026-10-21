@@ -493,7 +493,7 @@ export function ChangeDiagnosis({
   const against = rows.find((d) => (lead.change >= 0 ? d.direction === 'down' : d.direction === 'up'))
 
   return (
-    <section data-testid="change-diagnosis" className="grid gap-3 lg:grid-cols-3">
+    <section data-testid="change-diagnosis" className="grid grid-cols-1 gap-3 lg:grid-cols-3 [&>*]:min-w-0">
       {/*
         WIDE — the decomposition. Two thirds of the row, because a comparison needs the width and the
         reader is meant to read DOWN it rather than across a row of cards.
@@ -706,7 +706,7 @@ function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoi
   const charted = (metric === 'all' ? metrics : [metric]).slice(0, 2)
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {metrics.length > 1 && (
         <div role="group" aria-label={ar ? 'المؤشر' : 'Metric'} className="flex flex-wrap gap-1" data-testid="anomaly-metric-filter">
           {['all', ...metrics].map((m) => (
@@ -736,7 +736,8 @@ function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoi
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-border" data-testid="change-timeline">
+      {/* `min-w-0` + `max-w-full`: WebKit sizes an overflow-x-auto box by its table's min-width unless told it may shrink — the sweep caught /agency/analytics scrolling sideways at 390px. */}
+      <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-border" data-testid="change-timeline">
         <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-surface-secondary text-xs text-text-muted">
             <tr>
