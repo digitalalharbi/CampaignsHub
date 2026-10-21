@@ -261,6 +261,10 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     e?.message ? [{ field: FIELD_IDS[field] ?? field, message: String(e.message) }] : [],
   )
 
+  /* LAUNCH-001 — this form is an INTERNAL draft; publishing on the platforms is «إطلاق الحملات». Said on the form so nobody reads «حفظ» as a launch. */
+  const draftHint = locale === 'ar'
+    ? 'هذه مسودة داخلية في كامبينز هب ولا تُنشر على أي منصة. للنشر على المنصات استخدم «إطلاق الحملات».'
+    : 'This is an internal draft in CampaignsHub and is not published anywhere. To publish on the platforms use «Launch».'
   return (
     <Modal
       open={open}
@@ -279,6 +283,7 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
       }
     >
       <form className="space-y-3" onSubmit={handleSubmit((v) => mutation.mutate(v))}>
+        <p data-testid="campaign-draft-hint" className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">{draftHint}</p>
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={c.errTitle} />}
         {apiError && !apiError.errors && <Alert severity="danger" title={apiError.message} />}
 

@@ -29,6 +29,8 @@ final class LaunchInput
         return Validator::make($data, [
             'name' => ['required', 'string', 'min:1', 'max:250'],
             'objective' => ['required', 'string', 'max:64'],
+            'objectives' => ['nullable', 'array'],
+            'objectives.*' => ['string', 'max:64'],
             'accounts' => ['required', 'array', 'min:1', 'max:10'],
             'accounts.*.external_account_id' => ['required', 'string', 'max:64', 'distinct'],
             'accounts.*.daily_budget' => ['nullable', 'numeric', 'gt:0', 'max:100000000'],
