@@ -25,6 +25,7 @@ use Illuminate\Support\Str;
  * which a short link has. What IS copied is the part worth copying — the tenant scope removed for a
  * stranger's request, the active check done here rather than assumed, and an atomic increment.
  */
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 final class ShortLinkHops
@@ -42,6 +43,16 @@ final class ShortLinkHops
 
     /** How many collisions to ride out before giving up rather than looping forever. */
     private const ATTEMPTS = 8;
+
+    /**
+     * SMART-LINK-001 — a CHOSEN slug: 3–32 characters of lowercase letters, digits and single hyphens,
+     * never starting or ending with a hyphen. Wider than the minted alphabet on purpose: a chosen
+     * slug is read off a brief, not dictated, so `0` and `l` are the person's own decision.
+     */
+    public const CUSTOM_SLUG = '/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/';
+
+    /** Slugs that name a route of ours or would read as one. */
+    private const RESERVED = ['api', 'l', 'r', 'admin', 'app', 'agency', 'portal', 'login', 'logout', 'register', 'static', 'assets'];
 
     public function mint(): string
     {
@@ -69,6 +80,37 @@ final class ShortLinkHops
     }
 
     /**
+     * SMART-LINK-001 — a slug the person chose, normalised and checked, or a refusal naming why.
+     *
+     * Checked without the tenant scope, like minting: the column is unique globally, and a slug held
+     * by another tenant is held. The refusal says «taken», never whose — that would disclose another
+     * tenant's link.
+     *
+     * @throws ValidationException
+     */
+    public function chosen(string $slug): string
+    {
+        $slug = mb_strtolower(trim($slug));
+
+        if (preg_match(self::CUSTOM_SLUG, $slug) !== 1 || str_contains($slug, '--')) {
+            throw ValidationException::withMessages([
+                'slug' => [__('A custom slug is 3–32 lowercase letters, digits or single hyphens.')],
+            ]);
+        }
+
+        if (in_array($slug, self::RESERVED, true)) {
+            throw ValidationException::withMessages(['slug' => [__('That slug is reserved.')]]);
+        }
+
+        $taken = ShortLink::query()->withoutGlobalScope(TenantScope::class)->withTrashed()->where('slug', $slug)->exists();
+        if ($taken) {
+            throw ValidationException::withMessages(['slug' => [__('That slug is already taken.')]]);
+        }
+
+        return $slug;
+    }
+
+    /**
      * The link a slug names, counted as followed — or null, which the route renders as a miss.
      *
      * The increment is atomic rather than read-modify-write: this is the one endpoint here that can
@@ -82,7 +124,8 @@ final class ShortLinkHops
             ->where('is_active', true)
             ->first();
 
-        if ($link === null) {
+        // SMART-LINK-001 — an expired link is a miss, exactly like a disabled one: no count, no hop.
+        if ($link === null || $link->isExpired()) {
             return null;
         }
 
@@ -228,6 +271,7 @@ final class ShortLinkHops
     /** @return string the slug pattern the route accepts, kept beside the alphabet that produces it */
     public static function slugPattern(): string
     {
-        return '[a-z2-9]{'.self::LENGTH.'}';
+        // Minted slugs (7 of the narrow alphabet) and chosen ones (SMART-LINK-001) both match.
+        return '[a-z0-9][a-z0-9-]{2,31}';
     }
 }

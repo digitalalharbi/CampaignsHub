@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Support\Frontend;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -261,6 +262,90 @@ final class ShortLinkTest extends TestCase
         $reader->assignRole($role);
 
         $this->actingAs($reader, 'sanctum')->postJson('/api/v1/short-links/'.$created->json('data.id').'/enable')->assertForbidden();
+    }
+
+    // ---- SMART-LINK-001 — chosen slug, expiry, UTM: each optional, each off by default -------------
+
+    public function test_a_chosen_slug_is_the_address_and_it_resolves(): void
+    {
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/offer', 'slug' => ' Summer-Sale '])
+            ->assertCreated();
+
+        $this->assertSame('summer-sale', $res->json('data.slug'));
+        $this->assertTrue($res->json('data.custom_slug'));
+        $this->assertSame('active', $res->json('data.state'));
+        $this->get('/l/summer-sale')->assertRedirect('https://example.com/offer');
+    }
+
+    public function test_a_taken_reserved_or_malformed_slug_is_refused_with_the_reason(): void
+    {
+        $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/a', 'slug' => 'taken-one'])->assertCreated();
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/b', 'slug' => 'taken-one'])
+            ->assertStatus(422)->assertJsonValidationErrors(['slug']);
+        $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/b', 'slug' => 'api'])
+            ->assertStatus(422)->assertJsonValidationErrors(['slug']);
+        foreach (['ab', '-bad', 'bad--slug', 'عربي', 'has space'] as $bad) {
+            $this->actingAs($this->operator, 'sanctum')
+                ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/b', 'slug' => $bad])
+                ->assertStatus(422)->assertJsonValidationErrors(['slug']);
+        }
+    }
+
+    public function test_the_minted_path_is_unchanged_when_no_slug_is_chosen(): void
+    {
+        $res = $this->create('link', 'https://example.com/minted')->assertCreated();
+        $this->assertMatchesRegularExpression('/^[a-z2-9]{7}$/', $res->json('data.slug'));
+        $this->assertFalse($res->json('data.custom_slug'));
+        $this->assertNull($res->json('data.expires_at'));
+        $this->assertNull($res->json('data.utm'));
+    }
+
+    public function test_an_expired_link_sends_the_reader_to_the_site_and_counts_nothing(): void
+    {
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/limited', 'expires_at' => now()->addDay()->toIso8601String()])
+            ->assertCreated();
+        $slug = $res->json('data.slug');
+        $this->get('/l/'.$slug)->assertRedirect('https://example.com/limited');
+
+        Carbon::setTestNow(now()->addDays(2));
+        $this->get('/l/'.$slug)->assertRedirect(Frontend::origin().'/');
+        $this->assertSame(1, (int) ShortLink::query()->where('slug', $slug)->value('clicks'), 'an expired link counted a click');
+        $this->assertSame('expired', $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/short-links')->json('data.0.state'));
+        Carbon::setTestNow();
+
+        // A past expiry cannot be chosen at creation; it can be cleared later.
+        $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', ['kind' => 'link', 'value' => 'https://example.com/x', 'expires_at' => now()->subDay()->toIso8601String()])
+            ->assertStatus(422)->assertJsonValidationErrors(['expires_at']);
+        $this->actingAs($this->operator, 'sanctum')
+            ->patchJson('/api/v1/short-links/'.$res->json('data.id'), ['expires_at' => null])->assertOk()
+            ->assertJsonPath('data.expires_at', null);
+    }
+
+    public function test_utm_parameters_are_applied_to_the_destination_once_and_only_known_keys(): void
+    {
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->postJson('/api/v1/short-links', [
+                'kind' => 'link', 'value' => 'https://example.com/p?ref=x&utm_source=old',
+                'utm' => ['utm_source' => 'tiktok', 'utm_medium' => ' paid ', 'utm_campaign' => '', 'utm_bogus' => 'no'],
+            ])->assertCreated();
+
+        $this->assertSame(['utm_source' => 'tiktok', 'utm_medium' => 'paid'], $res->json('data.utm'));
+        $this->assertSame('https://example.com/p?ref=x&utm_source=old', $res->json('data.shows'), 'the row shows what was typed');
+        $this->get('/l/'.$res->json('data.slug'))->assertRedirect('https://example.com/p?ref=x&utm_source=tiktok&utm_medium=paid');
+    }
+
+    public function test_a_whatsapp_link_carries_no_utm(): void
+    {
+        $res = $this->createWith(['utm' => ['utm_source' => 'tiktok']])->assertCreated();
+        $this->assertNull($res->json('data.utm'));
+        $this->assertStringNotContainsString('utm_', (string) ShortLink::query()->find($res->json('data.id'))?->destination);
     }
 
     // ---- The slug ------------------------------------------------------------------------------
