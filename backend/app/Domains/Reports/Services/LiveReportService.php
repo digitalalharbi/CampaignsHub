@@ -304,6 +304,8 @@ final class LiveReportService
                 $built['platform_groups'],
             ),
             'ads_absent_reason' => $built['reason'],
+            // REPORT-BEST-NOT-SPEND-001 — what the headline lists are ordered on, and for which family.
+            'ads_basis' => $built['basis'] ?? ['family' => null, 'metric' => null],
             // The same reading the generated deck carries, from the same two ranked lists.
             'ads_reading' => (new AdsExplanation)->explain($built['ads'], $built['worst'], $objective),
             /*
@@ -933,6 +935,7 @@ final class LiveReportService
         ) + [
             'ads' => $content['ads'] ?? [],
             'ads_weakest' => $content['ads_weakest'] ?? [],
+            'ads_basis' => $content['ads_basis'] ?? null,
             'breakdowns' => ReportBreakdowns::forShare($share),
             // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the Owner chose per table; absent table means every column.
             'columns' => ReportColumns::forShare($share)->toArray(),
@@ -1098,6 +1101,7 @@ final class LiveReportService
             'creatives' => [
                 'ads' => [], 'ads_groups' => [], 'ads_platform_groups' => [], 'ads_roster' => [], 'ads_weakest' => [], 'top_creatives' => [],
                 'worst_creatives' => [], 'ads_reading' => null, 'ads_level' => null, 'ads_absent_reason' => null,
+                'ads_basis' => null,
                 /*
                  * The format comparison is a statement about the creatives this link is hiding, so it
                  * goes with them. Null rather than `[]`: the page reads `payload.content_formats &&`,

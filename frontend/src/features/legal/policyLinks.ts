@@ -41,6 +41,7 @@ export type PolicyKey =
   | 'subscriptions-refunds'
   | 'oauth-disclosure'
   | 'system-status'
+  | 'business-disclosure'
 
 type Policy = { to: string; ar: string; en: string }
 
@@ -58,6 +59,8 @@ const POLICIES: Record<PolicyKey, Policy> = {
   'subscriptions-refunds': { to: '/subscriptions-refunds', ar: 'الاشتراكات والاسترداد', en: 'Subscriptions & refunds' },
   'oauth-disclosure': { to: '/oauth-disclosure', ar: 'الإفصاح عن OAuth', en: 'OAuth disclosure' },
   'system-status': { to: '/system-status', ar: 'حالة النظام', en: 'System status' },
+  // LEGAL-DISCLOSURE-001 — linked from the policy pages' own list; the public footer stays as it was.
+  'business-disclosure': { to: '/business-disclosure', ar: 'الإفصاح عن العلاقات التجارية', en: 'Business disclosure' },
 }
 
 /**
@@ -78,7 +81,7 @@ export const POLICY_CONTEXTS = {
   /** Integrations and platform linking — what an OAuth reviewer and a connecting operator each need. */
   integrations: ['oauth-disclosure', 'data-processing', 'subprocessors', 'security'],
   /** Support and operational health. The status page belongs here, not in a marketing footer. */
-  support: ['system-status', 'acceptable-use', 'security'],
+  support: ['system-status', 'acceptable-use', 'security', 'business-disclosure'],
 } as const satisfies Record<string, readonly PolicyKey[]>
 
 export type PolicyContext = keyof typeof POLICY_CONTEXTS

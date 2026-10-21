@@ -54,12 +54,61 @@ final class CreativeRankingService
         return (float) ($item['spend_original'] ?? 0) > 0;
     }
 
+    /**
+     * CONTENT-RANKING-MATERIALITY-001 — a rate or a cost is a claim about a sample, and a sample of
+     * under one percent of the scope's spend is not one a client should be told is «best».
+     *
+     * The Resano link: the sales family's leaders were three ads with 0.74, 2.69 and 21.40 of spend and
+     * one order each, ranked on ROAS 178×, 30× and 13× above ads that spent hundreds and sold dozens. A
+     * ratio over a single order is arithmetic, not performance. Volumes (spend, impressions, orders…)
+     * are not gated: a count is the measurement itself.
+     */
+    private const MATERIAL_SHARE = 0.01;
+
+    /** The bases that ARE volumes — gated by nothing but being present and positive. */
+    private const VOLUMES = ['spend', 'impressions', 'clicks', 'reach', 'conversions', 'orders', 'purchases', 'revenue', 'leads', 'installs', 'engagements', 'video_views', 'landing_page_views', 'sign_ups', 'app_opens', 'page_views'];
+
+    /**
+     * The rows material enough to be judged on a ratio: at least MATERIAL_SHARE of the candidates'
+     * converted spend. Rows whose spend is withheld (null) cannot be measured against the pool and
+     * are kept, never silently dropped. If the gate would empty the list, nothing was material and the
+     * list stays as it was — a gate must not turn a small account's only ads into no ads.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private function material(array $items, string $sortKey): array
+    {
+        if (in_array($sortKey, self::VOLUMES, true)) {
+            return $items;
+        }
+
+        $pool = 0.0;
+        foreach ($items as $i) {
+            $pool += is_numeric($i['spend'] ?? null) ? (float) $i['spend'] : 0.0;
+        }
+        if ($pool <= 0.0) {
+            return $items;
+        }
+
+        $kept = array_values(array_filter(
+            $items,
+            static fn (array $i): bool => ! is_numeric($i['spend'] ?? null) || (float) $i['spend'] >= self::MATERIAL_SHARE * $pool,
+        ));
+
+        return $kept === [] ? $items : $kept;
+    }
+
     /** @param list<array<string, mixed>> $items rows with metric keys (spend, roas, cpa, ctr, ...) */
     public function rank(string $objective, array $items, int $limit = 5): array
     {
         $items = array_values(array_filter($items, fn ($i) => $this->didSpend($i)));
 
         [$sortKey, $direction, $reason] = $this->strategy($objective, $items);
+
+        if ($sortKey !== null) {
+            $items = $this->material($items, $sortKey);
+        }
 
         /*
          * No rankable metric means no leaders. An empty section is honest; an arbitrary five
@@ -140,6 +189,8 @@ final class CreativeRankingService
             $items,
             fn ($i) => $this->didSpend($i) && ($i[$sortKey] ?? null) !== null,
         ));
+        // CONTENT-RANKING-MATERIALITY-001 — «worst» is the far end of «best», and gated the same way.
+        $measured = $this->material($measured, $sortKey);
 
         if ($measured === []) {
             return [];
