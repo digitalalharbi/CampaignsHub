@@ -4,7 +4,9 @@ import { useDebouncedValue } from '@/components/forms/useTypeahead'
 import { StatCard } from '@/components/ui/StatCard'
 import { ChartCard, StatusMixBar } from '@/features/analytics/charts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
+import { AlertTriangle, BellRing, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { usePortalPath } from '@/app/portalPath'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from './labels'
@@ -383,6 +385,41 @@ function StatusBadge({ status, ar }: { status: string; ar: boolean }) {
   return <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${m?.tone ?? 'bg-surface-hover text-text-secondary'}`}>{statusLabel(status, ar)}</span>
 }
 
+/**
+ * OPS-LINK-001 — where a task came from and who holds it, in one compact line.
+ *
+ * An alert-opened task links back to its alert, so the person doing the work can see the measurement that raised it;
+ * every other task says what created it. Nothing here is inferred from a title.
+ */
+const SOURCE_LABEL: Record<string, { ar: string; en: string }> = {
+  manual: { ar: 'يدوية', en: 'Manual' },
+  alert: { ar: 'من تنبيه', en: 'From an alert' },
+  delivery: { ar: 'من التسليم', en: 'From delivery' },
+  rule: { ar: 'من قاعدة', en: 'From a rule' },
+  request: { ar: 'من طلب', en: 'From a request' },
+}
+
+function TaskOrigin({ task, ar }: { task: Task; ar: boolean }) {
+  const portal = usePortalPath()
+  const src = task.source
+  if (!src && !task.assignee_name && !task.created_by_name) return null
+  const label = src ? (SOURCE_LABEL[src.kind]?.[ar ? 'ar' : 'en'] ?? src.kind) : null
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted" data-testid={`task-origin-${task.id}`}>
+      {src && src.kind === 'alert' && 'id' in src
+        ? (
+          <Link to={portal(`/alerts?event=${src.id}`)} className="inline-flex items-center gap-1 font-semibold text-brand-600 hover:underline" data-testid={`task-source-alert-${task.id}`}>
+            <BellRing size={12} aria-hidden /> {label}: <span className="text-text-secondary">{src.title}</span>
+          </Link>
+        )
+        : label && <span data-testid={`task-source-${task.id}`}>{label}</span>}
+      {task.assignee_name && <span>{ar ? 'المسؤول: ' : 'Owner: '}<b className="text-text-secondary">{task.assignee_name}</b></span>}
+      {task.created_by_name && <span>{ar ? 'أنشأها: ' : 'Raised by: '}<b className="text-text-secondary">{task.created_by_name}</b></span>}
+    </div>
+  )
+}
+
 function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: Copy; ar: boolean; canUpdate: boolean; onStatus: (s: string) => void; onOpen: () => void }) {
   const pr = PRIORITY_META[task.priority]
   const done = task.status === 'completed'
@@ -399,6 +436,7 @@ function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: 
           ) : null}
         </div>
         {task.description ? <p className="line-clamp-1 text-sm text-text-secondary">{task.description}</p> : null}
+        <TaskOrigin task={task} ar={ar} />
         {task.due_date ? <span className="text-[11px] text-text-muted">{c.due}: <span className="tnum" dir="ltr">{fmtDate(task.due_date)}</span></span> : null}
       </div>
       <div className="flex items-center gap-2">

@@ -6,6 +6,7 @@ namespace App\Domains\Tasks\Http\Controllers;
 
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tasks\Resources\TaskResource;
+use App\Domains\Tasks\Services\TaskSources;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
@@ -117,6 +118,8 @@ final class TaskController extends Controller
             ->whereDate('due_date', '<', now()->toDateString())
             ->whereNotIn('status', ['completed', 'cancelled'])
             ->count();
+
+        TaskSources::attach($page->items());
 
         return ApiResponse::success(
             TaskResource::collection($page->items()),

@@ -1,7 +1,8 @@
 import { StatCard } from '@/components/ui/StatCard'
 import { RulePresets } from './RulePresets'
 import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDER, type AlertCategory } from './alertTaxonomy'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
 import { FilterBar, FilterChips, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
@@ -30,7 +31,7 @@ const COPY = {
     suggest_anomaly: 'ابدأ بـ«يوم غير معتاد»',
     suggest_anomaly_why: 'يقارن كل رقم بسلوكه في الأيام السابقة، فلا يحتاج منك حدًّا رقميًّا — ويشمل الحملات التي لم تكتب لها قاعدة.',
     suggest_anomaly_name: 'يوم غير معتاد',
-    no_match: 'لا نتائج تطابق البحث أو الفلاتر.', search_ph: 'ابحث في التنبيهات…',
+    no_match: 'لا نتائج تطابق البحث أو الفلاتر.', focus_missing: 'التنبيه المرتبط بالمهمة لم يعد ضمن السجل المعروض.', search_ph: 'ابحث في التنبيهات…',
     category: 'النوع', all_categories: 'كل الأنواع',
     sum_open: 'مفتوحة', sum_critical: 'حرِجة', sum_snoozed: 'مؤجّلة', sum_resolved: 'مُغلقة', sum_open_hint: 'تحتاج إجراء', sum_open_clear: 'لا شيء مفتوح',
     none_clear: 'لا توجد تنبيهات مفتوحة — لم تُطلق أي قاعدة نشطة في هذا المشروع.',
@@ -59,7 +60,7 @@ const COPY = {
     suggest_anomaly: 'Start with “Unusual day”',
     suggest_anomaly_why: 'It compares each figure against its own recent behaviour, so there is no threshold to choose — and it covers the campaigns nobody wrote a rule for.',
     suggest_anomaly_name: 'Unusual day',
-    no_match: 'No alerts match your search or filters.', search_ph: 'Search alerts…',
+    no_match: 'No alerts match your search or filters.', focus_missing: 'The alert linked from the task is no longer in the loaded ledger.', search_ph: 'Search alerts…',
     category: 'Kind', all_categories: 'Every kind',
     sum_open: 'Open', sum_critical: 'Critical', sum_snoozed: 'Snoozed', sum_resolved: 'Resolved', sum_open_hint: 'Need action', sum_open_clear: 'Nothing open',
     none_clear: 'No open alerts — no active rule has fired for this project.',
@@ -195,6 +196,16 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   /* ALERT-TAXONOMY-001 — the cut severity cannot make: WHAT kind of problem this is. */
   const [category, setCategory] = useState<'all' | AlertCategory>('all')
   const [term, setTerm] = useState('')
+  /*
+   * OPS-LINK-001 — a task raised from an alert links back here with `?event=<id>`.
+   *
+   * The linked event is shown first and outlined whatever the filters say: the reader followed a
+   * link to ONE alert, and landing on a list where the active filter hides it would read as the
+   * alert having vanished. If it is no longer in the loaded ledger we say so instead of guessing.
+   */
+  const [params] = useSearchParams()
+  const focusId = params.get('event')
+  const focusRef = useRef<HTMLLIElement | null>(null)
   // Live update: poll every 20s so newly-raised alerts appear without a manual refresh.
   // One read of the ledger, filtered client-side. The server caps the page at 200 and sends the
   // counts separately, because filtering a capped array is how the summary cards came to be wrong.
@@ -257,7 +268,9 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   )
 
   const needle = term.trim().toLowerCase()
-  const events = all.filter((e) => {
+  const focused = focusId ? all.find((e) => e.id === focusId) : undefined
+  const filtered = all.filter((e) => {
+    if (e.id === focused?.id) return false
     if (e.status !== filter) return false
     if (sev !== 'all' && e.severity !== sev) return false
     if (type !== 'all' && e.type !== type) return false
@@ -266,6 +279,10 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     const hay = `${labelFor(e, locale)} ${messageFor(e, locale)} ${TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}`.toLowerCase()
     return hay.includes(needle)
   })
+  const events = focused ? [focused, ...filtered] : filtered
+  useEffect(() => {
+    focusRef.current?.scrollIntoView?.({ block: 'center' })
+  }, [focused?.id])
 
   return (
     <div className="flex flex-col gap-4">
@@ -409,6 +426,9 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
         </p>
       )}
 
+      {focusId && q.isSuccess && !focused && (
+        <p className="rounded-xl border border-border bg-surface p-3 text-sm text-text-secondary" data-testid="alert-event-focus-missing">{c.focus_missing}</p>
+      )}
       {events.length === 0 ? (
         <p data-testid="alert-ledger-empty" className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           {/*
@@ -421,7 +441,14 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       ) : (
         <ul className="flex flex-col gap-2">
           {events.map((e) => (
-            <li key={e.id} data-severity={e.severity} className={`flex flex-col gap-2 rounded-2xl border border-s-4 border-border bg-surface p-4 ${sevStripe[e.severity]}`}>
+            <li
+              key={e.id}
+              ref={e.id === focused?.id ? focusRef : undefined}
+              data-severity={e.severity}
+              data-focused={e.id === focused?.id ? 'true' : undefined}
+              data-testid={e.id === focused?.id ? 'alert-event-focused' : undefined}
+              className={`flex flex-col gap-2 rounded-2xl border border-s-4 border-border bg-surface p-4 ${sevStripe[e.severity]} ${e.id === focused?.id ? 'ring-2 ring-accent' : ''}`}
+            >
               <div className="flex items-start gap-3">
                 <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${sevClass[e.severity]}`} aria-hidden />
                 <div className="flex flex-1 flex-col gap-1">
