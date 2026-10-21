@@ -585,6 +585,40 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /** TIKTOK-SPARK-COVER-001 — a Spark Ad's poster comes from its owning identity; a refused post costs only itself. */
+    /** TIKTOK-MEDIA-001 — one refused image chunk no longer drops the chunks after it, and an ad with nothing to show says why. */
+    public function test_tiktok_image_posters_survive_one_refused_chunk_and_an_asset_without_info_states_its_reason(): void
+    {
+        $this->configure('tiktok');
+        // 101 image ads: the first chunk of 100 image ids is refused by TikTok, the second (one id) answers.
+        $ads = [];
+        for ($i = 1; $i <= 101; $i++) {
+            $ads[] = ['ad_id' => "a{$i}", 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => "Image {$i}", 'image_ids' => ["img-{$i}"]];
+        }
+        $ads[] = ['ad_id' => 'a-video', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Video without info', 'video_id' => 'v-missing'];
+        $ads[] = ['ad_id' => 'a-spark', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Spark without identity', 'video_id' => null, 'tiktok_item_id' => '7300000000000000009'];
+        Http::fake(function (Request $r) use ($ads) {
+            $url = $r->url();
+            if (str_contains($url, 'file/image/ad/info/')) {
+                return str_contains($url, 'img-101')
+                    ? Http::response(['code' => 0, 'data' => ['list' => [['image_id' => 'img-101', 'image_url' => 'https://p16.tiktokcdn.com/img-101.jpg']]]])
+                    : Http::response(['code' => 40002, 'message' => 'image_ids invalid'], 400);
+            }
+            if (str_contains($url, 'file/video/ad/info/')) {
+                return Http::response(['code' => 0, 'data' => ['list' => []]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => $ads, 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $out = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertSame('https://p16.tiktokcdn.com/img-101.jpg', $out['a101']['creative']['asset_url'], 'the chunk after the refused one was still asked');
+        $this->assertArrayNotHasKey('asset_url', $out['a1']['creative']);
+        $this->assertSame('image_info_missing', $out['a1']['creative']['raw']['media_reason']);
+        $this->assertSame('video_info_missing', $out['a-video']['creative']['raw']['media_reason']);
+        $this->assertSame('spark_identity_unknown', $out['a-spark']['creative']['raw']['media_reason']);
+    }
+
     public function test_a_tiktok_spark_ad_gets_its_posts_own_poster_from_the_identity(): void
     {
         $this->configure('tiktok');
@@ -1179,6 +1213,64 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /** X returns day-indexed arrays; a null day is absent data, not a zero. */
+    /**
+     * X-STATS-WINDOW-001 — DAY stats are asked at midnight in the ad account's own timezone, end exclusive.
+     *
+     * Production refused the UTC-midnight window with INVALID_TIME_WINDOW. The fixture account is in Asia/Riyadh,
+     * so 2026-10-14..2026-10-20 is asked as [2026-10-14T00:00:00+03:00, 2026-10-21T00:00:00+03:00).
+     */
+    public function test_x_asks_for_day_stats_at_the_accounts_own_midnight_with_an_exclusive_end(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => []]),
+        ]);
+
+        $this->bound('x')->syncInsights('act-1', '2026-10-14', '2026-10-20');
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/stats/')
+            && $r['start_time'] === '2026-10-14T00:00:00+03:00'
+            && $r['end_time'] === '2026-10-21T00:00:00+03:00'
+            && $r['granularity'] === 'DAY');
+        $this->assertSame(1, collect(Http::recorded())->filter(fn (array $pair) => str_contains($pair[0]->url(), '/stats/'))->count(), 'seven days fit one synchronous request');
+    }
+
+    /** X answers at most seven days per synchronous stats request; a longer window is asked in consecutive pieces. */
+    public function test_x_splits_a_window_longer_than_seven_days_into_consecutive_pieces(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]]),
+            'ads-api.x.com/*/stats/*' => Http::sequence()
+                ->push(['data' => [['id' => 'cx', 'id_data' => [['metrics' => ['impressions' => [1, 2, 3, 4, 5, 6, 7]]]]]]])
+                ->push(['data' => [['id' => 'cx', 'id_data' => [['metrics' => ['impressions' => [8, 9, 10]]]]]]]),
+        ]);
+
+        $rows = $this->bound('x')->syncInsights('act-1', '2026-10-01', '2026-10-10')->records;
+
+        $windows = collect(Http::recorded())->filter(fn (array $pair) => str_contains($pair[0]->url(), '/stats/'))
+            ->map(fn (array $pair) => [$pair[0]['start_time'], $pair[0]['end_time']])->values()->all();
+        $this->assertSame([
+            ['2026-10-01T00:00:00+03:00', '2026-10-08T00:00:00+03:00'],
+            ['2026-10-08T00:00:00+03:00', '2026-10-11T00:00:00+03:00'],
+        ], $windows);
+        $this->assertSame(['2026-10-01', '2026-10-07', '2026-10-08', '2026-10-10'], [$rows[0]['date'], $rows[6]['date'], $rows[7]['date'], $rows[9]['date']], 'the pieces reassemble into one continuous series of local days');
+        $this->assertSame(10.0, (float) $rows[9]['impressions']);
+    }
+
+    /** An account whose timezone discovery never recorded is refused rather than reported on the wrong day. */
+    public function test_x_refuses_to_place_a_day_for_an_account_with_no_timezone(): void
+    {
+        $this->configure('x');
+        Http::fake(['ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]])]);
+        $out = $this->bound('x')->syncInsights('acct-no-tz', '2026-10-14', '2026-10-20');
+
+        $this->assertFalse($out->success);
+        $this->assertStringContainsString('no timezone recorded', (string) $out->message);
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), '/stats/'));
+    }
+
     public function test_x_unrolls_day_indexed_metrics_into_daily_rows(): void
     {
         $this->configure('x');
@@ -1193,7 +1285,7 @@ final class AdPlatformConnectorTest extends TestCase
             ]]]),
         ]);
 
-        $rows = $this->bound('x')->syncInsights('acct', '2026-08-01', '2026-08-03')->records;
+        $rows = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-03')->records;
 
         // Day two produced nothing at all, so there is no row claiming it spent zero.
         $this->assertCount(2, $rows);
@@ -1239,7 +1331,7 @@ final class AdPlatformConnectorTest extends TestCase
             ]]]),
         ]);
 
-        $row = $this->bound('x')->syncInsights('acct', '2026-08-01', '2026-08-02')->records[0];
+        $row = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-02')->records[0];
 
         // Every group the mapping reads is requested — the defect this unit exists to fix.
         Http::assertSent(fn (Request $r) => ! str_contains($r->url(), '/stats/')
@@ -1282,7 +1374,7 @@ final class AdPlatformConnectorTest extends TestCase
             ]]]),
         ]);
 
-        $rows = $this->bound('x')->syncInsights('acct', '2026-08-01', '2026-08-03')->records;
+        $rows = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-03')->records;
 
         $this->assertCount(2, $rows, 'a window measured only by spend threw the conversions away');
         $this->assertSame(2.0, $rows[0]['purchases']);
