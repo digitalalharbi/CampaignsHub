@@ -1,3 +1,4 @@
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { Num } from '@/components/ui/Num'
 import { useEffect, useMemo, useState } from 'react'
 import { useDebouncedValue } from '@/components/forms/useTypeahead'
@@ -160,6 +161,7 @@ export function TasksPage() {
           </>
         }
       />
+      <OpsHubBar />
 
       {/*
         The filters, on the page — UX-SWEEP-001.
