@@ -17,6 +17,10 @@ import {
   Settings,
   TrendingUp,
   Wallet,
+  Rocket,
+  Rows3,
+  RectangleHorizontal,
+  ShieldCheck,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -43,54 +47,60 @@ import type { NavGroup } from './SidebarNav'
  * destinations (REG-001: no clients, requests, conversations or client invoicing here). Regrouped,
  * not redesigned: every address, entitlement (`ent`) and page is unchanged.
  */
+/*
+ * NAV-TAXONOMY-001 — four areas, short familiar words, campaign work first in the order the Owner approved:
+ * نظرة عامة · المشاريع · إطلاق الحملات · الحملات · المجموعات · الإعلانات.
+ *
+ * Regrouped and renamed, never removed: every address this rail offered before is still here (navGrouping.test.ts
+ * proves it). Two are new addresses onto existing pages: «إطلاق الحملات» opens the campaign builder that already
+ * lives on the Campaigns page, and «المجموعات» / «الإعلانات» open the Analytics ad-set and ad tabs, which is where those
+ * rungs are read today. Approvals, which had a page and no entry, now has one.
+ */
 export const appNavGroups: readonly NavGroup[] = [
-  {
-    key: 'command',
-    ar: 'مركز القيادة', en: 'Command Center', icon: LayoutDashboard,
-    leaves: [
-      { to: '/app/dashboard', ar: 'لوحة التحكم', en: 'Dashboard', icon: LayoutDashboard, ent: 'dashboard' },
-      { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
-      { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
-    ],
-  },
   {
     key: 'campaigns',
     ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
     leaves: [
+      { to: '/app/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, ent: 'dashboard' },
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
-      { to: '/app/portfolio', ar: 'الملخص الشامل', en: 'Portfolio overview', icon: Layers, ent: 'projects' },
+      { to: '/app/campaigns?launch=1', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket, ent: 'campaigns' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
+      { to: '/app/analytics?tab=ad_sets', ar: 'المجموعات', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
+      { to: '/app/analytics?tab=ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal, ent: 'analytics' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
-      { to: '/app/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2, ent: 'campaigns' },
-      { to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' },
     ],
   },
   {
-    key: 'agents',
-    ar: 'الوكلاء الأذكياء', en: 'AI agents', icon: Bot,
-    leaves: [
-      { to: '/app/automation', ar: 'القواعد الآلية', en: 'Automated rules', icon: Workflow, ent: 'analytics' },
-      { to: '/app/agents', ar: 'مركز الوكلاء', en: 'Agent Center', icon: Bot, ent: 'analytics' },
-      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
-    ],
-  },
-  {
-    key: 'analytics',
-    ar: 'التحليلات والتقارير', en: 'Analytics & reports', icon: BarChart3,
+    key: 'performance',
+    ar: 'الأداء', en: 'Performance', icon: TrendingUp,
     leaves: [
       { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
+      { to: '/app/portfolio', ar: 'الملخص', en: 'Portfolio', icon: Layers, ent: 'projects' },
+      { to: '/app/short-links', ar: 'الروابط', en: 'Links', icon: Link2, ent: 'campaigns' },
       { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
     ],
   },
   {
+    key: 'operations',
+    ar: 'العمليات', en: 'Operations', icon: ListChecks,
+    leaves: [
+      { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
+      { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
+      { to: '/app/automation', ar: 'الأتمتة', en: 'Automation', icon: Workflow, ent: 'analytics' },
+      { to: '/app/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck, ent: 'analytics' },
+      { to: '/app/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, ent: 'analytics', end: true },
+      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
+      { to: '/app/spend-limits', ar: 'الميزانية', en: 'Budget', icon: Wallet, ent: 'analytics' },
+    ],
+  },
+  {
     key: 'business',
-    // Connecting a platform is the FIRST thing a new workspace does, so it leads the area.
-    ar: 'إدارة الأعمال', en: 'Business management', icon: Settings,
+    ar: 'الحساب', en: 'Account', icon: Settings,
     leaves: [
       { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
       { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
-      { to: '/app/settings', ar: 'إعدادات مساحة العمل', en: 'Workspace settings', icon: Settings, ent: 'settings' },
+      { to: '/app/settings', ar: 'الإعدادات', en: 'Settings', icon: Settings, ent: 'settings' },
     ],
   },
 ]

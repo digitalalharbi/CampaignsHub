@@ -305,14 +305,25 @@ export const updateShare = (p: string, reportId: string, shareId: string, body: 
 /** REPORT-LINK-ANALYTICS-001 — Owner-only: counts and dates, never an address. */
 export interface ShareAnalytics {
   views: number
+  /** Distinct DEVICES (address and browser together) — an estimate of people, never a count of them. */
   unique_views: number
   first_viewed_at: string | null
   last_viewed_at: string | null
   downloads: number
+  /** REPORT-LINK-ANALYTICS-002 — opens beyond a device's first. Absent from an older server. */
+  repeat_visits?: number
+  /** Opens that announced themselves as machines (link previews, crawlers) and were left out of `views`. */
+  bot_opens?: number
+  unique_basis?: 'device_estimate'
+  granularity?: 'day' | 'week' | 'month'
+  period?: { from: string; to: string }
+  series?: Array<{ period: string; views: number; devices: number }>
 }
 
-export const shareAnalytics = (p: string, reportId: string, shareId: string) =>
-  getData<ShareAnalytics>(`${base(p)}/${reportId}/shares/${shareId}/analytics`)
+export type ShareGranularity = 'day' | 'week' | 'month'
+
+export const shareAnalytics = (p: string, reportId: string, shareId: string, granularity: ShareGranularity = 'day') =>
+  getData<ShareAnalytics>(`${base(p)}/${reportId}/shares/${shareId}/analytics${granularity === 'day' ? '' : `?granularity=${granularity}`}`)
 
 export interface ShareAccessLog {
   action: string

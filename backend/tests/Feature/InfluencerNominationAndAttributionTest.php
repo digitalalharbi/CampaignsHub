@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Accounts\Capabilities\Capabilities;
+use App\Domains\Accounts\Capabilities\CapabilitySwitch;
 use App\Domains\Influencers\Models\Influencer;
 use App\Domains\Influencers\Models\InfluencerCollaboration;
 use App\Domains\Influencers\Models\InfluencerDeliverable;
@@ -14,6 +16,7 @@ use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tracking\Models\TrackingEvent;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -273,6 +276,38 @@ final class InfluencerNominationAndAttributionTest extends TestCase
         $asset = InfluencerTrackingAsset::query()->findOrFail($link['id']);
         $this->assertSame(2, $asset->clicks);
         $this->assertNotNull($asset->last_clicked_at);
+    }
+
+    /**
+     * TRACKING-EVENTS-001 — a creator's link click is also written down as a measured event, but only once the
+     * agency has switched advanced tracking on, and the visitor is sent to exactly the same place either way.
+     */
+    public function test_a_link_click_is_a_tracking_event_only_when_advanced_tracking_is_on(): void
+    {
+        $collaboration = $this->collaboration();
+        $link = $this->actingAs($this->manager, 'sanctum')
+            ->postJson("/api/v1/influencers/collaborations/{$collaboration->getKey()}/tracking", [
+                'kind' => 'link', 'destination_url' => 'https://brand.example/summer',
+            ])->assertCreated()->json('data');
+
+        $this->get('/t/'.$link['code'])->assertRedirect('https://brand.example/summer');
+        $this->assertSame(0, TrackingEvent::withoutGlobalScopes()->count(), 'off by default: nothing new is stored');
+
+        $this->tenant->forceFill(['enabled_modules' => ['paid_media', 'influencer_marketing', 'advanced_tracking']])->save();
+        CapabilitySwitch::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'scope_type' => 'tenant', 'scope_id' => null, 'scope_key' => $this->tenant->id,
+            'module' => 'advanced_tracking', 'enabled' => true,
+        ]);
+        app(Capabilities::class)->bump((string) $this->tenant->id);
+
+        $this->withHeaders(['User-Agent' => 'Mozilla/5.0 (iPhone) Safari/604'])->get('/t/'.$link['code'])->assertRedirect('https://brand.example/summer');
+
+        $event = TrackingEvent::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('influencer_link_click', $event->event_type);
+        $this->assertSame($link['id'], $event->subject_id);
+        $this->assertSame('brand.example', $event->destination_host);
+        $this->assertFalse($event->is_bot);
+        $this->assertSame(2, InfluencerTrackingAsset::query()->findOrFail($link['id'])->clicks, 'the existing counter counted both');
     }
 
     /**

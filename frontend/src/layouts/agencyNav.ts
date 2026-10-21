@@ -3,7 +3,7 @@ import {
   Bot,
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Send, Settings, TrendingUp, Users, Lightbulb, Wallet } from 'lucide-react'
+  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Send, Settings, TrendingUp, Users, Lightbulb, Wallet, Rocket, Rows3, RectangleHorizontal, ShieldCheck } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -60,62 +60,68 @@ import type { NavGroup } from './SidebarNav'
  * NAV-IA-001 still holds inside the second area — the projects directory and the portfolio overview
  * sit together and are named so neither reads as a version of the other.
  */
+/*
+ * NAV-TAXONOMY-001 — the same four areas as the advertiser rail plus the agency's own «العملاء», short familiar words,
+ * campaign work first in the approved order. Regrouped and renamed, never removed (navGrouping.test.ts): the clients,
+ * requests, conversations and invoices stay together because they are one job — serving a client.
+ */
 export const agencyNavGroups: readonly NavGroup[] = [
-  {
-    key: 'command',
-    ar: 'مركز القيادة', en: 'Command Center', icon: LayoutDashboard,
-    leaves: [
-      { to: '/agency/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
-      { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
-      { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
-      { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
-      { to: '/agency/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing },
-    ],
-  },
   {
     key: 'campaigns',
     ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
     leaves: [
+      { to: '/agency/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard },
       { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
-      { to: '/agency/portfolio', ar: 'الملخص الشامل', en: 'Portfolio overview', icon: Layers },
+      { to: '/agency/campaigns?launch=1', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket },
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
+      { to: '/agency/analytics?tab=ad_sets', ar: 'المجموعات', en: 'Ad groups', icon: Rows3 },
+      { to: '/agency/analytics?tab=ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal },
       { to: '/agency/content', ar: 'المحتويات', en: 'Content', icon: Images },
-      { to: '/agency/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2 },
-      { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
     ],
   },
   {
-    key: 'agents',
-    ar: 'الوكلاء الأذكياء', en: 'AI agents', icon: Bot,
-    leaves: [
-      { to: '/agency/automation', ar: 'القواعد الآلية', en: 'Automated rules', icon: Workflow },
-      { to: '/agency/agents', ar: 'مركز الوكلاء', en: 'Agent Center', icon: Bot },
-      { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
-    ],
-  },
-  {
-    key: 'analytics',
-    ar: 'التحليلات والتقارير', en: 'Analytics & reports', icon: BarChart3,
+    key: 'performance',
+    ar: 'الأداء', en: 'Performance', icon: TrendingUp,
     leaves: [
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
+      { to: '/agency/delivery', ar: 'التسليم', en: 'Delivery', icon: Send, cap: 'reports.view' },
+      { to: '/agency/portfolio', ar: 'الملخص', en: 'Portfolio', icon: Layers },
+      { to: '/agency/short-links', ar: 'الروابط', en: 'Links', icon: Link2 },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
-      // DELIV-DASH-001 — every client's weekly delivery and billing, with the one next step.
-      { to: '/agency/delivery', ar: 'التسليم الأسبوعي', en: 'Weekly delivery', icon: Send, cap: 'reports.view' },
+    ],
+  },
+  {
+    key: 'operations',
+    ar: 'العمليات', en: 'Operations', icon: ListChecks,
+    leaves: [
+      { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
+      { to: '/agency/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing },
+      { to: '/agency/automation', ar: 'الأتمتة', en: 'Automation', icon: Workflow },
+      { to: '/agency/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck },
+      { to: '/agency/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, end: true },
+      { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
+      { to: '/agency/spend-limits', ar: 'الميزانية', en: 'Budget', icon: Wallet },
+    ],
+  },
+  {
+    key: 'clients',
+    ar: 'خدمة العملاء', en: 'Client service', icon: Building2,
+    leaves: [
+      { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
+      { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
+      { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
+      { to: '/agency/billing', ar: 'الفواتير', en: 'Invoices', icon: Receipt },
     ],
   },
   {
     key: 'business',
-    // Two different pots, and confusing them is expensive: Client invoicing is what the agency's
-    // CLIENTS pay it, Agency subscription is what the agency pays CampaignsHub.
-    ar: 'إدارة الأعمال', en: 'Business management', icon: Building2,
+    ar: 'الحساب', en: 'Account', icon: Settings,
     leaves: [
-      { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
-      { to: '/agency/billing', ar: 'فواتير العملاء', en: 'Client invoicing', icon: Receipt },
-      { to: '/agency/subscriptions', ar: 'اشتراك الوكالة', en: 'Agency subscription', icon: CreditCard },
-      { to: '/agency/integrations', ar: 'ربط المنصات', en: 'Platform connections', icon: Plug, cap: 'integrations.manage' },
-      { to: '/agency/team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users, cap: 'team.manage' },
-      { to: '/agency/settings', ar: 'إعدادات الوكالة', en: 'Agency settings', icon: Settings },
+      { to: '/agency/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, cap: 'integrations.manage' },
+      { to: '/agency/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard },
+      { to: '/agency/team', ar: 'الفريق', en: 'Team', icon: Users, cap: 'team.manage' },
+      { to: '/agency/settings', ar: 'الإعدادات', en: 'Settings', icon: Settings },
     ],
   },
 ]

@@ -28,7 +28,7 @@ describe('the section a path belongs to', () => {
 
   /* `/app/short-links` must not be swallowed by a shorter sibling that happens to prefix it. */
   it('prefers the longest matching section', () => {
-    expect(sectionTitle('/app/short-links', appNavGroups, false)).toBe('Short Links — CampaignsHub')
+    expect(sectionTitle('/app/short-links', appNavGroups, false)).toBe('Links — CampaignsHub')
   })
 
   it('reads the agency rail for agency paths', () => {

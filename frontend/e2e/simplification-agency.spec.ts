@@ -71,7 +71,8 @@ test.describe('the agency rail', () => {
      * catch-all. The list is the current set of jobs.
      */
     // NAV-FIVE-AREAS-001 — the five areas, each named for a job.
-    for (const group of ['مركز القيادة', 'إدارة الحملات', 'الوكلاء الأذكياء', 'التحليلات والتقارير', 'إدارة الأعمال']) {
+    // NAV-TAXONOMY-001 — the areas the Owner approved on 2026-10-21, short and named for a job.
+    for (const group of ['إدارة الحملات', 'الأداء', 'العمليات', 'خدمة العملاء', 'الحساب']) {
       expect(text, `the rail is missing the «${group}» area`).toContain(group)
     }
     // And the sibling pair it replaced must not return.

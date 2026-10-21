@@ -7,7 +7,10 @@ namespace App\Domains\ShortLinks\Services;
 use App\Domains\ShortLinks\Models\ShortLink;
 use App\Domains\ShortLinks\Models\ShortLinkHop;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Domains\Tracking\Models\TrackingEvent;
+use App\Domains\Tracking\Services\TrackingRecorder;
 use App\Support\Frontend;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -68,7 +71,7 @@ final class ShortLinkHops
      * The increment is atomic rather than read-modify-write: this is the one endpoint here that can
      * be hit hard and concurrently, and a lost click is a number somebody reads as a result.
      */
-    public function resolveAndCount(string $slug): ?ShortLink
+    public function resolveAndCount(string $slug, ?Request $request = null): ?ShortLink
     {
         $link = ShortLink::query()
             ->withoutGlobalScope(TenantScope::class)
@@ -88,6 +91,25 @@ final class ShortLinkHops
             ->update(['clicks' => DB::raw('clicks + 1'), 'last_clicked_at' => $now]);
 
         $this->record($link, $now);
+
+        /*
+         * TRACKING-EVENTS-001 — the same open, as a measured event. Written AFTER the response is decided and
+         * never able to change it: the counters above are what they always were, and this adds the evidence a
+         * count cannot hold (when, whether a person, which destination). Off unless the workspace turned
+         * advanced tracking on, and a failure here is swallowed by the recorder.
+         */
+        app(TrackingRecorder::class)->record([
+            'tenant_id' => (string) $link->tenant_id,
+            'project_id' => $link->project_id === null ? null : (string) $link->project_id,
+            'event_type' => $link->mode === ShortLink::MODE_LANDING ? TrackingEvent::SHORT_LINK_OPEN : TrackingEvent::SHORT_LINK_REDIRECT,
+            'subject_type' => 'short_link',
+            'subject_id' => (string) $link->getKey(),
+            'source' => 'short_link',
+            'destination_type' => $link->kind === ShortLink::KIND_WHATSAPP ? 'whatsapp' : 'external_url',
+            'destination_host' => (string) parse_url((string) $link->destination, PHP_URL_HOST),
+            'occurred_at' => $now,
+            'consent_state' => 'not_required',
+        ], $request);
 
         return $link;
     }

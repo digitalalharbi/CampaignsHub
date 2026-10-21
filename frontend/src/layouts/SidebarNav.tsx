@@ -94,12 +94,13 @@ export function SidebarNav({
   const visible = groups
     .map((g) => ({ ...g, leaves: g.leaves.filter(permitted) }))
     .filter((g) => g.leaves.length > 0)
+  const allLeaves = visible.flatMap((g) => g.leaves)
 
   return (
     <nav aria-label={label} className="flex flex-col gap-1">
       {visible.map((group) =>
         group.leaves.length === 1 ? (
-          <Leaf key={group.key} leaf={group.leaves[0]} ar={ar} collapsed={collapsed} onNavigate={onNavigate} nested={false} />
+          <Leaf key={group.key} leaf={group.leaves[0]} ar={ar} collapsed={collapsed} onNavigate={onNavigate} nested={false} all={allLeaves} />
         ) : (
           <Group
             key={group.key}
@@ -109,6 +110,7 @@ export function SidebarNav({
             onNavigate={onNavigate}
             pathname={pathname}
             storageKey={storageKey}
+            all={allLeaves}
           />
         ),
       )}
@@ -116,10 +118,36 @@ export function SidebarNav({
   )
 }
 
+/**
+ * NAV-TAXONOMY-001 — which leaf is the current page, when two leaves share a path.
+ *
+ * «المجموعات» and «الإعلانات» are the Analytics page opened on a tab (`/analytics?tab=ad_sets`), and «إطلاق الحملات»
+ * is the Campaigns page with its builder open. Router matching reads the path only, so all three would light up
+ * together with their parent. A leaf with a query is current when the address carries those parameters; a plain leaf
+ * on the same path steps aside for it, so exactly one leaf is current.
+ */
+export function leafActive(leaf: NavLeaf, all: readonly NavLeaf[], pathname: string, search: string): boolean {
+  const [path, query] = leaf.to.split('?')
+  const onPath = leaf.end ? pathname === path : pathname === path || pathname.startsWith(`${path}/`)
+  if (!onPath) return false
+  const params = new URLSearchParams(search)
+  if (query) {
+    for (const [k, v] of new URLSearchParams(query)) {
+      if (params.get(k) !== v) return false
+    }
+
+    return true
+  }
+
+  return !all.some((o) => o !== leaf && o.to.includes('?') && leafActive(o, [], pathname, search))
+}
+
 function Leaf({
-  leaf, ar, collapsed, onNavigate, nested,
-}: { leaf: NavLeaf; ar: boolean; collapsed?: boolean; onNavigate?: () => void; nested: boolean }) {
+  leaf, ar, collapsed, onNavigate, nested, all,
+}: { leaf: NavLeaf; ar: boolean; collapsed?: boolean; onNavigate?: () => void; nested: boolean; all: readonly NavLeaf[] }) {
   const text = ar ? leaf.ar : leaf.en
+  const location = useLocation()
+  const isActive = leafActive(leaf, all, location.pathname, location.search)
 
   return (
     <NavLink
@@ -127,9 +155,11 @@ function Leaf({
       end={leaf.end}
       onClick={onNavigate}
       title={collapsed ? text : undefined}
-      className={({ isActive }) => leafClass(collapsed, isActive, nested)}
+      // NavLink sets aria-current from its own path match; on a shared path only the leaf chosen above is the page.
+      aria-current={isActive ? 'page' : 'false'}
+      className={() => leafClass(collapsed, isActive, nested)}
     >
-      {({ isActive }) => (
+      {() => (
         <>
           {isActive && <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />}
           <leaf.icon size={nested ? 17 : 19} strokeWidth={isActive ? 2.4 : 2} aria-hidden />
@@ -141,10 +171,10 @@ function Leaf({
 }
 
 function Group({
-  group, ar, collapsed, onNavigate, pathname, storageKey,
+  group, ar, collapsed, onNavigate, pathname, storageKey, all,
 }: {
   group: NavGroup; ar: boolean; collapsed?: boolean; onNavigate?: () => void
-  pathname: string; storageKey?: string
+  pathname: string; storageKey?: string; all: readonly NavLeaf[]
 }) {
   // Open unless the user has collapsed this one before. Defaulting to closed would put every section
   // behind a click and a guess, which is not simpler — it is the same list with the labels removed.
@@ -152,7 +182,7 @@ function Group({
 
   // Always open when the current page lives inside it, whatever the stored preference: a deep link
   // must never land someone in a collapsed rail with no indication of where they are.
-  const holdsCurrent = group.leaves.some((l) => pathname === l.to || pathname.startsWith(`${l.to}/`))
+  const holdsCurrent = group.leaves.some((l) => { const p = l.to.split('?')[0]; return pathname === p || pathname.startsWith(`${p}/`) })
   const text = ar ? group.ar : group.en
 
   const toggle = () => {
@@ -167,7 +197,7 @@ function Group({
     return (
       <>
         {group.leaves.map((l) => (
-          <Leaf key={l.to} leaf={l} ar={ar} collapsed onNavigate={onNavigate} nested={false} />
+          <Leaf key={l.to} leaf={l} ar={ar} collapsed onNavigate={onNavigate} nested={false} all={all} />
         ))}
       </>
     )
@@ -192,7 +222,7 @@ function Group({
       {(open || holdsCurrent) && (
         <div className="mt-0.5 flex flex-col gap-0.5">
           {group.leaves.map((l) => (
-            <Leaf key={l.to} leaf={l} ar={ar} onNavigate={onNavigate} nested />
+            <Leaf key={l.to} leaf={l} ar={ar} onNavigate={onNavigate} nested all={all} />
           ))}
         </div>
       )}

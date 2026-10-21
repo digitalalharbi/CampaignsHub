@@ -79,6 +79,8 @@ final class CapabilityController extends Controller
             ['scope_id' => $scopeId, 'enabled' => $data['enabled'], 'changed_by' => $request->user()->getKey()],
         );
 
+        $this->capabilities->bump((string) $tenant->getKey());
+
         $this->audit->log(
             'capability.changed', 'capability', $module,
             ['enabled' => $before], ['enabled' => $data['enabled'], 'scope' => $data['scope'], 'scope_id' => $scopeId],
@@ -107,6 +109,7 @@ final class CapabilityController extends Controller
 
         if ($existing !== null) {
             $existing->delete();
+            $this->capabilities->bump((string) $tenant->getKey());
             $this->audit->log('capability.cleared', 'capability', $module, ['enabled' => $existing->enabled], ['scope' => $data['scope'], 'scope_id' => $scopeId]);
         }
 

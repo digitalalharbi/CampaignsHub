@@ -131,7 +131,8 @@ test.describe('the portals are different products', () => {
      * thinks they are granting. The page, the route and the mechanism are unchanged — and the point
      * this assertion makes is unchanged with them: the advertiser rail has no such entry at all.
      */
-    await expect(rail.getByText(/الفريق والصلاحيات|Team & permissions/).first()).toBeVisible()
+    /* NAV-TAXONOMY-001 — the approved short label is «الفريق / Team»; the advertiser rail still has none. */
+    await expect(rail.getByText(/^الفريق$|^Team$/).first()).toBeVisible()
   })
 
   /**
