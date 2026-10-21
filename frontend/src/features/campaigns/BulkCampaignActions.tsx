@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal'
 import { getData } from '@/lib/api/client'
 import { STATE_LABELS, performWrite, type ActionState, type WriteEntity, type WriteOptions, type WriteResult } from './providerWrites'
 import { providerLabel } from './labels'
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { useAuth } from '@/stores/auth'
 
 /**
@@ -113,7 +114,7 @@ export function BulkCampaignActions({ projectId, selected, onClear, ar }: {
         <Modal open onClose={() => { if (!busy) setConfirm(null) }} title={confirm === 'pause' ? (ar ? 'إيقاف الحملات المحددة' : 'Pause the selected campaigns') : (ar ? 'تشغيل الحملات المحددة' : 'Resume the selected campaigns')} size="md"
           footer={<><Button variant="secondary" disabled={busy} onClick={() => setConfirm(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={busy} onClick={() => void run()} data-testid="campaigns-bulk-confirm">{confirm === 'pause' ? (ar ? 'نعم، أوقف' : 'Yes, pause') : (ar ? 'نعم، شغّل' : 'Yes, resume')}</Button></>}>
           <div className="space-y-2 text-sm" data-testid="campaigns-bulk-dialog">
-            <p>{ar ? `سيُرسل الطلب إلى المنصات لـ ${selected.length} حملة. لا يُغيَّر شيء محليًا قبل تأكيد المنصة.` : `The request goes to the platforms for ${selected.length} campaign(s). Nothing changes locally before the platform confirms.`}</p>
+            <p>{ar ? `سيُرسل الطلب إلى المنصات لـ ${countedCampaigns(selected.length, 'ar')}. لا يُغيَّر شيء محليًا قبل تأكيد المنصة.` : `The request goes to the platforms for ${countedCampaigns(selected.length, 'en')}. Nothing changes locally before the platform confirms.`}</p>
             {confirm === 'resume' && <p className="font-semibold text-warning">{ar ? 'تشغيل حملة يبدأ الإنفاق عليها.' : 'Resuming a campaign starts its spend.'}</p>}
             <ul className="list-disc ps-5 text-text-secondary">{selected.map((c) => <li key={c.id}>{c.name}</li>)}</ul>
           </div>
