@@ -775,6 +775,9 @@ export interface EntityRow extends MoneyProvenance {
    * `unknown` family — a caller choosing a column set has to tell those apart.
    */
   objective: string | null
+  /** ADV-CAMPAIGN-TABLES-001 — the platform, and the unified campaign whose write controls govern this row. */
+  provider?: string | null
+  unified_campaign_id?: string | null
   active_days: number
   last_active_on: string | null
   spend: number | null

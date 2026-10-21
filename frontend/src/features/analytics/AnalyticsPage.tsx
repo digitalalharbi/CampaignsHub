@@ -47,7 +47,7 @@ import { attributionFindings, type AttributionFinding } from './attributionFindi
 import { distributionFor } from './familyDistribution'
 import type { FreshnessRow, PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
-import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
+import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf, type CampaignRelevance } from '@/features/campaigns/campaignRelevance'
 import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
@@ -2636,6 +2636,40 @@ function entityMetricExact(row: EntityRow, key: string): string | null {
   return countCell(row[key] as number | null | undefined).exact
 }
 
+/**
+ * The value a metric column SORTS by — derived from the same key the column renders.
+ *
+ * ADV-CAMPAIGN-TABLES-001: the sort values were a fixed eleven-figure list (spend, impressions, reach,
+ * frequency, clicks, CTR, CPC, CPM, results, CPA) while the columns come from `plan.keys`, which follow
+ * the rows' objective. On any family whose plan differed — a sales list adds return and drops reach — a
+ * click on «ROAS» re-ordered by a figure that was not on screen. Money and derived costs sort by their
+ * raw number; a withheld or undividable figure is null, so it stays last in both directions.
+ */
+function entityMetricSortValue(row: EntityRow, key: string): number | null {
+  const read = (k: string): number | null => {
+    const v = row[k as keyof EntityRow]
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  }
+  const per = COST_PER_DENOMINATOR[key]
+  if (per) {
+    const spend = read('spend')
+    const denom = (read(per.field) ?? 0) / (per.per ?? 1)
+    return spend !== null && denom > 0 ? spend / denom : null
+  }
+
+  return read(key)
+}
+
+export type EntityWorkspaceControls = {
+  /** Matched against the name and the provider id, case-insensitively. */
+  search: string
+  status: 'all' | CampaignRelevance
+  /** Metric keys the reader switched off in the column chooser. */
+  hidden: readonly string[]
+  /** Opens the provider controls for a row; offered only on rows linked to a unified campaign. */
+  onManage?: (row: EntityRow) => void
+}
+
 function countCell(value: number | null | undefined): { text: string; exact: string | null } {
   const read = readMetricValue('number', value ?? null)
 
@@ -3030,7 +3064,7 @@ function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string
   )
 }
 
-function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+export function EntityTab({ projectId, range, filters, level, workspace }: TabProps & { level: 'ad_set' | 'ad'; workspace?: EntityWorkspaceControls }) {
   /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
   const portalTo = usePortalPath()
   const ar = useAr()
@@ -3083,9 +3117,23 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    * request takes. The response is the authority on what its own numbers are about.
    */
   const windowEnd = q.data?.period?.to ?? range.to
-  const rows = useMemo(
+  const allRows = useMemo(
     () => orderByRelevanceWith(q.data?.entities ?? [], windowEnd, (row) => row.entity_id),
     [q.data?.entities, windowEnd],
+  )
+  /*
+   * ADV-CAMPAIGN-TABLES-001 — the dedicated Ad groups / Ads pages narrow the SAME rows, never a second list.
+   * Search and status are read here, after the server's own narrowing (platform, objective, campaign), so a
+   * row hidden by the search is still counted by everything above the table that reads the response.
+   */
+  const needle = workspace?.search.trim().toLowerCase() ?? ''
+  const rows = useMemo(
+    () => allRows.filter((row) => {
+      if (workspace && workspace.status !== 'all' && relevanceOf(row, windowEnd) !== workspace.status) return false
+      if (needle && !`${row.name ?? ''} ${row.external_id}`.toLowerCase().includes(needle)) return false
+      return true
+    }),
+    [allRows, workspace, windowEnd, needle],
   )
   const currency = q.data?.currency ?? null
   const child = nextLevel(level)
@@ -3196,7 +3244,9 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    * a figure under the wrong heading the first time a family changed the count — a worse defect than
    * the generic column set this replaces.
    */
-  const plan = entityColumnPlan(rows)
+  const fullPlan = entityColumnPlan(allRows)
+  const plan = { ...fullPlan, keys: fullPlan.keys.filter((key) => !(workspace?.hidden ?? []).includes(key)) }
+  const manage = workspace?.onManage
 
   const head = [
     ar ? 'الاسم' : 'Name',
@@ -3204,6 +3254,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     ar ? 'الحالة' : 'State',
     ...plan.keys.map((key) => entityColumnLabel(key, ar)),
     ...(adContext ? [ar ? 'آخر نشاط' : 'Last active'] : []),
+    ...(manage ? [ar ? 'إدارة' : 'Manage'] : []),
   ]
 
   const cells = rows.map((row) => [
@@ -3243,6 +3294,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
           />
         </button>
       )}
+      {workspace && row.provider && <ProviderMark provider={row.provider} size={18} className="shrink-0" />}
       <div className="min-w-0">
       {/*
         Only a row with a level BENEATH it is a button. An ad is the last rung this table serves, and
@@ -3311,6 +3363,22 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     ...(adContext
       ? [row.last_active_on ? fmtDate(row.last_active_on) : '—']
       : []),
+    ...(manage
+      ? [row.unified_campaign_id
+          ? (
+            <button
+              key={`manage-${row.entity_id}`}
+              type="button"
+              onClick={() => manage(row)}
+              data-testid={`entity-manage-${row.entity_id}`}
+              className="rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-brand-600 hover:border-brand-500 focus-visible:outline-2 focus-visible:outline-brand-500"
+            >
+              {ar ? 'إدارة' : 'Manage'}
+            </button>
+          )
+          /* Not linked to a campaign in this product: there is nothing here to authorise a change against. */
+          : <span key={`manage-${row.entity_id}`} className="text-xs text-text-muted" title={ar ? 'غير مرتبط بحملة في المنصة الموحدة' : 'Not linked to a unified campaign'}>—</span>]
+      : []),
   ])
 
   /*
@@ -3326,21 +3394,8 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     null,                                   // state
     ...plan.keys.map((key) => entityMetricExact(row, key)),
     ...(adContext ? [null] : []),           // last active
+    ...(manage ? [null] : []),              // manage
   ])
-
-  /*
-   * Named `spendOf`, not `money`.
-   *
-   * It was `money` — a local shadow of the FORMATTER, returning a raw number. Two meanings of one
-   * word in one file is precisely how «18.05 SAR» on a USD account survived review: a reader
-   * checking «does this call state its currency» sees `money(row)` and moves on.
-   */
-  const spendOf = (row: (typeof rows)[number]) => (typeof row.spend === 'number' ? row.spend : null)
-  const per = (row: (typeof rows)[number], denom: number) => {
-    const spend = spendOf(row)
-
-    return spend !== null && denom > 0 ? spend / denom : null
-  }
 
   const values: SortValues[] = rows.map((row) => [
     row.name ?? row.external_id ?? '',
@@ -3356,17 +3411,9 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
      * «Stopped» before nothing is the alphabet answering a different question.
      */
     CAMPAIGN_RELEVANCE_ORDER.indexOf(relevanceOf(row, windowEnd)),
-    spendOf(row),
-    row.impressions ?? null,
-    row.reach ?? null,
-    row.frequency ?? null,
-    row.clicks ?? null,
-    row.ctr ?? null,
-    per(row, row.clicks ?? 0),
-    per(row, (row.impressions ?? 0) / 1000),
-    row.conversions ?? null,
-    per(row, row.conversions ?? 0),
+    ...plan.keys.map((key) => entityMetricSortValue(row, key)),
     ...(adContext ? [row.last_active_on ?? null] : []),
+    ...(manage ? [null] : []),
   ])
 
   return (
@@ -3382,7 +3429,8 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 
         Only on the ad-set tab: there is no decomposition of an AD by ad.
       */}
-      {level === 'ad_set' && (
+      {/* CAMPAIGNSHUB-FEATURE-FIRST — on the operational Ad groups page the table leads and the diagnosis follows it. */}
+      {level === 'ad_set' && !workspace && (
         <ChangeDiagnosis
           data={adSetDrivers.data}
           currency={currency}
@@ -3403,9 +3451,13 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
           parent reported nothing — otherwise a reader concludes the account is dead when what they
           are looking at is one quiet ad set.
         */
-        empty={!q.isLoading && rows.length === 0 && parent === null}
+        empty={!q.isLoading && allRows.length === 0 && parent === null}
       >
-        {!q.isLoading && !q.isError && rows.length === 0 && parent !== null ? (
+        {!q.isLoading && !q.isError && allRows.length > 0 && rows.length === 0 ? (
+          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid={`entity-no-match-${level}`}>
+            {ar ? 'لا صفوف تطابق البحث أو الحالة المختارة.' : 'No rows match the search or the chosen state.'}
+          </p>
+        ) : !q.isLoading && !q.isError && rows.length === 0 && parent !== null ? (
           <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid={`entity-empty-under-parent-${level}`}>
             {ar
               ? 'لم تُسجَّل أي بيانات تحت هذا المستوى في هذه الفترة. هذا ليس «لا توجد بيانات» للمشروع.'
@@ -3462,6 +3514,14 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
         )}
       </Panel>
 
+      {level === 'ad_set' && workspace && (
+        <ChangeDiagnosis
+          data={adSetDrivers.data}
+          currency={currency}
+          loading={adSetDrivers.isPending}
+          error={adSetDrivers.isError}
+        />
+      )}
     </div>
   )
 }
