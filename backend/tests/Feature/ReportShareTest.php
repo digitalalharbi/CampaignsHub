@@ -205,6 +205,26 @@ final class ReportShareTest extends TestCase
     }
 
     /**
+     * REPORT-TABLES-OWNER-COLUMNS-001 — a published link's columns can be changed after creation, the
+     * roster says what it publishes, and the live payload honours the new choice.
+     */
+    public function test_a_published_links_columns_can_be_edited_and_the_live_payload_honours_them(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, ['hide_spend' => true], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+
+        $this->assertSame([], $this->actingAs($this->owner, 'sanctum')->getJson(dirname($url))->assertOk()->json('data.0.columns'), 'a fresh link publishes every column');
+
+        $res = $this->actingAs($this->owner, 'sanctum')->patchJson($url, ['columns' => ['accounts' => ['results', 'spend', 'bogus'], 'days' => ['impressions']]])->assertOk();
+        $this->assertSame(['accounts' => ['results', 'spend'], 'days' => ['impressions']], $res->json('data.columns'), 'unknown keys are cut, named tables kept');
+
+        // The live payload reads the same stored choice (`ReportColumns::forShare`, covered by the platformComparison tests).
+        $this->assertSame(['accounts' => ['results', 'spend'], 'days' => ['impressions']], ReportColumns::forShare($share->fresh())->toArray());
+
+        $this->actingAs($this->owner, 'sanctum')->patchJson($url, ['columns' => []])->assertOk()->assertJsonPath('data.columns', []);
+    }
+
+    /**
      * REPORT-LINK-ANALYTICS-001 — the Owner sees how often the link was opened: total views, privacy-safe
      * unique views, first and last opened. Link-preview fetches are not people, one browser opening it twice
      * is one person, and the client's own payload carries none of it.

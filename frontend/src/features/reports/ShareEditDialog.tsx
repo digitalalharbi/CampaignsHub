@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { updateShare, type ShareEdit, type ShareRow } from './api'
+import { ColumnPicker } from './ColumnPicker'
 
 /**
  * REPORT-LINK-EDIT-IN-PLACE-001 — change a published client link without changing its URL.
@@ -17,14 +18,14 @@ const COPY = {
   ar: {
     title: 'تعديل الرابط', hint: 'الرابط نفسه يبقى كما هو — يظهر التغيير للعميل عند فتحه المرة القادمة.',
     download: 'السماح بالتنزيل', watermark: 'علامة مائية', spend: 'إخفاء الإنفاق', revenue: 'إخفاء الإيرادات', names: 'إخفاء أسماء الحملات',
-    form: 'مستوى التقرير', formAsIs: 'كما هو التقرير', formExec: 'ملخص تنفيذي', formDetailed: 'تقرير تفصيلي',
+    columns: 'أعمدة الجداول المنشورة', form: 'مستوى التقرير', formAsIs: 'كما هو التقرير', formExec: 'ملخص تنفيذي', formDetailed: 'تقرير تفصيلي',
     password: 'كلمة مرور جديدة', clearPassword: 'إزالة كلمة المرور', expiry: 'تاريخ انتهاء جديد', clearExpiry: 'بلا انتهاء',
     previous: 'إظهار مقارنة الفترة السابقة للعميل', save: 'حفظ التعديل', cancel: 'إلغاء', protectedNow: 'محمي بكلمة مرور حالياً',
   },
   en: {
     title: 'Edit link', hint: 'The link itself stays exactly as it is — the client sees the change the next time they open it.',
     download: 'Allow download', watermark: 'Watermark', spend: 'Hide spend', revenue: 'Hide revenue', names: 'Hide campaign names',
-    form: 'Report level', formAsIs: 'As the report is', formExec: 'Executive summary', formDetailed: 'Detailed report',
+    columns: 'Published table columns', form: 'Report level', formAsIs: 'As the report is', formExec: 'Executive summary', formDetailed: 'Detailed report',
     password: 'New password', clearPassword: 'Remove the password', expiry: 'New expiry date', clearExpiry: 'Never expires',
     previous: 'Show the previous-period comparison to the client', save: 'Save changes', cancel: 'Cancel', protectedNow: 'Currently password-protected',
   },
@@ -77,6 +78,35 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
             className="h-4 w-4 accent-brand-600"
           />
         </label>
+        {/*
+          REPORT-TABLES-OWNER-COLUMNS-001 — the published link's columns, editable after creation. The
+          picker starts from what the link publishes now; a table left untouched keeps its choice, and
+          «all columns» clears it. The hidden-spend rule still wins on the server, whatever is picked.
+        */}
+        <details className="rounded-xl border border-border px-3 py-2" data-testid="edit-columns">
+          <summary className="cursor-pointer text-sm font-semibold">{t.columns}</summary>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            {(['platforms', 'accounts', 'content', 'days'] as const).map((table) => {
+              const current = Array.isArray(share.columns) ? undefined : share.columns?.[table]
+              const chosen = edit.columns && table in edit.columns ? edit.columns[table] : (current ?? null)
+              return (
+                <ColumnPicker
+                  key={table}
+                  table={table}
+                  ar={ar}
+                  value={chosen && chosen.length > 0 ? chosen : null}
+                  onChange={(next) => setEdit((x) => {
+                    const base = x.columns ?? Object.fromEntries(Object.entries(Array.isArray(share.columns) ? {} : (share.columns ?? {})))
+                    const columns = { ...base }
+                    if (next === null) delete columns[table]
+                    else columns[table] = next
+                    return { ...x, columns }
+                  })}
+                />
+              )
+            })}
+          </div>
+        </details>
         <label className="block text-xs font-semibold text-text-secondary">{t.form}
           <select data-testid="edit-form" value={(edit.form !== undefined ? edit.form : share.form ?? '') ?? ''} onChange={(e) => setEdit((x) => ({ ...x, form: (e.target.value || null) as ShareEdit['form'] }))} className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
             <option value="">{t.formAsIs}</option>
