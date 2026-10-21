@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -131,6 +132,27 @@ final class EntityMetricsApiTest extends TestCase
 
         $this->assertSame('Riyadh · 18-34', $rows[0]['name'], 'a caller that is not the controller got no name');
         $this->assertSame('active', $rows[0]['status']);
+    }
+
+    /**
+     * ADV-CAMPAIGN-TABLES-001 — a row names its platform and the unified campaign whose controls govern it.
+     *
+     * The Ad groups / Ads pages draw the platform and open the campaign's provider write controls from a row;
+     * both must come with the row, and an entity not linked to a unified campaign must say so with a null
+     * rather than borrow another campaign's id.
+     */
+    public function test_a_row_names_its_platform_and_its_unified_campaign(): void
+    {
+        $unified = UnifiedCampaign::create(['project_id' => $this->project->getKey(), 'name' => 'Unified', 'status' => 'active', 'objective' => 'sales']);
+        $this->metric($this->squad->getKey(), ['impressions' => 1000]);
+
+        $row = $this->fetchLevel('ad_set')[0];
+        $this->assertSame('snapchat', $row['provider']);
+        $this->assertNull($row['unified_campaign_id'], 'an unlinked ad set is not attributed to any campaign');
+
+        $this->squad->forceFill(['unified_campaign_id' => $unified->getKey()])->save();
+        $row = $this->fetchLevel('ad_set')[0];
+        $this->assertSame((string) $unified->getKey(), $row['unified_campaign_id']);
     }
 
     /** An ad squad reaches the API with a NAME — a drill-down of provider ids is not a screen. */
