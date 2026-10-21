@@ -8,9 +8,10 @@ vi.mock('./api', async (orig) => ({
   listShortLinks: vi.fn(), listShortLinksWithMeta: vi.fn(),
   createShortLink: vi.fn(),
   disableShortLink: vi.fn(),
+  enableShortLink: vi.fn(),
 }))
 
-import { createShortLink, listShortLinksWithMeta } from './api'
+import { createShortLink, enableShortLink, listShortLinksWithMeta } from './api'
 
 /**
  * SHORT-LINKS-001 — two fields, one action, and a link to take away.
@@ -42,6 +43,18 @@ describe('the short-link utility', () => {
     signInWith(['campaigns.view', 'campaigns.update'])
   })
   afterEach(() => signOut())
+
+  /** SHORT-LINK-RESUME-001 — a disabled link offers «تفعيل», which resumes the same address; an active one offers «إيقاف». */
+  it('a disabled link is named as such and resumes at the same address', async () => {
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [{ ...LINK, is_active: false }], meta: {} } as never)
+    vi.mocked(enableShortLink).mockResolvedValue({ ...LINK, is_active: true } as never)
+    renderWithProviders(<ShortLinksPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('short-link-state-sl1')).toHaveTextContent('موقوف')
+    expect(screen.queryByTestId('short-link-disable-sl1')).toBeNull()
+    fireEvent.click(screen.getByTestId('short-link-enable-sl1'))
+    await waitFor(() => expect(enableShortLink).toHaveBeenCalledWith('sl1'))
+  })
 
   it('offers exactly two kinds, and nothing technical', async () => {
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })

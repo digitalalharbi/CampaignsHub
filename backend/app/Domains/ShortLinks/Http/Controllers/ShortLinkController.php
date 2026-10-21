@@ -213,6 +213,24 @@ final class ShortLinkController extends Controller
     }
 
     /**
+     * SHORT-LINK-RESUME-001 — turning one back on.
+     *
+     * The same slug, the same destination, the same counters: a link switched off for a day (a sold-out
+     * offer, a wrong message) resumes at the address people already hold, and the clicks it counted
+     * before continue the same series. Nothing is minted; a disabled link that has been deleted is a 404
+     * here like everywhere else on this controller.
+     */
+    public function enable(Request $request, string $link): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.update'), 403);
+
+        $model = ShortLink::query()->findOrFail($link);
+        $model->update(['is_active' => true]);
+
+        return ApiResponse::success($this->shape($model->refresh()), 'Short link enabled.');
+    }
+
+    /**
      * DELETE short-links/{link} — remove it from the library.
      *
      * «Disable» stops a link resolving and leaves it on the screen; this takes it off the screen and
