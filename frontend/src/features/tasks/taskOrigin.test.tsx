@@ -67,6 +67,19 @@ describe('task origin', () => {
     expect(within(row as HTMLElement).getByText(/Omar/)).toBeInTheDocument()
   })
 
+  /* DELIVERY-TASK-001 — the weekly review task opens the client's delivery tab, naming the week. */
+  it('links a weekly-delivery task to that client’s delivery tab', async () => {
+    vi.mocked(listTasks).mockResolvedValue(pageOf([task({
+      source: { kind: 'delivery', id: 'pk1', client_workspace_id: 'cw1', status: 'draft', period: '2026-10-12 → 2026-10-18' } as Task['source'],
+    })]))
+    renderWithProviders(<TasksPage />, { locale: 'ar', route: '/agency/tasks' })
+
+    const link = await screen.findByTestId('task-source-delivery-t1')
+    expect(link.getAttribute('href')).toBe('/agency/clients/cw1?tab=delivery')
+    expect(link.textContent).toContain('من التسليم')
+    expect(link.textContent).toContain('2026-10-12 → 2026-10-18')
+  })
+
   it('says a hand-made task is manual, with no alert link', async () => {
     vi.mocked(listTasks).mockResolvedValue(pageOf([task({ source: { kind: 'manual' } as Task['source'] })]))
     renderWithProviders(<TasksPage />, { locale: 'ar' })
