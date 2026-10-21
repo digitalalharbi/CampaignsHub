@@ -28,6 +28,8 @@ import {
   regenerateReport,
   renewShare,
   revokeShare,
+  pauseShare,
+  resumeShare,
   sendReport,
   shareLogs,
 } from './api'
@@ -1116,7 +1118,7 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
   )
 }
 
-function ShareManager({ projectId, reportId, onClose }: { projectId: string; reportId: string; onClose: () => void }) {
+export function ShareManager({ projectId, reportId, onClose }: { projectId: string; reportId: string; onClose: () => void }) {
   const ar = useAr()
   const qc = useQueryClient()
   const shares = useQuery({ queryKey: ['shares', projectId, reportId], queryFn: () => listShares(projectId, reportId) })
@@ -1209,6 +1211,11 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
   })
   const revoke = useMutation({
     mutationFn: (id: string) => revokeShare(projectId, reportId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
+  })
+  /* REPORT-LINK-PAUSE-001 — the reversible switch; «إلغاء» below stays the permanent one. */
+  const pause = useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) => (on ? pauseShare : resumeShare)(projectId, reportId, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
   })
   const renew = useMutation({
@@ -1391,7 +1398,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
               {shares.data!.map((s: ShareRow) => (
                 <div key={s.id} data-testid="share-row" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-sm">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.active ? 'bg-[var(--positive-background)] text-success' : 'bg-surface-secondary text-text-muted'}`}>{s.active ? (ar ? 'نشط' : 'Active') : s.revoked_at ? (ar ? 'مُلغى' : 'Revoked') : (ar ? 'منتهٍ' : 'Expired')}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.active ? 'bg-[var(--positive-background)] text-success' : 'bg-surface-secondary text-text-muted'}`}>{s.active ? (ar ? 'نشط' : 'Active') : s.revoked_at ? (ar ? 'مُلغى' : 'Revoked') : s.paused_at ? (ar ? 'متوقف' : 'Paused') : (ar ? 'منتهٍ' : 'Expired')}</span>
                     {/* Which kind of link this is, said plainly — the client's experience differs entirely. */}
                     <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-text-secondary">
                       {s.mode === 'live' ? (ar ? 'لحظي' : 'Live') : (ar ? 'ثابت' : 'Fixed')}
@@ -1405,7 +1412,20 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                     <button onClick={() => setLogsFor(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
                       {ar ? 'سجل الفتح' : 'Access history'}
                     </button>
-                    {s.active && (
+                    {/* Pause / resume leads the actions: it is the urgent one, and it keeps everything. */}
+                    {(s.active || s.paused_at) && (
+                      <button
+                        type="button"
+                        data-testid={`share-pause-${s.id}`}
+                        aria-pressed={Boolean(s.paused_at)}
+                        disabled={pause.isPending}
+                        onClick={() => pause.mutate({ id: s.id, on: !s.paused_at })}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-bold focus-visible:outline-2 focus-visible:outline-brand-500 ${s.paused_at ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-warning text-warning hover:bg-[var(--warning-background)]'}`}
+                      >
+                        {s.paused_at ? (ar ? 'تفعيل الرابط' : 'Resume link') : (ar ? 'إيقاف الرابط' : 'Pause link')}
+                      </button>
+                    )}
+                    {(s.active || s.paused_at) && (
                       <>
                         <button data-testid={`share-edit-${s.id}`} onClick={() => setEditing(s)} className="text-xs font-semibold text-text-secondary hover:underline">
                           {ar ? 'تعديل' : 'Edit'}
