@@ -123,6 +123,8 @@ export interface ShareRow {
   last_viewed_at: string | null
   expires_at: string | null
   revoked_at: string | null
+  /** REPORT-LINK-PAUSE-001 — set while the link is switched off; the link keeps its URL, settings and history. */
+  paused_at?: string | null
   logs_count: number | null
   created_at: string | null
   /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
@@ -146,6 +148,10 @@ export interface CreatedShare extends ShareRow {
 export const listShares = (p: string, reportId: string) => getData<ShareRow[]>(`${base(p)}/${reportId}/shares`)
 export const createShare = (p: string, reportId: string, opts: Record<string, unknown>) =>
   postData<CreatedShare>(`${base(p)}/${reportId}/shares`, opts)
+export const pauseShare = (p: string, reportId: string, shareId: string) =>
+  postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/pause`)
+export const resumeShare = (p: string, reportId: string, shareId: string) =>
+  postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/resume`)
 export const revokeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
 
