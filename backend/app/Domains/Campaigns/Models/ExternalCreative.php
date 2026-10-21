@@ -25,6 +25,7 @@ final class ExternalCreative extends Model
         'width', 'height', 'aspect_ratio', 'duration_seconds', 'file_size', 'file_hash',
         'body', 'headline', 'description', 'cta',
         'first_seen_at', 'last_active_at', 'source_updated_at', 'asset_expires_at', 'raw', 'cards',
+        'cover_path', 'cover_cached_at',
         'creative_group_id', 'last_synced_at', 'is_demo',
     ];
 
@@ -55,6 +56,7 @@ final class ExternalCreative extends Model
         'last_active_at' => 'datetime',
         'source_updated_at' => 'datetime',
         'asset_expires_at' => 'datetime',
+        'cover_cached_at' => 'datetime',
         'raw' => 'array',
         /*
          * A carousel's cards, or null.
