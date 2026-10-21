@@ -39,6 +39,13 @@ final class ShortLinkHopController extends Controller
     {
         $link = $this->hops->resolveAndCount($slug, $request);
 
+        // BIO-PAGE-001 — a bio page: its buttons are other short links, each counted on its own hop.
+        if ($link !== null && $link->kind === ShortLink::KIND_BIO) {
+            return response()
+                ->view('short-links.bio', $this->hops->bioPage($link))
+                ->header('X-Robots-Tag', 'noindex');
+        }
+
         if ($link !== null && $link->mode === ShortLink::MODE_LANDING) {
             return response()
                 ->view('short-links.landing', [

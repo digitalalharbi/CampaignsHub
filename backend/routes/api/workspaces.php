@@ -70,6 +70,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      */
     Route::get('short-links', [ShortLinkController::class, 'index'])->name('short-links.index');
     Route::post('short-links', [ShortLinkController::class, 'store'])->name('short-links.store');
+    // BIO-PAGE-001 — a page of buttons, each an existing short link; served on the same hop.
+    Route::post('short-links/bio', [ShortLinkController::class, 'storeBio'])->name('short-links.bio.store');
+    Route::patch('short-links/bio/{link}', [ShortLinkController::class, 'updateBio'])->name('short-links.bio.update');
     Route::get('short-links/{link}/history', [ShortLinkController::class, 'history'])->name('short-links.history');
     Route::patch('short-links/{link}', [ShortLinkController::class, 'update'])->name('short-links.update');
     Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->name('short-links.disable');

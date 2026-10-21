@@ -14,6 +14,7 @@ import { DateField } from '@/components/ui/DateField'
 import { useUi } from '@/stores/ui'
 import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
+import { BioPageEditor } from './BioPageEditor'
 
 /**
  * SHORT-LINKS-001 — a utility a non-technical person finishes in two fields.
@@ -262,7 +263,9 @@ export function ShortLinksPage() {
     },
   })
 
-  const rows = links.data?.data ?? []
+  const all = links.data?.data ?? []
+  // BIO-PAGE-001 — pages are drawn by their own editor below; the links list stays a list of links.
+  const rows = all.filter((l) => l.kind !== 'bio')
   const meta = links.data?.meta
   const recordingSince = meta?.recording_since ?? null
   const curve = meta?.daily ?? []
@@ -462,6 +465,8 @@ export function ShortLinksPage() {
           </div>
         </Card>
       ) : null}
+
+      <BioPageEditor links={all} ar={ar} />
 
       <Card>
         {rows.length === 0 ? (

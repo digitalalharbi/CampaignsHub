@@ -1,5 +1,7 @@
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
+**BIO-PAGE-001 built (feat/bio-page, stacked on feat/smart-links, 2026-10-22):** a bio page is a `bio`-kind short link on the same `/l/` hop (no edge change), buttons = the library's own links; backend 46/46, editor tests 3/3, preview verified. The same row ID exists as NOT_STARTED on feat/short-link-resume — keep THIS row. Next: ATTRIB-PRESETS-001 (after C1), MEMBER-VISIBILITY-001.
+
 **SMART-LINK-001 built (feat/smart-links, 2026-10-22):** chosen slug, expiry, UTM — each optional, off by default, behind a closed disclosure; backend 44/44, frontend 23/23. Based on main; open its PR after the chain. The same row ID also exists on feat/short-link-resume as NOT_STARTED — keep THIS row when the two meet. BIO-PAGE-001 next, then ATTRIB-PRESETS-001 (after C1), MEMBER-VISIBILITY-001.
 
 **Legal business disclosure (Owner 2026-10-21, feat/business-disclosure, LEGAL-DISCLOSURE-001):** public /business-disclosure page names حنكة by exact legal name as an advertising client that authorised CampaignsHub as a partner on its connected ad accounts — never as owner/operator. Terms, Privacy and homepage untouched. Open its PR right after the report-truth PR; verify the public URL after deploy; the Production operator identity must be published for the operator line to name the operator.

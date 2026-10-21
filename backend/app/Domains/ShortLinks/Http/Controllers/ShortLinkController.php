@@ -11,9 +11,11 @@ use App\Domains\ShortLinks\Services\ShortLinkHops;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 
 /**
  * SHORT-LINKS-001 — two fields, one action, and a list that shows only what a person acts on.
@@ -211,6 +213,91 @@ final class ShortLinkController extends Controller
     }
 
     /**
+     * BIO-PAGE-001 — POST short-links/bio: a page of buttons, each an existing short link of this tenant.
+     *
+     * Created like any short link (minted or chosen slug, optional expiry) with `kind = bio`; the
+     * destination is the site, which is where an empty page sends nobody anywhere. A bio page may not
+     * list another bio page: a page of pages is a maze, not a bio.
+     */
+    public function storeBio(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.update'), 403);
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:80'],
+            'subtitle' => ['nullable', 'string', 'max:160'],
+            'buttons' => ['required', 'array', 'min:1', 'max:20'],
+            'buttons.*.short_link_id' => ['required', 'string'],
+            'buttons.*.label' => ['nullable', 'string', 'max:60'],
+            'slug' => ['nullable', 'string', 'max:32'],
+            'expires_at' => ['nullable', 'date', 'after:now'],
+        ]);
+
+        $chosen = isset($data['slug']) && trim((string) $data['slug']) !== '' ? $this->hops->chosen((string) $data['slug']) : null;
+
+        $link = ShortLink::create([
+            'tenant_id' => (string) app(TenantContext::class)->tenantId(),
+            'slug' => $chosen ?? $this->hops->mint(),
+            'custom_slug' => $chosen !== null,
+            'kind' => ShortLink::KIND_BIO,
+            'destination' => Frontend::origin().'/',
+            'source_value' => $data['title'],
+            'mode' => ShortLink::MODE_LANDING,
+            'bio' => $this->bioBody($data),
+            'expires_at' => isset($data['expires_at']) ? Carbon::parse((string) $data['expires_at']) : null,
+            'created_by' => $request->user()->id,
+            'is_active' => true,
+        ]);
+
+        return ApiResponse::success($this->shape($link), 'Bio page created.', status: 201);
+    }
+
+    /** PATCH short-links/bio/{link} — the page's words and buttons; the slug never changes. */
+    public function updateBio(Request $request, string $link): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.update'), 403);
+
+        $model = ShortLink::query()->where('kind', ShortLink::KIND_BIO)->findOrFail($link);
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:80'],
+            'subtitle' => ['nullable', 'string', 'max:160'],
+            'buttons' => ['required', 'array', 'min:1', 'max:20'],
+            'buttons.*.short_link_id' => ['required', 'string'],
+            'buttons.*.label' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $model->forceFill(['bio' => $this->bioBody($data), 'source_value' => $data['title']])->save();
+
+        return ApiResponse::success($this->shape($model->refresh()), 'Bio page updated.');
+    }
+
+    /**
+     * The page body, with every button checked against THIS tenant's own live links.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{title: string, subtitle: ?string, buttons: list<array{short_link_id: string, label: ?string}>}
+     */
+    private function bioBody(array $data): array
+    {
+        $ids = array_values(array_unique(array_map(static fn (array $b): string => (string) $b['short_link_id'], $data['buttons'])));
+        $owned = ShortLink::query()->whereIn('id', $ids)->where('kind', '!=', ShortLink::KIND_BIO)->pluck('id')->map(static fn ($v): string => (string) $v)->all();
+        $missing = array_values(array_diff($ids, $owned));
+        if ($missing !== []) {
+            throw ValidationException::withMessages(['buttons' => [__('Every button must be one of your own short links (not a bio page).')]]);
+        }
+
+        return [
+            'title' => trim((string) $data['title']),
+            'subtitle' => isset($data['subtitle']) && trim((string) $data['subtitle']) !== '' ? trim((string) $data['subtitle']) : null,
+            'buttons' => array_map(static fn (array $b): array => [
+                'short_link_id' => (string) $b['short_link_id'],
+                'label' => isset($b['label']) && trim((string) $b['label']) !== '' ? mb_substr(trim((string) $b['label']), 0, 60) : null,
+            ], $data['buttons']),
+        ];
+    }
+
+    /**
      * Turning one off rather than deleting it.
      *
      * A short link that has been sent to people cannot be un-sent, so removing the row would turn
@@ -285,6 +372,8 @@ final class ShortLinkController extends Controller
             'utm' => $link->utm,
             'custom_slug' => (bool) $link->custom_slug,
             'state' => $link->state(),
+            // BIO-PAGE-001 — the page body on a bio row; null on every other kind.
+            'bio' => $link->kind === ShortLink::KIND_BIO ? $link->bio : null,
             'created_at' => $link->created_at?->toIso8601String(),
         ];
     }
