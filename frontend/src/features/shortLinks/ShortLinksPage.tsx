@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, ExternalLink, Link2, MessageCircle, Trash2 } from 'lucide-react'
+import { Check, Copy, ExternalLink, Link2, MessageCircle, QrCode, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/States'
@@ -13,6 +13,7 @@ import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/
 import { useUi } from '@/stores/ui'
 import { createShortLink, deleteShortLink, disableShortLink, enableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
+import { ShortLinkQr } from './ShortLinkQr'
 
 /**
  * SHORT-LINKS-001 — a utility a non-technical person finishes in two fields.
@@ -49,6 +50,7 @@ const COPY = {
     none_hint: 'أنشئ رابطاً مختصراً لمشاركته في إعلان أو رسالة.',
     clicks: 'نقرة',
     disabled: 'موقوف',
+    qr: 'رمز QR',
     disable: 'إيقاف',
     enable: 'تفعيل',
     disabled_hint: 'الرابط لا يُحوّل الآن؛ عنوانه محفوظ ويعود بالتفعيل.',
@@ -88,6 +90,7 @@ const COPY = {
     none_hint: 'Create a short link to share in an ad or a message.',
     clicks: 'clicks',
     disabled: 'Disabled',
+    qr: 'QR code',
     disable: 'Disable',
     enable: 'Enable',
     disabled_hint: 'The link does not resolve now; its address is kept and returns on enable.',
@@ -149,6 +152,8 @@ export function ShortLinksPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [created, setCreated] = useState<ShortLink | null>(null)
+  /* SHORT-LINK-QR-001 — which link's code is open, drawn in the browser from its own address. */
+  const [qrFor, setQrFor] = useState<ShortLink | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   /*
@@ -305,6 +310,10 @@ export function ShortLinksPage() {
                 <ExternalLink size={15} />
                 {t.open}
               </Button>
+              <Button variant="secondary" onClick={() => setQrFor(created)} data-testid="short-link-qr-open">
+                <QrCode size={15} />
+                {t.qr}
+              </Button>
               <Button variant="secondary" onClick={() => { setCreated(null); setOpen(true) }}>
                 {t.another}
               </Button>
@@ -391,6 +400,8 @@ export function ShortLinksPage() {
         </Card>
       ) : null}
 
+      {qrFor && <ShortLinkQr url={qrFor.short_url} slug={qrFor.slug} ar={ar} onClose={() => setQrFor(null)} />}
+
       <Card>
         {rows.length === 0 ? (
           <EmptyState title={t.none} description={t.none_hint} />
@@ -434,7 +445,10 @@ export function ShortLinksPage() {
                   <Button variant="secondary" onClick={() => void copy(l.short_url)} aria-label={t.copy}>
                     {copied === l.short_url ? <Check size={14} /> : <Copy size={14} />}
                   </Button>
-                  {l.is_active ? (
+                  <Button variant="secondary" onClick={() => setQrFor(l)} aria-label={t.qr} data-testid={`short-link-qr-${l.id}`}>
+                    <QrCode size={14} />
+                  </Button>
+                                    {l.is_active ? (
                     <Button variant="secondary" onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
                   ) : (
                     <Button variant="secondary" onClick={() => enable.mutate(l.id)} disabled={enable.isPending} data-testid={`short-link-enable-${l.id}`}>{t.enable}</Button>
