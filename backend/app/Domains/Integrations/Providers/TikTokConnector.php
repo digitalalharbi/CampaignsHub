@@ -627,6 +627,10 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                     'thumbnail_url' => is_string($v['video_cover_url'] ?? null) ? $v['video_cover_url'] : null,
                     'video_url' => is_string($v['preview_url'] ?? null) ? $v['preview_url'] : null,
                     'asset_expires_at' => is_string($v['preview_url_expire_time'] ?? null) ? $v['preview_url_expire_time'].' UTC' : null,
+                    // The file's own dimensions and length, when TikTok states them — never estimated.
+                    'width' => is_numeric($v['width'] ?? null) ? (int) $v['width'] : null,
+                    'height' => is_numeric($v['height'] ?? null) ? (int) $v['height'] : null,
+                    'duration_seconds' => is_numeric($v['duration'] ?? null) ? (float) $v['duration'] : null,
                 ], static fn ($x) => $x !== null);
             } elseif (isset($posts[$id])) {
                 $v = $posts[$id];

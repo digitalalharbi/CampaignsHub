@@ -544,6 +544,7 @@ final class AdPlatformConnectorTest extends TestCase
                 return Http::response(['code' => 0, 'data' => ['list' => [[
                     'video_id' => 'v-1', 'video_cover_url' => 'https://p16.tiktokcdn.com/cover-v1.jpg',
                     'preview_url' => 'https://v16.tiktokcdn.com/v1.mp4', 'preview_url_expire_time' => '2026-10-14 20:00:00',
+                    'width' => 1080, 'height' => 1920, 'duration' => 15.4,
                 ]]]]);
             }
             if (str_contains($url, 'file/image/ad/info/')) {
@@ -566,6 +567,7 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame('https://p16.tiktokcdn.com/cover-v1.jpg', $video['thumbnail_url']);
         $this->assertSame('https://v16.tiktokcdn.com/v1.mp4', $video['video_url']);
         $this->assertSame('2026-10-14 20:00:00 UTC', $video['asset_expires_at']);
+        $this->assertSame([1080, 1920, 15.4], [$video['width'], $video['height'], $video['duration_seconds']], 'the file’s own dimensions and length, as TikTok stated them');
         $this->assertSame('Buy now', $video['raw']['ad_text']);
         $this->assertSame('https://shop.test/p', $video['destination_url']);
 
