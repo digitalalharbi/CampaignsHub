@@ -1,3 +1,4 @@
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -60,7 +61,7 @@ export function AutomationPage() {
     : 'Rules that watch campaigns on every platform and ask for changes in the mode you choose: monitor, recommend for approval, or auto-execute where you granted it.'
 
   if (!p) {
-    return <div className="space-y-6"><PageIntro title={title} purpose={purpose} /><ProjectChooser purpose="recommendations" /></div>
+    return <div className="space-y-6"><PageIntro title={title} purpose={purpose} /><OpsHubBar /><ProjectChooser purpose="recommendations" /></div>
   }
 
   const s = summary.data
@@ -71,6 +72,7 @@ export function AutomationPage() {
     <div className="space-y-4" data-testid="automation-page">
       <PageIntro title={title} purpose={purpose}
         badges={<Link to={portalTo('/agents/approvals')} className="text-xs font-semibold text-brand-700 hover:underline" data-testid="automation-approvals"><ShieldCheck size={13} className="me-1 inline" aria-hidden />{ar ? 'طلبات الموافقة' : 'Approvals'}</Link>} />
+      <OpsHubBar />
 
       <section aria-label={ar ? 'ملخص القواعد' : 'Rules summary'} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 [&>*]:min-w-0" data-testid="automation-summary">
         {summary.isLoading && <Skeleton className="col-span-full h-20" />}

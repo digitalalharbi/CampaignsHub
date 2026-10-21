@@ -1,3 +1,4 @@
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Check, ShieldCheck, X } from 'lucide-react'
@@ -52,6 +53,7 @@ export function ApprovalsPage() {
     return (
       <div className="space-y-6">
         <PageIntro title={title} purpose={purpose} />
+        <OpsHubBar />
         <ProjectChooser purpose="recommendations" />
       </div>
     )
@@ -68,6 +70,7 @@ export function ApprovalsPage() {
         purpose={purpose}
         badges={waiting.length > 0 ? <Badge tone="warning">{ar ? `بانتظار القرار: ${waiting.length}` : `Waiting: ${waiting.length}`}</Badge> : undefined}
       />
+      <OpsHubBar />
 
       {query.data && (
         <p className="flex items-center gap-2 text-xs text-text-secondary" data-testid="approvals-limits">
