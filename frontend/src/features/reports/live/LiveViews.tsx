@@ -1,3 +1,4 @@
+import { basisLine } from './ExecutiveSummary'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -205,7 +206,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent 
       {sectionOn(payload, 'content_performance') && (
         <section className="flex flex-col gap-4">
           <ContentStrip
-            title={ar ? 'أفضل المحتوى' : 'Best content'}
+            title={`${ar ? 'أفضل المحتوى' : 'Best content'}${basisLine(payload.ads_basis, ar) ? ` — ${basisLine(payload.ads_basis, ar)}` : ''}`}
             items={(payload.ads ?? []).slice(0, 6)}
             testid="standard-best-content"
             currency={currency}
