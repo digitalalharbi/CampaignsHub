@@ -425,6 +425,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('team', [ProjectMembershipController::class, 'store'])->middleware('project.can:team.manage')->name('team.store');
     Route::match(['put', 'patch'], 'team/{membership}', [ProjectMembershipController::class, 'update'])->middleware('project.can:team.manage')->name('team.update');
     Route::delete('team/{membership}', [ProjectMembershipController::class, 'destroy'])->middleware('project.can:team.manage')->name('team.destroy');
+    // MEMBER-VISIBILITY-001 — the effective-access preview per member, through the same engine every route asks.
+    Route::get('team/{membership}/effective', [ProjectMembershipController::class, 'effective'])->middleware('project.can:team.manage')->name('team.effective');
 
     // Project-scoped views of tasks and notifications — switching projects changes these too.
     Route::get('tasks', [TaskController::class, 'index'])->middleware('project.can:tasks.view')->name('tasks.index');
