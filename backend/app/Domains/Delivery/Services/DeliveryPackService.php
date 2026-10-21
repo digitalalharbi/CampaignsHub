@@ -97,6 +97,7 @@ final class DeliveryPackService
             'created_by' => $by?->id,
         ]);
         $this->audit->log('delivery_pack.prepared', 'delivery_pack', (string) $pack->id, null, ['period' => $from->toDateString().' → '.$to->toDateString()]);
+        DeliveryTasks::ensureFor($pack);
 
         return $pack;
     }
@@ -204,6 +205,7 @@ final class DeliveryPackService
         }
         $pack->update(['status' => 'sent', 'sent_at' => Carbon::now()]);
         $this->audit->log('delivery_pack.sent', 'delivery_pack', (string) $pack->id);
+        DeliveryTasks::closeFor($pack);
 
         return $pack;
     }
