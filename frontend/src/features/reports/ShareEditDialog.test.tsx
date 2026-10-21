@@ -35,6 +35,16 @@ describe('ShareEditDialog', () => {
     expect(screen.getByText(/The link itself stays exactly as it is/)).toBeInTheDocument()
   })
 
+  /** REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — the switch starts off and is sent as a named section. */
+  it('offers ad-account names off by default and sends the section when switched on', async () => {
+    mount()
+    const box = screen.getByTestId('edit-account-names')
+    expect(box).not.toBeChecked()
+    fireEvent.click(box)
+    fireEvent.click(screen.getByTestId('edit-save'))
+    await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', { sections: { account_names: true } }))
+  })
+
   it('sends only what was changed', async () => {
     const onSaved = vi.fn()
     const onClose = vi.fn()

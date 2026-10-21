@@ -1,5 +1,7 @@
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
+**REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 slice 5 (feat/client-account-names, 2026-10-22):** a detailed client link no longer publishes technical ad-account names («Joodtelecom0227» seen on the Resano link) — neutral «حساب {المنصة} N» unless the Owner switches `account_names` on in the edit dialog. Chained after share-edit-columns.
+
 **Legal business disclosure (Owner 2026-10-21, feat/business-disclosure, LEGAL-DISCLOSURE-001):** public /business-disclosure page names حنكة by exact legal name as an advertising client that authorised CampaignsHub as a partner on its connected ad accounts — never as owner/operator. Terms, Privacy and homepage untouched. Open its PR right after the report-truth PR; verify the public URL after deploy; the Production operator identity must be published for the operator line to name the operator.
 **#793 (Google login hardening, another engineer) is BLOCKED by its own gate, not by a flake:** chromium run 39655961327 fails `auth-redesign` (1366×768 fit), two `auth-visual` baselines, `login-paths` «no social button» and `portal-distinctness` «no third-party button» — the PR adds a Google sign-in button that the product's own invariants forbid. Not edited (Owner: merged in order, not edited); removed from the serial order until the Owner decides whether the sign-in card may carry a third-party button. Queue now: report-truth → business-disclosure → #795 → #798 → restack chain.
 
