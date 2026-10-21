@@ -24,18 +24,20 @@ const render = (points: TimelinePoint[], locale: 'ar' | 'en' = 'en') =>
   renderWithProviders(<ChangeDiagnosis data={payload(points)} currency="SAR" />, { locale })
 
 const rowsText = () => [...screen.getByTestId('change-timeline').querySelectorAll('tbody tr')].map((r) => r.textContent ?? '')
+/* The day cell carries the row's testid; the row is its closest <tr>. */
+const rowOf = (id: string) => screen.getByTestId(id).closest('tr') as HTMLElement
 
 describe('the anomaly table', () => {
   it('shows the actual, the reference, the change in percent and a severity named from the same units', () => {
     render([pt('2026-08-14', 'spend', 9_000, 1_500, 7.2), pt('2026-08-10', 'clicks', 300, 600, -4)])
 
-    const row = screen.getByTestId('anomaly-row-2026-08-14-spend')
+    const row = rowOf('anomaly-row-2026-08-14-spend')
     expect(row).toHaveTextContent('9K SAR')
     expect(row).toHaveTextContent('1.5K SAR')
     expect(row).toHaveTextContent('+500%')
     expect(row).toHaveTextContent('Strong')
-    expect(screen.getByTestId('anomaly-row-2026-08-10-clicks')).toHaveTextContent('-50%')
-    expect(screen.getByTestId('anomaly-row-2026-08-10-clicks')).toHaveTextContent('Notable')
+    expect(rowOf('anomaly-row-2026-08-10-clicks')).toHaveTextContent('-50%')
+    expect(rowOf('anomaly-row-2026-08-10-clicks')).toHaveTextContent('Notable')
     // It does not claim to know which campaign moved the day: the timeline is measured on the project's total.
     expect(row).toHaveTextContent('Project')
   })
