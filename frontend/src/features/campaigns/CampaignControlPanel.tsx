@@ -1,5 +1,5 @@
 import { mediaFitClass } from '@/features/content/adPreview'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { usePortalBase } from '@/app/portalPath'
@@ -54,7 +54,11 @@ const TIKTOK_CALLS = [
   { value: 'VISIT_STORE', ar: 'زر المتجر', en: 'Visit store' },
 ]
 
-export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { campaign: UnifiedCampaign; projectId: string; onOpenHistory?: () => void }) {
+/**
+ * `focusExternalId` — ADV-CAMPAIGN-TABLES-001: opened from an Ad groups / Ads row, the panel outlines that row's
+ * own entity and brings it into view, so «Manage» on one ad does not land the reader at the top of the campaign.
+ */
+export function CampaignControlPanel({ campaign, projectId, onOpenHistory, focusExternalId }: { campaign: UnifiedCampaign; projectId: string; onOpenHistory?: () => void; focusExternalId?: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const locale = ar ? 'ar' : 'en'
   const options = useWriteOptions(projectId, campaign.id)
@@ -116,6 +120,12 @@ export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { c
   })
 
   const entities = options.data?.entities ?? []
+  const focusCls = (e: WriteEntity) => (focusExternalId !== undefined && e.external_id === focusExternalId ? ' ring-2 ring-brand-500' : '')
+  const focusAttr = (e: WriteEntity) => (focusExternalId !== undefined && e.external_id === focusExternalId ? { 'data-focused': 'true' } : {})
+  useEffect(() => {
+    if (focusExternalId === undefined || entities.length === 0) return
+    document.querySelector('[data-focused="true"]')?.scrollIntoView?.({ block: 'center' })
+  }, [focusExternalId, entities.length])
   const campaigns = entities.filter((e) => e.level === 'campaign')
   const childrenOf = (id: string, level: 'ad_set' | 'ad') => entities.filter((e) => e.level === level && e.parent_id === id)
   const looseAds = entities.filter((e) => e.level === 'ad' && !entities.some((s) => s.level === 'ad_set' && s.id === e.parent_id))
@@ -157,17 +167,17 @@ export function CampaignControlPanel({ campaign, projectId, onOpenHistory }: { c
       ) : (
         <ul className="space-y-3">
           {campaigns.map((c) => (
-            <li key={c.id} data-testid={`control-campaign-${c.id}`} className="rounded-2xl border border-border bg-surface p-4">
+            <li key={c.id} data-testid={`control-campaign-${c.id}`} {...focusAttr(c)} className={`rounded-2xl border border-border bg-surface p-4${focusCls(c)}`}>
               <EntityRow entity={c} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: c, action })} onOpen={(action) => setDialog({ kind: 'action', entity: c, action })} prominent />
               {childrenOf(c.id, 'ad_set').length > 0 && (
                 <ul className="mt-3 space-y-2 border-s-2 border-border ps-3">
                   {childrenOf(c.id, 'ad_set').map((s) => (
-                    <li key={s.id} data-testid={`control-ad-set-${s.id}`} className="rounded-xl bg-surface-secondary p-3">
+                    <li key={s.id} data-testid={`control-ad-set-${s.id}`} {...focusAttr(s)} className={`rounded-xl bg-surface-secondary p-3${focusCls(s)}`}>
                       <EntityRow entity={s} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: s, action })} onOpen={(action) => setDialog({ kind: 'action', entity: s, action })} />
                       {childrenOf(s.id, 'ad').length > 0 && (
                         <ul className="mt-2 space-y-1.5 border-s border-border ps-3">
                           {childrenOf(s.id, 'ad').map((a) => (
-                            <li key={a.id} data-testid={`control-ad-${a.id}`}>
+                            <li key={a.id} data-testid={`control-ad-${a.id}`} {...focusAttr(a)} className={`rounded-lg${focusCls(a)}`}>
                               <EntityRow entity={a} ar={ar} busy={write.isPending} onQuick={(action) => write.mutate({ entity: a, action })} onOpen={(action) => setDialog({ kind: 'action', entity: a, action })} compact />
                             </li>
                           ))}

@@ -12,6 +12,7 @@ import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
 import { AgentCenterPage } from '@/features/agents/AgentCenterPage'
 import { AutomationPage } from '@/features/automation/AutomationPage'
+import { EntityWorkspacePage } from '@/features/campaigns/EntityWorkspacePage'
 import { ApprovalsPage } from '@/features/agents/ApprovalsPage'
 import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
 import { ExecutiveOpsPage } from '@/features/crm/ExecutiveOpsPage'
@@ -357,6 +358,9 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
           { path: 'campaigns', element: <CampaignsPage /> },
+          /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
+          { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
+          { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
           /*
            * REG-001: the multi-client surfaces MOVED to /agency — they were never the advertiser's.
@@ -591,6 +595,9 @@ export const router = createBrowserRouter(withErrorBoundary([
              */
             { path: 'analytics', element: <AnalyticsPage /> },
             { path: 'campaigns', element: <CampaignsPage /> },
+            /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
+            { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
+            { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <CreativesPage /> },
             // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).

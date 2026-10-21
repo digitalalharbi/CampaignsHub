@@ -216,9 +216,9 @@ final class EntityMetricsAggregator
 
         $named = $entityType === EntityDailyMetric::AD
             ? ExternalAd::withoutGlobalScopes()->whereIn('id', $ids)
-                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id', 'unified_campaign_id'])
+                ->get(['id', 'name', 'status', 'provider', 'external_id', 'external_ad_set_id', 'external_campaign_id', 'unified_campaign_id'])
             : ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
-                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id', 'unified_campaign_id']);
+                ->get(['id', 'name', 'status', 'provider', 'external_id', 'external_campaign_id', 'unified_campaign_id']);
 
         $byId = $named->keyBy(static fn ($m): string => (string) $m->getKey());
 
@@ -258,6 +258,13 @@ final class EntityMetricsAggregator
                  * of a question rather than an answer to it.
                  */
                 'objective' => $campaignId === null ? null : ($objectives[$campaignId] ?? null),
+                /*
+                 * ADV-CAMPAIGN-TABLES-001 — the platform and the unified campaign this row belongs to, so an
+                 * ad-group or ad table can draw the platform and reach the campaign's provider write controls
+                 * (which are authorised per campaign) without a second lookup per row.
+                 */
+                'provider' => $entity?->provider,
+                'unified_campaign_id' => $campaignId === null ? null : (string) $campaignId,
             ];
         }, $rows);
     }
