@@ -18,6 +18,11 @@ export interface Task {
   is_overdue: boolean
   checklist: unknown[]
   created_at: string | null
+  /** OPS-LINK-001 — who holds it, who raised it, and what it came from (stored facts only). Absent from an older server. */
+  created_by?: number | null
+  assignee_name?: string | null
+  created_by_name?: string | null
+  source?: { kind: 'alert'; id: string; title: string; severity: string; status: string } | { kind: string }
 }
 
 export const TASK_STATUSES: TaskStatus[] = [

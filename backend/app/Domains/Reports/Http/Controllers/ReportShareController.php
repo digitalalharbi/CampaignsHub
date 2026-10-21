@@ -162,6 +162,40 @@ final class ReportShareController extends Controller
     }
 
     /**
+     * Pause a link: the URL stops opening for everyone at once, and nothing about it is lost.
+     *
+     * REPORT-LINK-PAUSE-001. Revoking is permanent; this is the reversible switch — the settings, the URL and the
+     * access history stay exactly as they are, and resuming brings the same link back. A revoked link cannot be
+     * paused or resumed: a deliberate cut-off is not something a toggle may reverse.
+     */
+    public function pause(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $model = $this->findShare($this->findReport($report), $share);
+        abort_if($model->revoked_at !== null, 409, 'A revoked link cannot be paused or resumed.');
+        if ($model->paused_at === null) {
+            $model->update(['paused_at' => Carbon::now()]);
+            $audit->log(action: 'report.shared_link_paused', entityType: ReportShare::class, entityId: (string) $model->id);
+        }
+
+        return ApiResponse::success($this->shape($model), 'Link paused.');
+    }
+
+    /** Resume a paused link — the same URL, the same settings. Resuming an active link changes nothing. */
+    public function resume(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $model = $this->findShare($this->findReport($report), $share);
+        abort_if($model->revoked_at !== null, 409, 'A revoked link cannot be paused or resumed.');
+        if ($model->paused_at !== null) {
+            $model->update(['paused_at' => null]);
+            $audit->log(action: 'report.shared_link_resumed', entityType: ReportShare::class, entityId: (string) $model->id);
+        }
+
+        return ApiResponse::success($this->shape($model), 'Link resumed.');
+    }
+
+    /**
      * Push a link's expiry out — the alternative to revoking one link and issuing another.
      *
      * Worth its own endpoint because the workaround is worse than it looks: re-issuing means the client
@@ -513,6 +547,7 @@ final class ReportShareController extends Controller
             'last_viewed_at' => $s->last_viewed_at?->toIso8601String(),
             'expires_at' => $s->expires_at?->toIso8601String(),
             'revoked_at' => $s->revoked_at?->toIso8601String(),
+            'paused_at' => $s->paused_at?->toIso8601String(),
             'logs_count' => $s->logs_count ?? null,
             'created_at' => $s->created_at?->toIso8601String(),
         ];
