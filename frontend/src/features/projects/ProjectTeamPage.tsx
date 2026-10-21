@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, UserPlus } from 'lucide-react'
-import { addProjectMember, listProjectTeam, listUsers, removeProjectMember } from './api'
+import { addProjectMember, listProjectTeam, listUsers, removeProjectMember, updateProjectMember } from './api'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -71,6 +71,15 @@ export function ProjectTeamPage() {
       invalidate()
     },
   })
+  /*
+   * MEMBER-VISIBILITY-001 — the money, per member. Withheld on the server: the toggle writes the
+   * membership's deny list and every project-scoped answer to that person loses its money keys.
+   */
+  const moneyMutation = useMutation({
+    mutationFn: ({ id, hide }: { id: string; hide: boolean }) => updateProjectMember(projectId, id, { denied: hide ? ['money.view'] : [] }),
+    onSuccess: invalidate,
+  })
+
   const removeMutation = useMutation({
     mutationFn: (membershipId: string) => removeProjectMember(projectId, membershipId),
     onSuccess: invalidate,
@@ -142,6 +151,22 @@ export function ProjectTeamPage() {
                     is the shape of defect this file already carries a docblock about.
                   */}
                   <Badge tone="info">{projectRoleLabel(m.role, ar)}</Badge>
+                  {(() => {
+                    const hidden = (m.denied ?? []).includes('money.view')
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => moneyMutation.mutate({ id: m.id, hide: !hidden })}
+                        disabled={moneyMutation.isPending}
+                        aria-pressed={hidden}
+                        data-testid={`member-money-${m.id}`}
+                        title={ar ? 'تُحجب الأرقام المالية (الإنفاق والإيراد والتكاليف) عن هذا العضو في هذا المشروع من الخادم، بما فيها التصدير.' : 'Money (spend, revenue, costs) is withheld from this member on this project by the server, exports included.'}
+                        className={`rounded-lg border px-2 py-1 text-[11px] font-bold ${hidden ? 'border-warning text-warning' : 'border-border text-text-secondary'}`}
+                      >
+                        {hidden ? (ar ? 'الأرقام المالية مخفية' : 'Money hidden') : (ar ? 'الأرقام المالية ظاهرة' : 'Money visible')}
+                      </button>
+                    )
+                  })()}
                   <button
                     type="button"
                     onClick={() => removeMutation.mutate(m.id)}

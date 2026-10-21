@@ -74,6 +74,18 @@ final class ProjectCapability
     public const SETTINGS_MANAGE = 'settings.manage';
 
     /**
+     * MEMBER-VISIBILITY-001 — the money: spend, revenue, budgets and every figure derived from them
+     * (ROAS, CPA, CPC, CPM, CPL, CPI, CPE, AOV, cost per anything).
+     *
+     * Separate from «may see the dashboard» for the same reason `leads.pii.view` is separate from
+     * `leads.view`: a media buyer optimising a campaign needs the results and the rates, and a client's
+     * analyst needs the orders — neither needs the bill. Every role preset grants it, so nothing
+     * changes for anybody until a membership withholds it; withheld, the server strips the money from
+     * every project-scoped answer and refuses exports (which would carry it).
+     */
+    public const MONEY_VIEW = 'money.view';
+
+    /**
      * Every capability this product recognises.
      *
      * A capability NOT on this list is refused rather than granted, wherever it is asked about. An
@@ -100,6 +112,7 @@ final class ProjectCapability
         self::TEAM_MANAGE,
         self::INTEGRATIONS_MANAGE,
         self::SETTINGS_MANAGE,
+        self::MONEY_VIEW,
     ];
 
     public static function exists(string $capability): bool
