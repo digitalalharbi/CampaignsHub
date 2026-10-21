@@ -2120,6 +2120,35 @@ final class MetricsAggregator
                 ->get(['id', 'project_id', 'name', 'total_budget', 'budget_currency', 'status']);
 
         /*
+         * BUDGET-HIERARCHY-001 — the PROVIDER's own ceiling per campaign, and where the campaign sits.
+         *
+         * The plan above is what somebody typed here; the limit the platform enforces is the figure
+         * that actually stops delivery, and the account rung already paces against it. A campaign
+         * rung that could not state it left the reader to open each platform. It is the same
+         * arithmetic as the account cap (`accountBudgets()`): a lifetime budget counts whole, a daily
+         * budget counts once per day of the window. A limit stated in two currencies is refused as a
+         * sum, the way every other money figure here refuses; «not sent» is null, never zero.
+         *
+         * `providers` and `account_ids` are the campaign's place in the hierarchy — the platform and
+         * the ad account its linked provider campaigns belong to — so the screen can drill from the
+         * project down to a campaign without a second query per rung.
+         */
+        $placements = $ids->isEmpty()
+            ? collect()
+            : DB::table('external_campaigns')
+                ->whereIn('unified_campaign_id', $ids->all())
+                ->selectRaw('unified_campaign_id')
+                ->selectRaw('COALESCE(SUM(lifetime_budget), 0) + COALESCE(SUM(CASE WHEN lifetime_budget IS NULL THEN daily_budget END), 0) * ? AS provider_limit', [$periodDays])
+                ->selectRaw('COUNT(*) FILTER (WHERE lifetime_budget IS NOT NULL OR daily_budget IS NOT NULL) AS limited')
+                ->selectRaw('COUNT(DISTINCT currency) FILTER (WHERE lifetime_budget IS NOT NULL OR daily_budget IS NOT NULL) AS limit_currencies')
+                ->selectRaw('MIN(currency) FILTER (WHERE lifetime_budget IS NOT NULL OR daily_budget IS NOT NULL) AS limit_currency')
+                ->selectRaw("STRING_AGG(DISTINCT provider, ',') AS providers")
+                ->selectRaw("STRING_AGG(DISTINCT external_account_id::text, ',') AS account_ids")
+                ->groupBy('unified_campaign_id')
+                ->get()
+                ->keyBy('unified_campaign_id');
+
+        /*
          * Which projects the window measured AT ALL — the condition the zero below depends on.
          *
          * A budgeted campaign with no row is a measured zero only where the connector was answering,
@@ -2201,6 +2230,12 @@ final class MetricsAggregator
             $expected = $budget * $elapsedFraction;
             $projected = $hasSpend ? ($elapsedFraction > 0 ? $spent / $elapsedFraction : $spent) : null;
 
+            $placement = $placements[(string) $c->id] ?? null;
+            $limitStated = $placement !== null
+                && (int) $placement->limited > 0
+                && (int) $placement->limit_currencies <= 1
+                && (float) $placement->provider_limit > 0.0;
+
             $rows[] = [
                 'campaign_id' => $c->id,
                 /*
@@ -2243,6 +2278,14 @@ final class MetricsAggregator
                 /* The day the pace is measured through when it is not today; null means today. */
                 'paced_through' => $pacedThrough,
                 'over_under' => $comparable && $projected !== null ? round($projected - $budget, 2) : null,
+                /* BUDGET-HIERARCHY-001 — the platform's own ceiling and the campaign's place in the hierarchy (see above). */
+                'provider_limit' => $limitStated ? round((float) $placement->provider_limit, 2) : null,
+                'provider_limit_currency' => $limitStated ? $placement->limit_currency : null,
+                'provider_limit_basis' => $placement === null || (int) $placement->limited === 0
+                    ? 'not_sent'
+                    : ((int) $placement->limit_currencies > 1 ? 'mixed_currency' : 'stated'),
+                'providers' => $placement?->providers ? explode(',', (string) $placement->providers) : [],
+                'account_ids' => $placement?->account_ids ? explode(',', (string) $placement->account_ids) : [],
                 /*
                  * Why pacing is absent, when it is. `comparable` — computed. `currency_mismatch` —
                  * the spend is real but denominated differently from the plan. `no_budget` — nobody
