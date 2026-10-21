@@ -273,7 +273,7 @@ export function ShortLinksPage() {
         <Card>
           <div className="flex flex-col gap-3" data-testid="short-link-result">
             <span className="text-sm font-semibold text-text-secondary">{t.ready}</span>
-            <code dir="ltr" className="block rounded-xl bg-surface-secondary p-3 text-center text-base font-bold">
+            <code dir="ltr" className="block break-all rounded-xl bg-surface-secondary p-3 text-center text-base font-bold">
               {created.short_url}
             </code>
             <div className="flex flex-wrap gap-2">
