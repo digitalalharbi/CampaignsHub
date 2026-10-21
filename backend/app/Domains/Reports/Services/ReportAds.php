@@ -363,7 +363,7 @@ final class ReportAds
          */
         $basis = $this->basis(null, $ranked === [] ? null : $this->ranking->metricFor($objective, $rankable));
         if ($basis['metric'] === 'spend') {
-            [$ranked, $weakest, $basis] = $this->headlineFromGroups($rankable, $groups);
+            [$ranked, $weakest, $basis] = $this->headlineFromGroups($rankable, $groups, $ranked, $weakest, $basis);
         }
 
         /*
@@ -396,13 +396,18 @@ final class ReportAds
      *
      * The leading family is the one ranked on a performance metric (anything but spend) with the most
      * candidates; its ranked ads are the «best», and its worst — the same family, the same metric —
-     * are the «to improve». Empty when no family ranks on a performance metric.
+     * are the «to improve». When no family ranks on a performance metric — a scope whose rows carry
+     * spend and nothing else — the scope-wide order stands as it always did, its basis stated as spend
+     * so the page draws no «performance» line over it (the roster is where «what ran» belongs).
      *
      * @param  list<array<string,mixed>>  $rankable
      * @param  list<array<string,mixed>>  $groups  as `groupsByObjective()` built them
+     * @param  list<array<string,mixed>>  $ranked  the scope-wide order, kept when no family can do better
+     * @param  list<array<string,mixed>>  $weakest  its far end
+     * @param  array<string, ?string>  $basis  the scope-wide basis (spend)
      * @return array{0: list<array<string,mixed>>, 1: list<array<string,mixed>>, 2: array<string, ?string>}
      */
-    private function headlineFromGroups(array $rankable, array $groups): array
+    private function headlineFromGroups(array $rankable, array $groups, array $ranked, array $weakest, array $basis): array
     {
         $leading = null;
         foreach ($groups as $group) {
@@ -415,7 +420,7 @@ final class ReportAds
         }
 
         if ($leading === null) {
-            return [[], [], $this->basis(null, null)];
+            return [$ranked, $weakest, $basis];
         }
 
         $family = (string) $leading['family'];
