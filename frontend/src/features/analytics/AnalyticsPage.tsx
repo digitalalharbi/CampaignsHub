@@ -82,9 +82,10 @@ import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter }
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { DashboardContextStrip } from './DashboardContextStrip'
+import { AdvertiserProjectsStrip, AdvertiserSourcesStrip } from '@/features/dashboard/AdvertiserContext'
+import { usePortalBase } from '@/app/portalPath'
 import { PeriodLabel } from '@/components/patterns/Status'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
-import { usePortalBase } from '@/app/portalPath'
 import { projectOptionLabels } from '@/features/projects/projectOptionLabels'
 import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
 import {
@@ -141,6 +142,7 @@ import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
+import { PortfolioPage } from '@/features/projects/PortfolioPage'
 import { LiveOperatingTab } from './LiveOperatingTab'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
@@ -296,6 +298,7 @@ const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: stri
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
   const { currentProjectId, setCurrentProjectId } = useProject()
+  const portalBase = usePortalBase()
   /*
    * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
    * all show the same page. They were `useState` only: narrowing to one platform and one objective
@@ -755,9 +758,20 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         thing the sentence asks for is on screen beside it.
       */}
       {currentProjectId === null ? (
-        <ProjectChooser purpose="analytics" />
+        /* ADV-HOME-001 — the dashboard opens on every project at once; analysis still asks for one. */
+        surface === 'dashboard'
+          ? <PortfolioPage home onOpenProject={setCurrentProjectId} />
+          : <ProjectChooser purpose="analytics" />
       ) : (
         <>
+        {/* ADV-HOME-001 — the advertiser's home names their other projects and this project's data sources.
+            The agency has its own home (AgencyDashboardPage); this strip is the advertiser's equivalent. */}
+        {surface === 'dashboard' && portalBase === '/app' && (
+          <div className="flex flex-col gap-3" data-testid="adv-context">
+            <AdvertiserProjectsStrip currentProjectId={currentProjectId} onSwitch={setCurrentProjectId} />
+            <AdvertiserSourcesStrip projectId={currentProjectId} />
+          </div>
+        )}
         {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
         {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
