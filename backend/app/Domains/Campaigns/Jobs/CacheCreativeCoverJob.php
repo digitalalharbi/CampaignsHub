@@ -26,6 +26,17 @@ final class CacheCreativeCoverJob implements ShouldQueue
 
     public function __construct(public readonly string $creativeId) {}
 
+    /**
+     * A cover that could not be fetched is usually a CDN link that has just expired or a platform
+     * that throttled us; a minute later is a different request, the same second is the same refusal.
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return [60];
+    }
+
     public function handle(CoverCache $covers): void
     {
         $creative = ExternalCreative::withoutGlobalScopes()->find($this->creativeId);
