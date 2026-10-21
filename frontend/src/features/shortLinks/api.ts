@@ -7,7 +7,7 @@ import { getData, getEnvelope, postData, deleteData, patchData } from '@/lib/api
  * above it. Naming it after either kind would put the technical distinction back into the request,
  * and the interface exists to keep it out.
  */
-export type ShortLinkKind = 'whatsapp' | 'link'
+export type ShortLinkKind = 'whatsapp' | 'link' | 'bio'
 
 export interface ShortLink {
   id: string
@@ -39,7 +39,13 @@ export interface ShortLink {
   utm?: Record<string, string> | null
   custom_slug?: boolean
   state?: 'active' | 'disabled' | 'expired'
+  /** BIO-PAGE-001 — the page body on a bio row; null on every other kind. */
+  bio?: BioBody | null
 }
+
+/** BIO-PAGE-001 — a page of buttons, each one of this workspace's own short links. */
+export interface BioButton { short_link_id: string; label?: string | null }
+export interface BioBody { title: string; subtitle?: string | null; buttons: BioButton[] }
 
 /** SMART-LINK-001 — the optional extras a link may be created with. Nothing here is required. */
 export interface ShortLinkOptions {
@@ -133,3 +139,9 @@ export const enableShortLink = (id: string) => postData<ShortLink>(`/short-links
  */
 export const deleteShortLink = (id: string) => deleteData<null>(`/short-links/${id}`)
 
+
+/** BIO-PAGE-001 — create a bio page (minted or chosen slug); served on the same /l/ hop as every link. */
+export const createBioPage = (body: BioBody & { slug?: string }) => postData<ShortLink>('/short-links/bio', body)
+
+/** BIO-PAGE-001 — the page's words and buttons; the slug never changes. */
+export const updateBioPage = (id: string, body: BioBody) => patchData<ShortLink>(`/short-links/bio/${id}`, body)
