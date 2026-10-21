@@ -135,7 +135,7 @@ const OUTCOME_LABEL: Record<string, { ar: string; en: string }> = {
 const OUTCOME_KEYS = Object.keys(OUTCOME_LABEL)
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
-import { accounts as countedAccounts, countedAr, countedEn, days as countedDays } from '@/lib/counted'
+import { accounts as countedAccounts, campaigns as countedCampaigns, countedAr, countedEn, days as countedDays } from '@/lib/counted'
 import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
@@ -1638,10 +1638,11 @@ function PlanFigure({ value, unit, note, signed }: { value: number | null | unde
  * An account whose campaigns state no ceiling shows «لم تُرسل» rather than a bar at 0% — no cap is
  * not an exhausted cap, and a progress bar at zero says the opposite of what is true.
  */
-function AccountBudgets({ projectId, range, filters }: TabProps) {
+function AccountBudgets({ projectId, range, filters, provider, picked, onPick }: TabProps & { provider?: string | null; picked?: string | null; onPick?: (account: { id: string; name: string | null }) => void }) {
   const ar = useAr()
   const q = useAccountBudgets(projectId, range, filters)
-  const rows = q.data ?? []
+  /* BUDGET-HIERARCHY-001 — under a picked platform, only that platform's accounts; the figures are untouched. */
+  const rows = (q.data ?? []).filter((r) => !provider || canonicalPlatform(r.provider) === provider)
 
   /** Near the ceiling, or heading past it before the window ends — the two reasons to intervene. */
   const atRisk = rows.filter((r) => (r.consumed_pct !== null && r.consumed_pct >= 0.8) || (r.pace !== null && r.pace > 1))
@@ -1674,10 +1675,24 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
           const noCap = ar ? 'لم تُرسل' : 'Not sent'
           const noCapNote = ar ? 'لم تُصرّح أي حملة على هذا الحساب بحدّ' : 'No campaign on this account states a ceiling'
 
+          const accountLabel = r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')
+
           return [
-            <span key="a" className="font-semibold text-text-primary">
-              {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
-            </span>,
+            onPick
+              ? (
+                <button
+                  key="a"
+                  type="button"
+                  data-testid={`budget-drill-account-${r.account_id}`}
+                  aria-pressed={picked === r.account_id}
+                  onClick={() => onPick({ id: r.account_id, name: r.account_name })}
+                  className={`rounded px-1 text-start font-semibold text-text-primary hover:underline ${picked === r.account_id ? 'ring-1 ring-brand-500' : ''}`}
+                  title={ar ? 'اعرض حملات هذا الحساب' : 'Show this account’s campaigns'}
+                >
+                  {accountLabel}
+                </button>
+              )
+              : <span key="a" className="font-semibold text-text-primary">{accountLabel}</span>,
             providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
             <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency") : undefined}>
               {money(r.spent, unit)}
@@ -1730,9 +1745,50 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const b = useBudget(projectId, range, filters)
   const reading = useBudgetExplanation(projectId, range, filters)
-  const rows = b.data ?? []
+  /*
+   * BUDGET-HIERARCHY-001 — one drill from the project down to a campaign.
+   *
+   * The three rungs were three tables that did not know about each other: a platform overrunning
+   * on the first could not be followed to the account on the second or the campaign on the third.
+   * A pick on a platform row narrows the accounts to that platform; a pick on an account narrows the
+   * campaigns to the ones whose linked provider campaigns live on it. Nothing is re-queried and no
+   * figure changes — the rows are the same rows, fewer of them, and the crumbs say which.
+   */
+  const [drill, setDrill] = useState<{ provider: string | null; account: { id: string; name: string | null } | null }>({ provider: null, account: null })
+  const pickPlatform = (provider: string) =>
+    setDrill((d) => (d.provider === provider ? { provider: null, account: null } : { provider, account: null }))
+  const pickAccount = (account: { id: string; name: string | null }) =>
+    setDrill((d) => ({ ...d, account: d.account?.id === account.id ? null : account }))
+  const all = b.data ?? []
+  const rows = all.filter((r) => {
+    if (drill.account) return (r.account_ids ?? []).includes(drill.account.id)
+    if (drill.provider) return (r.providers ?? []).some((p) => canonicalPlatform(p) === drill.provider)
+    return true
+  })
+  const hiddenUnplaced = (drill.provider || drill.account) ? all.filter((r) => (r.account_ids ?? []).length === 0).length : 0
   return (
     <div className="space-y-4">
+    {(drill.provider || drill.account) && (
+      <nav data-testid="budget-crumbs" aria-label={ar ? 'مسار الميزانية' : 'Budget drill path'} className="flex flex-wrap items-center gap-1 text-xs">
+        <button type="button" onClick={() => setDrill({ provider: null, account: null })} className="rounded px-1 font-semibold text-brand-600 hover:underline" data-testid="budget-crumb-project">
+          {ar ? 'المشروع' : 'Project'}
+        </button>
+        {drill.provider && (
+          <>
+            <span className="text-text-muted">›</span>
+            <button type="button" onClick={() => setDrill({ provider: drill.provider, account: null })} className={`rounded px-1 hover:underline ${drill.account ? 'font-semibold text-brand-600' : 'text-text-primary'}`} data-testid="budget-crumb-platform">
+              {providerLabel(drill.provider, ar ? 'ar' : 'en')}
+            </button>
+          </>
+        )}
+        {drill.account && (
+          <>
+            <span className="text-text-muted">›</span>
+            <span className="text-text-primary" data-testid="budget-crumb-account">{drill.account.name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}</span>
+          </>
+        )}
+      </nav>
+    )}
     {/*
       BUDGET-GOVERNANCE-001 — the PLATFORM rung, above the accounts and below the project.
 
@@ -1741,8 +1797,8 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       was a question a client could answer from their report while the operator responsible could
       not. It reads through the same table as the campaign rung because it returns the same shape.
     */}
-    <PlatformBudgets projectId={projectId} range={range} filters={filters} />
-    <AccountBudgets projectId={projectId} range={range} filters={filters} />
+    <PlatformBudgets projectId={projectId} range={range} filters={filters} picked={drill.provider} onPick={pickPlatform} />
+    <AccountBudgets projectId={projectId} range={range} filters={filters} provider={drill.provider} picked={drill.account?.id ?? null} onPick={pickAccount} />
     {/*
       FUNNEL-ANALYTICAL-PATTERN-001 — the reading ABOVE the table it reads.
 
@@ -1753,6 +1809,14 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       <BudgetReading reading={reading.data} locale={ar ? 'ar' : 'en'} />
     )}
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+      {hiddenUnplaced > 0 && (
+        /* A campaign linked to no provider campaign has no place on any rung; it is not hidden silently. */
+        <p data-testid="budget-unplaced-note" className="mb-2 text-xs text-text-muted">
+          {ar
+            ? `${countedCampaigns(hiddenUnplaced, 'ar')} غير مرتبطة بأي حملة على المنصات لا تظهر في هذا المسار — عُد إلى المشروع لرؤيتها.`
+            : `${hiddenUnplaced} campaign(s) linked to no platform campaign are outside this path — go back to the project to see them.`}
+        </p>
+      )}
       {/*
         BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
 
@@ -1767,8 +1831,8 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       */}
       <MetricTable
         head={ar
-          ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
-          : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
+          ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          : ['Campaign', 'Budget', 'Platform limit', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => {
           const basisNote = r.pacing_basis === 'currency_mismatch'
             ? (ar
@@ -1788,6 +1852,16 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
             /* CAMPAIGN-DRILL-001 — a budget row names a campaign, and «why is it pacing like this» is one click. */
             <CampaignLink key="n" projectId={projectId} campaignId={r.campaign_id} name={r.campaign_name} className="font-semibold text-text-primary" />,
             money(r.budget, r.budget_currency ?? undefined),
+            /* BUDGET-HIERARCHY-001 — the ceiling the platform enforces, beside the plan typed here; null is «not sent», never zero. */
+            r.provider_limit_basis === 'stated' && typeof r.provider_limit === 'number'
+              ? <span key="pl" dir="ltr" data-testid={`provider-limit-${r.campaign_id}`}>{money(r.provider_limit, r.provider_limit_currency ?? undefined)}</span>
+              : (
+                <span key="pl" className="text-text-muted" data-testid={`provider-limit-${r.campaign_id}`} title={r.provider_limit_basis === 'mixed_currency'
+                  ? (ar ? 'حدود بعملات متعددة لا تُجمع' : 'Limits in several currencies cannot be summed')
+                  : (ar ? 'لم تُرسل أي حملة مرتبطة على المنصة حدًا' : 'No linked platform campaign states a limit')}>
+                  {r.provider_limit_basis === 'mixed_currency' ? (ar ? 'عملات متعددة' : 'Mixed currencies') : (ar ? 'لم تُرسل' : 'Not sent')}
+                </span>
+              ),
             r.spent === null
               ? <span key="s" className="text-text-muted" title={basisNote}>—</span>
               : <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
@@ -1825,6 +1899,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         values={rows.map((r) => [
           r.campaign_name,
           r.budget ?? null,
+          r.provider_limit ?? null,
           r.spent ?? null,
           r.remaining,
           r.consumed_pct,
@@ -1835,7 +1910,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
           r.over_under ?? null,
         ])}
         /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
-        initialSort={{ column: 7, dir: 'desc' }}
+        initialSort={{ column: 8, dir: 'desc' }}
       />
     </Panel>
     </div>
@@ -3944,7 +4019,7 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
  * layout. The refusals travel too — a platform whose spend cannot be compared with its budget shows
  * «—» and the reason rather than a ratio built out of two currencies.
  */
-function PlatformBudgets({ projectId, range, filters }: TabProps) {
+function PlatformBudgets({ projectId, range, filters, picked, onPick }: TabProps & { picked?: string | null; onPick?: (provider: string) => void }) {
   const ar = useAr()
   const q = useBudgetPlatforms(projectId, range, filters)
   const rows = q.data ?? []
@@ -3971,7 +4046,22 @@ function PlatformBudgets({ projectId, range, filters }: TabProps) {
           ? ['المنصة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
           : ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => [
-          <PlatformCell key="p" provider={r.provider ?? ''} />,
+          /* BUDGET-HIERARCHY-001 — a platform row is the first rung of the drill: one click narrows the accounts and campaigns below to it. */
+          onPick
+            ? (
+              <button
+                key="p"
+                type="button"
+                data-testid={`budget-drill-platform-${canonicalPlatform(r.provider ?? '')}`}
+                aria-pressed={picked === canonicalPlatform(r.provider ?? '')}
+                onClick={() => onPick(canonicalPlatform(r.provider ?? ''))}
+                className={`rounded px-1 text-start hover:underline ${picked === canonicalPlatform(r.provider ?? '') ? 'ring-1 ring-brand-500' : ''}`}
+                title={ar ? 'اعرض حسابات هذه المنصة وحملاتها' : 'Show this platform’s accounts and campaigns'}
+              >
+                <PlatformCell provider={r.provider ?? ''} />
+              </button>
+            )
+            : <PlatformCell key="p" provider={r.provider ?? ''} />,
           <span key="b" dir="ltr">{money(r.budget, r.budget_currency ?? undefined)}</span>,
           <span key="s" dir="ltr">{r.spent === null ? '—' : money(r.spent, r.spent_currency ?? undefined)}</span>,
           <span key="r" dir="ltr">{r.remaining === null ? '—' : money(r.remaining, r.budget_currency ?? undefined)}</span>,
