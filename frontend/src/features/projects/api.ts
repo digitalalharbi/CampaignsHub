@@ -279,6 +279,19 @@ export async function updateProjectMember(projectId: string, membershipId: strin
   return patchData(`/projects/${projectId}/team/${membershipId}`, input)
 }
 
+/** MEMBER-VISIBILITY-001 — what one member may actually do here, resolved by the server's one authorisation engine. */
+export interface MemberEffective {
+  id: string
+  role: string
+  denied: string[]
+  effective: string[]
+  withheld: string[]
+}
+
+export function fetchMemberEffective(projectId: string, membershipId: string): Promise<MemberEffective> {
+  return getData<MemberEffective>(`/projects/${projectId}/team/${membershipId}/effective`)
+}
+
 export function listProjectTeam(projectId: string): Promise<ProjectMember[]> {
   return getData<ProjectMember[]>(`/projects/${projectId}/team`)
 }
