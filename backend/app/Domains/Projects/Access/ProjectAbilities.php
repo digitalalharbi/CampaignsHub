@@ -57,18 +57,20 @@ final class ProjectAbilities
      */
     private const FROM_TENANT = [
         'analytics.view' => [ProjectCapability::DASHBOARD_VIEW, ProjectCapability::ANALYTICS_VIEW, ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
-        'campaigns.view' => [ProjectCapability::CAMPAIGNS_VIEW],
+        // MEMBER-VISIBILITY-001 — a non-member who could read campaigns, budgets or reports before keeps the money:
+        // the tenant role never withheld it, and only a membership's `denied` list can.
+        'campaigns.view' => [ProjectCapability::CAMPAIGNS_VIEW, ProjectCapability::MONEY_VIEW],
         'campaigns.update' => [ProjectCapability::CAMPAIGNS_MANAGE],
         'campaigns.budget.change' => [ProjectCapability::BUDGET_MANAGE],
-        'budget.view' => [ProjectCapability::BUDGET_VIEW],
-        'budget.manage' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::BUDGET_MANAGE],
+        'budget.view' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
+        'budget.manage' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::BUDGET_MANAGE, ProjectCapability::MONEY_VIEW],
         'leads.view' => [ProjectCapability::LEADS_VIEW],
         'leads.update' => [ProjectCapability::LEADS_UPDATE],
         /* Named separately at the tenant layer too — see the note in `PermissionSeeder`. */
         'leads.pii.view' => [ProjectCapability::LEADS_PII_VIEW],
         'leads.assign' => [ProjectCapability::LEADS_ASSIGN],
         'leads.export' => [ProjectCapability::LEADS_EXPORT],
-        'reports.view' => [ProjectCapability::REPORTS_VIEW],
+        'reports.view' => [ProjectCapability::REPORTS_VIEW, ProjectCapability::MONEY_VIEW],
         'reports.create' => [ProjectCapability::REPORTS_MANAGE],
         'tasks.view' => [ProjectCapability::TASKS_VIEW],
         'tasks.update' => [ProjectCapability::TASKS_MANAGE],
