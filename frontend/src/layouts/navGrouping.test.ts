@@ -108,8 +108,12 @@ const AGENCY_BEFORE = [
    * and Approvals, which had a page and no entry.
    */
   '/agency/campaigns?launch=1',
-  '/agency/analytics?tab=ad_sets',
-  '/agency/analytics?tab=ads',
+  /*
+   * MOVED by ADV-CAMPAIGN-TABLES-001: «المجموعات» and «الإعلانات» open operational tables of their own now. The
+   * Analytics ad-set and ad tabs still exist inside Analytics; the rail no longer points at them.
+   */
+  '/agency/ad-groups',
+  '/agency/ads',
   '/agency/agents/approvals',
 ]
 

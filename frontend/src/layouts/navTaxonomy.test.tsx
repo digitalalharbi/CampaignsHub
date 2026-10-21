@@ -34,7 +34,7 @@ describe('which entry is the current page', () => {
 
 describe('the agency rail as drawn', () => {
   it('marks exactly one entry current on an ad tab, in Arabic, with the approved order', () => {
-    renderWithProviders(<SidebarNav groups={agencyNavGroups} ar label="nav" />, { locale: 'ar', route: '/agency/analytics?tab=ads' })
+    renderWithProviders(<SidebarNav groups={agencyNavGroups} ar label="nav" />, { locale: 'ar', route: '/agency/ads' })
 
     const currentLinks = document.querySelectorAll('a[aria-current="page"]')
     expect(currentLinks).toHaveLength(1)
