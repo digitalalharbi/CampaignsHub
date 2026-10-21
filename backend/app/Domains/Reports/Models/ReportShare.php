@@ -26,7 +26,7 @@ final class ReportShare extends Model
     protected $fillable = [
         'tenant_id', 'report_id', 'mode', 'form', 'token_hash', 'password_hash', 'allow_download',
         'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'settings', 'scope',
-        'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'created_by', 'is_demo', 'trace_mark',
+        'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'paused_at', 'created_by', 'is_demo', 'trace_mark',
     ];
 
     protected $hidden = ['token_hash', 'password_hash'];
@@ -43,6 +43,7 @@ final class ReportShare extends Model
         'last_viewed_at' => 'datetime',
         'expires_at' => 'datetime',
         'revoked_at' => 'datetime',
+        'paused_at' => 'datetime',
         'is_demo' => 'boolean',
     ];
 
@@ -224,7 +225,7 @@ final class ReportShare extends Model
 
     public function isActive(): bool
     {
-        if ($this->revoked_at !== null) {
+        if ($this->revoked_at !== null || $this->paused_at !== null) {
             return false;
         }
         if ($this->expires_at !== null && Carbon::now()->greaterThan($this->expires_at)) {
