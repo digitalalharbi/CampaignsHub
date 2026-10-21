@@ -53,8 +53,9 @@ import type { NavGroup } from './SidebarNav'
  *
  * Regrouped and renamed, never removed: every address this rail offered before is still here (navGrouping.test.ts
  * proves it). Two are new addresses onto existing pages: «إطلاق الحملات» opens the campaign builder that already
- * lives on the Campaigns page, and «المجموعات» / «الإعلانات» open the Analytics ad-set and ad tabs, which is where those
- * rungs are read today. Approvals, which had a page and no entry, now has one.
+ * lives on the Campaigns page; «المجموعات» / «الإعلانات» opened the Analytics ad-set and ad tabs until
+ * ADV-CAMPAIGN-TABLES-001 gave each rung an operational table of its own (/ad-groups, /ads). Approvals, which had a
+ * page and no entry, now has one.
  */
 export const appNavGroups: readonly NavGroup[] = [
   {
@@ -65,8 +66,8 @@ export const appNavGroups: readonly NavGroup[] = [
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
       { to: '/app/campaigns?launch=1', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket, ent: 'campaigns' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
-      { to: '/app/analytics?tab=ad_sets', ar: 'المجموعات', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
-      { to: '/app/analytics?tab=ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal, ent: 'analytics' },
+      { to: '/app/ad-groups', ar: 'المجموعات', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
+      { to: '/app/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal, ent: 'analytics' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
     ],
   },
