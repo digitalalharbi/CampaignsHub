@@ -1,3 +1,4 @@
+import { projectIdOf, useVisibility } from '@/stores/visibility'
 import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from './types'
 import { describeFailure, isTimeout, Refusal } from './errors'
@@ -27,6 +28,22 @@ export const api = axios.create({
  * `Accept-Language` rather than a custom header because it is the standard one, so a browser, a
  * mobile client or a curl gets the same treatment without knowing anything about this application.
  */
+/*
+ * MEMBER-VISIBILITY-001 — remember what the server withheld, so the page can say it.
+ *
+ * `meta.money_withheld` arrives on a project-scoped answer whose money keys were stripped for this
+ * member. Noted per project here, once, in the one place every answer passes; the note itself is
+ * drawn by the frame. Nothing is decided client-side — the figures are already gone.
+ */
+api.interceptors.response.use((response) => {
+  const meta = (response.data as { meta?: { money_withheld?: boolean } } | undefined)?.meta
+  if (meta?.money_withheld === true) {
+    const projectId = projectIdOf(response.config?.url)
+    if (projectId) useVisibility.getState().markMoneyWithheld(projectId)
+  }
+  return response
+})
+
 api.interceptors.request.use((config) => {
   config.headers.set('Accept-Language', useUi.getState().locale)
 

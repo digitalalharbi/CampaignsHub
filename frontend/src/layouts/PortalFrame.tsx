@@ -1,3 +1,4 @@
+import { MoneyWithheldNote } from '@/components/MoneyWithheldNote'
 import type { CSSProperties, ReactNode } from 'react'
 import { ReviewBanner } from '@/components/ReviewBanner'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
@@ -147,6 +148,8 @@ export function PortalFrame({
             stops text meeting the bezel.
           */}
           <div className={`mx-auto w-full min-w-0 flex-1 px-3 pb-8 pt-3 sm:px-4 lg:px-5 ${contentWidth}`}>
+            {/* MEMBER-VISIBILITY-001 — said once, above whatever the page draws, for the project in view. */}
+            <MoneyWithheldNote />
             {children}
           </div>
           {/*
