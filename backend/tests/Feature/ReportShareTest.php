@@ -410,6 +410,38 @@ final class ReportShareTest extends TestCase
         $this->getJson("/api/v1/reports/shared/{$raw2}")->assertStatus(404);
     }
 
+    /** REPORT-LINK-PAUSE-001 — pausing switches the SAME link off and resuming brings it back untouched. */
+    public function test_a_paused_link_stops_opening_and_resumes_as_the_same_link(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+
+        $this->actingAs($this->owner, 'sanctum');
+        $this->postJson("{$url}/pause")->assertOk()->assertJsonPath('data.active', false)->assertJsonPath('data.revoked_at', null);
+        $this->assertNotNull($this->postJson("{$url}/pause")->assertOk()->json('data.paused_at'), 'pausing twice changes nothing');
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertStatus(404);
+
+        $this->postJson("{$url}/resume")->assertOk()->assertJsonPath('data.active', true)->assertJsonPath('data.paused_at', null);
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+    }
+
+    public function test_a_revoked_link_can_be_neither_paused_nor_resumed_and_a_viewer_cannot_pause(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+
+        $viewer = User::create(['name' => 'V', 'email' => 'v3@a.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
+        $this->actingAs($viewer, 'sanctum')->postJson("{$url}/pause")->assertForbidden();
+
+        $share->update(['revoked_at' => now()]);
+        $this->actingAs($this->owner, 'sanctum');
+        $this->postJson("{$url}/pause")->assertStatus(409);
+        $this->postJson("{$url}/resume")->assertStatus(409);
+        $this->assertNull($share->fresh()->paused_at);
+    }
+
     /**
      * A share's CEILING comes from the metrics, never from the report's own payload.
      *
