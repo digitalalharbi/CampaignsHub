@@ -5,6 +5,7 @@ import { Num } from '@/components/ui/Num'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, PlatformDonutChart, RankingBarChart } from '@/features/analytics/charts'
 import { useUi } from '@/stores/ui'
+import { days } from '@/lib/counted'
 import { AttributionSettingsPanel } from './AttributionSettingsPanel'
 import { DataState } from './DataState'
 
@@ -101,7 +102,7 @@ export function AttributionCreditView({ credit }: { credit: CreditModels }) {
   return (
     <ChartCard
       title={title}
-      subtitle={ar ? `طلبات مرتبطة بدليل مُتحقَّق منه فقط — نافذة ${credit.lookback_days} يومًا` : `Only orders tied to verified evidence — ${credit.lookback_days}-day window`}
+      subtitle={ar ? `طلبات مرتبطة بدليل مُتحقَّق منه فقط — نافذة ${days(credit.lookback_days, 'ar')}` : `Only orders tied to verified evidence — a window of ${days(credit.lookback_days, 'en')}`}
       action={<DataState kind={hasEvidence ? 'measured' : 'unattributed'} testId="attribution-credit-state" />}
     >
       <div className="space-y-4" data-testid="attribution-credit">
@@ -142,10 +143,10 @@ export function AttributionCreditView({ credit }: { credit: CreditModels }) {
 
         <ul className="space-y-1 text-xs text-text-muted" data-testid="attribution-credit-notes">
           {cov.orders_excluded_fully_refunded > 0 && (
-            <li>{ar ? `${cov.orders_excluded_fully_refunded} طلبًا مُستردًّا بالكامل لم يُوزَّع.` : `${cov.orders_excluded_fully_refunded} fully refunded order(s) are not shared out.`}</li>
+            <li>{ar ? `طلبات مستردة بالكامل لم تُوزَّع: ${cov.orders_excluded_fully_refunded}` : `Fully refunded orders not shared out: ${cov.orders_excluded_fully_refunded}`}</li>
           )}
           {cov.orders_with_withheld_revenue > 0 && (
-            <li>{ar ? `إيراد ${cov.orders_with_withheld_revenue} طلبًا محجوب لغياب سعر صرف موثوق.` : `Revenue of ${cov.orders_with_withheld_revenue} order(s) is withheld — no trustworthy exchange rate.`}</li>
+            <li>{ar ? `طلبات إيرادها محجوب لغياب سعر صرف موثوق: ${cov.orders_with_withheld_revenue}` : `Orders with revenue withheld (no trustworthy exchange rate): ${cov.orders_with_withheld_revenue}`}</li>
           )}
           <li>{ar ? 'النقرة ليست عملية شراء: الدليل رابط مُتتبَّع ثم طلب يحمل رمزه.' : 'A click is not a purchase: the evidence is a tracked link, then an order that carries its token.'} <Num>{`v${credit.version}`}</Num></li>
         </ul>
