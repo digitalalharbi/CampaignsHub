@@ -348,6 +348,25 @@ final class ReportAds
         $platformGroups = $this->groupsByPlatform($rankable);
 
         /*
+         * REPORT-BEST-NOT-SPEND-001 — the headline lists never rest on spend.
+         *
+         * The grouping above was the fix for the mixed-objective report, and the two HEADLINE lists —
+         * `ads` and `ads_weakest`, the ones the summary draws as «أفضل المحتوى أداءً» and «محتوى بفرصة
+         * للتحسين» — kept reading the scope-wide order, which for an UNKNOWN family rests on spend. The
+         * Resano link showed it: the four «best» were the four biggest bills, two of them with no
+         * result on the card, and the «to improve» were the four cheapest.
+         *
+         * When the scope-wide basis is spend, the headline lists are the LEADING family's — the family
+         * ranked on a performance metric with the most candidates — and the basis travels in
+         * `ads_basis` so the page can say what the order means. No family rankable on a performance
+         * metric means no headline lists: an empty section is honest, a spend order never is.
+         */
+        $basis = $this->basis(null, $ranked === [] ? null : $this->ranking->metricFor($objective, $rankable));
+        if ($basis['metric'] === 'spend') {
+            [$ranked, $weakest, $basis] = $this->headlineFromGroups($rankable, $groups, $ranked, $weakest, $basis);
+        }
+
+        /*
          * REPORT-CREATIVE-TRUTH-001 §B — what did we RUN, beside what worked.
          *
          * `ads`, `worst` and `groups` are three curated answers to «which of these performed». None of
@@ -366,10 +385,82 @@ final class ReportAds
         $withheld = max(0, $inScope - count($roster));
 
         return $ranked === []
-            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope,
+            ? ['ads' => [], 'worst' => [], 'basis' => $basis, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope,
                 'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld, 'creatives_hidden' => $hidden]
-            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope,
+            : ['ads' => $ranked, 'worst' => $weakest, 'basis' => $basis, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope,
                 'creatives_unmeasured' => $unmeasured, 'creatives_withheld' => $withheld, 'creatives_hidden' => $hidden];
+    }
+
+    /**
+     * REPORT-BEST-NOT-SPEND-001 — the headline lists from the leading objective family.
+     *
+     * The leading family is the one ranked on a performance metric (anything but spend) with the most
+     * candidates; its ranked ads are the «best», and its worst — the same family, the same metric —
+     * are the «to improve». When no family ranks on a performance metric — a scope whose rows carry
+     * spend and nothing else — the scope-wide order stands as it always did, its basis stated as spend
+     * so the page draws no «performance» line over it (the roster is where «what ran» belongs).
+     *
+     * @param  list<array<string,mixed>>  $rankable
+     * @param  list<array<string,mixed>>  $groups  as `groupsByObjective()` built them
+     * @param  list<array<string,mixed>>  $ranked  the scope-wide order, kept when no family can do better
+     * @param  list<array<string,mixed>>  $weakest  its far end
+     * @param  array<string, ?string>  $basis  the scope-wide basis (spend)
+     * @return array{0: list<array<string,mixed>>, 1: list<array<string,mixed>>, 2: array<string, ?string>}
+     */
+    private function headlineFromGroups(array $rankable, array $groups, array $ranked, array $weakest, array $basis): array
+    {
+        $leading = null;
+        foreach ($groups as $group) {
+            if (! $group['ranked'] || $group['metric'] === null || $group['metric'] === 'spend') {
+                continue;
+            }
+            if ($leading === null || $group['candidates'] > $leading['candidates']) {
+                $leading = $group;
+            }
+        }
+
+        if ($leading === null) {
+            return [$ranked, $weakest, $basis];
+        }
+
+        $family = (string) $leading['family'];
+        $rows = array_values(array_filter($rankable, fn (array $row): bool => $this->familyKeyOf($row) === $family));
+
+        return [
+            $this->ranking->rank($family, $rows),
+            $this->ranking->worst($family, $rows),
+            $this->basis($family, (string) $leading['metric']),
+        ];
+    }
+
+    /**
+     * What the headline lists are ordered on, with the words the page prints: the metric's name and,
+     * when the order is one family's, that family's name.
+     *
+     * @return array{family: ?string, metric: ?string, label_ar: ?string, label_en: ?string, family_label_ar: ?string, family_label_en: ?string}
+     */
+    private function basis(?string $family, ?string $metric): array
+    {
+        $spec = $metric === null ? null : RankingMetric::of($metric);
+        $fam = $family === null ? null : (ObjectiveFamily::tryFrom($family) ?? ObjectiveFamily::Unknown);
+
+        return [
+            'family' => $family,
+            'metric' => $metric,
+            'label_ar' => $spec?->labelAr,
+            'label_en' => $spec?->labelEn,
+            'family_label_ar' => $fam === null ? null : ($fam->label()['ar'] ?? $fam->value),
+            'family_label_en' => $fam === null ? null : ($fam->label()['en'] ?? $fam->value),
+        ];
+    }
+
+    /** The objective family a ranked row belongs to, as the grouping reads it. */
+    private function familyKeyOf(array $row): string
+    {
+        $objective = (string) ($row['objective'] ?? '');
+
+        return (ObjectiveFamily::tryFrom($objective)
+            ?? (CampaignObjective::tryFrom($objective)?->family() ?? ObjectiveFamily::Unknown))->value;
     }
 
     /**
@@ -384,11 +475,7 @@ final class ReportAds
         $byFamily = [];
 
         foreach ($rankable as $row) {
-            $objective = (string) ($row['objective'] ?? '');
-            $family = ObjectiveFamily::tryFrom($objective)
-                ?? (CampaignObjective::tryFrom($objective)?->family() ?? ObjectiveFamily::Unknown);
-
-            $byFamily[$family->value][] = $row;
+            $byFamily[$this->familyKeyOf($row)][] = $row;
         }
 
         $groups = [];

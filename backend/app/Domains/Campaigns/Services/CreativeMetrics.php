@@ -142,6 +142,28 @@ final class CreativeMetrics
      */
     private const MONEY = ['spend', 'revenue'];
 
+    /**
+     * CREATIVE-GRAIN-ZERO-001 — the RESULT columns a creative grain can answer with a zero that its own
+     * ads contradict.
+     *
+     * Production, the Resano link: Snapchat's creative-grain rows carried `conversions 0, revenue 0`
+     * beside ad-grain rows for the same creative and the same days carrying `purchases 17` — Snapchat
+     * does not break purchases down to the creative, and answers the question with a zero exactly as
+     * it answers it for an account that sold nothing. The merge kept the zero because the creative
+     * grain had «reported» it, filled `purchases` from the ads because the creative grain had not, and
+     * the card said «النتائج 0» beside seventeen purchases.
+     *
+     * A measured disagreement (ten here, twenty there) stays the creative's — see the never-summed
+     * rule. A ZERO here beside a COUNT there, over the same days, is not a disagreement: it is the
+     * platform saying «not at this grain», and the grain that measured it is the one the card states.
+     *
+     * @var list<string>
+     */
+    private const GRAIN_RESULTS = ['conversions', 'purchases', 'add_to_cart', 'checkout', 'revenue'];
+
+    /** How far two grains' figures for one delivery may differ and still be read as the same measurement. */
+    private const GRAIN_AGREEMENT = 0.01;
+
     private const SUMS = [
         'spend' => 'spend',
         'impressions' => 'impressions',
@@ -520,6 +542,34 @@ final class CreativeMetrics
 
         $from += $moneyFrom;
 
+        /*
+         * CREATIVE-GRAIN-ZERO-001 — a result the creative grain measured as none while its ads, over
+         * the same days, measured a count: the ads' figure, named as theirs. Only an exact zero against
+         * a positive count qualifies; any other pair is a disagreement and stays the creative's.
+         */
+        $overridden = [];
+        foreach (self::GRAIN_RESULTS as $key) {
+            $here = $native[$key] ?? null;
+            $there = $ads[$key] ?? null;
+
+            if (! is_numeric($here) || (float) $here !== 0.0 || ! is_numeric($there) || (float) $there <= 0.0) {
+                continue;
+            }
+
+            $merged[$key] = $there;
+            $merged['reported'][$key] = true;
+            $from[$key] = 'ads';
+            $filled[] = $key;
+            $overridden[] = $key;
+
+            if (in_array($key, self::MONEY, true)) {
+                $merged[$key.'_withheld_rows'] = (int) ($ads[$key.'_withheld_rows'] ?? 0);
+                $merged[$key.'_original'] = $ads[$key.'_original'] ?? null;
+                $moneyFrom[$key] = 'ads';
+            }
+        }
+        $merged['grain_zero_overridden'] = $overridden;
+
         // The original currency now describes whichever grain each withheld money figure came from.
         $currencies = [];
         $several = false;
@@ -563,7 +613,10 @@ final class CreativeMetrics
                  * than a quotient, so it keeps the old fallback. There is no denominator for it to
                  * disagree with.
                  */
-                if (($native[$key] ?? null) !== null) {
+                if ($key === 'orders' && in_array('conversions', $overridden, true)) {
+                    // CREATIVE-GRAIN-ZERO-001 — «orders» is the conversions column under its product name.
+                    $merged[$key] = $merged['conversions'];
+                } elseif (($native[$key] ?? null) !== null) {
                     // keep the creative grain's own
                 } elseif (($ads[$key] ?? null) !== null) {
                     $merged[$key] = $ads[$key];
@@ -576,7 +629,20 @@ final class CreativeMetrics
             }
 
             $denominatorKey = $inputs[1];
-            $grain = $from[$denominatorKey] ?? 'native';
+            /*
+             * CREATIVE-GRAIN-ZERO-001 — the numerator's grain counts too. A ratio whose two inputs
+             * came from different grains is stated only when the grains agree on the input the card
+             * shows (within GRAIN_AGREEMENT), and then wholly from the ads; otherwise it is absent.
+             */
+            $grain = $this->ratioGrain($native, $ads, $merged, $from, $overridden, $inputs[0], $denominatorKey);
+
+            if ($grain === null) {
+                $merged[$key] = null;
+                $merged['ratio_inputs'][$key] = [null, null];
+
+                continue;
+            }
+
             $source = $grain === 'ads' ? $ads : $native;
 
             /*
@@ -606,6 +672,62 @@ final class CreativeMetrics
         $merged['from_ads'] = array_values(array_unique($filled));
 
         return $merged;
+    }
+
+    /**
+     * Which grain a ratio is read from, given where each of its inputs came from.
+     *
+     * CONTENT-RESULT-COST-ONE-GRAIN-001 as before: the grain whose DENOMINATOR the card shows. The one
+     * addition is for an input that CREATIVE-GRAIN-ZERO-001 took from the ads: a ratio over such an
+     * input and a native one is read wholly from the ads when the grains agree on the native input
+     * (within GRAIN_AGREEMENT), and is absent otherwise — never the creative grain's own, whose
+     * numerator is the zero that was just set aside.
+     *
+     * @param  array<string, mixed>  $native
+     * @param  array<string, mixed>  $ads
+     * @param  array<string, mixed>  $merged
+     * @param  array<string, string>  $from  merged key => 'native' | 'ads'
+     * @param  list<string>  $overridden  keys CREATIVE-GRAIN-ZERO-001 took from the ads
+     * @param  list<string>  $numerators  candidate numerator keys, in `derive()`'s order
+     */
+    private function ratioGrain(array $native, array $ads, array $merged, array $from, array $overridden, array $numerators, string $denominatorKey): ?string
+    {
+        $numeratorKey = $numerators[0];
+        foreach ($numerators as $candidate) {
+            if (is_numeric($merged[$candidate] ?? null)) {
+                $numeratorKey = $candidate;
+                break;
+            }
+        }
+
+        $numeratorGrain = $from[$numeratorKey] ?? 'native';
+        $denominatorGrain = $from[$denominatorKey] ?? 'native';
+        if ($numeratorGrain === $denominatorGrain) {
+            return $denominatorGrain;
+        }
+        if (! in_array($numeratorKey, $overridden, true) && ! in_array($denominatorKey, $overridden, true)) {
+            return $denominatorGrain;
+        }
+
+        foreach ([$numeratorKey, $denominatorKey] as $key) {
+            if (($from[$key] ?? 'native') === 'native' && ! $this->grainsAgree($native[$key] ?? null, $ads[$key] ?? null)) {
+                return null;
+            }
+        }
+
+        return 'ads';
+    }
+
+    /** Two grains state the same figure for one delivery when both are numeric and within GRAIN_AGREEMENT of each other. */
+    private function grainsAgree(mixed $here, mixed $there): bool
+    {
+        if (! is_numeric($here) || ! is_numeric($there)) {
+            return false;
+        }
+        $a = (float) $here;
+        $b = (float) $there;
+
+        return abs($a - $b) <= self::GRAIN_AGREEMENT * max(abs($a), abs($b), 1e-9);
     }
 
     /**

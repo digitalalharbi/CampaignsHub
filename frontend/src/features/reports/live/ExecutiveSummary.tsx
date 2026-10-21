@@ -454,6 +454,19 @@ function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: L
 
 /* ─────────────────────────────── Content ─────────────────────────────── */
 
+/**
+ * «مرتّبة على أداء المبيعات» — which objective the headline order rests on, when the scope mixed several.
+ *
+ * CLIENT-REPORT-FRAMING-001: the client's summary names no money metric, so the line names the FAMILY
+ * (sales, traffic, awareness…) and not the ROAS or cost the server ranked on. A single-objective scope
+ * needs no line: the order is the report's own objective.
+ */
+export function basisLine(basis: LivePayload['ads_basis'], ar: boolean): string | null {
+  if (!basis || !basis.metric || !basis.family) return null
+  const family = (ar ? basis.family_label_ar : basis.family_label_en) ?? basis.family
+  return ar ? `مرتّبة على أداء ${family}` : `Ranked by ${family.toLowerCase()} performance`
+}
+
 function ContentBlock({ kind, half = false, payload, locale, currency, platform, onClear, onOpen }: {
   kind: 'best' | 'improve'; half?: boolean; payload: LivePayload; locale: Locale; currency: string; platform: string | null; onClear: () => void; onOpen: (c: ReportAd) => void
 }) {
@@ -487,6 +500,10 @@ function ContentBlock({ kind, half = false, payload, locale, currency, platform,
     >
       {kind === 'improve' && (
         <p className="-mt-1 mb-3 text-[11px] text-text-muted">{ar ? 'ما نعمل على تحسينه في الفترة القادمة.' : 'What we are working to improve next.'}</p>
+      )}
+      {/* REPORT-BEST-NOT-SPEND-001 — the order says what it rests on; a client never reads «best» as «most expensive». */}
+      {items.length > 0 && basisLine(payload.ads_basis, ar) && (
+        <p className="-mt-1 mb-3 text-[11px] text-text-muted" data-testid={kind === 'best' ? 'exec-best-basis' : 'exec-improve-basis'}>{basisLine(payload.ads_basis, ar)}</p>
       )}
       {items.length === 0 ? (
         <p data-testid="exec-best-content-empty" className="text-sm text-text-muted">

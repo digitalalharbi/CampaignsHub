@@ -275,6 +275,59 @@ final class CreativeDualGrainTest extends TestCase
         $this->assertSame(8_000.0, (float) $totals['impressions']);
     }
 
+    /**
+     * CREATIVE-GRAIN-ZERO-001 — the Resano link. Snapchat's creative grain says «conversions 0, revenue
+     * 0» for a creative whose ads, over the same days, sold seventeen: the zero is the platform saying
+     * «not at this grain», and the card states the grain that measured it — count, revenue, and the
+     * costs computed wholly from that grain, because both grains agree on the spend.
+     */
+    public function test_a_creative_grain_zero_result_beside_an_ad_grain_count_is_the_ads_figure(): void
+    {
+        $creative = $this->creative('cr-grain-zero');
+        $this->creativeRow($creative, ['spend' => 100.0, 'impressions' => 8_000, 'clicks' => 200, 'conversions' => 0, 'revenue' => 0.0]);
+        $this->adWithMetrics($creative, spend: 100.0, impressions: 7_900, clicks: 190, extra: ['conversions' => 17, 'purchases' => 17, 'revenue' => 850.0]);
+
+        $row = $this->figures($creative);
+
+        $this->assertSame(17.0, (float) $row['conversions']);
+        $this->assertSame(17.0, (float) $row['orders']);
+        $this->assertSame(850.0, (float) $row['revenue']);
+        $this->assertSame(8_000.0, (float) $row['impressions'], 'delivery stays the creative grain\'s');
+        $this->assertSame(round(100 / 17, 4), round((float) $row['cpa'], 4), 'cost per result from the grain that measured the results');
+        $this->assertSame(8.5, (float) $row['roas']);
+        $this->assertSame(['conversions', 'revenue'], $row['grain_zero_overridden']);
+        $this->assertContains('conversions', $row['from_ads']);
+        $this->assertSame('reported_value', $row['availability']['orders']);
+    }
+
+    /** A zero against a count qualifies; ten against twenty is a disagreement and stays the creative\'s. */
+    public function test_a_measured_disagreement_between_grains_is_not_an_override(): void
+    {
+        $creative = $this->creative('cr-grain-ten');
+        $this->creativeRow($creative, ['spend' => 100.0, 'impressions' => 8_000, 'clicks' => 200, 'conversions' => 10]);
+        $this->adWithMetrics($creative, spend: 100.0, impressions: 7_900, clicks: 190, extra: ['conversions' => 20]);
+
+        $row = $this->figures($creative);
+
+        $this->assertSame(10.0, (float) $row['conversions']);
+        $this->assertSame([], $row['grain_zero_overridden']);
+    }
+
+    /** When the grains disagree on spend, the overridden count is stated but no cost is computed across them. */
+    public function test_an_overridden_count_beside_disagreeing_spend_states_no_cost(): void
+    {
+        $creative = $this->creative('cr-grain-spend');
+        $this->creativeRow($creative, ['spend' => 100.0, 'impressions' => 8_000, 'clicks' => 200, 'conversions' => 0]);
+        $this->adWithMetrics($creative, spend: 60.0, impressions: 7_900, clicks: 190, extra: ['conversions' => 17, 'revenue' => 850.0]);
+
+        $row = $this->figures($creative);
+
+        $this->assertSame(17.0, (float) $row['conversions']);
+        $this->assertSame(100.0, (float) $row['spend'], 'the creative grain\'s own spend stays');
+        $this->assertNull($row['cpa'], 'a cost across two grains that disagree on spend is not a measurement');
+        $this->assertNull($row['roas']);
+    }
+
     /** @return array<string, mixed> */
     private function figures(ExternalCreative $creative): array
     {
