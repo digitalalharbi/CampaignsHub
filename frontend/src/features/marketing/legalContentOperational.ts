@@ -50,7 +50,7 @@ export const AR_OPERATIONAL: LegalDoc[] = [
         heading: 'العلاقات التجارية الموثّقة',
         body: [
           'شركة حنكة الترويج للخدمات التسويقية شخص واحد',
-          'الصفة الموثّقة: عميل مُعلن لدى كامبينز هب. تُدار حملاتها الإعلانية وتُقرأ تقاريرها عبر المنصة بتفويضها، وقد منحت كامبينز هب صفة الشريك المُخوَّل على حساباتها الإعلانية لدى منصات الإعلان التي اختارت ربطها.',
+          'الصفة الموثّقة: عميل مُعلن لدى كامبينز هب، مُخوَّل بالوصول إلى خدمات كامبينز هب. تُدار حملاتها الإعلانية وتُقرأ تقاريرها عبر المنصة بتفويضها، وقد منحت كامبينز هب صفة الشريك المُخوَّل على حساباتها الإعلانية لدى منصات الإعلان التي اختارت ربطها.',
           'ما لا تعنيه هذه العلاقة: شركة حنكة ليست مالكة لمنصة كامبينز هب ولا مشغّلة لها، ولا تُمثّلها قانونيًا، ولا يُنشر أي محتوى أو يُنفق أي مبلغ باسمها إلا بتفويضها الموثّق.',
         ],
       },
@@ -384,7 +384,7 @@ export const EN_OPERATIONAL: LegalDoc[] = [
         heading: 'Documented business relationships',
         body: [
           'شركة حنكة الترويج للخدمات التسويقية شخص واحد (Hanka Promotion for Marketing Services, a one-person company)',
-          'Documented capacity: an advertising client of CampaignsHub. Its advertising campaigns are managed and its reports read through the platform under its authorisation, and it has granted CampaignsHub authorised-partner access to the advertising accounts it chose to connect on the ad platforms.',
+          'Verified role: an advertising client of CampaignsHub with authorised access to CampaignsHub services. Its advertising campaigns are managed and its reports read through the platform under its authorisation, and it has granted CampaignsHub authorised-partner access to the advertising accounts it chose to connect on the ad platforms.',
           'What this relationship is not: Hanka does not own or operate CampaignsHub, does not represent it legally, and nothing is published or spent in its name without its documented authorisation.',
         ],
       },
