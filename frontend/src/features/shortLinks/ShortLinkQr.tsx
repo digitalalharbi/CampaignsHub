@@ -80,7 +80,7 @@ export function ShortLinkQr({ url, slug, ar, onClose }: { url: string; slug: str
       footer={<Button onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>}
     >
       <div className="flex flex-col items-center gap-3" data-testid="short-link-qr" data-modules={n}>
-        <svg viewBox={`0 0 ${size} ${size}`} width={240} height={240} role="img" aria-label={url} shapeRendering="crispEdges" className="rounded-lg bg-white">
+        <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={url} shapeRendering="crispEdges" className="h-auto w-full max-w-[240px] rounded-lg bg-white">
           <rect width="100%" height="100%" fill="#fff" />
           {modules.map((row, r) => row.map((dark, c) => (dark ? <rect key={`${r}-${c}`} x={(c + QUIET) * CELL} y={(r + QUIET) * CELL} width={CELL} height={CELL} fill="#000" /> : null)))}
         </svg>
