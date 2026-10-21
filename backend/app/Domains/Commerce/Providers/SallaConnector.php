@@ -20,6 +20,9 @@ use App\Domains\Commerce\ValueObjects\Attribution;
 final class SallaConnector extends ApiCommerceConnector
 {
     /** Salla refuses a larger page; asking for more returns the default rather than an error. */
+    /** Order-details reads per sync — Salla no longer expands items into the list. */
+    private const MAX_DETAIL_CALLS = 500;
+
     private const PER_PAGE = 50;
 
     /** A stop the paginator cannot pass, so a broken `totalPages` cannot spin a worker for ever. */
@@ -102,11 +105,25 @@ final class SallaConnector extends ApiCommerceConnector
     {
         $orders = [];
 
-        $query = ['per_page' => self::PER_PAGE, 'from_date' => $from, 'to_date' => $to, 'expanded' => 'true'];
+        /*
+         * SALLA-ORDERS-EXPANDED-001 — Production refused every orders page with «Please remove expanded from the
+         * request parameters, as it has been deprecated.» The list is asked plainly; an order whose list row
+         * carries no items is read once more from its own details endpoint, which is where Salla keeps them now.
+         * Capped per sync so a large store cannot turn one page into thousands of calls.
+         */
+        $query = ['per_page' => self::PER_PAGE, 'from_date' => $from, 'to_date' => $to];
+        $detailCalls = 0;
 
         foreach ($this->pages('orders', $query, 'orders') as $o) {
             if (($o['id'] ?? null) === null) {
                 continue;
+            }
+            if (! array_key_exists('items', $o) && $detailCalls < self::MAX_DETAIL_CALLS) {
+                $detailCalls++;
+                $detail = $this->read($this->api()->get($this->url('orders/'.rawurlencode((string) $o['id']))), 'order details');
+                if (is_array($detail['data'] ?? null)) {
+                    $o = $detail['data'] + $o;
+                }
             }
 
             /** @var array<string,mixed> $amounts */

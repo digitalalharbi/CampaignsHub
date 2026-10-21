@@ -595,8 +595,12 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
             }
         }
 
-        try {
-            foreach (array_chunk(array_values(array_unique($imageIds)), 100) as $chunk) {
+        /*
+         * TIKTOK-MEDIA-001 — one refused chunk used to drop every image chunk after it (one try around the whole
+         * loop), so a single bad id left a page of image ads with no poster. Each chunk is its own attempt now.
+         */
+        foreach (array_chunk(array_values(array_unique($imageIds)), 100) as $chunk) {
+            try {
                 $body = $this->read($this->api($tokens)->get($this->url('file/image/ad/info/'), [
                     'advertiser_id' => $adAccountId,
                     'image_ids' => json_encode($chunk, JSON_THROW_ON_ERROR),
@@ -606,9 +610,9 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                         $images[(string) $i['image_id']] = $i;
                     }
                 }
+            } catch (RuntimeException $e) {
+                Log::warning('TikTok image info could not be read for one chunk; those creatives keep no poster.', ['reason' => $e->getMessage(), 'image_ids' => $chunk]);
             }
-        } catch (RuntimeException $e) {
-            Log::warning('TikTok media info could not be read; creatives kept without posters.', ['reason' => $e->getMessage()]);
         }
 
         foreach ($ads as $n => $ad) {
@@ -641,6 +645,21 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                     // «valid for an hour»: renewed by the next structure sweep.
                     'asset_expires_at' => $url === null ? null : now()->addHour()->toIso8601String(),
                 ], static fn ($x) => $x !== null);
+            }
+            /*
+             * Say, per ad, WHY nothing can be shown — on the creative itself, so the presenter and a log reader
+             * see the same reason: which asset kind the ad declared and which lookup gave nothing back.
+             */
+            if (! isset($creative['thumbnail_url']) && ! isset($creative['asset_url']) && ! isset($creative['video_url'])) {
+                $media = (string) (((array) ($creative['raw'] ?? []))['media'] ?? 'none');
+                $reason = match ($media) {
+                    'video' => 'video_info_missing',
+                    'image' => 'image_info_missing',
+                    'spark' => isset($ad['raw']['identity_type'], $ad['raw']['identity_id']) ? 'spark_post_info_missing' : 'spark_identity_unknown',
+                    default => 'no_asset_declared',
+                };
+                $creative['raw'] = ((array) ($creative['raw'] ?? [])) + ['media_reason' => $reason];
+                Log::info('TikTok creative has no displayable asset.', ['ad' => $ad['external_id'] ?? null, 'creative' => $id, 'media' => $media, 'reason' => $reason]);
             }
             $ads[$n]['creative'] = $creative;
         }
