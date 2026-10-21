@@ -56,7 +56,7 @@ final class ProjectAbilities
      * @var array<string, list<string>>
      */
     private const FROM_TENANT = [
-        'analytics.view' => [ProjectCapability::DASHBOARD_VIEW, ProjectCapability::ANALYTICS_VIEW, ProjectCapability::BUDGET_VIEW],
+        'analytics.view' => [ProjectCapability::DASHBOARD_VIEW, ProjectCapability::ANALYTICS_VIEW, ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
         'campaigns.view' => [ProjectCapability::CAMPAIGNS_VIEW],
         'campaigns.update' => [ProjectCapability::CAMPAIGNS_MANAGE],
         'campaigns.budget.change' => [ProjectCapability::BUDGET_MANAGE],
@@ -139,7 +139,14 @@ final class ProjectAbilities
             }
         }
 
-        return array_values(array_unique($granted));
+        /*
+         * MEMBER-VISIBILITY-001 — what this membership WITHHOLDS, subtracted last so neither the preset
+         * nor the extras can put it back. Only catalogue capabilities count, like the extras; a typo
+         * withholds nothing rather than everything.
+         */
+        $denied = array_values(array_filter((array) ($membership->denied ?? []), static fn ($d): bool => is_string($d) && ProjectCapability::exists($d)));
+
+        return array_values(array_unique(array_diff($granted, $denied)));
     }
 
     /**

@@ -45,6 +45,7 @@ use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
+use App\Domains\Projects\Middleware\WithholdMoneyForMember;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\DownloadCheckCommand;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -247,6 +248,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             RejectRevokedSessions::class,
             EnsureAccountActive::class,
+            // MEMBER-VISIBILITY-001 — strips money from a project-scoped answer when the membership withholds it.
+            WithholdMoneyForMember::class,
         ]);
 
         /*
