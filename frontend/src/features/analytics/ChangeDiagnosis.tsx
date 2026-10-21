@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { StatCard } from '@/components/ui/StatCard'
 import { Explainer } from '@/components/ui/Explainer'
@@ -6,7 +6,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyExact, num } from '@/features/analytics/format'
 import { useUi } from '@/stores/ui'
-import type { Decomposition, DriverRow, DriversPayload, TimePoint } from './api'
+import type { Decomposition, DriverRow, DriversPayload, TimePoint, TimelinePoint } from './api'
 
 /**
  * ANALYTICS-DIFFERENTIATION-001 — the block that makes Analytics a different product.
@@ -661,45 +661,137 @@ export function ChangeDiagnosis({
             is absent the list still renders on its own: markers with nothing to mark would be a
             chart of two points pretending to be a trend.
           */}
-          {series.length > 2 && (
-            <div className="mb-3 flex flex-col gap-3" data-testid="anomaly-charts">
-              {[...new Set(points.map((p) => p.metric))].slice(0, 2).map((metric) => (
-                <AnomalyTrend
-                  key={metric}
-                  metric={metric}
-                  series={series}
-                  marks={points.filter((p) => p.metric === metric)}
-                  ar={ar}
-                />
-              ))}
-            </div>
-          )}
-
-          <ul data-testid="change-timeline" className="flex flex-col gap-2">
-            {points.slice(0, 8).map((p) => (
-              <li
-                key={`${p.date}-${p.metric}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm"
-              >
-                <span dir="ltr" className="tnum font-semibold text-text-primary">{p.date}</span>
-                <span className="text-text-secondary">{metricLabel(p.metric, ar)}</span>
-                <span
-                  dir="ltr"
-                  title={exactFor(p.metric, currency)(p.value)}
-                  className={`tnum font-bold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}
-                >
-                  {formatFor(p.metric, currency)(p.value)}
-                </span>
-                <span className="text-xs text-text-muted">
-                  {ar ? 'المعتاد قبله ' : 'usual before it '}
-                  <span dir="ltr" className="tnum">{formatFor(p.metric, currency)(p.baseline)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <AnomalyExplorer points={points} series={series} currency={currency} ar={ar} />
           </>
         )}
       </div>
     </section>
+  )
+}
+
+/** How far a day sat from its own baseline, in the robust units the server measured it in (|z| from 3.5). */
+function severityOf(deviation: number): 'strong' | 'clear' | 'notable' {
+  const d = Math.abs(deviation)
+
+  return d >= 7 ? 'strong' : d >= 5 ? 'clear' : 'notable'
+}
+
+const SEVERITY: Record<'strong' | 'clear' | 'notable', { ar: string; en: string; cls: string }> = {
+  strong: { ar: 'قوي', en: 'Strong', cls: 'bg-[var(--negative-background)] text-danger' },
+  clear: { ar: 'واضح', en: 'Clear', cls: 'bg-[var(--warning-background)] text-warning' },
+  notable: { ar: 'ملحوظ', en: 'Notable', cls: 'bg-surface-secondary text-text-secondary' },
+}
+
+/**
+ * DASH-ANOMALY-001 — the days that departed from the period's behaviour, as a picture and a compact table.
+ *
+ * The finding is the server's (`ChangeTimeline`): each day is compared with the MEDIAN of the days before it, and is
+ * listed only when it sits at least 3.5 robust standard units away; a window too short to have a baseline is declined
+ * before this renders, so nothing here implies an anomaly the data cannot support. What this adds is the reading: a
+ * metric filter shared by the chart and the table, the reference beside the actual, the change in percent, a severity
+ * named from the same units, and a table that sorts by date or by how far the day moved.
+ *
+ * What it does not claim: which campaign moved the day. The timeline is measured on the project's total, so the
+ * scope column says the project, and nothing pretends to know more.
+ */
+function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoint[]; series: readonly TimePoint[]; currency: string | null; ar: boolean }) {
+  const metrics = useMemo(() => [...new Set(points.map((p) => p.metric))], [points])
+  const [metric, setMetric] = useState<string>('all')
+  const [sort, setSort] = useState<'date' | 'deviation'>('date')
+  const [showAll, setShowAll] = useState(false)
+
+  const filtered = points.filter((p) => metric === 'all' || p.metric === metric)
+  const rows = [...filtered].sort((a, b) => (sort === 'date' ? b.date.localeCompare(a.date) || Math.abs(b.deviation) - Math.abs(a.deviation) : Math.abs(b.deviation) - Math.abs(a.deviation)))
+  const shown = showAll ? rows : rows.slice(0, 10)
+  const charted = (metric === 'all' ? metrics : [metric]).slice(0, 2)
+
+  return (
+    <div className="space-y-3">
+      {metrics.length > 1 && (
+        <div role="group" aria-label={ar ? 'المؤشر' : 'Metric'} className="flex flex-wrap gap-1" data-testid="anomaly-metric-filter">
+          {['all', ...metrics].map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={metric === m}
+              data-testid={`anomaly-metric-${m}`}
+              onClick={() => setMetric(m)}
+              className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${metric === m ? 'border-brand-600 bg-brand-600 text-white' : 'border-border text-text-secondary'}`}
+            >
+              {m === 'all' ? (ar ? 'الكل' : 'All') : metricLabel(m, ar)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/*
+        VISUAL-FIRST-001 / clause D — the day drawn on the metric's own curve, the series the page already fetched. Where
+        the series is absent the table still stands: markers with nothing to mark would pretend to be a trend.
+      */}
+      {series.length > 2 && (
+        <div className="flex flex-col gap-3" data-testid="anomaly-charts">
+          {charted.map((m) => (
+            <AnomalyTrend key={m} metric={m} series={series} marks={points.filter((p) => p.metric === m)} ar={ar} />
+          ))}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-border" data-testid="change-timeline">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead className="bg-surface-secondary text-xs text-text-muted">
+            <tr>
+              <th className="px-3 py-2 text-start font-semibold">
+                <button type="button" onClick={() => setSort('date')} aria-pressed={sort === 'date'} data-testid="anomaly-sort-date">{ar ? 'اليوم' : 'Day'}</button>
+              </th>
+              <th className="px-3 py-2 text-start font-semibold">{ar ? 'المؤشر' : 'Metric'}</th>
+              <th className="px-3 py-2 text-end font-semibold">{ar ? 'الفعلي' : 'Actual'}</th>
+              <th className="px-3 py-2 text-end font-semibold">{ar ? 'المرجع' : 'Reference'}</th>
+              <th className="px-3 py-2 text-end font-semibold">{ar ? 'التغيّر' : 'Change'}</th>
+              <th className="px-3 py-2 text-start font-semibold">
+                <button type="button" onClick={() => setSort('deviation')} aria-pressed={sort === 'deviation'} data-testid="anomaly-sort-deviation">{ar ? 'الشدّة' : 'Severity'}</button>
+              </th>
+              <th className="px-3 py-2 text-start font-semibold">{ar ? 'النطاق' : 'Scope'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((p) => {
+              const sev = SEVERITY[severityOf(p.deviation)]
+              const pct = p.baseline !== 0 ? (p.value - p.baseline) / Math.abs(p.baseline) : null
+              const Arrow = p.direction === 'up' ? ArrowUpRight : ArrowDownRight
+
+              return (
+                <tr key={`${p.date}-${p.metric}`} className="border-t border-border" data-testid={`anomaly-row-${p.date}-${p.metric}`}>
+                  <td className="px-3 py-2"><span dir="ltr" className="tnum font-semibold text-text-primary">{p.date}</span></td>
+                  <td className="px-3 py-2 text-text-secondary">{metricLabel(p.metric, ar)}</td>
+                  <td className="px-3 py-2 text-end">
+                    <span dir="ltr" title={exactFor(p.metric, currency)(p.value)} className={`tnum font-bold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}>
+                      {formatFor(p.metric, currency)(p.value)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-end"><span dir="ltr" className="tnum text-text-muted">{formatFor(p.metric, currency)(p.baseline)}</span></td>
+                  <td className="px-3 py-2 text-end">
+                    <span dir="ltr" className={`tnum inline-flex items-center gap-0.5 font-semibold ${p.direction === 'up' ? 'text-success' : 'text-warning'}`}>
+                      <Arrow size={13} aria-hidden />
+                      {pct === null ? '—' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${sev.cls}`} title={ar ? `${Math.abs(p.deviation).toFixed(1)} وحدة انحراف عن وسيط الأيام السابقة` : `${Math.abs(p.deviation).toFixed(1)} robust units from the median of the days before`}>
+                      {ar ? sev.ar : sev.en}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-text-muted">{ar ? 'المشروع' : 'Project'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 10 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)} className="text-xs font-semibold text-brand-600 hover:underline" data-testid="anomaly-show-all">
+          {showAll ? (ar ? 'عرض أقل' : 'Show fewer') : (ar ? `عرض الكل (${rows.length})` : `Show all (${rows.length})`)}
+        </button>
+      )}
+    </div>
   )
 }
