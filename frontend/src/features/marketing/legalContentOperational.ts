@@ -315,6 +315,16 @@ export const AR_OPERATIONAL: LegalDoc[] = [
         ],
       },
       {
+        heading: 'إعلانات Google — لماذا نطاق Google Ads API',
+        body: [
+          'يساعد كامبينز هب الشركات على إدارة حملاتها الإعلانية ومتابعتها في مكان واحد.',
+          'عندما يختار المستخدم ربط حساب Google Ads، نستخدم هذا الإذن لتحديد الحسابات الإعلانية التي يمكنه الوصول إليها — بما فيها حسابات المدير — وقراءة تفاصيل الحملات وبيانات الأداء.',
+          'يتيح ذلك للمستخدم الاطلاع على نتائج إعلاناته ومتابعة الإنفاق وإعداد التقارير داخل كامبينز هب مباشرة دون التنقل بين المنصات.',
+          'لا نصل إلا إلى الحسابات التي صرّح بها المستخدم، ويمكن فصل الربط متى لم يعد مطلوبًا.',
+          'توفّر Google Ads نطاق OAuth واحدًا لهذه العمليات، لذلك لا يمكن لنطاق أضيق أن يدعم اكتشاف الحسابات والتقارير التي تحتاجها المنصة.',
+        ],
+      },
+      {
         heading: 'ما لا نفعله ببيانات المنصات',
         bullets: [
           'لا تُباع ولا تُشارك مع طرف ثالث.',
@@ -628,6 +638,16 @@ export const EN_OPERATIONAL: LegalDoc[] = [
       {
         heading: 'Least privilege',
         body: ['Only the read scopes the product actually uses are requested. The system does not ask for permission to create, edit or stop campaigns, and does not ask to post on your behalf.'],
+      },
+      {
+        heading: 'Google Ads — why the Google Ads API scope',
+        body: [
+          'CampaignsHub helps businesses manage and monitor their advertising campaigns in one place.',
+          'When a user chooses to connect their Google Ads account, we use this permission to identify the advertising accounts they can access, including manager accounts, and retrieve campaign details and performance data.',
+          'This allows users to view their advertising results, track spending, and prepare reports directly within CampaignsHub, without switching between platforms.',
+          'We only access accounts that the user has authorized, and the connection can be disconnected when it is no longer needed.',
+          'Google Ads provides a single OAuth scope for these API operations, so a more limited scope would not support the account discovery and reporting features our platform needs.',
+        ],
       },
       {
         heading: 'What we never do with platform data',
