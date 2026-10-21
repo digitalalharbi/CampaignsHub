@@ -29,8 +29,12 @@ export function WidgetSurface({ projectId, surface, range }: { projectId: string
   const [editing, setEditing] = useState(false)
 
   const widgets = layout.data?.widgets ?? []
-  const available = widgets.filter((w) => w.reason !== 'module_off')
-  if (!projectId || layout.isError || available.length === 0) return null
+  /*
+   * Only a widget that is actually SHOWN brings the area onto the page. A core widget is opt-in (hidden until someone
+   * chooses it in Settings → Widgets) and an advanced one appears when its module is switched on, so a project that has
+   * chosen nothing and enabled nothing gets exactly the page it had.
+   */
+  if (!projectId || layout.isError || !widgets.some((w) => w.visible)) return null
 
   const shown = widgets.filter((w) => w.visible && WIDGET_COMPONENTS[w.key] !== undefined)
 
@@ -62,7 +66,7 @@ export function WidgetSurface({ projectId, surface, range }: { projectId: string
   )
 }
 
-function LayoutEditor({ projectId, surface, widgets, sizes, onDone }: { projectId: string; surface: Surface; widgets: ResolvedWidget[]; sizes: WidgetSize[]; onDone: () => void }) {
+export function LayoutEditor({ projectId, surface, widgets, sizes, onDone }: { projectId: string; surface: Surface; widgets: ResolvedWidget[]; sizes: WidgetSize[]; onDone: () => void }) {
   const ar = useUi((u) => u.locale) === 'ar'
   const save = useSaveWidgetLayout(projectId, surface)
   const [rows, setRows] = useState<ResolvedWidget[]>(widgets)
@@ -105,7 +109,7 @@ function LayoutEditor({ projectId, surface, widgets, sizes, onDone }: { projectI
                 >
                   {sizes.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <Switch checked={w.visible && !off} disabled={off} onCheckedChange={(v) => patch(w.key, { visible: v, reason: v ? null : 'hidden_by_project' })} label={ar ? 'إظهار' : 'Show'} testId={`widget-switch-${w.key}`} />
+                <Switch checked={w.visible && !off} disabled={off} onCheckedChange={(v) => patch(w.key, { visible: v, reason: v ? null : 'hidden_by_project' })} label={surface === 'report' ? (ar ? 'السماح في روابط العملاء' : 'Allow on client links') : (ar ? 'إظهار' : 'Show')} testId={`widget-switch-${w.key}`} />
               </div>
             </li>
           )
