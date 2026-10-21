@@ -319,6 +319,17 @@ export interface BudgetRow {
   daily_average?: number | null
   over_under?: number | null
   /**
+   * BUDGET-HIERARCHY-001 — the platform's own ceiling for this campaign (lifetime budget, or daily ×
+   * the window's days, summed over its linked provider campaigns) and where it sits in the hierarchy.
+   * `not_sent` — no linked provider campaign states one (null, never zero); `mixed_currency` — two
+   * currencies cannot be one sum. Absent from an older server.
+   */
+  provider_limit?: number | null
+  provider_limit_currency?: string | null
+  provider_limit_basis?: 'stated' | 'not_sent' | 'mixed_currency'
+  providers?: string[]
+  account_ids?: string[]
+  /**
    * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
    * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
    * `nothing_measured_in_window` — the project's window holds no measured row, so a missing row is an
