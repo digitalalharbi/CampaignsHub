@@ -105,6 +105,25 @@ final class MemberMoneyVisibilityTest extends TestCase
         $this->assertSame(['money.view'], $rows[(string) $membership->id]['denied'], 'the team list does not say what the membership withholds');
     }
 
+    /** The effective-access preview says what the member may actually do — role, extras and deny list resolved. */
+    public function test_the_effective_access_preview_resolves_role_extras_and_the_deny_list(): void
+    {
+        $manager = $this->member(ProjectRole::MARKETING_MANAGER, [], ['projects.view', 'analytics.view', 'users.update', 'users.invite']);
+        $buyer = $this->member(ProjectRole::MEDIA_BUYER, [ProjectCapability::MONEY_VIEW, ProjectCapability::LEADS_PII_VIEW]);
+        $membership = ProjectMembership::withoutGlobalScopes()->where('user_id', $buyer->id)->firstOrFail();
+
+        $res = $this->actingAs($manager, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/team/{$membership->id}/effective")->assertOk();
+        $this->assertSame('media_buyer', $res->json('data.role'));
+        $this->assertSame(['money.view', 'leads.pii.view'], $res->json('data.denied'));
+        $this->assertContains('campaigns.manage', $res->json('data.effective'));
+        $this->assertNotContains('money.view', $res->json('data.effective'));
+        $this->assertContains('money.view', $res->json('data.withheld'));
+        $this->assertContains('leads.pii.view', $res->json('data.withheld'));
+
+        $viewer = $this->member(ProjectRole::VIEWER);
+        $this->actingAs($viewer, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/team/{$membership->id}/effective")->assertForbidden();
+    }
+
     public function test_the_key_rule_strips_money_and_leaves_results_alone(): void
     {
         $stripped = WithholdMoneyForMember::strip(['spend' => 1, 'revenue' => 2, 'roas' => 3, 'cpa' => 4, 'daily_budget' => 5, 'cost_per_result' => 6, 'impressions' => 7, 'conversions' => 8, 'nested' => ['spend_original' => 9, 'clicks' => 10, 'rows' => [['cpm' => 1, 'ctr' => 0.1]]]]);
