@@ -35,6 +35,19 @@ describe('ShareEditDialog', () => {
     expect(screen.getByText(/The link itself stays exactly as it is/)).toBeInTheDocument()
   })
 
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — the published link's columns start from what it publishes and are sent whole per table. */
+  it('starts the column picker from the link’s published columns and sends the changed table whole', async () => {
+    const withColumns = { ...share, columns: { accounts: ['results', 'impressions'] } } as unknown as ShareRow
+    renderWithProviders(<ShareEditDialog projectId="p" reportId="r" share={withColumns} onClose={vi.fn()} onSaved={vi.fn()} />, { locale: 'en' })
+    expect(screen.getByTestId('column-accounts-results')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('column-accounts-clicks')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('column-ctr')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByTestId('column-accounts-clicks'))
+    fireEvent.click(screen.getByTestId('edit-save'))
+    await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', { columns: { accounts: ['results', 'impressions', 'clicks'] } }))
+  })
+
   it('sends only what was changed', async () => {
     const onSaved = vi.fn()
     const onClose = vi.fn()

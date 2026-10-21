@@ -127,6 +127,8 @@ export interface ShareRow {
   paused_at?: string | null
   logs_count: number | null
   created_at: string | null
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — what the link publishes per table; `{}` means every column. */
+  columns?: Record<string, string[]>
   /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
   mode: 'live' | 'snapshot'
   /** How much of the report this link is; null means the report's own. */
@@ -303,6 +305,8 @@ export interface ShareEdit {
   clear_expiry?: boolean
   /** Named switches only; the server merges them over the link's existing ones. */
   sections?: Record<string, boolean>
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — the whole column choice per table; a table absent means every column. */
+  columns?: Record<string, string[]>
 }
 
 export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>
