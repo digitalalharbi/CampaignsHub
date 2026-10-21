@@ -6,6 +6,7 @@ use App\Console\Commands\MailDiagnoseCommand;
 use App\Console\Commands\ProvisionAgencyCommand;
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Console\Commands\SallaReviewCommand;
+use App\Domains\Accounts\Middleware\EnsureCapability;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
@@ -268,6 +269,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // ADR 0002: scope comes from the active MEMBERSHIP, not from users.tenant_id. The old
             // alias still resolves to the new middleware so every existing route keeps working.
             'tenant' => ResolveMembership::class,
+            'module' => EnsureCapability::class,
             'membership' => ResolveMembership::class,
             'portal' => EnsurePortal::class,
             // NOT an alias of `portal`: the platform owner belongs to no tenant, so they hold no
