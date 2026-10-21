@@ -41,6 +41,8 @@ final class ShareSections
         'budget',
         'funnel_store',
         'previous_comparison',
+        // REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — technical ad-account names on a client link; off unless the Owner enables them.
+        'account_names',
     ];
 
     /**
@@ -55,7 +57,7 @@ final class ShareSections
      * a display toggle, where «off» is a choice somebody made rather than a permission nobody granted.
      * So an absent key means ON for these, and OFF is only ever explicit.
      */
-    private const DISCLOSURE = ['attribution'];
+    private const DISCLOSURE = ['attribution', 'account_names'];
 
     private function __construct(
         public readonly bool $attribution,
@@ -65,6 +67,7 @@ final class ShareSections
         public readonly bool $budget,
         public readonly bool $funnel_store,
         public readonly bool $previous_comparison,
+        public readonly bool $account_names,
     ) {}
 
     /** @param array<string,mixed> $raw */
@@ -82,6 +85,7 @@ final class ShareSections
             budget: $flag('budget'),
             funnel_store: $flag('funnel_store'),
             previous_comparison: $flag('previous_comparison'),
+            account_names: $flag('account_names'),
         );
     }
 
@@ -102,6 +106,7 @@ final class ShareSections
             'budget' => $this->budget,
             'funnel_store' => $this->funnel_store,
             'previous_comparison' => $this->previous_comparison,
+            'account_names' => $this->account_names,
         ];
     }
 }

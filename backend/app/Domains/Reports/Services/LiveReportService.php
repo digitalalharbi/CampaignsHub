@@ -36,6 +36,7 @@ use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 
 /**
@@ -795,7 +796,7 @@ final class LiveReportService
          */
         $level = $this->levelFor($share);
         $payload['detail_level'] = $level;
-        $payload['accounts'] = $level === 'detailed' ? $engine->byAccount($from, $to) : [];
+        $payload['accounts'] = $level === 'detailed' ? $this->clientAccountRows($engine->byAccount($from, $to), $share) : [];
 
         $payload = $this->applySectionFlags($payload, $share);
 
@@ -953,6 +954,36 @@ final class LiveReportService
      *
      * @param  list<string>  $providers
      */
+    /**
+     * REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — the ad-account rows a client link publishes.
+     *
+     * The Owner's Hanka link carried «Joodtelecom0227» and «joodtelecom Self Service»: the agency's own
+     * account names, which are its internal arrangement and sometimes another client's name. Unless the
+     * link's `account_names` disclosure is on, each row is named by its platform and an ordinal —
+     * «حساب سناب شات 1» — and the technical id is withheld. The figures are untouched.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function clientAccountRows(array $rows, ReportShare $share): array
+    {
+        if ($share->sectionVisibility()->account_names) {
+            return $rows;
+        }
+
+        $ordinal = [];
+        foreach ($rows as $i => $row) {
+            $provider = (string) ($row['provider'] ?? '');
+            $ordinal[$provider] = ($ordinal[$provider] ?? 0) + 1;
+            $rows[$i]['account_name'] = 'حساب '.AdPlatforms::name($provider, 'ar').' '.$ordinal[$provider];
+            $rows[$i]['account_name_en'] = AdPlatforms::name($provider, 'en').' account '.$ordinal[$provider];
+            $rows[$i]['external_account_id'] = null;
+            $rows[$i]['account_name_withheld'] = true;
+        }
+
+        return $rows;
+    }
+
     /**
      * «أداء أنواع المحتوى» for this link — the operator's own answer, redacted where the link redacts.
      *

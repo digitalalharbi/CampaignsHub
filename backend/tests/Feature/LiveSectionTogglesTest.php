@@ -201,6 +201,49 @@ final class LiveSectionTogglesTest extends TestCase
      * Dropping the totals here would remove the report rather than the comparison — the switch is
      * about movement against the previous period, which is what `deltas` holds.
      */
+    /**
+     * REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — a client link names no ad account unless the Owner enables it:
+     * «حساب ميتا 1» and no technical id by default; the real name only when `account_names` is on.
+     */
+    public function test_a_client_link_withholds_technical_account_names_unless_the_owner_enables_them(): void
+    {
+        // The account breakdown is a DETAILED-level section the Owner enables on the report, as on the Hanka link.
+        $this->report->forceFill(['campaign_objective' => 'sales', 'config' => ['detail_level' => 'detailed'], 'section_settings' => ['sections' => ['account_breakdown' => true, 'detailed_tables' => true]]])->save();
+        $off = $this->detailedPayloadWith([]);
+        $this->assertNotEmpty($off['accounts'], 'a detailed link carries the account breakdown');
+        $this->assertSame('حساب ميتا 1', $off['accounts'][0]['account_name']);
+        $this->assertTrue($off['accounts'][0]['account_name_withheld']);
+        $this->assertNull($off['accounts'][0]['external_account_id']);
+        $this->assertSame(9000.0, (float) array_sum(array_column($off['accounts'], 'impressions')), 'the figures are untouched');
+        $this->assertCount(count($off['accounts']), array_unique(array_column($off['accounts'], 'account_name')), 'every withheld account keeps a distinct ordinal');
+
+        $on = $this->detailedPayloadWith(['account_names' => true]);
+        $this->assertNotSame('حساب ميتا 1', $on['accounts'][0]['account_name']);
+        $this->assertArrayNotHasKey('account_name_withheld', $on['accounts'][0]);
+    }
+
+    /** A DETAILED live link (the only level that builds the account breakdown), with the given sections. */
+    private function detailedPayloadWith(array $sections): array
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'mode' => 'live',
+            'form' => 'detailed',
+            'scope' => [
+                'project_id' => (string) $this->project->getKey(),
+                'campaign_ids' => [(string) $this->campaign->getKey()],
+                'providers' => ['meta'],
+                'earliest' => now()->subDays(30)->toDateString(),
+                'latest' => now()->toDateString(),
+            ],
+        ], null);
+        // The level decides whether the account breakdown is built at all; say it on the row, whatever create() kept.
+        $share->form = 'detailed';
+        $share->settings = $sections === [] ? ($share->settings ?? []) : ['sections' => $sections];
+        $share->save();
+
+        return $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()->json('data');
+    }
+
     public function test_switching_the_previous_comparison_off_keeps_the_figures_themselves(): void
     {
         $payload = $this->payloadWith(['previous_comparison' => false]);
