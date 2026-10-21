@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Actions;
 
+use App\Domains\Campaigns\Jobs\CacheCreativeCoverJob;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
+use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -258,6 +260,11 @@ final class ImportExternalStructure
                 'last_synced_at' => Carbon::now(),
             ],
         );
+        // TIKTOK-MEDIA-002 — take the cover into our own storage once the row holds a provider link.
+        // Only through a real queue: a sync queue would fetch provider media inside the structure pass itself.
+        if (config('queue.default') !== 'sync' && CoverCache::wanted($row)) {
+            CacheCreativeCoverJob::dispatch((string) $row->getKey());
+        }
 
         $counts['creatives']++;
 
