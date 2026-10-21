@@ -1,3 +1,11 @@
+# START HERE — 2026-10-21 (evening) — three Production sync defects fixed on `feat/provider-sync-fixes`; queue and two Owner P0 batches in flight
+
+**Owner defects 111–113 (X INVALID_TIME_WINDOW, TikTok posters, Salla `expanded`):** fixed with tests on `feat/provider-sync-fixes` (X-STATS-WINDOW-001, SALLA-ORDERS-EXPANDED-001, TIKTOK-MEDIA-001/-002). Proof after deploy: dispatch `production-diagnostics.yml` for provider x / tiktok / salla on the Owner's tenant ("Project 1") and read the sync logs; X also needs the X Ads API app. Cover caching needs a real queue worker in Production (the import hook is a no-op on a sync queue by design).
+
+**Queue state:** #791 WebKit overflow on /agency/analytics was a grid without `grid-cols-1 … [&>*]:min-w-0` around the anomaly table (reproduced in Playwright WebKit locally; main is clean) — fix pushed; #792 WebKit rerun; #796 Firefox rerun (flaky short-links click); #797 merged with main. Scripts: `serial.sh` / `after-opened.sh` in ch-scripts.
+
+---
+
 # START HERE — 2026-10-20 — #770–#774 merged and deployed; #775 and #776 open; focus is Smart Code, X Ads, payments
 
 **READ FIRST, EVERY SESSION:** `docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md` — the Owner's permanent, cumulative execution guard (sections 3–17 are the completion gate; §18 is the session opener). It indexes requirements; the matrix stays the only status ledger.
