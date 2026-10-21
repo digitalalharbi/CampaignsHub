@@ -114,7 +114,7 @@ final class LaunchPlanService
                 $problems[] = 'account_not_selected';
             } elseif ($account['state'] !== 'available') {
                 $problems[] = $account['state'];
-            } elseif (! in_array($plan->objective, $account['objectives'], true)) {
+            } elseif (! in_array(self::objectiveFor($plan, $provider), $account['objectives'], true)) {
                 $problems[] = 'invalid_objective';
             }
             if ($adapter !== null && isset($plan->spec['ad_set'])) {
@@ -221,7 +221,7 @@ final class LaunchPlanService
 
         if (($step['campaign']['external_id'] ?? null) === null) {
             $budget = $this->budgetFor($spec, (string) $step['account_id']);
-            $result = $this->writes->create($user, $projectId, $campaign, (string) $step['account_id'], $plan->objective, $budget, false);
+            $result = $this->writes->create($user, $projectId, $campaign, (string) $step['account_id'], self::objectiveFor($plan, $provider), $budget, false);
             $step['campaign'] = $this->outcome($result['body'], 'external_id', 'entity_id');
             if ($step['campaign']['status'] !== 'done') {
                 return $step;
@@ -302,6 +302,17 @@ final class LaunchPlanService
         }
 
         return false;
+    }
+
+    /**
+     * Platforms name objectives differently (Meta's OUTCOME_SALES is Snapchat's and TikTok's own word), so a plan
+     * may carry one per provider; the plan's own objective is the fallback for a provider it does not name.
+     */
+    public static function objectiveFor(LaunchPlan $plan, string $provider): string
+    {
+        $per = (array) ($plan->spec['objectives'] ?? []);
+
+        return (string) ($per[$provider] ?? $plan->objective);
     }
 
     private function budgetFor(array $spec, string $accountId): ?float

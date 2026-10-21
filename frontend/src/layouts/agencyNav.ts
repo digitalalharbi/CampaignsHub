@@ -72,7 +72,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/agency/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard },
       { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
-      { to: '/agency/campaigns?launch=1', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket },
+      { to: '/agency/launch', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket },
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
       { to: '/agency/ad-groups', ar: 'المجموعات', en: 'Ad groups', icon: Rows3 },
       { to: '/agency/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal },
