@@ -18,6 +18,7 @@ import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { accounts as countedAccounts } from '@/lib/counted'
 import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 
 /**
@@ -347,7 +348,7 @@ export function LaunchPage() {
         <Modal open onClose={() => setConfirming(false)} title={ar ? 'تأكيد النشر' : 'Confirm publishing'} size="md"
           footer={<><Button variant="secondary" onClick={() => setConfirming(false)}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={publish.isPending} onClick={() => publish.mutate()} data-testid="launch-confirm">{ar ? 'نعم، انشر' : 'Yes, publish'}</Button></>}>
           <div className="space-y-2 text-sm" data-testid="launch-confirm-dialog">
-            <p>{ar ? `سيُنشأ «${plan.name}» على ${plan.steps.length} حساب(ات) عبر واجهات المنصات الرسمية.` : `«${plan.name}» will be created on ${plan.steps.length} account(s) through the platforms’ official APIs.`}</p>
+            <p>{ar ? `سيُنشأ «${plan.name}» عبر واجهات المنصات الرسمية — ${countedAccounts(plan.steps.length, 'ar')}.` : `«${plan.name}» will be created through the platforms’ official APIs — ${countedAccounts(plan.steps.length, 'en')}.`}</p>
             <p className="font-semibold">{spec.launch ? (ar ? 'ستُشغَّل الحملات فور إنشائها وسيبدأ الإنفاق.' : 'The campaigns will run at once and spend will start.') : (ar ? 'تُنشأ موقوفة — لا إنفاق قبل تشغيلها.' : 'Created paused — no spend before they run.')}</p>
             {publish.isError && <p className="text-danger">{toApiError(publish.error).message}</p>}
           </div>
@@ -362,7 +363,7 @@ export function LaunchPage() {
               <li key={p.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
                 <span className="font-semibold text-text-primary">{p.name}</span>
                 <StatusBadge status={p.status} ar={ar} />
-                <span className="text-xs text-text-muted">{p.steps.length} {ar ? 'حساب' : 'account(s)'}</span>
+                <span className="text-xs text-text-muted">{countedAccounts(p.steps.length, ar ? 'ar' : 'en')}</span>
                 {p.unified_campaign_id && <Link to={portal(`/campaigns/${currentProjectId}/${p.unified_campaign_id}`)} className="text-xs font-bold text-brand-600 hover:underline">{ar ? 'فتح الحملة' : 'Open campaign'}</Link>}
                 {p.status !== 'published' && <button type="button" className="text-xs font-bold text-brand-600 hover:underline" onClick={() => { setPlan(p); setSpec({ ...p.spec, launch: p.launch }); setStep(p.status === 'draft' ? 5 : 6) }}>{ar ? 'فتح' : 'Open'}</button>}
               </li>
