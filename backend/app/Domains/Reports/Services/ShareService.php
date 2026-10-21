@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -230,6 +231,9 @@ final class ShareService
             // Content the Owner took off this link: the file's totals still include it, and the file says so.
             $data['creatives_hidden'] = app(SharedCreativeView::class)->hiddenCount($share);
         }
+
+        // WIDGET-REGISTRY-001 — the widgets this link shows on the web, in the same client-safe shape, so the file matches the page.
+        $data['widgets'] = app(SharedWidgetData::class)->forShare($share, $report);
 
         return $data;
     }
