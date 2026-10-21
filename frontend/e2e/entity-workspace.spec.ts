@@ -19,6 +19,9 @@ test.describe('the ads and ad-groups tables (agency, seeded data)', () => {
 
     const table = page.getByTestId('entity-table-ad')
     await expect(table).toBeVisible({ timeout: 30_000 })
+    // MGMT-PAGES-001 — the page carries its own KPI strip and trend above the table, not an Analytics tab.
+    await expect(page.getByTestId('entity-overview-ad')).toBeVisible()
+    await expect(page.getByTestId('entity-overview-ad-trend')).toBeVisible({ timeout: 30_000 })
     const rows = table.locator('tbody tr')
     const before = await rows.count()
     expect(before).toBeGreaterThan(1)
@@ -66,6 +69,8 @@ test.describe('the ads and ad-groups tables (advertiser portal)', () => {
     test(`${path} is the advertiser's own page, with its filters, and no agency link`, async ({ page }) => {
       await page.goto(path)
       await expect(page.getByTestId(`entity-workspace-${level}`)).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByTestId(`entity-overview-${level}`)).toBeVisible()
+      await expect(page).toHaveURL(new RegExp(`${path}$`))
       await expect(page.getByTestId(`entity-status-${level}`)).toBeVisible()
       await expect(page.getByTestId(`entity-search-${level}`)).toBeVisible()
       await expect(page.locator('main a[href^="/agency"]')).toHaveCount(0)

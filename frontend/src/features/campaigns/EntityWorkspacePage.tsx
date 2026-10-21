@@ -6,6 +6,7 @@ import { useEntities } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { entityColumnLabel, entityColumnPlan } from '@/features/analytics/entityObjectiveColumns'
 import { CampaignControlPanel } from './CampaignControlPanel'
+import { ManagementOverview } from './ManagementOverview'
 import { getCampaign } from './api'
 import type { CampaignRelevance } from './campaignRelevance'
 import { providerLabel } from './labels'
@@ -162,6 +163,9 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
           ))}
         </fieldset>
       )}
+
+      {/* MGMT-PAGES-001 — the report's own blocks above the table: KPI strip, trend, where results came from. */}
+      <ManagementOverview projectId={currentProjectId} range={range} filters={filters} testid={`entity-overview-${level}`} />
 
       <EntityTab projectId={currentProjectId} range={range} filters={filters} level={level} workspace={workspace} />
 
