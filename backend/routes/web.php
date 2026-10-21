@@ -62,6 +62,11 @@ Route::get('/demo/{path}', [AppMediaController::class, 'show'])
     ->where('path', '.*')
     ->name('app-media.show');
 
+/* TIKTOK-MEDIA-002 — cached creative covers, served from our own storage. */
+Route::get('/media/covers/{path}', [AppMediaController::class, 'cover'])
+    ->where('path', '[A-Za-z0-9/._-]+')
+    ->name('app-media.cover');
+
 /*
  * SHORT-LINKS-001 — the hop a stranger follows.
  *
