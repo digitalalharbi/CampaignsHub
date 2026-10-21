@@ -424,6 +424,28 @@ final class CampaignWriteService
      * @param  list<string>  $providers
      * @return array<string, list<array<string, mixed>>>
      */
+    /**
+     * LAUNCH-001 — the launcher reads the same account states and creative options the control panel does.
+     *
+     * Public wrappers over the two private builders so a launch plan can never disagree with a campaign's own
+     * control tab about which account may be written to or which creative may be bound.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function accountOptions(User $user, string $projectId): array
+    {
+        return $this->createOptions($user, $projectId);
+    }
+
+    /**
+     * @param  list<string>  $providers
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public function creativeOptions(array $providers): array
+    {
+        return $this->creatives($providers);
+    }
+
     private function creatives(array $providers): array
     {
         $out = [];
