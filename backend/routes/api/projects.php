@@ -394,6 +394,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}/shares', [ReportShareController::class, 'index'])->middleware('project.can:reports.view')->name('reports.shares.index');
     Route::post('reports/{report}/shares', [ReportShareController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.shares.store');
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
+    Route::post('reports/{report}/shares/{share}/pause', [ReportShareController::class, 'pause'])->middleware('project.can:reports.manage')->name('reports.shares.pause');
+    Route::post('reports/{report}/shares/{share}/resume', [ReportShareController::class, 'resume'])->middleware('project.can:reports.manage')->name('reports.shares.resume');
     Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
     Route::patch('reports/{report}/shares/{share}', [ReportShareController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.shares.update');
     Route::get('reports/{report}/shares/{share}/analytics', [ReportShareController::class, 'analytics'])->middleware('project.can:reports.view')->name('reports.shares.analytics');
