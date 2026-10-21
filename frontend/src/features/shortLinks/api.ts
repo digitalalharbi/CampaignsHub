@@ -34,6 +34,18 @@ export interface ShortLink {
   mode?: 'redirect' | 'landing'
   destination_host?: string | null
   destination_is_whatsapp?: boolean
+  /** SMART-LINK-001 — each optional, each off by default; absent from an older server. */
+  expires_at?: string | null
+  utm?: Record<string, string> | null
+  custom_slug?: boolean
+  state?: 'active' | 'disabled' | 'expired'
+}
+
+/** SMART-LINK-001 — the optional extras a link may be created with. Nothing here is required. */
+export interface ShortLinkOptions {
+  slug?: string
+  expires_at?: string
+  utm?: Partial<Record<'utm_source' | 'utm_medium' | 'utm_campaign' | 'utm_content' | 'utm_term', string>>
 }
 
 /** One day inside the RECORDED period. A day before it is absent, never a zero. */
@@ -89,8 +101,19 @@ export const shortLinkHistory = (id: string, from?: string, to?: string) => {
   }>
 }
 
-export const createShortLink = (kind: ShortLinkKind, value: string, message?: string) =>
-  postData<ShortLink>('/short-links', { kind, value, ...(message ? { message } : {}) })
+export const createShortLink = (kind: ShortLinkKind, value: string, message?: string, options: ShortLinkOptions = {}) =>
+  postData<ShortLink>('/short-links', {
+    kind,
+    value,
+    ...(message ? { message } : {}),
+    ...(options.slug ? { slug: options.slug } : {}),
+    ...(options.expires_at ? { expires_at: options.expires_at } : {}),
+    ...(options.utm && Object.values(options.utm).some((v) => (v ?? '').trim() !== '') ? { utm: options.utm } : {}),
+  })
+
+/** SMART-LINK-001 — set, move or clear a link's expiry; the slug and the recipient never change. */
+export const updateShortLinkExpiry = (id: string, expiresAt: string | null) =>
+  patchData<ShortLink>(`/short-links/${id}`, { expires_at: expiresAt })
 
 /** SHORT-LINK-COMPLIANCE-001 — edit the words waiting in the WhatsApp composer; the recipient never changes. */
 export const updateShortLinkMessage = (id: string, message: string) =>

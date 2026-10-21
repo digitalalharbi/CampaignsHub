@@ -44,11 +44,11 @@ final class ShortLinkDestinations
      *
      * @throws ValidationException with the field the person actually typed into
      */
-    public function resolve(string $kind, string $value, ?string $message = null): array
+    public function resolve(string $kind, string $value, ?string $message = null, array $utm = []): array
     {
         return match ($kind) {
             ShortLink::KIND_WHATSAPP => $this->whatsapp($value, $message),
-            ShortLink::KIND_LINK => $this->link($value),
+            ShortLink::KIND_LINK => $this->link($value, $utm),
             default => throw ValidationException::withMessages([
                 'kind' => [__('validation.in', ['attribute' => 'kind'])],
             ]),
@@ -117,7 +117,14 @@ final class ShortLinkDestinations
         return $clean === '' ? null : mb_substr($clean, 0, 500);
     }
 
-    private function link(string $value): array
+    /** SMART-LINK-001 — the five UTM keys a link may carry; anything else is not a UTM parameter. */
+    public const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+
+    /**
+     * @param  array<string, string|null>  $utm  SMART-LINK-001 — applied to the destination at creation; a key
+     *                                           already on the address is overridden by the chosen value
+     */
+    private function link(string $value, array $utm = []): array
     {
         $url = trim($value);
         $parts = parse_url($url);
@@ -148,11 +155,42 @@ final class ShortLinkDestinations
             $refuse(__('That is already a short link.'));
         }
 
+        $applied = $this->utm($utm);
+        if ($applied !== []) {
+            parse_str((string) ($parts['query'] ?? ''), $query);
+            $query = array_merge($query, $applied);
+            $url = (string) ($parts['scheme'] ?? 'https').'://'.$parts['host']
+                .(isset($parts['port']) ? ':'.$parts['port'] : '')
+                .(string) ($parts['path'] ?? '')
+                .'?'.http_build_query($query)
+                .(isset($parts['fragment']) ? '#'.$parts['fragment'] : '');
+        }
+
         return [
             'kind' => ShortLink::KIND_LINK,
             'destination' => $url,
-            'source_value' => $url,
+            'source_value' => trim($value),
+            'utm' => $applied === [] ? null : $applied,
         ];
+    }
+
+    /**
+     * The UTM values worth applying: known keys only, trimmed, bounded, empty ones dropped.
+     *
+     * @param  array<string, string|null>  $utm
+     * @return array<string, string>
+     */
+    private function utm(array $utm): array
+    {
+        $out = [];
+        foreach (self::UTM_KEYS as $key) {
+            $v = trim((string) ($utm[$key] ?? ''));
+            if ($v !== '') {
+                $out[$key] = mb_substr($v, 0, 100);
+            }
+        }
+
+        return $out;
     }
 
     /**

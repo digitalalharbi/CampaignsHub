@@ -88,14 +88,23 @@ final class ShortLinkController extends Controller
             'value' => ['required', 'string', 'max:2048'],
             'message' => ['nullable', 'string', 'max:1000'],
             'mode' => ['nullable', 'string', 'in:'.ShortLink::MODE_REDIRECT.','.ShortLink::MODE_LANDING],
+            // SMART-LINK-001 — each optional, each off by default; the two-field path is unchanged.
+            'slug' => ['nullable', 'string', 'max:32'],
+            'expires_at' => ['nullable', 'date', 'after:now'],
+            'utm' => ['nullable', 'array'],
+            'utm.*' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $resolved = $this->destinations->resolve((string) $data['kind'], (string) $data['value'], $data['message'] ?? null);
+        $resolved = $this->destinations->resolve((string) $data['kind'], (string) $data['value'], $data['message'] ?? null, (array) ($data['utm'] ?? []));
         $resolved['mode'] = (string) ($data['mode'] ?? ShortLink::MODE_REDIRECT);
+
+        $chosen = isset($data['slug']) && trim((string) $data['slug']) !== '' ? $this->hops->chosen((string) $data['slug']) : null;
 
         $link = ShortLink::create($resolved + [
             'tenant_id' => (string) app(TenantContext::class)->tenantId(),
-            'slug' => $this->hops->mint(),
+            'slug' => $chosen ?? $this->hops->mint(),
+            'custom_slug' => $chosen !== null,
+            'expires_at' => isset($data['expires_at']) ? Carbon::parse((string) $data['expires_at']) : null,
             'created_by' => $request->user()->id,
             'is_active' => true,
         ]);
@@ -126,7 +135,13 @@ final class ShortLinkController extends Controller
         $data = $request->validate([
             'message' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'mode' => ['sometimes', 'string', 'in:'.ShortLink::MODE_REDIRECT.','.ShortLink::MODE_LANDING],
+            // SMART-LINK-001 — the expiry may be set, moved or cleared; the slug and the recipient never change.
+            'expires_at' => ['sometimes', 'nullable', 'date'],
         ]);
+
+        if (array_key_exists('expires_at', $data)) {
+            $model->forceFill(['expires_at' => $data['expires_at'] === null ? null : Carbon::parse((string) $data['expires_at'])]);
+        }
 
         if (array_key_exists('message', $data)) {
             abort_unless($model->kind === ShortLink::KIND_WHATSAPP, 422, 'Only a WhatsApp link carries a message.');
@@ -265,6 +280,11 @@ final class ShortLinkController extends Controller
             'recorded_follows' => $recorded,
             'last_clicked_at' => $link->last_clicked_at?->toIso8601String(),
             'is_active' => $link->is_active,
+            // SMART-LINK-001 — the optional facts, said plainly; `state` is what the row claims about itself.
+            'expires_at' => $link->expires_at?->toIso8601String(),
+            'utm' => $link->utm,
+            'custom_slug' => (bool) $link->custom_slug,
+            'state' => $link->state(),
             'created_at' => $link->created_at?->toIso8601String(),
         ];
     }
