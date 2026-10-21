@@ -9,6 +9,7 @@ use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Automation\Http\Controllers\AutomationRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
+use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
@@ -169,6 +170,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * CAMPAIGN-MGMT-DOMAIN-001 — the write-capability registry, read before any surface draws a
      * control. Project-scoped because the answer is per reader and per provider the project uses.
      */
+    /*
+     * LAUNCH-001 — the multi-platform launcher: a draft plan, a review, and an explicitly confirmed publish that
+     * runs the same per-campaign write services the control tab uses.
+     */
+    Route::get('launch/options', [LaunchPlanController::class, 'options'])->middleware('project.can:campaigns.view')->name('launch.options');
+    Route::get('launch/plans', [LaunchPlanController::class, 'index'])->middleware('project.can:campaigns.view')->name('launch.plans.index');
+    Route::post('launch/plans', [LaunchPlanController::class, 'store'])->middleware('project.can:campaigns.manage')->name('launch.plans.store');
+    Route::get('launch/plans/{plan}', [LaunchPlanController::class, 'show'])->middleware('project.can:campaigns.view')->name('launch.plans.show');
+    Route::put('launch/plans/{plan}', [LaunchPlanController::class, 'update'])->middleware('project.can:campaigns.manage')->name('launch.plans.update');
+    Route::post('launch/plans/{plan}/publish', [LaunchPlanController::class, 'publish'])->middleware('project.can:campaigns.manage')->name('launch.plans.publish');
     Route::get('campaign-management/capabilities', [CampaignManagementController::class, 'capabilities'])->middleware('project.can:campaigns.view')->name('campaign-management.capabilities');
     /*
      * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
