@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { KpiCards } from '@/features/analytics/KpiCards'
+import { MetricStrip } from '@/components/ui/MetricStrip'
+import { dashboardMetrics } from '@/features/analytics/metricCatalog'
 import { ChartCard, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { Panel } from '@/features/analytics/components'
 import { usePlatforms, useSummary, useTimeseries, type MetricFilters, type Range } from '@/features/analytics/api'
@@ -28,6 +29,12 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
   const points = ts.data ?? []
   const series = useMemo(() => plotSeries(points, reportingCurrency, ar), [points, reportingCurrency, ar])
   const comparable = comparableWindows(s.data)
+  /*
+   * The report's board: four hero cards with sparklines and deltas, then the secondary row — chosen by
+   * `dashboardMetrics` for the objectives in scope, drawn by the same `MetricStrip` the dashboard uses, so
+   * a refusal, a never-reported metric and an empty scope are all said the way they are said there.
+   */
+  const strip = useMemo(() => dashboardMetrics('all', s.data, ar, points), [s.data, ar, points])
 
   const results = (platforms.data ?? [])
     .filter((p) => p.conversions > 0)
@@ -36,12 +43,13 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
 
   return (
     <div className="flex flex-col gap-4" data-testid={testid}>
-      <KpiCards
-        objective="all"
-        summary={s.data}
-        series={points}
-        comparable={comparable}
+      <MetricStrip
+        id={testid}
         ar={ar}
+        primary={strip.primary}
+        secondary={strip.secondary}
+        comparisonLabel={comparable ? undefined : (ar ? 'لا مقارنة — نافذة المقارنة غير مكتملة' : 'No comparison — the comparison window is incomplete')}
+        hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
         loading={s.isPending}
         error={s.isError ? s.error : undefined}
         onRetry={() => void s.refetch()}
