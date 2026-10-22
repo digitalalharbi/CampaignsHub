@@ -73,7 +73,18 @@ final class DailyDigestMail extends Mailable
          * class must not grow a second branding engine, and the requirement says so in capitals.
          */
         private readonly ?string $senderName = null,
+        /*
+         * EMAIL-DECISION-REPORT-001 — who is reading: `agency` (the operator's own digest, money and all)
+         * or `client` (CLIENT-REPORT-FRAMING-001: no spend anywhere, no cost per result, outcomes first,
+         * the portal behind the button). The data is the same digest; what is SAID of it is not.
+         */
+        public readonly string $audience = 'agency',
     ) {}
+
+    private function client(): bool
+    {
+        return $this->audience === 'client';
+    }
 
     /**
      * REPORT-FOOTER-001 in an inbox — the same fixed sentence and the same metadata line the page, the
@@ -131,9 +142,12 @@ final class DailyDigestMail extends Mailable
         };
 
         return new Envelope(
-            subject: $ar
-                ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
-                : $this->brandName()." — {$spend} {$when}, {$results} results",
+            // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
+            subject: $this->client()
+                ? ($ar ? $this->brandName()." — {$results} نتيجة {$when}" : $this->brandName()." — {$results} results {$when}")
+                : ($ar
+                    ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
+                    : $this->brandName()." — {$spend} {$when}, {$results} results"),
         );
     }
 
@@ -202,6 +216,7 @@ final class DailyDigestMail extends Mailable
                     'singleProject' => $this->singleProject(),
                     // EMAIL-DECISION-REPORT-001 — the body is a decision report: one row per project, not analysis.
                     'kind' => $this->kind,
+                    'audience' => $this->audience,
                     'dir' => $ar ? 'rtl' : 'ltr',
                     'portfolio' => $portfolio = $this->portfolio($p, $ar, $app),
                     'spendShare' => $this->spendShare($p, $portfolio),
@@ -255,6 +270,9 @@ final class DailyDigestMail extends Mailable
     /** The figure a project is judged on, by objective — the first of these its metric set carries. */
     private const OBJECTIVE_KEYS = ['roas', 'cpa', 'cpl', 'cpi', 'cpm', 'cpc', 'ctr', 'engagement_rate'];
 
+    /** What a CLIENT may be judged on: ratios that reveal no spend (CLIENT-REPORT-FRAMING-001). */
+    private const CLIENT_OBJECTIVE_KEYS = ['roas', 'conversion_rate', 'ctr', 'engagement_rate'];
+
     /**
      * EMAIL-DECISION-REPORT-001 (Owner 2026-10-22, the Moasher reference) — one row per project.
      *
@@ -292,6 +310,28 @@ final class DailyDigestMail extends Mailable
                 array_slice((array) ($follow['rows'] ?? []), 0, 3),
             ));
             $second = array_key_exists('revenue', $totals) && is_numeric($totals['revenue']) && (float) $totals['revenue'] > 0 ? 'revenue' : 'conversions';
+            if ($this->client()) {
+                // CLIENT-REPORT-FRAMING-001 — no spend and nothing divided by it; results and revenue with their movement,
+                // a ratio objective where the set names one, and the verdict said in outcomes rather than budgets.
+                $objectiveKey = in_array($objectiveKey, self::CLIENT_OBJECTIVE_KEYS, true) ? $objectiveKey : null;
+                $rows[] = [
+                    'name' => (string) ($block['project_name'] ?? ''),
+                    'tone' => $tone,
+                    'status' => $this->statusLabel($tone, $ar),
+                    'verdict' => $this->clientVerdict($block, $ar, $tone),
+                    'spend' => null,
+                    'second' => $p->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
+                    'revenue' => $second === 'revenue' ? $p->card('revenue', $totals, $reported, $change) : null,
+                    'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                    'rank' => self::TONE_RANK[$tone] ?? 2,
+                    'attention' => null,
+                    'follow' => null,
+                    'spend_amount' => null,
+                    'url' => Frontend::origin().'/portal',
+                ];
+
+                continue;
+            }
 
             $rows[] = [
                 'name' => (string) ($block['project_name'] ?? ''),
@@ -324,7 +364,7 @@ final class DailyDigestMail extends Mailable
     private function spendShare(DigestPresenter $p, array $rows): array
     {
         $spenders = array_values(array_filter($rows, static fn (array $r): bool => ($r['spend_amount'] ?? 0) > 0));
-        if ($spenders === [] || $this->singleProject()) {
+        if ($spenders === [] || $this->singleProject() || $this->client()) {
             return [];
         }
         usort($spenders, static fn (array $a, array $b): int => $b['spend_amount'] <=> $a['spend_amount']);
@@ -350,6 +390,10 @@ final class DailyDigestMail extends Mailable
      */
     private function charts(DigestPresenter $p, bool $ar): array
     {
+        // Both charts are drawn from spend; a client's mail carries neither (CLIENT-REPORT-FRAMING-001).
+        if ($this->client()) {
+            return ['trend' => null, 'donut' => null];
+        }
         $totals = (array) ($this->digest['totals'] ?? []);
         $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && is_numeric($pt['spend'] ?? null)));
         $trend = null;
@@ -410,6 +454,28 @@ final class DailyDigestMail extends Mailable
         }
 
         return $counts;
+    }
+
+    /**
+     * The client's verdict line: the outcome and its movement, never a budget or a spend. A failed sync
+     * keeps its own sentence, because incomplete figures are a fact the client must know.
+     *
+     * @param  array<string, mixed>  $block
+     */
+    private function clientVerdict(array $block, bool $ar, string $tone): string
+    {
+        if ((($block['freshness'] ?? [])['sync_failed'] ?? false) === true) {
+            return $ar ? 'بعض المصادر لم تُحدَّث — الأرقام أدناه ناقصة حتى تكتمل.' : 'Some sources did not update — the figures below are incomplete until they do.';
+        }
+        $delta = $block['change']['conversions'] ?? null;
+        if (! is_numeric($delta)) {
+            return $ar ? 'النتائج مُقارنة بالفترة السابقة غير متاحة بعد.' : 'Results against the previous period are not available yet.';
+        }
+        $pct = number_format(abs((float) $delta) * 100, 1).'%';
+
+        return (float) $delta >= 0
+            ? ($ar ? "النتائج ارتفعت {$pct} مقارنة بالفترة السابقة." : "Results rose {$pct} against the previous period.")
+            : ($ar ? "النتائج تراجعت {$pct} مقارنة بالفترة السابقة." : "Results fell {$pct} against the previous period.");
     }
 
     private function statusLabel(string $tone, bool $ar): string
@@ -560,6 +626,18 @@ final class DailyDigestMail extends Mailable
      * @return list<array{label: string, value: string, change: string|null, tone: string}>
      */
     private function accountCards(DigestPresenter $p, bool $ar): array
+    {
+        $cards = $this->agencyAccountCards($p, $ar);
+        if (! $this->client()) {
+            return $cards;
+        }
+        // A client's roll-up leads with what was achieved; the money that bought it is the agency's figure.
+        $spendLabel = $ar ? 'الإنفاق' : 'Spend';
+
+        return array_values(array_filter($cards, static fn (array $card): bool => ($card['label'] ?? '') !== $spendLabel));
+    }
+
+    private function agencyAccountCards(DigestPresenter $p, bool $ar): array
     {
         $totals = $this->digest['totals'] ?? [];
         $change = $totals['change'] ?? [];
@@ -964,6 +1042,8 @@ final class DailyDigestMail extends Mailable
             'results' => 'النتائج',
             'projects' => 'المشاريع',
             'intro_single' => 'ملخص الفترة لمشروع',
+            'intro_client' => 'هذا ما تحقّق في حملاتك هذه الفترة — والقرارات التي تستحق نظرتك.',
+            'open_portal' => 'افتح بوابتك ←',
             'portfolio' => 'محفظة المشاريع',
             'highlights' => 'أبرز التحرّكات',
             'health' => 'صحة المحفظة الآن',
@@ -1014,6 +1094,8 @@ final class DailyDigestMail extends Mailable
             'results' => 'Results',
             'projects' => 'Projects',
             'intro_single' => 'The period for',
+            'intro_client' => 'Here is what your campaigns achieved this period — and the decisions worth your look.',
+            'open_portal' => 'Open your portal →',
             'portfolio' => 'Project portfolio',
             'highlights' => 'Biggest moves',
             'health' => 'Portfolio health now',

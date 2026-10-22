@@ -16,7 +16,8 @@
 
     <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
     @php($singleProject = $singleProject ?? false)
-    <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $singleProject && isset($projects[0]) ? ($t['intro_single'] ?? $t['intro']).' '.$projects[0]['name'] : $t['intro'] }}</div>
+    @php($client = ($audience ?? 'agency') === 'client')
+    <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $client ? ($t['intro_client'] ?? $t['intro']) : ($singleProject && isset($projects[0]) ? ($t['intro_single'] ?? $t['intro']).' '.$projects[0]['name'] : $t['intro']) }}</div>
 
     {{--
       The account line. Spend and results sum across projects; a cost per result deliberately does not.
@@ -70,7 +71,7 @@
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px; border-top:1px solid #e4e0d6;">
                         <tr>
                             @foreach ($rest as $card)
-                                <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; padding-top:10px;">
+                                <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; text-align:center; padding-top:10px;">
                                     <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
                                     <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
                                     @if ($card['change'])
@@ -86,7 +87,9 @@
                   fourth — and the fourth they want is a cost per result, which across projects would
                   divide one client's money by another client's orders.
                 --}}
-                <div style="font-size:11px; color:#8b9a97; padding-top:10px; line-height:1.6;">{{ $t['no_blended_note'] }}</div>
+                @if (! $client)
+                    <div style="font-size:11px; color:#8b9a97; padding-top:10px; line-height:1.6;">{{ $t['no_blended_note'] }}</div>
+                @endif
             </td>
         </tr>
     </table>
@@ -199,8 +202,8 @@
                     @endif
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
                         <tr>
-                            @foreach (array_filter([$row['spend'], $row['second']]) as $card)
-                                <td class="ch-kpi" style="padding-{{ $endSide }}:18px; vertical-align:top;">
+                            @foreach (array_filter([$row['spend'], $row['second'], $row['revenue'] ?? null]) as $card)
+                                <td class="ch-kpi" width="96" style="vertical-align:top; text-align:center; padding:0 6px;">
                                     <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
                                     <div style="font-size:14px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}@if ($card['change']) <span style="font-size:11px; font-weight:700; color:{{ $card['change_colour'] }};">{{ $card['change'] }}</span>@endif</div>
                                 </td>
@@ -231,7 +234,7 @@
     <div style="margin:10px 0 18px; text-align:center;">
         <a href="{{ $portfolio[0]['url'] ?? '#' }}" data-block="cta"
            style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 22px; border-radius:10px;">{{ $t['open_portfolio'] }}</a>
+                  text-decoration:none; padding:11px 22px; border-radius:10px;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a>
     </div>
 
     <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:4px;">{{ $t['footer_note'] }}</div>

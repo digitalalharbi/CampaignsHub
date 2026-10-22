@@ -64,7 +64,7 @@
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
                                 <tr>
                                     @foreach ($item['figures']['strip'] as $card)
-                                        <td class="ch-kpi" style="vertical-align:top; padding-{{ $endSide }}:18px;">
+                                        <td class="ch-kpi" width="110" style="vertical-align:top; text-align:center; padding:0 6px;">
                                             <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
                                             <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
                                         </td>

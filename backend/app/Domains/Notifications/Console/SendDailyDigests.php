@@ -56,8 +56,9 @@ final class SendDailyDigests extends Command
          * A digest is opt-in: a row here is somebody who asked. Iterating users and defaulting them
          * in would mail every account in the installation the first time this ran.
          */
+        // EMAIL-DECISION-REPORT-001 — a client-workspace subscriber receives the CLIENT digest (no spend, outcomes first);
+        // an agency subscriber the full one. Both come from the same builder and the same scope.
         $rows = DB::table('notification_preferences')
-            ->whereNull('client_workspace_id')
             ->when($this->option('user') !== null, fn ($q) => $q->where('user_id', (int) $this->option('user')))
             ->get();
 
@@ -93,9 +94,10 @@ final class SendDailyDigests extends Command
 
             $locale = (string) ($row->locale ?? 'ar');
             $tenantId = (string) $row->tenant_id;
+            $audience = $row->client_workspace_id !== null ? 'client' : 'agency';
 
             if (in_array('daily', $digests, true)) {
-                $state = $dispatcher->sendDaily($user, $tenantId, $day->copy()->startOfDay(), $locale);
+                $state = $dispatcher->sendDaily($user, $tenantId, $day->copy()->startOfDay(), $locale, $audience);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} daily: {$state}");
             }
@@ -108,7 +110,7 @@ final class SendDailyDigests extends Command
              * on the same single send.
              */
             if (in_array('weekly', $digests, true) && ($this->option('force') || $local->dayOfWeekIso === $this->weekday($row))) {
-                $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale);
+                $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale, $audience);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} weekly: {$state}");
             }
@@ -128,7 +130,7 @@ final class SendDailyDigests extends Command
              */
             if (in_array('monthly', $digests, true) && ($this->option('force') || $local->day === $this->monthday($row))) {
                 $month = $this->option('force') ? $day->copy() : $day->copy()->subMonthNoOverflow();
-                $state = $dispatcher->sendMonthly($user, $tenantId, $month, $locale);
+                $state = $dispatcher->sendMonthly($user, $tenantId, $month, $locale, $audience);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} monthly: {$state}");
             }
