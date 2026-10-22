@@ -1,0 +1,69 @@
+name: Browser dependencies probe
+
+# The fast way to test `.github/scripts/install-browsers.sh`: the same script the gate runs, on a fresh runner, with no
+# application tests behind it — minutes instead of an hour. It runs when the script or this file changes, or by hand.
+# It proves the browser LAUNCHES, not just that it installed, and prints how long the install took so a regression in
+# the mirror or in the script is a number rather than a red gate.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/browser-deps-probe.yml'
+      - '.github/scripts/install-browsers.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [webkit, firefox]
+    name: probe (${{ matrix.browser }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Restore apt archives
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
+          restore-keys: |
+            apt-debs-${{ runner.os }}-${{ matrix.browser }}-
+      - name: Install browsers (timed)
+        id: browsers
+        working-directory: frontend
+        run: |
+          start=$SECONDS
+          bash ../.github/scripts/install-browsers.sh ${{ matrix.browser }}
+          echo "::notice::install took $((SECONDS - start)) s (cache restored: $(find ~/apt-debs -name '*.deb' 2>/dev/null | wc -l) archives before the run)"
+      - name: Save apt archives
+        if: always() && steps.browsers.outputs.fetched != '' && steps.browsers.outputs.fetched != '0'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
+      - name: The browser launches
+        working-directory: frontend
+        run: |
+          node -e "
+            const { ${{ matrix.browser }}: b } = require('@playwright/test');
+            (async () => {
+              const browser = await b.launch();
+              const page = await browser.newPage();
+              await page.setContent('<p>ok</p>');
+              console.log('${{ matrix.browser }} launched, title/body:', await page.textContent('p'));
+              await browser.close();
+            })().catch((e) => { console.error(e); process.exit(1); });
+          "
