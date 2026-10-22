@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Num } from '@/components/ui/Num'
+import { Delta } from '@/components/ui/Delta'
 import { PortalTrend } from './PortalTrend'
 import { KpiSparkline } from '@/features/analytics/charts'
 import { ProviderMark } from '@/components/ProviderMark'
@@ -146,6 +147,8 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
                 testid={`portfolio-kpi-${k}`}
                 label={t.k[k] ?? k}
                 value={<Num>{format(k, data.kpis[k], data.currency)}</Num>}
+                /* CP-PARITY-001 — the movement pill the advertiser cards carry; drawn only from the server's own comparison. */
+                trailing={<Delta metric={k} change={data.movement?.[k] ?? null} ar={ar} testid={`portfolio-move-${k}`} />}
                 spark={sparkOf(data, k) ? <span data-testid={`portfolio-spark-${k}`} className="block"><KpiSparkline points={sparkOf(data, k)!} height={26} /></span> : undefined}
               />
             ))}
@@ -156,6 +159,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
                 <li key={k} className="flex items-baseline gap-1.5">
                   <span>{t.k[k] ?? k}</span>
                   <Num className="font-semibold text-text-primary">{format(k, data.kpis[k], data.currency)}</Num>
+                  <Delta metric={k} change={data.movement?.[k] ?? null} ar={ar} testid={`portfolio-move-${k}`} />
                 </li>
               ))}
             </ul>

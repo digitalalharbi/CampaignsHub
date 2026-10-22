@@ -64,6 +64,17 @@ final class PortalOverview
             $kpis['roas'] = ($spendWhole && $revenueWhole) ? ($totals['roas'] ?? null) : null;
         }
 
+        /*
+         * CP-PARITY-001 — each figure's movement against the window before it, the pill the advertiser's cards carry.
+         *
+         * The comparison is the analytics service's own (`delta`: (now − before) / |before|, null where before was nothing
+         * or either side is not a number) — never recomputed here. A key is offered only where its FIGURE is offered, under
+         * the same whole-money rule: a withheld spend has no movement any more than it has a figure. The whole map is
+         * absent when the service could not compare at all (a mixed-currency space sends `delta` null), so the client's
+         * page draws no pill rather than one from figures it would have to invent.
+         */
+        $movement = self::movementFor($kpis, is_array($data['delta'] ?? null) ? $data['delta'] : null);
+
         $platforms = array_map(function (array $p) use ($spendWhole): array {
             $row = [
                 'provider' => $p['provider'] ?? null,
@@ -96,6 +107,7 @@ final class PortalOverview
             'currency' => ($v['spend'] || $v['revenue']) ? ReportingCurrency::DEFAULT : null,
             'freshness' => ['state' => $data['freshness']['state'] ?? null, 'last_sync_at' => $data['freshness']['last_sync_at'] ?? null],
             'kpis' => $kpis,
+            'movement' => $movement,
             'platforms' => $platforms,
             'projects' => $v['projects'] ? $projects->map(fn (Project $p): array => array_filter([
                 'id' => (string) $p->getKey(),
@@ -110,6 +122,27 @@ final class PortalOverview
             'attention' => $this->attention($workspace, $v, $onlyProjectIds),
             'trend' => $this->trend((array) ($data['timeseries'] ?? [])),
         ];
+    }
+
+    /**
+     * One movement per figure OFFERED, from the service's own comparison; null where the figure is withheld, where the
+     * service had no previous value, or (the whole map) where it could not compare at all.
+     *
+     * @param  array<string, mixed>  $kpis
+     * @param  array<string, mixed>|null  $delta
+     * @return array<string, float|null>|null
+     */
+    public static function movementFor(array $kpis, ?array $delta): ?array
+    {
+        if ($delta === null) {
+            return null;
+        }
+        $movement = [];
+        foreach (array_keys($kpis) as $key) {
+            $movement[$key] = $kpis[$key] === null ? null : (is_numeric($delta[$key] ?? null) ? (float) $delta[$key] : null);
+        }
+
+        return $movement;
     }
 
     /**
