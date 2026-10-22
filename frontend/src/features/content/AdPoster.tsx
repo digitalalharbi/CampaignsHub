@@ -6,6 +6,7 @@ import { platformColor } from '@/features/analytics/components'
 import { absenceLabel, absenceShort, assetAspect, clientAbsence, mediaFit, posterSource, previewShape, readPreview, type MediaAspect } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
+import { ProviderMark } from '@/components/ProviderMark'
 
 /**
  * AD-PREVIEW-001 — one still, drawn the same way on every surface that shows an ad.
@@ -177,6 +178,8 @@ export function AdPoster({
         >
           <span aria-hidden className="absolute inset-x-0 top-0 h-1.5" style={{ background: color }} />
           <Icon size={22} aria-hidden className="shrink-0" style={{ color }} />
+          {/* REPORT-PLATFORM-LOGOS-001 — a cover that says WHERE it ran says it with the platform's own logo as well as its name. */}
+          {key ? <ProviderMark provider={key} size={18} /> : null}
           <span data-testid={testid ? `${testid}-absent-label` : undefined} className="text-xs font-bold text-text-primary">
             {key ? providerLabel(key, ar ? 'ar' : 'en') : kindLabel}
           </span>
