@@ -80,18 +80,33 @@ prefetch() {
 
   # Each worker: the mirror apt chose, then a second mirror for the same pool path; a size check before the rename.
   export DEBS
+  # apt does not hand out plain URLs on these runners: it says `mirror+file:/etc/apt/apt-mirrors.txt/pool/...`, meaning
+  # «this pool path, from whichever mirror that file lists» (the first run of this script failed every archive on exactly
+  # that, `Protocol "mirror+file" not supported`). So the path is taken from the URI and tried against each listed mirror,
+  # then against the public Ubuntu archive, so one slow or failing mirror costs a few seconds and not the install.
+  PREFETCH_MIRRORS=$( { grep -Eo '^https?://[^[:space:]]+' /etc/apt/apt-mirrors.txt 2>/dev/null; printf '%s\n' 'http://archive.ubuntu.com/ubuntu/' 'http://security.ubuntu.com/ubuntu/'; } | awk '!seen[$0]++')
+  export PREFETCH_MIRRORS
+  candidates() {
+    local url=$1 path m
+    case "$url" in
+      mirror+file:*) path=${url#*apt-mirrors.txt/}
+                     while read -r m; do [ -n "$m" ] && printf '%s%s\n' "${m%/}/" "$path"; done <<< "$PREFETCH_MIRRORS" ;;
+      *) printf '%s\n' "$url" ;;
+    esac
+  }
   fetch_one() {
-    local url=$1 file=$2 size=$3 u err got
-    for u in "$url" "${url/azure.archive.ubuntu.com/archive.ubuntu.com}" "${url/azure.archive.ubuntu.com/security.ubuntu.com}"; do
+    local url=$1 file=$2 size=$3 u err got=
+    while read -r u; do
       err=$(curl -fsSL --retry 2 --retry-delay 1 --connect-timeout 10 --max-time 90 -o "$DEBS/$file.part" "$u" 2>&1) || { got="curl: ${err:-failed} ($u)"; continue; }
       if [ "$(wc -c < "$DEBS/$file.part" | tr -d ' ')" = "$size" ]; then mv "$DEBS/$file.part" "$DEBS/$file"; return 0; fi
       got="size mismatch for $file (wanted $size, got $(wc -c < "$DEBS/$file.part" | tr -d ' ')) from $u"
-    done
+    done < <(candidates "$url")
     rm -f "$DEBS/$file.part"
     # One summary line per failure is enough to diagnose; the count is printed after the run.
-    echo "FAILED $file :: ${got:-unknown}" >> "$DEBS.failures"
+    echo "FAILED $file :: ${got:-no candidate URL}" >> "$DEBS.failures"
     return 0
   }
+  export -f candidates
   export -f fetch_one
   : > "$DEBS.failures"
   xargs -P "$JOBS" -L1 bash -c 'fetch_one "$0" "$1" "$2"' < /tmp/apt-todo.txt
