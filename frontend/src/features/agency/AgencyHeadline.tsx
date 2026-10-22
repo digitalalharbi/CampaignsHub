@@ -13,7 +13,9 @@ import { lastNDays } from '@/features/analytics/api'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/States'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
-import { ChartCard, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { ChartCard, KpiSparkline, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { sparkFor } from '@/features/analytics/metricCatalog'
+import type { TimePoint } from '@/features/analytics/api'
 import { money, num, ratio } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { allowsDerived, comparableWindows, coverageNote, readCoverage, windowsUnlikeNote } from '@/lib/coverage/contract'
@@ -106,6 +108,11 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   const prevSpend = previous ? readMoney(previous, 'spend', currency, ar) : null
   const prevCpa = previous ? readCostPer(previous, 'cpa', 'conversions', currency, ar) : null
   const prevRoas = previous ? readRoas(previous, ar) : null
+  const sparkOf = (key: string): ReactNode => {
+    const points = sparkFor(key, (d?.timeseries ?? []) as unknown as readonly TimePoint[], undefined)
+
+    return points ? <div data-testid={`agency-kpi-${key}-spark`}><KpiSparkline points={points} height={26} /></div> : undefined
+  }
   const deltaOf = (metric: string, cur: number | null | undefined, prev: number | null | undefined) =>
     comparable && cur != null && prev != null ? { metric, current: cur, previous: prev } : undefined
   const notDerived = ar ? 'لا تُشتق على نافذة ناقصة' : 'Not derived over an incomplete window'
@@ -148,10 +155,21 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
         </p>
       ) : (
         <>
-          <StatGrid columns="grid-cols-2 lg:grid-cols-4">
+          {/*
+            UX-COMPACT-CHARTS-001 — the shape of the window under each figure.
+
+            The four cards stated a number and its movement and nothing about the days between: a
+            reader comparing «61.2K SAR, +22%» had no way to see whether the rise was steady or one
+            spike. Each card now carries the window's daily shape through the product's one sparkline
+            rule (`sparkFor`): a day nobody reported is left out, a series more than a third missing or
+            flat draws nothing, and a metric the series does not carry (a cost per result the daily
+            rows never hold) shows no line rather than a line invented from zeros.
+          */}
+          <StatGrid columns="grid-cols-2 lg:grid-cols-4" sparks>
             <Door to="/agency/portfolio">
               <StatCard
                 testid="agency-kpi-spend"
+                spark={sparkOf('spend')}
                 tone="brand"
                 label={ar ? 'الإنفاق' : 'Spend'}
                 value={<span dir="ltr">{formatMoneyReading(spend!, money)}</span>}
@@ -162,6 +180,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
             <Door to="/agency/campaigns?view=table&lifecycle=all">
               <StatCard
                 testid="agency-kpi-results"
+                spark={sparkOf('conversions')}
                 tone="success"
                 label={ar ? 'النتائج المُبلَّغة' : 'Reported results'}
                 value={<span dir="ltr">{conversions == null ? '—' : num(conversions)}</span>}
@@ -172,6 +191,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
             <Door to="/agency/analytics">
               <StatCard
                 testid="agency-kpi-cpa"
+                spark={sparkOf('cpa')}
                 tone="info"
                 label={ar ? 'تكلفة النتيجة' : 'Cost per result'}
                 value={<span dir="ltr">{derived ? formatMoneyReading(cpa!, money) : '—'}</span>}
@@ -182,6 +202,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
             <Door to="/agency/analytics">
               <StatCard
                 testid="agency-kpi-roas"
+                spark={sparkOf('roas')}
                 tone="neutral"
                 label="ROAS"
                 value={<span dir="ltr">{derived && roas!.value !== null ? ratio(roas!.value) : '—'}</span>}

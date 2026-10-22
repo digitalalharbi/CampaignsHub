@@ -91,7 +91,9 @@ final class DigestPathBarTest extends TestCase
         $html = MailGallery::render('digest-daily', 'en');
 
         $this->assertNotNull($html, 'the gallery has no digest-daily message to render');
-        // The email-safe technique: a percentage-width cell inside a nested presentation table.
+        // The email-safe technique: a percentage-width cell inside a nested presentation table —
+        // now carried by the portfolio's spend-share comparison (EMAIL-DECISION-REPORT-001).
+        $this->assertStringContainsString('data-block="spend-share"', $html);
         $this->assertMatchesRegularExpression('/width="\d+%" style="background-color:#0d8a6f/', $html);
     }
 }

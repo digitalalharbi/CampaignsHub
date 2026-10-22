@@ -15,7 +15,22 @@
 <div style="font-family:{!! $font !!}; color:#0b1a16;">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 6px;">{{ $greeting }}</div>
-    <div style="font-size:14px; color:#3d4742; line-height:1.8; margin:0 0 18px;">{{ $intro }}</div>
+    <div style="font-size:14px; color:#3d4742; line-height:1.8; margin:0 0 12px;">{{ $intro }}</div>
+    {{-- EMAIL-DECISION-REPORT-001 — how many need a decision, by severity, before the cards: the portfolio-health strip of an alert mail. --}}
+    @php($bySeverity = array_count_values(array_map(static fn (array $i): string => (string) ($i['severity'] ?? 'info'), $items)))
+    @if (count($items) > 1)
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="severity-strip" style="margin:0 0 16px;">
+            <tr>
+                @foreach (['critical', 'warning', 'positive', 'info'] as $level)
+                    @if (($bySeverity[$level] ?? 0) > 0)
+                        <td style="padding-{{ $endSide }}:8px;">
+                            <span style="display:inline-block; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; background-color:{{ $toneBg[$level] }}; color:{{ $tone[$level] }};" dir="ltr">{{ $bySeverity[$level] }} {{ $level === 'critical' ? ($dir === 'rtl' ? 'حرج' : 'critical') : ($level === 'warning' ? ($dir === 'rtl' ? 'تحذير' : 'warning') : ($level === 'positive' ? ($dir === 'rtl' ? 'إيجابي' : 'positive') : ($dir === 'rtl' ? 'للعلم' : 'info'))) }}</span>
+                        </td>
+                    @endif
+                @endforeach
+            </tr>
+        </table>
+    @endif
 
     @foreach ($items as $item)
         @php($colour = $tone[$item['severity']] ?? $tone['info'])
@@ -35,7 +50,39 @@
                         <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $item['context'] }}</div>
                     @endif
                     <div style="font-size:16px; font-weight:800; color:#0b1a16; padding-top:4px; line-height:1.5;">{{ $item['title'] }}</div>
+                    {{--
+                      EMAIL-PERF-DASHBOARDS-001 — the finding's own number first, then the sentence.
+                      One lead figure at display size and the rest as a compact strip, the hierarchy the
+                      digest and the web's Platform view use; absent when the rule carries no figure.
+                    --}}
+                    @if (! empty($item['figures']))
+                        <div style="margin-top:10px;">
+                            <div style="font-size:12px; color:#5b6b68;">{{ $item['figures']['lead']['label'] }}</div>
+                            <div class="ch-kpi-lead" style="font-size:24px; line-height:1.15; font-weight:800; color:#0b1a16; text-align:{{ $startSide }};" dir="ltr">{{ $item['figures']['lead']['value'] }}</div>
+                        </div>
+                        @if (! empty($item['figures']['strip']))
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+                                <tr>
+                                    @foreach ($item['figures']['strip'] as $card)
+                                        <td class="ch-kpi" width="{{ (int) (100 / count($item['figures']['strip'])) }}%" style="vertical-align:top; text-align:center; padding:0 6px;">
+                                            <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
+                                            <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            </table>
+                        @endif
+                    @endif
                     <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $item['detail'] }}</div>
+                    @if (! empty($item['action']))
+                        {{-- The decision this card asks for, and the one place to take it. --}}
+                        <div data-block="action" style="font-size:13px; font-weight:700; color:#0b1a16; padding-top:10px;">{{ $item['action'] }}</div>
+                    @endif
+                    @if (! empty($item['url']))
+                        <div style="padding-top:8px;">
+                            <a href="{{ $item['url'] }}" style="display:inline-block; background-color:#ffffff; color:{{ $colour }}; border:1px solid {{ $colour }}; font-size:12px; font-weight:700; text-decoration:none; padding:7px 14px; border-radius:8px;">{{ $dir === 'rtl' ? 'افتح التنبيه ←' : 'Open the alert →' }}</a>
+                        </div>
+                    @endif
                 </td>
             </tr>
         </table>

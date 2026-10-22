@@ -72,8 +72,15 @@ final class DigestMailVisualTest extends TestCase
         foreach (['ar', 'en'] as $locale) {
             $html = $this->html($locale);
 
-            // EMAIL-BRAND-001 — the official lockup is the only image; every chart is still type and tables.
-            $this->assertSame(1, substr_count($html, '<img'), "$locale: an image other than the brand lockup");
+            // EMAIL-BRAND-001 — the official lockup, and (EMAIL-DECISION-REPORT-001) the static chart PNGs served
+            // by opaque token from our own origin, each with its figures in the alt. No other image, ever.
+            preg_match_all('/<img\b[^>]*>/', $html, $images);
+            $others = array_filter($images[0], static fn (string $tag): bool => ! str_contains($tag, '/brand/email/lockup-'));
+            $this->assertCount(count($images[0]) - 1, $others, "$locale: the lockup is one image");
+            foreach ($others as $tag) {
+                $this->assertMatchesRegularExpression('#src="[^"]+/mail/charts/[a-z0-9]{32}\.png"#', $tag, "$locale: an image that is neither the lockup nor a chart");
+                $this->assertMatchesRegularExpression('#alt="[^"]{8,}"#', $tag, "$locale: a chart without its readable fallback");
+            }
             $this->assertStringNotContainsString('<svg', $html, "$locale: inline SVG, which Outlook drops");
             $this->assertStringNotContainsString('<script', $html);
             $this->assertStringNotContainsString('<canvas', $html);

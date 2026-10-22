@@ -8,7 +8,9 @@ use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Support\AlertFigures;
 use App\Models\User;
+use App\Support\Frontend;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -139,6 +141,11 @@ final class AlertEventMailer
                     'title' => (string) (($ar ? ($i['title_ar'] ?? null) : null) ?? $i['title']),
                     'detail' => (string) (($ar ? ($i['detail_ar'] ?? null) : null) ?? $i['detail']),
                     'context' => (string) ($i['project_name'] ?? ''),
+                    // EMAIL-PERF-DASHBOARDS-001 — one lead figure and a strip, read from the event's context; null keeps the sentence alone.
+                    'figures' => AlertFigures::from((array) ($i['context'] ?? []), $ar),
+                    // EMAIL-DECISION-REPORT-001 — an action-required card: what to decide, and the one place to do it.
+                    'action' => self::action((string) ($i['notification_type'] ?? ''), $ar),
+                    'url' => Frontend::origin().'/app/alerts?event='.rawurlencode((string) ($i['event_id'] ?? '')),
                 ], $claimed),
                 lang: $locale,
                 recipientName: (string) $user->name,
@@ -152,6 +159,18 @@ final class AlertEventMailer
     }
 
     /** One key per event and trigger moment: the same alert re-raised after its cooldown is a new send. */
+    /** The decision a finding asks for, in one line — by the notification type the rule maps to, never a generated recommendation. */
+    public static function action(string $type, bool $ar): string
+    {
+        return match ($type) {
+            'budget_risk' => $ar ? 'قرار اليوم: أبقِ الميزانية أو عدّلها أو أوقف ما لا يؤدي.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
+            'sync_failed' => $ar ? 'أعد ربط المصدر حتى تكتمل الأرقام.' : 'Reconnect the source so the figures are complete.',
+            'token_expiring' => $ar ? 'جدّد الصلاحية قبل انقطاع البيانات.' : 'Renew the access before the data stops.',
+            'report_failed' => $ar ? 'أعد توليد التقرير أو افتحه لترى السبب.' : 'Regenerate the report, or open it to read why.',
+            default => $ar ? 'افتح التنبيه واتخذ قرارًا.' : 'Open the alert and decide.',
+        };
+    }
+
     private function periodKey(array $item): string
     {
         return substr(hash('sha256', (string) $item['event_id'].'|'.(string) $item['triggered_at']), 0, 24);

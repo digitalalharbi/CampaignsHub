@@ -17,6 +17,7 @@ use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
+use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
@@ -161,9 +162,10 @@ final class ReportController extends Controller
              * currency here would have printed USD totals under whatever three letters were sent.
              */
             'currency' => ReportingCurrency::DEFAULT,
+            // REPORT-TABLES-OWNER-COLUMNS-001 — `config['columns']` is cut to the known tables and keys on the way in.
             'config' => ($periodKind === 'custom')
-                ? self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level)
-                : array_merge((array) self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level), ['period_kind' => $periodKind]),
+                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level))
+                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
             // The level's starting sections, with whatever the Owner switched explicitly laid over them.
             'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
                 ? null
@@ -223,6 +225,10 @@ final class ReportController extends Controller
             'mode' => ['sometimes', Rule::in(['live', 'snapshot'])],
             'config' => ['sometimes', 'array'],
         ]);
+        if (array_key_exists('config', $data)) {
+            // REPORT-TABLES-OWNER-COLUMNS-001 — the same cut on an edit as on creation.
+            $data['config'] = ReportColumns::normaliseConfig(is_array($data['config']) ? $data['config'] : null);
+        }
         $model->update($data);
 
         return ApiResponse::success($this->shape($model->fresh(), withData: true), 'Report updated.');
@@ -380,6 +386,17 @@ final class ReportController extends Controller
              * — and would reasonably conclude the report was broken and not send it.
              */
             $out['data'] = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
+            /*
+             * REPORT-TABLES-OWNER-COLUMNS-001 — the saved page honours the report's own choice.
+             *
+             * The link, the print route and the files receive `report_columns` through
+             * `ReportSectionSurfaces::apply`; the operator's own page reads the stored data
+             * directly, so the choice is attached here from the same reader. Absent means every
+             * column, which is what every saved report rendered before the choice existed.
+             */
+            if (is_array($out['data']) && ($chosen = ReportColumns::forReport($r)->toArray()) !== []) {
+                $out['data']['report_columns'] = $chosen;
+            }
         }
 
         return $out;

@@ -1,4 +1,6 @@
 import { moneyExact } from '@/features/analytics/format'
+import { sparkPoints } from '@/features/analytics/metricCatalog'
+import type { TimePoint } from '@/features/analytics/api'
 import { providerLabel } from '@/features/campaigns/labels'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -76,19 +78,64 @@ export function printAbsence(reading: PreviewReading, ar: boolean): string {
   return clientAbsence(reading, ar).sentence
 }
 
-function Trend({ points, color }: { points: Array<Record<string, unknown>>; color: string }) {
-  const key = points.every((p) => typeof p.spend === 'number') ? 'spend' : 'clicks'
-  const values = points.map((p) => Number(p[key] ?? 0))
-  if (values.length < 2) return null
-  const max = Math.max(...values, 1)
+/**
+ * REPORT-CHARTS-COMPLETE-001 — the printed trend under the chart contract: valid data, a unit, a
+ * label and the period, or no chart at all.
+ *
+ * It used to coalesce a missing day to zero and pick spend whenever every day carried a number,
+ * then draw an unlabelled line. Now it reads through the product's one sparkline rule
+ * (`sparkPoints`): a day nobody reported is a break in the line, a series more than a third missing
+ * or flat is refused, and fewer than two real days draws nothing. Spend is plotted only when the
+ * link discloses spend (`shares.spend` is null exactly when it does not); otherwise clicks. The
+ * line is captioned with its metric, its unit and the window, because a printed page has no hover.
+ */
+function trendSeries(block: PrintPlatformDrilldown): { key: 'spend' | 'clicks'; points: (number | null)[] } | null {
+  const series = block.timeseries as unknown as readonly TimePoint[]
+  if (block.shares.spend !== null) {
+    const spend = sparkPoints('spend', series, undefined)
+    if (spend) return { key: 'spend', points: spend }
+  }
+  const clicks = sparkPoints('clicks', series, undefined)
+
+  return clicks ? { key: 'clicks', points: clicks } : null
+}
+
+function Trend({ block, color, ar, currency }: { block: PrintPlatformDrilldown; color: string; ar: boolean; currency: string }) {
+  const series = trendSeries(block)
+  if (!series) return null
+  const { key, points } = series
+  const present = points.filter((v): v is number => v !== null)
+  const max = Math.max(...present, 1)
   const w = 300
   const h = 60
-  const d = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${((i / (values.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 4) - 2).toFixed(1)}`).join(' ')
+  const x = (i: number) => ((i / (points.length - 1)) * w).toFixed(1)
+  const y = (v: number) => (h - (v / max) * (h - 4) - 2).toFixed(1)
+
+  // One `M` per run of measured days: a break in the data is a break in the line.
+  let d = ''
+  let open = false
+  points.forEach((v, i) => {
+    if (v === null) { open = false; return }
+    d += `${open ? 'L' : 'M'}${x(i)},${y(v)} `
+    open = true
+  })
+
+  const metric = ar ? METRIC_LABELS[key].ar : METRIC_LABELS[key].en
+  const unit = key === 'spend' ? currency : null
+  const period = `${block.period.from} → ${block.period.to}`
 
   return (
-    <svg data-testid="print-drilldown-trend" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="pdd-trend" aria-hidden>
-      <path d={d} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <figure className="pdd-trend-figure" data-testid="print-drilldown-trend-figure">
+      <svg data-testid="print-drilldown-trend" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="pdd-trend" aria-hidden>
+        <path d={d.trim()} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      </svg>
+      <figcaption className="pdd-trend-label" data-testid="print-drilldown-trend-label">
+        <span>{ar ? `الاتجاه اليومي — ${metric}` : `Daily trend — ${metric}`}</span>
+        {unit && <span><bdi dir="ltr">{unit}</bdi></span>}
+        <span><bdi dir="ltr">{period}</bdi></span>
+        {present.length < points.length && <span>{ar ? 'الفجوات أيام لم تُبلَّغ' : 'Gaps are unreported days'}</span>}
+      </figcaption>
+    </figure>
   )
 }
 
@@ -173,7 +220,7 @@ export function PrintPlatformDrilldown({ block, locale, currency }: { block: Pri
             {block.shares.spend && <ShareRow testid="print-drilldown-share-spend" label={ar ? 'من الإنفاق' : 'of spend'} share={block.shares.spend} color={color} />}
             <ShareRow testid="print-drilldown-share-outcome" label={ar ? outcome.ar : outcome.en} share={block.shares.outcome} color="#16a34a" />
           </div>
-          <Trend points={block.timeseries} color={color} />
+          <Trend block={block} color={color} ar={ar} currency={currency} />
         </div>
       </div>
       {[
@@ -216,7 +263,9 @@ const PDD_CSS = `
 .pdd-share-bar { height: 7pt; background: #eef2f6; border-radius: 4pt; overflow: hidden; }
 .pdd-share-bar span { display: block; height: 100%; border-radius: 4pt; }
 .pdd-share-label { color: #6b7280; }
+.pdd-trend-figure { margin: 0; }
 .pdd-trend { width: 100%; height: 60pt; border-bottom: 1px solid #e5e7eb; }
+.pdd-trend-label { display: flex; flex-wrap: wrap; gap: 4pt 10pt; font-size: 7.5pt; color: #6b7280; margin-top: 3pt; }
 .pdd-list { margin-top: 8pt; }
 .pdd-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4pt; }
 .pdd-ad { display: grid; grid-template-columns: 70pt 1fr 70pt 40pt; align-items: center; gap: 6pt; font-size: 8.5pt; break-inside: avoid; }

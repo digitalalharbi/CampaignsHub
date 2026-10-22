@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { cutColumns } from './reportColumns'
 import { AdPoster } from '@/features/content/AdPoster'
 import { DataMetricTable, type Column, type Row } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -75,8 +76,11 @@ export function ReportCreativeRoster({
   form,
   countOnly = false,
   onOpen,
+  chosen,
 }: {
   roster: RosterRow[] | undefined
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's content-table choice; absent means every column. */
+  chosen?: string[]
   /** How many creatives ran in this report's scope — counted before any bound was applied. */
   inScope?: number | null
   /** And how many of those this document does not list. */
@@ -182,7 +186,8 @@ export function ReportCreativeRoster({
         )
         : (
           <DataMetricTable
-            columns={columns(ar, currency ?? null)}
+            /* REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's content-table choice, on the saved page as on the print. */
+            columns={cutColumns(chosen, columns(ar, currency ?? null), { provider: 'platform', spend: 'spend', impressions: 'impressions', clicks: 'clicks', conversions: 'results' })}
             rows={visible.map((row, i) => line(row, i, locale, onOpen))}
             /* Spend descending: the money is what a reader scans this list for first. */
             initialSort={{ column: 2, dir: 'desc' }}
