@@ -406,10 +406,13 @@ final class DailyDigestMail extends Mailable
             return ['trend' => null, 'donut' => null];
         }
         $totals = (array) ($this->digest['totals'] ?? []);
-        $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && is_numeric($pt['spend'] ?? null)));
+        // A day nobody reported stays a HOLE in the series: the line breaks there rather than joining across it.
+        $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && isset($pt['date'])));
         $trend = null;
-        if (count($series) >= 2) {
-            $values = array_map(static fn (array $pt): float => (float) $pt['spend'], $series);
+        $measured = array_values(array_filter($series, static fn (array $pt): bool => is_numeric($pt['spend'] ?? null)));
+        if (count($measured) >= 2) {
+            $values = array_map(static fn (array $pt): ?float => is_numeric($pt['spend'] ?? null) ? (float) $pt['spend'] : null, $series);
+            $present = array_values(array_filter($values, static fn (?float $v): bool => $v !== null));
             $token = MailChart::store(['kind' => 'trend', 'values' => $values, 'colour' => MailChart::COLOURS[0], 'width' => 320, 'height' => 64]);
             if ($token !== null) {
                 $first = (string) $series[0]['date'];
@@ -418,8 +421,9 @@ final class DailyDigestMail extends Mailable
                     'url' => MailChart::url($token),
                     'width' => 320,
                     'height' => 64,
-                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($values)).' – '.$p->money(max($values)),
-                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last,
+                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($present)).' – '.$p->money(max($present)),
+                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last
+                        .(count($present) < count($values) ? ($ar ? ' — الفجوات أيام لم تُبلَّغ' : ' — gaps are unreported days') : ''),
                 ];
             }
         }
@@ -430,7 +434,9 @@ final class DailyDigestMail extends Mailable
             $sum = array_sum(array_map(static fn (array $row): float => (float) $row['spend'], $platforms));
             $legend = [];
             $segments = [];
-            foreach (array_slice($platforms, 0, 8) as $i => $row) {
+            // Every platform that spent, largest first — never a fixed count (CanonicalPlatformOrderTest); the colours cycle.
+            usort($platforms, static fn (array $a, array $b): int => (float) $b['spend'] <=> (float) $a['spend']);
+            foreach ($platforms as $i => $row) {
                 $colour = MailChart::COLOURS[$i % count(MailChart::COLOURS)];
                 $segments[] = ['label' => (string) $row['provider'], 'value' => (float) $row['spend'], 'colour' => $colour];
                 $legend[] = [

@@ -65,9 +65,13 @@ final class MailChart
     public static function drawable(array $spec): bool
     {
         if (($spec['kind'] ?? null) === 'trend') {
-            $values = array_values(array_filter((array) ($spec['values'] ?? []), 'is_numeric'));
+            // The dashboard's one sparkline rule: two measured points at least, no more than a third missing, never flat.
+            $points = array_values((array) ($spec['values'] ?? []));
+            $present = array_values(array_filter($points, 'is_numeric'));
 
-            return count($values) >= 2 && count(array_unique(array_map('floatval', $values))) > 1;
+            return count($present) >= 2
+                && count($present) >= (int) ceil(count($points) * (2 / 3))
+                && count(array_unique(array_map('floatval', $present))) > 1;
         }
         if (($spec['kind'] ?? null) === 'donut') {
             $sum = 0.0;
@@ -94,7 +98,9 @@ final class MailChart
     /** @param  array<string, mixed>  $spec */
     private static function trend(array $spec): string
     {
-        $values = array_map('floatval', array_values(array_filter((array) ($spec['values'] ?? []), 'is_numeric')));
+        // A null is a day nobody reported: the line and its area break there instead of joining across it.
+        $values = array_map(static fn ($v): ?float => is_numeric($v) ? (float) $v : null, array_values((array) ($spec['values'] ?? [])));
+        $present = array_values(array_filter($values, static fn (?float $v): bool => $v !== null));
         $w = max(120, min(640, (int) ($spec['width'] ?? 320)));
         $h = max(32, min(240, (int) ($spec['height'] ?? 72)));
         // Drawn at twice the size for a sharp image on high-density screens; the <img> states the CSS size.
@@ -110,30 +116,56 @@ final class MailChart
         $line = imagecolorallocate($img, $r, $g, $b);
         $fill = imagecolorallocatealpha($img, $r, $g, $b, 100);
 
-        $min = min($values);
-        $max = max($values);
+        $min = min($present);
+        $max = max($present);
         $span = $max - $min ?: 1.0;
         $n = count($values);
         $pad = 4 * $scale;
-        $x = static fn (int $i): int => (int) round($pad + ($i / ($n - 1)) * ($w * $scale - 2 * $pad));
+        $x = static fn (int $i): int => (int) round($pad + ($n > 1 ? ($i / ($n - 1)) : 0) * ($w * $scale - 2 * $pad));
         $y = static fn (float $v): int => (int) round($h * $scale - $pad - (($v - $min) / $span) * ($h * $scale - 2 * $pad));
+        $floor = $h * $scale - $pad;
 
-        // The area under the line, then the line itself, then the endpoint — the same shape the dashboard draws.
-        $polygon = [];
+        // One run per stretch of measured days: the area under it, then the line — a hole in the data is a hole in the chart.
+        $runs = [];
+        $run = [];
         foreach ($values as $i => $v) {
-            $polygon[] = $x($i);
-            $polygon[] = $y($v);
+            if ($v === null) {
+                if ($run !== []) {
+                    $runs[] = $run;
+                }
+                $run = [];
+
+                continue;
+            }
+            $run[] = $i;
         }
-        $polygon[] = $x($n - 1);
-        $polygon[] = $h * $scale - $pad;
-        $polygon[] = $x(0);
-        $polygon[] = $h * $scale - $pad;
-        imagefilledpolygon($img, $polygon, $fill);
+        if ($run !== []) {
+            $runs[] = $run;
+        }
         imagesetthickness($img, 2 * $scale);
-        for ($i = 1; $i < $n; $i++) {
-            imageline($img, $x($i - 1), $y($values[$i - 1]), $x($i), $y($values[$i]), $line);
+        foreach ($runs as $indices) {
+            if (count($indices) >= 2) {
+                $polygon = [];
+                foreach ($indices as $i) {
+                    $polygon[] = $x($i);
+                    $polygon[] = $y((float) $values[$i]);
+                }
+                $polygon[] = $x($indices[count($indices) - 1]);
+                $polygon[] = $floor;
+                $polygon[] = $x($indices[0]);
+                $polygon[] = $floor;
+                imagefilledpolygon($img, $polygon, $fill);
+                for ($k = 1, $c = count($indices); $k < $c; $k++) {
+                    imageline($img, $x($indices[$k - 1]), $y((float) $values[$indices[$k - 1]]), $x($indices[$k]), $y((float) $values[$indices[$k]]), $line);
+                }
+            } else {
+                // A single measured day between holes is a dot, not a line to nowhere.
+                imagefilledellipse($img, $x($indices[0]), $y((float) $values[$indices[0]]), 4 * $scale, 4 * $scale, $line);
+            }
         }
-        imagefilledellipse($img, $x($n - 1), $y($values[$n - 1]), 6 * $scale, 6 * $scale, $line);
+        // The endpoint, emphasised: «where it is now» is the one point a reader looks for.
+        $lastIndex = max(array_keys(array_filter($values, static fn (?float $v): bool => $v !== null)));
+        imagefilledellipse($img, $x($lastIndex), $y((float) $values[$lastIndex]), 6 * $scale, 6 * $scale, $line);
 
         ob_start();
         imagepng($img);
