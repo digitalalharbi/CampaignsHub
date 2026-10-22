@@ -407,27 +407,27 @@ final class DailyDigestMail extends Mailable
         }
         $totals = (array) ($this->digest['totals'] ?? []);
         /*
-         * Owner 2026-10-22: a day nobody reported is not drawn and not mentioned. The trend is the
-         * reported days only, in order, and its caption names the first and last REPORTED day — the
-         * email never writes that something is missing. Nothing is interpolated either: a day that
-         * was not reported contributes no point, so the line joins reported days and nothing else.
+         * Owner 2026-10-22: the trend keeps every day at its real date. A day nobody reported is a
+         * HOLE — the line and its area break there and never join two non-consecutive reported days
+         * into one continuous trend — and nothing is written about it: the caption names the window's
+         * first and last day and no more. A measured zero is a real point, not a hole. Under the
+         * dashboard's thresholds (two measured points, no more than a third missing, never flat) the
+         * chart is simply absent, and the email says nothing about why.
          */
-        $measured = array_values(array_filter(
-            (array) ($totals['series'] ?? []),
-            static fn ($pt): bool => is_array($pt) && isset($pt['date']) && is_numeric($pt['spend'] ?? null),
-        ));
+        $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && isset($pt['date'])));
+        $values = array_map(static fn (array $pt): ?float => is_numeric($pt['spend'] ?? null) ? (float) $pt['spend'] : null, $series);
+        $present = array_values(array_filter($values, static fn (?float $v): bool => $v !== null));
         $trend = null;
-        if (count($measured) >= 2) {
-            $values = array_map(static fn (array $pt): float => (float) $pt['spend'], $measured);
+        if (count($present) >= 2) {
             $token = MailChart::store(['kind' => 'trend', 'values' => $values, 'colour' => MailChart::COLOURS[0], 'width' => 320, 'height' => 64]);
             if ($token !== null) {
-                $first = (string) $measured[0]['date'];
-                $last = (string) $measured[count($measured) - 1]['date'];
+                $first = (string) $series[0]['date'];
+                $last = (string) $series[count($series) - 1]['date'];
                 $trend = [
                     'url' => MailChart::url($token),
                     'width' => 320,
                     'height' => 64,
-                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($values)).' – '.$p->money(max($values)),
+                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($present)).' – '.$p->money(max($present)),
                     'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last,
                 ];
             }
