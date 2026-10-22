@@ -1,4 +1,5 @@
 import { ReportIdentityCards } from './ReportIdentityCards'
+import { ColumnPicker } from './ColumnPicker'
 import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -861,6 +862,15 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
    * as `section_settings`, so the report that is generated carries exactly this set.
    */
   const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>({})
+  /*
+   * REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's column choice per table, SAVED with the report.
+   *
+   * The link builder had the picker and the saved report did not, so a snapshot's page, PDF and
+   * files were the surfaces the Owner could not restrict. Null per table means «every column»;
+   * only restricted tables travel, under `config.columns`, the shape a link stores.
+   */
+  const [columnChoice, setColumnChoice] = useState<Record<string, string[] | null>>({})
+  const chosenColumns = Object.fromEntries(Object.entries(columnChoice).filter(([, v]) => v !== null)) as Record<string, string[]>
   const startingSections = levelSections(level)
   const sectionPreview = (sectionRegistry.data?.sections ?? []).map((x) => ({
     ...x,
@@ -879,6 +889,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         detail_level: level,
         ...(Object.keys(sectionChoice).length === 0 ? {} : { section_settings: { sections: sectionChoice } }),
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
+        ...(Object.keys(chosenColumns).length === 0 ? {} : { config: { columns: chosenColumns } }),
         audience: audience ?? 'client',
         period_start: from,
         period_end: to,
@@ -1063,6 +1074,16 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             ))}
           </fieldset>
         )}
+        {/* REPORT-TABLES-OWNER-COLUMNS-001 — the table columns, chosen here and saved with the report. Closed by default: every column is the default. */}
+        <details data-testid="rb-columns" className="rounded-xl border border-border p-3">
+          <summary className="cursor-pointer text-xs font-bold text-text-muted">{ar ? 'أعمدة الجداول' : 'Table columns'}</summary>
+          <div className="mt-2 grid gap-2">
+            <ColumnPicker value={columnChoice.platforms ?? null} onChange={(next) => setColumnChoice((c) => ({ ...c, platforms: next }))} ar={ar} />
+            {(['accounts', 'content', 'days'] as const).map((table) => (
+              <ColumnPicker key={table} table={table} value={columnChoice[table] ?? null} onChange={(next) => setColumnChoice((c) => ({ ...c, [table]: next }))} ar={ar} />
+            ))}
+          </div>
+        </details>
         <div data-testid="builder-audience">
         <SelectField
           label={ar ? 'هذا التقرير موجّه إلى' : 'This report is for'}
