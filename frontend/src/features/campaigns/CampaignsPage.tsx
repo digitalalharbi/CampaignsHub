@@ -1511,7 +1511,7 @@ export function CampaignsPage() {
                     return (
                       <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
                         <td className="p-3"><input type="checkbox" aria-label={c.name} checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} data-testid={`campaigns-select-${c.id}`} /></td>
-                        <td className="p-3 font-semibold">
+                        <td className="p-3 font-semibold" data-testid="campaign-row-name">
                           <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
                         </td>
                         <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>

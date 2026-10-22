@@ -31,9 +31,13 @@ async function openTable(page: Page) {
   await expect(page.getByTestId('campaign-row').first()).toBeVisible({ timeout: 30_000 })
 }
 
+/*
+ * The NAME cell, by its own test id. The first cell of a row is the bulk-selection checkbox since
+ * CAMPAIGNS-TABLE-002, so «the first td» stopped being the name — the one thing this helper reads.
+ */
 const namesOnPage = (page: Page) =>
   page.getByTestId('campaign-row').evaluateAll((rows) =>
-    rows.map((r) => (r.querySelector('td a, td') as HTMLElement | null)?.textContent?.trim() ?? ''),
+    rows.map((r) => (r.querySelector('[data-testid="campaign-row-name"]') as HTMLElement | null)?.textContent?.trim() ?? ''),
   )
 
 test.describe('the campaigns listing at production cardinality', () => {
