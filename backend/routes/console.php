@@ -87,6 +87,9 @@ Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverla
  */
 Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutOverlapping();
 
+// TIKTOK-MEDIA-002 — covers into our own storage, after the night's structure sweep has refreshed the links.
+Schedule::command('creatives:refresh-covers')->dailyAt('03:30')->withoutOverlapping();
+
 /*
  * Close the runs a worker abandoned — before the next sweep reads them as work in progress.
  *

@@ -85,6 +85,18 @@ final class ReportingWindow
      * `2026-08-16T00:00:00.000+03:00` rather than `2026-08-16T00:00:00.000-00:00`: same instant
      * arithmetic, and only the first is a day boundary as far as the account is concerned.
      */
+    /** The first local midnight, as a moment — for a provider that wants its own ISO shape rather than `startIso()`. */
+    public function startAt(): Carbon
+    {
+        return $this->start->copy();
+    }
+
+    /** The exclusive end: local midnight after the last day. */
+    public function endAt(): Carbon
+    {
+        return $this->end->copy();
+    }
+
     public function startIso(): string
     {
         return $this->iso($this->start);
