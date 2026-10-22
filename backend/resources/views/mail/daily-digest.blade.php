@@ -55,9 +55,10 @@
                 @if ($lead)
                     <div style="margin-top:10px;">
                         <div style="font-size:12px; color:#5b6b68;">{{ $lead['label'] }}</div>
-                        <div class="ch-kpi-lead" style="font-size:30px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
+                        {{-- The figure sits under its label on the same side: a dir="ltr" figure in an RTL mail would drift to the far edge (Owner 2026-10-22). --}}
+                        <div class="ch-kpi-lead" style="font-size:30px; line-height:1.15; font-weight:800; color:#0b1a16; text-align:{{ $startSide }};" dir="ltr">{{ $lead['value'] }}</div>
                         @if ($lead['change'])
-                            <div style="font-size:12px; font-weight:700; color:{{ $tone[$lead['tone']] }};" dir="ltr">{{ $lead['change'] }}</div>
+                            <div style="font-size:12px; font-weight:700; color:{{ $tone[$lead['tone']] }}; text-align:{{ $startSide }};" dir="ltr">{{ $lead['change'] }}</div>
                         @endif
                         @if (! empty($charts['trend']))
                             {{-- EMAIL-DECISION-REPORT-001 — the window's shape under the figure: a static PNG with its figures in the alt and a caption beneath. --}}
@@ -83,14 +84,7 @@
                         </tr>
                     </table>
                 @endif
-                {{--
-                  Stated, not implied. A reader who sees three account-wide figures will look for a
-                  fourth — and the fourth they want is a cost per result, which across projects would
-                  divide one client's money by another client's orders.
-                --}}
-                @if (! $noMoney)
-                    <div style="font-size:11px; color:#8b9a97; padding-top:10px; line-height:1.6;">{{ $t['no_blended_note'] }}</div>
-                @endif
+                {{-- No blended cost per result across projects — and no sentence saying so (Owner 2026-10-22): what is not computed is simply not there. --}}
             </td>
         </tr>
     </table>
@@ -132,8 +126,9 @@
         <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['health'] }}</div>
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="health" style="margin-bottom:16px;">
             <tr>
+                {{-- A pill per state that HAS projects — a «0 at risk» pill is a count of nothing (Owner 2026-10-22). --}}
                 @foreach ([['good', $health['good']], ['warn', $health['warn']], ['bad', $health['bad']], ['neutral', $health['neutral']]] as [$k, $n])
-                    @if ($n > 0 || $k !== 'neutral')
+                    @if ($n > 0)
                         <td style="padding-{{ $endSide }}:8px;">
                             <span style="display:inline-block; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; background-color:{{ $toneBg[$k] }}; color:{{ $tone[$k] }};" dir="ltr">{{ $n }} {{ $k === 'good' ? ($dir === 'rtl' ? 'بخير' : 'fine') : ($k === 'warn' ? ($dir === 'rtl' ? 'مراقبة' : 'watch') : ($k === 'bad' ? ($dir === 'rtl' ? 'خطر' : 'at risk') : ($dir === 'rtl' ? 'بلا حكم' : 'no verdict'))) }}</span>
                         </td>
@@ -201,16 +196,20 @@
                     @if ($row['attention'] || $row['follow'])
                         <div style="font-size:12px; color:{{ $row['attention'] ? $tone['warn'] : '#5b6b68' }}; line-height:1.6; margin-top:2px;">{{ $t['follow_up'] }}: {{ $row['attention'] ?? $row['follow'] }}</div>
                     @endif
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+                    @php($cells = array_values(array_filter([$row['spend'], $row['second'], $row['revenue'] ?? null])))
+                    @if ($cells)
+                    {{-- Equal columns, labels over figures, every column a real figure: the strip stays parallel with no empty cell (Owner 2026-10-22). --}}
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
                         <tr>
-                            @foreach (array_filter([$row['spend'], $row['second'], $row['revenue'] ?? null]) as $card)
-                                <td class="ch-kpi" width="96" style="vertical-align:top; text-align:center; padding:0 6px;">
+                            @foreach ($cells as $card)
+                                <td class="ch-kpi" width="{{ (int) (100 / count($cells)) }}%" style="vertical-align:top; text-align:center; padding:0 6px;">
                                     <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
                                     <div style="font-size:14px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}@if ($card['change']) <span style="font-size:11px; font-weight:700; color:{{ $card['change_colour'] }};">{{ $card['change'] }}</span>@endif</div>
                                 </td>
                             @endforeach
                         </tr>
                     </table>
+                    @endif
                 </td>
                 @if ($row['objective'])
                     <td width="112" style="padding:12px 14px; vertical-align:middle; text-align:center; background-color:{{ $toneBg[$row['tone']] }}; border-radius:0 12px 12px 0;">

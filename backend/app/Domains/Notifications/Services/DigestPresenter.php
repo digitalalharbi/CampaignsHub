@@ -331,15 +331,28 @@ final class DigestPresenter
         $value = $totals[$key] ?? null;
         $delta = $change[$key] ?? null;
 
+        /*
+         * EMAIL-DECISION-REPORT-001 (Owner 2026-10-22): a figure nobody sent is not a card. The email
+         * never writes «لم ترسله المنصة» or «لا توجد بيانات» beside a label — it leaves the cell out, so
+         * every strip is made of real figures and nothing else. `count()`, `money()` and the rest keep
+         * their honest wording for the surfaces that still ask a single figure a direct question.
+         */
+        if ($spec['kind'] === 'count' && in_array($key, self::COUNTS, true) && ($reported[$key] ?? true) === false) {
+            return null;
+        }
+        if (! is_numeric($value)) {
+            return null;
+        }
+
         return [
             'label' => $this->ar() ? $spec['ar'] : $spec['en'],
             'value' => match ($spec['kind']) {
                 // `count` is the only one that consults `reported`: it is the only kind whose zero
                 // could have been coalesced from a metric nobody ever sent.
                 'count' => $this->count($totals, $reported, $key),
-                'money' => $this->money(is_numeric($value) ? (float) $value : null),
-                'percent' => $this->percent(is_numeric($value) ? (float) $value : null),
-                default => $this->ratio(is_numeric($value) ? (float) $value : null),
+                'money' => $this->money((float) $value),
+                'percent' => $this->percent((float) $value),
+                default => $this->ratio((float) $value),
             },
             'change' => $this->change($delta),
             // Neutral figures are never coloured: spending more is neither good nor bad on its own,

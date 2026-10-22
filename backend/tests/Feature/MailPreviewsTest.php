@@ -134,15 +134,15 @@ final class MailPreviewsTest extends TestCase
      * spend divided by another client's orders. The account header carries spend, results and
      * revenue — all sums of the same thing — and no ratio at all.
      */
-    public function test_the_portfolio_header_states_no_blended_cost_per_result(): void
+    public function test_the_portfolio_header_carries_no_blended_cost_per_result(): void
     {
         $html = $this->render()['digest-weekly.ar.html'];
 
         /*
          * Asserted on the RENDERED email rather than the fixture: the template composes the account
          * header, so a blended ratio could be introduced there without the payload ever carrying one.
-         * «تكلفة النتيجة» is legitimate INSIDE a project block, so the header is isolated first — it
-         * ends where the first project's section begins.
+         * «تكلفة النتيجة» is legitimate INSIDE a project row, so the header is isolated first — it
+         * ends where the first project's row begins.
          */
         $text = (string) preg_replace('/\s+/u', ' ', (string) strip_tags($html));
 
@@ -150,17 +150,9 @@ final class MailPreviewsTest extends TestCase
         $this->assertIsInt($firstProject);
         $header = mb_substr($text, 0, $firstProject);
 
-        /*
-         * The header says «تكلفة النتيجة» exactly once, and as an EXPLANATION rather than a figure:
-         * «لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر.»
-         * So the assertion is about the arithmetic, not the words — no number may follow the phrase.
-         */
-        $this->assertStringContainsString('لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع', $header,
-            'the header stopped explaining why it carries no blended ratio');
-        $this->assertDoesNotMatchRegularExpression('/تكلفة النتيجة[^ا-ي]{0,12}[0-9]/u', $header,
-            'the portfolio header printed a blended cost per result');
-        $this->assertDoesNotMatchRegularExpression('/(ROAS|العائد على الإنفاق)[^ا-ي]{0,12}[0-9]/u', $header,
-            'the portfolio header printed a blended return');
+        // Owner 2026-10-22: the header neither prints a blended ratio nor explains that it does not — an absence is not content.
+        $this->assertStringNotContainsString('تكلفة النتيجة', $header, 'the portfolio header mentions a blended cost per result');
+        $this->assertDoesNotMatchRegularExpression('/(ROAS|العائد على الإنفاق)/u', $header, 'the portfolio header mentions a blended return');
 
         // …and it does state the sums that ARE comparable across projects.
         $this->assertStringContainsString('41,833', $header);
