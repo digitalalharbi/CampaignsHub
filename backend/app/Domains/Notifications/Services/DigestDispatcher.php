@@ -7,6 +7,8 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -54,6 +56,8 @@ final class DigestDispatcher
         private readonly TenantContext $tenants,
         // The ONE branding resolver. Injected rather than newed so this class cannot grow a second.
         private readonly SharedLinkBranding $branding,
+        // MEMBER-VISIBILITY-001 — the one authorisation engine, asked per recipient whether the money may be shown.
+        private readonly ProjectAbilities $abilities,
     ) {}
 
     /**
@@ -142,6 +146,16 @@ final class DigestDispatcher
             $this->tenants->setTenantId($tenantId);
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
+            // MEMBER-VISIBILITY-001 — a reader whose membership withholds the money on any project in scope receives
+            // the digest without spend, cost or spend charts. Decided per recipient, from the one authorisation engine.
+            if ($audience === 'agency' && ProjectCapability::exists('money.view')) {
+                foreach ($projectIds as $projectId) {
+                    if (! $this->abilities->allows($user, (string) $projectId, 'money.view')) {
+                        $audience = 'restricted';
+                        break;
+                    }
+                }
+            }
             $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to);
 
             /*

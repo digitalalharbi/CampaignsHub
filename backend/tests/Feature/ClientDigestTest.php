@@ -15,6 +15,22 @@ use Tests\TestCase;
  */
 final class ClientDigestTest extends TestCase
 {
+    /** MEMBER-VISIBILITY-001 — an agency member whose membership withholds the money reads the same digest without it, and keeps the agency's own button. */
+    public function test_a_restricted_member_gets_no_money_and_keeps_the_agency_button(): void
+    {
+        $html = (string) MailGallery::render('digest-restricted-daily', 'en');
+
+        $this->assertStringNotContainsString('41,833', $html);
+        $this->assertStringNotContainsString('23,333', $html);
+        $this->assertStringNotContainsString('Cost per result', $html);
+        $this->assertStringNotContainsString('data-block="chart-trend"', $html);
+        $this->assertStringNotContainsString('data-block="chart-donut"', $html);
+        $this->assertStringNotContainsString('data-block="spend-share"', $html);
+        $this->assertStringContainsString('96,500', $html, 'revenue stays: it is the outcome, not the money that bought it');
+        $this->assertStringContainsString('Open your portfolio board', $html, 'the agency button, not the client portal');
+        $this->assertStringNotContainsString('/portal"', $html);
+    }
+
     public function test_the_client_weekly_carries_no_spend_no_cost_and_no_spend_chart_and_leads_with_outcomes(): void
     {
         foreach (['ar', 'en'] as $locale) {
