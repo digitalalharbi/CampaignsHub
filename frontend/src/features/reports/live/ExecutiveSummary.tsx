@@ -349,6 +349,7 @@ function ResultsSplit({ payload, reader, ar, result, wide, selected, onSelect }:
                 >
                   <span className="flex min-w-0 items-center gap-1.5 text-text-secondary">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: platformColor(r.key) }} />
+                    <ProviderMark provider={r.key} size={16} />
                     <span className="truncate">{r.name}</span>
                   </span>
                   <span className="tnum font-bold text-text-primary"><Num>{`${Math.round((r.value / total) * 100)}%`}</Num></span>

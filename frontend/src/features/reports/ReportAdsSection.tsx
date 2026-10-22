@@ -1,4 +1,5 @@
 import { AdPoster } from '@/features/content/AdPoster'
+import { ProviderMark } from '@/components/ProviderMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { objectiveLabel } from '@/features/campaigns/labels'
@@ -530,8 +531,10 @@ function AdCard({
         <div className="truncate text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
           {ad.name ?? '—'}
         </div>
-        <div className="truncate text-[11px] text-text-muted">
-          {[
+        <div className="flex items-center gap-1 truncate text-[11px] text-text-muted">
+          {/* REPORT-PLATFORM-LOGOS-001 — the platform's own logo ahead of its name. */}
+          {ad.provider ? <ProviderMark provider={canonicalPlatform(ad.provider)} size={14} /> : null}
+          <span className="truncate">{[
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the platform and the objective, never the campaign.
              *
@@ -543,7 +546,7 @@ function AdCard({
              */
             ad.provider ? providerLabel(ad.provider, locale) : null,
             ad.objective ? objectiveLabel(ad.objective, locale) : null,
-          ].filter(Boolean).join(' · ')}
+          ].filter(Boolean).join(' · ')}</span>
         </div>
       </div>
 

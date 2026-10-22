@@ -1,4 +1,5 @@
 import { providerLabel } from '@/features/campaigns/labels'
+import { ProviderMark } from '@/components/ProviderMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -163,10 +164,11 @@ function Leaders({ testid, title, ranking, currency, ar, content = false }: { te
                 <span aria-hidden>{mark} </span>{kind === 'best' ? (ar ? 'الأقوى' : 'Strongest') : (ar ? 'الأضعف' : 'Weakest')}
               </div>
               <div className="mt-1 flex items-center gap-1.5 truncate text-sm font-bold text-text-primary">
-                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: platformColor(canonicalPlatform(end.provider ?? '')) }} aria-hidden />
+                {/* REPORT-PLATFORM-LOGOS-001 — the platform's own logo; a content name keeps the colour dot and carries the logo on its platform line. */}
+                {content ? <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: platformColor(canonicalPlatform(end.provider ?? '')) }} aria-hidden /> : <ProviderMark provider={canonicalPlatform(end.provider ?? '')} size={18} />}
                 <span className="truncate">{label.primary}</span>
               </div>
-              {label.secondary && <div className="truncate text-[10px] text-text-muted">{label.secondary}</div>}
+              {label.secondary && <div className="flex items-center gap-1 truncate text-[10px] text-text-muted"><ProviderMark provider={canonicalPlatform(end.provider ?? '')} size={12} /><span className="truncate">{label.secondary}</span></div>}
               <div className="tnum mt-1 text-base font-extrabold text-text-primary"><Num>{formatRankingValue(ranking.metric, end.value, currency)}</Num></div>
             </div>
           )
