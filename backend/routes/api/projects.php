@@ -10,9 +10,11 @@ use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Automation\Http\Controllers\AutomationRulesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
+use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
+use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
@@ -26,6 +28,7 @@ use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\LiveDrilldownController;
 use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
+use App\Domains\Reports\Http\Controllers\ProjectReportViewsController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
@@ -38,6 +41,8 @@ use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
+use App\Domains\Tracking\Http\Controllers\TrackingSummaryController;
+use App\Domains\Widgets\Http\Controllers\WidgetLayoutController;
 use Illuminate\Support\Facades\Route;
 
 // Project management (tenant-scoped; not project-context-bound).
@@ -165,6 +170,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * CAMPAIGN-MGMT-DOMAIN-001 — the write-capability registry, read before any surface draws a
      * control. Project-scoped because the answer is per reader and per provider the project uses.
      */
+    /*
+     * LAUNCH-001 — the multi-platform launcher: a draft plan, a review, and an explicitly confirmed publish that
+     * runs the same per-campaign write services the control tab uses.
+     */
+    Route::get('launch/options', [LaunchPlanController::class, 'options'])->middleware('project.can:campaigns.view')->name('launch.options');
+    Route::get('launch/plans', [LaunchPlanController::class, 'index'])->middleware('project.can:campaigns.view')->name('launch.plans.index');
+    Route::post('launch/plans', [LaunchPlanController::class, 'store'])->middleware('project.can:campaigns.manage')->name('launch.plans.store');
+    Route::get('launch/plans/{plan}', [LaunchPlanController::class, 'show'])->middleware('project.can:campaigns.view')->name('launch.plans.show');
+    Route::put('launch/plans/{plan}', [LaunchPlanController::class, 'update'])->middleware('project.can:campaigns.manage')->name('launch.plans.update');
+    Route::post('launch/plans/{plan}/publish', [LaunchPlanController::class, 'publish'])->middleware('project.can:campaigns.manage')->name('launch.plans.publish');
     Route::get('campaign-management/capabilities', [CampaignManagementController::class, 'capabilities'])->middleware('project.can:campaigns.view')->name('campaign-management.capabilities');
     /*
      * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
@@ -230,6 +245,19 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-005: Platform-Reported vs Store-Confirmed, the attribution window each figure
     // was collected under, and what may be summed — the platforms' claims never are.
     Route::get('metrics/attribution', [MetricsController::class, 'attribution'])->name('metrics.attribution');
+    // REPORT-VIEWS-001 — how often this project's shared report links were opened, across all of them.
+    Route::get('report-views/summary', [ProjectReportViewsController::class, 'show'])->middleware('project.can:reports.view')->name('report-views.summary');
+    // WIDGET-REGISTRY-001 — which widgets a surface shows for this project, resolved on the server.
+    Route::get('widgets/{surface}', [WidgetLayoutController::class, 'show'])->middleware('project.can:analytics.view')->name('widgets.show');
+    Route::put('widgets/{surface}', [WidgetLayoutController::class, 'update'])->middleware('project.can:reports.manage')->name('widgets.update');
+    // WIDGET-REGISTRY-001 — which widgets ONE shared link shows a client; off until the link is told to show them.
+    Route::get('reports/{report}/shares/{share}/widgets', [WidgetLayoutController::class, 'share'])->middleware('project.can:reports.view')->name('reports.shares.widgets.show')->whereUuid(['report', 'share']);
+    Route::put('reports/{report}/shares/{share}/widgets', [WidgetLayoutController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.widgets.update')->whereUuid(['report', 'share']);
+    // TRACKING-SUMMARY-001 — recorded link activity, from the day advanced tracking was switched on.
+    Route::get('tracking/summary', [TrackingSummaryController::class, 'show'])->middleware(['module:advanced_tracking', 'project.can:analytics.view'])->name('tracking.summary');
+    // ATTRIB-CREDIT-001 — this project's fractional attribution rules; refused unless the module is switched on here.
+    Route::get('attribution-settings', [AttributionSettingsController::class, 'show'])->middleware(['module:attribution_intelligence', 'project.can:analytics.view'])->name('attribution-settings.show');
+    Route::put('attribution-settings', [AttributionSettingsController::class, 'update'])->middleware(['module:attribution_intelligence', 'project.can:reports.manage'])->name('attribution-settings.update');
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
 

@@ -19,6 +19,12 @@ import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
 import { campaignEfficiency, campaignHeadline, campaignReturn, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
+import { CAMPAIGN_COLUMNS, CAMPAIGN_PRESETS, columnLabel, presetOf, readCampaignColumns, rememberCampaignColumns, type CampaignPreset } from './campaignColumns'
+import { CampaignViewsBar } from './CampaignViewsBar'
+import { BulkCampaignActions } from './BulkCampaignActions'
+import { readMetric, SPECS } from '@/features/analytics/metricCatalog'
+import type { SavedView } from '@/features/dashboard/savedViews'
+import { Columns3 } from 'lucide-react'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
@@ -185,6 +191,28 @@ export function CampaignsPage() {
    */
   const [sort, setSort] = useState('')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+  /*
+   * CAMPAIGNS-TABLE-001 — which metric columns the table shows: a preset or a hand-picked set, remembered per reader;
+   * a saved view restores columns, filters and order in ONE state change (one setter per concern, applied together).
+   */
+  const [columns, setColumnsState] = useState<string[]>(() => readCampaignColumns())
+  const [choosingColumns, setChoosingColumns] = useState(false)
+  /* CAMPAIGNS-TABLE-002 — rows ticked for a bulk pause/resume; cleared when the list changes under them. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const toggleSelected = (id: string) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  const setColumns = (keys: string[]) => { setColumnsState(keys); rememberCampaignColumns(keys) }
+  const applyPreset = (name: Exclude<CampaignPreset, 'custom'>) => setColumns([...CAMPAIGN_PRESETS[name].columns])
+  const toggleColumn = (key: string) => setColumns(columns.includes(key) ? columns.filter((k) => k !== key) : [...columns, key])
+  const applySavedView = (v: SavedView) => {
+    const f = v.filters ?? {}
+    if (Array.isArray(f.columns) && f.columns.length > 0) setColumns(f.columns)
+    setStatus(typeof f.status === 'string' ? f.status : '')
+    setObjective(typeof f.objective === 'string' ? f.objective : '')
+    setSort(typeof f.sort === 'string' ? f.sort : '')
+    setDir(f.dir === 'asc' ? 'asc' : 'desc')
+    if (typeof v.date_range?.days === 'number') setDays(v.date_range.days)
+  }
+  const visibleColumns = CAMPAIGN_COLUMNS.filter((c) => columns.includes(c.key)).sort((a, b) => columns.indexOf(a.key) - columns.indexOf(b.key))
 
   const applySort = (column: string) => {
     if (sort === column) {
@@ -1406,80 +1434,91 @@ export function CampaignsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-              <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm">
-                {/*
-                  CAMPAIGNS-TABLE-COMPARISON-001 — «use tables when comparison is the job».
-
-                  It carried name, objective, status, budget and a link count, and nothing a reader
-                  could compare two campaigns ON: no spend, no result, no cost per result. Comparing
-                  what two campaigns cost meant opening both.
-
-                  The three sortable columns order the WHOLE filtered set on the server, before the
-                  page is cut. Sorting the twenty-five rows the browser holds would answer «the
-                  dearest of the most relevant twenty-five» while looking like an answer about the
-                  project — which is why the header sends `sort` rather than reordering an array.
-                */}
+              <div className="flex flex-col gap-2 border-b border-border p-3" data-testid="campaigns-table-controls">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-text-secondary">{ar ? 'المقاييس:' : 'Metrics:'}</span>
+                  {(Object.keys(CAMPAIGN_PRESETS) as Array<Exclude<CampaignPreset, 'custom'>>).map((name) => (
+                    <button key={name} type="button" onClick={() => applyPreset(name)} aria-pressed={presetOf(columns) === name} data-testid={`campaigns-preset-${name}`}
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${presetOf(columns) === name ? 'border-brand-600 bg-brand-600 text-white' : 'border-border text-text-secondary hover:border-brand-400'}`}>
+                      {ar ? CAMPAIGN_PRESETS[name].ar : CAMPAIGN_PRESETS[name].en}
+                    </button>
+                  ))}
+                  {presetOf(columns) === 'custom' && <span className="rounded-lg border border-brand-600 px-2.5 py-1 text-xs font-bold text-brand-600" data-testid="campaigns-preset-custom">{ar ? 'مخصص' : 'Custom'}</span>}
+                  <button type="button" onClick={() => setChoosingColumns((v) => !v)} aria-expanded={choosingColumns} data-testid="campaigns-columns-toggle"
+                    className="ms-auto inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400">
+                    <Columns3 size={14} aria-hidden /> {ar ? 'الأعمدة' : 'Columns'}
+                  </button>
+                </div>
+                {choosingColumns && (
+                  <fieldset className="flex flex-wrap gap-2" data-testid="campaigns-columns">
+                    <legend className="sr-only">{ar ? 'الأعمدة الظاهرة' : 'Visible columns'}</legend>
+                    {CAMPAIGN_COLUMNS.map((c) => (
+                      <label key={c.key} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-text-primary">
+                        <input type="checkbox" checked={columns.includes(c.key)} onChange={() => toggleColumn(c.key)} data-testid={`campaigns-column-${c.key}`} />
+                        {columnLabel(c, locale)}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                <CampaignViewsBar
+                  current={{ status, objective, columns, sort: sort || undefined, dir }}
+                  days={days}
+                  onApply={applySavedView}
+                  ar={ar}
+                />
+                <BulkCampaignActions
+                  projectId={projectId}
+                  selected={shownCampaigns.filter((c) => selectedIds.includes(c.id)).map((c) => ({ id: c.id, name: c.name }))}
+                  onClear={() => setSelectedIds([])}
+                  ar={ar}
+                />
+              </div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm" data-testid="campaigns-table">
                 <thead>
-                  <tr className="border-b border-border text-text-muted">
+                  <tr className="border-b border-border text-xs text-text-muted">
+                    <th className="p-3 text-start">
+                      <input type="checkbox" aria-label={ar ? 'تحديد الكل' : 'Select all'} data-testid="campaigns-select-all"
+                        checked={shownCampaigns.length > 0 && shownCampaigns.every((c) => selectedIds.includes(c.id))}
+                        onChange={(e) => setSelectedIds(e.target.checked ? shownCampaigns.map((c) => c.id) : [])} />
+                    </th>
                     <SortableHeader id="name" label={ar ? 'الحملة' : 'Campaign'} sort={sort} dir={dir} onSort={applySort} ar={ar} />
                     <th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th>
                     <th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th>
-                    <SortableHeader id="spend" label={ar ? 'الإنفاق' : 'Spend'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
-                    <SortableHeader id="results" label={ar ? 'النتائج' : 'Results'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
-                    <th className="p-3 text-center">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</th>
-                    {/* Shown for the objectives that name a return; blank — not «—» — for the rest. */}
-                    <th className="p-3 text-center">{ar ? 'العائد' : 'Return'}</th>
-                    <th className="p-3 text-center">{ar ? 'الميزانية' : 'Budget'}</th>
-                    <th className="p-3 text-center">{ar ? 'مرتبطة' : 'Linked'}</th>
+                    {visibleColumns.map((col) => col.sort
+                      ? <SortableHeader key={col.key} id={col.sort} label={columnLabel(col, locale)} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
+                      : <th key={col.key} className={`p-3 ${col.align === 'start' ? 'text-start' : 'text-center'}`} data-testid={`campaigns-head-${col.key}`}>{columnLabel(col, locale)}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {shownCampaigns.map((c) => {
                     const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
-
+                    const cell = (key: string) => {
+                      const col = CAMPAIGN_COLUMNS.find((x) => x.key === key)!
+                      switch (col.kind) {
+                        case 'spend': return <MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} />
+                        case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
+                        case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
+                        case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
+                        case 'budget': return <span className="tnum">{money(c.total_budget, c.budget_currency)}</span>
+                        case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
+                        case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
+                        default: {
+                          const spec = SPECS[key]
+                          return spec && m ? <MetricCell reading={readMetric(key, spec, m as Record<string, number | null>, undefined, reportingCurrency)} locale={locale} /> : <span className="text-text-muted">—</span>
+                        }
+                      }
+                    }
                     return (
                       <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
-                        {/*
-                          * CAMPAIGN-DRILL-001 — the NAME is the way in, and it is a real link.
-                          *
-                          * The row carried an `onClick` that navigated, which reads as clickable and
-                          * is not: a div handler cannot be opened in a new tab, middle-clicked,
-                          * copied as a link or reached by keyboard, and it routed through the
-                          * unprefixed path, where the portal redirect drops the state carrying «back
-                          * to where you were». An anchor does all of those by being one.
-                          */}
-                        <td className="p-3 font-semibold">
+                        <td className="p-3"><input type="checkbox" aria-label={c.name} checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} data-testid={`campaigns-select-${c.id}`} /></td>
+                        <td className="p-3 font-semibold" data-testid="campaign-row-name">
                           <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
                         </td>
                         <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
                         <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
-                        {/*
-                          The campaign's OWN reading, through the shared catalogue — a sales campaign
-                          is judged on what it sold and an awareness one on who it reached, and a
-                          column that printed «conversions» for both would price the wrong thing.
-                        */}
-                        <td className="p-3 text-center"><MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} /></td>
-                        <td className="p-3 text-center"><MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} /></td>
-                        <td className="p-3 text-center"><MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} /></td>
-                        {/*
-                          * An objective with no return figure gets an EMPTY cell, not «—».
-                          *
-                          * `MetricCell` renders «—» for a null reading, and «—» in this product means
-                          * «the platform had this and did not give it». An awareness campaign was
-                          * never bought to return revenue, so that sentence is false about it — the
-                          * honest rendering is nothing at all. Checked in the browser, where the
-                          * first version of this column printed «—» on every traffic and awareness
-                          * row while its own comment claimed it printed nothing.
-                          */}
-                        <td className="p-3 text-center">
-                          {(() => {
-                            const ret = campaignReturn(c.objective, m, ar, reportingCurrency)
-
-                            return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} />
-                          })()}
-                        </td>
-                        <td className="p-3 text-center"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
-                        <td className="p-3 text-center"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
+                        {visibleColumns.map((col) => (
+                          <td key={col.key} className={`p-3 ${col.align === 'start' ? 'text-start' : 'text-center'}`} data-testid={`campaigns-cell-${col.key}`}>{cell(col.key)}</td>
+                        ))}
                       </tr>
                     )
                   })}

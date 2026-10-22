@@ -107,9 +107,14 @@ const AGENCY_BEFORE = [
    * the campaign builder on the Campaigns page, the Analytics ad-set and ad tabs (where those rungs are read today),
    * and Approvals, which had a page and no entry.
    */
-  '/agency/campaigns?launch=1',
-  '/agency/analytics?tab=ad_sets',
-  '/agency/analytics?tab=ads',
+  /* LAUNCH-001 — «إطلاق الحملات» is its own page now, a real launch on the platforms' APIs; the campaigns page keeps `?launch=1` for the internal draft form. */
+  '/agency/launch',
+  /*
+   * MOVED by ADV-CAMPAIGN-TABLES-001: «المجموعات» and «الإعلانات» open operational tables of their own now. The
+   * Analytics ad-set and ad tabs still exist inside Analytics; the rail no longer points at them.
+   */
+  '/agency/ad-groups',
+  '/agency/ads',
   '/agency/agents/approvals',
 ]
 

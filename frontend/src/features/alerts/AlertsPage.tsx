@@ -1,3 +1,4 @@
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { StatCard } from '@/components/ui/StatCard'
 import { RulePresets } from './RulePresets'
 import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDER, type AlertCategory } from './alertTaxonomy'
@@ -147,6 +148,7 @@ export function AlertsPage() {
         on that tab asked.
       */}
       <PageIntro testid="alerts-intro" title={c.title} purpose={c.subtitle} />
+      <OpsHubBar />
 
       <div className="flex flex-wrap gap-1 border-b border-border">
         {tabs.map((tb) => (
