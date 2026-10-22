@@ -249,75 +249,32 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('frontend/package-lock.json') }}
-      # BROWSER-INSTALL-RETRY-001 — the apt mirror stalls, and one stall used to cost a whole gate.
+      # BROWSER-INSTALL-PREFETCH-001 — system packages come down in parallel, from a cache that survives a failed job.
       #
-      # The cache above holds the BROWSER BINARIES. `--with-deps` is a separate job: it shells out to
-      # apt for the system libraries, and those come from the runner's mirror on every run, cache hit
-      # or not. Three gate runs in one day died there — two firefox, one webkit — each ending
-      # «The action 'Browsers' has timed out after 25 minutes» with the log stopped mid-download on
-      # azure.archive.ubuntu.com. No test had run. The result reads as a failed gate on the pull
-      # request, which is the worst part: a red check that says nothing about the change.
-      #
-      # So the budget is spent as three attempts of eight minutes rather than one of twenty-five. A
-      # stalled mirror is abandoned early and retried — on a different connection, usually a
-      # different mirror — instead of being waited out. The ceiling is unchanged, so a genuine
-      # problem still fails and still names this step, which is what the cache note above asks for.
+      # The whole story (the stalled mirror, the dpkg lock a retry used to race, why the install is one hard-failing
+      # command and only the browser download retries) is in `.github/scripts/install-browsers.sh`; it is a script so
+      # `browser-deps-probe.yml` can exercise the same code on a runner in minutes instead of inside an hour of gate.
+      # The archives are cached under a key per run and restored by prefix, so the newest set wins; the save step
+      # runs `if: always()` and only when something new was fetched, because the run most in need of the cache is the
+      # one that dies partway through the download.
+      - name: Restore apt archives
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
+          restore-keys: |
+            apt-debs-${{ runner.os }}-${{ matrix.browser }}-
       - name: Browsers
+        id: browsers
         working-directory: frontend
-        timeout-minutes: 40
-        run: |
-          # `timeout` is GNU coreutils and ships in the ubuntu runner image. If it ever does not,
-          # the per-attempt bound is lost but the step must still be able to SUCCEED — without this
-          # guard every attempt would fail on a missing binary and the gate would go red for a
-          # reason that has nothing to do with the change, which is the exact failure mode being
-          # fixed here. The step's own `timeout-minutes` is the backstop in that case.
-          bounded() {
-            if command -v timeout >/dev/null 2>&1; then timeout 480 "$@"; else "$@"; fi
-          }
-          # BROWSER-INSTALL-APT-LOCK-001 — system packages once, browser downloads retried.
-          #
-          # `npx playwright install --with-deps` was one command doing two jobs, and the retry loop around
-          # it retried the wrong one. `timeout` stops `npx`, but Playwright's «Switching to root user» hands
-          # the system packages to a `sudo apt-get` child that outlives the timed-out parent and keeps the
-          # dpkg lock, so every retry died in seconds on «Could not get lock /var/lib/dpkg/lock-frontend.
-          # It is held by process N (apt-get)» — exit 100 three times, no test run (#820, 2026-10-22).
-          #
-          # So the two jobs are separate. (1) System dependencies are installed ONCE: the step first
-          # requires apt and dpkg to be idle (waited for up to ten minutes, never killed — killing apt
-          # mid-install half-configures the package database — and a lock still held is a FAILURE that
-          # names the holder, not something to race), then runs `install-deps` a single time under the
-          # bound. There is no retry of apt, because a retry of apt is what collided. (2) Only the browser
-          # DOWNLOAD — a plain HTTPS fetch with no lock — keeps its three bounded attempts.
-          apt_idle() {
-            for _ in $(seq 1 120); do
-              if ! pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null 2>&1; then return 0; fi
-              sleep 5
-            done
-            echo "::error::apt/dpkg still running after ten minutes: $(pgrep -a -x 'apt-get|apt|dpkg|unattended-upgr' | head -3 | tr '\n' ';')"
-            return 1
-          }
-          apt_idle || exit 1
-          # The mirror is slow, not absent: in #798's chromium run attempt 1 was at package 11 of ~100 after
-          # eight minutes and was still downloading — in the background, holding the lock — when attempts 2
-          # and 3 died on it. That first apt-get was the run that would have finished. So the slow download is
-          # waited out ONCE, and made less slow: short per-request timeouts and three retries per package turn
-          # a stalled connection into a fresh one in seconds instead of the 30 s «Ign:» stalls in the log.
-          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-mirror >/dev/null
-          # A cold system-package install is slower than a browser download, so it gets its own, longer bound (30 minutes, waited out once — never abandoned and raced).
-          if ! { if command -v timeout >/dev/null 2>&1; then timeout 1800 npx playwright install-deps chromium ${{ matrix.browser }}; else npx playwright install-deps chromium ${{ matrix.browser }}; fi; }; then
-            echo "::error::system dependencies failed to install once; not retrying apt (a retry races the lock the failed run may still hold)"
-            pgrep -a -x 'apt-get|apt|dpkg' || true
-            exit 1
-          fi
-          for attempt in 1 2 3; do
-            if bounded npx playwright install chromium ${{ matrix.browser }}; then
-              exit 0
-            fi
-            echo "::warning::browser download attempt ${attempt} stalled or failed — retrying the download only"
-            sleep 15
-          done
-          echo "::error::browser download failed three times; the runner could not reach the Playwright CDN"
-          exit 1
+        timeout-minutes: 30
+        run: bash ../.github/scripts/install-browsers.sh ${{ matrix.browser }}
+      - name: Save apt archives
+        if: always() && steps.browsers.outputs.fetched != '' && steps.browsers.outputs.fetched != '0'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
       # would mean the gate exercises a different code path than a developer's machine does.

@@ -1,0 +1,151 @@
+name: Browser dependencies probe
+
+# The fast way to test `.github/scripts/install-browsers.sh`: the same script the gate runs, on a fresh runner, with no
+# application tests behind it — minutes instead of an hour. It runs when the script or this file changes, or by hand.
+#
+# It does not accept a green run that quietly fell back to sequential apt: the cold jobs FAIL unless at least 90 % of the
+# archives were prefetched in parallel, and they print the numbers. It proves the browser LAUNCHES, not just that it
+# installed. And it proves cache recovery after an interrupted run on purpose: `interrupt` cuts its prefetch short and
+# dies before install-deps (as a timed-out step would) yet still saves what it has; `resume` then restores that partial
+# set, must find archives already held and still fetch the rest, and must install and launch.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/browser-deps-probe.yml'
+      - '.github/scripts/install-browsers.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  cold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # `jobs` is the parallelism, measured rather than assumed: the first runs showed the prefetch slower than apt on a
+        # healthy mirror, so the width is a number to choose from, not a constant to trust.
+        include:
+          - { browser: webkit, jobs: 4 }
+          - { browser: webkit, jobs: 12 }
+          - { browser: webkit, jobs: 32 }
+          - { browser: firefox, jobs: 12 }
+    name: cold (${{ matrix.browser }}, ${{ matrix.jobs }} jobs)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Install browsers (timed)
+        id: browsers
+        working-directory: frontend
+        env:
+          PREFETCH_JOBS: ${{ matrix.jobs }}
+        run: |
+          start=$SECONDS
+          bash ../.github/scripts/install-browsers.sh ${{ matrix.browser }}
+          echo "::notice::install took $((SECONDS - start)) s"
+      - name: Prefetch really ran in parallel
+        run: |
+          wanted='${{ steps.browsers.outputs.wanted }}'; got='${{ steps.browsers.outputs.prefetched }}'
+          echo "wanted=$wanted prefetched=$got"
+          [ -n "$wanted" ] && [ "$wanted" -gt 0 ] || { echo "::error::the prefetch never resolved a package list"; exit 1; }
+          [ $((got * 10)) -ge $((wanted * 9)) ] || { echo "::error::only $got of $wanted archives were prefetched; apt fell back to sequential downloads"; exit 1; }
+      - name: The browser launches
+        working-directory: frontend
+        run: |
+          node -e "
+            const { ${{ matrix.browser }}: b } = require('@playwright/test');
+            (async () => {
+              const browser = await b.launch();
+              const page = await browser.newPage();
+              await page.setContent('<p>ok</p>');
+              console.log('${{ matrix.browser }} launched, page says:', await page.textContent('p'));
+              await browser.close();
+            })().catch((e) => { console.error(e); process.exit(1); });
+          "
+
+  interrupt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: interrupt (webkit)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Install, cut short on purpose
+        id: browsers
+        continue-on-error: true
+        working-directory: frontend
+        env:
+          # Only the first 30 archives are fetched, as a run interrupted after thirty downloads would have; then the script
+          # exits before install-deps, as a dying install step would.
+          PREFETCH_LIMIT: '30'
+          STOP_AFTER_PREFETCH: '1'
+        run: bash ../.github/scripts/install-browsers.sh webkit
+      - name: Save what the interrupted run fetched
+        if: always() && steps.browsers.outputs.fetched != '' && steps.browsers.outputs.fetched != '0'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: The interruption left a partial set behind
+        run: |
+          wanted='${{ steps.browsers.outputs.wanted }}'; got='${{ steps.browsers.outputs.prefetched }}'
+          echo "interrupted run: wanted=$wanted prefetched=$got fetched=${{ steps.browsers.outputs.fetched }}"
+          [ -n "$got" ] && [ "$got" -gt 0 ] && [ "$got" -lt "$wanted" ] || { echo "::error::expected a PARTIAL set (0 < prefetched < wanted); got $got of $wanted"; exit 1; }
+
+  resume:
+    needs: interrupt
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: resume (webkit)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Restore the interrupted run's archives
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Install, resuming
+        id: browsers
+        working-directory: frontend
+        run: |
+          before=$(find ~/apt-debs -name '*.deb' | wc -l | tr -d ' ')
+          echo "archives restored from the interrupted run: $before"
+          [ "$before" -gt 0 ] || { echo "::error::nothing was restored: partial progress is lost when the install step dies"; exit 1; }
+          bash ../.github/scripts/install-browsers.sh webkit
+      - name: Resumed, did not start over
+        run: |
+          wanted='${{ steps.browsers.outputs.wanted }}'; got='${{ steps.browsers.outputs.prefetched }}'
+          echo "after resume: wanted=$wanted prefetched=$got"
+          [ $((got * 10)) -ge $((wanted * 9)) ] || { echo "::error::resume ended with only $got of $wanted archives"; exit 1; }
+      - name: The browser launches
+        working-directory: frontend
+        run: |
+          node -e "
+            const { webkit: b } = require('@playwright/test');
+            (async () => { const browser = await b.launch(); const page = await browser.newPage(); await page.setContent('<p>ok</p>'); console.log('webkit launched after resume:', await page.textContent('p')); await browser.close(); })().catch((e) => { console.error(e); process.exit(1); });
+          "
