@@ -286,6 +286,15 @@ final class DailyDigest
             'paths' => $this->byPath($campaigns),
             'best_platform' => $this->pick($platforms, 'provider', best: true),
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
+            // EMAIL-DECISION-REPORT-001 — the shape of the window and where the money went, for the email's charts.
+            'series' => array_values(array_map(
+                static fn (array $point): array => ['date' => (string) $point['date'], 'spend' => is_numeric($point['spend'] ?? null) ? round((float) $point['spend'], 2) : null],
+                $scoped->timeseries($from, $to),
+            )),
+            'platforms' => array_values(array_map(
+                static fn (array $row): array => ['provider' => (string) $row['provider'], 'spend' => is_numeric($row['spend'] ?? null) ? round((float) $row['spend'], 2) : 0.0],
+                $platforms,
+            )),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — no campaign is named in a digest.
              *
@@ -642,11 +651,28 @@ final class DailyDigest
          * Null where the previous window is zero: every rise from nothing is infinite, and «up ∞%»
          * is not a movement anybody set a threshold on.
          */
+        // The portfolio's daily shape and its spend by platform: sums of the blocks, day by day and provider by provider.
+        $series = [];
+        $byProvider = [];
+        foreach ($blocks as $block) {
+            foreach ((array) ($block['series'] ?? []) as $point) {
+                if (is_numeric($point['spend'] ?? null)) {
+                    $series[(string) $point['date']] = ($series[(string) $point['date']] ?? 0.0) + (float) $point['spend'];
+                }
+            }
+            foreach ((array) ($block['platforms'] ?? []) as $row) {
+                $byProvider[(string) $row['provider']] = ($byProvider[(string) $row['provider']] ?? 0.0) + (float) ($row['spend'] ?? 0);
+            }
+        }
+        ksort($series);
+        arsort($byProvider);
         $change = static function (float $now, float $before): ?float {
             return $before <= 0.0 ? null : round(($now - $before) / $before, 4);
         };
 
         return [
+            'series' => array_map(static fn (string $date, float $spend): array => ['date' => $date, 'spend' => round($spend, 2)], array_keys($series), array_values($series)),
+            'platforms' => array_map(static fn (string $provider, float $spend): array => ['provider' => $provider, 'spend' => round($spend, 2)], array_keys($byProvider), array_values($byProvider)),
             'projects' => count($blocks),
             'spend' => round($spend, 2),
             'conversions' => round($conversions, 2),
