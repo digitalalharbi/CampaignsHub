@@ -275,7 +275,7 @@ final class MailGallery
      *
      * @return array<string,mixed>
      */
-    private static function digest(bool $weekly = false): array
+    public static function digest(bool $weekly = false): array
     {
         return [
             'sendable' => true,

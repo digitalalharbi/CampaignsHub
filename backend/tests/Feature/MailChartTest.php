@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Notifications\Charts\MailChart;
+use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Support\MailGallery;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -96,6 +97,37 @@ final class MailChartTest extends TestCase
             // The legend is the fallback: every platform with its share, as text.
             $this->assertStringContainsString('44%', $html, "[$locale] meta's share in the legend");
             $this->assertStringNotContainsString('18240', $html, "[$locale] no figure travels in a chart URL");
+        }
+    }
+
+    /**
+     * Owner 2026-10-22 — a day nobody reported is neither drawn nor mentioned.
+     *
+     * The trend is built from the reported days only, its caption names the first and last REPORTED
+     * day, and no wording about gaps or missing days reaches the email. Nothing is interpolated: the
+     * stored specification holds exactly the reported values, in order.
+     */
+    public function test_an_unreported_day_is_left_out_of_the_trend_and_never_mentioned(): void
+    {
+        $digest = MailGallery::digest(weekly: true);
+        $digest['totals']['series'] = [
+            ['date' => '2026-07-31', 'spend' => 5000.0],
+            ['date' => '2026-08-01', 'spend' => null],
+            ['date' => '2026-08-02', 'spend' => 6100.0],
+            ['date' => '2026-08-03', 'spend' => null],
+            ['date' => '2026-08-04', 'spend' => 5900.0],
+            ['date' => '2026-08-05', 'spend' => null],
+        ];
+        foreach (['ar', 'en'] as $locale) {
+            $html = (new DailyDigestMail($digest, $locale, 'Mohammed', 'weekly'))->render();
+            $this->assertStringContainsString('data-block="chart-trend"', $html);
+            $this->assertStringContainsString('2026-07-31 → 2026-08-04', $html, "[$locale] the caption spans the reported days only");
+            $this->assertStringNotContainsString('2026-08-05', $html, "[$locale] an unreported last day is not named");
+            foreach (['الفجوات', 'لم تُبلَّغ', 'gaps', 'unreported', 'missing'] as $word) {
+                $this->assertStringNotContainsString($word, $html, "[$locale] the email never says data is missing");
+            }
+            preg_match('#/mail/charts/([a-z0-9]{32})\.png" width="320"#', $html, $m);
+            $this->assertSame([5000.0, 6100.0, 5900.0], MailChart::spec($m[1])['values'], 'the stored series is the reported days, in order, with nothing between them');
         }
     }
 }
