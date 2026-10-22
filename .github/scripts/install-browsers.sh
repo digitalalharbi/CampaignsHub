@@ -97,10 +97,15 @@ prefetch() {
     esac
   }
   fetch_one() {
-    local url=$1 file=$2 size=$3 u err got=
+    local url=$1 file=$2 size=$3 u err got= t0 host
     while read -r u; do
+      t0=$(date +%s%3N)
       err=$(curl -fsSL --retry 2 --retry-delay 1 --connect-timeout 10 --max-time 90 -o "$DEBS/$file.part" "$u" 2>&1) || { got="curl: ${err:-failed} ($u)"; continue; }
-      if [ "$(wc -c < "$DEBS/$file.part" | tr -d ' ')" = "$size" ]; then mv "$DEBS/$file.part" "$DEBS/$file"; return 0; fi
+      if [ "$(wc -c < "$DEBS/$file.part" | tr -d ' ')" = "$size" ]; then
+        host=${u#*://}; host=${host%%/*}
+        echo "$host $(( $(date +%s%3N) - t0 )) $size" >> "$DEBS.timings"
+        mv "$DEBS/$file.part" "$DEBS/$file"; return 0
+      fi
       got="size mismatch for $file (wanted $size, got $(wc -c < "$DEBS/$file.part" | tr -d ' ')) from $u"
     done < <(candidates "$url")
     rm -f "$DEBS/$file.part"
@@ -110,7 +115,9 @@ prefetch() {
   }
   export -f candidates
   export -f fetch_one
-  : > "$DEBS.failures"
+  : > "$DEBS.failures"; : > "$DEBS.timings"
+  # Probe-only: fetch just the first N archives, as a run interrupted after N downloads would have.
+  if [ -n "${PREFETCH_LIMIT:-}" ]; then head -n "$PREFETCH_LIMIT" /tmp/apt-todo.txt > /tmp/apt-todo.limited && mv /tmp/apt-todo.limited /tmp/apt-todo.txt; fi
   # Whatever happens next (the job timing out, the step being killed, install-deps dying), progress so far is worth caching:
   # `fetched` is set BEFORE the first download and corrected afterwards, so a prefetch that never reaches its summary still saves.
   out fetched 1
@@ -118,6 +125,12 @@ prefetch() {
   timeout "$PREFETCH_TIMEOUT" xargs -P "$JOBS" -L1 bash -c 'fetch_one "$0" "$1" "$2"' < /tmp/apt-todo.txt \
     || echo "::warning::prefetch stopped after ${PREFETCH_TIMEOUT}s (or xargs failed); the archives already held are kept and apt fetches the rest"
   rm -f "$DEBS"/*.part
+  # Where the time went: per mirror, how many archives, how many MB, mean and slowest single archive. A prefetch that is
+  # slower than apt on a healthy mirror is a finding, so the numbers are printed rather than guessed at.
+  if [ -s "$DEBS.timings" ]; then
+    awk '{ n[$1]++; mb[$1]+=$3/1048576; ms[$1]+=$2; if ($2>mx[$1]) mx[$1]=$2 }
+         END { for (h in n) printf "mirror %s: %d archives, %.1f MB, mean %d ms, slowest %d ms\n", h, n[h], mb[h], ms[h]/n[h], mx[h] }' "$DEBS.timings"
+  fi
   if [ -s "$DEBS.failures" ]; then
     echo "$(wc -l < "$DEBS.failures" | tr -d ' ') archives could not be prefetched (apt fetches them itself); first reasons:"
     head -3 "$DEBS.failures" | cut -c1-300

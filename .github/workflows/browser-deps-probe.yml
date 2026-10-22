@@ -26,8 +26,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [webkit, firefox]
-    name: cold (${{ matrix.browser }})
+        # `jobs` is the parallelism, measured rather than assumed: the first runs showed the prefetch slower than apt on a
+        # healthy mirror, so the width is a number to choose from, not a constant to trust.
+        include:
+          - { browser: webkit, jobs: 4 }
+          - { browser: webkit, jobs: 12 }
+          - { browser: webkit, jobs: 32 }
+          - { browser: firefox, jobs: 12 }
+    name: cold (${{ matrix.browser }}, ${{ matrix.jobs }} jobs)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,6 +47,8 @@ jobs:
       - name: Install browsers (timed)
         id: browsers
         working-directory: frontend
+        env:
+          PREFETCH_JOBS: ${{ matrix.jobs }}
         run: |
           start=$SECONDS
           bash ../.github/scripts/install-browsers.sh ${{ matrix.browser }}
@@ -84,9 +92,9 @@ jobs:
         continue-on-error: true
         working-directory: frontend
         env:
-          # Far too short for the whole set, so the prefetch is stopped partway; then the script exits before install-deps.
-          PREFETCH_TIMEOUT: '2'
-          PREFETCH_JOBS: '1'
+          # Only the first 30 archives are fetched, as a run interrupted after thirty downloads would have; then the script
+          # exits before install-deps, as a dying install step would.
+          PREFETCH_LIMIT: '30'
           STOP_AFTER_PREFETCH: '1'
         run: bash ../.github/scripts/install-browsers.sh webkit
       - name: Save what the interrupted run fetched
