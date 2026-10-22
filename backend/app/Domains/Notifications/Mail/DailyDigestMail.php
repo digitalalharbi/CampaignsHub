@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\ReportingTimezone;
+use App\Domains\Notifications\Charts\MailChart;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
@@ -205,6 +206,7 @@ final class DailyDigestMail extends Mailable
                     'portfolio' => $portfolio = $this->portfolio($p, $ar, $app),
                     'spendShare' => $this->spendShare($p, $portfolio),
                     'health' => $this->health(),
+                    'charts' => $this->charts($p, $ar),
                     'font' => MailDesign::font($ar),
                     'numericFont' => MailDesign::numericFont(),
                     't' => $this->copy($ar),
@@ -334,6 +336,67 @@ final class DailyDigestMail extends Mailable
             'value' => $r['spend']['value'] ?? $p->money($r['spend_amount']),
             'width' => max(2, (int) round(100 * (float) $r['spend_amount'] / $max)),
         ], array_slice($spenders, 0, 8));
+    }
+
+    /**
+     * EMAIL-DECISION-REPORT-001 — the two chart images, each with its readable fallback.
+     *
+     * The trend is the portfolio's daily spend over the window (the account tile's own shape); the
+     * donut is where that spend went by platform, with a legend that doubles as the fallback. Both
+     * are specifications stored under a token (`MailChart`): the figures never travel in a URL. With
+     * GD absent, or nothing drawable, the keys are null and the email embeds no image.
+     *
+     * @return array{trend: array<string, mixed>|null, donut: array<string, mixed>|null}
+     */
+    private function charts(DigestPresenter $p, bool $ar): array
+    {
+        $totals = (array) ($this->digest['totals'] ?? []);
+        $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && is_numeric($pt['spend'] ?? null)));
+        $trend = null;
+        if (count($series) >= 2) {
+            $values = array_map(static fn (array $pt): float => (float) $pt['spend'], $series);
+            $token = MailChart::store(['kind' => 'trend', 'values' => $values, 'colour' => MailChart::COLOURS[0], 'width' => 320, 'height' => 64]);
+            if ($token !== null) {
+                $first = (string) $series[0]['date'];
+                $last = (string) $series[count($series) - 1]['date'];
+                $trend = [
+                    'url' => MailChart::url($token),
+                    'width' => 320,
+                    'height' => 64,
+                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($values)).' – '.$p->money(max($values)),
+                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last,
+                ];
+            }
+        }
+
+        $platforms = array_values(array_filter((array) ($totals['platforms'] ?? []), static fn ($row): bool => is_array($row) && (float) ($row['spend'] ?? 0) > 0));
+        $donut = null;
+        if (count($platforms) >= 2) {
+            $sum = array_sum(array_map(static fn (array $row): float => (float) $row['spend'], $platforms));
+            $legend = [];
+            $segments = [];
+            foreach (array_slice($platforms, 0, 8) as $i => $row) {
+                $colour = MailChart::COLOURS[$i % count(MailChart::COLOURS)];
+                $segments[] = ['label' => (string) $row['provider'], 'value' => (float) $row['spend'], 'colour' => $colour];
+                $legend[] = [
+                    'label' => AdPlatforms::name((string) $row['provider'], $ar ? 'ar' : 'en'),
+                    'value' => $p->money((float) $row['spend']),
+                    'share' => number_format(100 * (float) $row['spend'] / $sum, 0).'%',
+                    'colour' => $colour,
+                ];
+            }
+            $token = MailChart::store(['kind' => 'donut', 'segments' => $segments, 'size' => 112]);
+            if ($token !== null) {
+                $donut = [
+                    'url' => MailChart::url($token),
+                    'size' => 112,
+                    'alt' => ($ar ? 'الإنفاق حسب المنصة: ' : 'Spend by platform: ').implode(' · ', array_map(static fn (array $l): string => $l['label'].' '.$l['share'], $legend)),
+                    'legend' => $legend,
+                ];
+            }
+        }
+
+        return ['trend' => $trend, 'donut' => $donut];
     }
 
     /** @return array{good: int, warn: int, bad: int, neutral: int} */
@@ -910,6 +973,7 @@ final class DailyDigestMail extends Mailable
             'open_portfolio' => 'افتح لوحة مشاريعك ←',
             'needs_attention' => 'تحتاج انتباهًا',
             'spend_share' => 'أين ذهب الإنفاق بين المشاريع',
+            'spend_by_platform' => 'الإنفاق حسب المنصة',
             'fine_named' => 'بخير',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
@@ -959,6 +1023,7 @@ final class DailyDigestMail extends Mailable
             'open_portfolio' => 'Open your portfolio board →',
             'needs_attention' => 'need attention',
             'spend_share' => 'Where the spend went, by project',
+            'spend_by_platform' => 'Spend by platform',
             'fine_named' => 'Fine',
             'funnel' => 'Funnel',
             'content' => 'Content',
