@@ -39,6 +39,33 @@ final class MailChartTest extends TestCase
         $this->assertNull(MailChart::store(['kind' => 'trend', 'values' => [1.0, 1.0]]), 'nothing drawable, nothing stored');
     }
 
+    /** A day nobody reported is a hole in the chart: nothing is drawn in its column, and the alt says so. */
+    public function test_a_missing_day_leaves_a_gap_in_the_trend_rather_than_a_line_through_it(): void
+    {
+        // Four days, the second unreported: points sit at 0, 1/3, 2/3 and 1 of the width.
+        $png = MailChart::render(['kind' => 'trend', 'values' => [10.0, null, 20.0, 30.0], 'width' => 300, 'height' => 60]);
+        $img = imagecreatefromstring($png);
+        $this->assertNotFalse($img);
+        $w = imagesx($img);
+        $h = imagesy($img);
+        $opaque = static function (int $x) use ($img, $h): int {
+            $n = 0;
+            for ($y = 0; $y < $h; $y++) {
+                if (((imagecolorat($img, $x, $y) >> 24) & 0x7F) < 127) {
+                    $n++;
+                }
+            }
+
+            return $n;
+        };
+        // In the hole (the column of the unreported day) nothing is drawn; inside the measured run the area and the line are.
+        $this->assertSame(0, $opaque((int) round($w / 3)), 'the unreported day was drawn through');
+        $this->assertGreaterThan(0, $opaque((int) round($w * 0.83)), 'the measured run is drawn');
+
+        $this->assertTrue(MailChart::drawable(['kind' => 'trend', 'values' => [10.0, null, 20.0, 30.0]]));
+        $this->assertFalse(MailChart::drawable(['kind' => 'trend', 'values' => [10.0, null, null, 30.0]]), 'more than a third missing is refused, like the dashboard');
+    }
+
     public function test_the_route_serves_a_stored_token_as_png_and_answers_404_for_the_rest(): void
     {
         $token = MailChart::store(['kind' => 'trend', 'values' => [10.0, 20.0, 15.0]]);
@@ -49,6 +76,8 @@ final class MailChartTest extends TestCase
         $this->get("/mail/charts/{$token}.png")->assertOk()->assertHeader('Content-Type', 'image/png');
         $this->get('/mail/charts/'.str_repeat('f', 32).'.png')->assertNotFound();
         $this->get('/mail/charts/not-a-token.png')->assertNotFound();
+        $this->get('/mail/charts/'.strtoupper($token).'.png')->assertNotFound();
+        $this->get('/mail/charts/'.$token.'/extra.png')->assertNotFound();
 
         Cache::forget('mail-chart:'.$token);
         $this->get("/mail/charts/{$token}.png")->assertNotFound();

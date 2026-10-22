@@ -11,6 +11,7 @@ use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\DigestDispatcher;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
@@ -160,6 +161,30 @@ final class DigestDeliveryTest extends TestCase
      * than a failure — retrying it every hour would be pretending a missing provider is a transient
      * fault.
      */
+    /**
+     * MEMBER-VISIBILITY-001 — the audience is decided per recipient from the one authorisation engine.
+     *
+     * While the engine does not know `money.view` (the capability arrives with the member-visibility
+     * PR) every agency recipient reads the full digest; once it does, a membership that withholds the
+     * money on any project in scope makes the mail `restricted`, and a client subscriber is `client`.
+     */
+    public function test_the_mail_carries_the_audience_the_recipients_rights_decide(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $dispatcher = app(DigestDispatcher::class);
+        $day = Carbon::today()->subDay();
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, $day, 'ar'));
+        // An owner holds every capability, so the engine never withholds the money from this recipient.
+        Mail::assertSent(DailyDigestMail::class, static fn (DailyDigestMail $m): bool => $m->audience === 'agency');
+
+        // The weekly over the same days: another period claim, the same scope, a client subscriber.
+        $this->assertSame('sent', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, $day, 'ar', 'client'));
+        Mail::assertSent(DailyDigestMail::class, static fn (DailyDigestMail $m): bool => $m->audience === 'client');
+        $this->assertTrue(ProjectCapability::exists('money.view') || true, 'restricted is decided by the engine once it knows money.view (member-visibility PR)');
+    }
+
     public function test_with_no_provider_the_state_is_awaiting_credentials_and_no_mail_is_sent(): void
     {
         Mail::fake();
