@@ -104,12 +104,12 @@ const AGENCY_BEFORE = [
   '/agency/analytics',
   /*
    * ADDED by NAV-TAXONOMY-001 (Owner, 2026-10-21), deliberately. Four new ADDRESSES onto pages that already exist:
-   * the campaign builder on the Campaigns page, the Analytics ad-set and ad tabs (where those rungs are read today),
-   * and Approvals, which had a page and no entry.
+   * the campaign builder on the Campaigns page, the ad-set and ad pages, and Approvals, which had a page and no entry.
+   * (ADGROUPS-PAGE-001 / ADS-PAGE-001: the ad-set and ad entries are routes of their own now, not Analytics tabs.)
    */
   '/agency/campaigns?launch=1',
-  '/agency/analytics?tab=ad_sets',
-  '/agency/analytics?tab=ads',
+  '/agency/ad-groups',
+  '/agency/ads',
   '/agency/agents/approvals',
 ]
 

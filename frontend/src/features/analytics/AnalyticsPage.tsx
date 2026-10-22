@@ -2,7 +2,7 @@ import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, Eye } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
@@ -293,7 +293,16 @@ const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: stri
   ad: { ar: 'لم تصل بيانات الإعلانات', en: 'ad figures missing' },
 }
 
-export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
+/**
+ * ADGROUPS-PAGE-001 / ADS-PAGE-001 — `entity` makes this the INDEPENDENT ad-groups or ads page.
+ *
+ * The permanent guard (§5.5, §5.6) asks for «المجموعات» and «الإعلانات» as routes of their own, not Analytics tabs: the
+ * navigation used to point at `/analytics?tab=ad_sets` and `?tab=ads`. The entity table, its drilldown, its filters,
+ * its objective-aware columns and its previews are the ones already built and measured, so the page is the SAME
+ * component with the tab fixed by the route and the eleven-tab bar not drawn — one source for the figures, no second
+ * pipeline to disagree with the Analytics tab. Drilling across a level moves to the sibling page instead of switching a tab.
+ */
+export function AnalyticsPage({ surface = 'analytics', entity }: { surface?: Surface; entity?: 'ad_set' | 'ad' } = {}) {
   const ar = useAr()
   const { currentProjectId, setCurrentProjectId } = useProject()
   /*
@@ -313,7 +322,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * and no explanation — it is CARRIED to the surface that has that tab.
    */
   const isAnalysis = surface === 'analytics'
-  const tab = isAnalysis ? urlTab : 'performance'
+  const tab = entity ? (entity === 'ad_set' ? 'ad_sets' : 'ads') : isAnalysis ? urlTab : 'performance'
+  const portalTo = usePortalPath()
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
   /*
@@ -520,7 +530,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       */}
       <PageIntro
         testid={`${surface}-intro`}
-        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        title={entity === 'ad_set'
+          ? (ar ? 'المجموعات' : 'Ad groups')
+          : entity === 'ad'
+            ? (ar ? 'الإعلانات' : 'Ads')
+            : surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
         /*
           SURFACE-SEPARATION-001 — each surface says what it is FOR, and they are different things.
 
@@ -542,7 +556,15 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           The analysis surface keeps its sentence. It is opened deliberately, to ask why, and what
           it offers is genuinely not obvious from its title.
         */
-        purpose={surface === 'dashboard'
+        purpose={entity === 'ad_set'
+          ? (ar
+            ? 'مجموعات الإعلانات عبر منصاتك: الإنفاق والنتائج ومؤشرات الهدف لكل مجموعة، مع الانتقال إلى إعلاناتها.'
+            : 'Your ad groups across platforms: spend, results and the objective\'s own figures per group, with the way down to its ads.')
+          : entity === 'ad'
+            ? (ar
+              ? 'إعلاناتك بمعاينتها وأدائها وحالتها، مع الانتقال إلى المحتوى الذي عُرض تحت كل إعلان.'
+              : 'Your ads with their previews, performance and status, and the way down to the content that ran under each.')
+            : surface === 'dashboard'
           ? undefined
           : ar
             ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
@@ -705,7 +727,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         components over the same hooks, and no second metric pipeline exists to disagree with the
         first.
       */}
-      {isAnalysis && (
+      {isAnalysis && !entity && (
       <div
         role="tablist"
         aria-label={ar ? 'أقسام التحليلات' : 'Analytics sections'}
@@ -762,8 +784,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
-        {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
+        {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" pageRoutes={entity ? entityPageRoutes(portalTo) : undefined} />}
+        {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" pageRoutes={entity ? entityPageRoutes(portalTo) : undefined} />}
         {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -3016,7 +3038,18 @@ function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string
   )
 }
 
-function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+/** Where each rung of the hierarchy lives when the ad-group and ad pages are routes of their own. */
+type EntityPageRoutes = Partial<Record<DrillLevel, { path: string; tab?: string }>>
+
+function entityPageRoutes(portalTo: (path: string) => string): EntityPageRoutes {
+  return {
+    campaign: { path: portalTo('/analytics'), tab: 'campaigns' },
+    ad_set: { path: portalTo('/ad-groups') },
+    ad: { path: portalTo('/ads') },
+  }
+}
+
+function EntityTab({ projectId, range, filters, level, pageRoutes }: TabProps & { level: 'ad_set' | 'ad'; pageRoutes?: EntityPageRoutes }) {
   /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
   const portalTo = usePortalPath()
   const ar = useAr()
@@ -3125,10 +3158,30 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    * halves of «where am I» stay in the link.
    */
   const write = useUrlWriter()
-  const go = (next: DrillStep[], to: DrillLevel) => write({
-    drill: { value: encodePath(next), fallback: '' },
-    tab: { value: TAB_FOR[to], fallback: 'performance' },
-  })
+  const navigate = useNavigate()
+  const location = useLocation()
+  const go = (next: DrillStep[], to: DrillLevel) => {
+    /*
+     * On the independent pages a different rung is a different PAGE. The filters in the URL (period, platforms, objective)
+     * travel with the reader; the path is rewritten for the page they land on; `tab` is dropped because the route decides it.
+     */
+    const target = pageRoutes?.[to]
+    if (target && to !== level) {
+      const params = new URLSearchParams(location.search)
+      const encoded = encodePath(next)
+      if (encoded) params.set('drill', encoded); else params.delete('drill')
+      params.delete('tab')
+      if (target.tab) params.set('tab', target.tab)
+      const query = params.toString()
+      navigate(`${target.path}${query ? `?${query}` : ''}`)
+
+      return
+    }
+    write({
+      drill: { value: encodePath(next), fallback: '' },
+      tab: { value: TAB_FOR[to], fallback: 'performance' },
+    })
+  }
 
   const heading = level === 'ad_set'
     ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
