@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, cleanup } from '@testing-library/react'
 import { PrintDocument } from './PrintDocument'
 import { printAbsence, type PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
 import { readPreview } from '@/features/content/adPreview'
@@ -30,7 +30,8 @@ const block: PrintPlatformDrilldown = {
   objective: { key: 'sales', ranking: 'roas' },
   objectives: [{ path: 'conversion', label_ar: 'التحويل والمبيعات', label_en: 'Conversion & sales', metrics: { spend: 300, orders: 12, cpa: 25, revenue: 1500, roas: 5 } }],
   totals: { spend: 300 },
-  timeseries: [{ date: '2026-07-10', spend: 150 }, { date: '2026-07-11', spend: 150 }],
+  // Two real days with a shape: a flat line is not a trend and would (rightly) draw nothing.
+  timeseries: [{ date: '2026-07-10', spend: 150 }, { date: '2026-07-11', spend: 200 }],
   shares: { spend: { value: 300, total: 400, share: 0.75 }, outcome: { metric: 'revenue', value: 1500, total: 1700, share: 0.8824 } },
   ads: [
     { name: 'Summer hero', provider: 'meta', spend: 200, conversions: 8, preview: { state: 'available', kind: 'image', image_url: 'https://cdn.example.com/a.jpg', thumbnail_url: 'https://cdn.example.com/a.jpg' } },
@@ -112,5 +113,50 @@ describe('the printed footer', () => {
     expect(screen.queryByTestId('print-document-spend-notes')).toBeNull()
     expect(container.textContent).not.toContain('official invoices are the reference')
     expect(container.textContent).not.toContain('Data sources')
+  })
+})
+
+/**
+ * REPORT-CHARTS-COMPLETE-001 — the printed trend under the chart contract.
+ *
+ * It used to coalesce a missing day to zero, pick spend whenever every day carried a number and
+ * draw an unlabelled line. A printed page has no hover, so the line is captioned with its metric,
+ * unit and window; a day nobody reported breaks the line; spend is plotted only when the link
+ * discloses it; one point or a flat series draws nothing.
+ */
+describe('the printed drill-down trend reads through the one sparkline rule', () => {
+  const withSeries = (timeseries: unknown[], extra: Partial<PrintPlatformDrilldown> = {}) =>
+    render(<PrintDocument data={{ ...(base as object), platform_drilldowns: [{ ...block, ...extra, timeseries }] } as never} reportName="R" currency="SAR" />)
+
+  it('leaves an unreported day as a break in the line and captions metric, unit and window', () => {
+    withSeries([{ date: '2026-07-10', spend: 150 }, { date: '2026-07-11', clicks: 5 }, { date: '2026-07-12', spend: 200 }])
+    const d = screen.getByTestId('print-drilldown-trend').querySelector('path')?.getAttribute('d') ?? ''
+    expect(d.match(/M/g)?.length).toBe(2)
+    const label = screen.getByTestId('print-drilldown-trend-label')
+    expect(label).toHaveTextContent('Daily trend — Spend')
+    expect(label).toHaveTextContent('SAR')
+    expect(label).toHaveTextContent('2026-07-01 → 2026-07-31')
+    expect(label).toHaveTextContent('Gaps are unreported days')
+  })
+
+  it('plots clicks, not spend, when the link hides spend — and says so', () => {
+    withSeries(
+      [{ date: '2026-07-10', spend: 150, clicks: 10 }, { date: '2026-07-11', spend: 160, clicks: 30 }],
+      { shares: { ...block.shares, spend: null } },
+    )
+    const label = screen.getByTestId('print-drilldown-trend-label')
+    expect(label).toHaveTextContent('Daily trend — Clicks')
+    expect(label).not.toHaveTextContent('SAR')
+  })
+
+  it('draws nothing for one day, a flat series, or a series more than a third unreported', () => {
+    withSeries([{ date: '2026-07-10', spend: 150 }])
+    expect(screen.queryByTestId('print-drilldown-trend')).not.toBeInTheDocument()
+    cleanup()
+    withSeries([{ date: '2026-07-10', spend: 150 }, { date: '2026-07-11', spend: 150 }])
+    expect(screen.queryByTestId('print-drilldown-trend')).not.toBeInTheDocument()
+    cleanup()
+    withSeries([{ date: '2026-07-10', spend: 150 }, { date: '2026-07-11' }, { date: '2026-07-12' }, { date: '2026-07-13', spend: 90 }])
+    expect(screen.queryByTestId('print-drilldown-trend')).not.toBeInTheDocument()
   })
 })
