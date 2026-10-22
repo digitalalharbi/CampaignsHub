@@ -20,7 +20,8 @@ final class EmailKpiHierarchyTest extends TestCase
             $html = (string) MailGallery::render('digest-daily', $locale);
 
             $leads = substr_count($html, 'class="ch-kpi-lead"');
-            $projects = substr_count($html, 'class="ch-kpi-lead" style="font-size:28px');
+            // EMAIL-DECISION-REPORT-001 — each portfolio row leads with its objective figure at 22px.
+            $projects = substr_count($html, 'class="ch-kpi-lead" style="font-size:22px');
 
             $this->assertGreaterThanOrEqual(2, $leads, "[$locale] the account line and at least one project lead with a large figure");
             $this->assertSame(1, substr_count($html, 'class="ch-kpi-lead" style="font-size:30px'), "[$locale] exactly one account-level lead");
@@ -35,7 +36,7 @@ final class EmailKpiHierarchyTest extends TestCase
             $html = (string) MailGallery::render('digest-single-project', $locale);
 
             $this->assertSame(1, substr_count($html, 'class="ch-kpi-lead" style="font-size:30px'), "[$locale] exactly one lead, at display size");
-            $this->assertSame(0, substr_count($html, 'class="ch-kpi-lead" style="font-size:28px'), "[$locale] no second-tier lead: the project is the hero");
+            $this->assertSame(0, substr_count($html, 'class="ch-kpi-lead" style="font-size:22px'), "[$locale] no second-tier lead: the project row is the hero");
             $this->assertStringNotContainsString($locale === 'ar' ? 'إجمالي الحساب' : 'Account total', $html, "[$locale] no account roll-up above a single project");
             $this->assertStringContainsString($locale === 'ar' ? 'ملخص الفترة لمشروع' : 'The period for', $html, "[$locale] the intro names the project");
         }

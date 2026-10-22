@@ -199,6 +199,12 @@ final class DailyDigestMail extends Mailable
                 'slot' => view('mail.daily-digest', [
                     // EMAIL-PERF-DASHBOARDS-001 — one project is not a portfolio: the project itself leads, no roll-up above it.
                     'singleProject' => $this->singleProject(),
+                    // EMAIL-DECISION-REPORT-001 — the body is a decision report: one row per project, not analysis.
+                    'kind' => $this->kind,
+                    'dir' => $ar ? 'rtl' : 'ltr',
+                    'portfolio' => $portfolio = $this->portfolio($p, $ar, $app),
+                    'spendShare' => $this->spendShare($p, $portfolio),
+                    'health' => $this->health(),
                     'font' => MailDesign::font($ar),
                     'numericFont' => MailDesign::numericFont(),
                     't' => $this->copy($ar),
@@ -239,6 +245,118 @@ final class DailyDigestMail extends Mailable
         // deserves its roll-up, because the roll-up says how many the reader is responsible for.
         return count($this->digest['projects'] ?? []) === 1
             && (int) ($this->digest['totals']['projects'] ?? 1) <= 1;
+    }
+
+    /** Tone → the order a reader at risk reads in: trouble first, then watch, then the rest. */
+    private const TONE_RANK = ['bad' => 0, 'warn' => 1, 'neutral' => 2, 'good' => 3];
+
+    /** The figure a project is judged on, by objective — the first of these its metric set carries. */
+    private const OBJECTIVE_KEYS = ['roas', 'cpa', 'cpl', 'cpi', 'cpm', 'cpc', 'ctr', 'engagement_rate'];
+
+    /**
+     * EMAIL-DECISION-REPORT-001 (Owner 2026-10-22, the Moasher reference) — one row per project.
+     *
+     * A status pill and the name, spend and the second figure with their movement, and ONE large
+     * objective figure with its movement — the decision view. Rows read trouble first. Nothing here
+     * is recomputed: every value is the presenter's card for that key, so the row says exactly what
+     * the project block used to, in a tenth of the space.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function portfolio(DigestPresenter $p, bool $ar, string $app): array
+    {
+        $rows = [];
+        foreach ($this->digest['projects'] ?? [] as $block) {
+            $totals = (array) ($block['totals'] ?? []);
+            $reported = (array) ($block['reported'] ?? []);
+            $change = (array) ($block['change'] ?? []);
+            $verdict = $p->verdict($block);
+            $tone = (string) ($verdict['tone'] ?? 'neutral');
+            $set = (array) ($block['metric_set'] ?? []);
+
+            // The objective figure: the first the metric set names; with no stated set, the first the totals hold.
+            $objectiveKey = null;
+            foreach (self::OBJECTIVE_KEYS as $key) {
+                // Named by the set: the row shows it even when nothing arrived (the presenter says so); unnamed: only a real figure.
+                if ($set !== [] ? in_array($key, $set, true) : (array_key_exists($key, $totals) && is_numeric($totals[$key]))) {
+                    $objectiveKey = $key;
+                    break;
+                }
+            }
+            $follow = $this->followUp($p, $ar, $block['follow_up'] ?? null);
+            $attention = $follow === null ? [] : array_values(array_filter((array) ($follow['attention'] ?? []), 'is_string'));
+            $followLine = $follow === null ? null : implode(' · ', array_map(
+                static fn (array $cell): string => $cell['label'].' '.$cell['value'],
+                array_slice((array) ($follow['rows'] ?? []), 0, 3),
+            ));
+            $second = array_key_exists('revenue', $totals) && is_numeric($totals['revenue']) && (float) $totals['revenue'] > 0 ? 'revenue' : 'conversions';
+
+            $rows[] = [
+                'name' => (string) ($block['project_name'] ?? ''),
+                'tone' => $tone,
+                'status' => $this->statusLabel($tone, $ar),
+                'verdict' => (string) ($verdict['text'] ?? ''),
+                'spend' => $p->card('spend', $totals, $reported, $change),
+                'second' => $p->card($second, $totals, $reported, $change),
+                'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                'rank' => self::TONE_RANK[$tone] ?? 2,
+                // EXECUTIVE-DAILY-DIGEST-001 — the one follow-up line that needs a person, counts only; the table went with the analysis.
+                'attention' => $attention === [] ? null : implode(' · ', $attention),
+                'follow' => $followLine === '' ? null : $followLine,
+                'spend_amount' => is_numeric($totals['spend'] ?? null) ? (float) $totals['spend'] : null,
+                'url' => $app.'/app/dashboard',
+            ];
+        }
+        usort($rows, static fn (array $a, array $b): int => $a['rank'] <=> $b['rank']);
+
+        return $rows;
+    }
+
+    /**
+     * A visual comparison the row list cannot give: where the portfolio's money went, project by
+     * project, as email-safe bars (a percentage-width cell inside a presentation table).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{name: string, value: string, width: int}>
+     */
+    private function spendShare(DigestPresenter $p, array $rows): array
+    {
+        $spenders = array_values(array_filter($rows, static fn (array $r): bool => ($r['spend_amount'] ?? 0) > 0));
+        if ($spenders === [] || $this->singleProject()) {
+            return [];
+        }
+        usort($spenders, static fn (array $a, array $b): int => $b['spend_amount'] <=> $a['spend_amount']);
+        // Each bar is the project's share of the portfolio's spend; the roll-up is the whole when it is larger than any project.
+        $max = max((float) $spenders[0]['spend_amount'], (float) ($this->digest['totals']['spend'] ?? 0));
+
+        return array_map(static fn (array $r): array => [
+            'name' => $r['name'],
+            'value' => $r['spend']['value'] ?? $p->money($r['spend_amount']),
+            'width' => max(2, (int) round(100 * (float) $r['spend_amount'] / $max)),
+        ], array_slice($spenders, 0, 8));
+    }
+
+    /** @return array{good: int, warn: int, bad: int, neutral: int} */
+    private function health(): array
+    {
+        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $counts = ['good' => 0, 'warn' => 0, 'bad' => 0, 'neutral' => 0];
+        foreach ($this->digest['projects'] ?? [] as $block) {
+            $tone = (string) ($p->verdict($block)['tone'] ?? 'neutral');
+            $counts[array_key_exists($tone, $counts) ? $tone : 'neutral']++;
+        }
+
+        return $counts;
+    }
+
+    private function statusLabel(string $tone, bool $ar): string
+    {
+        return match ($tone) {
+            'bad' => $ar ? 'خطر' : 'At risk',
+            'warn' => $ar ? 'انتباه' : 'Watch',
+            'good' => $ar ? 'بخير' : 'Fine',
+            default => $ar ? 'بلا حكم' : 'No verdict',
+        };
     }
 
     private function rhythmName(bool $ar): string
@@ -783,6 +901,16 @@ final class DailyDigestMail extends Mailable
             'results' => 'النتائج',
             'projects' => 'المشاريع',
             'intro_single' => 'ملخص الفترة لمشروع',
+            'portfolio' => 'محفظة المشاريع',
+            'highlights' => 'أبرز التحرّكات',
+            'health' => 'صحة المحفظة الآن',
+            'decisions' => 'يحتاج قرارك',
+            'more_projects' => 'مشاريع أخرى في لوحة المحفظة',
+            'fine_projects' => 'مشاريع لا تحتاج قرارًا',
+            'open_portfolio' => 'افتح لوحة مشاريعك ←',
+            'needs_attention' => 'تحتاج انتباهًا',
+            'spend_share' => 'أين ذهب الإنفاق بين المشاريع',
+            'fine_named' => 'بخير',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
             'recommendations' => 'التوصيات المعتمدة',
@@ -800,7 +928,7 @@ final class DailyDigestMail extends Mailable
             'received_short' => 'وصل',
             'contacted_short' => 'تم التواصل',
             'overdue_short' => 'متأخر',
-            'no_blended_note' => 'لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر. تجدها داخل كل مشروع، وبحسب المسار.',
+            'no_blended_note' => 'لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر. تجدها داخل كل مشروع،ويحمل كل صفّ مشروع رقم هدفه الخاص بدلًا منه.',
             'by_path' => 'حسب المسار التسويقي',
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
@@ -822,6 +950,16 @@ final class DailyDigestMail extends Mailable
             'results' => 'Results',
             'projects' => 'Projects',
             'intro_single' => 'The period for',
+            'portfolio' => 'Project portfolio',
+            'highlights' => 'Biggest moves',
+            'health' => 'Portfolio health now',
+            'decisions' => 'Needs your decision',
+            'more_projects' => 'more projects on the portfolio board',
+            'fine_projects' => 'projects need no decision',
+            'open_portfolio' => 'Open your portfolio board →',
+            'needs_attention' => 'need attention',
+            'spend_share' => 'Where the spend went, by project',
+            'fine_named' => 'Fine',
             'funnel' => 'Funnel',
             'content' => 'Content',
             'recommendations' => 'Approved recommendations',
@@ -839,7 +977,7 @@ final class DailyDigestMail extends Mailable
             'received_short' => 'Received',
             'contacted_short' => 'Contacted',
             'overdue_short' => 'Overdue',
-            'no_blended_note' => 'Cost per result and return are not summed across projects — that would divide one client’s money by another client’s results. They appear inside each project, by marketing path.',
+            'no_blended_note' => 'Cost per result and return are not summed across projects — that would divide one client’s money by another client’s results. Each project row carries its own objective figure instead.',
             'by_path' => 'By marketing path',
             'best' => 'Best',
             'worst' => 'Weakest',
