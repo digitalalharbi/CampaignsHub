@@ -60,6 +60,8 @@ final class MailGallery
         return self::accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
+            // EMAIL-DECISION-REPORT-001 — the CLIENT weekly: no spend anywhere, outcomes first, the portal behind the button.
+            'digest-client-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'سارة' : 'Sarah', 'weekly', null, 'client'),
             // EMAIL-PERF-DASHBOARDS-001 — the single-project variant: the project leads, no roll-up, no ranking of one.
             'digest-single-project' => new DailyDigestMail(array_replace(self::digest(), [
                 'projects' => array_slice(self::digest()['projects'], 0, 1),

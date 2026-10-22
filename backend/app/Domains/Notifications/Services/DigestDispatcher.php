@@ -72,12 +72,12 @@ final class DigestDispatcher
      *
      * @return string the state written to the ledger
      */
-    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar'): string
+    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency'): string
     {
         $end = $day->copy()->endOfDay();
         $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
 
-        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale);
+        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale, $audience);
     }
 
     /**
@@ -87,12 +87,12 @@ final class DigestDispatcher
      * week converges on the same row and the same unique-index guarantee. Everything else is the
      * daily path: same builder, same scope, same honest states.
      */
-    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar'): string
+    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar', string $audience = 'agency'): string
     {
         $end = $weekEnd->copy()->endOfDay();
         $start = $end->copy()->subDays(6)->startOfDay();
 
-        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale);
+        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale, $audience);
     }
 
     /**
@@ -106,12 +106,12 @@ final class DigestDispatcher
      * that slides is not comparable to the one before it, and comparability is the only reason to
      * send a monthly report rather than a weekly one.
      */
-    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar'): string
+    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar', string $audience = 'agency'): string
     {
         $start = $inMonth->copy()->startOfMonth()->startOfDay();
         $end = $inMonth->copy()->endOfMonth()->endOfDay();
 
-        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale);
+        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale, $audience);
     }
 
     /** One send, for any of the three rhythms. */
@@ -123,6 +123,7 @@ final class DigestDispatcher
         Carbon $from,
         Carbon $to,
         string $locale,
+        string $audience = 'agency',
     ): string {
 
         // Claim the period first. A losing race means somebody else is already sending it.
@@ -186,6 +187,7 @@ final class DigestDispatcher
                 (string) $user->name,
                 $kind,
                 is_string($identity['name'] ?? null) ? $identity['name'] : null,
+                $audience,
             ));
 
             return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now());
