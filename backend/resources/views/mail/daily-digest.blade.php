@@ -57,6 +57,13 @@
                         @if ($lead['change'])
                             <div style="font-size:12px; font-weight:700; color:{{ $tone[$lead['tone']] }};" dir="ltr">{{ $lead['change'] }}</div>
                         @endif
+                        @if (! empty($charts['trend']))
+                            {{-- EMAIL-DECISION-REPORT-001 — the window's shape under the figure: a static PNG with its figures in the alt and a caption beneath. --}}
+                            <div style="margin-top:8px;" data-block="chart-trend">
+                                <img src="{{ $charts['trend']['url'] }}" width="{{ $charts['trend']['width'] }}" height="{{ $charts['trend']['height'] }}" alt="{{ $charts['trend']['alt'] }}" style="display:block; max-width:100%; height:auto; border:0;">
+                                <div style="font-size:11px; color:#8b9a97; margin-top:2px;">{{ $charts['trend']['caption'] }}</div>
+                            </div>
+                        @endif
                     </div>
                 @endif
                 @if ($rest)
@@ -147,6 +154,30 @@
                     <td style="padding:3px 0; color:#0b1a16; text-align:{{ $endSide }}; white-space:nowrap;" dir="ltr">{{ $bar['value'] }}</td>
                 </tr>
             @endforeach
+        </table>
+    @endif
+
+    @if (! empty($charts['donut']))
+        {{-- Where the spend went by platform: the donut, and its legend — which is also the fallback when images are off. --}}
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">{{ $t['spend_by_platform'] }}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="chart-donut" style="margin-bottom:16px;">
+            <tr>
+                <td width="{{ $charts['donut']['size'] + 12 }}" style="vertical-align:middle;">
+                    <img src="{{ $charts['donut']['url'] }}" width="{{ $charts['donut']['size'] }}" height="{{ $charts['donut']['size'] }}" alt="{{ $charts['donut']['alt'] }}" style="display:block; border:0;">
+                </td>
+                <td style="vertical-align:middle; font-size:12px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        @foreach ($charts['donut']['legend'] as $item)
+                            <tr>
+                                <td style="padding:2px 6px 2px 0;"><span style="display:inline-block; width:10px; height:10px; border-radius:5px; background-color:{{ $item['colour'] }};"></span></td>
+                                <td style="padding:2px 8px 2px 0; color:#0b1a16;">{{ $item['label'] }}</td>
+                                <td style="padding:2px 8px 2px 0; color:#0b1a16; font-weight:700;" dir="ltr">{{ $item['share'] }}</td>
+                                <td style="padding:2px 0; color:#5b6b68;" dir="ltr">{{ $item['value'] }}</td>
+                            </tr>
+                        @endforeach
+                    </table>
+                </td>
+            </tr>
         </table>
     @endif
 

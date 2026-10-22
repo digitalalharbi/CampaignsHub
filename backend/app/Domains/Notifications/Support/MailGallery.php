@@ -300,6 +300,12 @@ final class MailGallery
                  * a preview showing one would be previewing an arithmetic accident.
                  */
                 'spend' => 41833.18, 'conversions' => 401, 'revenue' => 96500.0, 'projects' => 3,
+                // EMAIL-DECISION-REPORT-001 — the portfolio's daily shape and its spend by platform, for the charts.
+                'series' => [
+                    ['date' => '2026-07-31', 'spend' => 5210.0], ['date' => '2026-08-01', 'spend' => 6480.5], ['date' => '2026-08-02', 'spend' => 5930.0],
+                    ['date' => '2026-08-03', 'spend' => 7102.2], ['date' => '2026-08-04', 'spend' => 5620.0], ['date' => '2026-08-05', 'spend' => 6390.48], ['date' => '2026-08-06', 'spend' => 5100.0],
+                ],
+                'platforms' => [['provider' => 'meta', 'spend' => 18240.0], ['provider' => 'snapchat', 'spend' => 12100.5], ['provider' => 'google', 'spend' => 7492.68], ['provider' => 'tiktok', 'spend' => 4000.0]],
                 'previous' => ['spend' => 36600.0, 'conversions' => 448, 'revenue' => 92000.0],
                 'change' => ['spend' => 0.143, 'conversions' => -0.1049, 'revenue' => 0.0489],
             ],

@@ -52,6 +52,11 @@ Route::get('/r/{token}/preview.png', [SharePreviewController::class, 'image'])
     ->where('token', '[A-Za-z0-9]{16,64}')
     ->name('reports.share.preview.image');
 
+// EMAIL-DECISION-REPORT-001 — the static chart image behind an email's `<img>`, by opaque token (figures never in the URL).
+Route::get('/mail/charts/{token}.png', [\App\Domains\Notifications\Http\Controllers\MailChartController::class, 'png'])
+    ->middleware('throttle:120,1')
+    ->name('mail.chart');
+
 /*
  * AD-MEDIA-RECOVERY-001 — the app's own media, served by the app so a film can be SEEKED.
  *
