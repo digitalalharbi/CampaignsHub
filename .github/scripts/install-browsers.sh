@@ -81,17 +81,24 @@ prefetch() {
   # Each worker: the mirror apt chose, then a second mirror for the same pool path; a size check before the rename.
   export DEBS
   fetch_one() {
-    local url=$1 file=$2 size=$3 u
+    local url=$1 file=$2 size=$3 u err got
     for u in "$url" "${url/azure.archive.ubuntu.com/archive.ubuntu.com}" "${url/azure.archive.ubuntu.com/security.ubuntu.com}"; do
-      if curl -fsSL --retry 2 --retry-delay 1 --connect-timeout 10 --max-time 90 -o "$DEBS/$file.part" "$u" 2>/dev/null \
-         && [ "$(wc -c < "$DEBS/$file.part" | tr -d ' ')" = "$size" ]; then
-        mv "$DEBS/$file.part" "$DEBS/$file"; return 0
-      fi
+      err=$(curl -fsSL --retry 2 --retry-delay 1 --connect-timeout 10 --max-time 90 -o "$DEBS/$file.part" "$u" 2>&1) || { got="curl: ${err:-failed} ($u)"; continue; }
+      if [ "$(wc -c < "$DEBS/$file.part" | tr -d ' ')" = "$size" ]; then mv "$DEBS/$file.part" "$DEBS/$file"; return 0; fi
+      got="size mismatch for $file (wanted $size, got $(wc -c < "$DEBS/$file.part" | tr -d ' ')) from $u"
     done
-    rm -f "$DEBS/$file.part"; echo "could not prefetch $file (apt will fetch it itself)"; return 0
+    rm -f "$DEBS/$file.part"
+    # One summary line per failure is enough to diagnose; the count is printed after the run.
+    echo "FAILED $file :: ${got:-unknown}" >> "$DEBS.failures"
+    return 0
   }
   export -f fetch_one
+  : > "$DEBS.failures"
   xargs -P "$JOBS" -L1 bash -c 'fetch_one "$0" "$1" "$2"' < /tmp/apt-todo.txt
+  if [ -s "$DEBS.failures" ]; then
+    echo "$(wc -l < "$DEBS.failures" | tr -d ' ') archives could not be prefetched (apt fetches them itself); first reasons:"
+    head -3 "$DEBS.failures" | cut -c1-300
+  fi
 
   # Where apt looks for archives. `cp -n`: an archive apt already holds is not replaced.
   sudo cp -n "$DEBS"/*.deb /var/cache/apt/archives/ 2>/dev/null || true
