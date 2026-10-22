@@ -3,7 +3,10 @@ import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getClientAnalytics, type ClientAnalytics } from './api'
 import { compact, money, moneyExact, num as fullNumber, ratio } from '@/features/analytics/format'
-import { ChartCard, MetricLineChart, SpendRevenueAreaChart, StatusMixBar, type MixTone } from '@/features/analytics/charts'
+import { ChartCard, KpiSparkline, MetricLineChart, SpendRevenueAreaChart, StatusMixBar, type MixTone } from '@/features/analytics/charts'
+import { sparkFor } from '@/features/analytics/metricCatalog'
+import type { TimePoint } from '@/features/analytics/api'
+import type { ReactNode } from 'react'
 import { objectiveLabel } from '@/features/campaigns/labels'
 import { useT } from '@/lib/i18n'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -46,8 +49,26 @@ function DeltaBadge({ v }: { v: number | null | undefined }) {
 }
 
 /** UX-KPI-PRESENTATION-001 — the shared card; `muted` is gone with the second background it named. */
-function Kpi({ label, value, exact, delta }: { label: string; value: string; exact?: string; delta?: number | null; muted?: boolean }) {
-  return <StatCard label={label} value={value} exact={exact} trailing={<DeltaBadge v={delta} />} />
+function Kpi({ label, value, exact, delta, spark }: { label: string; value: string; exact?: string; delta?: number | null; muted?: boolean; spark?: ReactNode }) {
+  return <StatCard label={label} value={value} exact={exact} trailing={<DeltaBadge v={delta} />} spark={spark} />
+}
+
+/**
+ * UX-COMPACT-CHARTS-001 (second surface) — each KPI card carries the window's daily shape.
+ *
+ * The series is the one this tab already draws its two line charts from, so the card's sparkline and
+ * the chart beneath it are one reading of one period. The daily rows are full metric rows — the
+ * server computes the day's ROAS, cost per result, CTR and CPC beside its spend, results and
+ * revenue, and withholds a ratio (null) where its denominator was nothing — so NOTHING is derived
+ * here: a second computation of a ratio the server already states would be a second answer to one
+ * question. Everything passes the product's one sparkline rule (`sparkFor`): a withheld day is a
+ * hole that is left out, a series more than a third missing or flat draws nothing, and nothing is
+ * written about why.
+ */
+function sparkOf(key: string, series: ClientAnalytics['timeseries'] | undefined): ReactNode {
+  const points = sparkFor(key, series as unknown as readonly TimePoint[] | undefined, undefined)
+
+  return points ? <div data-testid={`client-kpi-${key}-spark`}><KpiSparkline points={points} height={26} /></div> : undefined
 }
 
 function FreshnessBanner({ a, t }: { a: ClientAnalytics; t: ReturnType<typeof useT> }) {
@@ -121,13 +142,13 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Kpi label={`${t('an_spend')}${cur}`} {...cash(a.totals.spend, a.currency ?? null)} delta={a.delta?.spend} />
-            <Kpi label={t('an_results')} {...counted(a.totals.conversions)} delta={a.delta?.conversions} />
-            <Kpi label={`${t('an_revenue')}${cur}`} {...cash(a.totals.revenue, a.currency ?? null)} delta={a.delta?.revenue} />
-            <Kpi label={t('an_roas')} value={ratio(a.totals.roas)} delta={a.delta?.roas} muted={!a.roas_is_primary} />
-            <Kpi label={`${t('an_cpa')}${cur}`} value={num(a.totals.cpa, 2)} delta={a.delta?.cpa} />
-            <Kpi label={t('an_ctr')} value={pct(a.totals.ctr)} delta={a.delta?.ctr} />
-            <Kpi label={`${t('an_cpc')}${cur}`} value={num(a.totals.cpc, 2)} delta={a.delta?.cpc} />
+            <Kpi label={`${t('an_spend')}${cur}`} {...cash(a.totals.spend, a.currency ?? null)} delta={a.delta?.spend} spark={sparkOf('spend', a.timeseries)} />
+            <Kpi label={t('an_results')} {...counted(a.totals.conversions)} delta={a.delta?.conversions} spark={sparkOf('conversions', a.timeseries)} />
+            <Kpi label={`${t('an_revenue')}${cur}`} {...cash(a.totals.revenue, a.currency ?? null)} delta={a.delta?.revenue} spark={sparkOf('revenue', a.timeseries)} />
+            <Kpi label={t('an_roas')} value={ratio(a.totals.roas)} delta={a.delta?.roas} muted={!a.roas_is_primary} spark={sparkOf('roas', a.timeseries)} />
+            <Kpi label={`${t('an_cpa')}${cur}`} value={num(a.totals.cpa, 2)} delta={a.delta?.cpa} spark={sparkOf('cpa', a.timeseries)} />
+            <Kpi label={t('an_ctr')} value={pct(a.totals.ctr)} delta={a.delta?.ctr} spark={sparkOf('ctr', a.timeseries)} />
+            <Kpi label={`${t('an_cpc')}${cur}`} value={num(a.totals.cpc, 2)} delta={a.delta?.cpc} spark={sparkOf('cpc', a.timeseries)} />
             <Kpi label={`${t('an_cpm')}${cur}`} value={num(a.totals.cpm, 2)} delta={a.delta?.cpm} />
           </div>
           <p className="text-[11px] text-text-muted">{t('an_vs_prev')}</p>
