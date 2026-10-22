@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Alerts\Services\AlertEventMailer;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
+use App\Support\Frontend;
 use Illuminate\Mail\Mailable;
 
 /**
@@ -58,6 +60,15 @@ final class MailGallery
         return self::accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
+            // MEMBER-VISIBILITY-001 — the agency member whose membership withholds the money: no spend, cost or spend chart, the agency's own intro and button.
+            'digest-restricted-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'ليان' : 'Layan', 'daily', null, 'restricted'),
+            // EMAIL-DECISION-REPORT-001 — the CLIENT weekly: no spend anywhere, outcomes first, the portal behind the button.
+            'digest-client-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'سارة' : 'Sarah', 'weekly', null, 'client'),
+            // EMAIL-PERF-DASHBOARDS-001 — the single-project variant: the project leads, no roll-up, no ranking of one.
+            'digest-single-project' => new DailyDigestMail(array_replace(self::digest(), [
+                'projects' => array_slice(self::digest()['projects'], 0, 1),
+                'totals' => array_replace(self::digest()['totals'], ['projects' => 1]),
+            ]), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
 
             /*
              * The alerts as they are actually sent — MAIL-013.
@@ -76,6 +87,10 @@ final class MailGallery
                         'detail' => $ar
                             ? 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.'
                             : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
+                        // The figures as the pace rule writes them, read by the same reader the real mail uses.
+                        'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'SAR'], $ar),
+                        'action' => AlertEventMailer::action('budget_risk', $ar),
+                        'url' => Frontend::origin().'/app/alerts?event=demo-1',
                     ],
                     [
                         'severity' => 'warning',
@@ -92,6 +107,8 @@ final class MailGallery
                         'detail' => $ar
                             ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، لذلك قد تكون بعض المؤشرات غير مكتملة.'
                             : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
+                        'action' => AlertEventMailer::action('sync_failed', $ar),
+                        'url' => Frontend::origin().'/app/alerts?event=demo-3',
                     ],
                 ],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
@@ -258,7 +275,7 @@ final class MailGallery
      *
      * @return array<string,mixed>
      */
-    private static function digest(bool $weekly = false): array
+    public static function digest(bool $weekly = false): array
     {
         return [
             'sendable' => true,
@@ -293,6 +310,12 @@ final class MailGallery
                  * a preview showing one would be previewing an arithmetic accident.
                  */
                 'spend' => 41833.18, 'conversions' => 401, 'revenue' => 96500.0, 'projects' => 3,
+                // EMAIL-DECISION-REPORT-001 — the portfolio's daily shape and its spend by platform, for the charts.
+                'series' => [
+                    ['date' => '2026-07-31', 'spend' => 5210.0], ['date' => '2026-08-01', 'spend' => 6480.5], ['date' => '2026-08-02', 'spend' => 5930.0],
+                    ['date' => '2026-08-03', 'spend' => 7102.2], ['date' => '2026-08-04', 'spend' => 5620.0], ['date' => '2026-08-05', 'spend' => 6390.48], ['date' => '2026-08-06', 'spend' => 5100.0],
+                ],
+                'platforms' => [['provider' => 'meta', 'spend' => 18240.0], ['provider' => 'snapchat', 'spend' => 12100.5], ['provider' => 'google', 'spend' => 7492.68], ['provider' => 'tiktok', 'spend' => 4000.0]],
                 'previous' => ['spend' => 36600.0, 'conversions' => 448, 'revenue' => 92000.0],
                 'change' => ['spend' => 0.143, 'conversions' => -0.1049, 'revenue' => 0.0489],
             ],

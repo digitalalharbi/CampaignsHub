@@ -15,9 +15,17 @@
 <div style="font-family:{!! $font !!}; color:#0b1a16;">
 
     <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
-    <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $t['intro'] }}</div>
+    @php($singleProject = $singleProject ?? false)
+    @php($client = ($audience ?? 'agency') === 'client')
+    @php($noMoney = in_array($audience ?? 'agency', ['client', 'restricted'], true))
+    <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $client ? ($t['intro_client'] ?? $t['intro']) : ($singleProject && isset($projects[0]) ? ($t['intro_single'] ?? $t['intro']).' '.$projects[0]['name'] : $t['intro']) }}</div>
 
-    {{-- The account line. Spend and results sum across projects; a cost per result deliberately does not. --}}
+    {{--
+      The account line. Spend and results sum across projects; a cost per result deliberately does not.
+      EMAIL-PERF-DASHBOARDS-001 — absent for a single project: a roll-up of one repeats the project's
+      own figures one card above them.
+    --}}
+    @if (! $singleProject)
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:20px;">
         <tr>
@@ -47,9 +55,17 @@
                 @if ($lead)
                     <div style="margin-top:10px;">
                         <div style="font-size:12px; color:#5b6b68;">{{ $lead['label'] }}</div>
-                        <div class="ch-kpi-lead" style="font-size:30px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
+                        {{-- The figure sits under its label on the same side: a dir="ltr" figure in an RTL mail would drift to the far edge (Owner 2026-10-22). --}}
+                        <div class="ch-kpi-lead" style="font-size:30px; line-height:1.15; font-weight:800; color:#0b1a16; text-align:{{ $startSide }};" dir="ltr">{{ $lead['value'] }}</div>
                         @if ($lead['change'])
-                            <div style="font-size:12px; font-weight:700; color:{{ $tone[$lead['tone']] }};" dir="ltr">{{ $lead['change'] }}</div>
+                            <div style="font-size:12px; font-weight:700; color:{{ $tone[$lead['tone']] }}; text-align:{{ $startSide }};" dir="ltr">{{ $lead['change'] }}</div>
+                        @endif
+                        @if (! empty($charts['trend']))
+                            {{-- EMAIL-DECISION-REPORT-001 — the window's shape under the figure: a static PNG with its figures in the alt and a caption beneath. --}}
+                            <div style="margin-top:8px;" data-block="chart-trend">
+                                <img src="{{ $charts['trend']['url'] }}" width="{{ $charts['trend']['width'] }}" height="{{ $charts['trend']['height'] }}" alt="{{ $charts['trend']['alt'] }}" style="display:block; max-width:100%; height:auto; border:0;">
+                                <div style="font-size:11px; color:#8b9a97; margin-top:2px;">{{ $charts['trend']['caption'] }}</div>
+                            </div>
                         @endif
                     </div>
                 @endif
@@ -57,7 +73,7 @@
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px; border-top:1px solid #e4e0d6;">
                         <tr>
                             @foreach ($rest as $card)
-                                <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; padding-top:10px;">
+                                <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; text-align:center; padding-top:10px;">
                                     <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
                                     <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
                                     @if ($card['change'])
@@ -68,300 +84,158 @@
                         </tr>
                     </table>
                 @endif
-                {{--
-                  Stated, not implied. A reader who sees three account-wide figures will look for a
-                  fourth — and the fourth they want is a cost per result, which across projects would
-                  divide one client's money by another client's orders.
-                --}}
-                <div style="font-size:11px; color:#8b9a97; padding-top:10px; line-height:1.6;">{{ $t['no_blended_note'] }}</div>
+                {{-- No blended cost per result across projects — and no sentence saying so (Owner 2026-10-22): what is not computed is simply not there. --}}
             </td>
         </tr>
     </table>
+    @endif
 
     {{--
-      EMAIL-DASHBOARD-UX-001 — the two ends, before the middle.
+      EMAIL-DECISION-REPORT-001 — the body is a decision report (Owner 2026-10-22, the Moasher reference).
 
-      A person reading on a phone at 8am wants what rose most and what fell most; a list of twelve
-      projects in alphabetical order is a list nobody reads to the bottom. Movement is measured on
-      RESULTS rather than spend, because spending more is not an improvement and a digest that
-      celebrates it rewards the wrong behaviour.
-
-      Absent entirely when there is only one project with a comparison: «best of one» is a ranking of
-      nothing, and printing it as a highlight teaches a reader that the highlights mean nothing.
+      One row per project: a status pill and the name, spend and the second figure with their
+      movement, and ONE large objective figure with its movement in a tone-coloured block. Trouble
+      reads first. The daily mail lists the portfolio (ten rows, then «N more»); the weekly and
+      monthly lead with the biggest moves and the portfolio's health, then only the rows that need a
+      decision. The paths, the funnel, the content, the recommendations and the follow-up counts that
+      used to follow every project are analysis, and analysis is what the dashboard behind the button
+      is for — an email is read for a decision.
     --}}
+    @php($periodic = $kind !== 'daily')
+    @php($decisions = array_values(array_filter($portfolio, static fn ($r) => in_array($r['tone'], ['bad', 'warn'], true))))
+    @php($listed = $periodic ? $decisions : array_slice($portfolio, 0, 10))
+    @php($rest = $periodic ? ($health['good'] + $health['neutral']) : max(0, count($portfolio) - 10))
+
     @if (($movement['best'] ?? null) || ($movement['worst'] ?? null))
-        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['movement'] }}</div>
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['highlights'] }}</div>
         @if ($movement['best'])
-            <div style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }};
-                        border-{{ $startSide }}:3px solid {{ $tone['good'] }};">
+            <div data-block="highlight-best" style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }}; border-{{ $startSide }}:3px solid {{ $tone['good'] }};">
                 <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['best']['name'] }} — {{ $t['best_move'] }}</div>
                 <div style="font-size:12px; color:{{ $tone['good'] }};" dir="ltr">{{ $movement['best']['text'] }}</div>
             </div>
         @endif
         @if ($movement['worst'])
-            <div style="margin-bottom:16px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['bad'] }};
-                        border-{{ $startSide }}:3px solid {{ $tone['bad'] }};">
+            <div data-block="highlight-worst" style="margin-bottom:16px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['bad'] }}; border-{{ $startSide }}:3px solid {{ $tone['bad'] }};">
                 <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['worst']['name'] }} — {{ $t['worst_move'] }}</div>
                 <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="ltr">{{ $movement['worst']['text'] }}</div>
             </div>
         @endif
     @endif
 
-    @foreach ($projects as $p)
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="border:1px solid #e4e0d6; border-radius:12px; margin-bottom:16px;">
+    @if ($periodic && count($portfolio) > 1)
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['health'] }}</div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="health" style="margin-bottom:16px;">
             <tr>
-                <td style="padding:16px;">
-
-                    <div style="font-size:16px; font-weight:800; color:#0b1a16;">{{ $p['name'] }}</div>
-
-                    {{-- The verdict, before the figures — this is the line a phone reader acts on. --}}
-                    <div style="margin-top:8px; padding:10px 12px; border-radius:8px;
-                                background-color:{{ $toneBg[$p['verdict']['tone']] }};
-                                color:{{ $tone[$p['verdict']['tone']] }};
-                                font-size:13px; line-height:1.6;">
-                        {{ $p['verdict']['text'] }}
-                    </div>
-
-                    {{-- What happened, and what changed against the window before this one. --}}
-                    @php($lead = $p['kpis'][0] ?? null)
-                    @php($rest = array_slice($p['kpis'], 1))
-                    @if ($lead)
-                        <div style="margin-top:14px;">
-                            <div style="font-size:12px; color:#5b6b68;">{{ $lead['label'] }}</div>
-                            <div class="ch-kpi-lead" style="font-size:28px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
-                            @if ($lead['change'])
-                                <div style="font-size:12px; font-weight:700; color:{{ $lead['change_colour'] }};" dir="ltr">{{ $lead['change'] }}</div>
-                            @endif
-                        </div>
+                {{-- A pill per state that HAS projects — a «0 at risk» pill is a count of nothing (Owner 2026-10-22). --}}
+                @foreach ([['good', $health['good']], ['warn', $health['warn']], ['bad', $health['bad']], ['neutral', $health['neutral']]] as [$k, $n])
+                    @if ($n > 0)
+                        <td style="padding-{{ $endSide }}:8px;">
+                            <span style="display:inline-block; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; background-color:{{ $toneBg[$k] }}; color:{{ $tone[$k] }};" dir="ltr">{{ $n }} {{ $k === 'good' ? ($dir === 'rtl' ? 'بخير' : 'fine') : ($k === 'warn' ? ($dir === 'rtl' ? 'مراقبة' : 'watch') : ($k === 'bad' ? ($dir === 'rtl' ? 'خطر' : 'at risk') : ($dir === 'rtl' ? 'بلا حكم' : 'no verdict'))) }}</span>
+                        </td>
                     @endif
-                    @if ($rest)
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;">
+                @endforeach
+            </tr>
+        </table>
+    @endif
+
+    @if ($spendShare)
+        {{-- Where the money went — the one comparison a list of rows cannot show at a glance. Bars are table cells with a width: the email-safe chart. --}}
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">{{ $t['spend_share'] }}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="spend-share" style="margin-bottom:16px; font-size:12px;">
+            @foreach ($spendShare as $bar)
+                <tr>
+                    <td width="34%" style="padding:3px 0; color:#0b1a16;">{{ $bar['name'] }}</td>
+                    <td width="44%" style="padding:3px 6px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eeeae0; border-radius:4px;">
+                            <tr><td width="{{ $bar['width'] }}%" style="background-color:#0d8a6f; height:8px; line-height:8px; font-size:1px; border-radius:4px;">&nbsp;</td><td></td></tr>
+                        </table>
+                    </td>
+                    <td style="padding:3px 0; color:#0b1a16; text-align:{{ $endSide }}; white-space:nowrap;" dir="ltr">{{ $bar['value'] }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
+    @if (! empty($charts['donut']))
+        {{-- Where the spend went by platform: the donut, and its legend — which is also the fallback when images are off. --}}
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">{{ $t['spend_by_platform'] }}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="chart-donut" style="margin-bottom:16px;">
+            <tr>
+                <td width="{{ $charts['donut']['size'] + 12 }}" style="vertical-align:middle;">
+                    <img src="{{ $charts['donut']['url'] }}" width="{{ $charts['donut']['size'] }}" height="{{ $charts['donut']['size'] }}" alt="{{ $charts['donut']['alt'] }}" style="display:block; border:0;">
+                </td>
+                <td style="vertical-align:middle; font-size:12px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        @foreach ($charts['donut']['legend'] as $item)
                             <tr>
-                                @foreach ($rest as $kpi)
-                                    <td class="ch-kpi" width="{{ (int) (100 / max(1, count($rest))) }}%" style="vertical-align:top; padding-{{ $endSide }}:8px;">
-                                        <div style="font-size:11px; color:#5b6b68;">{{ $kpi['label'] }}</div>
-                                        <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $kpi['value'] }}</div>
-                                        @if ($kpi['change'])
-                                            <div style="font-size:11px; font-weight:700; color:{{ $kpi['change_colour'] }};" dir="ltr">{{ $kpi['change'] }}</div>
-                                        @endif
-                                    </td>
-                                @endforeach
+                                <td style="padding:2px 6px 2px 0;"><span style="display:inline-block; width:10px; height:10px; border-radius:5px; background-color:{{ $item['colour'] }};"></span></td>
+                                <td style="padding:2px 8px 2px 0; color:#0b1a16;">{{ $item['label'] }}</td>
+                                <td style="padding:2px 8px 2px 0; color:#0b1a16; font-weight:700;" dir="ltr">{{ $item['share'] }}</td>
+                                <td style="padding:2px 0; color:#5b6b68;" dir="ltr">{{ $item['value'] }}</td>
                             </tr>
-                        </table>
-                    @endif
-
-                    {{--
-                      By marketing path — the block that keeps this honest about objectives.
-
-                      Awareness money sits beside awareness results, and only the conversion path
-                      carries a cost per order, because only it was bought to produce one.
-                    --}}
-                    @if ($p['paths'])
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['by_path'] }}</div>
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
-                            @foreach ($p['paths'] as $path)
-                                <tr>
-                                    <td width="28%" style="padding:6px 0; border-bottom:1px solid #eeeae0; color:#0b1a16;">{{ $path['label'] }}</td>
-                                    {{--
-                                        The share of spend, drawn. Nested table with a percentage-width
-                                        cell — the same email-safe technique the funnel below already
-                                        uses, which is what proves it renders in the clients this
-                                        product sends to. «Where did the money go» is read from bar
-                                        lengths in one pass and from a column of figures in several.
-                                    --}}
-                                    <td width="30%" style="padding:6px 0; border-bottom:1px solid #eeeae0;">
-                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eeeae0; border-radius:4px;">
-                                            <tr><td width="{{ $path['width'] }}%" style="background-color:#0d8a6f; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
-                                        </table>
-                                    </td>
-                                    <td style="padding:6px 0; border-bottom:1px solid #eeeae0; color:#0b1a16; text-align:{{ $endSide }};" dir="ltr">{{ $path['spend'] }}</td>
-                                    <td style="padding:6px 0; border-bottom:1px solid #eeeae0; color:#5b6b68; text-align:{{ $endSide }};" dir="ltr">{{ $path['result'] }}</td>
-                                </tr>
-                            @endforeach
-                        </table>
-                    @endif
-
-                    {{-- Best and worst, among the rows that HAVE a cost per result to be judged on. --}}
-                    @if ($p['best'] || $p['worst'])
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px; font-size:13px;">
-                            @if ($p['best'])
-                                <tr>
-                                    <td style="padding:4px 0; color:#0d8a6f; font-weight:700;">{{ $t['best'] }}</td>
-                                    <td style="padding:4px 0; color:#0b1a16;">{{ $p['best'] }}</td>
-                                </tr>
-                            @endif
-                            @if ($p['worst'])
-                                <tr>
-                                    <td style="padding:4px 0; color:#b45309; font-weight:700;">{{ $t['worst'] }}</td>
-                                    <td style="padding:4px 0; color:#0b1a16;">{{ $p['worst'] }}</td>
-                                </tr>
-                            @endif
-                        </table>
-                    @endif
-
-                    {{--
-                      The funnel — MAIL-005.
-
-                      Bars are table cells with a width, because a `div` with a percentage width is
-                      the one layout Outlook renders as a full-width block. Stages nobody reported
-                      are absent rather than drawn at zero: a bar of length nothing reads as a step
-                      where everybody left.
-                    --}}
-                    @if ($p['funnel'])
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['funnel'] }}</div>
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
-                            @foreach ($p['funnel'] as $stage)
-                                <tr>
-                                    <td width="35%" style="padding:5px 0; color:#0b1a16;">{{ $stage['label'] }}</td>
-                                    <td width="40%" style="padding:5px 0;">
-                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eeeae0; border-radius:4px;">
-                                            <tr><td width="{{ $stage['width'] }}%" style="background-color:#0d8a6f; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
-                                        </table>
-                                    </td>
-                                    <td style="padding:5px 0; color:#0b1a16; text-align:{{ $endSide }};" dir="ltr">{{ $stage['count'] }}</td>
-                                </tr>
-                            @endforeach
-                        </table>
-                    @endif
-
-                    {{-- Content: what is working, and what has started to slip. --}}
-                    @if ($p['creatives'])
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['content'] }}</div>
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
-                            @if ($p['creatives']['best'])
-                                <tr>
-                                    <td style="padding:4px 0; color:#0d8a6f; font-weight:700; white-space:nowrap;">{{ $t['best_content'] }}</td>
-                                    <td style="padding:4px 0; color:#0b1a16;">
-                                        {{ $p['creatives']['best']['name'] }}
-                                        @if ($p['creatives']['best']['reason'])
-                                            <span style="color:#5b6b68;">— {{ $p['creatives']['best']['reason'] }}</span>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @endif
-                            @foreach ($p['creatives']['declining'] as $c)
-                                <tr>
-                                    <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['declining'] }}</td>
-                                    <td style="padding:4px 0; color:#0b1a16;">{{ $c['name'] }}</td>
-                                </tr>
-                            @endforeach
-                            @foreach ($p['creatives']['fatigued'] as $c)
-                                <tr>
-                                    <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['fatigued'] }}</td>
-                                    <td style="padding:4px 0; color:#0b1a16;">{{ $c['name'] }}</td>
-                                </tr>
-                            @endforeach
-                        </table>
-                    @endif
-
-                    {{--
-                      EMAIL-SETTINGS-DEPTH-001 — approved recommendations, quoted, never generated.
-
-                      Absent when the reader did not ask for them AND when there are none: the digest
-                      does not announce a section somebody switched off, and an empty heading would
-                      read as «nobody has any advice for you», which is a claim this has not made.
-                    --}}
-                    @if (!empty($p['recommendations']))
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['recommendations'] }}</div>
-                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
-                            @foreach ($p['recommendations'] as $r)
-                                <tr>
-                                    <td style="padding:4px 0; color:#0b1a16;">
-                                        <strong>{{ $r['title'] }}</strong>
-                                        @if ($r['body'])
-                                            <span style="color:#5b6b68;">— {{ $r['body'] }}</span>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </table>
-                    @endif
-
-                    {{--
-                      EXECUTIVE-DAILY-DIGEST-001 — what happened AFTER the lead arrived.
-
-                      Above the notes, because a manager reading this on a phone at 8am is asking
-                      «is anybody being called», and below the money, because the money is what
-                      produced them. Counts only: no name, no phone, no email travels in this mail.
-                    --}}
-                    @if ($p['follow_up'])
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['follow_up'] }}</div>
-
-                        @if ($p['follow_up']['attention'])
-                            {{-- What needs a person, before the figures that merely describe the day. --}}
-                            <div style="margin-top:6px; padding:9px 11px; border-radius:8px; background-color:{{ $toneBg['warn'] }}; border-{{ $startSide }}:3px solid {{ $tone['warn'] }};">
-                                @foreach ($p['follow_up']['attention'] as $item)
-                                    <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $item }}</div>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;">
-                            @foreach (array_chunk($p['follow_up']['rows'], 3) as $row)
-                                <tr>
-                                    @foreach ($row as $cell)
-                                        <td width="33%" style="padding:6px 0;">
-                                            <div style="font-size:11px; color:#8b9a97;">{{ $cell['label'] }}</div>
-                                            <div style="font-size:15px; font-weight:700; color:#0b1a16;">{{ $cell['value'] }}</div>
-                                        </td>
-                                    @endforeach
-                                </tr>
-                            @endforeach
-                        </table>
-
-                        @if ($p['follow_up']['owners'])
-                            {{-- Who, when there is more than one who. One owner is not a comparison. --}}
-                            <div style="font-size:11px; color:#8b9a97; margin-top:10px;">{{ $t['by_owner'] }}</div>
-                            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:4px;">
-                                <tr>
-                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['owner'] }}</td>
-                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['received_short'] }}</td>
-                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['contacted_short'] }}</td>
-                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['overdue_short'] }}</td>
-                                </tr>
-                                @foreach ($p['follow_up']['owners'] as $owner)
-                                    <tr>
-                                        <td style="font-size:13px; color:#0b1a16; padding:3px 0;">{{ $owner['name'] }}</td>
-                                        <td style="font-size:13px; color:#0b1a16; padding:3px 0;">{{ $owner['received'] }}</td>
-                                        <td style="font-size:13px; color:#0b1a16; padding:3px 0;">{{ $owner['contacted'] }}</td>
-                                        <td style="font-size:13px; color:{{ $owner['overdue'] === '0' ? '#5b6b68' : $tone['warn'] }}; padding:3px 0;">{{ $owner['overdue'] }}</td>
-                                    </tr>
-                                @endforeach
-                            </table>
-                        @endif
-                    @endif
-
-                    {{--
-                      The notes: what happened, what it means, what to do.
-
-                      Three at most. A fourth is not read, and a mail that lists ten alerts every
-                      morning teaches its reader that the alerts mean nothing.
-                    --}}
-                    @if ($p['notes'])
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['notes'] }}</div>
-                        @foreach ($p['notes'] as $note)
-                            <div style="margin-top:6px; padding:9px 11px; border-radius:8px;
-                                        background-color:{{ $toneBg[$note['tone']] }};
-                                        border-{{ $startSide }}:3px solid {{ $tone[$note['tone']] }};">
-                                <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $note['title'] }}</div>
-                                <div style="font-size:12px; color:#5b6b68; line-height:1.6; padding-top:2px;">{{ $note['detail'] }}</div>
-                            </div>
                         @endforeach
-                    @endif
-
-                    {{-- How old the figures are, beside the figures (§15.15). --}}
-                    <div style="font-size:11px; color:#8b9a97; margin-top:12px;">{{ $p['freshness'] }}</div>
-
-                    <div style="margin-top:14px;">
-                        <a href="{{ $p['url'] }}"
-                           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:13px; font-weight:700;
-                                  text-decoration:none; padding:9px 16px; border-radius:8px;">{{ $t['open_dashboard'] }}</a>
-                    </div>
+                    </table>
                 </td>
             </tr>
         </table>
+    @endif
+
+    @if ($listed)
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $periodic ? $t['decisions'] : $t['portfolio'] }}</div>
+    @endif
+    @foreach ($listed as $row)
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="portfolio-row"
+               style="border:1px solid #e4e0d6; border-radius:12px; margin-bottom:10px;">
+            <tr>
+                <td style="padding:12px 14px; vertical-align:top;">
+                    <div>
+                        <span class="ch-status" style="display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; background-color:{{ $toneBg[$row['tone']] }}; color:{{ $tone[$row['tone']] }};">{{ $row['status'] }}</span>
+                        <span style="font-size:15px; font-weight:800; color:#0b1a16; padding-{{ $startSide }}:6px;">{{ $row['name'] }}</span>
+                    </div>
+                    <div style="font-size:12px; color:#5b6b68; line-height:1.6; margin-top:4px;">{{ $row['verdict'] }}</div>
+                    @if ($row['attention'] || $row['follow'])
+                        <div style="font-size:12px; color:{{ $row['attention'] ? $tone['warn'] : '#5b6b68' }}; line-height:1.6; margin-top:2px;">{{ $t['follow_up'] }}: {{ $row['attention'] ?? $row['follow'] }}</div>
+                    @endif
+                    @php($cells = array_values(array_filter([$row['spend'], $row['second'], $row['revenue'] ?? null])))
+                    @if ($cells)
+                    {{-- Equal columns, labels over figures, every column a real figure: the strip stays parallel with no empty cell (Owner 2026-10-22). --}}
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+                        <tr>
+                            @foreach ($cells as $card)
+                                <td class="ch-kpi" width="{{ (int) (100 / count($cells)) }}%" style="vertical-align:top; text-align:center; padding:0 6px;">
+                                    <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
+                                    <div style="font-size:14px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}@if ($card['change']) <span style="font-size:11px; font-weight:700; color:{{ $card['change_colour'] }};">{{ $card['change'] }}</span>@endif</div>
+                                </td>
+                            @endforeach
+                        </tr>
+                    </table>
+                    @endif
+                </td>
+                @if ($row['objective'])
+                    <td width="112" style="padding:12px 14px; vertical-align:middle; text-align:center; background-color:{{ $toneBg[$row['tone']] }}; border-radius:0 12px 12px 0;">
+                        <div class="ch-kpi-lead" style="font-size:{{ $singleProject ? '30' : '22' }}px; line-height:1.15; font-weight:800; color:{{ $tone[$row['tone']] }};" dir="ltr">{{ $row['objective']['value'] }}</div>
+                        <div style="font-size:11px; color:#5b6b68;">{{ $row['objective']['label'] }}</div>
+                        @if ($row['objective']['change'])
+                            <div style="font-size:11px; font-weight:700; color:{{ $row['objective']['change_colour'] }};" dir="ltr">{{ $row['objective']['change'] }}</div>
+                        @endif
+                    </td>
+                @endif
+            </tr>
+        </table>
     @endforeach
+    @if ($rest > 0)
+        @php($fine = $periodic ? array_values(array_filter($portfolio, static fn ($r) => ! in_array($r['tone'], ['bad', 'warn'], true))) : [])
+        <div data-block="portfolio-rest" style="font-size:12px; color:#5b6b68; margin:4px 0 14px;" dir="auto">
+            {{ $periodic ? "{$rest} {$t['fine_projects']}" : "+{$rest} {$t['more_projects']}" }}@if ($fine): {{ implode(' · ', array_map(static fn ($r) => $r['name'], $fine)) }}@endif
+        </div>
+    @endif
+
+    {{-- One button, and it says where it lands. --}}
+    <div style="margin:10px 0 18px; text-align:center;">
+        <a href="{{ $portfolio[0]['url'] ?? '#' }}" data-block="cta"
+           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
+                  text-decoration:none; padding:11px 22px; border-radius:10px;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a>
+    </div>
 
     <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:4px;">{{ $t['footer_note'] }}</div>
 

@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\ReportingTimezone;
+use App\Domains\Notifications\Charts\MailChart;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
@@ -72,7 +73,29 @@ final class DailyDigestMail extends Mailable
          * class must not grow a second branding engine, and the requirement says so in capitals.
          */
         private readonly ?string $senderName = null,
+        /*
+         * EMAIL-DECISION-REPORT-001 — who is reading: `agency` (the operator's own digest, money and all)
+         * or `client` (CLIENT-REPORT-FRAMING-001: no spend anywhere, no cost per result, outcomes first,
+         * the portal behind the button). The data is the same digest; what is SAID of it is not.
+         */
+        public readonly string $audience = 'agency',
     ) {}
+
+    private function client(): bool
+    {
+        return $this->audience === 'client';
+    }
+
+    /**
+     * MEMBER-VISIBILITY-001 — whether this reader may see the money at all. A client never does; an
+     * agency member whose membership withholds `money.view` on any project in scope does not either
+     * (`restricted`): the same digest, with every spend, cost and spend chart left out and the
+     * agency's own intro and button kept.
+     */
+    private function withholdsMoney(): bool
+    {
+        return in_array($this->audience, ['client', 'restricted'], true);
+    }
 
     /**
      * REPORT-FOOTER-001 in an inbox — the same fixed sentence and the same metadata line the page, the
@@ -130,9 +153,12 @@ final class DailyDigestMail extends Mailable
         };
 
         return new Envelope(
-            subject: $ar
-                ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
-                : $this->brandName()." — {$spend} {$when}, {$results} results",
+            // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
+            subject: $this->withholdsMoney()
+                ? ($ar ? $this->brandName()." — {$results} نتيجة {$when}" : $this->brandName()." — {$results} results {$when}")
+                : ($ar
+                    ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
+                    : $this->brandName()." — {$spend} {$when}, {$results} results"),
         );
     }
 
@@ -197,6 +223,16 @@ final class DailyDigestMail extends Mailable
                 'reportFooter' => $this->reportFooter($ar),
                 'projects' => $this->projects($p, $ar, $app),
                 'slot' => view('mail.daily-digest', [
+                    // EMAIL-PERF-DASHBOARDS-001 — one project is not a portfolio: the project itself leads, no roll-up above it.
+                    'singleProject' => $this->singleProject(),
+                    // EMAIL-DECISION-REPORT-001 — the body is a decision report: one row per project, not analysis.
+                    'kind' => $this->kind,
+                    'audience' => $this->audience,
+                    'dir' => $ar ? 'rtl' : 'ltr',
+                    'portfolio' => $portfolio = $this->portfolio($p, $ar, $app),
+                    'spendShare' => $this->spendShare($p, $portfolio),
+                    'health' => $this->health(),
+                    'charts' => $this->charts($p, $ar),
                     'font' => MailDesign::font($ar),
                     'numericFont' => MailDesign::numericFont(),
                     't' => $this->copy($ar),
@@ -223,6 +259,257 @@ final class DailyDigestMail extends Mailable
      * One mailable serves three rhythms {@see self::$kind}, which is why this was possible at all: the
      * copy array is built once and knew nothing about the rhythm the header already names.
      */
+    /**
+     * EMAIL-PERF-DASHBOARDS-001 — the single-project variant.
+     *
+     * A digest over one project printed an account roll-up that repeated the project's own figures
+     * one card above them, and a «movement» block ranking the best of one. With one project the
+     * project is the hero: it leads at the account's display size, the roll-up and the ranking are
+     * left out, and the intro names the project rather than «your projects».
+     */
+    private function singleProject(): bool
+    {
+        // One block AND one project in scope: a scope of several where only one had activity still
+        // deserves its roll-up, because the roll-up says how many the reader is responsible for.
+        return count($this->digest['projects'] ?? []) === 1
+            && (int) ($this->digest['totals']['projects'] ?? 1) <= 1;
+    }
+
+    /** Tone → the order a reader at risk reads in: trouble first, then watch, then the rest. */
+    private const TONE_RANK = ['bad' => 0, 'warn' => 1, 'neutral' => 2, 'good' => 3];
+
+    /** The figure a project is judged on, by objective — the first of these its metric set carries. */
+    private const OBJECTIVE_KEYS = ['roas', 'cpa', 'cpl', 'cpi', 'cpm', 'cpc', 'ctr', 'engagement_rate'];
+
+    /** What a CLIENT may be judged on: ratios that reveal no spend (CLIENT-REPORT-FRAMING-001). */
+    private const CLIENT_OBJECTIVE_KEYS = ['roas', 'conversion_rate', 'ctr', 'engagement_rate'];
+
+    /**
+     * EMAIL-DECISION-REPORT-001 (Owner 2026-10-22, the Moasher reference) — one row per project.
+     *
+     * A status pill and the name, spend and the second figure with their movement, and ONE large
+     * objective figure with its movement — the decision view. Rows read trouble first. Nothing here
+     * is recomputed: every value is the presenter's card for that key, so the row says exactly what
+     * the project block used to, in a tenth of the space.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function portfolio(DigestPresenter $p, bool $ar, string $app): array
+    {
+        $rows = [];
+        foreach ($this->digest['projects'] ?? [] as $block) {
+            $totals = (array) ($block['totals'] ?? []);
+            $reported = (array) ($block['reported'] ?? []);
+            $change = (array) ($block['change'] ?? []);
+            $verdict = $p->verdict($block);
+            $tone = (string) ($verdict['tone'] ?? 'neutral');
+            $set = (array) ($block['metric_set'] ?? []);
+
+            // The objective figure: the first the metric set names; with no stated set, the first the totals hold.
+            $objectiveKey = null;
+            foreach (self::OBJECTIVE_KEYS as $key) {
+                // Named by the set first, otherwise the first the totals hold — and only ever a REAL figure (Owner 2026-10-22: nothing is written about a figure nobody sent).
+                if (($set === [] || in_array($key, $set, true)) && array_key_exists($key, $totals) && is_numeric($totals[$key])) {
+                    $objectiveKey = $key;
+                    break;
+                }
+            }
+            $follow = $this->followUp($p, $ar, $block['follow_up'] ?? null);
+            $attention = $follow === null ? [] : array_values(array_filter((array) ($follow['attention'] ?? []), 'is_string'));
+            $followLine = $follow === null ? null : implode(' · ', array_map(
+                static fn (array $cell): string => $cell['label'].' '.$cell['value'],
+                array_slice((array) ($follow['rows'] ?? []), 0, 3),
+            ));
+            $second = array_key_exists('revenue', $totals) && is_numeric($totals['revenue']) && (float) $totals['revenue'] > 0 ? 'revenue' : 'conversions';
+            if ($this->withholdsMoney()) {
+                // CLIENT-REPORT-FRAMING-001 / MEMBER-VISIBILITY-001 — no spend and nothing divided by it; results and revenue with their movement,
+                // a ratio objective where the set names one, and the verdict said in outcomes rather than budgets.
+                $objectiveKey = in_array($objectiveKey, self::CLIENT_OBJECTIVE_KEYS, true) ? $objectiveKey : null;
+                $rows[] = [
+                    'name' => (string) ($block['project_name'] ?? ''),
+                    'tone' => $tone,
+                    'status' => $this->statusLabel($tone, $ar),
+                    'verdict' => $this->clientVerdict($block, $ar, $tone),
+                    'spend' => null,
+                    'second' => $p->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
+                    'revenue' => $second === 'revenue' ? $p->card('revenue', $totals, $reported, $change) : null,
+                    'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                    'rank' => self::TONE_RANK[$tone] ?? 2,
+                    'attention' => null,
+                    'follow' => null,
+                    'spend_amount' => null,
+                    'url' => $this->client() ? Frontend::origin().'/portal' : $app.'/app/dashboard',
+                ];
+
+                continue;
+            }
+
+            $rows[] = [
+                'name' => (string) ($block['project_name'] ?? ''),
+                'tone' => $tone,
+                'status' => $this->statusLabel($tone, $ar),
+                'verdict' => (string) ($verdict['text'] ?? ''),
+                'spend' => $p->card('spend', $totals, $reported, $change),
+                'second' => $p->card($second, $totals, $reported, $change),
+                'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                'rank' => self::TONE_RANK[$tone] ?? 2,
+                // EXECUTIVE-DAILY-DIGEST-001 — the one follow-up line that needs a person, counts only; the table went with the analysis.
+                'attention' => $attention === [] ? null : implode(' · ', $attention),
+                'follow' => $followLine === '' ? null : $followLine,
+                'spend_amount' => is_numeric($totals['spend'] ?? null) ? (float) $totals['spend'] : null,
+                'url' => $app.'/app/dashboard',
+            ];
+        }
+        usort($rows, static fn (array $a, array $b): int => $a['rank'] <=> $b['rank']);
+
+        return $rows;
+    }
+
+    /**
+     * A visual comparison the row list cannot give: where the portfolio's money went, project by
+     * project, as email-safe bars (a percentage-width cell inside a presentation table).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{name: string, value: string, width: int}>
+     */
+    private function spendShare(DigestPresenter $p, array $rows): array
+    {
+        $spenders = array_values(array_filter($rows, static fn (array $r): bool => ($r['spend_amount'] ?? 0) > 0));
+        if ($spenders === [] || $this->singleProject() || $this->withholdsMoney()) {
+            return [];
+        }
+        usort($spenders, static fn (array $a, array $b): int => $b['spend_amount'] <=> $a['spend_amount']);
+        // Each bar is the project's share of the portfolio's spend; the roll-up is the whole when it is larger than any project.
+        $max = max((float) $spenders[0]['spend_amount'], (float) ($this->digest['totals']['spend'] ?? 0));
+
+        return array_map(static fn (array $r): array => [
+            'name' => $r['name'],
+            'value' => $r['spend']['value'] ?? $p->money($r['spend_amount']),
+            'width' => max(2, (int) round(100 * (float) $r['spend_amount'] / $max)),
+        ], array_slice($spenders, 0, 8));
+    }
+
+    /**
+     * EMAIL-DECISION-REPORT-001 — the two chart images, each with its readable fallback.
+     *
+     * The trend is the portfolio's daily spend over the window (the account tile's own shape); the
+     * donut is where that spend went by platform, with a legend that doubles as the fallback. Both
+     * are specifications stored under a token (`MailChart`): the figures never travel in a URL. With
+     * GD absent, or nothing drawable, the keys are null and the email embeds no image.
+     *
+     * @return array{trend: array<string, mixed>|null, donut: array<string, mixed>|null}
+     */
+    private function charts(DigestPresenter $p, bool $ar): array
+    {
+        // Both charts are drawn from spend; a reader who may not see the money gets neither.
+        if ($this->withholdsMoney()) {
+            return ['trend' => null, 'donut' => null];
+        }
+        $totals = (array) ($this->digest['totals'] ?? []);
+        /*
+         * Owner 2026-10-22: the trend keeps every day at its real date. A day nobody reported is a
+         * HOLE — the line and its area break there and never join two non-consecutive reported days
+         * into one continuous trend — and nothing is written about it: the caption names the window's
+         * first and last day and no more. A measured zero is a real point, not a hole. Under the
+         * dashboard's thresholds (two measured points, no more than a third missing, never flat) the
+         * chart is simply absent, and the email says nothing about why.
+         */
+        $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && isset($pt['date'])));
+        $values = array_map(static fn (array $pt): ?float => is_numeric($pt['spend'] ?? null) ? (float) $pt['spend'] : null, $series);
+        $present = array_values(array_filter($values, static fn (?float $v): bool => $v !== null));
+        $trend = null;
+        if (count($present) >= 2) {
+            $token = MailChart::store(['kind' => 'trend', 'values' => $values, 'colour' => MailChart::COLOURS[0], 'width' => 320, 'height' => 64]);
+            if ($token !== null) {
+                $first = (string) $series[0]['date'];
+                $last = (string) $series[count($series) - 1]['date'];
+                $trend = [
+                    'url' => MailChart::url($token),
+                    'width' => 320,
+                    'height' => 64,
+                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($present)).' – '.$p->money(max($present)),
+                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last,
+                ];
+            }
+        }
+
+        $platforms = array_values(array_filter((array) ($totals['platforms'] ?? []), static fn ($row): bool => is_array($row) && (float) ($row['spend'] ?? 0) > 0));
+        $donut = null;
+        if (count($platforms) >= 2) {
+            $sum = array_sum(array_map(static fn (array $row): float => (float) $row['spend'], $platforms));
+            $legend = [];
+            $segments = [];
+            // Every platform that spent, largest first — never a fixed count (CanonicalPlatformOrderTest); the colours cycle.
+            usort($platforms, static fn (array $a, array $b): int => (float) $b['spend'] <=> (float) $a['spend']);
+            foreach ($platforms as $i => $row) {
+                $colour = MailChart::COLOURS[$i % count(MailChart::COLOURS)];
+                $segments[] = ['label' => (string) $row['provider'], 'value' => (float) $row['spend'], 'colour' => $colour];
+                $legend[] = [
+                    'label' => AdPlatforms::name((string) $row['provider'], $ar ? 'ar' : 'en'),
+                    'value' => $p->money((float) $row['spend']),
+                    'share' => number_format(100 * (float) $row['spend'] / $sum, 0).'%',
+                    'colour' => $colour,
+                ];
+            }
+            $token = MailChart::store(['kind' => 'donut', 'segments' => $segments, 'size' => 112]);
+            if ($token !== null) {
+                $donut = [
+                    'url' => MailChart::url($token),
+                    'size' => 112,
+                    'alt' => ($ar ? 'الإنفاق حسب المنصة: ' : 'Spend by platform: ').implode(' · ', array_map(static fn (array $l): string => $l['label'].' '.$l['share'], $legend)),
+                    'legend' => $legend,
+                ];
+            }
+        }
+
+        return ['trend' => $trend, 'donut' => $donut];
+    }
+
+    /** @return array{good: int, warn: int, bad: int, neutral: int} */
+    private function health(): array
+    {
+        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $counts = ['good' => 0, 'warn' => 0, 'bad' => 0, 'neutral' => 0];
+        foreach ($this->digest['projects'] ?? [] as $block) {
+            $tone = (string) ($p->verdict($block)['tone'] ?? 'neutral');
+            $counts[array_key_exists($tone, $counts) ? $tone : 'neutral']++;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * The client's verdict line: the outcome and its movement, never a budget or a spend. A failed sync
+     * keeps its own sentence, because incomplete figures are a fact the client must know.
+     *
+     * @param  array<string, mixed>  $block
+     */
+    private function clientVerdict(array $block, bool $ar, string $tone): string
+    {
+        if ((($block['freshness'] ?? [])['sync_failed'] ?? false) === true) {
+            return $ar ? 'بعض المصادر لم تُحدَّث — الأرقام أدناه ناقصة حتى تكتمل.' : 'Some sources did not update — the figures below are incomplete until they do.';
+        }
+        $delta = $block['change']['conversions'] ?? null;
+        if (! is_numeric($delta)) {
+            return $ar ? 'النتائج مُقارنة بالفترة السابقة غير متاحة بعد.' : 'Results against the previous period are not available yet.';
+        }
+        $pct = number_format(abs((float) $delta) * 100, 1).'%';
+
+        return (float) $delta >= 0
+            ? ($ar ? "النتائج ارتفعت {$pct} مقارنة بالفترة السابقة." : "Results rose {$pct} against the previous period.")
+            : ($ar ? "النتائج تراجعت {$pct} مقارنة بالفترة السابقة." : "Results fell {$pct} against the previous period.");
+    }
+
+    private function statusLabel(string $tone, bool $ar): string
+    {
+        return match ($tone) {
+            'bad' => $ar ? 'خطر' : 'At risk',
+            'warn' => $ar ? 'انتباه' : 'Watch',
+            'good' => $ar ? 'بخير' : 'Fine',
+            default => $ar ? 'بلا حكم' : 'No verdict',
+        };
+    }
+
     private function rhythmName(bool $ar): string
     {
         return match ($this->kind) {
@@ -362,6 +649,18 @@ final class DailyDigestMail extends Mailable
      */
     private function accountCards(DigestPresenter $p, bool $ar): array
     {
+        $cards = $this->agencyAccountCards($p, $ar);
+        if (! $this->withholdsMoney()) {
+            return $cards;
+        }
+        // A client's roll-up leads with what was achieved; the money that bought it is the agency's figure.
+        $spendLabel = $ar ? 'الإنفاق' : 'Spend';
+
+        return array_values(array_filter($cards, static fn (array $card): bool => ($card['label'] ?? '') !== $spendLabel));
+    }
+
+    private function agencyAccountCards(DigestPresenter $p, bool $ar): array
+    {
         $totals = $this->digest['totals'] ?? [];
         $change = $totals['change'] ?? [];
 
@@ -380,11 +679,12 @@ final class DailyDigestMail extends Mailable
         [$resultChange, $resultTone] = $pill($change['conversions'] ?? null);
         [$revenueChange, $revenueTone] = $pill($change['revenue'] ?? null);
 
-        $cards = [
-            ['label' => $ar ? 'الإنفاق' : 'Spend', 'value' => $p->headline($totals['spend'] ?? null), 'change' => $spendChange, 'tone' => $spendTone],
-            ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) ($totals['conversions'] ?? 0)), 'change' => $resultChange, 'tone' => $resultTone],
+        // A tile exists only for a figure that exists (Owner 2026-10-22): no «no data» tile, no coalesced zero.
+        $cards = array_values(array_filter([
+            is_numeric($totals['spend'] ?? null) ? ['label' => $ar ? 'الإنفاق' : 'Spend', 'value' => $p->headline((float) $totals['spend']), 'change' => $spendChange, 'tone' => $spendTone] : null,
+            is_numeric($totals['conversions'] ?? null) ? ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) $totals['conversions']), 'change' => $resultChange, 'tone' => $resultTone] : null,
             ['label' => $ar ? 'المشاريع' : 'Projects', 'value' => (string) ($totals['projects'] ?? 0), 'change' => null, 'tone' => 'neutral'],
-        ];
+        ]));
 
         if ((float) ($totals['revenue'] ?? 0) > 0) {
             $cards[] = ['label' => $ar ? 'الإيراد' : 'Revenue', 'value' => $p->headline($totals['revenue'] ?? null), 'change' => $revenueChange, 'tone' => $revenueTone];
@@ -764,6 +1064,20 @@ final class DailyDigestMail extends Mailable
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
             'projects' => 'المشاريع',
+            'intro_single' => 'ملخص الفترة لمشروع',
+            'intro_client' => 'هذا ما تحقّق في حملاتك هذه الفترة — والقرارات التي تستحق نظرتك.',
+            'open_portal' => 'افتح بوابتك ←',
+            'portfolio' => 'محفظة المشاريع',
+            'highlights' => 'أبرز التحرّكات',
+            'health' => 'صحة المحفظة الآن',
+            'decisions' => 'يحتاج قرارك',
+            'more_projects' => 'مشاريع أخرى في لوحة المحفظة',
+            'fine_projects' => 'مشاريع لا تحتاج قرارًا',
+            'open_portfolio' => 'افتح لوحة مشاريعك ←',
+            'needs_attention' => 'تحتاج انتباهًا',
+            'spend_share' => 'أين ذهب الإنفاق بين المشاريع',
+            'spend_by_platform' => 'الإنفاق حسب المنصة',
+            'fine_named' => 'بخير',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
             'recommendations' => 'التوصيات المعتمدة',
@@ -781,7 +1095,6 @@ final class DailyDigestMail extends Mailable
             'received_short' => 'وصل',
             'contacted_short' => 'تم التواصل',
             'overdue_short' => 'متأخر',
-            'no_blended_note' => 'لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر. تجدها داخل كل مشروع، وبحسب المسار.',
             'by_path' => 'حسب المسار التسويقي',
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
@@ -802,6 +1115,20 @@ final class DailyDigestMail extends Mailable
             'spend' => 'Spend',
             'results' => 'Results',
             'projects' => 'Projects',
+            'intro_single' => 'The period for',
+            'intro_client' => 'Here is what your campaigns achieved this period — and the decisions worth your look.',
+            'open_portal' => 'Open your portal →',
+            'portfolio' => 'Project portfolio',
+            'highlights' => 'Biggest moves',
+            'health' => 'Portfolio health now',
+            'decisions' => 'Needs your decision',
+            'more_projects' => 'more projects on the portfolio board',
+            'fine_projects' => 'projects need no decision',
+            'open_portfolio' => 'Open your portfolio board →',
+            'needs_attention' => 'need attention',
+            'spend_share' => 'Where the spend went, by project',
+            'spend_by_platform' => 'Spend by platform',
+            'fine_named' => 'Fine',
             'funnel' => 'Funnel',
             'content' => 'Content',
             'recommendations' => 'Approved recommendations',
@@ -819,7 +1146,6 @@ final class DailyDigestMail extends Mailable
             'received_short' => 'Received',
             'contacted_short' => 'Contacted',
             'overdue_short' => 'Overdue',
-            'no_blended_note' => 'Cost per result and return are not summed across projects — that would divide one client’s money by another client’s results. They appear inside each project, by marketing path.',
             'by_path' => 'By marketing path',
             'best' => 'Best',
             'worst' => 'Weakest',

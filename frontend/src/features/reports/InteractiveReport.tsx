@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
+import { cutColumns } from './reportColumns'
 import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { ReportLinksSection } from './ReportLinksSection'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -32,7 +33,8 @@ import { TrendPill } from '@/features/analytics/components'
 import { ReportFooter } from './reportFooter'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
-import { SPECS } from '@/features/analytics/metricCatalog'
+import type { TimePoint } from '@/features/analytics/api'
+import { SPECS, sparkFor } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
@@ -607,9 +609,15 @@ function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { labe
  * bottom of a card, which reads as «this was zero every day» rather than «this was never plotted».
  */
 const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
-  if (!k || !rows.some((r) => r[k] !== undefined && r[k] !== null)) return undefined
+  /*
+   * REPORT-CHARTS-COMPLETE-001 — the product's one sparkline rule, not a second copy. The old map
+   * coalesced a day nobody reported to zero and drew it, and a withheld money day (spend null,
+   * the original amount beside it) became a dip to the floor. `sparkFor` leaves holes out, refuses
+   * a series more than a third missing or flat, and never draws a metric nobody sent.
+   */
+  if (!k) return undefined
 
-  return rows.map((r) => Number(r[k] ?? 0))
+  return sparkFor(k, rows as unknown as readonly TimePoint[], undefined)
 }
 const pRow = (data: ReportData, p: string) => (data.platforms ?? []).find((r) => r.provider === p) as Record<string, number> | undefined
 
@@ -1137,6 +1145,7 @@ function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }
         saying. It opens the SAME detail as the cards — one reader for one creative.
       */}
       <ReportCreativeRoster
+        chosen={data.report_columns?.content}
         roster={data.ads_roster}
         inScope={data.creatives_in_scope}
         withheld={data.creatives_withheld}
@@ -1309,14 +1318,15 @@ function ComparisonSlide({ data }: { data: ReportData }) {
       */}
       <ChartCard title="ترتيب المنصات" className="lg:col-span-2">
         <DataMetricTable
-          columns={[
+          /* REPORT-TABLES-OWNER-COLUMNS-001 — the saved report's own column choice, the same cut the print and the files make. */
+          columns={cutColumns(data.report_columns?.platforms, [
             { key: 'platform', label: 'المنصة', kind: 'text' },
             { key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency },
             { key: 'conversions', label: 'النتائج', kind: 'number' },
             { key: 'cpa', label: 'CPA', kind: 'money', currency: data.currency },
             { key: 'roas', label: 'ROAS', kind: 'ratio' },
             { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
-          ]}
+          ], { spend: 'spend', conversions: 'results', cpa: 'cost' })}
           rows={(data.platforms ?? []).map((p) => ({
             platform: (
               <span className="inline-flex items-center gap-1.5 font-semibold">
@@ -1813,7 +1823,7 @@ function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number,
   return (
     <div data-testid="report-daily-records">
       <Title sub="كل يوم في فترة التقرير">السجل اليومي</Title>
-      <DataMetricTable columns={columns} rows={rows} />
+      <DataMetricTable columns={cutColumns(data.report_columns?.days, columns, { impressions: 'impressions', clicks: 'clicks', results: 'results', spend: 'spend' })} rows={rows} />
     </div>
   )
 }
@@ -1921,7 +1931,7 @@ function AccountsSlide({ data }: { data: ReportData }) {
         <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">لا حسابات بأرقام في هذا النطاق.</p>
       ) : (
         <div data-testid="report-accounts-table">
-          <DataMetricTable columns={columns} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
+          <DataMetricTable columns={cutColumns(data.report_columns?.accounts, columns, { platform: 'platform', spend: 'spend', results: 'results', cost: 'cost' })} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
         </div>
       )}
     </div>

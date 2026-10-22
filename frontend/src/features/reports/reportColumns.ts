@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { Column } from '@/components/ui/MetricTable'
 
 /**
  * REPORT-TABLES-OWNER-COLUMNS-001 — cut a table to the columns the link's Owner chose.
@@ -20,4 +21,14 @@ export function selectColumns(
   const keep = head.map((_, i) => i).filter((i) => i === 0 || (keys[i] !== '' && chosen.includes(keys[i])))
 
   return { head: keep.map((i) => head[i]), rows: rows.map((r) => keep.map((i) => r[i])) }
+}
+
+/**
+ * The same cut for a `DataMetricTable`: `keys` maps each column's own key to the picker key it
+ * answers to ('' for one the Owner cannot choose). The first column — the row's name — stays.
+ */
+export function cutColumns(chosen: string[] | undefined, columns: Column[], keys: Record<string, string>): Column[] {
+  if (chosen === undefined) return columns
+
+  return columns.filter((c, i) => i === 0 || ((keys[c.key] ?? '') !== '' && chosen.includes(keys[c.key])))
 }

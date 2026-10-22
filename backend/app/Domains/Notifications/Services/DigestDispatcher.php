@@ -7,6 +7,8 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -54,6 +56,8 @@ final class DigestDispatcher
         private readonly TenantContext $tenants,
         // The ONE branding resolver. Injected rather than newed so this class cannot grow a second.
         private readonly SharedLinkBranding $branding,
+        // MEMBER-VISIBILITY-001 — the one authorisation engine, asked per recipient whether the money may be shown.
+        private readonly ProjectAbilities $abilities,
     ) {}
 
     /**
@@ -72,12 +76,12 @@ final class DigestDispatcher
      *
      * @return string the state written to the ledger
      */
-    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar'): string
+    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency'): string
     {
         $end = $day->copy()->endOfDay();
         $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
 
-        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale);
+        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale, $audience);
     }
 
     /**
@@ -87,12 +91,12 @@ final class DigestDispatcher
      * week converges on the same row and the same unique-index guarantee. Everything else is the
      * daily path: same builder, same scope, same honest states.
      */
-    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar'): string
+    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar', string $audience = 'agency'): string
     {
         $end = $weekEnd->copy()->endOfDay();
         $start = $end->copy()->subDays(6)->startOfDay();
 
-        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale);
+        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale, $audience);
     }
 
     /**
@@ -106,12 +110,12 @@ final class DigestDispatcher
      * that slides is not comparable to the one before it, and comparability is the only reason to
      * send a monthly report rather than a weekly one.
      */
-    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar'): string
+    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar', string $audience = 'agency'): string
     {
         $start = $inMonth->copy()->startOfMonth()->startOfDay();
         $end = $inMonth->copy()->endOfMonth()->endOfDay();
 
-        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale);
+        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale, $audience);
     }
 
     /** One send, for any of the three rhythms. */
@@ -123,6 +127,7 @@ final class DigestDispatcher
         Carbon $from,
         Carbon $to,
         string $locale,
+        string $audience = 'agency',
     ): string {
 
         // Claim the period first. A losing race means somebody else is already sending it.
@@ -141,6 +146,16 @@ final class DigestDispatcher
             $this->tenants->setTenantId($tenantId);
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
+            // MEMBER-VISIBILITY-001 — a reader whose membership withholds the money on any project in scope receives
+            // the digest without spend, cost or spend charts. Decided per recipient, from the one authorisation engine.
+            if ($audience === 'agency' && ProjectCapability::exists('money.view')) {
+                foreach ($projectIds as $projectId) {
+                    if (! $this->abilities->allows($user, (string) $projectId, 'money.view')) {
+                        $audience = 'restricted';
+                        break;
+                    }
+                }
+            }
             $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to);
 
             /*
@@ -186,6 +201,7 @@ final class DigestDispatcher
                 (string) $user->name,
                 $kind,
                 is_string($identity['name'] ?? null) ? $identity['name'] : null,
+                $audience,
             ));
 
             return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now());
