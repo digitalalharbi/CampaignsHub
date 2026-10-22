@@ -96,16 +96,14 @@ final class DigestMailRenderTest extends TestCase
     {
         $en = $this->html('en');
         $ar = $this->html('ar');
-
-        $this->assertStringContainsString('240,000', $en, 'impressions were reported and must be shown');
+        // EMAIL-DECISION-REPORT-001 — the row carries spend, the second figure and the objective; no bare zero anywhere.
+        $this->assertStringContainsString('9,400', $en, 'the project row states its spend');
         $this->assertStringNotContainsString('>0<', $en, 'no bare zero should be rendered as a figure');
-
         // The presenter is what decides this; assert its wording reaches the page in both languages.
         $this->assertStringContainsString('Not reported', (new DigestPresenter('en'))
             ->count(['reach' => 0.0], ['reach' => false], 'reach'));
         $this->assertStringContainsString('لم ترسله المنصة', (new DigestPresenter('ar'))
             ->count(['reach' => 0.0], ['reach' => false], 'reach'));
-
         $this->assertStringContainsString('Nakheel — Sales', $ar);
     }
 
@@ -128,16 +126,17 @@ final class DigestMailRenderTest extends TestCase
      * The awareness bucket in the fixture has spend and no conversions. It must print its spend and
      * its campaign count, and must NOT borrow the conversion path's denominator.
      */
-    public function test_the_awareness_path_is_shown_without_a_cost_per_order(): void
+    /**
+     * EMAIL-DECISION-REPORT-001 (Owner 2026-10-22) — the marketing-path split is analysis, and analysis is
+     * what the dashboard behind the button is for. The email keeps the decision row: the objective figure
+     * and its movement, never a cost per result on a path that earned none.
+     */
+    public function test_the_marketing_path_split_stays_out_of_the_email_and_the_row_keeps_the_objective(): void
     {
         $en = $this->html('en');
-
-        $this->assertStringContainsString('By marketing path', $en);
-        $this->assertStringContainsString('2 campaigns', $en, 'awareness reports what it ran, not a cost it never earned');
-        $this->assertStringContainsString('cost/result 87.10 USD', $en, 'the conversion path keeps its own cost');
-
-        // A path with no spend at all is left out rather than printed as a zero row.
-        $this->assertStringNotContainsString('0 campaigns', $en);
+        $this->assertStringNotContainsString('By marketing path', $en);
+        $this->assertStringContainsString('data-block="portfolio-row"', $en);
+        $this->assertStringContainsString('4.20×', $en, 'the row leads with the objective figure (ROAS)');
     }
 
     /** An Arabic email is laid out right to left — a translated email in the wrong direction is worse. */
@@ -236,41 +235,32 @@ final class DigestMailRenderTest extends TestCase
      * than as headings with «—» under them. Each assertion below is a section that used to be
      * missing entirely: a reader had numbers and no way to tell what to do about them.
      */
-    public function test_the_email_carries_a_funnel_content_and_the_notes(): void
+    /**
+     * EMAIL-DECISION-REPORT-001 (Owner 2026-10-22) — the funnel, the content list and the notes left the
+     * email body: an email is read for a decision, and those are analysis. The row keeps the verdict line.
+     */
+    public function test_the_email_carries_the_verdict_and_not_the_funnel_content_or_notes(): void
     {
         $html = $this->renderOf($this->rich());
-
-        $this->assertStringContainsString('المسار', $html);
-        $this->assertStringContainsString('الظهور', $html);
-        // Arabic labels, not the engine's English ones: a half-translated funnel reads worse than
-        // either language alone.
         $this->assertStringNotContainsString('Landing Page View', $html);
-        $this->assertStringContainsString('زيارات الصفحة', $html);
-
-        $this->assertStringContainsString('المحتوى', $html);
-        $this->assertStringContainsString('Bundle Carousel', $html);
-
-        $this->assertStringContainsString('ما يستحق الانتباه', $html);
-        // Platform-scoped wording — CLIENT-REPORT-ENTITY-BOUNDARY-001: «الإنفاق على ميتا يستهلك…».
-        $this->assertStringContainsString('يستهلك الميزانية أسرع من الخطة', $html);
-        $this->assertStringContainsString('ميتا', $html);
+        $this->assertStringNotContainsString('Bundle Carousel', $html);
+        $this->assertStringNotContainsString('ما يستحق الانتباه', $html);
+        $this->assertStringContainsString('data-block="portfolio-row"', $html);
+        $this->assertStringContainsString('class="ch-status"', $html);
     }
 
     /** A stage nobody reported is absent — a bar of length nothing reads as «everybody left here». */
-    public function test_an_unreported_funnel_stage_is_left_out_rather_than_drawn_at_zero(): void
+    /** The funnel is not in the email at all now; a stage nobody reported can therefore never be drawn at zero. */
+    public function test_no_funnel_stage_is_drawn_in_the_email(): void
     {
         $digest = $this->rich();
         $digest['projects'][0]['funnel'] = [
             ['stage' => 'impressions', 'label' => 'Impressions', 'count' => 400000, 'step_rate' => null],
-            ['stage' => 'clicks', 'label' => 'Clicks', 'count' => 9000, 'step_rate' => 0.0225],
-            // Never sent by any connected platform.
             ['stage' => 'add_to_cart', 'label' => 'Add to Cart', 'count' => null, 'step_rate' => null],
         ];
-
         $html = $this->renderOf($digest);
-
-        $this->assertStringContainsString('النقرات', $html);
         $this->assertStringNotContainsString('الإضافة للسلة', $html);
+        $this->assertStringNotContainsString('400,000', $html);
     }
 
     /**
@@ -298,21 +288,16 @@ final class DigestMailRenderTest extends TestCase
      * has any advice for you», which is a claim the product has not made — and a heading rendered for
      * somebody who opted out would be the switch not working.
      */
-    public function test_approved_recommendations_are_rendered_only_when_there_are_some(): void
+    /** EMAIL-DECISION-REPORT-001 — approved recommendations are read on the dashboard, not in the digest body. */
+    public function test_recommendations_are_not_rendered_in_the_digest_body(): void
     {
         $with = $this->rich();
         $with['projects'][0]['recommendations'] = [
-            ['id' => 'r1', 'title' => 'ارفع ميزانية المجموعة الأعلى', 'body' => 'هي الوحيدة تحت التكلفة المستهدفة.', 'priority' => 'high', 'campaign_id' => 'c1', 'due_date' => null],
+            ['id' => 'r1', 'title' => 'ارفع ميزانية المجموعة الأعلى', 'body' => 'هي الوحيدة تحت التكلفة المستهدفة.', 'priority' => 'high'],
         ];
-
         $html = $this->renderOf($with);
-        $this->assertStringContainsString('التوصيات المعتمدة', $html);
-        $this->assertStringContainsString('ارفع ميزانية المجموعة الأعلى', $html);
-
-        $without = $this->rich();
-        $without['projects'][0]['recommendations'] = [];
-
-        $this->assertStringNotContainsString('التوصيات المعتمدة', $this->renderOf($without));
+        $this->assertStringNotContainsString('التوصيات المعتمدة', $html);
+        $this->assertStringNotContainsString('ارفع ميزانية المجموعة الأعلى', $html);
     }
 
     /**

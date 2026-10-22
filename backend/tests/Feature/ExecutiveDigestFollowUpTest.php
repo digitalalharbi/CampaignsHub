@@ -190,8 +190,10 @@ final class ExecutiveDigestFollowUpTest extends TestCase
 
         $html = (new DailyDigestMail($this->digest(), 'ar', 'Manager', 'daily'))->render();
 
-        $this->assertStringContainsString('زميلة', $html);
-        $this->assertStringContainsString('حسب المسؤول', $html);
+        // EMAIL-DECISION-REPORT-001 (Owner 2026-10-22) — the per-owner table is analysis and left the email;
+        // the row keeps one follow-up line, counts only.
+        $this->assertStringNotContainsString('حسب المسؤول', $html);
+        $this->assertStringNotContainsString('زميلة', $html);
 
         // Still no lead identity, even with the team table on screen.
         $this->assertStringNotContainsString('نورة', $html);
