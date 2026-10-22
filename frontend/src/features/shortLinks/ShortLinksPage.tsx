@@ -445,21 +445,13 @@ export function ShortLinksPage() {
                   <Button variant="secondary" onClick={() => void copy(l.short_url)} aria-label={t.copy}>
                     {copied === l.short_url ? <Check size={14} /> : <Copy size={14} />}
                   </Button>
-<<<<<<< HEAD
-                  {l.is_active ? (
-                    <Button variant="secondary" onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
-                  ) : (
-                    <Button variant="secondary" onClick={() => enable.mutate(l.id)} disabled={enable.isPending} data-testid={`short-link-enable-${l.id}`}>{t.enable}</Button>
-||||||| parent of 865ca813 (Every short link has a QR code drawn in the browser, downloadable as SVG or PNG (SHORT-LINK-QR-001))
-                  {l.is_active && (
-                    <Button variant="secondary" onClick={() => disable.mutate(l.id)}>{t.disable}</Button>
-=======
                   <Button variant="secondary" onClick={() => setQrFor(l)} aria-label={t.qr} data-testid={`short-link-qr-${l.id}`}>
                     <QrCode size={14} />
                   </Button>
-                  {l.is_active && (
-                    <Button variant="secondary" onClick={() => disable.mutate(l.id)}>{t.disable}</Button>
->>>>>>> 865ca813 (Every short link has a QR code drawn in the browser, downloadable as SVG or PNG (SHORT-LINK-QR-001))
+                                    {l.is_active ? (
+                    <Button variant="secondary" onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => enable.mutate(l.id)} disabled={enable.isPending} data-testid={`short-link-enable-${l.id}`}>{t.enable}</Button>
                   )}
                   {confirming === l.id ? (
                     <>
