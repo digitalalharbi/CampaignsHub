@@ -264,7 +264,7 @@ jobs:
       # problem still fails and still names this step, which is what the cache note above asks for.
       - name: Browsers
         working-directory: frontend
-        timeout-minutes: 25
+        timeout-minutes: 40
         run: |
           # `timeout` is GNU coreutils and ships in the ubuntu runner image. If it ever does not,
           # the per-attempt bound is lost but the step must still be able to SUCCEED — without this
@@ -297,8 +297,14 @@ jobs:
             return 1
           }
           apt_idle || exit 1
-          # A cold system-package install is slower than a browser download, so it gets its own, longer bound.
-          if ! { if command -v timeout >/dev/null 2>&1; then timeout 900 npx playwright install-deps chromium ${{ matrix.browser }}; else npx playwright install-deps chromium ${{ matrix.browser }}; fi; }; then
+          # The mirror is slow, not absent: in #798's chromium run attempt 1 was at package 11 of ~100 after
+          # eight minutes and was still downloading — in the background, holding the lock — when attempts 2
+          # and 3 died on it. That first apt-get was the run that would have finished. So the slow download is
+          # waited out ONCE, and made less slow: short per-request timeouts and three retries per package turn
+          # a stalled connection into a fresh one in seconds instead of the 30 s «Ign:» stalls in the log.
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-mirror >/dev/null
+          # A cold system-package install is slower than a browser download, so it gets its own, longer bound (30 minutes, waited out once — never abandoned and raced).
+          if ! { if command -v timeout >/dev/null 2>&1; then timeout 1800 npx playwright install-deps chromium ${{ matrix.browser }}; else npx playwright install-deps chromium ${{ matrix.browser }}; fi; }; then
             echo "::error::system dependencies failed to install once; not retrying apt (a retry races the lock the failed run may still hold)"
             pgrep -a -x 'apt-get|apt|dpkg' || true
             exit 1
