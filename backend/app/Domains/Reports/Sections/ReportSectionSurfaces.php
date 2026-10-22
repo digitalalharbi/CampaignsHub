@@ -152,7 +152,12 @@ final class ReportSectionSurfaces
         if ($share !== null && $share->trace_mark !== null) {
             $payload['report_trace'] = $share->trace_mark;
         }
-        if ($share !== null && ($chosen = ReportColumns::forShare($share)->toArray()) !== []) {
+        // A saved report carries its own choice (`config['columns']`); a link's choice wins where it states one.
+        $chosen = $share !== null ? ReportColumns::forShare($share)->toArray() : [];
+        if ($chosen === []) {
+            $chosen = ReportColumns::forReport($report)->toArray();
+        }
+        if ($chosen !== []) {
             $payload['report_columns'] = $chosen;
         }
 
