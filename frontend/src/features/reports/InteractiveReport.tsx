@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
+import { cutColumns } from './reportColumns'
 import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { ReportLinksSection } from './ReportLinksSection'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -1144,6 +1145,7 @@ function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }
         saying. It opens the SAME detail as the cards — one reader for one creative.
       */}
       <ReportCreativeRoster
+        chosen={data.report_columns?.content}
         roster={data.ads_roster}
         inScope={data.creatives_in_scope}
         withheld={data.creatives_withheld}
@@ -1316,14 +1318,15 @@ function ComparisonSlide({ data }: { data: ReportData }) {
       */}
       <ChartCard title="ترتيب المنصات" className="lg:col-span-2">
         <DataMetricTable
-          columns={[
+          /* REPORT-TABLES-OWNER-COLUMNS-001 — the saved report's own column choice, the same cut the print and the files make. */
+          columns={cutColumns(data.report_columns?.platforms, [
             { key: 'platform', label: 'المنصة', kind: 'text' },
             { key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency },
             { key: 'conversions', label: 'النتائج', kind: 'number' },
             { key: 'cpa', label: 'CPA', kind: 'money', currency: data.currency },
             { key: 'roas', label: 'ROAS', kind: 'ratio' },
             { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
-          ]}
+          ], { spend: 'spend', conversions: 'results', cpa: 'cost' })}
           rows={(data.platforms ?? []).map((p) => ({
             platform: (
               <span className="inline-flex items-center gap-1.5 font-semibold">
@@ -1820,7 +1823,7 @@ function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number,
   return (
     <div data-testid="report-daily-records">
       <Title sub="كل يوم في فترة التقرير">السجل اليومي</Title>
-      <DataMetricTable columns={columns} rows={rows} />
+      <DataMetricTable columns={cutColumns(data.report_columns?.days, columns, { impressions: 'impressions', clicks: 'clicks', results: 'results', spend: 'spend' })} rows={rows} />
     </div>
   )
 }
@@ -1928,7 +1931,7 @@ function AccountsSlide({ data }: { data: ReportData }) {
         <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">لا حسابات بأرقام في هذا النطاق.</p>
       ) : (
         <div data-testid="report-accounts-table">
-          <DataMetricTable columns={columns} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
+          <DataMetricTable columns={cutColumns(data.report_columns?.accounts, columns, { platform: 'platform', spend: 'spend', results: 'results', cost: 'cost' })} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
         </div>
       )}
     </div>
