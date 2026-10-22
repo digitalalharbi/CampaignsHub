@@ -620,6 +620,23 @@ export function sparkFor(
   series: readonly TimePoint[] | undefined,
   reported: Record<string, boolean> | undefined,
 ): number[] | undefined {
+  return sparkPoints(key, series, reported)?.filter((v): v is number => v !== null)
+}
+
+/**
+ * REPORT-CHARTS-COMPLETE-001 — the same rule, with the holes KEPT.
+ *
+ * `sparkFor` hands a card the measured points only, which is right for a 96px shape. A chart with
+ * an x-axis — the printed drill-down trend — must leave a day nobody reported as a break in the
+ * line, because joining across it draws a measurement nobody made. Both readers share this one
+ * function, so the thresholds (two points at least, no more than a third missing, never a flat
+ * line, never a metric the platform did not send) cannot drift between the card and the chart.
+ */
+export function sparkPoints(
+  key: string,
+  series: readonly TimePoint[] | undefined,
+  reported: Record<string, boolean> | undefined,
+): (number | null)[] | undefined {
   if (series === undefined || series.length < 2) return undefined
 
   // Never a line for something nobody sent — see the note above.
@@ -640,7 +657,7 @@ export function sparkFor(
    */
   if (present.every((v) => v === present[0])) return undefined
 
-  return present
+  return points
 }
 
 export function dashboardMetrics(

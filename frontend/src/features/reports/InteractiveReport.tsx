@@ -32,7 +32,8 @@ import { TrendPill } from '@/features/analytics/components'
 import { ReportFooter } from './reportFooter'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
-import { SPECS } from '@/features/analytics/metricCatalog'
+import type { TimePoint } from '@/features/analytics/api'
+import { SPECS, sparkFor } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
@@ -607,9 +608,15 @@ function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { labe
  * bottom of a card, which reads as «this was zero every day» rather than «this was never plotted».
  */
 const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
-  if (!k || !rows.some((r) => r[k] !== undefined && r[k] !== null)) return undefined
+  /*
+   * REPORT-CHARTS-COMPLETE-001 — the product's one sparkline rule, not a second copy. The old map
+   * coalesced a day nobody reported to zero and drew it, and a withheld money day (spend null,
+   * the original amount beside it) became a dip to the floor. `sparkFor` leaves holes out, refuses
+   * a series more than a third missing or flat, and never draws a metric nobody sent.
+   */
+  if (!k) return undefined
 
-  return rows.map((r) => Number(r[k] ?? 0))
+  return sparkFor(k, rows as unknown as readonly TimePoint[], undefined)
 }
 const pRow = (data: ReportData, p: string) => (data.platforms ?? []).find((r) => r.provider === p) as Record<string, number> | undefined
 
