@@ -60,6 +60,8 @@ final class MailGallery
         return self::accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
+            // MEMBER-VISIBILITY-001 — the agency member whose membership withholds the money: no spend, cost or spend chart, the agency's own intro and button.
+            'digest-restricted-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'ليان' : 'Layan', 'daily', null, 'restricted'),
             // EMAIL-DECISION-REPORT-001 — the CLIENT weekly: no spend anywhere, outcomes first, the portal behind the button.
             'digest-client-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'سارة' : 'Sarah', 'weekly', null, 'client'),
             // EMAIL-PERF-DASHBOARDS-001 — the single-project variant: the project leads, no roll-up, no ranking of one.

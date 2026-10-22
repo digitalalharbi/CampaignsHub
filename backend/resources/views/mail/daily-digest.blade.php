@@ -17,6 +17,7 @@
     <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
     @php($singleProject = $singleProject ?? false)
     @php($client = ($audience ?? 'agency') === 'client')
+    @php($noMoney = in_array($audience ?? 'agency', ['client', 'restricted'], true))
     <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $client ? ($t['intro_client'] ?? $t['intro']) : ($singleProject && isset($projects[0]) ? ($t['intro_single'] ?? $t['intro']).' '.$projects[0]['name'] : $t['intro']) }}</div>
 
     {{--
@@ -87,7 +88,7 @@
                   fourth — and the fourth they want is a cost per result, which across projects would
                   divide one client's money by another client's orders.
                 --}}
-                @if (! $client)
+                @if (! $noMoney)
                     <div style="font-size:11px; color:#8b9a97; padding-top:10px; line-height:1.6;">{{ $t['no_blended_note'] }}</div>
                 @endif
             </td>

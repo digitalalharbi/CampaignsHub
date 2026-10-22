@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domains\Notifications\Charts\MailChart;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -36,6 +37,8 @@ final class MailDiagnoseCommand extends Command
         $this->line('username set   : '.(! empty($mailer['username']) ? 'yes' : 'no'));
         $this->line('password set   : '.(! empty($mailer['password']) ? 'yes' : 'no'));
         $this->line('from address   : '.(string) config('mail.from.address'));
+        // EMAIL-DECISION-REPORT-001 — whether this server can draw the email charts (GD); without it the mail embeds no image.
+        $this->line('chart images   : '.(MailChart::available() ? 'gd available — charts embedded' : 'gd missing — charts omitted, text fallbacks only'));
 
         $rows = DB::table('mail_deliveries')->orderByDesc('created_at')->limit(max(1, min((int) $this->option('limit'), 50)))
             ->get(['kind', 'recipient', 'status', 'error', 'created_at']);
