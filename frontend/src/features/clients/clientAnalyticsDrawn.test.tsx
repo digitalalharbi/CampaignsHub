@@ -26,8 +26,9 @@ import { getClientAnalytics } from './api'
  * of any kind and must say the currency rule withheld it, never «no measured days»; a single-currency
  * client draws both charts.
  */
-const day = (date: string, over: Record<string, number> = {}) => ({
-  date, spend: 100, clicks: 20, impressions: 1000, conversions: 2, revenue: 300, ...over,
+const day = (date: string, over: Record<string, number | null> = {}) => ({
+  // A daily row is a full metric row: the server states the day's ratios beside its sums, null where the denominator was nothing.
+  date, spend: 100, clicks: 20, impressions: 1000, conversions: 2, revenue: 300, roas: 3, cpa: 50, ctr: 0.02, cpc: 5, ...over,
 })
 
 const analytics = (over: Record<string, unknown> = {}) => ({
@@ -127,5 +128,44 @@ describe('the client analytics tab draws the series it already serves', () => {
 
     await screen.findByTestId('client-count-trend')
     expect(screen.queryByTestId('client-objective-mix-bar')).toBeNull()
+  })
+
+  /**
+   * UX-COMPACT-CHARTS-001 (second surface) — the KPI cards carry the window's shape.
+   *
+   * The sparkline reads the SAME series the charts draw — the server's own daily ratios, nothing
+   * derived here — through the product's one sparkline rule: a varying series draws, a flat one does
+   * not, and a day whose ratio the server withheld (null) is a hole rather than a zero.
+   */
+  it('draws a sparkline under each KPI that has a varying daily series, and none under a flat one', async () => {
+    vi.mocked(getClientAnalytics).mockResolvedValue(analytics({
+      timeseries: [
+        day('2026-09-01', { spend: 100, revenue: 300, conversions: 2, roas: 3, cpa: 50, ctr: 0.02 }),
+        day('2026-09-02', { spend: 150, revenue: 300, conversions: 3, roas: 2, cpa: 50, ctr: 0.03 }),
+        day('2026-09-03', { spend: 120, revenue: 600, conversions: 0, roas: 5, cpa: null, ctr: 0.01 }),
+      ],
+    }) as never)
+    renderWithProviders(<TabAnalytics clientId="c1" />, { locale: 'en' })
+
+    expect(await screen.findByTestId('client-kpi-spend-spark')).toBeInTheDocument()
+    expect(screen.getByTestId('client-kpi-roas-spark')).toBeInTheDocument()
+    expect(screen.getByTestId('client-kpi-ctr-spark')).toBeInTheDocument()
+    // Revenue is 300, 300, 600 — it varies, so it draws; results 2, 3, 0 vary too.
+    expect(screen.getByTestId('client-kpi-revenue-spark')).toBeInTheDocument()
+    expect(screen.getByTestId('client-kpi-conversions-spark')).toBeInTheDocument()
+    // Cost per result: 50, 50 and a withheld day — two identical points, flat, nothing drawn (and no zero invented for the hole).
+    expect(screen.queryByTestId('client-kpi-cpa-spark')).toBeNull()
+    // CPC is 5 every day: flat, nothing drawn.
+    expect(screen.queryByTestId('client-kpi-cpc-spark')).toBeNull()
+  })
+
+  it('draws no sparkline from a flat series or a single day', async () => {
+    vi.mocked(getClientAnalytics).mockResolvedValue(analytics() as never)
+    renderWithProviders(<TabAnalytics clientId="c1" />, { locale: 'en' })
+
+    await screen.findByTestId('client-money-trend')
+    // The default fixture repeats the same day three times: every series is flat.
+    expect(screen.queryByTestId('client-kpi-spend-spark')).toBeNull()
+    expect(screen.queryByTestId('client-kpi-roas-spark')).toBeNull()
   })
 })
