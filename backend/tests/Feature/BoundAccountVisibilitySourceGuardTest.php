@@ -53,6 +53,9 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Campaigns/Console/ReconcileContentMetricsCommand.php' => 'walks one creative through the product\'s own services, which apply the rule',
         'Domains/Campaigns/Console/ContentDefectCensusCommand.php' => 'lists through CreativeRows::present(), which applies the rule',
         'Domains/Campaigns/Console/SnapchatLpvProvenanceCommand.php' => 'counts stored rows by provenance',
+        // TIKTOK-MEDIA-002 — the cover cache reads a creative's stored media URL to fetch a file; no figure, no viewer.
+        'Domains/Campaigns/Console/RefreshCreativeCoversCommand.php' => 'caches media files for every creative that lacks one; reads media URLs, never a figure, for no viewer',
+        'Domains/Campaigns/Jobs/CacheCreativeCoverJob.php' => 'fetches one creative\'s media file off the request path; reads its media URL, never a figure, for no viewer',
         'Console/Commands/DemoRemoveCommand.php' => 'removes seeded rows',
         // Models, relations and policies — not readers of a project's figures.
         'Domains/Campaigns/Models/ExternalAd.php' => 'relation',

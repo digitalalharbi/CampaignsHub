@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Actions;
 
+use App\Domains\Campaigns\Jobs\CacheCreativeCoverJob;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
+use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -241,6 +243,10 @@ final class ImportExternalStructure
                 ...array_filter([
                     'headline' => is_string($creative['headline'] ?? null) && $creative['headline'] !== '' ? $creative['headline'] : null,
                     'body' => is_string($creative['body'] ?? null) && $creative['body'] !== '' ? $creative['body'] : null,
+                    // TIKTOK-MEDIA-001 — the file's own dimensions and length, only when the connector sent them.
+                    'width' => is_int($creative['width'] ?? null) ? $creative['width'] : null,
+                    'height' => is_int($creative['height'] ?? null) ? $creative['height'] : null,
+                    'duration_seconds' => is_numeric($creative['duration_seconds'] ?? null) ? (float) $creative['duration_seconds'] : null,
                 ], static fn ($v) => $v !== null),
                 /*
                  * CONTENT-NOTHING-TO-DRAW-WHY-001 — the body the platform sent, kept.
@@ -258,6 +264,11 @@ final class ImportExternalStructure
                 'last_synced_at' => Carbon::now(),
             ],
         );
+        // TIKTOK-MEDIA-002 — take the cover into our own storage once the row holds a provider link.
+        // Only through a real queue: a sync queue would fetch provider media inside the structure pass itself.
+        if (config('queue.default') !== 'sync' && CoverCache::wanted($row)) {
+            CacheCreativeCoverJob::dispatch((string) $row->getKey());
+        }
 
         $counts['creatives']++;
 

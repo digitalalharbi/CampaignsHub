@@ -26,6 +26,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -65,6 +66,39 @@ final class CommerceStoreSyncTest extends TestCase
             'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id,
             'name' => 'P', 'status' => 'active',
         ]);
+    }
+
+    /** SALLA-ORDERS-EXPANDED-001 — the deprecated `expanded` parameter is never sent; items come from the order's own details. */
+    public function test_salla_orders_are_listed_without_expanded_and_items_are_read_from_the_order_details(): void
+    {
+        $this->configure('salla');
+        $store = $this->store('salla');
+        Http::fake(function (Request $r) {
+            $url = $r->url();
+            if (str_contains($url, '/orders/o9')) {
+                return Http::response(['data' => [
+                    'id' => 'o9', 'items' => [['id' => 'i9', 'name' => 'عباية', 'quantity' => 2, 'sku' => 'AB-9', 'product' => ['id' => 'p9'], 'amounts' => ['total' => ['amount' => 300.0, 'currency' => 'SAR']]]],
+                ]]);
+            }
+            if (str_contains($url, '/orders')) {
+                return Http::response(['data' => [[
+                    'id' => 'o9', 'reference_id' => 9, 'status' => ['slug' => 'completed', 'name' => 'مكتمل'],
+                    'date' => ['date' => '2026-08-01 10:00:00.000000', 'timezone' => 'Asia/Riyadh'],
+                    'amounts' => ['total' => ['amount' => 300.0, 'currency' => 'SAR'], 'sub_total' => ['amount' => 300.0, 'currency' => 'SAR']],
+                    'customer' => ['id' => 'c9', 'first_name' => 'نورة', 'last_name' => 'س', 'email' => 'n@example.sa'],
+                ]], 'pagination' => ['currentPage' => 1, 'totalPages' => 1]]);
+            }
+
+            return Http::response(['data' => [], 'pagination' => ['currentPage' => 1, 'totalPages' => 1]]);
+        });
+
+        $run = app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
+
+        $this->assertSame('success', $run->status, (string) $run->error);
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'expanded'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/orders/o9'));
+        $order = CommerceOrder::withoutGlobalScopes()->where('external_id', 'o9')->firstOrFail();
+        $this->assertCount(1, $order->items, 'the items came from the order details, not from a deprecated expansion');
     }
 
     // ── Salla, end to end ─────────────────────────────────────────────────────────────────────

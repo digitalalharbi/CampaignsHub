@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Reporting\ReportingWindow;
 use Illuminate\Support\Carbon;
 
 /**
@@ -26,6 +28,9 @@ final class XConnector extends ApiAdvertisingConnector
 
     /** The documented ceiling for `entity_ids` on a single stats call. */
     private const ENTITIES_PER_CALL = 20;
+
+    /** X answers synchronous DAY stats for at most seven days per request; longer windows are asked in pieces. */
+    private const MAX_DAYS_PER_REQUEST = 7;
 
     protected function platform(): string
     {
@@ -196,57 +201,102 @@ final class XConnector extends ApiAdvertisingConnector
             return []; // nothing to ask about; the account has no campaigns in this window
         }
 
+        /*
+         * X-STATS-WINDOW-001 — Production refused every stats call with «Expect time to be midnight in the
+         * account's local timezone for day granularity · INVALID_TIME_WINDOW». The window was built at UTC
+         * midnight; X wants midnight in the AD ACCOUNT's own timezone, which discovery already records, and it
+         * answers at most seven days per synchronous request. `ReportingWindow` — the same rule Snapchat uses —
+         * places the days in that zone (refusing, rather than guessing, when none was recorded), and `chunked`
+         * cuts a longer backfill into seven-day pieces that reassemble idempotently on (campaign, date, metric).
+         * The end is exclusive: midnight after the last day.
+         */
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
         $rows = [];
 
-        foreach (array_chunk($campaignIds, self::ENTITIES_PER_CALL) as $chunk) {
-            $body = $this->read(
-                $this->api($tokens)->get($this->url("stats/accounts/{$adAccountId}"), [
-                    'entity' => 'CAMPAIGN',
-                    'entity_ids' => implode(',', $chunk),
-                    'granularity' => 'DAY',
-                    /*
-                     * X-001 — the groups this connector actually READS.
-                     *
-                     * It was `BILLING,ENGAGEMENT` while `unroll()` read `conversion_purchases` (a
-                     * WEB_CONVERSION metric) and `video_total_views` (a VIDEO metric). Neither group
-                     * was requested, so X never returned either one and both were mapped from a key
-                     * that could not arrive. Downstream that is indistinguishable from a platform
-                     * which does not report them: no error, no log, the metrics simply never existed.
-                     *
-                     * A metric mapped and never asked for is the quietest way to lose a figure, and
-                     * this is why every connector here now builds its request FROM its own map.
-                     */
-                    'metric_groups' => 'BILLING,ENGAGEMENT,VIDEO,WEB_CONVERSION',
-                    'placement' => 'ALL_ON_TWITTER',
-                    'start_time' => $from.'T00:00:00Z',
-                    'end_time' => $to.'T00:00:00Z',
-                ]),
-                'daily stats',
-            );
-
-            /** @var list<mixed> $entities */
-            $entities = (array) ($body['data'] ?? []);
-
-            // X returns one record per ENTITY, each carrying its own day series — so the unit here is
-            // the entity. See the note on `$rawInsightRows`: the number is not cross-platform.
-            $this->countRawInsightRows(count($entities));
-
-            foreach ($entities as $entity) {
-                $campaignId = (string) ($entity['id'] ?? '');
-                /** @var array<string,mixed> $series */
-                $series = (array) (($entity['id_data'][0]['metrics'] ?? []));
-
-                if ($campaignId === '' || $series === []) {
-                    continue;
-                }
-
-                foreach ($this->unroll($series, $from) as $row) {
-                    $rows[] = ['campaign_id' => $campaignId, ...$row];
-                }
+        foreach ($window->chunked(self::MAX_DAYS_PER_REQUEST) as $piece) {
+            foreach (array_chunk($campaignIds, self::ENTITIES_PER_CALL) as $chunk) {
+                $rows = [...$rows, ...$this->fetchStatsPiece($tokens, $adAccountId, $chunk, $piece)];
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * One stats request: one window piece, up to twenty campaigns.
+     *
+     * @param  list<string>  $chunk
+     * @return list<array<string, mixed>>
+     */
+    private function fetchStatsPiece(OAuthTokens $tokens, string $adAccountId, array $chunk, ReportingWindow $piece): array
+    {
+        $rows = [];
+        $from = $piece->startAt()->toDateString();
+
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("stats/accounts/{$adAccountId}"), [
+                'entity' => 'CAMPAIGN',
+                'entity_ids' => implode(',', $chunk),
+                'granularity' => 'DAY',
+                /*
+                 * X-001 — the groups this connector actually READS.
+                 *
+                 * It was `BILLING,ENGAGEMENT` while `unroll()` read `conversion_purchases` (a
+                 * WEB_CONVERSION metric) and `video_total_views` (a VIDEO metric). Neither group
+                 * was requested, so X never returned either one and both were mapped from a key
+                 * that could not arrive. Downstream that is indistinguishable from a platform
+                 * which does not report them: no error, no log, the metrics simply never existed.
+                 *
+                 * A metric mapped and never asked for is the quietest way to lose a figure, and
+                 * this is why every connector here now builds its request FROM its own map.
+                 */
+                'metric_groups' => 'BILLING,ENGAGEMENT,VIDEO,WEB_CONVERSION',
+                'placement' => 'ALL_ON_TWITTER',
+                // ISO 8601 with the account's own offset and no fractional seconds — the shape X documents.
+                'start_time' => $piece->startAt()->format('Y-m-d\TH:i:sP'),
+                'end_time' => $piece->endAt()->format('Y-m-d\TH:i:sP'),
+            ]),
+            'daily stats',
+        );
+
+        /** @var list<mixed> $entities */
+        $entities = (array) ($body['data'] ?? []);
+
+        // X returns one record per ENTITY, each carrying its own day series — so the unit here is
+        // the entity. See the note on `$rawInsightRows`: the number is not cross-platform.
+        $this->countRawInsightRows(count($entities));
+
+        foreach ($entities as $entity) {
+            $campaignId = (string) ($entity['id'] ?? '');
+            /** @var array<string,mixed> $series */
+            $series = (array) (($entity['id_data'][0]['metrics'] ?? []));
+
+            if ($campaignId === '' || $series === []) {
+                continue;
+            }
+
+            foreach ($this->unroll($series, $from) as $row) {
+                $rows[] = ['campaign_id' => $campaignId, ...$row];
+            }
+        }
+
+        return $rows;
+    }
+
+    /** The ad account's own timezone, as discovery recorded it — never defaulted (see ReportingWindow). */
+    private function accountTimezone(string $adAccountId): ?string
+    {
+        if ($this->connection === null) {
+            return null;
+        }
+
+        $timezone = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $this->connection->getKey())
+            ->where('external_id', $adAccountId)
+            ->where('account_type', 'ad_account')
+            ->value('timezone');
+
+        return is_string($timezone) && $timezone !== '' ? $timezone : null;
     }
 
     /**
