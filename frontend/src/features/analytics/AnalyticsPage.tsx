@@ -2255,6 +2255,7 @@ function AttributionSection({ projectId, range, filters }: TabProps) {
   return (
     <>
       <AttributionPanel
+        projectId={projectId}
         data={a.data}
         loading={a.isLoading}
         error={a.isError}

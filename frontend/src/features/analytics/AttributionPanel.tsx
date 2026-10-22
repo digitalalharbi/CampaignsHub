@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Panel } from './components'
 import { AttributionModels } from './AttributionModels'
+import { AttributionSettingsPanel } from './AttributionSettingsPanel'
 import { AttributionDisagreementView } from './AttributionDisagreementView'
 import { money, moneyExact, num, percent } from './format'
 import type { Attribution, PlatformClaim, Reconciliation as ReconciliationData } from './api'
@@ -43,7 +44,10 @@ export function AttributionPanel({
   error,
   locale,
   className,
+  projectId,
 }: {
+  /** ATTRIB-PRESETS-001 — the project whose preset the chooser reads and writes. */
+  projectId?: string | null
   data: Attribution | undefined
   loading?: boolean
   error?: boolean
@@ -215,6 +219,8 @@ export function AttributionPanel({
         <Reconciliation data={data?.reconciliation} ar={ar} />
         <AttributionDisagreementView data={data?.disagreement} ar={ar} />
         <AttributionModels data={data?.model_comparison} ar={ar} />
+        {/* ATTRIB-PRESETS-001 — the preset the comparison above ran under, and the choice; nothing when the module is off. */}
+        <AttributionSettingsPanel ar={ar} projectId={projectId} />
 
         {/* ── Store-Confirmed ───────────────────────────────────────────────────────────── */}
         <section className="min-w-0 border-t border-border pt-4">

@@ -1,6 +1,6 @@
 import type { BudgetExplanationPayload } from './BudgetReading'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { getEnvelope, getData } from '@/lib/api/client'
+import { getEnvelope, getData, putData } from '@/lib/api/client'
 import type { FilterScope } from './filterScope'
 
 /** KPI bundle returned by every aggregation (base sums + derived ratios; nulls when undefined). */
@@ -1213,3 +1213,35 @@ export const useObjectiveTrend = (p: string | null, r: Range, f?: MetricFilters)
 
 export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
+
+/**
+ * ATTRIB-PRESETS-001 — this project's attribution preset over the one credit engine.
+ *
+ * `presets` is the server's catalogue (BASIC / STANDARD / ADVANCED / CUSTOM); `current` is null until
+ * the Owner chose, in which case the engine runs the default preset (`default_preset`). `versions`
+ * are every change, newest first, so a comparison can be named with the configuration it ran under.
+ * The endpoint answers 403 when the attribution module is off for this project.
+ */
+export interface AttributionPreset { label_ar: string; label_en: string; models: string[]; advanced: boolean }
+export interface AttributionAdvanced { honour_consent: boolean; exclude_refunds: boolean; eligible_channels: string[] | null }
+export interface AttributionSettingsData {
+  configured: boolean
+  models_available: string[]
+  defaults: { models: string[]; lookback_days: number; half_life_days: number; weights: Record<string, number> }
+  current: null | { models: string[]; lookback_days: number; half_life_days: number; weights: Record<string, number>; version: string; preset: string; advanced: AttributionAdvanced | null }
+  current_version: string
+  presets: Record<string, AttributionPreset>
+  default_preset: string
+  advanced_defaults: AttributionAdvanced
+  versions: Array<{ number: number; preset: string; models: string[]; lookback_days: number; half_life_days: number; weights: Record<string, number>; advanced: AttributionAdvanced | null; version: string; changed_by: number | null; created_at: string | null }>
+}
+export interface AttributionSettingsUpdate {
+  preset: string
+  lookback_days?: number
+  half_life_days?: number
+  weights?: Record<string, number>
+  models?: string[]
+  advanced?: Partial<AttributionAdvanced>
+}
+export const getAttributionSettings = (p: string) => getData<AttributionSettingsData>(`/projects/${p}/attribution-settings`)
+export const updateAttributionSettings = (p: string, body: AttributionSettingsUpdate) => putData<AttributionSettingsData>(`/projects/${p}/attribution-settings`, body)

@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Metrics\Services\AttributionCredit;
+use App\Domains\Metrics\Settings\AttributionPresets;
 use App\Domains\Metrics\Settings\AttributionSettings;
 use App\Domains\Metrics\Settings\ProjectAttributionSetting;
 use App\Domains\Projects\Context\ProjectContext;
@@ -39,8 +40,14 @@ final class AttributionSettingsController extends Controller
             'current' => $row === null ? null : [
                 'models' => $row->models, 'lookback_days' => $row->lookback_days, 'half_life_days' => $row->half_life_days,
                 'weights' => $row->weights, 'version' => $row->version,
+                'preset' => $row->preset ?? AttributionPresets::DEFAULT, 'advanced' => $row->advanced,
             ],
             'current_version' => AttributionCredit::VERSION,
+            // ATTRIB-PRESETS-001 — the four presets, the default, and this project's change history.
+            'presets' => AttributionPresets::catalogue(),
+            'default_preset' => AttributionPresets::DEFAULT,
+            'advanced_defaults' => AttributionPresets::ADVANCED_DEFAULTS,
+            'versions' => $this->settings->versions($tenantId, $projectId),
         ]);
     }
 
@@ -48,7 +55,14 @@ final class AttributionSettingsController extends Controller
     {
         [$tenantId, $projectId] = $this->scope();
         $data = $request->validate([
-            'models' => ['required', 'array', 'min:1'],
+            // ATTRIB-PRESETS-001 — with a preset, the models are the preset's; without one, the old contract.
+            'preset' => ['nullable', 'string', 'in:'.implode(',', AttributionPresets::ALL)],
+            'advanced' => ['nullable', 'array'],
+            'advanced.honour_consent' => ['nullable', 'boolean'],
+            'advanced.exclude_refunds' => ['nullable', 'boolean'],
+            'advanced.eligible_channels' => ['nullable', 'array'],
+            'advanced.eligible_channels.*' => ['string'],
+            'models' => ['required_without:preset', 'array', 'min:1'],
             'models.*' => ['string'],
             'lookback_days' => ['nullable', 'integer'],
             'half_life_days' => ['nullable', 'integer'],
@@ -66,8 +80,8 @@ final class AttributionSettingsController extends Controller
 
         $this->audit->log(
             'attribution.settings_changed', 'project', $projectId,
-            $before === null ? null : ['models' => $before->models, 'lookback_days' => $before->lookback_days, 'half_life_days' => $before->half_life_days],
-            ['models' => $row->models, 'lookback_days' => $row->lookback_days, 'half_life_days' => $row->half_life_days, 'version' => $row->version],
+            $before === null ? null : ['preset' => $before->preset, 'models' => $before->models, 'lookback_days' => $before->lookback_days, 'half_life_days' => $before->half_life_days],
+            ['preset' => $row->preset, 'models' => $row->models, 'lookback_days' => $row->lookback_days, 'half_life_days' => $row->half_life_days, 'version' => $row->version],
         );
 
         return $this->show();
