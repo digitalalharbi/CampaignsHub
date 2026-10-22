@@ -53,6 +53,23 @@ final class EmailKpiHierarchyTest extends TestCase
         $this->assertStringContainsString('10,000.00 SAR', $html);
     }
 
+    /** EMAIL-DECISION-REPORT-001 — an alert is an action-required card: the decision it asks for, and the one place to take it. */
+    public function test_an_alert_card_names_its_decision_and_links_to_the_alert_and_the_bundle_counts_by_severity(): void
+    {
+        $html = (string) MailGallery::render('alerts-bundle', 'ar');
+
+        $this->assertSame(2, substr_count($html, 'data-block="action"'), 'the two findings with a decision carry it; the third has none');
+        $this->assertStringContainsString('قرار اليوم: أبقِ الميزانية', $html);
+        $this->assertStringContainsString('أعد ربط المصدر', $html);
+        $this->assertMatchesRegularExpression('#href="[^"]+/app/alerts\?event=demo-1"#', $html, 'the button lands on the alert itself (OPS-LINK-001 deep link)');
+        $this->assertStringContainsString('data-block="severity-strip"', $html);
+        $this->assertMatchesRegularExpression('#2 حرج#', $html);
+        $this->assertMatchesRegularExpression('#1 تحذير#', $html);
+
+        $one = (string) MailGallery::render('alerts-one', 'en');
+        $this->assertStringNotContainsString('data-block="severity-strip"', $one, 'one finding is not a count');
+    }
+
     public function test_the_weekly_digest_keeps_the_same_hierarchy(): void
     {
         $html = (string) MailGallery::render('digest-weekly', 'en');
