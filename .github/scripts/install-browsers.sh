@@ -55,11 +55,12 @@ printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Tim
 prefetch() {
   local started=$SECONDS dry pkgs uris want have
   say "prefetch system packages for chromium + $browser"
-  dry=$(npx playwright install-deps --dry-run chromium "$browser" 2>&1) || { echo "dry-run failed: $dry" | head -5; end; return 1; }
-  # The command is printed as `... apt-get install -y --no-install-recommends pkg pkg pkg ...`; take what follows the flag.
-  pkgs=$(printf '%s\n' "$dry" | grep -o -- '--no-install-recommends .*' | head -1 | sed -e 's/--no-install-recommends //' -e 's/["'"'"'].*$//')
-  [ -n "$pkgs" ] || { echo "could not read the package list from: $(printf '%s' "$dry" | head -c 400)"; end; return 1; }
-  echo "packages named by Playwright: $(printf '%s\n' $pkgs | wc -l)"
+  # `--dry-run` prints «Missing system dependencies (N):» and one indented package per line, and exits non-zero while
+  # any are missing — that is its answer, not a failure — so the status is ignored and the list is read.
+  dry=$(npx playwright install-deps --dry-run chromium "$browser" 2>&1 || true)
+  pkgs=$(printf '%s\n' "$dry" | sed -n 's/^  \([a-z0-9][a-z0-9+.:-]*\)$/\1/p' | tr '\n' ' ')
+  [ -n "$pkgs" ] || { echo "could not read a package list from: $(printf '%s' "$dry" | head -c 400)"; end; return 1; }
+  echo "packages named by Playwright: $(printf '%s\n' $pkgs | wc -l | tr -d ' ')"
 
   sudo apt-get update -qq >/dev/null 2>&1 || true
   # shellcheck disable=SC2086
