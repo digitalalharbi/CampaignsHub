@@ -68,6 +68,24 @@ describe('the agency headline', () => {
     expect(screen.getByTestId('agency-freshness')).toBeInTheDocument()
   })
 
+  /** UX-COMPACT-CHARTS-001 — each card carries the window's daily shape, and only for a metric the series holds. */
+  it('draws a sparkline under a figure the daily series carries and none under one it does not', async () => {
+    vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({
+      timeseries: [
+        { date: '2026-09-11', spend: 2000, conversions: 20 },
+        { date: '2026-09-12', spend: 2100, conversions: 25 },
+        { date: '2026-09-13', spend: 1900, conversions: 22 },
+      ],
+    }))
+    renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
+    const spend = await screen.findByTestId('agency-kpi-spend')
+    expect(within(spend).getByTestId('agency-kpi-spend-spark')).toBeInTheDocument()
+    expect(within(screen.getByTestId('agency-kpi-results')).getByTestId('agency-kpi-conversions-spark')).toBeInTheDocument()
+    // The daily rows carry no cost per result and no return: no line is invented from zeros.
+    expect(screen.queryByTestId('agency-kpi-cpa-spark')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agency-kpi-roas-spark')).not.toBeInTheDocument()
+  })
+
   it('withholds the movement and says why when the current window stopped short', async () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ current: totals(40_000, 500, truncated) }))
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
