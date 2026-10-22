@@ -274,37 +274,43 @@ jobs:
           bounded() {
             if command -v timeout >/dev/null 2>&1; then timeout 480 "$@"; else "$@"; fi
           }
-          # BROWSER-INSTALL-APT-LOCK-001 — the retry used to collide with its own predecessor.
+          # BROWSER-INSTALL-APT-LOCK-001 — system packages once, browser downloads retried.
           #
-          # `timeout` stops `npx`, but Playwright's «Switching to root user» hands the system packages
-          # to a `sudo apt-get` child, and a child outlives the process that was timed out: it keeps
-          # downloading and keeps the dpkg lock. The next attempt then started while that apt-get was
-          # still alive and every one of its tries died on «Could not get lock /var/lib/dpkg/lock-frontend.
-          # It is held by process N (apt-get)» — exit 100 three times in seconds, a red gate that said
-          # nothing about the change (#820, 2026-10-22).
+          # `npx playwright install --with-deps` was one command doing two jobs, and the retry loop around
+          # it retried the wrong one. `timeout` stops `npx`, but Playwright's «Switching to root user» hands
+          # the system packages to a `sudo apt-get` child that outlives the timed-out parent and keeps the
+          # dpkg lock, so every retry died in seconds on «Could not get lock /var/lib/dpkg/lock-frontend.
+          # It is held by process N (apt-get)» — exit 100 three times, no test run (#820, 2026-10-22).
           #
-          # So an attempt never starts while apt or dpkg is running: the previous attempt's leftover is
-          # WAITED for (it is making progress, just slowly — killing apt mid-install is how a package
-          # database ends up half-configured), up to ten minutes, and a lock still held after that is
-          # reported by name instead of being raced. The ceiling stays bounded and the gate stays a gate.
+          # So the two jobs are separate. (1) System dependencies are installed ONCE: the step first
+          # requires apt and dpkg to be idle (waited for up to ten minutes, never killed — killing apt
+          # mid-install half-configures the package database — and a lock still held is a FAILURE that
+          # names the holder, not something to race), then runs `install-deps` a single time under the
+          # bound. There is no retry of apt, because a retry of apt is what collided. (2) Only the browser
+          # DOWNLOAD — a plain HTTPS fetch with no lock — keeps its three bounded attempts.
           apt_idle() {
             for _ in $(seq 1 120); do
-              if pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null 2>&1; then sleep 5; else return 0; fi
+              if ! pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null 2>&1; then return 0; fi
+              sleep 5
             done
-            echo "::warning::apt/dpkg still running after ten minutes: $(pgrep -a -x 'apt-get|apt|dpkg|unattended-upgr' | head -3 | tr '\n' ';')"
+            echo "::error::apt/dpkg still running after ten minutes: $(pgrep -a -x 'apt-get|apt|dpkg|unattended-upgr' | head -3 | tr '\n' ';')"
             return 1
           }
+          apt_idle || exit 1
+          # A cold system-package install is slower than a browser download, so it gets its own, longer bound.
+          if ! { if command -v timeout >/dev/null 2>&1; then timeout 900 npx playwright install-deps chromium ${{ matrix.browser }}; else npx playwright install-deps chromium ${{ matrix.browser }}; fi; }; then
+            echo "::error::system dependencies failed to install once; not retrying apt (a retry races the lock the failed run may still hold)"
+            pgrep -a -x 'apt-get|apt|dpkg' || true
+            exit 1
+          fi
           for attempt in 1 2 3; do
-            apt_idle || true
-            if bounded npx playwright install --with-deps chromium ${{ matrix.browser }}; then
+            if bounded npx playwright install chromium ${{ matrix.browser }}; then
               exit 0
             fi
-            echo "::warning::browser install attempt ${attempt} stalled or failed — waiting for apt to settle, then retrying"
-            apt_idle || true
-            sudo dpkg --configure -a >/dev/null 2>&1 || true
-            sleep 5
+            echo "::warning::browser download attempt ${attempt} stalled or failed — retrying the download only"
+            sleep 15
           done
-          echo "::error::browser install failed three times; the runner could not reach its package mirror"
+          echo "::error::browser download failed three times; the runner could not reach the Playwright CDN"
           exit 1
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
