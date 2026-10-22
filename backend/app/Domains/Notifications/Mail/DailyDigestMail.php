@@ -308,8 +308,8 @@ final class DailyDigestMail extends Mailable
             // The objective figure: the first the metric set names; with no stated set, the first the totals hold.
             $objectiveKey = null;
             foreach (self::OBJECTIVE_KEYS as $key) {
-                // Named by the set: the row shows it even when nothing arrived (the presenter says so); unnamed: only a real figure.
-                if ($set !== [] ? in_array($key, $set, true) : (array_key_exists($key, $totals) && is_numeric($totals[$key]))) {
+                // Named by the set first, otherwise the first the totals hold — and only ever a REAL figure (Owner 2026-10-22: nothing is written about a figure nobody sent).
+                if (($set === [] || in_array($key, $set, true)) && array_key_exists($key, $totals) && is_numeric($totals[$key])) {
                     $objectiveKey = $key;
                     break;
                 }
@@ -406,24 +406,29 @@ final class DailyDigestMail extends Mailable
             return ['trend' => null, 'donut' => null];
         }
         $totals = (array) ($this->digest['totals'] ?? []);
-        // A day nobody reported stays a HOLE in the series: the line breaks there rather than joining across it.
-        $series = array_values(array_filter((array) ($totals['series'] ?? []), static fn ($pt): bool => is_array($pt) && isset($pt['date'])));
+        /*
+         * Owner 2026-10-22: a day nobody reported is not drawn and not mentioned. The trend is the
+         * reported days only, in order, and its caption names the first and last REPORTED day — the
+         * email never writes that something is missing. Nothing is interpolated either: a day that
+         * was not reported contributes no point, so the line joins reported days and nothing else.
+         */
+        $measured = array_values(array_filter(
+            (array) ($totals['series'] ?? []),
+            static fn ($pt): bool => is_array($pt) && isset($pt['date']) && is_numeric($pt['spend'] ?? null),
+        ));
         $trend = null;
-        $measured = array_values(array_filter($series, static fn (array $pt): bool => is_numeric($pt['spend'] ?? null)));
         if (count($measured) >= 2) {
-            $values = array_map(static fn (array $pt): ?float => is_numeric($pt['spend'] ?? null) ? (float) $pt['spend'] : null, $series);
-            $present = array_values(array_filter($values, static fn (?float $v): bool => $v !== null));
+            $values = array_map(static fn (array $pt): float => (float) $pt['spend'], $measured);
             $token = MailChart::store(['kind' => 'trend', 'values' => $values, 'colour' => MailChart::COLOURS[0], 'width' => 320, 'height' => 64]);
             if ($token !== null) {
-                $first = (string) $series[0]['date'];
-                $last = (string) $series[count($series) - 1]['date'];
+                $first = (string) $measured[0]['date'];
+                $last = (string) $measured[count($measured) - 1]['date'];
                 $trend = [
                     'url' => MailChart::url($token),
                     'width' => 320,
                     'height' => 64,
-                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($present)).' – '.$p->money(max($present)),
-                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last
-                        .(count($present) < count($values) ? ($ar ? ' — الفجوات أيام لم تُبلَّغ' : ' — gaps are unreported days') : ''),
+                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($values)).' – '.$p->money(max($values)),
+                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last,
                 ];
             }
         }
@@ -674,11 +679,12 @@ final class DailyDigestMail extends Mailable
         [$resultChange, $resultTone] = $pill($change['conversions'] ?? null);
         [$revenueChange, $revenueTone] = $pill($change['revenue'] ?? null);
 
-        $cards = [
-            ['label' => $ar ? 'الإنفاق' : 'Spend', 'value' => $p->headline($totals['spend'] ?? null), 'change' => $spendChange, 'tone' => $spendTone],
-            ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) ($totals['conversions'] ?? 0)), 'change' => $resultChange, 'tone' => $resultTone],
+        // A tile exists only for a figure that exists (Owner 2026-10-22): no «no data» tile, no coalesced zero.
+        $cards = array_values(array_filter([
+            is_numeric($totals['spend'] ?? null) ? ['label' => $ar ? 'الإنفاق' : 'Spend', 'value' => $p->headline((float) $totals['spend']), 'change' => $spendChange, 'tone' => $spendTone] : null,
+            is_numeric($totals['conversions'] ?? null) ? ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) $totals['conversions']), 'change' => $resultChange, 'tone' => $resultTone] : null,
             ['label' => $ar ? 'المشاريع' : 'Projects', 'value' => (string) ($totals['projects'] ?? 0), 'change' => null, 'tone' => 'neutral'],
-        ];
+        ]));
 
         if ((float) ($totals['revenue'] ?? 0) > 0) {
             $cards[] = ['label' => $ar ? 'الإيراد' : 'Revenue', 'value' => $p->headline($totals['revenue'] ?? null), 'change' => $revenueChange, 'tone' => $revenueTone];
@@ -1089,7 +1095,6 @@ final class DailyDigestMail extends Mailable
             'received_short' => 'وصل',
             'contacted_short' => 'تم التواصل',
             'overdue_short' => 'متأخر',
-            'no_blended_note' => 'لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر. ويحمل كل صفّ مشروع رقم هدفه الخاص بدلًا منهما.',
             'by_path' => 'حسب المسار التسويقي',
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
@@ -1141,7 +1146,6 @@ final class DailyDigestMail extends Mailable
             'received_short' => 'Received',
             'contacted_short' => 'Contacted',
             'overdue_short' => 'Overdue',
-            'no_blended_note' => 'Cost per result and return are not summed across projects — that would divide one client’s money by another client’s results. Each project row carries its own objective figure instead.',
             'by_path' => 'By marketing path',
             'best' => 'Best',
             'worst' => 'Weakest',
