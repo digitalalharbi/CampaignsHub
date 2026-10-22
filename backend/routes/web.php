@@ -2,6 +2,7 @@
 
 use App\Domains\Campaigns\Http\Controllers\AppMediaController;
 use App\Domains\Influencers\Http\Controllers\AttributionController;
+use App\Domains\Notifications\Http\Controllers\MailChartController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
 use App\Domains\ShortLinks\Http\Controllers\ShortLinkHopController;
 use App\Domains\ShortLinks\Services\ShortLinkHops;
@@ -53,7 +54,7 @@ Route::get('/r/{token}/preview.png', [SharePreviewController::class, 'image'])
     ->name('reports.share.preview.image');
 
 // EMAIL-DECISION-REPORT-001 — the static chart image behind an email's `<img>`, by opaque token (figures never in the URL).
-Route::get('/mail/charts/{token}.png', [\App\Domains\Notifications\Http\Controllers\MailChartController::class, 'png'])
+Route::get('/mail/charts/{token}.png', [MailChartController::class, 'png'])
     ->middleware('throttle:120,1')
     ->name('mail.chart');
 

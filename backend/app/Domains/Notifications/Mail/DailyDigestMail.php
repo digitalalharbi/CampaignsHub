@@ -87,6 +87,17 @@ final class DailyDigestMail extends Mailable
     }
 
     /**
+     * MEMBER-VISIBILITY-001 — whether this reader may see the money at all. A client never does; an
+     * agency member whose membership withholds `money.view` on any project in scope does not either
+     * (`restricted`): the same digest, with every spend, cost and spend chart left out and the
+     * agency's own intro and button kept.
+     */
+    private function withholdsMoney(): bool
+    {
+        return in_array($this->audience, ['client', 'restricted'], true);
+    }
+
+    /**
      * REPORT-FOOTER-001 in an inbox — the same fixed sentence and the same metadata line the page, the
      * link, the deck and the PDF end with. Across several projects the campaign objective is not one
      * thing, so it is left out rather than guessed.
@@ -143,7 +154,7 @@ final class DailyDigestMail extends Mailable
 
         return new Envelope(
             // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
-            subject: $this->client()
+            subject: $this->withholdsMoney()
                 ? ($ar ? $this->brandName()." — {$results} نتيجة {$when}" : $this->brandName()." — {$results} results {$when}")
                 : ($ar
                     ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
@@ -310,8 +321,8 @@ final class DailyDigestMail extends Mailable
                 array_slice((array) ($follow['rows'] ?? []), 0, 3),
             ));
             $second = array_key_exists('revenue', $totals) && is_numeric($totals['revenue']) && (float) $totals['revenue'] > 0 ? 'revenue' : 'conversions';
-            if ($this->client()) {
-                // CLIENT-REPORT-FRAMING-001 — no spend and nothing divided by it; results and revenue with their movement,
+            if ($this->withholdsMoney()) {
+                // CLIENT-REPORT-FRAMING-001 / MEMBER-VISIBILITY-001 — no spend and nothing divided by it; results and revenue with their movement,
                 // a ratio objective where the set names one, and the verdict said in outcomes rather than budgets.
                 $objectiveKey = in_array($objectiveKey, self::CLIENT_OBJECTIVE_KEYS, true) ? $objectiveKey : null;
                 $rows[] = [
@@ -327,7 +338,7 @@ final class DailyDigestMail extends Mailable
                     'attention' => null,
                     'follow' => null,
                     'spend_amount' => null,
-                    'url' => Frontend::origin().'/portal',
+                    'url' => $this->client() ? Frontend::origin().'/portal' : $app.'/app/dashboard',
                 ];
 
                 continue;
@@ -364,7 +375,7 @@ final class DailyDigestMail extends Mailable
     private function spendShare(DigestPresenter $p, array $rows): array
     {
         $spenders = array_values(array_filter($rows, static fn (array $r): bool => ($r['spend_amount'] ?? 0) > 0));
-        if ($spenders === [] || $this->singleProject() || $this->client()) {
+        if ($spenders === [] || $this->singleProject() || $this->withholdsMoney()) {
             return [];
         }
         usort($spenders, static fn (array $a, array $b): int => $b['spend_amount'] <=> $a['spend_amount']);
@@ -390,8 +401,8 @@ final class DailyDigestMail extends Mailable
      */
     private function charts(DigestPresenter $p, bool $ar): array
     {
-        // Both charts are drawn from spend; a client's mail carries neither (CLIENT-REPORT-FRAMING-001).
-        if ($this->client()) {
+        // Both charts are drawn from spend; a reader who may not see the money gets neither.
+        if ($this->withholdsMoney()) {
             return ['trend' => null, 'donut' => null];
         }
         $totals = (array) ($this->digest['totals'] ?? []);
@@ -628,7 +639,7 @@ final class DailyDigestMail extends Mailable
     private function accountCards(DigestPresenter $p, bool $ar): array
     {
         $cards = $this->agencyAccountCards($p, $ar);
-        if (! $this->client()) {
+        if (! $this->withholdsMoney()) {
             return $cards;
         }
         // A client's roll-up leads with what was achieved; the money that bought it is the agency's figure.
