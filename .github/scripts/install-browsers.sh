@@ -34,6 +34,8 @@ DEBS=${APT_DEBS_DIR:-$HOME/apt-debs}
 JOBS=${PREFETCH_JOBS:-12}
 mkdir -p "$DEBS"
 
+PREFETCH_TIMEOUT=${PREFETCH_TIMEOUT:-600}
+out() { [ -n "${GITHUB_OUTPUT:-}" ] && echo "$1=$2" >> "$GITHUB_OUTPUT"; return 0; }
 say() { printf '::group::%s\n' "$*"; }
 end() { printf '::endgroup::\n'; }
 
@@ -109,7 +111,13 @@ prefetch() {
   export -f candidates
   export -f fetch_one
   : > "$DEBS.failures"
-  xargs -P "$JOBS" -L1 bash -c 'fetch_one "$0" "$1" "$2"' < /tmp/apt-todo.txt
+  # Whatever happens next (the job timing out, the step being killed, install-deps dying), progress so far is worth caching:
+  # `fetched` is set BEFORE the first download and corrected afterwards, so a prefetch that never reaches its summary still saves.
+  out fetched 1
+  # Bounded on its own: a prefetch that cannot finish in ten minutes hands the rest to apt rather than eating the step.
+  timeout "$PREFETCH_TIMEOUT" xargs -P "$JOBS" -L1 bash -c 'fetch_one "$0" "$1" "$2"' < /tmp/apt-todo.txt \
+    || echo "::warning::prefetch stopped after ${PREFETCH_TIMEOUT}s (or xargs failed); the archives already held are kept and apt fetches the rest"
+  rm -f "$DEBS"/*.part
   if [ -s "$DEBS.failures" ]; then
     echo "$(wc -l < "$DEBS.failures" | tr -d ' ') archives could not be prefetched (apt fetches them itself); first reasons:"
     head -3 "$DEBS.failures" | cut -c1-300
@@ -118,11 +126,20 @@ prefetch() {
   # Where apt looks for archives. `cp -n`: an archive apt already holds is not replaced.
   sudo cp -n "$DEBS"/*.deb /var/cache/apt/archives/ 2>/dev/null || true
   echo "prefetch took $((SECONDS - started)) s; $(find "$DEBS" -name '*.deb' | wc -l | tr -d ' ') archives held"
-  # Tell the workflow whether there is anything new worth caching (written now, so it survives a later failure).
-  [ -n "${GITHUB_OUTPUT:-}" ] && echo "fetched=$(find "$DEBS" -name '*.deb' -newer /tmp/apt-uris.txt | wc -l | tr -d ' ')" >> "$GITHUB_OUTPUT"
+  # What the workflow and the probe need to know, written now so it survives a later failure: how many archives were
+  # wanted, how many are now held at the right size, and how many of those are new (worth caching).
+  held=0
+  while read -r _ file size; do
+    [ -s "$DEBS/$file" ] && [ "$(wc -c < "$DEBS/$file" | tr -d ' ')" = "$size" ] && held=$((held + 1))
+  done < /tmp/apt-uris.txt
+  echo "prefetch result: $held of $want archives held at the right size"
+  out wanted "$want"; out prefetched "$held"
+  out fetched "$(find "$DEBS" -name '*.deb' -newer /tmp/apt-uris.txt | wc -l | tr -d ' ')"
   end
 }
 prefetch || echo "::warning::prefetch skipped; install-deps will download sequentially (slower, same result)"
+# Probe-only: stop here, as a dying install step would, so the cache-recovery path can be exercised on purpose.
+if [ -n "${STOP_AFTER_PREFETCH:-}" ]; then echo "STOP_AFTER_PREFETCH set: stopping before install-deps"; exit 75; fi
 
 # --- 3. system dependencies, ONCE; a failure is a failure ----------------------------------------------------------
 say "install-deps (once)"
