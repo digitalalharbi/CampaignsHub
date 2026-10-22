@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 
 /**
@@ -61,6 +62,41 @@ final class ReportColumns
     public static function forShare(ReportShare $share): self
     {
         return self::fromArray((array) (($share->settings ?? [])['columns'] ?? []));
+    }
+
+    /**
+     * The SAVED report's own choice — `config['columns']`, the same shape a link stores.
+     *
+     * A snapshot has no link to carry the choice, and its page, its PDF and its files were the
+     * surfaces the Owner could not restrict. The report keeps the choice in its configuration;
+     * a link built from the report keeps its own and wins where it states one.
+     */
+    public static function forReport(Report $report): self
+    {
+        return self::fromArray((array) (($report->config ?? [])['columns'] ?? []));
+    }
+
+    /**
+     * Normalise a report configuration's `columns` on the way in: unknown tables and keys are cut,
+     * and a choice that restricts nothing is not stored at all.
+     *
+     * @param  array<string, mixed>|null  $config
+     * @return array<string, mixed>|null
+     */
+    public static function normaliseConfig(?array $config): ?array
+    {
+        if ($config === null || ! array_key_exists('columns', $config)) {
+            return $config;
+        }
+
+        $chosen = self::fromArray((array) $config['columns'])->toArray();
+        if ($chosen === []) {
+            unset($config['columns']);
+        } else {
+            $config['columns'] = $chosen;
+        }
+
+        return $config;
     }
 
     /** @return array<string, list<string>> */
