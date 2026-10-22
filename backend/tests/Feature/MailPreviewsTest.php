@@ -68,7 +68,7 @@ final class MailPreviewsTest extends TestCase
             $this->assertArrayHasKey("{$kind}.en.html", $files, "{$kind} has no English preview");
         }
 
-        $this->assertCount(32, $files);
+        $this->assertCount(34, $files);
     }
 
     /**
