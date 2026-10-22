@@ -40,7 +40,7 @@ final class MailChartTest extends TestCase
         $this->assertNull(MailChart::store(['kind' => 'trend', 'values' => [1.0, 1.0]]), 'nothing drawable, nothing stored');
     }
 
-    /** A day nobody reported is a hole in the chart: nothing is drawn in its column, and the alt says so. */
+    /** A day nobody reported is a hole in the chart: nothing is drawn in its column, and the line never crosses it. */
     public function test_a_missing_day_leaves_a_gap_in_the_trend_rather_than_a_line_through_it(): void
     {
         // Four days, the second unreported: points sit at 0, 1/3, 2/3 and 1 of the width.
@@ -101,33 +101,36 @@ final class MailChartTest extends TestCase
     }
 
     /**
-     * Owner 2026-10-22 — a day nobody reported is neither drawn nor mentioned.
+     * Owner 2026-10-22 — real dates, visual breaks, and not a word about it.
      *
-     * The trend is built from the reported days only, its caption names the first and last REPORTED
-     * day, and no wording about gaps or missing days reaches the email. Nothing is interpolated: the
-     * stored specification holds exactly the reported values, in order.
+     * A day nobody reported keeps its place in the series as a hole: the stored specification holds
+     * the window day by day with null where nothing arrived, so the PNG breaks the line there and
+     * never joins two non-consecutive reported days into one continuous trend. A measured zero is a
+     * real point. The caption names the window's first and last day; no wording about gaps or
+     * missing days reaches the email — data quality stays internal.
      */
-    public function test_an_unreported_day_is_left_out_of_the_trend_and_never_mentioned(): void
+    public function test_an_unreported_day_breaks_the_trend_at_its_real_date_and_is_never_mentioned(): void
     {
         $digest = MailGallery::digest(weekly: true);
         $digest['totals']['series'] = [
             ['date' => '2026-07-31', 'spend' => 5000.0],
             ['date' => '2026-08-01', 'spend' => null],
             ['date' => '2026-08-02', 'spend' => 6100.0],
-            ['date' => '2026-08-03', 'spend' => null],
+            ['date' => '2026-08-03', 'spend' => 0.0],
             ['date' => '2026-08-04', 'spend' => 5900.0],
             ['date' => '2026-08-05', 'spend' => null],
+            ['date' => '2026-08-06', 'spend' => 7200.0],
         ];
         foreach (['ar', 'en'] as $locale) {
             $html = (new DailyDigestMail($digest, $locale, 'Mohammed', 'weekly'))->render();
             $this->assertStringContainsString('data-block="chart-trend"', $html);
-            $this->assertStringContainsString('2026-07-31 → 2026-08-04', $html, "[$locale] the caption spans the reported days only");
-            $this->assertStringNotContainsString('2026-08-05', $html, "[$locale] an unreported last day is not named");
-            foreach (['الفجوات', 'لم تُبلَّغ', 'gaps', 'unreported', 'missing'] as $word) {
+            $this->assertStringContainsString('2026-07-31 → 2026-08-06', $html, "[$locale] the caption is the window's real first and last day");
+            foreach (['الفجوات', 'لم تُبلَّغ', 'gaps', 'unreported', 'missing', 'لا توجد بيانات'] as $word) {
                 $this->assertStringNotContainsString($word, $html, "[$locale] the email never says data is missing");
             }
             preg_match('#/mail/charts/([a-z0-9]{32})\.png" width="320"#', $html, $m);
-            $this->assertSame([5000.0, 6100.0, 5900.0], MailChart::spec($m[1])['values'], 'the stored series is the reported days, in order, with nothing between them');
+            $this->assertSame([5000.0, null, 6100.0, 0.0, 5900.0, null, 7200.0], MailChart::spec($m[1])['values'],
+                'the stored series keeps every day at its real position: holes where nothing arrived, a real point for a measured zero');
         }
     }
 }
