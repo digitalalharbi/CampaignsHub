@@ -27,7 +27,7 @@ final class ProjectAttributionSetting extends Model
     protected $table = 'project_attribution_settings';
 
     /** @var list<string> */
-    protected $fillable = ['tenant_id', 'project_id', 'models', 'lookback_days', 'half_life_days', 'weights', 'version', 'updated_by'];
+    protected $fillable = ['tenant_id', 'project_id', 'models', 'lookback_days', 'half_life_days', 'weights', 'version', 'updated_by', 'preset', 'advanced'];
 
-    protected $casts = ['models' => 'array', 'weights' => 'array', 'lookback_days' => 'integer', 'half_life_days' => 'integer'];
+    protected $casts = ['models' => 'array', 'weights' => 'array', 'lookback_days' => 'integer', 'half_life_days' => 'integer', 'advanced' => 'array'];
 }
