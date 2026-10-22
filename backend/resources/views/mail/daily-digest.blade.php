@@ -15,9 +15,15 @@
 <div style="font-family:{!! $font !!}; color:#0b1a16;">
 
     <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
-    <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $t['intro'] }}</div>
+    @php($singleProject = $singleProject ?? false)
+    <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $singleProject && isset($projects[0]) ? ($t['intro_single'] ?? $t['intro']).' '.$projects[0]['name'] : $t['intro'] }}</div>
 
-    {{-- The account line. Spend and results sum across projects; a cost per result deliberately does not. --}}
+    {{--
+      The account line. Spend and results sum across projects; a cost per result deliberately does not.
+      EMAIL-PERF-DASHBOARDS-001 — absent for a single project: a roll-up of one repeats the project's
+      own figures one card above them.
+    --}}
+    @if (! $singleProject)
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:20px;">
         <tr>
@@ -77,6 +83,7 @@
             </td>
         </tr>
     </table>
+    @endif
 
     {{--
       EMAIL-DASHBOARD-UX-001 — the two ends, before the middle.
@@ -89,7 +96,7 @@
       Absent entirely when there is only one project with a comparison: «best of one» is a ranking of
       nothing, and printing it as a highlight teaches a reader that the highlights mean nothing.
     --}}
-    @if (($movement['best'] ?? null) || ($movement['worst'] ?? null))
+    @if (! $singleProject && (($movement['best'] ?? null) || ($movement['worst'] ?? null)))
         <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['movement'] }}</div>
         @if ($movement['best'])
             <div style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }};
@@ -129,7 +136,7 @@
                     @if ($lead)
                         <div style="margin-top:14px;">
                             <div style="font-size:12px; color:#5b6b68;">{{ $lead['label'] }}</div>
-                            <div class="ch-kpi-lead" style="font-size:28px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
+                            <div class="ch-kpi-lead" style="font-size:{{ $singleProject ? '30' : '28' }}px; line-height:1.15; font-weight:800; color:#0b1a16;" dir="ltr">{{ $lead['value'] }}</div>
                             @if ($lead['change'])
                                 <div style="font-size:12px; font-weight:700; color:{{ $lead['change_colour'] }};" dir="ltr">{{ $lead['change'] }}</div>
                             @endif
