@@ -8,6 +8,8 @@ import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
+import { AdGroupsPage } from '@/features/analytics/AdGroupsPage'
+import { AdsPage } from '@/features/analytics/AdsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
 import { AgentCenterPage } from '@/features/agents/AgentCenterPage'
@@ -358,6 +360,9 @@ export const router = createBrowserRouter(withErrorBoundary([
                     { path: 'design', element: <DesignSystemPage /> },
           { path: 'campaigns', element: <CampaignsPage /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
+          // ADGROUPS-PAGE-001 / ADS-PAGE-001 — «المجموعات» and «الإعلانات» are pages of their own, not Analytics tabs.
+          { path: 'ad-groups', element: <AdGroupsPage /> },
+          { path: 'ads', element: <AdsPage /> },
           /*
            * REG-001: the multi-client surfaces MOVED to /agency — they were never the advertiser's.
            *
@@ -592,6 +597,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'analytics', element: <AnalyticsPage /> },
             { path: 'campaigns', element: <CampaignsPage /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
+            { path: 'ad-groups', element: <AdGroupsPage /> },
+            { path: 'ads', element: <AdsPage /> },
             { path: 'content', element: <CreativesPage /> },
             // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).
             { path: 'content/groups', element: <CreativeGroupsPage portal="agency" /> },
