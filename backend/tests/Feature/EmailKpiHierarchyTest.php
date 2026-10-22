@@ -28,6 +28,30 @@ final class EmailKpiHierarchyTest extends TestCase
         }
     }
 
+    /** EMAIL-PERF-DASHBOARDS-001 — one project is not a portfolio: it leads itself, with no roll-up and no ranking of one. */
+    public function test_a_single_project_digest_leads_with_the_project_and_carries_no_roll_up(): void
+    {
+        foreach (['ar', 'en'] as $locale) {
+            $html = (string) MailGallery::render('digest-single-project', $locale);
+
+            $this->assertSame(1, substr_count($html, 'class="ch-kpi-lead" style="font-size:30px'), "[$locale] exactly one lead, at display size");
+            $this->assertSame(0, substr_count($html, 'class="ch-kpi-lead" style="font-size:28px'), "[$locale] no second-tier lead: the project is the hero");
+            $this->assertStringNotContainsString($locale === 'ar' ? 'إجمالي الحساب' : 'Account total', $html, "[$locale] no account roll-up above a single project");
+            $this->assertStringContainsString($locale === 'ar' ? 'ملخص الفترة لمشروع' : 'The period for', $html, "[$locale] the intro names the project");
+        }
+    }
+
+    /** EMAIL-PERF-DASHBOARDS-001 — an alert leads with the rule's own number; a finding without one keeps its sentence alone. */
+    public function test_an_alert_with_figures_leads_with_them_and_one_without_does_not(): void
+    {
+        $html = (string) MailGallery::render('alerts-bundle', 'en');
+
+        // Three findings; only the budget-pace one carries figures.
+        $this->assertSame(1, substr_count($html, 'class="ch-kpi-lead"'));
+        $this->assertStringContainsString('167%', $html);
+        $this->assertStringContainsString('10,000.00 SAR', $html);
+    }
+
     public function test_the_weekly_digest_keeps_the_same_hierarchy(): void
     {
         $html = (string) MailGallery::render('digest-weekly', 'en');

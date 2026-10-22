@@ -197,6 +197,8 @@ final class DailyDigestMail extends Mailable
                 'reportFooter' => $this->reportFooter($ar),
                 'projects' => $this->projects($p, $ar, $app),
                 'slot' => view('mail.daily-digest', [
+                    // EMAIL-PERF-DASHBOARDS-001 — one project is not a portfolio: the project itself leads, no roll-up above it.
+                    'singleProject' => $this->singleProject(),
                     'font' => MailDesign::font($ar),
                     'numericFont' => MailDesign::numericFont(),
                     't' => $this->copy($ar),
@@ -223,6 +225,22 @@ final class DailyDigestMail extends Mailable
      * One mailable serves three rhythms {@see self::$kind}, which is why this was possible at all: the
      * copy array is built once and knew nothing about the rhythm the header already names.
      */
+    /**
+     * EMAIL-PERF-DASHBOARDS-001 — the single-project variant.
+     *
+     * A digest over one project printed an account roll-up that repeated the project's own figures
+     * one card above them, and a «movement» block ranking the best of one. With one project the
+     * project is the hero: it leads at the account's display size, the roll-up and the ranking are
+     * left out, and the intro names the project rather than «your projects».
+     */
+    private function singleProject(): bool
+    {
+        // One block AND one project in scope: a scope of several where only one had activity still
+        // deserves its roll-up, because the roll-up says how many the reader is responsible for.
+        return count($this->digest['projects'] ?? []) === 1
+            && (int) ($this->digest['totals']['projects'] ?? 1) <= 1;
+    }
+
     private function rhythmName(bool $ar): string
     {
         return match ($this->kind) {
@@ -764,6 +782,7 @@ final class DailyDigestMail extends Mailable
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
             'projects' => 'المشاريع',
+            'intro_single' => 'ملخص الفترة لمشروع',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
             'recommendations' => 'التوصيات المعتمدة',
@@ -802,6 +821,7 @@ final class DailyDigestMail extends Mailable
             'spend' => 'Spend',
             'results' => 'Results',
             'projects' => 'Projects',
+            'intro_single' => 'The period for',
             'funnel' => 'Funnel',
             'content' => 'Content',
             'recommendations' => 'Approved recommendations',

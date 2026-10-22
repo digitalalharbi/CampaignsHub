@@ -58,6 +58,11 @@ final class MailGallery
         return self::accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
+            // EMAIL-PERF-DASHBOARDS-001 — the single-project variant: the project leads, no roll-up, no ranking of one.
+            'digest-single-project' => new DailyDigestMail(array_replace(self::digest(), [
+                'projects' => array_slice(self::digest()['projects'], 0, 1),
+                'totals' => array_replace(self::digest()['totals'], ['projects' => 1]),
+            ]), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
 
             /*
              * The alerts as they are actually sent — MAIL-013.
@@ -76,6 +81,8 @@ final class MailGallery
                         'detail' => $ar
                             ? 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.'
                             : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
+                        // The figures as the pace rule writes them, read by the same reader the real mail uses.
+                        'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'SAR'], $ar),
                     ],
                     [
                         'severity' => 'warning',

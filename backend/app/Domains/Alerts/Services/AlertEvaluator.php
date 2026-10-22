@@ -398,6 +398,8 @@ final class AlertEvaluator
             'project_id' => $b['project_id'] ?? $rule->project_id,
             'project_name' => isset($b['project_id']) ? (Project::query()->whereKey($b['project_id'])->value('name') ?? '') : '',
             'triggered_at' => ($recovered ? 'recovered:' : '').$now->toIso8601String(),
+            // EMAIL-PERF-DASHBOARDS-001 — the rule's own figures travel with the finding, so the email can lead with the number.
+            'context' => (array) ($b['context'] ?? []),
         ];
     }
 
