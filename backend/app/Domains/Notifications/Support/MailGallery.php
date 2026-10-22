@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Alerts\Services\AlertEventMailer;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
+use App\Support\Frontend;
 use Illuminate\Mail\Mailable;
 
 /**
@@ -83,6 +85,8 @@ final class MailGallery
                             : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
                         // The figures as the pace rule writes them, read by the same reader the real mail uses.
                         'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'SAR'], $ar),
+                        'action' => AlertEventMailer::action('budget_risk', $ar),
+                        'url' => Frontend::origin().'/app/alerts?event=demo-1',
                     ],
                     [
                         'severity' => 'warning',
@@ -99,6 +103,8 @@ final class MailGallery
                         'detail' => $ar
                             ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، لذلك قد تكون بعض المؤشرات غير مكتملة.'
                             : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
+                        'action' => AlertEventMailer::action('sync_failed', $ar),
+                        'url' => Frontend::origin().'/app/alerts?event=demo-3',
                     ],
                 ],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
