@@ -8,6 +8,7 @@ use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Support\AlertFigures;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -139,6 +140,8 @@ final class AlertEventMailer
                     'title' => (string) (($ar ? ($i['title_ar'] ?? null) : null) ?? $i['title']),
                     'detail' => (string) (($ar ? ($i['detail_ar'] ?? null) : null) ?? $i['detail']),
                     'context' => (string) ($i['project_name'] ?? ''),
+                    // EMAIL-PERF-DASHBOARDS-001 — one lead figure and a strip, read from the event's context; null keeps the sentence alone.
+                    'figures' => AlertFigures::from((array) ($i['context'] ?? []), $ar),
                 ], $claimed),
                 lang: $locale,
                 recipientName: (string) $user->name,
