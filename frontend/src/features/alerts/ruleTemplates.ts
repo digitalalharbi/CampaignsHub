@@ -89,6 +89,12 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
     extra: { cooldown_minutes: 1440 },
   }),
   build({
+    key: 'tracking_health', group: 'health', type: 'tracking_health', severity: 'warning',
+    name: { ar: 'سلامة تتبع العملاء المحتملين', en: 'Lead tracking health' },
+    why: { ar: 'ينبّه حين يتعطل نموذج، أو تفشل تحويلات مباشرة، أو تُبلغ منصة بعملاء أكثر مما في مركز العملاء. كل تنبيه يحمل خطورته وما المطلوب.', en: 'Warns when a form breaks, live conversions fail, or a platform reports more leads than the Leads Centre holds. Each alert carries its own severity and what to do.' },
+    extra: { cooldown_minutes: 1440 },
+  }),
+  build({
     key: 'lead_unassigned_60', group: 'leads', type: 'lead_unassigned', threshold: { minutes: 60 }, severity: 'warning',
     name: { ar: 'عميل محتمل بلا مسؤول ساعة', en: 'Lead unassigned for an hour' },
     why: { ar: 'ينبّه حين يبقى عميل محتمل جديد بلا مسؤول ساعة كاملة.', en: 'Warns when a new lead has had nobody assigned for a full hour.' },

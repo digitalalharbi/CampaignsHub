@@ -57,6 +57,7 @@ const CATEGORY: Partial<Record<AlertType, AlertCategory>> = {
   // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the feed, not the figures.
   sync_outage: 'data',
   measurement_outage: 'data',
+  tracking_health: 'data',
 }
 
 export function alertCategory(type: string): AlertCategory {
@@ -125,6 +126,10 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
   measurement_outage: {
     ar: 'افحص ربط خاصية GA4: لا مزامنة ناجحة ضمن الحد، فأرقام القياس خارج الإسناد المنصّي متوقفة.',
     en: 'Check the GA4 property connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
+  },
+  tracking_health: {
+    ar: 'افتح «سلامة التتبع» في صفحة النماذج: كل بند يقول ما الخلل وما المطلوب فعله.',
+    en: 'Open «Tracking health» on the Forms page — each finding says what is wrong and what to do about it.',
   },
   report_failed: {
     ar: 'أعد توليد التقرير، وإن تكرّر الفشل فالسبب في المصدر لا في التقرير.',
