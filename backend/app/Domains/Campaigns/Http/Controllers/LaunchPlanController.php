@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Http\Controllers;
 
+use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchPlanService;
 use App\Domains\Projects\Context\ProjectContext;
@@ -28,6 +29,15 @@ final class LaunchPlanController extends Controller
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
         return ApiResponse::success($this->plans->options($request->user(), $this->projectId($project)), 'Launch options.');
+    }
+
+    public function strategy(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        $goal = (string) $request->query('goal', 'sales');
+        abort_unless(in_array($goal, JourneyPlanner::GOALS, true), 422, 'Unknown business goal.');
+
+        return ApiResponse::success($this->plans->strategy($request->user(), $this->projectId($project), $goal), 'Launch strategy.');
     }
 
     public function index(Request $request, string $project): JsonResponse
