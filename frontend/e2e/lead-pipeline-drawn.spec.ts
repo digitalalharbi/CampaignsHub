@@ -70,7 +70,7 @@ test('the bars are banded by a real category axis', async ({ page }) => {
 
   const progression = pipeline.locator('.recharts-wrapper').first()
   const bars = progression.locator('.recharts-bar-rectangle')
-  const categories = await progression.locator('.recharts-yAxis .recharts-cartesian-axis-tick').count()
+  const ticks = progression.locator('.recharts-yAxis .recharts-cartesian-axis-tick')
 
   /*
     One bar element per category is what proves the axis. Without one, recharts drew a single
@@ -85,10 +85,16 @@ test('the bars are banded by a real category axis', async ({ page }) => {
     Polled, because `ResponsiveContainer` renders once before it has measured its parent and again
     with real dimensions; reading the geometry on the first pass is a race, not a measurement.
   */
+  // BOTH counts are read inside the poll. `categories` used to be read once, before the axis was drawn — 0 on the first
+  // `ResponsiveContainer` pass — and the bars then settled at 6 against an expected 0 («Expected: 0, Received: 6» on the webkit gate of a
+  // docs-only PR). Equal AND non-zero is the property: one bar element per category, and the chart really drew its axis.
   await expect.poll(
-    async () => (await bars.all()).length,
+    async () => {
+      const [b, t] = [(await bars.all()).length, await ticks.count()]
+      return t > 0 && b === t ? 'one bar per category' : `bars=${b} categories=${t}`
+    },
     { timeout: 15000 },
-  ).toBe(categories)
+  ).toBe('one bar per category')
 
   /*
     And where something IS standing in the pipeline, it is drawn to scale.
