@@ -40,6 +40,25 @@ final class LaunchPlanController extends Controller
         return ApiResponse::success($this->plans->strategy($request->user(), $this->projectId($project), $goal), 'Launch strategy.');
     }
 
+    public function budgetSplit(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        $data = $request->validate([
+            'total' => ['required', 'numeric', 'gt:0', 'max:100000000'],
+            'currency' => ['required', 'string', 'size:3'],
+            'accounts' => ['required', 'array', 'min:1', 'max:10'],
+            'accounts.*.external_account_id' => ['required', 'string', 'max:64', 'distinct'],
+            'accounts.*.share' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+        try {
+            $out = $this->plans->budgetSplit($request->user(), $this->projectId($project), (float) $data['total'], (string) $data['currency'], $data['accounts']);
+        } catch (InvalidArgumentException $e) {
+            abort(422, $e->getMessage());
+        }
+
+        return ApiResponse::success($out, 'Budget split.');
+    }
+
     public function index(Request $request, string $project): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
@@ -53,7 +72,7 @@ final class LaunchPlanController extends Controller
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
         $model = $this->find($project, $plan);
 
-        return ApiResponse::success($this->shape($model) + ['review' => $this->plans->review($request->user(), $this->projectId($project), $model)], 'Launch plan.');
+        return ApiResponse::success($this->detail($request, $project, $model), 'Launch plan.');
     }
 
     public function store(Request $request, string $project): JsonResponse
@@ -61,7 +80,7 @@ final class LaunchPlanController extends Controller
         abort_unless($request->user()?->hasPermission('campaigns.create'), 403);
         $model = $this->plans->prepare($request->user(), $this->project($project), $request->all());
 
-        return ApiResponse::success($this->shape($model) + ['review' => $this->plans->review($request->user(), $this->projectId($project), $model)], 'Launch plan saved.', status: 201);
+        return ApiResponse::success($this->detail($request, $project, $model), 'Launch plan saved.', status: 201);
     }
 
     public function update(Request $request, string $project, string $plan): JsonResponse
@@ -74,24 +93,24 @@ final class LaunchPlanController extends Controller
             abort(409, $e->getMessage());
         }
 
-        return ApiResponse::success($this->shape($model) + ['review' => $this->plans->review($request->user(), $this->projectId($project), $model)], 'Launch plan saved.');
+        return ApiResponse::success($this->detail($request, $project, $model), 'Launch plan saved.');
     }
 
     /** POST …/publish — sends the plan to the platforms. Nothing is sent without `confirm`. */
     public function publish(Request $request, string $project, string $plan): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.create'), 403);
-        $request->validate(['confirm' => ['required', 'accepted']], ['confirm.*' => 'Publishing to the platforms needs an explicit confirmation.']);
+        $request->validate(['confirm' => ['required', 'accepted'], 'spend_ack' => ['nullable', 'string', 'max:128']], ['confirm.*' => 'Publishing to the platforms needs an explicit confirmation.']);
         $model = $this->find($project, $plan);
         try {
-            $model = $this->plans->publish($request->user(), $this->project($project), $model);
+            $model = $this->plans->publish($request->user(), $this->project($project), $model, $request->input('spend_ack'));
         } catch (InvalidArgumentException $e) {
-            abort(403, $e->getMessage());
+            abort($e->getCode() ?: 403, $e->getMessage());
         }
 
         $status = $model->status === LaunchPlan::PUBLISHED ? 200 : ($model->status === LaunchPlan::FAILED ? 422 : 207);
 
-        return response()->json(['data' => $this->shape($model) + ['review' => $this->plans->review($request->user(), $this->projectId($project), $model)], 'message' => match ($model->status) {
+        return response()->json(['data' => $this->detail($request, $project, $model), 'message' => match ($model->status) {
             LaunchPlan::PUBLISHED => 'Published on every platform.',
             LaunchPlan::PARTIAL => 'Published on some platforms — the rest can be retried.',
             default => 'Nothing was published.',
@@ -117,6 +136,14 @@ final class LaunchPlanController extends Controller
     private function projectId(string $project): string
     {
         return $this->context->projectId() ?? $project;
+    }
+
+    /** The plan, its per-account review, and what a launch would commit to (with the token a publish must echo). */
+    private function detail(Request $request, string $project, LaunchPlan $model): array
+    {
+        $projectId = $this->projectId($project);
+
+        return $this->shape($model) + ['review' => $this->plans->review($request->user(), $projectId, $model), 'spend' => $this->plans->spend($request->user(), $projectId, $model)];
     }
 
     private function shape(LaunchPlan $p): array

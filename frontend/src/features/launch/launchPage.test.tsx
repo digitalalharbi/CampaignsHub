@@ -6,9 +6,9 @@ import { useProject } from '@/stores/project'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, useLaunchOptions: vi.fn(), useLaunchPlans: vi.fn(), useLaunchStrategy: vi.fn(), savePlan: vi.fn(), publishPlan: vi.fn() }
+  return { ...actual, useLaunchOptions: vi.fn(), useLaunchPlans: vi.fn(), useLaunchStrategy: vi.fn(), splitBudget: vi.fn(), savePlan: vi.fn(), publishPlan: vi.fn() }
 })
-import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, useLaunchStrategy } from './api'
+import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy } from './api'
 
 const ok = (data: unknown) => ({ data, isPending: false, isLoading: false, isError: false, error: null, refetch: vi.fn() })
 const options = (state: 'available' | 'awaiting_credentials' = 'available') => ({
@@ -64,7 +64,7 @@ describe('the launch page', () => {
     expect(await screen.findByTestId('launch-confirm-dialog')).toHaveTextContent('تُنشأ موقوفة')
     expect(publishPlan).not.toHaveBeenCalled()
     fireEvent.click(screen.getByTestId('launch-confirm'))
-    await waitFor(() => expect(publishPlan).toHaveBeenCalledWith('p1', 'pl1'))
+    await waitFor(() => expect(publishPlan).toHaveBeenCalledWith('p1', 'pl1', undefined))
     expect(await screen.findByTestId('launch-results')).toHaveTextContent('5001')
     expect(screen.getByTestId('launch-status-published')).toBeInTheDocument()
     expect(screen.getByTestId('launch-open-campaign')).toHaveAttribute('href', '/agency/campaigns/p1/uc1')
@@ -148,5 +148,54 @@ describe('the launch page', () => {
     fireEvent.click(screen.getByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-apply-acc1'))
     expect(screen.getByTestId('launch-apply-acc1')).toHaveTextContent('Applied to the plan')
+  })
+
+  /** LAUNCH-SPEND-001 — a plan that RUNS campaigns is published only after the person approves the numbers, and the server's token goes with it. */
+  it('asks for the spend approval before a running launch and sends the server token with it', async () => {
+    const spend = { launch: true, ack_required: true, lines: [{ account_id: 'acc1', daily_budget: 200, currency: 'SAR' }], daily_by_currency: { SAR: 200 }, ad_set_daily_budget: null, mode: 'manual', ack_token: 'tok-123' }
+    vi.mocked(savePlan).mockResolvedValue(plan({ launch: true, spend, spec: { ...plan().spec, launch: true } }) as never)
+    vi.mocked(publishPlan).mockResolvedValue(plan({ status: 'published', launch: true, spend }) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.change(screen.getByTestId('launch-name'), { target: { value: 'Ramadan' } })
+    fireEvent.click(screen.getByRole('combobox', { name: /Objective/ }))
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /OUTCOME_SALES|Sales/ }))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-save'))
+    await screen.findByTestId('launch-review')
+
+    fireEvent.click(screen.getByTestId('launch-publish'))
+    const dialog = await screen.findByTestId('launch-confirm-dialog')
+    expect(within(dialog).getByTestId('launch-spend')).toHaveTextContent('200 SAR')
+    expect(screen.getByTestId('launch-confirm')).toBeDisabled()
+    expect(publishPlan).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('launch-spend-ack'))
+    fireEvent.click(screen.getByTestId('launch-confirm'))
+    await waitFor(() => expect(publishPlan).toHaveBeenCalledWith('p1', 'pl1', 'tok-123'))
+  })
+
+  /** LAUNCH-BUDGET-001 — the split is the server's arithmetic, shown per account, and applied only when asked. */
+  it('calculates a budget split, shows each account its share and amount, and applies it on request', async () => {
+    vi.mocked(splitBudget).mockResolvedValue({
+      ok: true, total: 100, currency: 'SAR', violations: [],
+      slots: [{ id: 'acc1', share_pct: 100, amount: 100, currency: 'SAR', amount_in_account_currency: 100, account_currency: 'SAR' }],
+    } as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.change(screen.getByTestId('launch-budget-total'), { target: { value: '100' } })
+    fireEvent.click(screen.getByTestId('launch-split-calc'))
+
+    expect(await screen.findByTestId('launch-split-acc1')).toHaveTextContent('100% · 100 SAR')
+    expect(splitBudget).toHaveBeenCalledWith('p1', expect.objectContaining({ total: 100, currency: 'SAR', accounts: [{ external_account_id: 'acc1', share: null }] }))
+    expect((screen.getByTestId('launch-budget-acc1') as HTMLInputElement).value).toBe('')
+    fireEvent.click(screen.getByTestId('launch-split-apply'))
+    expect((screen.getByTestId('launch-budget-acc1') as HTMLInputElement).value).toBe('100')
   })
 })
