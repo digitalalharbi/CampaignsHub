@@ -465,11 +465,11 @@ const EVENT_LABEL: Record<string, { en: string; ar: string }> = {
 
 /**
  * LAUNCH-READINESS-001 — one line per account: which events the platform was seen to report. Never a claim about the pixel
- * itself (no official API here reads it); «not reported» is the honest word for an event with no figure in the window.
+ * itself (no official API here reads it); «no events» is the honest word for an event with no figure in the window.
  */
 function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadiness; windowDays: number; ar: boolean }) {
   const word = (s: EventStatus) =>
-    s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'غير مُبلَّغ' : 'Not reported'
+    s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'لا توجد أحداث' : 'No events'
   return (
     <ul className="mt-1.5 flex flex-wrap gap-1.5 px-1" data-testid={`launch-readiness-${readiness.tier}`} aria-label={ar ? 'جاهزية التتبع' : 'Tracking readiness'}>
       {(Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>).map((k) => {
