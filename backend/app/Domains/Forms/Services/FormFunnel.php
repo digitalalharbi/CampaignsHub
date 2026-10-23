@@ -87,7 +87,7 @@ final class FormFunnel
             'subject_type' => 'lead_form',
             'subject_id' => (string) $form->id,
             'source' => 'first_party_form',
-            'consent_state' => $submission->consent_state === 'granted' ? 'granted' : 'unknown',
+            'consent_state' => $submission->measurement_consent === 'granted' ? 'granted' : 'unknown',
             'session_id' => $submission->session_id,
             'lead_id' => (string) $lead->id,
             'click_id_type' => isset($attribution['click_ids']) ? (string) array_key_first($attribution['click_ids']) : null,

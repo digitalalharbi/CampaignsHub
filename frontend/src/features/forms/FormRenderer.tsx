@@ -14,9 +14,9 @@ export type FunnelSignal = { type: 'form_start' } | { type: 'step_completed'; st
 export function FormRenderer({ definition, ar, onSubmit, onSignal, submitting = false, serverError = null, preview = false }: {
   definition: FormDefinition
   ar: boolean
-  onSubmit: (answers: Answers, consent: boolean) => void
+  onSubmit: (answers: Answers, consent: boolean, measurement: boolean) => void
   /** FORMS-FUNNEL-EVENTS-001 — what the visitor did, for the page to report; the preview never passes it. */
-  onSignal?: (signal: FunnelSignal, consent: boolean) => void
+  onSignal?: (signal: FunnelSignal, measurement: boolean) => void
   submitting?: boolean
   serverError?: string | null
   /** The builder's preview: the same page, but «send» does nothing. */
@@ -27,6 +27,8 @@ export function FormRenderer({ definition, ar, onSubmit, onSignal, submitting = 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [consent, setConsent] = useState(false)
   const [consentError, setConsentError] = useState(false)
+  /* The second, optional consent — reporting identifiers to measurement and ad platforms. Never pre-ticked, never required. */
+  const [measurement, setMeasurement] = useState(false)
   const [started, setStarted] = useState(false)
 
   const steps = definition.steps
@@ -37,7 +39,7 @@ export function FormRenderer({ definition, ar, onSubmit, onSignal, submitting = 
   const style = accent ? ({ '--form-accent': accent } as CSSProperties) : undefined
 
   const set = (id: string, value: AnswerValue) => {
-    if (!started) { setStarted(true); onSignal?.({ type: 'form_start' }, consent) }
+    if (!started) { setStarted(true); onSignal?.({ type: 'form_start' }, measurement) }
     setAnswers((a) => ({ ...a, [id]: value }))
     setErrors((e) => { const { [id]: _drop, ...rest } = e; return rest })
   }
@@ -46,11 +48,11 @@ export function FormRenderer({ definition, ar, onSubmit, onSignal, submitting = 
     const e = stepErrors(definition, stepIndex, answers, ar)
     setErrors(e)
     if (Object.keys(e).length > 0) return
-    onSignal?.({ type: 'step_completed', step: stepIndex + 1 }, consent)
+    onSignal?.({ type: 'step_completed', step: stepIndex + 1 }, measurement)
     if (!last) { setStepIndex(stepIndex + 1); return }
     if (definition.consent.required && !consent) { setConsentError(true); return }
-    if (!preview) onSignal?.({ type: 'submit_attempt', step: stepIndex + 1 }, consent)
-    if (!preview) onSubmit(cleanAnswers(definition, answers), consent)
+    if (!preview) onSignal?.({ type: 'submit_attempt', step: stepIndex + 1 }, measurement)
+    if (!preview) onSubmit(cleanAnswers(definition, answers), consent, measurement)
   }
 
   if (!step) return null
@@ -94,6 +96,13 @@ export function FormRenderer({ definition, ar, onSubmit, onSignal, submitting = 
           </label>
           {consentError && <p role="alert" className="text-xs text-danger" data-testid="form-consent-error">{ar ? 'نحتاج موافقتك لإرسال النموذج.' : 'We need your consent to send the form.'}</p>}
         </div>
+      )}
+
+      {last && definition.consent.measurement?.enabled && (
+        <label className="flex items-start gap-2 text-sm text-text-secondary">
+          <input type="checkbox" className="mt-1" checked={measurement} onChange={(e) => setMeasurement(e.target.checked)} data-testid="form-measurement" />
+          <span>{pick(definition.consent.measurement.text, ar)} <em className="not-italic text-xs">{ar ? '(اختياري)' : '(optional)'}</em></span>
+        </label>
       )}
 
       {serverError && <p role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm text-danger" data-testid="form-server-error">{serverError}</p>}

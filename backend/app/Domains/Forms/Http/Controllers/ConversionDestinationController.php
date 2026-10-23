@@ -174,7 +174,7 @@ final class ConversionDestinationController extends Controller
             'missing_credentials' => $missing,
             'validation' => $validation,
             'note' => $validation === null
-                ? 'Nothing was sent. The payload above is what would be built; a destination in test mode, or without its credentials, is never contacted.'
+                ? 'Nothing was sent. The payload in this response is what would be built; a destination in test mode, or without its credentials, is never contacted.'
                 : 'The synthetic payload was sent to the platform\'s checking interface only.',
         ], 'Diagnostics.');
     }

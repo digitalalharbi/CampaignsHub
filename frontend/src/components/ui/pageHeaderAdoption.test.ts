@@ -43,6 +43,12 @@ const OUT_OF_SCOPE = [
     one question. Giving it the product's header would be giving it the product's chrome, which is
     the thing that page is deliberately without.
   */
+  /*
+    FORMS-HUB-001 — the PUBLIC lead form (`/f/:slug`) is the same kind of page as the landing page above: a stranger
+    from an advertisement, no workspace, no rail, asked to fill one form. The team's own screens for forms
+    (`FormsPage`, `FormBuilderPage`) are inside the workspace and DO use `PageIntro`.
+  */
+  /\/features\/forms\/PublicFormPage\.tsx$/,
   /\.test\.tsx$/,
 ]
 

@@ -167,6 +167,29 @@ export function FormBuilderPage() {
               onChange={(e) => edit({ ...definition, consent: { ...definition.consent, text: setLoc(definition.consent.text, ar ? 'ar' : 'en', e.target.value) } })}
               data-testid="consent-text"
             />
+            <label className="flex items-start gap-2 text-sm font-semibold text-text-primary">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(definition.consent.measurement?.enabled)}
+                onChange={(e) => edit({ ...definition, consent: { ...definition.consent, measurement: { text: definition.consent.measurement?.text ?? '', enabled: e.target.checked } } })}
+                data-testid="measurement-enabled"
+              />
+              <span>
+                {ar ? 'اطلب موافقة اختيارية ثانية: إرسال بيانات الزائر مُشفّرة إلى منصات القياس والإعلان' : 'Ask a second, optional consent: report the visitor\u2019s hashed details to measurement and ad platforms'}
+                <span className="block text-xs font-normal text-text-secondary">{ar ? 'بدونها لا يُرسل أي تحويل إلى أي منصة، حتى لو وُجدت وجهة.' : 'Without it no conversion is reported to any platform, even if a destination exists.'}</span>
+              </span>
+            </label>
+            {definition.consent.measurement?.enabled && (
+              <textarea
+                className={input}
+                rows={2}
+                aria-label={ar ? 'نص موافقة القياس' : 'Measurement consent text'}
+                value={pick(definition.consent.measurement.text, ar)}
+                onChange={(e) => edit({ ...definition, consent: { ...definition.consent, measurement: { enabled: true, text: setLoc(definition.consent.measurement?.text, ar ? 'ar' : 'en', e.target.value) } } })}
+                data-testid="measurement-text"
+              />
+            )}
             <textarea
               className={input}
               rows={2}

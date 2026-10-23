@@ -75,7 +75,7 @@ final class LeadFormFunnelTest extends TestCase
                 ['id' => 'full_name', 'type' => 'text', 'label' => 'Name', 'maps_to' => 'name'],
                 ['id' => 'mobile', 'type' => 'phone', 'label' => 'Mobile', 'maps_to' => 'phone'],
             ]]],
-            'consent' => ['required' => true, 'text' => ['en' => 'May we call you?']],
+            'consent' => ['required' => true, 'text' => ['en' => 'May we call you?'], 'measurement' => ['enabled' => true, 'text' => ['en' => 'Measure my visit.']]],
         ];
         $id = $this->actingAs($this->owner, 'sanctum')->withHeaders(self::SPA)->postJson("/api/v1/projects/{$this->project->id}/forms", ['name' => 'F', 'definition' => $definition])->assertCreated()->json('data.id');
         $this->actingAs($this->owner, 'sanctum')->withHeaders(self::SPA)->postJson("/api/v1/projects/{$this->project->id}/forms/{$id}/publish")->assertOk();
@@ -90,7 +90,7 @@ final class LeadFormFunnelTest extends TestCase
             'submission_id' => 'sub-'.bin2hex(random_bytes(8)),
             'session_id' => 'ses-'.bin2hex(random_bytes(6)),
             'answers' => ['full_name' => 'Sara', 'mobile' => '0500000001'],
-            'consent' => ['accepted' => true],
+            'consent' => ['accepted' => true, 'measurement' => true],
             'attribution' => ['utm_source' => 'meta', 'utm_campaign' => 'q4', 'gclid' => 'Cj0KCQiA-test-1'],
         ];
     }

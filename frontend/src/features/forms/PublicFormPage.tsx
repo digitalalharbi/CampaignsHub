@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPublicForm, sendFunnelBeacon, submitPublicForm } from './api'
 import { FormRenderer, type FunnelSignal } from './FormRenderer'
+import { initConsentMode, loadContainer, pushFormEvent, updateConsent } from './dataLayer'
 import { pick } from './formLogic'
 import { useUi } from '@/stores/ui'
 import type { Answers } from './types'
@@ -41,6 +42,9 @@ export function PublicFormPage() {
     const q = new URLSearchParams(window.location.search)
     for (const k of KEYS) { const v = q.get(k); if (v) out[k] = v }
     out.landing_path = window.location.pathname
+    /* GA4's own cookie, when the page has one: it is what joins a server-side event to this visit. Digits and dots only. */
+    const ga = /(?:^|;\s*)_ga=GA\d\.\d\.(\d{4,12}\.\d{4,12})/.exec(document.cookie)
+    if (ga) out.ga_client_id = ga[1]
     if (document.referrer) out.referrer = document.referrer
     return out
   }, [])
@@ -48,14 +52,29 @@ export function PublicFormPage() {
   const beacon = (event: Parameters<typeof sendFunnelBeacon>[1]['event'], consent: boolean, step?: number) =>
     sendFunnelBeacon(slug, { event, event_id: randomId(), session_id: sessionId.current, step, consent: consent ? 'granted' : 'unknown', attribution })
 
-  /* The page was seen — once, when the definition has arrived. Consent is «unknown» until the visitor ticks the box. */
+  /*
+   * The page was seen — once, when the definition has arrived. Consent Mode defaults go in BEFORE any container loads,
+   * every signal denied; the measurement state is «unknown» until the visitor ticks the optional box.
+   */
   const viewed = useRef(false)
   useEffect(() => {
-    if (form.isSuccess && !viewed.current) { viewed.current = true; beacon('form_view', false) }
+    if (form.isSuccess && !viewed.current) {
+      viewed.current = true
+      initConsentMode()
+      loadContainer(form.data.tracking?.gtm_container_id)
+      pushFormEvent('ch_form_view', { form_name: form.data.name })
+      beacon('form_view', false)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.isSuccess])
 
-  const signal = (s: FunnelSignal, consent: boolean) => beacon(s.type, consent, 'step' in s ? s.step : undefined)
+  const measured = useRef(false)
+  const signal = (s: FunnelSignal, measurement: boolean) => {
+    if (measurement !== measured.current) { measured.current = measurement; updateConsent(measurement) }
+    if (s.type === 'form_start') pushFormEvent('ch_form_start', { form_name: form.data?.name ?? '' })
+    if (s.type === 'step_completed') pushFormEvent('ch_form_step', { form_name: form.data?.name ?? '', step: s.step })
+    beacon(s.type, measurement, 'step' in s ? s.step : undefined)
+  }
 
   const thankYou = form.data?.definition.thank_you
   useEffect(() => {
@@ -67,11 +86,13 @@ export function PublicFormPage() {
     return <Shell><p role="alert" className="text-sm text-text-secondary" data-testid="public-form-missing">{ar ? 'هذا النموذج غير متاح.' : 'This form is not available.'}</p></Shell>
   }
 
-  const send = async (answers: Answers, consent: boolean) => {
+  const send = async (answers: Answers, consent: boolean, measurement: boolean) => {
     setSending(true)
     setError(null)
     try {
-      await submitPublicForm(slug, { submission_id: submissionId.current, answers, consent: { accepted: consent }, attribution, session_id: sessionId.current, website: trap.current?.value ?? '' })
+      const result = await submitPublicForm(slug, { submission_id: submissionId.current, answers, consent: { accepted: consent, measurement }, attribution, session_id: sessionId.current, website: trap.current?.value ?? '' })
+      /* The browser tag gets the server's own id, so a platform that hears from both counts one conversion. */
+      if (result.event_id && !result.duplicate) pushFormEvent('generate_lead', { form_name: form.data?.name ?? '', event_id: result.event_id })
       setDone(true)
     } catch {
       /* The id is kept: sending again is the same submission. */

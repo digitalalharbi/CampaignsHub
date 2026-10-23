@@ -74,4 +74,18 @@ describe('the forms list and the builder', () => {
     fireEvent.click(await screen.findByTestId('form-publish'))
     await waitFor(() => expect(postData).toHaveBeenCalledWith('/projects/p1/forms/f1/publish', {}))
   })
+
+  it('turns on the optional measurement consent with its own wording and saves it in the definition', async () => {
+    vi.mocked(patchData).mockResolvedValue(detail())
+    renderWithProviders(<FormBuilderPage />, { route: '/agency/forms/f1', path: '/agency/forms/:formId' })
+    fireEvent.click(await screen.findByTestId('measurement-enabled'))
+    fireEvent.change(screen.getByTestId('measurement-text'), { target: { value: 'Report my hashed details.' } })
+    fireEvent.click(screen.getByTestId('form-save'))
+
+    await waitFor(() => expect(patchData).toHaveBeenCalled())
+    const body = vi.mocked(patchData).mock.calls[0][1] as { definition: { consent: { measurement: { enabled: boolean; text: { en: string } } } } }
+    expect(body.definition.consent.measurement.enabled).toBe(true)
+    expect(body.definition.consent.measurement.text.en).toBe('Report my hashed details.')
+    expect(await screen.findByTestId('form-preview')).toBeInTheDocument()
+  })
 })

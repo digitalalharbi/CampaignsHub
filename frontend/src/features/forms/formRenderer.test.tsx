@@ -39,7 +39,7 @@ describe('the form a visitor meets', () => {
 
     fireEvent.click(screen.getByTestId('form-consent'))
     fireEvent.click(screen.getByTestId('form-next'))
-    expect(onSubmit).toHaveBeenCalledWith({ full_name: 'Sara', mobile: '0500000001', interest: 'land' }, true)
+    expect(onSubmit).toHaveBeenCalledWith({ full_name: 'Sara', mobile: '0500000001', interest: 'land' }, true, false)
   })
 
   it('a preview never sends', () => {
@@ -59,5 +59,33 @@ describe('the form a visitor meets', () => {
     fireEvent.click(screen.getByTestId('form-next'))
     fireEvent.click(screen.getByTestId('form-back'))
     expect((screen.getByTestId('field-full_name') as HTMLInputElement).value).toBe('Sara')
+  })
+
+  it('offers the second, optional consent only when the version asks, never pre-ticked, and reports it separately', () => {
+    const d = starterDefinition()
+    d.consent.measurement = { enabled: true, text: { en: 'Report my hashed details to ad platforms.' } }
+    const onSubmit = vi.fn()
+    const onSignal = vi.fn()
+    render(<FormRenderer definition={d} ar={false} onSubmit={onSubmit} onSignal={onSignal} />)
+
+    const box = screen.getByTestId('form-measurement') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    fireEvent.change(screen.getByTestId('field-full_name'), { target: { value: 'Sara' } })
+    fireEvent.change(screen.getByTestId('field-mobile'), { target: { value: '0500000001' } })
+    fireEvent.click(screen.getByTestId('form-consent'))
+    // Contact consent given, measurement not: the form sends, and says so.
+    fireEvent.click(screen.getByTestId('form-next'))
+    expect(onSubmit).toHaveBeenLastCalledWith({ full_name: 'Sara', mobile: '0500000001' }, true, false)
+    expect(onSignal.mock.calls.every(([, measurement]) => measurement === false)).toBe(true)
+
+    fireEvent.click(box)
+    fireEvent.click(screen.getByTestId('form-next'))
+    expect(onSubmit).toHaveBeenLastCalledWith({ full_name: 'Sara', mobile: '0500000001' }, true, true)
+    expect(onSignal).toHaveBeenLastCalledWith({ type: 'submit_attempt', step: 1 }, true)
+  })
+
+  it('does not draw the measurement box on a form that never asked', () => {
+    render(<FormRenderer definition={starterDefinition()} ar={false} onSubmit={vi.fn()} />)
+    expect(screen.queryByTestId('form-measurement')).toBeNull()
   })
 })
