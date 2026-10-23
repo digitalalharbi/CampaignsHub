@@ -33,6 +33,24 @@ export interface AccountReadiness {
 
 export type ReadyAccountOption = CreateAccountOption & { readiness?: AccountReadiness | null }
 
+export type BusinessGoal = 'sales' | 'leads' | 'awareness' | 'traffic'
+
+/** LAUNCH-JOURNEY-001 — the objective one account has earned for a business goal. A proposal; nothing is saved by reading it. */
+export interface StrategyAccount {
+  account_id: string
+  provider: string
+  name: string | null
+  tier: 'sales_ready' | 'partial' | 'none'
+  objective_kind: string
+  stage: 'sales' | 'leads' | 'awareness' | 'traffic' | 'bridge' | 'measurement_first'
+  objective: string | null
+  objective_refusal: string | null
+  optimization_event: string | null
+  reasons: string[]
+  measurement_plan: Array<{ event: string; status: EventStatus; action: string }>
+  advance: { next: string | null; needs: Array<{ event: string; observed: number; needed: number }> }
+}
+
 export interface LaunchOptions {
   accounts: ReadyAccountOption[]
   readiness: { window_days: number; eligible_events: number; project: { store_linked: boolean; ga4_linked: boolean; live_conversion_destinations: string[] } } | null
@@ -107,6 +125,13 @@ export const useLaunchOptions = (projectId: string | null) => useQuery({
   queryKey: ['launch', 'options', projectId],
   queryFn: () => getData<LaunchOptions>(`${base(projectId!)}/options`),
   enabled: Boolean(projectId),
+  retry: false,
+})
+
+export const useLaunchStrategy = (projectId: string | null, goal: BusinessGoal | null) => useQuery({
+  queryKey: ['launch', 'strategy', projectId, goal],
+  queryFn: () => getData<{ goal: BusinessGoal; accounts: StrategyAccount[] }>(`${base(projectId!)}/strategy?goal=${goal}`),
+  enabled: Boolean(projectId) && goal !== null,
   retry: false,
 })
 

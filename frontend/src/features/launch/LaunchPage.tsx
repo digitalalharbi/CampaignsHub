@@ -19,7 +19,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
-import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, type AccountReadiness, type EventStatus, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 
 /**
  * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
@@ -68,6 +68,8 @@ export function LaunchPage() {
   const { currentProjectId } = useProject()
   const options = useLaunchOptions(currentProjectId)
   const plans = useLaunchPlans(currentProjectId)
+  const [goal, setGoal] = useState<BusinessGoal | null>(null)
+  const strategy = useLaunchStrategy(currentProjectId, goal)
   const [step, setStep] = useState(0)
   const [spec, setSpec] = useState<LaunchSpec>(empty)
   const [plan, setPlan] = useState<LaunchPlan | null>(null)
@@ -135,6 +137,7 @@ export function LaunchPage() {
                   <Link to={portal(`/projects/${currentProjectId}/integrations`)} className="font-bold text-brand-600 hover:underline">{ar ? 'اختر حسابات المشروع' : 'Choose the project’s accounts'}</Link>
                 </p>
               )}
+              <GoalChooser goal={goal} onChange={setGoal} ar={ar} />
               <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0" data-testid="launch-accounts">
                 {accounts.map((a) => (
                   <li key={a.id}>
@@ -152,6 +155,10 @@ export function LaunchPage() {
                       </span>
                     </label>
                     {a.readiness && <ReadinessStrip readiness={a.readiness} windowDays={options.data?.readiness?.window_days ?? 30} ar={ar} />}
+                    {goal && strategy.data?.accounts.filter((x) => x.account_id === a.id).map((x) => (
+                      <ProposalLine key={x.account_id} proposal={x} ar={ar} applied={spec.objectives?.[a.provider] === x.objective}
+                        onApply={() => x.objective && setSpec((s) => ({ ...s, objectives: { ...(s.objectives ?? {}), [a.provider]: x.objective! } }))} />
+                    ))}
                   </li>
                 ))}
               </ul>
@@ -468,7 +475,7 @@ function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadi
       {(Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>).map((k) => {
         const e = readiness.events[k]
         return (
-          <li key={k} title={ar ? `ما أبلغت به المنصة خلال ${windowDays} يومًا` : `What the platform reported in the last ${windowDays} days`}>
+          <li key={k} title={ar ? `ما أبلغت به المنصة في نافذة القياس (بالأيام: ${windowDays})` : `What the platform reported in the measurement window (days: ${windowDays})`}>
             <Badge tone={e.status === 'eligible' ? 'success' : e.status === 'proven' ? 'neutral' : 'warning'}>
               <span data-testid={`launch-event-${k}`}>{ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en} · {word(e.status)}</span>
             </Badge>
@@ -476,5 +483,72 @@ function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadi
         )
       })}
     </ul>
+  )
+}
+
+const GOALS: Array<{ id: BusinessGoal; en: string; ar: string }> = [
+  { id: 'sales', en: 'Sales', ar: 'مبيعات' },
+  { id: 'leads', en: 'Leads', ar: 'عملاء محتملون' },
+  { id: 'awareness', en: 'Awareness', ar: 'وعي' },
+  { id: 'traffic', en: 'Traffic', ar: 'زيارات' },
+]
+
+/** LAUNCH-JOURNEY-001 — the business goal; the proposals below follow it and change nothing until a person applies one. */
+function GoalChooser({ goal, onChange, ar }: { goal: BusinessGoal | null; onChange: (g: BusinessGoal | null) => void; ar: boolean }) {
+  return (
+    <div className="space-y-1.5" data-testid="launch-goal">
+      <p className="text-xs font-semibold text-text-secondary">{ar ? 'الهدف التجاري (اختياري — يقترح هدف كل حساب حسب ما قيس فعلًا)' : 'Business goal (optional — proposes each account’s objective from what it actually measured)'}</p>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={ar ? 'الهدف التجاري' : 'Business goal'}>
+        {GOALS.map((g) => (
+          <button key={g.id} type="button" aria-pressed={goal === g.id} data-testid={`launch-goal-${g.id}`}
+            onClick={() => onChange(goal === g.id ? null : g.id)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${goal === g.id ? 'border-brand-500 bg-brand-500/10 text-text-primary' : 'border-border text-text-secondary hover:border-brand-400'}`}>
+            {ar ? g.ar : g.en}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const STAGE_TEXT: Record<StrategyAccount['stage'], { en: string; ar: string }> = {
+  sales: { en: 'Sales campaign — Purchase is eligible', ar: 'حملة مبيعات — حدث الشراء مؤهل' },
+  leads: { en: 'Lead campaign — Lead is eligible', ar: 'حملة عملاء محتملين — حدث العميل مؤهل' },
+  awareness: { en: 'Awareness — needs no conversion event', ar: 'وعي — لا يحتاج حدث تحويل' },
+  traffic: { en: 'Traffic — needs no conversion event', ar: 'زيارات — لا تحتاج حدث تحويل' },
+  bridge: { en: 'Bridge — optimise for a lower-funnel event first', ar: 'مرحلة وسيطة — التحسين لحدث أدنى في المسار أولًا' },
+  measurement_first: { en: 'Traffic first — complete the measurement before selling', ar: 'زيارات أولًا — أكمل القياس قبل البيع' },
+}
+
+const ACTION_TEXT: Record<string, { en: string; ar: string }> = {
+  link_the_store_and_send_the_purchase_event: { en: 'Link the store and send the Purchase event.', ar: 'اربط المتجر وأرسل حدث الشراء.' },
+  store_linked_but_platform_reports_no_purchase: { en: 'The store is linked but the platform reports no Purchase — check the event it receives.', ar: 'المتجر مرتبط لكن المنصة لا تبلّغ عن أي شراء — راجع الحدث الذي تستقبله.' },
+  send_the_lead_event_from_the_form: { en: 'Send the Lead event when the form is submitted.', ar: 'أرسل حدث العميل المحتمل عند إرسال النموذج.' },
+  send_the_event: { en: 'Send this event.', ar: 'أرسل هذا الحدث.' },
+}
+
+function ProposalLine({ proposal, ar, applied, onApply }: { proposal: StrategyAccount; ar: boolean; applied: boolean; onApply: () => void }) {
+  const stage = STAGE_TEXT[proposal.stage]
+  return (
+    <div className="mt-1.5 space-y-1 rounded-lg border border-border bg-surface-hover/40 p-2 text-xs" data-testid={`launch-proposal-${proposal.stage}`}>
+      <p className="font-semibold text-text-primary">{ar ? stage.ar : stage.en}</p>
+      {proposal.objective_refusal
+        ? <p className="text-text-muted">{ar ? 'هذه المنصة لا تدعم هذا الهدف عبر واجهتها.' : 'This platform does not offer this objective through its API.'}</p>
+        : (
+          <p className="text-text-secondary">
+            <span dir="ltr" className="font-mono">{proposal.objective}</span>
+            {proposal.optimization_event && <> · {ar ? 'التحسين لحدث' : 'optimise for'} <span dir="ltr" className="font-mono">{proposal.optimization_event}</span></>}
+          </p>
+        )}
+      {proposal.measurement_plan.map((m) => (
+        <p key={m.event} className="text-text-muted">{(ACTION_TEXT[m.action] ?? ACTION_TEXT.send_the_event!)[ar ? 'ar' : 'en']}</p>
+      ))}
+      {proposal.objective && (
+        <button type="button" onClick={onApply} disabled={applied} data-testid={`launch-apply-${proposal.account_id}`}
+          className="rounded-md border border-border px-2 py-1 font-semibold text-text-primary hover:border-brand-400 disabled:opacity-60">
+          {applied ? (ar ? 'مُطبَّق على الخطة' : 'Applied to the plan') : (ar ? 'استخدم هذا الهدف' : 'Use this objective')}
+        </button>
+      )}
+    </div>
   )
 }

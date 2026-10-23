@@ -39,6 +39,7 @@ final class LaunchPlanService
         private readonly WriteAdapterRegistry $adapters,
         private readonly AuditLogger $audit,
         private readonly LaunchReadiness $readiness,
+        private readonly JourneyPlanner $journey,
     ) {}
 
     /** What the builder may offer: the project's accounts with their write state, and each platform's vocabulary. */
@@ -70,7 +71,8 @@ final class LaunchPlanService
         $project = Project::query()->find($projectId);
         $readiness = $project === null ? null : $this->readiness->forAccounts((string) $project->tenant_id, $projectId, $accounts);
         foreach ($accounts as &$account) {
-            $account['readiness'] = $readiness['accounts'][$account['id']] ?? null;
+            // Readiness is about advertising events; a measurement or store account launches nothing and is never scored.
+            $account['readiness'] = $this->adapters->for((string) $account['provider']) === null ? null : ($readiness['accounts'][$account['id']] ?? null);
         }
         unset($account);
 
@@ -81,6 +83,26 @@ final class LaunchPlanService
             'creatives' => $this->writes->creativeOptions(array_values(array_unique(array_column($accounts, 'provider')))),
             'launch_permitted' => $user->hasPermission(WriteCapabilityRegistry::CAPABILITIES['publish']),
         ];
+    }
+
+    /**
+     * LAUNCH-JOURNEY-001 — per ad account, the objective it has earned for a business goal. A proposal only: nothing is saved,
+     * sent or changed, and no account's optimisation goal moves without the person choosing it.
+     *
+     * @return array<string,mixed>
+     */
+    public function strategy(User $user, string $projectId, string $goal): array
+    {
+        $options = $this->options($user, $projectId);
+        $project = $options['readiness']['project'] ?? [];
+        $rows = [];
+        foreach ($options['accounts'] as $account) {
+            $supported = $this->adapters->for((string) $account['provider'])?->objectives() ?? [];
+            $proposal = $this->journey->plan($goal, (string) $account['provider'], $account['readiness'] ?? [], $supported, $project);
+            $rows[] = ['account_id' => $account['id'], 'provider' => $account['provider'], 'name' => $account['name'], 'currency' => $account['currency'], 'state' => $account['state'], 'tier' => $account['readiness']['tier'] ?? 'none'] + $proposal;
+        }
+
+        return ['goal' => $goal, 'accounts' => $rows, 'readiness' => $options['readiness']];
     }
 
     /** Save (or re-save) a draft and say, per account, what publishing would do and what would refuse it. */
