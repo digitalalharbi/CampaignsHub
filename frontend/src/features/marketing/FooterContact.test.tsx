@@ -83,3 +83,19 @@ describe('the public contact footer', () => {
     expect(screen.getByTestId('footer-phone').tagName).toBe('A')
   })
 })
+
+/** The registered name sits in every public footer, verbatim, and says nothing about ownership. */
+describe('the public legal-name line', () => {
+  const NAME = 'شركة حنكة الترويج للخدمات التسويقية شخص واحد'
+
+  it.each(['ar', 'en'] as const)('shows the exact legal name on the homepage in %s', (locale) => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale })
+
+    const line = screen.getByTestId('footer-legal-name')
+    expect(line.textContent).toBe(NAME)
+    expect(line).toHaveAttribute('dir', 'rtl')
+    expect(line.className).toContain('text-xs')
+    expect(line.textContent).not.toMatch(/©|مالك|مشغّل|owner|operat/i)
+  })
+})

@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { brand } from '@/lib/brand'
 import { useUi } from '@/stores/ui'
+import { FooterLegalName } from './FooterContact'
 
 const features = [
   { icon: FolderKanban, ar: 'إدارة المشاريع', en: 'Project management' },
@@ -207,6 +208,7 @@ export function MarketingPage() {
         <div className="mx-auto flex max-w-[1240px] flex-col items-center justify-between gap-2 px-6 py-6 text-xs text-text-muted md:flex-row">
           <span>© {ar ? brand.lockup.nameAr : brand.lockup.nameEn} — {brand.domain}</span>
           <span>{ar ? 'المنتج · المزايا · الأسعار · الأمان · الخصوصية · الشروط · الدعم' : 'Product · Features · Pricing · Security · Privacy · Terms · Support'}</span>
+          <FooterLegalName />
         </div>
       </footer>
     </div>
