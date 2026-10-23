@@ -58,6 +58,7 @@ const CATEGORY: Partial<Record<AlertType, AlertCategory>> = {
   sync_outage: 'data',
   measurement_outage: 'data',
   tracking_health: 'data',
+  launch_advance: 'performance',
 }
 
 export function alertCategory(type: string): AlertCategory {
@@ -130,6 +131,10 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
   tracking_health: {
     ar: 'افتح «سلامة التتبع» في صفحة النماذج: كل بند يقول ما الخلل وما المطلوب فعله.',
     en: 'Open «Tracking health» on the Forms page — each finding says what is wrong and what to do about it.',
+  },
+  launch_advance: {
+    ar: 'افتح صفحة الإطلاق وانظر الاقتراح: لم يتغيّر شيء تلقائيًا، والقرار لك.',
+    en: 'Open the launch page and read the proposal — nothing was changed automatically; the decision is yours.',
   },
   report_failed: {
     ar: 'أعد توليد التقرير، وإن تكرّر الفشل فالسبب في المصدر لا في التقرير.',
