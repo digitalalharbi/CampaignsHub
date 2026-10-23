@@ -40,8 +40,10 @@ use Illuminate\Support\Facades\DB;
  *  - a schedule fires from the queue and would email the client next Sunday, out of anybody's sight.
  *  - a binding is what makes an account's data arrive; left active, the deleted project keeps being
  *    synced into.
+ *  - a published lead form answers from a slug and keeps creating leads, and a live conversion destination keeps
+ *    reporting them (FORMS-PDPL-001).
  *
- * All three are closed in the SAME transaction as the delete, because a deletion that half-happened
+ * All of these are closed in the SAME transaction as the delete, because a deletion that half-happened
  * is worse than one that failed: the interface would say the project is gone while the link still
  * opens.
  *
@@ -92,6 +94,21 @@ final class DeleteProject
                 ->where('project_id', $projectId)
                 ->where('active', true)
                 ->update(['active' => false, 'next_run_at' => null, 'updated_at' => now()]);
+
+            // 4. Stop strangers submitting to the project's public forms and stop its conversions being reported. A form is
+            //    ARCHIVED (kept, with its versions and submissions as the record of what was asked and agreed), a destination is
+            //    switched OFF — the same vocabulary the team uses; nothing is deleted. A published form answers from a slug, not a
+            //    session, so without this it would keep creating leads in a project nobody can open.
+            DB::table('lead_forms')
+                ->where('tenant_id', $tenantId)
+                ->where('project_id', $projectId)
+                ->where('status', 'published')
+                ->update(['status' => 'archived', 'updated_at' => now()]);
+            DB::table('conversion_destinations')
+                ->where('tenant_id', $tenantId)
+                ->where('project_id', $projectId)
+                ->where('status', '!=', 'off')
+                ->update(['status' => 'off', 'updated_at' => now()]);
 
             $project->delete();
         });

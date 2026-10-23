@@ -106,6 +106,8 @@ const PROJ_IMPACT_LABELS: Array<{ key: string; ar: string; en: string }> = [
   { key: 'reports', ar: 'التقارير', en: 'Reports' },
   { key: 'active_shares', ar: 'روابط مشاركة نشطة', en: 'Active share links' },
   { key: 'report_schedules', ar: 'جداول إرسال', en: 'Scheduled sends' },
+  { key: 'live_forms', ar: 'نماذج منشورة', en: 'Published forms' },
+  { key: 'live_conversion_destinations', ar: 'وجهات تحويلات مباشرة', en: 'Live conversion destinations' },
   { key: 'tasks', ar: 'المهام', en: 'Tasks' },
   { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members' },
 ]
