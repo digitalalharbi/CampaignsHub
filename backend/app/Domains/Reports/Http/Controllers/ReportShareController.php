@@ -269,6 +269,10 @@ final class ReportShareController extends Controller
             'creatives.*' => ['boolean'],
             'sections' => ['array'],
             'sections.*' => ['boolean'],
+            // REPORT-TABLES-OWNER-COLUMNS-001 — the published link's columns may be changed after creation.
+            'columns' => ['array'],
+            'columns.*' => ['array'],
+            'columns.*.*' => ['string', 'max:40'],
         ]);
 
         $before = $link->only(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'form', 'expires_at']);
@@ -295,6 +299,10 @@ final class ReportShareController extends Controller
         if (array_key_exists('sections', $opts)) {
             // Merged over what the link already has: naming one switch must not reset the others to their default.
             $settings['sections'] = ShareSections::fromArray(array_replace((array) ($settings['sections'] ?? []), $opts['sections']))->toArray();
+        }
+        if (array_key_exists('columns', $opts)) {
+            // The whole choice at once: a table named is replaced, a table absent means every column — exactly as at creation.
+            $settings['columns'] = ReportColumns::fromArray($opts['columns'])->toArray();
         }
         $fill['settings'] = $settings;
 
@@ -534,6 +542,8 @@ final class ReportShareController extends Controller
             'form' => $s->form,
             'creatives' => $s->creativeVisibility()->toArray(),
             'sections' => $s->sectionVisibility()->toArray(),
+            // REPORT-TABLES-OWNER-COLUMNS-001 — what the link publishes per table, so the edit dialog starts from it.
+            'columns' => ReportColumns::forShare($s)->toArray(),
             'scope' => $s->scope,
             'allow_download' => $s->allow_download,
             'hide_spend' => $s->hide_spend,

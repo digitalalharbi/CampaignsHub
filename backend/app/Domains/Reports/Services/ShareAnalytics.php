@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\DB;
 final class ShareAnalytics
 {
     /** Substrings that identify an automated fetch of the link rather than a person opening it. */
-    private const BOT_MARKERS = ['bot', 'crawl', 'spider', 'preview', 'whatsapp', 'facebookexternalhit', 'slack', 'telegram', 'linkedinbot', 'embedly', 'curl', 'wget'];
+    public const BOT_MARKERS = ['bot', 'crawl', 'spider', 'preview', 'whatsapp', 'facebookexternalhit', 'slack', 'telegram', 'linkedinbot', 'embedly', 'curl', 'wget'];
 
     /** @return array{views: int, unique_views: int, first_viewed_at: ?string, last_viewed_at: ?string, downloads: int} */
     private const GRANULARITIES = ['day' => ['days' => 30, 'step' => 'P1D'], 'week' => ['days' => 84, 'step' => 'P7D'], 'month' => ['days' => 365, 'step' => 'P1M']];
@@ -45,11 +45,7 @@ final class ShareAnalytics
      */
     public function for(ReportShare $share, ?Carbon $from = null, ?Carbon $to = null, string $granularity = 'day'): array
     {
-        $views = DB::table('report_share_access_logs')->where('share_id', $share->getKey())->where('action', 'view');
-
-        foreach (self::BOT_MARKERS as $marker) {
-            $views->whereRaw("lower(coalesce(user_agent, '')) not like ?", ['%'.$marker.'%']);
-        }
+        $views = self::humanOnly(DB::table('report_share_access_logs')->where('share_id', $share->getKey())->where('action', 'view'));
 
         $row = (clone $views)->selectRaw(
             "count(*) as views, count(distinct md5(coalesce(ip, '') || '|' || coalesce(user_agent, '') || '|' || ?)) as unique_views, min(created_at) as first_at, max(created_at) as last_at",
@@ -61,7 +57,7 @@ final class ShareAnalytics
 
         $downloads = DB::table('report_share_access_logs')->where('share_id', $share->getKey())->where('action', 'download')->count();
 
-        return [
+        return $this->state($share) + [
             'views' => (int) ($row->views ?? 0),
             'unique_views' => (int) ($row->unique_views ?? 0),
             'first_viewed_at' => $row?->first_at === null ? null : Carbon::parse((string) $row->first_at)->toIso8601String(),
@@ -77,7 +73,87 @@ final class ShareAnalytics
             'repeat_visits' => max(0, (int) ($row->views ?? 0) - (int) ($row->unique_views ?? 0)),
             'bot_opens' => max(0, $all - (int) ($row->views ?? 0)),
             'unique_basis' => 'device_estimate',
-        ] + $trend;
+        ] + $trend + ['comparison' => $this->comparison($share, clone $views, $trend['period'])];
+    }
+
+    /**
+     * REPORT-LINK-ANALYTICS-003 — the link's own state beside its figures, so «no opens this week» is read with
+     * «the link has been paused since Tuesday» rather than as a client who lost interest. One of active, paused,
+     * revoked or expired, with the moment it entered that state; paused and revoked are the Owner's own acts,
+     * expired is the clock.
+     *
+     * @return array{state: string, state_since: ?string}
+     */
+    private function state(ReportShare $share): array
+    {
+        if ($share->revoked_at !== null) {
+            return ['state' => 'revoked', 'state_since' => $share->revoked_at->toIso8601String()];
+        }
+        if ($share->paused_at !== null) {
+            return ['state' => 'paused', 'state_since' => $share->paused_at->toIso8601String()];
+        }
+        if ($share->expires_at !== null && Carbon::now()->greaterThan($share->expires_at)) {
+            return ['state' => 'expired', 'state_since' => $share->expires_at->toIso8601String()];
+        }
+
+        return ['state' => 'active', 'state_since' => null];
+    }
+
+    /**
+     * REPORT-LINK-ANALYTICS-003 — the drawn window against the window of the same length just before it:
+     * human opens, distinct devices and downloads in each, so a rise or a fall is a comparison of like with like.
+     * Both windows are the report's own days; a link younger than two windows simply shows zeros for the earlier one.
+     *
+     * @param  Builder  $views  already limited to this link's human views
+     * @param  array{from: string, to: string}  $period  the drawn window, as the trend reported it
+     * @return array{current: array{from: string, to: string, views: int, devices: int, downloads: int}, previous: array{from: string, to: string, views: int, devices: int, downloads: int}}
+     */
+    private function comparison(ReportShare $share, $views, array $period): array
+    {
+        $tz = $this->timezoneOf($share);
+        $start = Carbon::parse($period['from'], $tz)->startOfDay();
+        $end = Carbon::parse($period['to'], $tz)->startOfDay();
+        $days = $start->diffInDays($end) + 1;
+        $prevEnd = $start->copy()->subDay();
+        $prevStart = $prevEnd->copy()->subDays($days - 1);
+
+        $count = function (Carbon $from, Carbon $to) use ($share, $views, $tz): array {
+            $window = fn ($q) => $q
+                ->whereRaw('created_at at time zone ? >= ?', [$tz, $from->toDateTimeString()])
+                ->whereRaw('created_at at time zone ? < ?', [$tz, $to->copy()->addDay()->toDateTimeString()]);
+            $row = $window(clone $views)->selectRaw("count(*) as views, count(distinct md5(coalesce(ip, '') || '|' || coalesce(user_agent, ''))) as devices")->first();
+            $downloads = $window(DB::table('report_share_access_logs')->where('share_id', $share->getKey())->where('action', 'download'))->count();
+
+            return ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'views' => (int) ($row->views ?? 0), 'devices' => (int) ($row->devices ?? 0), 'downloads' => $downloads];
+        };
+
+        return ['current' => $count($start, $end), 'previous' => $count($prevStart, $prevEnd)];
+    }
+
+    /** The report's own clock, the one its period is measured on; UTC when it names none or an unknown one. */
+    private function timezoneOf(ReportShare $share): string
+    {
+        $tz = (string) (Report::withoutGlobalScopes()->whereKey($share->report_id)->value('timezone') ?: 'UTC');
+
+        return in_array($tz, \DateTimeZone::listIdentifiers(), true) ? $tz : 'UTC';
+    }
+
+    /**
+     * Leave out the opens that announced themselves as machines — link previews, crawlers, command-line tools.
+     *
+     * One definition for the per-link analytics and the project-level summary, so the two can never disagree about
+     * what counts as a person. A user agent is a claim: «not matched here» means «did not announce itself».
+     *
+     * @param  Builder  $query
+     * @return Builder
+     */
+    public static function humanOnly($query)
+    {
+        foreach (self::BOT_MARKERS as $marker) {
+            $query->whereRaw("lower(coalesce(user_agent, '')) not like ?", ['%'.$marker.'%']);
+        }
+
+        return $query;
     }
 
     /**
@@ -92,10 +168,7 @@ final class ShareAnalytics
     private function trend(ReportShare $share, $views, ?Carbon $from, ?Carbon $to, string $granularity): array
     {
         $granularity = array_key_exists($granularity, self::GRANULARITIES) ? $granularity : 'day';
-        $tz = (string) (Report::withoutGlobalScopes()->whereKey($share->report_id)->value('timezone') ?: 'UTC');
-        if (! in_array($tz, \DateTimeZone::listIdentifiers(), true)) {
-            $tz = 'UTC';
-        }
+        $tz = $this->timezoneOf($share);
 
         $end = ($to ?? Carbon::now($tz))->copy()->setTimezone($tz)->startOfDay();
         $start = ($from ?? $end->copy()->subDays(self::GRANULARITIES[$granularity]['days'] - 1))->copy()->setTimezone($tz)->startOfDay();

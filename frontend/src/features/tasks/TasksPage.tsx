@@ -1,10 +1,11 @@
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { Num } from '@/components/ui/Num'
 import { useEffect, useMemo, useState } from 'react'
 import { useDebouncedValue } from '@/components/forms/useTypeahead'
 import { StatCard } from '@/components/ui/StatCard'
 import { ChartCard, StatusMixBar } from '@/features/analytics/charts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, BellRing, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
+import { AlertTriangle, BellRing, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, Truck, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
@@ -160,6 +161,7 @@ export function TasksPage() {
           </>
         }
       />
+      <OpsHubBar />
 
       {/*
         The filters, on the page — UX-SWEEP-001.
@@ -413,7 +415,13 @@ function TaskOrigin({ task, ar }: { task: Task; ar: boolean }) {
             <BellRing size={12} aria-hidden /> {label}: <span className="text-text-secondary">{src.title}</span>
           </Link>
         )
-        : label && <span data-testid={`task-source-${task.id}`}>{label}</span>}
+        : src && src.kind === 'delivery' && 'client_workspace_id' in src
+          ? (
+            <Link to={portal(`/clients/${src.client_workspace_id}?tab=delivery`)} className="inline-flex items-center gap-1 font-semibold text-brand-600 hover:underline" data-testid={`task-source-delivery-${task.id}`}>
+              <Truck size={12} aria-hidden /> {label}: <span className="text-text-secondary" dir="ltr">{src.period}</span>
+            </Link>
+          )
+          : label && <span data-testid={`task-source-${task.id}`}>{label}</span>}
       {task.assignee_name && <span>{ar ? 'المسؤول: ' : 'Owner: '}<b className="text-text-secondary">{task.assignee_name}</b></span>}
       {task.created_by_name && <span>{ar ? 'أنشأها: ' : 'Raised by: '}<b className="text-text-secondary">{task.created_by_name}</b></span>}
     </div>

@@ -59,6 +59,8 @@ final class ProjectRole
             ProjectCapability::ANALYTICS_VIEW,
             ProjectCapability::CAMPAIGNS_VIEW,
             ProjectCapability::REPORTS_VIEW,
+            // MEMBER-VISIBILITY-001 — the money comes with reading, until a membership withholds it.
+            ProjectCapability::MONEY_VIEW,
         ];
 
         return [
@@ -93,6 +95,7 @@ final class ProjectRole
             self::SALES_MANAGER => [
                 ProjectCapability::DASHBOARD_VIEW,
                 ProjectCapability::REPORTS_VIEW,
+                ProjectCapability::MONEY_VIEW,
                 ProjectCapability::LEADS_VIEW,
                 ProjectCapability::LEADS_PII_VIEW,
                 ProjectCapability::LEADS_ASSIGN,

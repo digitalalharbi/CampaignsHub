@@ -16,6 +16,8 @@ use App\Domains\Commerce\Services\StoreTime;
 use App\Domains\Commerce\ValueObjects\Attribution;
 use App\Domains\Commerce\ValueObjects\MoneyConversion;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Metrics\Touchpoints\TouchpointLinker;
+use App\Domains\Tracking\Services\TrackingRecorder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -206,6 +208,12 @@ final class ImportStoreData
                 $counts['items'] += $this->items($store, $order, $row['items'] ?? [], $money);
 
                 $this->attribution->apply($order, $campaigns);
+
+                // TOUCHPOINT-EVIDENCE-001 — an order that carries a click id or a token we minted is linked to the
+                // click it came from. Idempotent, and only for a project that switched advanced tracking on.
+                if (app(TrackingRecorder::class)->enabled((string) $store->tenant_id, $projectId)) {
+                    app(TouchpointLinker::class)->linkOrder($order);
+                }
 
                 if ($order->external_campaign_id !== null) {
                     $counts['attributed']++;

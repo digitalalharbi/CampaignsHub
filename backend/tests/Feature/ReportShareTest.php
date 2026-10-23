@@ -205,6 +205,26 @@ final class ReportShareTest extends TestCase
     }
 
     /**
+     * REPORT-TABLES-OWNER-COLUMNS-001 — a published link's columns can be changed after creation, the
+     * roster says what it publishes, and the live payload honours the new choice.
+     */
+    public function test_a_published_links_columns_can_be_edited_and_the_live_payload_honours_them(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, ['hide_spend' => true], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+
+        $this->assertSame([], $this->actingAs($this->owner, 'sanctum')->getJson(dirname($url))->assertOk()->json('data.0.columns'), 'a fresh link publishes every column');
+
+        $res = $this->actingAs($this->owner, 'sanctum')->patchJson($url, ['columns' => ['accounts' => ['results', 'spend', 'bogus'], 'days' => ['impressions']]])->assertOk();
+        $this->assertSame(['accounts' => ['results', 'spend'], 'days' => ['impressions']], $res->json('data.columns'), 'unknown keys are cut, named tables kept');
+
+        // The live payload reads the same stored choice (`ReportColumns::forShare`, covered by the platformComparison tests).
+        $this->assertSame(['accounts' => ['results', 'spend'], 'days' => ['impressions']], ReportColumns::forShare($share->fresh())->toArray());
+
+        $this->actingAs($this->owner, 'sanctum')->patchJson($url, ['columns' => []])->assertOk()->assertJsonPath('data.columns', []);
+    }
+
+    /**
      * REPORT-LINK-ANALYTICS-001 — the Owner sees how often the link was opened: total views, privacy-safe
      * unique views, first and last opened. Link-preview fetches are not people, one browser opening it twice
      * is one person, and the client's own payload carries none of it.
@@ -239,6 +259,46 @@ final class ReportShareTest extends TestCase
         foreach (['unique_views', 'first_viewed_at', 'analytics'] as $private) {
             $this->assertStringNotContainsString($private, $public, "the client's payload carries {$private}");
         }
+    }
+
+    /**
+     * REPORT-LINK-ANALYTICS-003 — the drawn window against the equal window before it, in the report's own days,
+     * and the link's own state beside the figures: a paused link says so and since when.
+     */
+    public function test_the_window_is_compared_with_the_one_before_it_and_the_link_states_itself(): void
+    {
+        $this->report->forceFill(['timezone' => 'Asia/Riyadh'])->save();
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $log = function (string $action, string $ip, string $utc) use ($share): void {
+            DB::table('report_share_access_logs')->insert(['id' => (string) Str::uuid(), 'share_id' => $share->id, 'action' => $action, 'ip' => $ip, 'user_agent' => 'Mozilla/5.0 Chrome/120', 'created_at' => Carbon::parse($utc, 'UTC')]);
+        };
+        // The earlier window (Oct 5–9): three opens by two devices, one download.
+        $log('view', '1.1.1.1', '2026-10-05 09:00:00');
+        $log('view', '1.1.1.1', '2026-10-07 09:00:00');
+        $log('view', '2.2.2.2', '2026-10-09 20:30:00'); // 23:30 Riyadh — still the 9th, still the earlier window
+        $log('download', '2.2.2.2', '2026-10-09 10:00:00');
+        // The drawn window (Oct 10–14): two opens by one device, no download.
+        $log('view', '3.3.3.3', '2026-10-10 09:00:00');
+        $log('view', '3.3.3.3', '2026-10-13 09:00:00');
+        $log('view', '4.4.4.4', '2026-10-09 21:30:00'); // 00:30 on the 10th in Riyadh — the drawn window
+
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}/analytics?from=2026-10-10&to=2026-10-14";
+        $data = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data');
+
+        $this->assertSame('active', $data['state']);
+        $this->assertNull($data['state_since']);
+        $this->assertSame(['from' => '2026-10-10', 'to' => '2026-10-14', 'views' => 3, 'devices' => 2, 'downloads' => 0], $data['comparison']['current']);
+        $this->assertSame(['from' => '2026-10-05', 'to' => '2026-10-09', 'views' => 3, 'devices' => 2, 'downloads' => 1], $data['comparison']['previous']);
+
+        $share->forceFill(['paused_at' => Carbon::parse('2026-10-15 08:00:00', 'UTC')])->save();
+        $data = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data');
+        $this->assertSame('paused', $data['state']);
+        $this->assertSame('2026-10-15T08:00:00+00:00', $data['state_since']);
+
+        $share->forceFill(['paused_at' => null, 'expires_at' => Carbon::parse('2026-10-16 00:00:00', 'UTC')])->save();
+        Carbon::setTestNow('2026-10-20 00:00:00');
+        $this->assertSame('expired', $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk()->json('data.state'));
+        Carbon::setTestNow();
     }
 
     /**

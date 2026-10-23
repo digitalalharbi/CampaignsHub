@@ -159,4 +159,29 @@ describe('ProviderMark', () => {
     expect(marks[0]).toHaveAttribute('aria-hidden', 'true')
     expect(marks).toHaveLength(2)
   })
+
+  /**
+   * CP-PARITY-001 — the movement pills the advertiser dashboard carries, on the client's cards too.
+   *
+   * Drawn only from the server's own comparison: a key the server did not compare (or a space it could not —
+   * mixed currencies, no previous window) gets no pill, never one computed on the page.
+   */
+  it('shows a movement pill per figure when the server compared the window with the one before it', async () => {
+    vi.mocked(fetchPortalOverview).mockResolvedValue({ ...base, movement: { impressions: 0.12, clicks: -0.08, conversions: null, ctr: 0.004 } })
+    renderWithProviders(<PortfolioPerformance />, { locale: 'en' })
+
+    expect(await screen.findByTestId('portfolio-move-impressions')).toHaveTextContent('12')
+    expect(screen.getByTestId('portfolio-move-clicks')).toHaveTextContent('8')
+    expect(screen.queryByTestId('portfolio-move-conversions'), 'no previous figure, no pill').toBeNull()
+    // The secondary strip carries its movement too (CTR moved 0.4% — under the flat threshold, still drawn as flat).
+    expect(within(screen.getByTestId('portfolio-secondary')).getByTestId('portfolio-move-ctr')).toBeInTheDocument()
+  })
+
+  it('draws no pill at all when the server sent no comparison', async () => {
+    vi.mocked(fetchPortalOverview).mockResolvedValue(base)
+    renderWithProviders(<PortfolioPerformance />, { locale: 'en' })
+
+    await screen.findByTestId('portfolio-kpi-impressions')
+    expect(screen.queryByTestId('portfolio-move-impressions')).toBeNull()
+  })
 })

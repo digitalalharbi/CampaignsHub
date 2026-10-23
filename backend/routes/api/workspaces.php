@@ -68,13 +68,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      * flow is «two fields and a button», and asking which project a WhatsApp number belongs to is
      * exactly the question the requirement rules out.
      */
-    Route::get('short-links', [ShortLinkController::class, 'index'])->name('short-links.index');
-    Route::post('short-links', [ShortLinkController::class, 'store'])->name('short-links.store');
-    Route::get('short-links/{link}/history', [ShortLinkController::class, 'history'])->name('short-links.history');
-    Route::patch('short-links/{link}', [ShortLinkController::class, 'update'])->name('short-links.update');
-    Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->name('short-links.disable');
+    Route::get('short-links', [ShortLinkController::class, 'index'])->middleware('module:smart_links')->name('short-links.index');
+    Route::post('short-links', [ShortLinkController::class, 'store'])->middleware('module:smart_links')->name('short-links.store');
+    Route::get('short-links/{link}/history', [ShortLinkController::class, 'history'])->middleware('module:smart_links')->name('short-links.history');
+    Route::patch('short-links/{link}', [ShortLinkController::class, 'update'])->middleware('module:smart_links')->name('short-links.update');
+    Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->middleware('module:smart_links')->name('short-links.disable');
+    Route::post('short-links/{link}/enable', [ShortLinkController::class, 'enable'])->middleware('module:smart_links')->name('short-links.enable');
+    // BIO-PAGE-001 — a page of buttons, each an existing short link; served on the same hop.
+    Route::post('short-links/bio', [ShortLinkController::class, 'storeBio'])->middleware('module:smart_links')->name('short-links.bio.store');
+    Route::patch('short-links/bio/{link}', [ShortLinkController::class, 'updateBio'])->middleware('module:smart_links')->name('short-links.bio.update');
     /* Delete removes it from the library; disable only stops it resolving — see the controller. */
-    Route::delete('short-links/{link}', [ShortLinkController::class, 'destroy'])->name('short-links.destroy');
+    Route::delete('short-links/{link}', [ShortLinkController::class, 'destroy'])->middleware('module:smart_links')->name('short-links.destroy');
 
     /*
      * BUDGET-GOVERNANCE-001 — the CLIENT rung of the budget hierarchy.
