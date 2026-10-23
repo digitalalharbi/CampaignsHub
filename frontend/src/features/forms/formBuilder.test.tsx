@@ -88,4 +88,17 @@ describe('the forms list and the builder', () => {
     expect(body.definition.consent.measurement.text.en).toBe('Report my hashed details.')
     expect(await screen.findByTestId('form-preview')).toBeInTheDocument()
   })
+
+  it('saves a round-robin team and the follow-up the team promises', async () => {
+    vi.mocked(patchData).mockResolvedValue(detail())
+    renderWithProviders(<FormBuilderPage />, { route: '/agency/forms/f1', path: '/agency/forms/:formId' })
+    fireEvent.change(await screen.findByTestId('form-owner'), { target: { value: 'round_robin' } })
+    fireEvent.click(await screen.findByTestId('form-pool-7'))
+    fireEvent.change(screen.getByTestId('form-follow-up'), { target: { value: '30' } })
+    fireEvent.click(screen.getByTestId('form-save'))
+
+    await waitFor(() => expect(patchData).toHaveBeenCalled())
+    const body = vi.mocked(patchData).mock.calls[0][1] as Record<string, unknown>
+    expect(body).toMatchObject({ assignment_mode: 'round_robin', assignment_owner_ids: [7], follow_up_minutes: 30 })
+  })
 })

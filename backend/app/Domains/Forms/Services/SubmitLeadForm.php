@@ -13,7 +13,10 @@ use App\Domains\Forms\Conversions\ConversionDispatcher;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Models\LeadFormSubmission;
 use App\Domains\Forms\Models\LeadFormVersion;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Models\User;
 use App\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -64,6 +67,7 @@ final class SubmitLeadForm
         private readonly TenantContext $tenant,
         private readonly FormFunnel $funnel,
         private readonly ConversionDispatcher $conversions,
+        private readonly ProjectAbilities $abilities,
     ) {}
 
     /**
@@ -131,6 +135,10 @@ final class SubmitLeadForm
                     'submitted_at' => $now,
                 ]);
 
+                // A referral code is verified against THIS tenant and form; a code that does not verify is ignored, never an error.
+                $referrerId = isset($payload['ref']) && is_string($payload['ref']) ? ReferralCodes::verify($payload['ref'], (string) $form->tenant_id, (string) $form->id) : null;
+                $referrer = $referrerId === null ? null : Lead::query()->where('project_id', $form->project_id)->find($referrerId);
+
                 $clickId = null;
                 foreach (self::CLICK_IDS as $type) {
                     if (isset($attribution['click_ids'][$type])) {
@@ -163,11 +171,15 @@ final class SubmitLeadForm
                     'utm_term' => $attribution['utm_term'] ?? null,
                     'click_id' => $clickId,
                     'form_answers' => $clean['labelled'],
+                    'referred_by_lead_id' => $referrer?->id,
                     'phone_normalized' => PhoneNumber::normalise($clean['phone']),
                     'email_normalized' => $clean['email'],
                 ]);
 
                 $submission->forceFill(['lead_id' => $lead->id])->save();
+                if ($referrer !== null) {
+                    $this->activity->execute($referrer, 'note', 'Referred a new lead through the form «'.$form->name.'»', ['referred_lead_id' => (string) $lead->id]);
+                }
 
                 $this->activity->execute($lead, 'status_change', 'Lead created from the form «'.$form->name.'»', ['form_id' => (string) $form->id, 'version' => $version->version, 'submission_id' => (string) $submission->id]);
                 $this->audit->log(
@@ -177,11 +189,19 @@ final class SubmitLeadForm
                     after: ['form_id' => (string) $form->id, 'version' => $version->version, 'consent' => $submission->consent_state],
                 );
 
-                if ($form->default_owner_id !== null) {
-                    $lead = $this->advance->assign($lead, (int) $form->default_owner_id);
+                $owner = $this->owner($form);
+                if ($owner !== null) {
+                    $lead = $this->advance->assign($lead, $owner);
+                }
+                // The follow-up the team promised on arrival: what the follow-up workspace and its overdue alerts already read.
+                if ($form->follow_up_minutes !== null && $owner !== null) {
+                    $lead = $this->advance->scheduleFollowUp($lead, Carbon::now()->addMinutes((int) $form->follow_up_minutes));
                 }
                 app(LinkDuplicateLead::class)->handle($lead);
                 $this->funnel->leadCreated($form, $lead, $submission);
+                if ($referrer !== null) {
+                    $this->funnel->referred($form, $lead, $referrer);
+                }
 
                 return ['submission' => $submission, 'lead' => $lead, 'duplicate' => false];
             });
@@ -198,6 +218,36 @@ final class SubmitLeadForm
 
             return ['submission' => $won, 'lead' => $won->lead_id === null ? null : Lead::query()->find($won->lead_id), 'duplicate' => true];
         }
+    }
+
+    /**
+     * Who gets this lead. One fixed person, or — in round-robin — whoever of the pool holds the fewest of THIS form's leads,
+     * the earlier-listed person on a tie. A pool member who can no longer work the project's leads is skipped at the moment of
+     * the draw, not at configuration: people are removed from projects after a form is built.
+     */
+    private function owner(LeadForm $form): ?int
+    {
+        if ($form->assignment_mode !== 'round_robin') {
+            return $form->default_owner_id === null ? null : (int) $form->default_owner_id;
+        }
+
+        $pool = array_values(array_unique(array_map('intval', (array) $form->assignment_owner_ids)));
+        $eligible = array_values(array_filter($pool, fn (int $id): bool => ($user = User::query()->find($id)) !== null
+            && $this->abilities->allows($user, (string) $form->project_id, ProjectCapability::LEADS_UPDATE)));
+        if ($eligible === []) {
+            // Nobody in the pool can take it: fall back to the single owner, else leave it unassigned for the manager's queue.
+            return $form->default_owner_id === null ? null : (int) $form->default_owner_id;
+        }
+
+        $held = Lead::query()->where('form_id', (string) $form->id)->whereIn('owner_id', $eligible)->selectRaw('owner_id, count(*) as n')->groupBy('owner_id')->pluck('n', 'owner_id');
+        $best = $eligible[0];
+        foreach ($eligible as $id) {
+            if ((int) ($held[$id] ?? 0) < (int) ($held[$best] ?? 0)) {
+                $best = $id;
+            }
+        }
+
+        return $best;
     }
 
     /**

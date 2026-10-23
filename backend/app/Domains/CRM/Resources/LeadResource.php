@@ -45,6 +45,8 @@ final class LeadResource extends JsonResource
             'company_id' => $this->company_id,
             'contact_id' => $this->contact_id,
             'owner_id' => $this->owner_id,
+            // FORMS-REFERRALS-001 — which project the lead belongs to, so a screen can offer THAT project's forms. An id, not identity.
+            'project_id' => $this->project_id,
             'is_converted' => $this->isConverted(),
             'converted_opportunity_id' => $this->converted_opportunity_id,
             'converted_at' => optional($this->converted_at)->toIso8601String(),

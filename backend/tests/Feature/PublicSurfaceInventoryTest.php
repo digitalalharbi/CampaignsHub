@@ -65,6 +65,9 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/plans',
         'GET api/v1/plans/{code}/quote',
         'GET api/v1/public/catalog/paid-media-services',
+        // FORMS-HUB-001 — a published lead form as a stranger meets it: the slug is unguessable, only a PUBLISHED form of a workspace
+        // with the module on answers, and the three are throttled per form and address (`public-form`).
+        'GET api/v1/public/forms/{slug}',
         'GET api/v1/public/pages/{page}',
         'GET api/v1/ready',
         'GET api/v1/reports/download/{token}',
@@ -129,6 +132,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/data-requests',
         'POST api/v1/invitations/accept',
         'POST api/v1/payments/webhook/{provider}',
+        'POST api/v1/public/forms/{slug}/events',
+        'POST api/v1/public/forms/{slug}/submissions',
         'POST api/v1/requests',
         'POST api/v1/requests/track/{token}/reply',
         'POST api/v1/requests/uploads',

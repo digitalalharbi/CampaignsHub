@@ -21,8 +21,8 @@ final class LeadFormSubmission extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'lead_form_id', 'lead_form_version_id', 'lead_id', 'idempotency_key', 'session_id',
-        'consent_state', 'consent_version', 'measurement_consent', 'attribution', 'submitted_at',
+        'consent_state', 'consent_version', 'measurement_consent', 'attribution', 'submitted_at', 'evidence_purged_at', 'purge_reason',
     ];
 
-    protected $casts = ['attribution' => 'array', 'submitted_at' => 'datetime'];
+    protected $casts = ['attribution' => 'array', 'submitted_at' => 'datetime', 'evidence_purged_at' => 'datetime'];
 }

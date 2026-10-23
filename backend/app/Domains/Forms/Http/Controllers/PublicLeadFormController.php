@@ -62,7 +62,7 @@ final class PublicLeadFormController extends Controller
             return ApiResponse::success(['accepted' => true, 'duplicate' => false], 'Received.');
         }
 
-        $result = $this->submit->handle($form, $request->only(['submission_id', 'answers', 'consent', 'attribution', 'session_id']));
+        $result = $this->submit->handle($form, $request->only(['submission_id', 'answers', 'consent', 'attribution', 'session_id', 'ref']));
 
         return ApiResponse::success([
             'accepted' => true,

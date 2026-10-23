@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/States'
+import { days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { useFormFunnel, useLinkFunnel } from './api'
 import type { Funnel } from './types'
@@ -41,7 +42,7 @@ function FunnelView({ q, days, setDays, testid }: { q: { isLoading: boolean; isE
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
           {PERIODS.map((p) => (
             <button key={p} type="button" aria-pressed={days === p} onClick={() => setDays(p)} className={`rounded-lg border px-2 py-1 text-xs font-semibold ${days === p ? 'border-brand-500 text-brand-600' : 'border-border text-text-secondary'}`} data-testid={`${testid}-period-${p}`}>
-              {ar ? `${p} يومًا` : `${p} days`}
+              {countedDays(p, ar ? 'ar' : 'en')}
             </button>
           ))}
         </div>
@@ -109,7 +110,7 @@ function Body({ f, ar, testid }: { f: Funnel; ar: boolean; testid: string }) {
                 <Stat label={ar ? 'نقرة ← عميل' : 'Click → lead'} value={pct(f.click_to_lead_rate)} />
               </div>
             )}
-          <p className="text-xs text-text-secondary" data-testid={`${testid}-rule`}>{f.attribution_rule}</p>
+          <p className="text-xs text-text-secondary" data-testid={`${testid}-rule`}>{f.attribution_rule ? (ar ? f.attribution_rule.ar : f.attribution_rule.en) : ''}</p>
         </div>
       )}
 
@@ -126,8 +127,14 @@ function Body({ f, ar, testid }: { f: Funnel; ar: boolean; testid: string }) {
         />
       </div>
 
-      <p className="text-xs text-text-secondary" data-testid={`${testid}-cost`}>{ar ? 'تكلفة العميل المحتمل غير معروضة: لا إنفاق إعلاني مربوط بنموذج أو رابط، وأي قسمة ستكون ربطًا مُختلقًا.' : f.cost.reason}</p>
-      <p className="text-xs text-text-muted">{f.stage_note}</p>
+      {(L.referred ?? 0) > 0 && (
+        <p className="text-xs text-text-secondary" data-testid={`${testid}-referred`}>
+          {ar ? `${L.referred} من هذه العملاء المحتملين جاؤوا بإحالة من عميل آخر، أُغلقت منهم ${L.referred_won ?? 0}.` : `${L.referred} of these leads were referred by another lead; ${L.referred_won ?? 0} of them were won.`}
+        </p>
+      )}
+
+      <p className="text-xs text-text-secondary" data-testid={`${testid}-cost`}>{ar ? f.cost.reason.ar : f.cost.reason.en}</p>
+      <p className="text-xs text-text-muted">{ar ? f.stage_note.ar : f.stage_note.en}</p>
     </div>
   )
 }

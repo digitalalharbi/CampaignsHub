@@ -130,7 +130,8 @@ final class TrackingHealthTest extends TestCase
         $c = $this->check($h, 'form_broken:');
         $this->assertSame('critical', $c['severity']);
         $this->assertSame(22, $c['numbers']['views']);
-        $this->assertStringContainsString('phone', (string) $c['action']);
+        $this->assertStringContainsString('phone', $c['action']['en']);
+        $this->assertNotSame($c['action']['en'], $c['action']['ar'], 'Every sentence travels in both languages.');
         $this->assertSame(1, $h['summary']['critical']);
         $this->assertSame('critical', $h['checks'][0]['severity'], 'The worst thing comes first.');
     }
@@ -143,7 +144,7 @@ final class TrackingHealthTest extends TestCase
         $c = $this->check($this->health(), 'form_visits:');
 
         $this->assertSame('unavailable', $c['severity']);
-        $this->assertStringContainsString('cannot be told from one nobody opens', (string) $c['detail']);
+        $this->assertStringContainsString('cannot be told from one nobody opens', $c['detail']['en']);
     }
 
     public function test_coverage_is_a_rate_only_over_enough_leads_and_a_mostly_untagged_form_warns(): void
@@ -197,7 +198,7 @@ final class TrackingHealthTest extends TestCase
         $this->assertSame('warning', $this->check($h, 'delivery_stuck:')['severity']);
         $never = $this->check($h, 'never_asked:');
         $this->assertSame('warning', $never['severity']);
-        $this->assertStringContainsString('measurement consent', (string) $never['action']);
+        $this->assertStringContainsString('measurement consent', $never['action']['en']);
         $row = $h['deliveries'][0];
         $this->assertSame([1, 1, 1], [$row['failed'], $row['queued_stuck'], $row['skipped_consent']]);
     }
@@ -233,13 +234,13 @@ final class TrackingHealthTest extends TestCase
         $this->assertSame([['provider' => 'meta', 'platform_reported' => 40, 'stored' => 10, 'difference' => 30, 'stored_to_reported' => 0.25]], $h['reconciliation']);
         $c = $this->check($h, 'reconcile:meta');
         $this->assertSame('warning', $c['severity']);
-        $this->assertStringContainsString('attribution window', (string) $c['action']);
+        $this->assertStringContainsString('attribution window', $c['action']['en']);
     }
 
     public function test_it_never_claims_an_accuracy_and_needs_the_permission_and_stays_in_the_project(): void
     {
         $h = $this->health();
-        $this->assertStringContainsString('never states an accuracy', $h['confidence_note']);
+        $this->assertStringContainsString('never states an accuracy', $h['confidence_note']['en']);
         $this->assertStringNotContainsString('accuracy_percent', json_encode($h));
 
         $viewer = User::create(['name' => 'V', 'email' => uniqid().'@v.test', 'password' => 'secret123']);

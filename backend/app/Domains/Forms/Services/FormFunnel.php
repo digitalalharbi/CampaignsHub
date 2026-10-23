@@ -100,6 +100,22 @@ final class FormFunnel
         ]);
     }
 
+    /** `lead_referred`: written for the NEW lead, when a verified referral code brought them. One per lead. */
+    public function referred(LeadForm $form, Lead $lead, Lead $referrer): void
+    {
+        $this->recorder->record([
+            'tenant_id' => (string) $form->tenant_id,
+            'project_id' => (string) $form->project_id,
+            'event_type' => TrackingEvent::LEAD_REFERRED,
+            'subject_type' => 'lead_form',
+            'subject_id' => (string) $form->id,
+            'source' => 'leads_centre',
+            'consent_state' => 'not_required',
+            'lead_id' => (string) $lead->id,
+            'dedupe_key' => 'lead_referred:'.$lead->id,
+        ]);
+    }
+
     /** Written by the Leads Centre's own transition, once per lead and kind, for a lead that came through a first-party form. */
     public function transition(Lead $lead, LeadStage $to, ?Carbon $at = null): void
     {

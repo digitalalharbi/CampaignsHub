@@ -222,13 +222,15 @@ final class LeadFormFunnelReportTest extends TestCase
         $r = $this->as()->getJson("/api/v1/projects/{$this->project->id}/links/{$link->id}/funnel")->assertOk()->json('data');
         $this->assertTrue($r['credited']);
         $this->assertSame(2, $r['leads']['received']);
-        $this->assertStringContainsString('utm_campaign', $r['attribution_rule']);
+        $this->assertStringContainsString('utm_campaign', $r['attribution_rule']['en']);
+        $this->assertStringContainsString('utm_campaign', $r['attribution_rule']['ar']);
 
         $none = $this->as()->getJson("/api/v1/projects/{$this->project->id}/links/{$other->id}/funnel")->assertOk()->json('data');
         $this->assertFalse($none['credited']);
         $this->assertSame(0, $none['leads']['received']);
         $this->assertNull($none['click_to_lead_rate']);
-        $this->assertStringContainsString('no utm_campaign', $none['attribution_rule']);
+        $this->assertStringContainsString('no utm_campaign', $none['attribution_rule']['en']);
+        $this->assertNotSame($none['attribution_rule']['en'], $none['attribution_rule']['ar']);
     }
 
     public function test_the_funnel_needs_the_permission_stays_in_its_project_and_bounds_the_range(): void

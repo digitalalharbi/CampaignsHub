@@ -25,7 +25,7 @@ describe('the conversion destinations screen', () => {
   it('says a destination in test sends nothing, shows the last week by outcome and the last error, and never a secret', async () => {
     renderWithProviders(<ConversionsPanel projectId="p1" />)
     expect(await screen.findByTestId('destination-status-d1')).toHaveTextContent('Test — sends nothing')
-    expect(screen.getByTestId('destination-counts-d1')).toHaveTextContent('sent 4 · failed 1 · no consent 2 · test 3')
+    expect(screen.getByTestId('destination-counts-d1')).toHaveTextContent('Last 7 days: sent 4 · failed 1 · no consent 2 · test 3')
     expect(screen.getByTestId('destination-last-error-d1')).toHaveTextContent('HTTP 403 ***')
     expect(screen.getByTestId('planned-kinds')).toHaveTextContent('TikTok Events API')
     expect(document.body.textContent).not.toMatch(/SECRET/)

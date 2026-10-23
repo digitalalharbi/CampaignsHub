@@ -45,6 +45,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'creatives:refresh-covers',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
         'delivery:prepare-weekly',
+        // FORMS-PDPL-001 — the evidence around a form submission is anonymised past its form's retention (02:30 daily); the consent record is kept.
+        'forms:purge-evidence',
         'fx:rates',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker

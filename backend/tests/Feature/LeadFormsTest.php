@@ -13,6 +13,8 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Models\LeadFormSubmission;
 use App\Domains\Forms\Models\LeadFormVersion;
+use App\Domains\Forms\Services\SubmitLeadForm;
+use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -372,5 +374,85 @@ final class LeadFormsTest extends TestCase
             $this->assertNotEmpty($lead->form_answers);
         }
         $this->assertEqualsCanonicalizing($ids, LeadFormSubmission::withoutGlobalScopes()->pluck('idempotency_key')->all());
+    }
+
+    private function agent(string $name): User
+    {
+        $u = User::create(['name' => $name, 'email' => uniqid().'@t.test', 'password' => 'secret123']);
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => $name, 'slug' => 'r-'.uniqid()]);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $this->grantMembership($u, $this->tenant);
+        $u->assignRole($role);
+        app(TenantContext::class)->forget();
+
+        return $u;
+    }
+
+    public function test_round_robin_gives_each_lead_to_whoever_of_the_pool_holds_the_fewest_and_stamps_the_promised_follow_up(): void
+    {
+        [$a, $b, $c] = [$this->agent('A'), $this->agent('B'), $this->agent('C')];
+        $slug = $this->publishedForm(['assignment_mode' => 'round_robin', 'assignment_owner_ids' => [$a->id, $b->id, $c->id], 'follow_up_minutes' => 30]);
+
+        foreach (range(1, 6) as $n) {
+            $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission(['answers' => ['mobile' => '05000009'.str_pad((string) $n, 2, '0', STR_PAD_LEFT), 'email' => "rr{$n}@example.test"]]))->assertCreated();
+        }
+
+        $held = Lead::withoutGlobalScopes()->selectRaw('owner_id, count(*) n')->groupBy('owner_id')->pluck('n', 'owner_id')->all();
+        $this->assertEquals([$a->id => 2, $b->id => 2, $c->id => 2], $held, 'Six leads over three agents: two each.');
+        foreach (Lead::withoutGlobalScopes()->get() as $lead) {
+            $this->assertNotNull($lead->assigned_at);
+            $this->assertSame('assigned', $lead->status);
+            $this->assertEqualsWithDelta(30 * 60, $lead->received_at->diffInSeconds($lead->next_follow_up_at, false), 5);
+        }
+    }
+
+    public function test_a_pool_member_who_can_no_longer_work_the_project_is_skipped_at_the_draw(): void
+    {
+        $a = $this->agent('A');
+        // B works leads through a narrow tenant role (no settings.manage, so nothing is implied).
+        $b = User::create(['name' => 'B', 'email' => uniqid().'@t.test', 'password' => 'secret123']);
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $narrow = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Narrow', 'slug' => 'n-'.uniqid()]);
+        $narrow->givePermissionTo('leads.view', 'leads.update', 'projects.view.all');
+        $this->grantMembership($b, $this->tenant);
+        $b->assignRole($narrow);
+        app(TenantContext::class)->forget();
+
+        $slug = $this->publishedForm(['assignment_mode' => 'round_robin', 'assignment_owner_ids' => [$a->id, $b->id]]);
+
+        // Taken off leads after the form was built.
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $narrow->permissions()->detach();
+        app(TenantContext::class)->forget();
+        app()->forgetInstance(ProjectAbilities::class);
+        app()->forgetInstance(SubmitLeadForm::class);
+
+        foreach (range(1, 3) as $n) {
+            $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission(['answers' => ['mobile' => '05000008'.str_pad((string) $n, 2, '0', STR_PAD_LEFT), 'email' => "sk{$n}@example.test"]]))->assertCreated();
+        }
+
+        $this->assertSame([$a->id], Lead::withoutGlobalScopes()->pluck('owner_id')->unique()->values()->all());
+    }
+
+    public function test_a_pool_with_somebody_who_cannot_work_the_project_is_refused_whole(): void
+    {
+        $a = $this->agent('A');
+        $stranger = User::create(['name' => 'S', 'email' => uniqid().'@s.test', 'password' => 'secret123']);
+
+        $this->as()->postJson("/api/v1/projects/{$this->project->id}/forms", ['name' => 'F', 'definition' => $this->definition(), 'assignment_mode' => 'round_robin', 'assignment_owner_ids' => [$a->id, $stranger->id]])->assertStatus(422);
+        $this->as()->postJson("/api/v1/projects/{$this->project->id}/forms", ['name' => 'F', 'definition' => $this->definition(), 'follow_up_minutes' => 1])->assertStatus(422);
+        $this->assertSame(0, LeadForm::withoutGlobalScopes()->count());
+    }
+
+    public function test_with_nobody_to_take_it_the_lead_is_left_unassigned_for_the_managers_queue(): void
+    {
+        $slug = $this->publishedForm(['follow_up_minutes' => 30]);
+
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated();
+
+        $lead = Lead::withoutGlobalScopes()->firstOrFail();
+        $this->assertNull($lead->owner_id);
+        $this->assertNull($lead->next_follow_up_at, 'A follow-up promised to nobody is not a promise.');
     }
 }

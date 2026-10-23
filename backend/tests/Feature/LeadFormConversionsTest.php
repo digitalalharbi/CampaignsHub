@@ -309,7 +309,7 @@ final class LeadFormConversionsTest extends TestCase
     {
         $url = "/api/v1/projects/{$this->project->id}/conversion-destinations";
 
-        foreach (['tiktok_events', 'snapchat_capi', 'google_ads', 'linkedin_capi', 'x_conversions', 'made_up'] as $kind) {
+        foreach (['tiktok_events', 'google_ads', 'linkedin_capi', 'x_conversions', 'made_up'] as $kind) {
             $this->as()->postJson($url, ['kind' => $kind, 'name' => 'X', 'config' => ['pixel_id' => '123456789']])->assertStatus(422);
         }
         $this->as()->postJson($url, $this->ga4(['config' => ['measurement_id' => 'not-an-id']]))->assertStatus(422);
@@ -397,5 +397,45 @@ final class LeadFormConversionsTest extends TestCase
 
         $this->assertSame($eventId, (string) ConversionDelivery::withoutGlobalScopes()->firstOrFail()->event_id);
         $this->assertSame($eventId, LeadFormSubmission::withoutGlobalScopes()->firstOrFail()->id);
+    }
+
+    public function test_snapchat_gets_the_shape_its_reference_names_and_validates_through_its_own_endpoint(): void
+    {
+        $this->httpReturns(Http::response(['status' => 'OK'], 200));
+        $id = $this->create(['kind' => 'snapchat_capi', 'name' => 'Snap', 'config' => ['pixel_id' => '1c5b9a3e-aaaa-4bbb-8ccc-0123456789ab'], 'secrets' => ['access_token' => 'TOKEN-snap-value']]);
+        $slug = $this->slug();
+        $body = $this->submission();
+        $body['attribution']['sclid'] = 'ScCid-abc123';
+
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $body)->assertCreated();
+
+        $delivery = ConversionDelivery::withoutGlobalScopes()->firstOrFail();
+        $row = $delivery->payload['body']['data'][0];
+        $this->assertSame('SIGN_UP', $row['event_name']);
+        $this->assertSame('WEB', $row['action_source']);
+        $this->assertSame((string) $delivery->event_id, $row['event_id'], 'Deduplicated against the pixel by event id.');
+        $this->assertIsInt($row['event_time']);
+        $this->assertGreaterThan(1_700_000_000_000, $row['event_time'], 'Epoch milliseconds, which Snap encourages.');
+        $this->assertSame([hash('sha256', 'sara@example.test')], $row['user_data']['em']);
+        $this->assertSame([hash('sha256', '966500000123')], $row['user_data']['ph']);
+        $this->assertSame('ScCid-abc123', $row['user_data']['sc_click_id']);
+        $this->assertStringContainsString('/villas', $row['event_source_url']);
+        $this->assertStringNotContainsString('TOKEN-snap-value', json_encode($delivery->payload));
+        $this->assertSame('https://tr.snapchat.com/v3/1c5b9a3e-aaaa-4bbb-8ccc-0123456789ab/events', $delivery->payload['url']);
+
+        $this->live($id);
+        $this->as()->postJson("/api/v1/projects/{$this->project->id}/conversion-destinations/{$id}/diagnose")->assertOk()->assertJsonPath('data.validation.ok', true);
+        Http::assertSent(fn (HttpRequest $r): bool => str_starts_with($r->url(), 'https://tr.snapchat.com/v3/1c5b9a3e-aaaa-4bbb-8ccc-0123456789ab/events/validate?') && str_contains($r->url(), 'access_token=TOKEN-snap-value'));
+    }
+
+    public function test_snapchat_settings_are_validated_against_its_own_event_list(): void
+    {
+        $url = "/api/v1/projects/{$this->project->id}/conversion-destinations";
+        $this->as()->postJson($url, ['kind' => 'snapchat_capi', 'name' => 'S', 'config' => ['pixel_id' => 'x']])->assertStatus(422);
+        $this->as()->postJson($url, ['kind' => 'snapchat_capi', 'name' => 'S', 'config' => ['pixel_id' => '1c5b9a3e-aaaa-4bbb-8ccc-0123456789ab', 'event_name' => 'LEAD']])->assertStatus(422);
+        $this->as()->postJson($url, ['kind' => 'snapchat_capi', 'name' => 'S', 'config' => ['pixel_id' => '1c5b9a3e-aaaa-4bbb-8ccc-0123456789ab', 'event_name' => 'CUSTOM_EVENT_1']])->assertCreated();
+        // It cannot go live without its token.
+        $id = ConversionDestination::withoutGlobalScopes()->firstOrFail()->id;
+        $this->as()->patchJson("{$url}/{$id}", ['status' => 'live', 'confirm_live' => true])->assertStatus(422);
     }
 }

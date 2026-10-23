@@ -11,8 +11,8 @@ const base = {
   leads: { submissions: 2, received: 2, people: 1, contacted: 1, qualified: 1, appointment: 1, won: 1 },
   rates: { lead_to_contacted: 0.5, lead_to_qualified: 0.5, lead_to_appointment: 0.5, lead_to_won: 0.5 },
   won_estimated_value: { SAR: 40000 },
-  cost: { cost_per_lead: null, reason: 'No ad spend is linked to a form or a link, so a cost per lead would be an invented division.' },
-  stage_note: 'Contacted and qualified are counted from the stamps the pipeline writes.',
+  cost: { cost_per_lead: null, reason: { en: 'No ad spend is linked to a form or a link, so a cost per lead would be an invented division.', ar: 'لا إنفاق إعلاني مربوط بنموذج أو رابط.' } },
+  stage_note: { en: 'Contacted and qualified are counted from the stamps the pipeline writes.', ar: 'التواصل والتأهيل يُحسبان من الأختام.' },
 }
 
 describe('the form and link results', () => {
@@ -61,7 +61,7 @@ describe('the form and link results', () => {
   it('states how a link was credited, and that an untagged link credits nothing', async () => {
     vi.mocked(getData).mockResolvedValue({
       ...base, scope: { type: 'link', id: 'l1', name: 'plain' }, tracking: { since: '2026-10-01' }, clicks: { clicks: 12, machine: 3, device_days: 9 },
-      credited: false, attribution_rule: 'This link carries no utm_campaign, so no lead can be credited to it.', click_to_lead_rate: null,
+      credited: false, attribution_rule: { en: 'This link carries no utm_campaign, so no lead can be credited to it.', ar: 'هذا الرابط لا يحمل utm_campaign.' }, click_to_lead_rate: null,
       leads: { submissions: null, received: 0, people: 0, contacted: 0, qualified: 0, appointment: 0, won: 0 },
     })
     renderWithProviders(<LinkFunnelPanel projectId="p1" linkId="l1" />, { locale: 'en' })
@@ -78,5 +78,11 @@ describe('the form and link results', () => {
     screen.getByTestId('form-funnel-period-7').click()
     await waitFor(() => expect(vi.mocked(getData).mock.calls.some(([u]) => /forms\/f1\/funnel\?from=\d{4}-\d{2}-\d{2}&to=/.test(u as string))).toBe(true))
     await waitFor(() => expect(vi.mocked(getData).mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it('says how many leads came by referral and how many of those were won', async () => {
+    vi.mocked(getData).mockResolvedValue({ ...base, scope: { type: 'form', id: 'f1', name: 'Villa' }, visit: { state: 'tracking_off', since: null }, leads: { ...base.leads, referred: 2, referred_won: 1 } })
+    renderWithProviders(<FormFunnelPanel projectId="p1" formId="f1" />, { locale: 'en' })
+    expect(await screen.findByTestId('form-funnel-referred')).toHaveTextContent('2 of these leads were referred by another lead; 1 of them were won.')
   })
 })

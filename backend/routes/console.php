@@ -30,6 +30,9 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
  */
 Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
 
+// FORMS-PDPL-001 — the evidence around a form submission expires; the consent record does not.
+Schedule::command('forms:purge-evidence')->dailyAt('02:30')->withoutOverlapping();
+
 // DEV-only: scheduler liveness heartbeat consumed by /dev/status (never scheduled in production).
 if (! app()->environment('production')) {
     Schedule::call(function (): void {

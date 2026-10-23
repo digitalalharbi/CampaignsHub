@@ -66,6 +66,10 @@ final class LeadFormController extends Controller
             'name' => ['required', 'string', 'max:160'],
             'definition' => ['required', 'array'],
             'default_owner_id' => ['nullable', 'integer', 'exists:users,id'],
+            'assignment_mode' => ['sometimes', 'in:fixed,round_robin'],
+            'assignment_owner_ids' => ['sometimes', 'nullable', 'array', 'max:25'],
+            'assignment_owner_ids.*' => ['integer', 'exists:users,id'],
+            'follow_up_minutes' => ['sometimes', 'nullable', 'integer', 'min:5', 'max:10080'],
             'retention_days' => ['nullable', 'integer', 'min:30', 'max:3650'],
         ]);
         $definition = $this->normalise($data['definition']);
@@ -76,6 +80,9 @@ final class LeadFormController extends Controller
             'name' => $data['name'],
             'status' => LeadForm::DRAFT,
             'default_owner_id' => $owner,
+            'assignment_mode' => $data['assignment_mode'] ?? 'fixed',
+            'assignment_owner_ids' => $this->pool($data['assignment_owner_ids'] ?? null, $project),
+            'follow_up_minutes' => $data['follow_up_minutes'] ?? null,
             'retention_days' => $data['retention_days'] ?? null,
             'created_by' => $request->user()?->id,
         ]);
@@ -92,6 +99,10 @@ final class LeadFormController extends Controller
             'name' => ['sometimes', 'string', 'max:160'],
             'definition' => ['sometimes', 'array'],
             'default_owner_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            'assignment_mode' => ['sometimes', 'in:fixed,round_robin'],
+            'assignment_owner_ids' => ['sometimes', 'nullable', 'array', 'max:25'],
+            'assignment_owner_ids.*' => ['integer', 'exists:users,id'],
+            'follow_up_minutes' => ['sometimes', 'nullable', 'integer', 'min:5', 'max:10080'],
             'retention_days' => ['sometimes', 'nullable', 'integer', 'min:30', 'max:3650'],
         ]);
 
@@ -100,6 +111,15 @@ final class LeadFormController extends Controller
         }
         if (array_key_exists('default_owner_id', $data)) {
             $model->default_owner_id = $this->owner($data['default_owner_id'], $project);
+        }
+        if (isset($data['assignment_mode'])) {
+            $model->assignment_mode = $data['assignment_mode'];
+        }
+        if (array_key_exists('assignment_owner_ids', $data)) {
+            $model->assignment_owner_ids = $this->pool($data['assignment_owner_ids'], $project);
+        }
+        if (array_key_exists('follow_up_minutes', $data)) {
+            $model->follow_up_minutes = $data['follow_up_minutes'];
         }
         if (array_key_exists('retention_days', $data)) {
             $model->retention_days = $data['retention_days'];
@@ -184,6 +204,26 @@ final class LeadFormController extends Controller
         return (int) $id;
     }
 
+    /**
+     * The round-robin pool: every member must be someone who can work this project's leads, or the whole pool is refused —
+     * a pool that silently drops people would hand leads to fewer agents than the team believes it chose.
+     *
+     * @param  list<int>|null  $ids
+     * @return list<int>|null
+     */
+    private function pool(?array $ids, string $project): ?array
+    {
+        if ($ids === null || $ids === []) {
+            return null;
+        }
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        foreach ($ids as $id) {
+            $this->owner($id, $project);
+        }
+
+        return $ids;
+    }
+
     private function may(Request $request, string $project, string $capability): void
     {
         $user = $request->user();
@@ -213,6 +253,9 @@ final class LeadFormController extends Controller
             'slug' => $f->slug,
             'public_url' => Frontend::url('/f/'.$f->slug),
             'default_owner_id' => $f->default_owner_id,
+            'assignment_mode' => $f->assignment_mode,
+            'assignment_owner_ids' => $f->assignment_owner_ids ?? [],
+            'follow_up_minutes' => $f->follow_up_minutes,
             'retention_days' => $f->retention_days,
             'published_version_id' => $f->published_version_id,
             'created_at' => $f->created_at?->toIso8601String(),

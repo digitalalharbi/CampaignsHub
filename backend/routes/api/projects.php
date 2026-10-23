@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
+use App\Domains\Forms\Http\Controllers\FormDataController;
 use App\Domains\Forms\Http\Controllers\FormFunnelController;
 use App\Domains\Forms\Http\Controllers\LeadFormController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
@@ -180,6 +181,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         Route::patch('forms/{form}', [LeadFormController::class, 'update'])->middleware('project.can:leads.update')->name('forms.update');
         Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->middleware('project.can:leads.update')->name('forms.publish');
         Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->middleware('project.can:leads.update')->name('forms.archive');
+        // FORMS-REFERRALS-001 — the link a lead can pass on, carrying a signed code that names them.
+        Route::get('leads/{lead}/referral-link', [FormDataController::class, 'referralLink'])->middleware('project.can:leads.update')->name('leads.referral-link');
+        // FORMS-PDPL-001 — a data subject's erasure of one lead (needs leads.delete as well; irreversible, so it asks to be confirmed).
+        Route::post('leads/{lead}/erase', [FormDataController::class, 'erase'])->middleware('project.can:leads.update')->name('leads.erase');
         // FORMS-DASHBOARDS-001 — the funnel of one form, and of one link, for this project.
         Route::get('forms/{form}/funnel', [FormFunnelController::class, 'form'])->middleware('project.can:leads.view')->name('forms.funnel');
         Route::get('tracking-health', [FormFunnelController::class, 'health'])->middleware('project.can:leads.view')->name('tracking-health');
