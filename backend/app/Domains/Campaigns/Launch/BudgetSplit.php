@@ -104,7 +104,7 @@ final class BudgetSplit
             return array_map(static fn (int $u): float => (float) ($u / 100), $units);
         }
         $left = 10000 - $named;
-        if ($left < 0 || ($left === 0 && $open > 0)) {
+        if ($left <= 0) {
             throw new InvalidArgumentException('shares_leave_nothing_for_the_rest');
         }
         $each = intdiv($left, $open);
