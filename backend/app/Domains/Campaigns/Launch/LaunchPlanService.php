@@ -41,6 +41,7 @@ final class LaunchPlanService
         private readonly LaunchReadiness $readiness,
         private readonly JourneyPlanner $journey,
         private readonly BudgetSplit $split,
+        private readonly LaunchSpendCheck $limits,
     ) {}
 
     /** What the builder may offer: the project's accounts with their write state, and each platform's vocabulary. */
@@ -219,11 +220,13 @@ final class LaunchPlanService
     {
         $accounts = collect($this->writes->accountOptions($user, $projectId))->keyBy('id');
         $lines = [];
+        $withProvider = [];
         $byCurrency = [];
         foreach ((array) ($plan->spec['accounts'] ?? []) as $a) {
             $budget = $a['daily_budget'] ?? null;
             $currency = (string) ($accounts->get($a['external_account_id'])['currency'] ?? '');
             $lines[] = ['account_id' => (string) $a['external_account_id'], 'daily_budget' => $budget === null ? null : (float) $budget, 'currency' => $currency];
+            $withProvider[] = end($lines) + ['provider' => (string) ($accounts->get($a['external_account_id'])['provider'] ?? '')];
             if ($budget !== null) {
                 $byCurrency[$currency] = round(($byCurrency[$currency] ?? 0) + (float) $budget, 2);
             }
@@ -237,6 +240,7 @@ final class LaunchPlanService
             'daily_by_currency' => $byCurrency,
             'ad_set_daily_budget' => $adSetBudget === null ? null : (float) $adSetBudget,
             'mode' => (string) ($plan->spec['budget']['mode'] ?? 'manual'),
+            'limit_checks' => $this->limits->forProject((string) $plan->project_id, $withProvider),
             'ack_token' => hash_hmac('sha256', json_encode([(string) $plan->getKey(), (bool) $plan->launch, $lines, $adSetBudget], JSON_THROW_ON_ERROR), (string) config('app.key')),
         ];
     }
