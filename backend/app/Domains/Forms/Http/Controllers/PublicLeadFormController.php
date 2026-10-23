@@ -98,7 +98,8 @@ final class PublicLeadFormController extends Controller
         abort_if($form === null || $version === null, 404, 'Form not found.');
 
         $tenant = Tenant::query()->find($form->tenant_id);
-        $project = Project::withoutGlobalScopes()->where('tenant_id', $form->tenant_id)->find($form->project_id);
+        // A soft-deleted project is not a project: its form must not answer even if it was somehow left published.
+        $project = Project::withoutGlobalScopes()->where('tenant_id', $form->tenant_id)->whereNull('deleted_at')->find($form->project_id);
         abort_if(
             $tenant === null || $project === null
             || ! $this->capabilities->allows('forms_hub', $tenant, $project->client_workspace_id === null ? null : (string) $project->client_workspace_id, (string) $project->id),

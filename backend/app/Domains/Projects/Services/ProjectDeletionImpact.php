@@ -105,6 +105,23 @@ final class ProjectDeletionImpact
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->count();
 
+        /*
+         * FORMS-PDPL-001 — the public addresses a stranger could still submit to, and the places a lead's conversion would still
+         * be reported. Counted for the same reason the links are: «how many things outside this agency keep answering today».
+         */
+        $counts['live_forms'] = DB::table('lead_forms')
+            ->where('tenant_id', $tenantId)
+            ->where('project_id', $projectId)
+            ->where('status', 'published')
+            ->whereNull('deleted_at')
+            ->count();
+        $counts['live_conversion_destinations'] = DB::table('conversion_destinations')
+            ->where('tenant_id', $tenantId)
+            ->where('project_id', $projectId)
+            ->where('status', 'live')
+            ->whereNull('deleted_at')
+            ->count();
+
         return [
             'project' => [
                 'id' => $projectId,
