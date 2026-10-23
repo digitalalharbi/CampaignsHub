@@ -209,6 +209,18 @@ final class LaunchSafetyTest extends TestCase
         $this->assertSame([], $plan['spend']['limit_checks']);
     }
 
+    public function test_a_campaign_name_already_used_in_the_project_is_refused_on_the_field_not_as_a_database_error_mid_publish(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['id' => '6001'])->push(['id' => '7001'])]);
+        $first = $this->draft(launch: false);
+        $this->publish($first)->assertOk();
+
+        $account = $this->account('meta', 'act_2');
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $this->spec($account, null, adSet: false))
+            ->assertStatus(422)->assertJsonValidationErrors('name');
+    }
+
     public function test_the_goal_and_the_budget_choices_survive_in_the_one_plan(): void
     {
         $account = $this->account('meta', 'act_9');

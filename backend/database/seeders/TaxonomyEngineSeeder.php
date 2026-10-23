@@ -632,6 +632,8 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'measurement_outage', 'label_ar' => 'انقطاع القياس (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
                     // TRACKING-HEALTH-001 — a broken form, a failing conversion delivery, a platform that reports more than the Leads Centre holds.
                     ['key' => 'tracking_health', 'label_ar' => 'سلامة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
+                    // LAUNCH-ADVANCE-001 — a launched account that now earns a better stage; an opportunity, never an automatic change.
+                    ['key' => 'launch_advance', 'label_ar' => 'مرحلة إطلاق أفضل متاحة', 'label_en' => 'Better launch stage available', 'color' => '#10b981', 'icon' => 'trending-up'],
                 ],
             ],
             [
