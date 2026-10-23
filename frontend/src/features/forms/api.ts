@@ -65,6 +65,8 @@ export interface SubmitPayload {
   session_id: string
   /** The honeypot: a field no person sees. Always empty from this page. */
   website: string
+  /** FORMS-REFERRALS-001 — the signed referral code from the address, when there was one. */
+  ref?: string
 }
 
 export function submitPublicForm(slug: string, payload: SubmitPayload): Promise<{ accepted: boolean; duplicate: boolean; reference?: string; event_id?: string }> {

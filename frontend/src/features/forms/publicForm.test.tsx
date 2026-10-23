@@ -134,4 +134,28 @@ describe('the public form page', () => {
     const updates = (window.dataLayer ?? []).filter((x) => typeof (x as IArguments).length === 'number' && Array.from(x as IArguments)[1] === 'update')
     expect(updates).toHaveLength(0)
   })
+
+  it('sends the referral code the link carried, as its own field and not as attribution', async () => {
+    vi.mocked(submitPublicForm).mockResolvedValue({ accepted: true, duplicate: false })
+    window.history.pushState({}, '', '/f/abcdefgh1234?ref=aaaabbbbccccddddeeeeffff00001111.0a1b2c3d&utm_source=referral')
+    renderWithProviders(<PublicFormPage />, { route: '/f/abcdefgh1234', path: '/f/:slug' })
+    await fill()
+    fireEvent.click(screen.getByTestId('form-next'))
+    await screen.findByTestId('public-form-thanks')
+
+    const payload = vi.mocked(submitPublicForm).mock.calls[0][1]
+    expect(payload.ref).toBe('aaaabbbbccccddddeeeeffff00001111.0a1b2c3d')
+    expect(payload.attribution).not.toHaveProperty('ref')
+    expect(payload.attribution).toMatchObject({ utm_source: 'referral' })
+  })
+
+  it('sends no ref field when the address carries none', async () => {
+    vi.mocked(submitPublicForm).mockResolvedValue({ accepted: true, duplicate: false })
+    window.history.pushState({}, '', '/f/abcdefgh1234')
+    renderWithProviders(<PublicFormPage />, { route: '/f/abcdefgh1234', path: '/f/:slug' })
+    await fill()
+    fireEvent.click(screen.getByTestId('form-next'))
+    await screen.findByTestId('public-form-thanks')
+    expect(vi.mocked(submitPublicForm).mock.calls[0][1]).not.toHaveProperty('ref')
+  })
 })
