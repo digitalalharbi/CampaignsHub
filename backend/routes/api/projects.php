@@ -173,20 +173,20 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * the project inside the controller, with the module gate on the route.
      */
     Route::middleware('module:forms_hub')->group(function (): void {
-        Route::get('forms', [LeadFormController::class, 'index'])->name('forms.index');
-        Route::post('forms', [LeadFormController::class, 'store'])->name('forms.store');
-        Route::get('forms/{form}', [LeadFormController::class, 'show'])->name('forms.show');
-        Route::patch('forms/{form}', [LeadFormController::class, 'update'])->name('forms.update');
-        Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->name('forms.publish');
-        Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->name('forms.archive');
+        Route::get('forms', [LeadFormController::class, 'index'])->middleware('project.can:leads.view')->name('forms.index');
+        Route::post('forms', [LeadFormController::class, 'store'])->middleware('project.can:leads.update')->name('forms.store');
+        Route::get('forms/{form}', [LeadFormController::class, 'show'])->middleware('project.can:leads.view')->name('forms.show');
+        Route::patch('forms/{form}', [LeadFormController::class, 'update'])->middleware('project.can:leads.update')->name('forms.update');
+        Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->middleware('project.can:leads.update')->name('forms.publish');
+        Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->middleware('project.can:leads.update')->name('forms.archive');
         // FORMS-DISPATCH-001 — where a lead's conversion is reported, and the ledger of every attempt.
-        Route::get('conversion-destinations', [ConversionDestinationController::class, 'index'])->name('conversions.index');
-        Route::post('conversion-destinations', [ConversionDestinationController::class, 'store'])->name('conversions.store');
-        Route::patch('conversion-destinations/{destination}', [ConversionDestinationController::class, 'update'])->name('conversions.update');
-        Route::delete('conversion-destinations/{destination}', [ConversionDestinationController::class, 'destroy'])->name('conversions.destroy');
-        Route::post('conversion-destinations/{destination}/diagnose', [ConversionDestinationController::class, 'diagnose'])->name('conversions.diagnose');
-        Route::get('conversion-deliveries', [ConversionDestinationController::class, 'deliveries'])->name('conversions.deliveries');
-        Route::post('conversion-deliveries/{delivery}/retry', [ConversionDestinationController::class, 'retry'])->name('conversions.retry');
+        Route::get('conversion-destinations', [ConversionDestinationController::class, 'index'])->middleware('project.can:leads.view')->name('conversions.index');
+        Route::post('conversion-destinations', [ConversionDestinationController::class, 'store'])->middleware('project.can:leads.update')->name('conversions.store');
+        Route::patch('conversion-destinations/{destination}', [ConversionDestinationController::class, 'update'])->middleware('project.can:leads.update')->name('conversions.update');
+        Route::delete('conversion-destinations/{destination}', [ConversionDestinationController::class, 'destroy'])->middleware('project.can:leads.update')->name('conversions.destroy');
+        Route::post('conversion-destinations/{destination}/diagnose', [ConversionDestinationController::class, 'diagnose'])->middleware('project.can:leads.update')->name('conversions.diagnose');
+        Route::get('conversion-deliveries', [ConversionDestinationController::class, 'deliveries'])->middleware('project.can:leads.view')->name('conversions.deliveries');
+        Route::post('conversion-deliveries/{delivery}/retry', [ConversionDestinationController::class, 'retry'])->middleware('project.can:leads.update')->name('conversions.retry');
     });
 
     /*
