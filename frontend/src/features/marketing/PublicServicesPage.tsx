@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { brand, productName } from '@/lib/brand'
 import * as LucideIcons from 'lucide-react'
 import { ArrowLeft, ArrowRight, RotateCcw, Search } from 'lucide-react'
-import { FooterContact, FooterLegalName } from './FooterContact'
+import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { CONTACT_EMAIL } from './legalContent'
 import { PublicHeader } from './PublicHeader'
@@ -231,7 +231,6 @@ export function PublicServicesPage() {
       <footer className="border-t border-border bg-surface py-6 text-center text-xs text-text-muted">
         <div className="flex flex-col items-center gap-2 px-4">
           <FooterContact locale={locale as Locale} variant="inline" />
-          <FooterLegalName />
           <span>© {new Date().getFullYear()} {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn} — {c.footer.rights}</span>
         </div>
       </footer>
