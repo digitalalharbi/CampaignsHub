@@ -166,6 +166,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
      */
     Route::get('/public/forms/{slug}', [PublicLeadFormController::class, 'show'])
         ->where('slug', '[a-z0-9]{8,24}')->name('public.forms.show')->middleware('throttle:public-form');
+    Route::post('/public/forms/{slug}/events', [PublicLeadFormController::class, 'event'])
+        ->where('slug', '[a-z0-9]{8,24}')->name('public.forms.event')->middleware('throttle:public-form');
     Route::post('/public/forms/{slug}/submissions', [PublicLeadFormController::class, 'submit'])
         ->where('slug', '[a-z0-9]{8,24}')->name('public.forms.submit')->middleware('throttle:public-form');
 
