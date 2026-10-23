@@ -119,4 +119,50 @@ final class ProductionEdgeRoutingTest extends TestCase
         $this->assertNotEmpty($m, 'the /l/ block could not be read');
         $this->assertStringContainsString('proxy_pass http://backend:8000;', $m[1]);
     }
+
+    /**
+     * Owner 2026-10-23 — /welcome is retired: a PERMANENT redirect to «/», and the redirect address carries no query string.
+     *
+     * `return 301 /` copies nothing, so `?utm_source=chatgpt.com` is not repeated in the Location header. The client-side redirect in
+     * the router stays as a second line, but it is a 200 with an HTML shell — only this answers a crawler or a link-checker properly.
+     */
+    public function test_welcome_is_a_permanent_redirect_to_the_homepage_without_the_query_string(): void
+    {
+        foreach (['/welcome', '/welcome/'] as $path) {
+            $this->assertMatchesRegularExpression(
+                '~location\s*=\s*'.preg_quote($path, '~').'\s*\{\s*return\s+301\s+/;\s*\}~',
+                $this->conf,
+                "{$path} must be an exact match answering «return 301 /;» — no \$args, no \$request_uri",
+            );
+        }
+        $this->assertStringNotContainsString('$args', (string) preg_replace('~#[^\n]*~', '', $this->conf), 'no redirect may copy the query string');
+    }
+
+    /**
+     * The shell of the app is revalidated, never trusted stale; the hashed bundles are cached for a year; and neither location
+     * silently drops the security headers (an `add_header` in a location replaces the server-level set).
+     */
+    public function test_the_shell_is_revalidated_the_bundles_are_immutable_and_the_security_headers_survive(): void
+    {
+        $fallback = $this->block('location\s+/\s*\{');
+        $this->assertStringContainsString('try_files $uri $uri/ /index.html;', $fallback);
+        $this->assertStringContainsString('add_header Cache-Control "no-cache" always;', $fallback);
+
+        $assets = $this->block('location\s+/assets/\s*\{');
+        $this->assertStringContainsString('try_files $uri =404;', $assets, 'a missing hashed file is a 404, not index.html');
+        $this->assertStringContainsString('immutable', $assets);
+
+        foreach ([$fallback, $assets] as $block) {
+            foreach (['X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy'] as $header) {
+                $this->assertStringContainsString($header, $block, "{$header} must be repeated where add_header replaces the server-level set");
+            }
+        }
+    }
+
+    private function block(string $opening): string
+    {
+        $this->assertSame(1, preg_match('~'.$opening.'(.*?)\n    \}~s', $this->conf, $m), "block {$opening} not found");
+
+        return $m[1];
+    }
 }

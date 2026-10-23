@@ -98,4 +98,23 @@ describe('the public legal-name line', () => {
     expect(line.className).toContain('text-xs')
     expect(line.textContent).not.toMatch(/©|مالك|مشغّل|owner|operat/i)
   })
+
+  it.each(['/?utm_source=chatgpt.com', '/?utm_source=google&utm_campaign=spring&gclid=abc'])('shows the same line when the homepage is opened with tracking parameters (%s)', (route) => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route, locale: 'ar' })
+
+    expect(screen.getByTestId('footer-legal-name').textContent).toBe(NAME)
+  })
+})
+
+/** Owner 2026-10-23 — the name is on the homepage footer and NOWHERE else in what the public can read. */
+describe('the legal name is not part of any other public content', () => {
+  it('appears in no policy or information document, in either language', async () => {
+    const { AR_OPERATIONAL, EN_OPERATIONAL } = await import('./legalContentOperational')
+    const docs = [...AR_OPERATIONAL, ...EN_OPERATIONAL]
+    expect(docs.length).toBeGreaterThan(0)
+    for (const doc of docs) {
+      expect(JSON.stringify(doc), `${doc.slug} must not name the company`).not.toMatch(/حنكة|hanka/i)
+    }
+  })
 })
