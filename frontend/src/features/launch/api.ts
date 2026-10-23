@@ -21,8 +21,21 @@ export interface LaunchProvider {
   bid_required: boolean
 }
 
+export type EventStatus = 'unavailable' | 'proven' | 'eligible'
+
+/** LAUNCH-READINESS-001 — what an account was seen to measure, from its own synced results. */
+export interface AccountReadiness {
+  provider: string | null
+  tier: 'sales_ready' | 'partial' | 'none'
+  pixel: { status: 'unavailable'; reason: string }
+  events: Record<'page_views' | 'add_to_cart' | 'leads' | 'purchases', { event: string; status: EventStatus; observed: number }>
+}
+
+export type ReadyAccountOption = CreateAccountOption & { readiness?: AccountReadiness | null }
+
 export interface LaunchOptions {
-  accounts: CreateAccountOption[]
+  accounts: ReadyAccountOption[]
+  readiness: { window_days: number; eligible_events: number; project: { store_linked: boolean; ga4_linked: boolean; live_conversion_destinations: string[] } } | null
   providers: LaunchProvider[]
   creatives: Record<string, CreativeOption[]>
   launch_permitted: boolean
