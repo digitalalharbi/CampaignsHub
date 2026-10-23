@@ -85,7 +85,6 @@ const STILL_HAND_DRAWN = [
   'src/features/influencers/creator/CreatorWorkPage.tsx',
   'src/features/marketing/DataDeletionPage.tsx',
   'src/features/marketing/HeroSection.tsx',
-  'src/features/marketing/MarketingPage.tsx',
   'src/features/marketing/PublicHomePage.tsx',
   'src/features/marketing/PublicInfoPage.tsx',
   'src/features/marketing/PublicServicesPage.tsx',
