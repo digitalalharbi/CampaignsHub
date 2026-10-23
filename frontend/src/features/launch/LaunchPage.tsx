@@ -369,6 +369,20 @@ export function LaunchPage() {
                     <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : `${l.daily_budget} ${l.currency}`}</span></li>
                   ))}
                 </ul>
+                {plan.spend.limit_checks.length > 0 && (
+                  <ul className="space-y-1 text-xs" data-testid="launch-limit-checks">
+                    {plan.spend.limit_checks.map((c) => (
+                      <li key={c.limit_id} data-testid={`launch-limit-${c.status}`} className={c.status === 'exceeds' ? 'text-warning' : 'text-text-secondary'}>
+                        {c.status === 'exceeds'
+                          ? (ar ? `يتجاوز حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) بمقدار ${c.over_by} ${c.currency} حتى ${c.period_ends_on}.` : `Exceeds the ${LIMIT_SCOPE[c.scope].en} spend limit by ${c.over_by} ${c.currency} until ${c.period_ends_on}.`)
+                          : c.status === 'within'
+                            ? (ar ? `ضمن حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) حتى ${c.period_ends_on}.` : `Within the ${LIMIT_SCOPE[c.scope].en} spend limit until ${c.period_ends_on}.`)
+                            : (ar ? `لا يمكن مقارنته بحدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) — عملة أو أرقام غير قابلة للمقارنة.` : `Cannot be compared with the ${LIMIT_SCOPE[c.scope].en} spend limit — different currency or no comparable spend yet.`)}
+                      </li>
+                    ))}
+                    <li className="text-text-muted">{ar ? 'حدود الإنفاق مراقبة داخلية: المنصة لا تتوقف عندها.' : 'Spend limits are internal monitoring: the platform does not stop at them.'}</li>
+                  </ul>
+                )}
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5 accent-brand-600" checked={spendOk} onChange={(e) => setSpendOk(e.target.checked)} data-testid="launch-spend-ack" />{ar ? 'أوافق على حدود الإنفاق هذه وأفوّض تشغيل الحملات.' : 'I approve these spend limits and authorise the campaigns to run.'}</label>
               </div>
             )}
@@ -660,4 +674,10 @@ const SPLIT_ERROR: Record<string, { en: string; ar: string }> = {
   shares_leave_nothing_for_the_rest: { en: 'The named shares leave nothing for the other accounts.', ar: 'النسب المحددة لا تترك شيئًا للحسابات الأخرى.' },
   shares_must_not_be_negative: { en: 'A share cannot be negative.', ar: 'لا يمكن أن تكون النسبة سالبة.' },
   account_not_selected: { en: 'An account is not selected for this project.', ar: 'حساب غير محدد لهذا المشروع.' },
+}
+
+const LIMIT_SCOPE: Record<'project' | 'platform' | 'account', { en: string; ar: string }> = {
+  project: { en: 'project', ar: 'المشروع' },
+  platform: { en: 'platform', ar: 'المنصة' },
+  account: { en: 'account', ar: 'الحساب' },
 }

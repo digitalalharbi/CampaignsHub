@@ -132,7 +132,24 @@ export interface SpendSummary {
   daily_by_currency: Record<string, number>
   ad_set_daily_budget: number | null
   mode: BudgetMode
+  limit_checks: LimitCheck[]
   ack_token: string
+}
+
+/** LAUNCH-SPEND-LIMIT-001 — a spend limit read against what this launch commits. It warns; it never blocks. */
+export interface LimitCheck {
+  limit_id: string
+  scope: 'project' | 'platform' | 'account'
+  scope_id: string | null
+  currency: string
+  period_ends_on: string
+  days_left: number
+  remaining: number | null
+  daily_commitment: number
+  committed_until_period_end: number
+  over_by: number | null
+  status: 'within' | 'exceeds' | 'not_comparable'
+  enforcement: string
 }
 
 /** LAUNCH-BUDGET-001 — one daily budget split over accounts; amounts total the budget to the cent. */
