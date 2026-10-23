@@ -67,3 +67,17 @@ export interface SubmitPayload {
 export function submitPublicForm(slug: string, payload: SubmitPayload): Promise<{ accepted: boolean; duplicate: boolean; reference?: string }> {
   return postData(`/public/forms/${slug}/submissions`, payload)
 }
+
+/** FORMS-FUNNEL-EVENTS-001 — the visit as the browser saw it. Fire and forget: a lost beacon must never break the form. */
+export interface FunnelBeacon {
+  event: 'page_view' | 'form_view' | 'form_start' | 'step_completed' | 'submit_attempt'
+  event_id: string
+  session_id: string
+  step?: number
+  consent: 'granted' | 'unknown'
+  attribution: Record<string, string>
+}
+
+export function sendFunnelBeacon(slug: string, beacon: FunnelBeacon): void {
+  postData(`/public/forms/${slug}/events`, beacon).catch(() => undefined)
+}

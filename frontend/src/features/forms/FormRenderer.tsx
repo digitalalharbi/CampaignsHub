@@ -9,10 +9,14 @@ import type { Answers, AnswerValue, FormDefinition, FormField } from './types'
  *
  * It checks before it sends and the server checks again. A hidden field's answer is never sent.
  */
-export function FormRenderer({ definition, ar, onSubmit, submitting = false, serverError = null, preview = false }: {
+export type FunnelSignal = { type: 'form_start' } | { type: 'step_completed'; step: number } | { type: 'submit_attempt'; step: number }
+
+export function FormRenderer({ definition, ar, onSubmit, onSignal, submitting = false, serverError = null, preview = false }: {
   definition: FormDefinition
   ar: boolean
   onSubmit: (answers: Answers, consent: boolean) => void
+  /** FORMS-FUNNEL-EVENTS-001 — what the visitor did, for the page to report; the preview never passes it. */
+  onSignal?: (signal: FunnelSignal, consent: boolean) => void
   submitting?: boolean
   serverError?: string | null
   /** The builder's preview: the same page, but «send» does nothing. */
@@ -23,6 +27,7 @@ export function FormRenderer({ definition, ar, onSubmit, submitting = false, ser
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [consent, setConsent] = useState(false)
   const [consentError, setConsentError] = useState(false)
+  const [started, setStarted] = useState(false)
 
   const steps = definition.steps
   const step = steps[stepIndex]
@@ -32,6 +37,7 @@ export function FormRenderer({ definition, ar, onSubmit, submitting = false, ser
   const style = accent ? ({ '--form-accent': accent } as CSSProperties) : undefined
 
   const set = (id: string, value: AnswerValue) => {
+    if (!started) { setStarted(true); onSignal?.({ type: 'form_start' }, consent) }
     setAnswers((a) => ({ ...a, [id]: value }))
     setErrors((e) => { const { [id]: _drop, ...rest } = e; return rest })
   }
@@ -40,8 +46,10 @@ export function FormRenderer({ definition, ar, onSubmit, submitting = false, ser
     const e = stepErrors(definition, stepIndex, answers, ar)
     setErrors(e)
     if (Object.keys(e).length > 0) return
+    onSignal?.({ type: 'step_completed', step: stepIndex + 1 }, consent)
     if (!last) { setStepIndex(stepIndex + 1); return }
     if (definition.consent.required && !consent) { setConsentError(true); return }
+    if (!preview) onSignal?.({ type: 'submit_attempt', step: stepIndex + 1 }, consent)
     if (!preview) onSubmit(cleanAnswers(definition, answers), consent)
   }
 

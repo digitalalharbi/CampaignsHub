@@ -61,6 +61,7 @@ final class SubmitLeadForm
         private readonly RecordActivity $activity,
         private readonly AuditLogger $audit,
         private readonly TenantContext $tenant,
+        private readonly FormFunnel $funnel,
     ) {}
 
     /**
@@ -177,6 +178,7 @@ final class SubmitLeadForm
                     $lead = $this->advance->assign($lead, (int) $form->default_owner_id);
                 }
                 app(LinkDuplicateLead::class)->handle($lead);
+                $this->funnel->leadCreated($form, $lead, $submission);
 
                 return ['submission' => $submission, 'lead' => $lead, 'duplicate' => false];
             });
