@@ -45,6 +45,10 @@ final class LaunchReadiness
      */
     public function forAccounts(string $tenantId, string $projectId, array $accounts, ?Carbon $now = null): array
     {
+        if ($accounts === []) {
+            return ['window_days' => max(1, (int) config('launch.readiness.window_days', 30)), 'eligible_events' => max(1, (int) config('launch.readiness.eligible_events', 50)), 'accounts' => [], 'project' => $this->project($tenantId, $projectId)];
+        }
+
         $days = max(1, (int) config('launch.readiness.window_days', 30));
         $threshold = max(1, (int) config('launch.readiness.eligible_events', 50));
         $since = ($now ?? Carbon::now())->copy()->subDays($days)->toDateString();
@@ -55,7 +59,7 @@ final class LaunchReadiness
             ->where('project_id', $projectId)
             ->where('is_demo', false)
             ->where('metric_date', '>=', $since)
-            ->whereIn('external_account_id', array_column($accounts, 'id') ?: ['-'])
+            ->whereIn('external_account_id', array_column($accounts, 'id'))
             ->groupBy('external_account_id')
             ->selectRaw('external_account_id, sum(page_views) as page_views, sum(add_to_cart) as add_to_cart, sum(leads) as leads, sum(purchases) as purchases')
             ->get()
