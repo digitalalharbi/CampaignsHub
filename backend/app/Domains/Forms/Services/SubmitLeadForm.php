@@ -9,6 +9,7 @@ use App\Domains\CRM\Actions\AdvanceLead;
 use App\Domains\CRM\Actions\LinkDuplicateLead;
 use App\Domains\CRM\Actions\RecordActivity;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Forms\Conversions\ConversionDispatcher;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Models\LeadFormSubmission;
 use App\Domains\Forms\Models\LeadFormVersion;
@@ -62,6 +63,7 @@ final class SubmitLeadForm
         private readonly AuditLogger $audit,
         private readonly TenantContext $tenant,
         private readonly FormFunnel $funnel,
+        private readonly ConversionDispatcher $conversions,
     ) {}
 
     /**
@@ -114,7 +116,7 @@ final class SubmitLeadForm
         $now = Carbon::now();
 
         try {
-            return DB::transaction(function () use ($form, $version, $key, $payload, $clean, $attribution, $accepted, $definition, $now): array {
+            $result = DB::transaction(function () use ($form, $version, $key, $payload, $clean, $attribution, $accepted, $definition, $now): array {
                 $submission = LeadFormSubmission::create([
                     'tenant_id' => $form->tenant_id,
                     'project_id' => $form->project_id,
@@ -182,6 +184,13 @@ final class SubmitLeadForm
 
                 return ['submission' => $submission, 'lead' => $lead, 'duplicate' => false];
             });
+
+            // After the lead is committed: a destination being slow or down can never cost the lead.
+            if ($result['lead'] !== null) {
+                $this->conversions->forLead($form, $result['lead'], $result['submission']);
+            }
+
+            return $result;
         } catch (UniqueConstraintViolationException) {
             // Two requests with one key raced; the other won. This one is its duplicate.
             $won = LeadFormSubmission::query()->where('lead_form_id', $form->id)->where('idempotency_key', $key)->firstOrFail();
@@ -210,6 +219,12 @@ final class SubmitLeadForm
         }
         if ($ids !== []) {
             $out['click_ids'] = $ids;
+        }
+        // GA4 joins a server-side event to the visit by the client id of its own cookie; both are digits and dots, never a person's name.
+        foreach (['ga_client_id' => '/^\d{4,12}\.\d{4,12}$/', 'ga_session_id' => '/^\d{6,14}$/'] as $k => $pattern) {
+            if (isset($raw[$k]) && is_string($raw[$k]) && preg_match($pattern, $raw[$k]) === 1) {
+                $out[$k] = $raw[$k];
+            }
         }
         if (isset($raw['landing_path']) && is_string($raw['landing_path'])) {
             // The path only: a query string can carry a token, a phone number or a name.
