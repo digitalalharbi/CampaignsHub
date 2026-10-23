@@ -154,7 +154,7 @@ describe('the launch page', () => {
 
   /** LAUNCH-SPEND-001 — a plan that RUNS campaigns is published only after the person approves the numbers, and the server's token goes with it. */
   it('asks for the spend approval before a running launch and sends the server token with it', async () => {
-    const spend = { launch: true, ack_required: true, lines: [{ account_id: 'acc1', daily_budget: 200, currency: 'SAR' }], daily_by_currency: { SAR: 200 }, ad_set_daily_budget: null, mode: 'manual', ack_token: 'tok-123' }
+    const spend = { launch: true, ack_required: true, lines: [{ account_id: 'acc1', daily_budget: 200, currency: 'SAR' }], daily_by_currency: { SAR: 200 }, ad_set_daily_budget: null, mode: 'manual', ack_token: 'tok-123', limit_checks: [{ limit_id: 'l1', scope: 'project', scope_id: null, currency: 'SAR', period_ends_on: '2026-11-01', days_left: 10, remaining: 1000, daily_commitment: 200, committed_until_period_end: 2000, over_by: 1000, status: 'exceeds', enforcement: 'internal_monitoring' }] }
     vi.mocked(savePlan).mockResolvedValue(plan({ launch: true, spend, spec: { ...plan().spec, launch: true } }) as never)
     vi.mocked(publishPlan).mockResolvedValue(plan({ status: 'published', launch: true, spend }) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
@@ -173,6 +173,8 @@ describe('the launch page', () => {
     fireEvent.click(screen.getByTestId('launch-publish'))
     const dialog = await screen.findByTestId('launch-confirm-dialog')
     expect(within(dialog).getByTestId('launch-spend')).toHaveTextContent('200 SAR')
+    expect(within(dialog).getByTestId('launch-limit-exceeds')).toHaveTextContent('Exceeds the project spend limit by 1000 SAR until 2026-11-01')
+    expect(within(dialog).getByTestId('launch-limit-checks')).toHaveTextContent('the platform does not stop at them')
     expect(screen.getByTestId('launch-confirm')).toBeDisabled()
     expect(publishPlan).not.toHaveBeenCalled()
 
