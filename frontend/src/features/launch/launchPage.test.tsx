@@ -111,11 +111,11 @@ describe('the launch page', () => {
     withReadiness.accounts[0] = {
       ...withReadiness.accounts[0],
       readiness: {
-        provider: 'meta', tier: 'partial', pixel: { status: 'unavailable', reason: 'not_readable_from_platform_api' },
+        provider: 'meta', tier: 'partial', data: 'synced', pixel: { status: 'unavailable', reason: 'not_readable_from_platform_api' },
         events: {
           page_views: { event: 'PageView', status: 'eligible', observed: 900 },
           add_to_cart: { event: 'AddToCart', status: 'proven', observed: 12 },
-          leads: { event: 'Lead', status: 'unavailable', observed: 0 },
+          leads: { event: 'Lead', status: 'not_reported', observed: 0 },
           purchases: { event: 'Purchase', status: 'proven', observed: 3 },
         },
       },
@@ -128,7 +128,7 @@ describe('the launch page', () => {
     const list = await screen.findByTestId('launch-accounts')
     expect(within(list).getAllByRole('listitem')).toHaveLength(1)
     expect(within(list).queryByTestId('launch-readiness')).not.toBeInTheDocument()
-    expect(list.textContent).not.toMatch(/Purchase|PageView|No events/)
+    expect(list.textContent).not.toMatch(/Purchase|PageView|Not seen|No data/)
 
     fireEvent.click(screen.getByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-next'))   // accounts → objective
@@ -139,8 +139,8 @@ describe('the launch page', () => {
     const table = await screen.findByTestId('launch-readiness')
     expect(within(table).getByTestId('launch-event-acc1-purchases')).toHaveAttribute('data-status', 'proven')
     expect(within(table).getByTestId('launch-event-acc1-page_views')).toHaveAttribute('data-status', 'eligible')
-    expect(within(table).getByTestId('launch-event-acc1-leads')).toHaveAttribute('data-status', 'unavailable')
-    expect(within(table).getByTestId('launch-event-acc1-leads')).toHaveAccessibleName('Lead: No events')
+    expect(within(table).getByTestId('launch-event-acc1-leads')).toHaveAttribute('data-status', 'not_reported')
+    expect(within(table).getByTestId('launch-event-acc1-leads')).toHaveAccessibleName('Lead: Not seen')
     expect(within(table).getByTestId('launch-readiness-legend')).toHaveTextContent('Eligible')
     expect(table.textContent).not.toMatch(/pixel/i)
   })
@@ -152,7 +152,7 @@ describe('the launch page', () => {
       accounts: [{
         account_id: 'acc1', provider: 'meta', name: 'Razzah Meta', tier: 'none', objective_kind: 'traffic', stage: 'measurement_first',
         objective: 'OUTCOME_TRAFFIC', objective_refusal: null, optimization_event: null, reasons: ['no_usable_conversion_event'],
-        measurement_plan: [{ event: 'Purchase', status: 'unavailable', action: 'link_the_store_and_send_the_purchase_event' }],
+        measurement_plan: [{ event: 'Purchase', status: 'not_reported', action: 'check_the_platform_receives_the_purchase_event' }],
         advance: { next: 'bridge', needs: [{ event: 'Purchase', observed: 0, needed: 50 }] },
       }],
     }) as never)
@@ -166,7 +166,7 @@ describe('the launch page', () => {
     fireEvent.click(await screen.findByTestId('launch-goal-sales'))
     const proposal = await screen.findByTestId('launch-proposal-measurement_first')
     expect(proposal).toHaveTextContent('Traffic first')
-    expect(proposal).toHaveTextContent('Link the store and send the Purchase event.')
+    expect(proposal).toHaveTextContent('Check that the platform receives the Purchase event')
 
     fireEvent.click(screen.getByTestId('launch-apply-acc1'))
     expect(screen.getByTestId('launch-apply-acc1')).toHaveTextContent('Applied to the plan')
@@ -221,5 +221,26 @@ describe('the launch page', () => {
     expect((screen.getByTestId('launch-budget-acc1') as HTMLInputElement).value).toBe('')
     fireEvent.click(screen.getByTestId('launch-split-apply'))
     expect((screen.getByTestId('launch-budget-acc1') as HTMLInputElement).value).toBe('100')
+  })
+
+  /** Absence is not evidence of absence — an account with nothing synced is told to sync, never that an event is missing. */
+  it('tells an account with no synced data to sync first, in words that never say an event does not exist', async () => {
+    vi.mocked(useLaunchStrategy).mockReturnValue(ok({
+      goal: 'sales',
+      accounts: [{
+        account_id: 'acc1', provider: 'meta', name: 'Razzah Meta', tier: 'none', objective_kind: 'traffic', stage: 'measurement_first',
+        objective: 'OUTCOME_TRAFFIC', objective_refusal: null, optimization_event: null, reasons: ['no_synced_data'],
+        measurement_plan: [{ event: null, status: 'no_data', action: 'sync_the_account_first' }],
+        advance: { next: 'bridge', needs: [{ event: 'Purchase', observed: 0, needed: 50 }] },
+      }],
+    }) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(await screen.findByTestId('launch-goal-sales'))
+    const proposal = await screen.findByTestId('launch-proposal-measurement_first')
+    expect(proposal).toHaveTextContent('No synced results yet')
+    expect(proposal.textContent).not.toMatch(/does not exist|is missing/i)
   })
 })

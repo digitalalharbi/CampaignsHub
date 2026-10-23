@@ -21,12 +21,14 @@ export interface LaunchProvider {
   bid_required: boolean
 }
 
-export type EventStatus = 'unavailable' | 'proven' | 'eligible'
+/** Absence is never «the event does not exist»: `no_data` = nothing synced at all; `not_reported` = results exist, this event was not in them. */
+export type EventStatus = 'no_data' | 'not_reported' | 'proven' | 'eligible'
 
 /** LAUNCH-READINESS-001 — what an account was seen to measure, from its own synced results. */
 export interface AccountReadiness {
   provider: string | null
   tier: 'sales_ready' | 'partial' | 'none'
+  data: 'synced' | 'none'
   pixel: { status: 'unavailable'; reason: string }
   events: Record<'page_views' | 'add_to_cart' | 'leads' | 'purchases', { event: string; status: EventStatus; observed: number }>
 }
@@ -49,7 +51,7 @@ export interface StrategyAccount {
   objective_refusal: string | null
   optimization_event: string | null
   reasons: string[]
-  measurement_plan: Array<{ event: string; status: EventStatus; action: string }>
+  measurement_plan: Array<{ event: string | null; status: EventStatus; action: string }>
   advance: { next: string | null; needs: Array<{ event: string; observed: number; needed: number }> }
 }
 

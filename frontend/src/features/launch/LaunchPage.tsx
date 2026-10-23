@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { BarChart3, CheckCircle2, CircleCheck, CircleDot, CircleSlash, ClipboardList, FileText, Megaphone, Rocket, Users, XCircle } from 'lucide-react'
+import { BarChart3, CheckCircle2, CircleCheck, CircleDashed, CircleDot, CircleHelp, ClipboardList, FileText, Megaphone, Rocket, Users, XCircle } from 'lucide-react'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -523,8 +523,9 @@ const EVENT_LABEL: Record<string, { en: string; ar: string }> = {
  */
 function ReadinessTable({ accounts, windowDays, ar }: { accounts: Array<{ id: string; name: string | null; provider: string; readiness?: AccountReadiness | null }>; windowDays: number; ar: boolean }) {
   if (accounts.length === 0) return null
-  const word = (s: EventStatus) => (s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'لا توجد أحداث' : 'No events')
-  const mark = (s: EventStatus) => (s === 'eligible' ? <CircleCheck size={16} className="text-success" aria-hidden /> : s === 'proven' ? <CircleDot size={16} className="text-text-secondary" aria-hidden /> : <CircleSlash size={16} className="text-text-muted" aria-hidden />)
+  // None of these words says an event «does not exist»: the data can only show what it was seen to carry.
+  const word = (s: EventStatus) => (s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : s === 'not_reported' ? (ar ? 'لم يُرصد' : 'Not seen') : ar ? 'لا بيانات بعد' : 'No data yet')
+  const mark = (s: EventStatus) => (s === 'eligible' ? <CircleCheck size={16} className="text-success" aria-hidden /> : s === 'proven' ? <CircleDot size={16} className="text-text-secondary" aria-hidden /> : s === 'not_reported' ? <CircleDashed size={16} className="text-text-muted" aria-hidden /> : <CircleHelp size={16} className="text-text-muted" aria-hidden />)
   const keys = Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>
   return (
     <div className="space-y-2 md:col-span-2" data-testid="launch-readiness">
@@ -557,7 +558,8 @@ function ReadinessTable({ accounts, windowDays, ar }: { accounts: Array<{ id: st
       <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted" data-testid="launch-readiness-legend">
         <span className="inline-flex items-center gap-1"><CircleCheck size={13} aria-hidden /> {word('eligible')}</span>
         <span className="inline-flex items-center gap-1"><CircleDot size={13} aria-hidden /> {word('proven')}</span>
-        <span className="inline-flex items-center gap-1"><CircleSlash size={13} aria-hidden /> {word('unavailable')}</span>
+        <span className="inline-flex items-center gap-1"><CircleDashed size={13} aria-hidden /> {word('not_reported')}</span>
+        <span className="inline-flex items-center gap-1"><CircleHelp size={13} aria-hidden /> {word('no_data')}</span>
       </p>
     </div>
   )
@@ -598,10 +600,11 @@ const STAGE_TEXT: Record<StrategyAccount['stage'], { en: string; ar: string }> =
 }
 
 const ACTION_TEXT: Record<string, { en: string; ar: string }> = {
-  link_the_store_and_send_the_purchase_event: { en: 'Link the store and send the Purchase event.', ar: 'اربط المتجر وأرسل حدث الشراء.' },
-  store_linked_but_platform_reports_no_purchase: { en: 'The store is linked but the platform reports no Purchase — check the event it receives.', ar: 'المتجر مرتبط لكن المنصة لا تبلّغ عن أي شراء — راجع الحدث الذي تستقبله.' },
-  send_the_lead_event_from_the_form: { en: 'Send the Lead event when the form is submitted.', ar: 'أرسل حدث العميل المحتمل عند إرسال النموذج.' },
-  send_the_event: { en: 'Send this event.', ar: 'أرسل هذا الحدث.' },
+  sync_the_account_first: { en: 'No synced results yet, so nothing can be said about any event — connect and finish syncing this account first.', ar: 'لا توجد نتائج مُزامنة بعد، فلا يمكن الحكم على أي حدث — أكمل ربط الحساب ومزامنته أولًا.' },
+  check_the_platform_receives_the_purchase_event: { en: 'Check that the platform receives the Purchase event — link the store and send it if it is not being sent.', ar: 'تحقق من أن المنصة تستقبل حدث الشراء — اربط المتجر وأرسله إن لم يكن يُرسل.' },
+  store_linked_but_platform_reports_no_purchase: { en: 'The store is linked but no Purchase was seen in the platform’s results — check the event it receives.', ar: 'المتجر مرتبط لكن لم يُرصد أي شراء في نتائج المنصة — تحقق من الحدث الذي تستقبله.' },
+  check_the_platform_receives_the_lead_event: { en: 'Check that the platform receives the Lead event when the form is submitted.', ar: 'تحقق من أن المنصة تستقبل حدث العميل المحتمل عند إرسال النموذج.' },
+  check_the_platform_receives_the_event: { en: 'Check that the platform receives this event.', ar: 'تحقق من أن المنصة تستقبل هذا الحدث.' },
 }
 
 function ProposalLine({ proposal, ar, applied, onApply }: { proposal: StrategyAccount; ar: boolean; applied: boolean; onApply: () => void }) {
@@ -618,7 +621,7 @@ function ProposalLine({ proposal, ar, applied, onApply }: { proposal: StrategyAc
           </p>
         )}
       {proposal.measurement_plan.map((m) => (
-        <p key={m.event} className="text-text-muted">{(ACTION_TEXT[m.action] ?? ACTION_TEXT.send_the_event!)[ar ? 'ar' : 'en']}</p>
+        <p key={`${m.event}-${m.action}`} className="text-text-muted">{(ACTION_TEXT[m.action] ?? ACTION_TEXT.check_the_platform_receives_the_event!)[ar ? 'ar' : 'en']}</p>
       ))}
       {proposal.objective && (
         <button type="button" onClick={onApply} disabled={applied} data-testid={`launch-apply-${proposal.account_id}`}

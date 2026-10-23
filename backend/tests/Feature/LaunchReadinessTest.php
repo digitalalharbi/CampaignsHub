@@ -27,7 +27,7 @@ use Tests\TestCase;
 /**
  * LAUNCH-READINESS-001 — what each ad account was SEEN to measure, read from its own synced results and nothing else.
  *
- * `unavailable` never passes as a pass, a demo row is never evidence, and another project's figures never leak in.
+ * absence is never read as «the event does not exist» (`no_data` vs `not_reported`), a demo row is never evidence, and another project's figures never leak in.
  */
 final class LaunchReadinessTest extends TestCase
 {
@@ -73,7 +73,7 @@ final class LaunchReadinessTest extends TestCase
         return app(LaunchReadiness::class)->forAccounts((string) $this->tenant->id, (string) $this->project->id, $rows);
     }
 
-    public function test_an_event_is_unavailable_proven_or_eligible_by_what_the_account_reported_and_the_account_tier_follows(): void
+    public function test_an_event_is_proven_or_eligible_by_what_the_account_reported_and_absence_is_never_read_as_the_event_not_existing(): void
     {
         $ready = $this->account('meta', 'act_1');
         $partial = $this->account('meta', 'act_2');
@@ -89,18 +89,23 @@ final class LaunchReadinessTest extends TestCase
         $r = $out['accounts'][(string) $ready->id];
         $this->assertSame('eligible', $r['events']['purchases']['status']);
         $this->assertSame(65, $r['events']['purchases']['observed'], 'Two days are one window.');
-        $this->assertSame('unavailable', $r['events']['leads']['status'], 'A figure that was never reported is not a zero measured.');
+        $this->assertSame('not_reported', $r['events']['leads']['status'], 'The account has results and none carries a Lead: not seen — not «there is no Lead event».');
+        $this->assertSame('synced', $r['data']);
         $this->assertSame('sales_ready', $r['tier']);
 
         $p = $out['accounts'][(string) $partial->id];
         $this->assertSame('proven', $p['events']['purchases']['status']);
         $this->assertSame('partial', $p['tier']);
 
-        foreach ([$silent, $zeros] as $account) {
-            $a = $out['accounts'][(string) $account->id];
-            $this->assertSame('none', $a['tier']);
-            $this->assertSame('unavailable', $a['events']['purchases']['status']);
+        // No synced results at all: NOTHING is known about any event — a different answer from «results exist, this event was not in them».
+        $s = $out['accounts'][(string) $silent->id];
+        $this->assertSame(['none', 'none'], [$s['tier'], $s['data']]);
+        foreach ($s['events'] as $event) {
+            $this->assertSame('no_data', $event['status']);
         }
+        $z = $out['accounts'][(string) $zeros->id];
+        $this->assertSame(['none', 'synced'], [$z['tier'], $z['data']]);
+        $this->assertSame('not_reported', $z['events']['purchases']['status']);
     }
 
     public function test_the_pixel_is_never_claimed_because_no_official_api_here_can_read_it(): void
