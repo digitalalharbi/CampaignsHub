@@ -33,6 +33,8 @@ export function PublicFormPage() {
   const submissionId = useRef(randomId())
   const sessionId = useRef(randomId())
   const trap = useRef<HTMLInputElement>(null)
+  /* FORMS-REFERRALS-001 — the signed code a referral link carried. Sent as its own field; the server verifies it and ignores one that does not verify. */
+  const referral = useMemo(() => new URLSearchParams(window.location.search).get('ref'), [])
   const [done, setDone] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,7 +92,7 @@ export function PublicFormPage() {
     setSending(true)
     setError(null)
     try {
-      const result = await submitPublicForm(slug, { submission_id: submissionId.current, answers, consent: { accepted: consent, measurement }, attribution, session_id: sessionId.current, website: trap.current?.value ?? '' })
+      const result = await submitPublicForm(slug, { submission_id: submissionId.current, answers, consent: { accepted: consent, measurement }, attribution, session_id: sessionId.current, website: trap.current?.value ?? '', ...(referral ? { ref: referral } : {}) })
       /* The browser tag gets the server's own id, so a platform that hears from both counts one conversion. */
       if (result.event_id && !result.duplicate) pushFormEvent('generate_lead', { form_name: form.data?.name ?? '', event_id: result.event_id })
       setDone(true)
