@@ -30,7 +30,6 @@ import { PersonalNotificationsPage } from '@/features/account/PersonalNotificati
 import { ProfilePage } from '@/features/account/ProfilePage'
 import { PasswordPage } from '@/features/account/PasswordPage'
 import { SecurityPage } from '@/features/account/SecurityPage'
-import { MarketingPage } from '@/features/marketing/MarketingPage'
 import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
 import { ProjectsPage } from '@/features/projects/ProjectsPage'
 import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
@@ -145,7 +144,9 @@ export const router = createBrowserRouter(withErrorBoundary([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
   // its own paths (/dashboard, /campaigns, …); `/` is public and shows "back to dashboard" when signed in.
   { path: '/', element: <PublicHomePage /> },
-  { path: '/welcome', element: <MarketingPage /> },
+  // Owner 2026-10-23: the legacy /welcome page is retired. Its address is still linked from search and chat results (with or without
+  // a utm_source), so it lands on the homepage instead of a dead end.
+  { path: '/welcome', element: <Navigate to="/" replace /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   /*

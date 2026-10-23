@@ -36,9 +36,9 @@ export const AR_OPERATIONAL: LegalDoc[] = [
   {
     slug: 'business-disclosure',
     title: 'الإفصاح عن العلاقات التجارية الموثّقة',
-    updated: 'آخر تحديث: 21 أكتوبر 2026',
+    updated: 'آخر تحديث: 23 أكتوبر 2026',
     disclaimer: AR_DISCLAIMER,
-    intro: 'صفحة عامة تُعرّف بالعلاقات التجارية الموثّقة بين كامبينز هب وجهات أخرى، بالأسماء القانونية وبالصفة الفعلية لكل علاقة كما هي موثّقة لدى المنصة — لا أكثر ولا أقل.',
+    intro: 'صفحة عامة تشرح طبيعة العلاقات التجارية الموثّقة بين كامبينز هب وعملائها المُعلنين، وبالصفة الفعلية لكل علاقة كما هي موثّقة لدى المنصة — لا أكثر ولا أقل.',
     sections: [
       {
         heading: 'الجهة المشغّلة لكامبينز هب',
@@ -49,9 +49,8 @@ export const AR_OPERATIONAL: LegalDoc[] = [
       {
         heading: 'العلاقات التجارية الموثّقة',
         body: [
-          'شركة حنكة الترويج للخدمات التسويقية شخص واحد',
-          'الصفة الموثّقة: عميل مُعلن لدى كامبينز هب، مُخوَّل بالوصول إلى خدمات كامبينز هب. تُدار حملاتها الإعلانية وتُقرأ تقاريرها عبر المنصة بتفويضها، وقد منحت كامبينز هب صفة الشريك المُخوَّل على حساباتها الإعلانية لدى منصات الإعلان التي اختارت ربطها.',
-          'ما لا تعنيه هذه العلاقة: شركة حنكة ليست مالكة لمنصة كامبينز هب ولا مشغّلة لها، ولا تُمثّلها قانونيًا، ولا يُنشر أي محتوى أو يُنفق أي مبلغ باسمها إلا بتفويضها الموثّق.',
+          'علاقة كامبينز هب بكل عميل مُعلن علاقة خدمة موثّقة: العميل جهة مستقلة مُخوَّلة بالوصول إلى خدمات كامبينز هب، وتُدار حملاتها الإعلانية وتُقرأ تقاريرها عبر المنصة بتفويضها، وقد تمنح كامبينز هب صفة الشريك المُخوَّل على الحسابات الإعلانية التي اختارت ربطها.',
+          'ما لا تعنيه هذه العلاقة: العميل ليس مالكًا لمنصة كامبينز هب ولا مشغّلًا لها، ولا يُمثّلها قانونيًا، ولا يُنشر أي محتوى أو يُنفق أي مبلغ باسمه إلا بتفويضه الموثّق. لا تُسمّي هذه الصفحة عملاء بأسمائهم؛ وتُتاح وثائق أي علاقة لصاحبها أو للمنصات الإعلانية عند الطلب.',
         ],
       },
       {
@@ -380,9 +379,9 @@ export const EN_OPERATIONAL: LegalDoc[] = [
   {
     slug: 'business-disclosure',
     title: 'Disclosure of documented business relationships',
-    updated: 'Last updated: 21 October 2026',
+    updated: 'Last updated: 23 October 2026',
     disclaimer: EN_DISCLAIMER,
-    intro: 'A public page naming the documented business relationships between CampaignsHub and other parties — by legal name, and by the actual capacity each relationship has on record. Nothing more, nothing less.',
+    intro: 'A public page explaining the documented business relationships between CampaignsHub and its advertising clients, and the actual capacity each relationship has on record. Nothing more, nothing less.',
     sections: [
       {
         heading: 'Who operates CampaignsHub',
@@ -393,9 +392,8 @@ export const EN_OPERATIONAL: LegalDoc[] = [
       {
         heading: 'Documented business relationships',
         body: [
-          'شركة حنكة الترويج للخدمات التسويقية شخص واحد (Hanka Promotion for Marketing Services, a one-person company)',
-          'Verified role: an advertising client of CampaignsHub with authorised access to CampaignsHub services. Its advertising campaigns are managed and its reports read through the platform under its authorisation, and it has granted CampaignsHub authorised-partner access to the advertising accounts it chose to connect on the ad platforms.',
-          'What this relationship is not: Hanka does not own or operate CampaignsHub, does not represent it legally, and nothing is published or spent in its name without its documented authorisation.',
+          'CampaignsHub’s relationship with each advertising client is a documented service relationship: the client is an independent party with authorised access to CampaignsHub services, its advertising campaigns are managed and its reports read through the platform under its authorisation, and it may grant CampaignsHub authorised-partner access to the advertising accounts it chose to connect.',
+          'What this relationship is not: the client does not own or operate CampaignsHub, does not represent it legally, and nothing is published or spent in its name without its documented authorisation. This page does not name clients; the documents of any relationship are available to its owner, or to an ad platform, on request.',
         ],
       },
       {

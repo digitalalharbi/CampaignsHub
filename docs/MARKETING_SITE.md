@@ -1,3 +1,5 @@
+> **Retired 2026-10-23 (Owner):** `/welcome` and `MarketingPage.tsx` no longer exist; the address redirects to the homepage (`/`, `PublicHomePage`). The text below describes the retired page.
+
 # Marketing Site
 
 Public landing at `/welcome` (`frontend/src/features/marketing/MarketingPage.tsx`). Brand-driven

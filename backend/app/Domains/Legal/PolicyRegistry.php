@@ -69,7 +69,7 @@ final class PolicyRegistry
         'account-deletion' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],
         'data-requests' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],
         // LEGAL-DISCLOSURE-001 — documented business relationships; informational, never binding.
-        'business-disclosure' => ['version' => '1.0', 'effective' => '2026-10-21', 'binding' => false],
+        'business-disclosure' => ['version' => '1.1', 'effective' => '2026-10-23', 'binding' => false],
     ];
 
     /** @return list<string> every published document slug. */
