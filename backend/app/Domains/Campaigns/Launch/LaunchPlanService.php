@@ -38,6 +38,7 @@ final class LaunchPlanService
         private readonly CampaignWriteService $writes,
         private readonly WriteAdapterRegistry $adapters,
         private readonly AuditLogger $audit,
+        private readonly LaunchReadiness $readiness,
     ) {}
 
     /** What the builder may offer: the project's accounts with their write state, and each platform's vocabulary. */
@@ -66,8 +67,16 @@ final class LaunchPlanService
             ];
         }
 
+        $project = Project::query()->find($projectId);
+        $readiness = $project === null ? null : $this->readiness->forAccounts((string) $project->tenant_id, $projectId, $accounts);
+        foreach ($accounts as &$account) {
+            $account['readiness'] = $readiness['accounts'][$account['id']] ?? null;
+        }
+        unset($account);
+
         return [
             'accounts' => $accounts,
+            'readiness' => $readiness === null ? null : ['window_days' => $readiness['window_days'], 'eligible_events' => $readiness['eligible_events'], 'project' => $readiness['project']],
             'providers' => $providers,
             'creatives' => $this->writes->creativeOptions(array_values(array_unique(array_column($accounts, 'provider')))),
             'launch_permitted' => $user->hasPermission(WriteCapabilityRegistry::CAPABILITIES['publish']),

@@ -19,7 +19,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
-import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, type AccountReadiness, type EventStatus, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 
 /**
  * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
@@ -151,6 +151,7 @@ export function LaunchPage() {
                           : <Badge tone="warning">{problemText(a.state, ar)}</Badge>}
                       </span>
                     </label>
+                    {a.readiness && <ReadinessStrip readiness={a.readiness} windowDays={options.data?.readiness?.window_days ?? 30} ar={ar} />}
                   </li>
                 ))}
               </ul>
@@ -445,5 +446,35 @@ function Results({ plan, ar, projectId, accounts, onRetry, retrying }: { plan: L
       {plan.status !== 'published' && <Button loading={retrying} onClick={onRetry} data-testid="launch-retry">{ar ? 'أعد المحاولة للخطوات المتبقية' : 'Retry the remaining steps'}</Button>}
       <p className="text-xs text-text-muted">{ar ? 'المعرّفات والحالات أعلاه هي ما أكّدته المنصات نفسها.' : 'The ids and states above are what the platforms themselves confirmed.'}</p>
     </div>
+  )
+}
+
+const EVENT_LABEL: Record<string, { en: string; ar: string }> = {
+  page_views: { en: 'PageView', ar: 'مشاهدة الصفحة' },
+  add_to_cart: { en: 'AddToCart', ar: 'الإضافة للسلة' },
+  leads: { en: 'Lead', ar: 'عميل محتمل' },
+  purchases: { en: 'Purchase', ar: 'الشراء' },
+}
+
+/**
+ * LAUNCH-READINESS-001 — one line per account: which events the platform was seen to report. Never a claim about the pixel
+ * itself (no official API here reads it); «not reported» is the honest word for an event with no figure in the window.
+ */
+function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadiness; windowDays: number; ar: boolean }) {
+  const word = (s: EventStatus) =>
+    s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'غير مُبلَّغ' : 'Not reported'
+  return (
+    <ul className="mt-1.5 flex flex-wrap gap-1.5 px-1" data-testid={`launch-readiness-${readiness.tier}`} aria-label={ar ? 'جاهزية التتبع' : 'Tracking readiness'}>
+      {(Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>).map((k) => {
+        const e = readiness.events[k]
+        return (
+          <li key={k} title={ar ? `ما أبلغت به المنصة خلال ${windowDays} يومًا` : `What the platform reported in the last ${windowDays} days`}>
+            <Badge tone={e.status === 'eligible' ? 'success' : e.status === 'proven' ? 'neutral' : 'warning'}>
+              <span data-testid={`launch-event-${k}`}>{ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en} · {word(e.status)}</span>
+            </Badge>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
