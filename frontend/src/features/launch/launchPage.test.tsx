@@ -97,4 +97,31 @@ describe('the launch page', () => {
     expect(within(results).getByTestId('launch-status-partial')).toBeInTheDocument()
     expect(screen.getByTestId('launch-retry')).toBeInTheDocument()
   })
+  /** LAUNCH-READINESS-001 — each account says which events it was seen to report, and never states what it cannot know. */
+  it('shows, per account, which events were reported — and never claims a pixel', async () => {
+    const withReadiness = {
+      ...options(),
+      readiness: { window_days: 30, eligible_events: 50, project: { store_linked: false, ga4_linked: false, live_conversion_destinations: [] } },
+    }
+    withReadiness.accounts[0] = {
+      ...withReadiness.accounts[0],
+      readiness: {
+        provider: 'meta', tier: 'partial', pixel: { status: 'unavailable', reason: 'not_readable_from_platform_api' },
+        events: {
+          page_views: { event: 'PageView', status: 'eligible', observed: 900 },
+          add_to_cart: { event: 'AddToCart', status: 'proven', observed: 12 },
+          leads: { event: 'Lead', status: 'unavailable', observed: 0 },
+          purchases: { event: 'Purchase', status: 'proven', observed: 3 },
+        },
+      },
+    } as never
+    vi.mocked(useLaunchOptions).mockReturnValue(ok(withReadiness) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    const strip = await screen.findByTestId('launch-readiness-partial')
+    expect(within(strip).getByTestId('launch-event-purchases')).toHaveTextContent('Purchase · Proven')
+    expect(within(strip).getByTestId('launch-event-page_views')).toHaveTextContent('PageView · Eligible')
+    expect(within(strip).getByTestId('launch-event-leads')).toHaveTextContent('Lead · Not reported')
+    expect(strip.textContent).not.toMatch(/pixel/i)
+  })
 })
