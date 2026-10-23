@@ -15,6 +15,8 @@ import { useUi } from '@/stores/ui'
 import { createShortLink, deleteShortLink, disableShortLink, enableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
 import { ShortLinkQr } from './ShortLinkQr'
+import { LinkFunnelPanel } from '@/features/forms/FunnelPanel'
+import { useProject } from '@/stores/project'
 import { BioPageEditor } from './BioPageEditor'
 
 /**
@@ -174,6 +176,9 @@ export function ShortLinksPage() {
   const [created, setCreated] = useState<ShortLink | null>(null)
   /* SHORT-LINK-QR-001 — which link's code is open, drawn in the browser from its own address. */
   const [qrFor, setQrFor] = useState<ShortLink | null>(null)
+  /* FORMS-DASHBOARDS-001 — the link whose results are open, for the project the person is in. */
+  const [resultsFor, setResultsFor] = useState<string | null>(null)
+  const { currentProjectId } = useProject()
   /*
    * SMART-LINK-001 — the Owner's 2026-10-21 correction: a chosen slug, an expiry and UTM tags MAY be
    * set. Behind a closed disclosure so the two-field path stays the two-field path: nothing technical
@@ -539,7 +544,8 @@ export function ShortLinksPage() {
                     </button>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Wraps: the «Results» action made this cluster wider than a 390px phone. */}
+                <div className="flex max-w-full flex-wrap items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>
                   <span className="tnum text-xs text-text-secondary">{l.clicks} {t.clicks}</span>
                   {!l.is_active && <Badge tone="warning" data-testid={`short-link-state-${l.id}`}>{t.disabled}</Badge>}
@@ -548,6 +554,9 @@ export function ShortLinksPage() {
                   <Button variant="secondary" onClick={() => void copy(l.short_url)} aria-label={t.copy}>
                     {copied === l.short_url ? <Check size={14} /> : <Copy size={14} />}
                   </Button>
+                  {currentProjectId && (
+                    <Button variant="secondary" onClick={() => setResultsFor(resultsFor === l.id ? null : l.id)} aria-expanded={resultsFor === l.id} data-testid={`short-link-results-${l.id}`}>{ar ? 'النتائج' : 'Results'}</Button>
+                  )}
                   <Button variant="secondary" onClick={() => setQrFor(l)} aria-label={t.qr} data-testid={`short-link-qr-${l.id}`}>
                     <QrCode size={14} />
                   </Button>
@@ -586,6 +595,7 @@ export function ShortLinksPage() {
                     {t.delete_failed}
                   </span>
                 )}
+                {resultsFor === l.id && currentProjectId && <div className="w-full"><LinkFunnelPanel projectId={currentProjectId} linkId={l.id} /></div>}
               </div>
             ))}
           </div>

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Forms\Http\Controllers\PublicLeadFormController;
 use App\Domains\Legal\Http\Controllers\DataDeletionController;
 use App\Domains\Legal\Http\Controllers\PublicIntakeController;
 use App\Domains\Legal\Http\Controllers\PublicLegalController;
@@ -157,6 +158,18 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // Rate-limited; ETag + Cache-Control set inside the controller.
     Route::get('/public/catalog/paid-media-services', [PublicPaidServiceController::class, 'index'])
         ->name('public.catalog.paid-media-services')->middleware('throttle:public-catalogue');
+
+    /*
+     * FORMS-HUB-001 — a project's published lead form, as a stranger meets it. Unauthenticated; the
+     * controller reveals only the published definition and turns away anything unpublished, archived
+     * or switched off.
+     */
+    Route::get('/public/forms/{slug}', [PublicLeadFormController::class, 'show'])
+        ->where('slug', '[a-z0-9]{8,24}')->name('public.forms.show')->middleware('throttle:public-form');
+    Route::post('/public/forms/{slug}/events', [PublicLeadFormController::class, 'event'])
+        ->where('slug', '[a-z0-9]{8,24}')->name('public.forms.event')->middleware('throttle:public-form');
+    Route::post('/public/forms/{slug}/submissions', [PublicLeadFormController::class, 'submit'])
+        ->where('slug', '[a-z0-9]{8,24}')->name('public.forms.submit')->middleware('throttle:public-form');
 
     // Domain route files are included here as the platform grows.
     require __DIR__.'/api/identity.php';

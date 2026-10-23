@@ -13,6 +13,10 @@ use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
+use App\Domains\Forms\Http\Controllers\FormDataController;
+use App\Domains\Forms\Http\Controllers\FormFunnelController;
+use App\Domains\Forms\Http\Controllers\LeadFormController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
@@ -166,6 +170,35 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * figures, the other deliberately does not.
      */
     Route::get('metrics/campaign-options', [MetricsController::class, 'campaignOptions'])->name('metrics.campaign-options');
+    /*
+     * FORMS-HUB-001 — the project's lead forms. `leads.view` reads, `leads.update` changes; both are asked of
+     * the project inside the controller, with the module gate on the route.
+     */
+    Route::middleware('module:forms_hub')->group(function (): void {
+        Route::get('forms', [LeadFormController::class, 'index'])->middleware('project.can:leads.view')->name('forms.index');
+        Route::post('forms', [LeadFormController::class, 'store'])->middleware('project.can:leads.update')->name('forms.store');
+        Route::get('forms/{form}', [LeadFormController::class, 'show'])->middleware('project.can:leads.view')->name('forms.show');
+        Route::patch('forms/{form}', [LeadFormController::class, 'update'])->middleware('project.can:leads.update')->name('forms.update');
+        Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->middleware('project.can:leads.update')->name('forms.publish');
+        Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->middleware('project.can:leads.update')->name('forms.archive');
+        // FORMS-REFERRALS-001 — the link a lead can pass on, carrying a signed code that names them.
+        Route::get('leads/{lead}/referral-link', [FormDataController::class, 'referralLink'])->middleware('project.can:leads.update')->name('leads.referral-link');
+        // FORMS-PDPL-001 — a data subject's erasure of one lead (needs leads.delete as well; irreversible, so it asks to be confirmed).
+        Route::post('leads/{lead}/erase', [FormDataController::class, 'erase'])->middleware('project.can:leads.update')->name('leads.erase');
+        // FORMS-DASHBOARDS-001 — the funnel of one form, and of one link, for this project.
+        Route::get('forms/{form}/funnel', [FormFunnelController::class, 'form'])->middleware('project.can:leads.view')->name('forms.funnel');
+        Route::get('tracking-health', [FormFunnelController::class, 'health'])->middleware('project.can:leads.view')->name('tracking-health');
+        Route::get('links/{link}/funnel', [FormFunnelController::class, 'link'])->middleware('project.can:leads.view')->name('links.funnel');
+        // FORMS-DISPATCH-001 — where a lead's conversion is reported, and the ledger of every attempt.
+        Route::get('conversion-destinations', [ConversionDestinationController::class, 'index'])->middleware('project.can:leads.view')->name('conversions.index');
+        Route::post('conversion-destinations', [ConversionDestinationController::class, 'store'])->middleware('project.can:leads.update')->name('conversions.store');
+        Route::patch('conversion-destinations/{destination}', [ConversionDestinationController::class, 'update'])->middleware('project.can:leads.update')->name('conversions.update');
+        Route::delete('conversion-destinations/{destination}', [ConversionDestinationController::class, 'destroy'])->middleware('project.can:leads.update')->name('conversions.destroy');
+        Route::post('conversion-destinations/{destination}/diagnose', [ConversionDestinationController::class, 'diagnose'])->middleware('project.can:leads.update')->name('conversions.diagnose');
+        Route::get('conversion-deliveries', [ConversionDestinationController::class, 'deliveries'])->middleware('project.can:leads.view')->name('conversions.deliveries');
+        Route::post('conversion-deliveries/{delivery}/retry', [ConversionDestinationController::class, 'retry'])->middleware('project.can:leads.update')->name('conversions.retry');
+    });
+
     /*
      * CAMPAIGN-MGMT-DOMAIN-001 — the write-capability registry, read before any surface draws a
      * control. Project-scoped because the answer is per reader and per provider the project uses.

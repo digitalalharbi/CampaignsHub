@@ -1,5 +1,6 @@
 export interface Lead {
   id: string
+  project_id?: string | null
   name: string
   email: string | null
   phone: string | null

@@ -1,27 +1,4 @@
-import {
-  Workflow,
-  Bot,
-  Layers,
-  Link2,
-  BarChart3,
-  BellRing,
-  CreditCard,
-  FolderKanban,
-  FolderOpen,
-  Images,
-  LayoutDashboard,
-  Lightbulb,
-  ListChecks,
-  Megaphone,
-  Plug,
-  Settings,
-  TrendingUp,
-  Wallet,
-  Rocket,
-  Rows3,
-  RectangleHorizontal,
-  ShieldCheck,
-} from 'lucide-react'
+import { BarChart3, BellRing, Bot, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, Plug, RectangleHorizontal, Rocket, Rows3, Settings, ShieldCheck, TrendingUp, Wallet, Workflow } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -79,6 +56,7 @@ export const appNavGroups: readonly NavGroup[] = [
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
       { to: '/app/portfolio', ar: 'الملخص', en: 'Portfolio', icon: Layers, ent: 'projects' },
       { to: '/app/short-links', ar: 'الروابط', en: 'Links', icon: Link2, ent: 'campaigns' },
+      { to: '/app/forms', ar: 'النماذج', en: 'Forms', icon: ClipboardList, ent: 'campaigns' },
       { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
     ],
   },

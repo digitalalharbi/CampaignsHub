@@ -131,6 +131,10 @@ final class TrackingRecorder
             'utm_campaign' => $event['utm_campaign'] ?? null,
             'utm_content' => $event['utm_content'] ?? null,
             'dedupe_key' => $dedupe,
+            'session_id' => isset($event['session_id']) ? substr((string) $event['session_id'], 0, 64) : null,
+            'lead_id' => $event['lead_id'] ?? null,
+            'step' => isset($event['step']) ? (int) $event['step'] : null,
+            'click_id_type' => isset($event['click_id_type']) ? substr((string) $event['click_id_type'], 0, 16) : null,
         ]);
     }
 
