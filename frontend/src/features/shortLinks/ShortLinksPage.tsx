@@ -544,7 +544,8 @@ export function ShortLinksPage() {
                     </button>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Wraps: the «Results» action made this cluster wider than a 390px phone. */}
+                <div className="flex max-w-full flex-wrap items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>
                   <span className="tnum text-xs text-text-secondary">{l.clicks} {t.clicks}</span>
                   {!l.is_active && <Badge tone="warning" data-testid={`short-link-state-${l.id}`}>{t.disabled}</Badge>}

@@ -18,8 +18,11 @@
         </include>
     </source>
     <php>
-        <!-- The full suite (alerts + campaign command center) peaks ~125MB; lift the 128M default. -->
-        <ini name="memory_limit" value="512M"/>
+        <!-- The full suite (alerts + campaign command center) peaks ~125MB; lift the 128M default.
+             Raised from 512M to 1G on 2026-10-23: the suite crossed 5,500 tests and the one-process run hit the old
+             ceiling on CI (a fatal in routes/api.php at boot, not an assertion). Memory per test grows with the number
+             of test cases the process has built; this is headroom, not a licence for a test to hold more. -->
+        <ini name="memory_limit" value="1024M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
