@@ -24,7 +24,7 @@ use Throwable;
  * The lead is already stored when this runs; nothing here can lose it, and a failure here is logged and swallowed for
  * the same reason the event recorder's is — a destination being down must never turn a stored lead into an error.
  *
- *  - CONSENT first. A visitor who had not consented produces a `skipped_consent` row and NOTHING else: no payload is
+ *  - CONSENT first — the SECOND consent, to measurement and advertising reporting (the consent to be contacted does not cover it). A visitor who had not agreed produces a `skipped_consent` row and NOTHING else: no payload is
  *    built and no identifier is hashed, so there is no conversion to leak. The row stays, so «why did Meta hear about
  *    four of these five» has an answer.
  *  - ONE delivery per (destination, event id). The event id is the submission's id — the same one the browser's tag is
@@ -45,6 +45,9 @@ final class ConversionDispatcher
                 ->get();
 
             foreach ($destinations as $destination) {
+                if (! ConversionKinds::deliversFromServer($destination->kind)) {
+                    continue;
+                }
                 $this->one($destination, $form, $lead, $submission);
             }
         } catch (Throwable $e) {
@@ -65,8 +68,11 @@ final class ConversionDispatcher
         ];
 
         try {
-            if ($submission->consent_state !== 'granted') {
-                DB::transaction(fn () => ConversionDelivery::create($base + ['status' => ConversionDelivery::SKIPPED_CONSENT]));
+            if ($submission->measurement_consent !== 'granted') {
+                $why = $submission->measurement_consent === 'denied'
+                    ? 'The visitor did not agree to their identifiers being reported to measurement and advertising platforms.'
+                    : 'This version of the form did not ask for that agreement, so nothing is reported.';
+                DB::transaction(fn () => ConversionDelivery::create($base + ['status' => ConversionDelivery::SKIPPED_CONSENT, 'error' => $why]));
 
                 return;
             }

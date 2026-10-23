@@ -111,4 +111,15 @@ final class FormDefinitionTest extends TestCase
         $this->assertStringContainsString('https', $this->refused($this->valid(['thank_you' => ['redirect_url' => 'javascript:alert(1)']])));
         $this->assertStringContainsString('https', $this->refused($this->valid(['thank_you' => ['redirect_url' => 'http://example.test/x']])));
     }
+
+    public function test_measurement_consent_is_its_own_optional_consent_and_changes_the_wording_version(): void
+    {
+        $off = FormDefinition::normalise($this->valid());
+        $on = FormDefinition::normalise($this->valid(['consent' => ['measurement' => ['enabled' => true, 'text' => ['en' => 'Report my hashed details.']]]]));
+
+        $this->assertFalse($off['consent']['measurement']['enabled']);
+        $this->assertTrue($on['consent']['measurement']['enabled']);
+        $this->assertNotSame($off['consent']['version'], $on['consent']['version']);
+        $this->assertStringContainsString('measurement', $this->refused($this->valid(['consent' => ['measurement' => ['enabled' => true, 'text' => '']]])));
+    }
 }

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Forms\Http\Controllers;
 
 use App\Domains\Accounts\Capabilities\Capabilities;
+use App\Domains\Forms\Conversions\ConversionKinds;
+use App\Domains\Forms\Models\ConversionDestination;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Models\LeadFormVersion;
 use App\Domains\Forms\Services\FormFunnel;
@@ -33,10 +35,18 @@ final class PublicLeadFormController extends Controller
     {
         [$form, $version] = $this->live($slug);
 
+        // The one tag manager container the team made live for this form, if any — the page loads it, nothing else does.
+        $container = ConversionDestination::withoutGlobalScopes()
+            ->where('tenant_id', $form->tenant_id)->where('project_id', $form->project_id)
+            ->where('kind', ConversionKinds::GTM_WEB)->where('status', ConversionDestination::LIVE)
+            ->where(fn ($q) => $q->whereNull('lead_form_id')->orWhere('lead_form_id', $form->id))
+            ->orderByRaw('lead_form_id is null')->first();
+
         return ApiResponse::success([
             'name' => $form->name,
             'version' => $version->version,
             'definition' => $version->definition,
+            'tracking' => ['gtm_container_id' => $container?->config['container_id'] ?? null],
         ], 'Form.');
     }
 
@@ -58,6 +68,8 @@ final class PublicLeadFormController extends Controller
             'accepted' => true,
             'duplicate' => $result['duplicate'],
             'reference' => substr((string) $result['submission']->id, 0, 8),
+            // The deduplication id: the page gives the same one to its browser tag, so a platform that hears from both counts one conversion.
+            'event_id' => (string) $result['submission']->id,
         ], 'Received.', status: $result['duplicate'] ? 200 : 201);
     }
 

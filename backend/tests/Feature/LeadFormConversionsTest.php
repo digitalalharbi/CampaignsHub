@@ -12,6 +12,7 @@ use App\Domains\Forms\Jobs\DeliverConversion;
 use App\Domains\Forms\Models\ConversionDelivery;
 use App\Domains\Forms\Models\ConversionDestination;
 use App\Domains\Forms\Models\LeadForm;
+use App\Domains\Forms\Models\LeadFormSubmission;
 use App\Domains\Forms\Models\LeadFormVersion;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -76,7 +77,7 @@ final class LeadFormConversionsTest extends TestCase
         return $this->actingAs($this->owner, 'sanctum')->withHeaders(self::SPA);
     }
 
-    private function slug(bool $consentRequired = true): string
+    private function slug(bool $consentRequired = true, bool $asksMeasurement = true): string
     {
         $definition = [
             'steps' => [['id' => 's1', 'title' => 'You', 'fields' => [
@@ -84,7 +85,7 @@ final class LeadFormConversionsTest extends TestCase
                 ['id' => 'mobile', 'type' => 'phone', 'label' => 'Mobile', 'maps_to' => 'phone'],
                 ['id' => 'email', 'type' => 'email', 'label' => 'Email', 'maps_to' => 'email'],
             ]]],
-            'consent' => ['required' => $consentRequired, 'text' => ['en' => 'May we contact you?']],
+            'consent' => ['required' => $consentRequired, 'text' => ['en' => 'May we contact you?'], 'measurement' => ['enabled' => $asksMeasurement, 'text' => ['en' => 'You may report my hashed details to measurement and ad platforms.']]],
         ];
         $id = $this->as()->postJson("/api/v1/projects/{$this->project->id}/forms", ['name' => 'Villa enquiry', 'definition' => $definition])->assertCreated()->json('data.id');
         $this->as()->postJson("/api/v1/projects/{$this->project->id}/forms/{$id}/publish")->assertOk();
@@ -93,13 +94,13 @@ final class LeadFormConversionsTest extends TestCase
     }
 
     /** @return array<string,mixed> */
-    private function submission(bool $consent = true): array
+    private function submission(bool $consent = true, bool $measurement = true): array
     {
         return [
             'submission_id' => 'sub-'.bin2hex(random_bytes(8)),
             'session_id' => 'ses-'.bin2hex(random_bytes(6)),
             'answers' => ['full_name' => 'Sara Al-Qahtani', 'mobile' => '0500000123', 'email' => 'Sara@Example.test'],
-            'consent' => ['accepted' => $consent],
+            'consent' => ['accepted' => $consent, 'measurement' => $measurement],
             'attribution' => ['utm_source' => 'meta', 'utm_campaign' => 'q4', 'fbclid' => 'AbCdEf12345', 'ga_client_id' => '1234567890.1700000000', 'landing_path' => '/villas?x=1'],
         ];
     }
@@ -144,17 +145,36 @@ final class LeadFormConversionsTest extends TestCase
         }
     }
 
-    public function test_a_visitor_who_did_not_consent_is_recorded_as_skipped_and_nothing_is_built(): void
+    public function test_a_visitor_who_did_not_agree_to_measurement_is_recorded_as_skipped_and_nothing_is_built(): void
     {
         Http::fake();
         $this->create($this->ga4());
-        $slug = $this->slug(consentRequired: false);
+        $slug = $this->slug();
 
-        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission(consent: false))->assertCreated();
+        // Consent to be contacted, but NOT to their identifiers being reported to platforms: the lead is stored, no conversion leaves.
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission(consent: true, measurement: false))->assertCreated();
 
         $delivery = ConversionDelivery::withoutGlobalScopes()->firstOrFail();
         $this->assertSame('skipped_consent', $delivery->status);
         $this->assertNull($delivery->payload);
+        $this->assertStringContainsString('did not agree', (string) $delivery->error);
+        $this->assertSame('denied', LeadFormSubmission::withoutGlobalScopes()->firstOrFail()->measurement_consent);
+        Http::assertNothingSent();
+    }
+
+    public function test_a_form_that_never_asked_for_measurement_consent_reports_nothing(): void
+    {
+        Http::fake();
+        $this->create($this->ga4());
+        $slug = $this->slug(asksMeasurement: false);
+
+        // A submitter cannot grant what the version never offered: the claim in the body is ignored.
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission(consent: true, measurement: true))->assertCreated();
+
+        $this->assertSame('not_asked', LeadFormSubmission::withoutGlobalScopes()->firstOrFail()->measurement_consent);
+        $delivery = ConversionDelivery::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('skipped_consent', $delivery->status);
+        $this->assertStringContainsString('did not ask', (string) $delivery->error);
         Http::assertNothingSent();
     }
 
@@ -347,5 +367,35 @@ final class LeadFormConversionsTest extends TestCase
 
         $this->actingAs($viewer, 'sanctum')->withHeaders(self::SPA)->postJson("/api/v1/projects/{$this->project->id}/conversion-destinations", $this->ga4())->assertForbidden();
         $this->actingAs($viewer, 'sanctum')->withHeaders(self::SPA)->getJson("/api/v1/projects/{$this->project->id}/conversion-destinations")->assertForbidden();
+    }
+
+    public function test_the_page_loads_a_tag_manager_container_only_when_the_team_made_it_live_and_it_delivers_nothing_itself(): void
+    {
+        Http::fake();
+        $slug = $this->slug();
+        $id = $this->create(['kind' => 'gtm_web', 'name' => 'Web container', 'config' => ['container_id' => 'gtm-abc1234']]);
+
+        $this->getJson("/api/v1/public/forms/{$slug}")->assertOk()->assertJsonPath('data.tracking.gtm_container_id', null);
+
+        $this->live($id);
+        $this->getJson("/api/v1/public/forms/{$slug}")->assertOk()->assertJsonPath('data.tracking.gtm_container_id', 'GTM-ABC1234');
+
+        // It configures the PAGE; a submission produces no server delivery for it.
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated();
+        $this->assertSame(0, ConversionDelivery::withoutGlobalScopes()->count());
+        Http::assertNothingSent();
+
+        $this->as()->postJson("/api/v1/projects/{$this->project->id}/conversion-destinations", ['kind' => 'gtm_web', 'name' => 'Bad', 'config' => ['container_id' => 'not-gtm']])->assertStatus(422);
+    }
+
+    public function test_the_answer_carries_the_deduplication_id_the_browser_tag_must_use(): void
+    {
+        $this->create(['kind' => 'meta_capi', 'name' => 'Meta', 'config' => ['pixel_id' => '123456789012345'], 'secrets' => ['access_token' => 'TOKEN-x']]);
+        $slug = $this->slug();
+
+        $eventId = $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated()->json('data.event_id');
+
+        $this->assertSame($eventId, (string) ConversionDelivery::withoutGlobalScopes()->firstOrFail()->event_id);
+        $this->assertSame($eventId, LeadFormSubmission::withoutGlobalScopes()->firstOrFail()->id);
     }
 }

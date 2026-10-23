@@ -126,6 +126,7 @@ final class SubmitLeadForm
                     'session_id' => is_string($payload['session_id'] ?? null) ? mb_substr($payload['session_id'], 0, 64) : null,
                     'consent_state' => $accepted ? 'granted' : 'denied',
                     'consent_version' => $definition['consent']['version'] ?? null,
+                    'measurement_consent' => ! ($definition['consent']['measurement']['enabled'] ?? false) ? 'not_asked' : ((bool) (($payload['consent']['measurement'] ?? false) === true) ? 'granted' : 'denied'),
                     'attribution' => $attribution,
                     'submitted_at' => $now,
                 ]);

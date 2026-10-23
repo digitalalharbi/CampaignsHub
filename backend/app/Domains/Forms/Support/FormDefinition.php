@@ -99,6 +99,19 @@ final class FormDefinition
             $errors[] = 'A form that asks for consent needs the consent text the person will read.';
         }
 
+        /*
+         * A SECOND, optional consent: that the person's hashed identifiers may be reported to measurement and
+         * advertising platforms. It is not folded into the consent to be contacted — those are different purposes,
+         * a person can want one without the other, and the second is a disclosure to third parties that the first
+         * does not cover. A form that does not ask it never has a conversion reported (FORMS-DISPATCH-001).
+         */
+        $measurement = is_array($consent['measurement'] ?? null) ? $consent['measurement'] : [];
+        $measurementOn = (bool) ($measurement['enabled'] ?? false);
+        $measurementText = self::text($measurement['text'] ?? null, 1200);
+        if ($measurementOn && self::isBlank($measurementText)) {
+            $errors[] = 'A form that asks for measurement consent needs the wording the person will read.';
+        }
+
         $thank = is_array($raw['thank_you'] ?? null) ? $raw['thank_you'] : [];
         $redirect = isset($thank['redirect_url']) && is_string($thank['redirect_url']) && $thank['redirect_url'] !== '' ? $thank['redirect_url'] : null;
         if ($redirect !== null && (filter_var($redirect, FILTER_VALIDATE_URL) === false || ! str_starts_with($redirect, 'https://'))) {
@@ -120,7 +133,8 @@ final class FormDefinition
                 'required' => $required,
                 'text' => $consentText,
                 // The wording the person agreed to is identified, not just stored: change the text, change the version.
-                'version' => substr(hash('sha256', json_encode($consentText, JSON_UNESCAPED_UNICODE) ?: ''), 0, 12),
+                'version' => substr(hash('sha256', json_encode([$consentText, $measurementOn ? $measurementText : null], JSON_UNESCAPED_UNICODE) ?: ''), 0, 12),
+                'measurement' => ['enabled' => $measurementOn, 'text' => $measurementOn ? $measurementText : ''],
             ],
             'thank_you' => ['message' => self::text($thank['message'] ?? null, 600), 'redirect_url' => $redirect],
             'style' => ['accent' => $accent, 'theme' => $theme],

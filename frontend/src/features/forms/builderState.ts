@@ -20,6 +20,14 @@ export function starterDefinition(): FormDefinition {
     consent: {
       required: true,
       text: { ar: 'أوافق على التواصل معي بخصوص هذا الطلب.', en: 'I agree to be contacted about this enquiry.' },
+      // Off by default: a form only asks for it when the team is going to report conversions to a platform.
+      measurement: {
+        enabled: false,
+        text: {
+          ar: 'أوافق على إرسال بياناتي مُشفّرة (هاش) إلى منصات القياس والإعلان لقياس نتيجة الحملة.',
+          en: 'I agree that my details, hashed, may be sent to measurement and advertising platforms to measure the campaign.',
+        },
+      },
     },
     thank_you: { message: { ar: 'شكرًا، وصلتنا بياناتك وسنتواصل معك.', en: 'Thank you — we have your details and will be in touch.' }, redirect_url: null },
     style: { accent: null, theme: 'auto' },

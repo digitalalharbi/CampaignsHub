@@ -22,20 +22,29 @@ final class ConversionKinds
 
     public const GTM_SERVER = 'gtm_server';
 
+    /** The tag manager container the PUBLIC PAGE loads — no server delivery, only a script on the page once the team made it live. */
+    public const GTM_WEB = 'gtm_web';
+
     /** @var list<string> */
-    public const IMPLEMENTED = [self::GA4, self::META, self::GTM_SERVER];
+    public const IMPLEMENTED = [self::GA4, self::META, self::GTM_SERVER, self::GTM_WEB];
 
     /** @var list<string> official conversions interfaces whose builders are not written yet */
     public const PLANNED = ['tiktok_events', 'snapchat_capi', 'google_ads', 'linkedin_capi', 'x_conversions'];
 
+    /** Whether a kind is a server-side delivery. `gtm_web` is configuration for the page and has nothing to deliver. */
+    public static function deliversFromServer(string $kind): bool
+    {
+        return $kind !== self::GTM_WEB;
+    }
+
     /** @var array<string,string> kind => the platform's own event name used when none is chosen */
-    private const DEFAULT_EVENT = [self::GA4 => 'generate_lead', self::META => 'Lead', self::GTM_SERVER => 'generate_lead'];
+    private const DEFAULT_EVENT = [self::GA4 => 'generate_lead', self::META => 'Lead', self::GTM_SERVER => 'generate_lead', self::GTM_WEB => ''];
 
     /** @var array<string,list<string>> the secret keys each kind may hold */
-    private const SECRET_KEYS = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => ['api_key']];
+    private const SECRET_KEYS = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => ['api_key'], self::GTM_WEB => []];
 
     /** @var array<string,list<string>> the secret keys a destination needs before it may go live */
-    private const REQUIRED_FOR_LIVE = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => []];
+    private const REQUIRED_FOR_LIVE = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => [], self::GTM_WEB => []];
 
     /**
      * Normalise and validate a destination's non-secret settings.
@@ -80,6 +89,14 @@ final class ConversionKinds
                 }
 
                 return ['endpoint_url' => $url, 'event_name' => $event];
+
+            case self::GTM_WEB:
+                $container = strtoupper(trim((string) ($raw['container_id'] ?? '')));
+                if (preg_match('/^GTM-[A-Z0-9]{4,10}$/', $container) !== 1) {
+                    throw new InvalidArgumentException('A web GTM destination needs the container id (GTM-XXXXXX).');
+                }
+
+                return ['container_id' => $container];
         }
 
         throw new InvalidArgumentException(in_array($kind, self::PLANNED, true)

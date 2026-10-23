@@ -9,6 +9,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { ConversionsPanel } from './ConversionsPanel'
 import { useCreateForm, useForms } from './api'
 import { starterDefinition } from './builderState'
 import type { LeadFormRow } from './types'
@@ -68,6 +69,8 @@ export function FormsPage() {
       <div className="grid gap-3 md:grid-cols-2">
         {(forms.data ?? []).map((f) => <FormCard key={f.id} form={f} base={base} ar={ar} />)}
       </div>
+
+      <ConversionsPanel projectId={currentProjectId} />
     </div>
   )
 }
