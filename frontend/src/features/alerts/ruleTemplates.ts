@@ -95,6 +95,12 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
     extra: { cooldown_minutes: 1440 },
   }),
   build({
+    key: 'launch_advance', group: 'results', type: 'launch_advance', severity: 'info',
+    name: { ar: 'حساب صار مؤهلًا لمرحلة إطلاق أفضل', en: 'Account earned a better launch stage' },
+    why: { ar: 'ينبّه حين تدعم نتائج حساب أُطلقت له خطة مرحلةً أفضل مما كان عليه (مثل الانتقال من الزيارات إلى المبيعات). لا يغيّر شيئًا بنفسه.', en: 'Tells you when the synced results of an account a plan launched on now support a better stage than it had (for example traffic to sales). It changes nothing by itself.' },
+    extra: { cooldown_minutes: 1440 },
+  }),
+  build({
     key: 'lead_unassigned_60', group: 'leads', type: 'lead_unassigned', threshold: { minutes: 60 }, severity: 'warning',
     name: { ar: 'عميل محتمل بلا مسؤول ساعة', en: 'Lead unassigned for an hour' },
     why: { ar: 'ينبّه حين يبقى عميل محتمل جديد بلا مسؤول ساعة كاملة.', en: 'Warns when a new lead has had nobody assigned for a full hour.' },
