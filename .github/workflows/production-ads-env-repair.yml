@@ -1,0 +1,46 @@
+name: Production Ads Env Repair
+
+# DEPLOY-ENV-CONTRACT-001 — add the four ad-platform key NAMES the deploy's env-contract step says the live env lacks.
+#
+# Every release since #793 has been refused at the env-contract step because `deploy/backend.production.env` on the server lacks
+# AD_PLATFORM_REDIRECT_BASE and the three GOOGLE_ADS_* keys. The deploy is right to refuse. This puts them in place so it can run.
+#
+# THIS IS NOT A WAY TO EDIT PRODUCTION CONFIGURATION. There are no inputs — no key, no value, no command. The four keys and their
+# values live in `scripts/repair-ads-env.sh`, are ADD-ONLY (an already-declared key is never touched), and the three GOOGLE_ADS_*
+# values are blank on purpose: Google Ads stays «Awaiting Credentials» and no credential is invented. Every other line of the file
+# is asserted byte-for-byte unchanged, a backup is taken first and restored on any failed proof, and nothing out of the live file
+# is printed.
+#
+# Manual only: no push trigger and no schedule. It is one repair, not a mechanism.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Add the four missing keys to the live env, and nothing else
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # The same preamble the deploy runs, so the script and the contract are the ones from the revision being repaired
+            # against rather than whatever the box last checked out.
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+            bash scripts/repair-ads-env.sh \
+              deploy/backend.production.env \
+              deploy/backend.production.env.example
