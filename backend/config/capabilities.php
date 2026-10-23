@@ -36,6 +36,7 @@ return [
         'attribution_intelligence' => ['activation' => 'explicit', 'default_entitled' => false, 'label' => ['en' => 'Attribution intelligence', 'ar' => 'ذكاء الإسناد']],
         'marketing_impact' => ['activation' => 'explicit', 'default_entitled' => false, 'label' => ['en' => 'Marketing impact', 'ar' => 'أثر التسويق']],
         'link_in_bio' => ['activation' => 'explicit', 'default_entitled' => false, 'label' => ['en' => 'Link in bio', 'ar' => 'صفحات الروابط']],
+        'forms_hub' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'Forms & conversion hub', 'ar' => 'النماذج ومركز التحويلات']],
         'advanced_tracking' => ['activation' => 'explicit', 'default_entitled' => false, 'label' => ['en' => 'Advanced tracking', 'ar' => 'التتبع المتقدم']],
     ],
 ];
