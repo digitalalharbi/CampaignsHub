@@ -13,8 +13,8 @@ namespace App\Domains\Identity\Services;
  * it produces a redirect to an error page nobody can explain, and it tells the visitor the platform
  * supports something it does not.
  *
- * `Live` and `AwaitingCredentials` are therefore reported to the client, and the button is inert in
- * the second case with the reason on it.
+ * `Live` and `AwaitingCredentials` are therefore reported to the client, which advertises only the
+ * live capability while retaining an explicit server-side readiness state.
  */
 final class OAuthProviderRegistry
 {

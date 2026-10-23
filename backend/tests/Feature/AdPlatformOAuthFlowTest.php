@@ -18,6 +18,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -140,12 +141,9 @@ final class AdPlatformOAuthFlowTest extends TestCase
     public function test_the_whole_flow_opens_a_connection_and_discovers_real_accounts(): void
     {
         $this->configure('meta');
-        Http::fake([
-            'graph.facebook.com/*/oauth/access_token*' => Http::response(['access_token' => 'AT', 'expires_in' => 5184000]),
-            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => [
-                ['id' => 'act_1', 'name' => 'Main', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
-                ['id' => 'act_2', 'name' => 'Second', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
-            ]]),
+        $this->fakeMeta([
+            ['id' => 'act_1', 'name' => 'Main', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
+            ['id' => 'act_2', 'name' => 'Second', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
         ]);
 
         $state = $this->startAndTakeState('meta');
@@ -172,11 +170,8 @@ final class AdPlatformOAuthFlowTest extends TestCase
     public function test_the_return_carries_the_connection_and_the_destination_it_left_with(): void
     {
         $this->configure('meta');
-        Http::fake([
-            'graph.facebook.com/*/oauth/access_token*' => Http::response(['access_token' => 'AT', 'expires_in' => 5184000]),
-            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => [
-                ['id' => 'act_1', 'name' => 'Main', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
-            ]]),
+        $this->fakeMeta([
+            ['id' => 'act_1', 'name' => 'Main', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
         ]);
 
         $workspace = ClientWorkspace::create([
@@ -226,11 +221,8 @@ final class AdPlatformOAuthFlowTest extends TestCase
     public function test_authorising_again_does_not_duplicate_the_discovered_accounts(): void
     {
         $this->configure('meta');
-        Http::fake([
-            'graph.facebook.com/*/oauth/access_token*' => Http::response(['access_token' => 'AT', 'expires_in' => 5184000]),
-            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => [
-                ['id' => 'act_1', 'name' => 'Renamed', 'currency' => 'SAR', 'account_status' => 1],
-            ]]),
+        $this->fakeMeta([
+            ['id' => 'act_1', 'name' => 'Renamed', 'currency' => 'SAR', 'account_status' => 1],
         ]);
 
         foreach ([1, 2] as $_) {
@@ -282,10 +274,7 @@ final class AdPlatformOAuthFlowTest extends TestCase
     public function test_a_state_is_spent_the_first_time_it_is_used(): void
     {
         $this->configure('meta');
-        Http::fake([
-            'graph.facebook.com/*/oauth/access_token*' => Http::response(['access_token' => 'AT', 'expires_in' => 100]),
-            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => []]),
-        ]);
+        $this->fakeMeta([], 100);
 
         $state = $this->startAndTakeState('meta');
 
@@ -315,10 +304,7 @@ final class AdPlatformOAuthFlowTest extends TestCase
     public function test_a_token_that_cannot_list_an_account_does_not_become_a_connected_state(): void
     {
         $this->configure('meta');
-        Http::fake([
-            'graph.facebook.com/*/oauth/access_token*' => Http::response(['access_token' => 'AT', 'expires_in' => 100]),
-            'graph.facebook.com/*/me/adaccounts*' => Http::response(['error' => ['message' => 'Insufficient permission']], 403),
-        ]);
+        $this->fakeMeta([], 100, true);
 
         $this->get('/api/v1/oauth/ads/meta/callback?code=abc&state='.$this->startAndTakeState('meta'))
             ->assertRedirectContains('outcome=failed');
@@ -331,6 +317,25 @@ final class AdPlatformOAuthFlowTest extends TestCase
         foreach (PlatformCredentials::for($platform)->requires() as $key) {
             config()->set("ad_platforms.platforms.{$platform}.{$key}", "test-{$key}");
         }
+    }
+
+    /** @param list<array<string, mixed>> $accounts */
+    private function fakeMeta(array $accounts, int $expiresIn = 5184000, bool $refuseAccounts = false): void
+    {
+        Http::preventStrayRequests();
+        Http::fake(function (HttpRequest $request) use ($accounts, $expiresIn, $refuseAccounts) {
+            if (str_contains($request->url(), '/oauth/access_token')) {
+                return Http::response(['access_token' => 'AT', 'expires_in' => $expiresIn]);
+            }
+
+            if (str_contains($request->url(), '/me/adaccounts')) {
+                return $refuseAccounts
+                    ? Http::response(['error' => ['message' => 'Insufficient permission']], 403)
+                    : Http::response(['data' => $accounts]);
+            }
+
+            return Http::response([], 404);
+        });
     }
 
     /** Run the authenticated half and return the state it minted. */

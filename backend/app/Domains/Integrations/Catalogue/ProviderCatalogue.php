@@ -19,7 +19,7 @@ use InvalidArgumentException;
  * | Snapchat  | ad accounts hang off an ORGANISATION; a valid token with no org id lists nothing    |
  * | TikTok    | `app_id`/`secret`/`auth_code`, and HTTP 200 with `code != 0` is a refusal           |
  * | Meta      | no refresh token — a long-lived EXCHANGE; and webhooks with `X-Hub-Signature-256`   |
- * | Google    | a developer token approved on a separate track; refresh only with offline+consent   |
+ * | Google    | Cloud-project API access; refresh only with offline+consent                         |
  * | X         | PKCE is mandatory, so `code_verifier` must survive the whole round trip             |
  * | LinkedIn  | every REST call is pinned to a monthly `LinkedIn-Version`; unpinned calls are 426   |
  * | Salla     | a store, not an ad account; webhooks signed with `x-salla-signature`                |
@@ -310,16 +310,16 @@ final class ProviderCatalogue
             webhookSignatureHeader: null,
             prerequisites: [
                 'A Google Cloud project with the Google Ads API enabled and the OAuth consent screen published.',
-                'A developer token approved for at least Basic Access on a Google Ads manager account — a test-access token only reaches test accounts.',
+                'The OAuth client\'s Google Cloud project granted Explorer, Basic or Standard access — Test access reaches test accounts only.',
                 'The redirect URI below added to the OAuth client\'s Authorised redirect URIs.',
             ],
             prerequisitesAr: [
                 'مشروع في جوجل كلاود مع تفعيل Google Ads API ونشر شاشة موافقة OAuth.',
-                'رمز مطوّر معتمد بمستوى Basic Access على الأقل على حساب مدير في جوجل أدز — رمز الاختبار يصل لحسابات الاختبار فقط.',
+                'منح مشروع Google Cloud المالك لعميل OAuth مستوى Explorer أو Basic أو Standard — مستوى Test يصل لحسابات الاختبار فقط.',
                 'إضافة رابط العودة أدناه ضمن روابط العودة المصرّح بها لعميل OAuth.',
             ],
             docsUrl: 'https://developers.google.com/google-ads/api/docs/start',
-            rateLimitNote: 'Operations are capped per developer token per day; exhaustion arrives as '
+            rateLimitNote: 'Operations are capped per Google Cloud project access level; exhaustion arrives as '
                 .'`RESOURCE_EXHAUSTED` rather than an HTTP 429.',
             paginationNote: '`nextPageToken` on search / searchStream.',
         );

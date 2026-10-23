@@ -77,6 +77,7 @@ final class GoogleAdsDeveloperTokenContractTest extends TestCase
         foreach ([
             base_path('config/ad_platforms.php'),
             app_path('Domains/Integrations/Catalogue/ProviderCatalogue.php'),
+            app_path('Domains/Integrations/OAuth/PlatformCredentials.php'),
             app_path('Domains/Integrations/Providers/ApiAdvertisingConnector.php'),
         ] as $file) {
             $said = (string) file_get_contents($file);
@@ -87,9 +88,19 @@ final class GoogleAdsDeveloperTokenContractTest extends TestCase
                 basename($file).' still states that the developer token gates every call',
             );
             $this->assertStringNotContainsString(
+                'refused by every single API call',
+                $said,
+                basename($file).' still contains the pre-sunset readiness claim',
+            );
+            $this->assertStringNotContainsString(
                 'approved separately from the OAuth client',
                 $said,
                 basename($file).' still states the token is approved separately from the OAuth client',
+            );
+            $this->assertStringNotContainsString(
+                'per developer token per day',
+                $said,
+                basename($file).' still states that current quotas follow the sunset developer token',
             );
         }
     }

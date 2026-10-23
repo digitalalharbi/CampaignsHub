@@ -26,10 +26,9 @@ declare(strict_types=1);
 | refuses to call out — it does not attempt a request that would fail, and it never renders as
 | connected.
 |
-| That strictness is not decoration. Google Ads without a developer token can authenticate and then be
-| refused by every single API call; Snapchat without an organisation id can authenticate and then have
-| nothing to list. Both would look "connected" to a check that only asked for a token, and the customer
-| would be told their account was linked while no figure would ever arrive.
+| That strictness is not decoration. A provider missing one of its CURRENT required values may
+| authenticate and then have nothing usable to list. Google Ads' legacy developer token is not such a
+| value after its 2026-09-09 sunset; its access level follows the Cloud project instead.
 |
 | ## Nothing in this file is a claim
 |

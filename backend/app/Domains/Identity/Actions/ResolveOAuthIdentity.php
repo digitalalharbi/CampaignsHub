@@ -86,6 +86,10 @@ final class ResolveOAuthIdentity
      */
     public function link(User $user, string $provider, array $profile): OAuthIdentity
     {
+        if ($profile['sub'] === '') {
+            throw new RuntimeException('The provider did not identify the account.');
+        }
+
         $takenByAnother = OAuthIdentity::query()
             ->where('provider', $provider)
             ->where('provider_user_id', $profile['sub'])

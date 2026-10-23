@@ -15,8 +15,8 @@ namespace App\Domains\Integrations\Catalogue;
  *
  * ## Why this is not one shared shape with a `fields` array and nothing else
  *
- * The providers are not variations of each other. Google Ads refuses every API call without a
- * developer token that is approved on a different track from the OAuth client. Snapchat hangs ad
+ * The providers are not variations of each other. Google Ads production access follows the Cloud
+ * project that owns its OAuth client. Snapchat hangs ad
  * accounts off an organisation, so a perfectly valid token lists nothing without one. TikTok does not
  * use the OAuth parameter names. Salla and Zid are not advertising platforms at all and have no ad
  * accounts to discover. A generic model would let each of those fail as "connected, and no data",

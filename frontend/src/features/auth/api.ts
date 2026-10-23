@@ -183,7 +183,7 @@ export interface OAuthProvider {
   label: { en: string; ar: string }
   /** `live` or `awaiting_credentials` — reported, never guessed at in the browser. */
   status: string
-  /** False when the provider has no credentials configured: render it, but inert. */
+  /** False when the provider has no credentials configured: do not advertise an unusable action. */
   available: boolean
 }
 

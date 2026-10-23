@@ -6,6 +6,8 @@ namespace App\Domains\Identity\Http\Controllers;
 
 use App\Domains\Identity\Actions\OAuthOutcome;
 use App\Domains\Identity\Actions\ResolveOAuthIdentity;
+use App\Domains\Identity\Models\OAuthIdentity;
+use App\Domains\Identity\Services\GoogleIdTokenVerifier;
 use App\Domains\Identity\Services\OAuthFlow;
 use App\Domains\Identity\Services\OAuthProviderRegistry;
 use App\Domains\Identity\Support\AccountSuspension;
@@ -13,6 +15,7 @@ use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,9 +29,9 @@ use Throwable;
  *
  * Three endpoints and one honest answer:
  *
- *   - `providers` is PUBLIC and says which providers are usable. The sign-in page renders every one
- *     of them either way, so a provider that has not been set up appears as unavailable with the
- *     reason on it rather than as a button that redirects into an error nobody can explain.
+ *   - `providers` is PUBLIC and says which providers are usable. The sign-in page advertises only
+ *     usable providers, so an installation without credentials has no dead control that redirects
+ *     into an error nobody can explain.
  *   - `start` mints the PKCE verifier, `state` and `nonce`, and hands back the authorize URL.
  *   - `callback` is where the provider returns. It verifies `state`, exchanges the code with the
  *     verifier, checks the `nonce`, and then applies the portal rule that the password path applies:
@@ -42,6 +45,7 @@ final class OAuthController extends Controller
     public function __construct(
         private readonly OAuthProviderRegistry $registry,
         private readonly OAuthFlow $flow,
+        private readonly GoogleIdTokenVerifier $googleTokens,
         private readonly ResolveOAuthIdentity $identities,
         private readonly PortalResolver $portals,
     ) {}
@@ -76,17 +80,73 @@ final class OAuthController extends Controller
         return ApiResponse::success(['authorize_url' => $begun['url']], 'Sign-in started.');
     }
 
+    /** GET /auth/oauth/identities — the signed-in person's provider links. */
+    public function identities(Request $request): JsonResponse
+    {
+        $linked = $request->user()->oauthIdentities()->get()->keyBy('provider');
+        $providers = [];
+
+        foreach ($this->registry->forClient() as $provider) {
+            $providerName = $provider['provider'] ?? null;
+            if (! is_string($providerName)) {
+                continue;
+            }
+
+            $identity = $linked->get($providerName);
+            if (! $identity instanceof OAuthIdentity) {
+                $identity = null;
+            }
+
+            $providers[] = $provider + [
+                'linked' => $identity !== null,
+                'email' => $identity?->email,
+                'linked_at' => $identity?->linked_at?->toIso8601String(),
+            ];
+        }
+
+        return ApiResponse::success(['providers' => $providers]);
+    }
+
+    /** POST /auth/oauth/{provider}/link — begin a flow bound to this authenticated user. */
+    public function linkStart(Request $request, string $provider): JsonResponse
+    {
+        if (! $this->registry->isConfigured($provider)) {
+            return ApiResponse::error('This provider is awaiting credentials.', null, ['provider' => $provider], 503);
+        }
+
+        $begun = $this->flow->begin($request, $provider, null, '/account/security', 'link', $request->user()->getKey());
+
+        return ApiResponse::success(['authorize_url' => $begun['url']], 'Account linking started.');
+    }
+
     /** GET|POST /auth/oauth/{provider}/callback */
     public function callback(Request $request, string $provider): RedirectResponse
     {
+        $pending = null;
+
         try {
-            // The provider's own refusal (the visitor pressed Cancel) arrives as `error`.
+            $pending = $this->flow->consume($request, $provider, (string) $request->input('state'));
+
+            // Consume state even on refusal so it remains single-use and so linking returns to
+            // account settings rather than dropping an authenticated person on the login page.
             if ($request->filled('error')) {
-                return $this->back('cancelled');
+                return $pending['intent'] === 'link'
+                    ? $this->linkBack($provider, 'cancelled')
+                    : $this->back('cancelled');
             }
 
-            $pending = $this->flow->consume($request, $provider, (string) $request->input('state'));
             $profile = $this->exchange($provider, (string) $request->input('code'), $pending['verifier'], $pending['nonce']);
+
+            if ($pending['intent'] === 'link') {
+                $user = Auth::guard('web')->user();
+                if ($user === null || ! hash_equals((string) $pending['user_id'], (string) $user->getKey())) {
+                    throw new RuntimeException('The linking session is no longer authenticated.');
+                }
+
+                $this->identities->link($user, $provider, $profile);
+
+                return $this->linkBack($provider, 'connected');
+            }
 
             ['user' => $user] = $this->identities->execute($provider, $profile);
 
@@ -107,17 +167,19 @@ final class OAuthController extends Controller
             Auth::guard('web')->login($user, true);
             $request->session()->regenerate();
 
-            $target = is_string($pending['redirect']) && str_starts_with($pending['redirect'], '/')
+            $target = is_string($pending['redirect']) && $this->isSafeFrontendPath($pending['redirect'])
                 ? $pending['redirect']
                 : $this->portals->landingPathFor($user, $requested);
 
-            return redirect()->to($target);
+            return redirect()->away(Frontend::url($target));
         } catch (OAuthOutcome $outcome) {
             return $this->back($outcome->reason, ['message' => $outcome->getMessage()]);
         } catch (Throwable) {
             // Nothing from the provider or the exchange is echoed back — an error string reflected
             // into the SPA is an injection surface, and the visitor cannot act on it anyway.
-            return $this->back('failed');
+            return is_array($pending) && ($pending['intent'] ?? null) === 'link'
+                ? $this->linkBack($provider, 'failed')
+                : $this->back('failed');
         }
     }
 
@@ -142,12 +204,16 @@ final class OAuthController extends Controller
         }
 
         $idToken = (string) $response->json('id_token');
-        $claims = $this->flow->claimsFromIdToken($idToken);
+        if ($provider === 'google') {
+            $claims = $this->googleTokens->verify($idToken, (string) config('services.google.client_id'), $nonce);
+        } else {
+            $claims = $this->flow->claimsFromIdToken($idToken);
 
-        // The nonce ties this token to the request THIS browser started. A token replayed from an
-        // earlier flow carries the earlier nonce and fails here.
-        if (! hash_equals((string) ($claims['nonce'] ?? ''), $nonce)) {
-            throw new RuntimeException('The identity token did not match this sign-in.');
+            // Google verifies the nonce inside its provider-specific cryptographic verifier. Keep
+            // the same replay protection on providers that still use the legacy exchange path.
+            if (! is_string($claims['nonce'] ?? null) || ! hash_equals($nonce, $claims['nonce'])) {
+                throw new RuntimeException('The identity token did not match this sign-in.');
+            }
         }
 
         return [
@@ -163,6 +229,22 @@ final class OAuthController extends Controller
     /** Back to the sign-in page with a flag it can turn into a sentence. */
     private function back(string $reason, array $extra = []): RedirectResponse
     {
-        return redirect()->to('/login?'.http_build_query(['oauth' => $reason] + $extra));
+        return redirect()->away(Frontend::url('/login?'.http_build_query(['oauth' => $reason] + $extra)));
+    }
+
+    private function linkBack(string $provider, string $outcome): RedirectResponse
+    {
+        return redirect()->away(Frontend::url('/account/security?'.http_build_query([
+            'oauth_link' => $outcome,
+            'provider' => $provider,
+        ])));
+    }
+
+    private function isSafeFrontendPath(string $path): bool
+    {
+        return str_starts_with($path, '/')
+            && ! str_starts_with($path, '//')
+            && ! str_contains($path, '\\')
+            && ! preg_match('/[\r\n]/', $path);
     }
 }

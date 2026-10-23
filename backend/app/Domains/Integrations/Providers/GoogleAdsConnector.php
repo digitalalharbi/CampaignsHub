@@ -24,8 +24,8 @@ use Illuminate\Support\Facades\Log;
  * Money is in micros here too, and the customer id must be sent with the dashes stripped even though
  * every Google console shows it with them.
  *
- * Awaiting credentials — and note that the OAuth client is not enough: Google Ads refuses every call
- * without an approved developer token, which is why it is in the platform's `requires`.
+ * Awaiting credentials until the OAuth client pair exists. Production account access is governed by
+ * the Google Cloud project that owns that client; the legacy developer-token header is optional.
  */
 final class GoogleAdsConnector extends ApiAdvertisingConnector implements ReportsEntityGrains, ReportsPeriodReach
 {

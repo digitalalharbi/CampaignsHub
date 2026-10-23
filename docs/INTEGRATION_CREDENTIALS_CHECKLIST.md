@@ -120,7 +120,7 @@ not read a state for your install out of this table.
 |---|---|
 | Meta Ads | `META_ADS_APP_ID` · `META_ADS_APP_SECRET` · optional `META_ADS_CONFIG_ID` (unset = dialog asks for `scope` as before) |
 | Meta **Candidate** app (META-CANDIDATE-001) | `META_CANDIDATE_APP_ID` · `META_CANDIDATE_APP_SECRET` · `META_CANDIDATE_CONFIG_ID` · optional `META_CANDIDATE_SCOPES` (comma list, default `ads_read`) — see below |
-| Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` — **no manager (MCC) account id** (GADS-MCC-001) |
+| Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET`; `GOOGLE_ADS_DEVELOPER_TOKEN` is legacy/optional after 2026-09-09 — **no manager (MCC) account id** (GADS-MCC-001) |
 | TikTok Ads | `TIKTOK_ADS_APP_ID` · `TIKTOK_ADS_APP_SECRET` |
 | Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
 | X Ads | `X_ADS_CLIENT_ID` (the app's **API Key**) · `X_ADS_CLIENT_SECRET` (the **API Key Secret**) — OAuth 1.0a: the Ads API accepts no OAuth 2.0 token. Needs a developer app with the **Ads API Access Form** approved for that app and the callback URL registered on it. |

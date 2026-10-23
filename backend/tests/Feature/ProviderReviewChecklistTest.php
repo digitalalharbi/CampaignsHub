@@ -17,8 +17,8 @@ use Tests\TestCase;
  * REVIEW-001 — eight checklists, because there are eight different reviews.
  *
  * The failure this guards against is a single generic list applied to every provider. It would be
- * wrong in both directions at once: silent about the developer token that makes every Google call
- * fail, and about the organisation id without which a valid Snapchat token lists nothing — while
+ * wrong in both directions at once: silent about the Cloud-project access level that decides whether
+ * Google can reach production accounts, and about Snapchat's app review — while
  * demanding business verification from Salla, which has no such thing.
  */
 final class ProviderReviewChecklistTest extends TestCase
@@ -58,7 +58,7 @@ final class ProviderReviewChecklistTest extends TestCase
     public function test_each_provider_names_the_requirement_that_actually_blocks_it(): void
     {
         $expected = [
-            'google' => 'developer_token_basic',
+            'google' => 'cloud_project_production_access',
             'meta' => 'business_verification',
             'tiktok' => 'sandbox_whitelist',
             // Was `organisation_id` — retired with the field itself (SNAP-ORG-001). A system
@@ -83,7 +83,7 @@ final class ProviderReviewChecklistTest extends TestCase
         $sallaKeys = array_column(ReviewCatalogue::for('salla'), 'key');
 
         $this->assertNotContains('business_verification', $sallaKeys);
-        $this->assertNotContains('developer_token_basic', $sallaKeys);
+        $this->assertNotContains('cloud_project_production_access', $sallaKeys);
         $this->assertNotContains('project_tier', $sallaKeys);
     }
 

@@ -32,9 +32,10 @@ use InvalidArgumentException;
  * same code path, or the console would be a second, quieter configuration system.
  *
  * `isConfigured()` is deliberately all-or-nothing against the provider's own required-field list in
- * `ProviderCatalogue`. A partial configuration is the dangerous case, not the harmless one: Google Ads
- * with an OAuth client and no developer token authenticates cleanly and is then refused by every API
- * call, which reads to a customer as "connected, and your numbers are zero".
+ * `ProviderCatalogue`. A partial configuration is the dangerous case, not the harmless one: a provider
+ * may authenticate with only part of its CURRENT credential set and then fail on its first useful call,
+ * which reads to a customer as "connected, and your numbers are zero". Google Ads' legacy developer
+ * token is optional after its 2026-09-09 sunset and is therefore not part of that required set.
  */
 final class PlatformCredentials
 {
@@ -195,7 +196,7 @@ final class PlatformCredentials
      * Which required values are absent — the exact list a setup page shows.
      *
      * Returning the names rather than a boolean matters: "awaiting credentials" is not actionable,
-     * and «ينقص: developer_token» is.
+     * while the exact name of a currently required field is.
      *
      * @return list<string>
      */

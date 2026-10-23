@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react'
-import { emailCodeStart, emailCodeVerify, login, phoneSignInStart, phoneSignInVerify, signInMethod } from './api'
+import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, login, phoneSignInStart, phoneSignInVerify, signInMethod, startOAuth } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { AuthShell } from './AuthShell'
 import { OtpField } from './OtpField'
@@ -78,6 +78,7 @@ const COPY = {
     phoneHint: 'سنرسل رمز تحقق إلى هذا الرقم.',
     phoneInvalid: 'أدخل رقم جوال صحيحًا.',
     continue: 'متابعة',
+    google: 'المتابعة عبر Google',
   },
   en: {
     title: 'Welcome back',
@@ -110,6 +111,7 @@ const COPY = {
     phoneHint: 'We will send a verification code to this number.',
     phoneInvalid: 'Enter a valid mobile number.',
     continue: 'Continue',
+    google: 'Continue with Google',
   },
 } as const
 
@@ -138,6 +140,13 @@ export function LoginPage() {
   const status = useAuth((s) => s.status)
   const { locale } = useUi()
   const c = COPY[locale]
+  const oauthProviders = useQuery({ queryKey: ['oauth', 'providers'], queryFn: fetchOAuthProviders })
+  const google = oauthProviders.data?.find((provider) => provider.provider === 'google')
+  const googleAvailable = google?.available === true
+  const googleSignIn = useMutation({
+    mutationFn: () => startOAuth('google', { redirect: null }),
+    onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
+  })
   const ar = locale === 'ar'
 
   /*
@@ -430,17 +439,40 @@ export function LoginPage() {
               <span className="h-px flex-1 bg-border" />
             </div>
 
-            <Button
-              type="button"
-              data-testid="login-request-code"
-              variant="secondary"
-              className="w-full"
-              size="lg"
-              loading={requestCode.isPending || startCode.isPending}
-              onClick={askForCode}
-            >
-              <Mail size={17} /> {c.sendCode}
-            </Button>
+            {/*
+              Keep the optional provider in the existing secondary-action row. Adding a second
+              separator and a full-width row pushed the 1366x768 sign-in page below the viewport.
+              An unconfigured provider is omitted: there is no useful action for a visitor to take,
+              and the server remains the authority that decides when the capability is available.
+            */}
+            <div className={googleAvailable ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'grid grid-cols-1 gap-3'}>
+              <Button
+                type="button"
+                data-testid="login-request-code"
+                variant="secondary"
+                className="w-full"
+                size="lg"
+                loading={requestCode.isPending || startCode.isPending}
+                onClick={askForCode}
+              >
+                <Mail size={17} /> {c.sendCode}
+              </Button>
+
+              {googleAvailable && (
+                <Button
+                  type="button"
+                  data-testid="login-google"
+                  variant="secondary"
+                  className="w-full"
+                  size="lg"
+                  loading={googleSignIn.isPending}
+                  onClick={() => googleSignIn.mutate()}
+                >
+                  <span aria-hidden="true" className="font-bold">G</span>
+                  {c.google}
+                </Button>
+              )}
+            </div>
 
             {/*
               A statement of practice, not a claim about this request.

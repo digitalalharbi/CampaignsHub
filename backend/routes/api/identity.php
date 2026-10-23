@@ -109,9 +109,9 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         ->middleware('throttle:6,1');
 
     /*
-     * Social sign-in (LOGIN-004). `providers` is public so the sign-in page can render each one's
-     * real state — Live, or Awaiting Credentials — instead of offering a button that cannot work.
-     * `start` and `callback` are public too: they ARE the sign-in.
+     * Social sign-in (LOGIN-004). `providers` is public so the sign-in page can use each provider's
+     * real state — Live, or Awaiting Credentials — and omit an action that cannot work. `start` and
+     * `callback` are public too: they ARE the sign-in.
      */
     Route::get('/oauth/providers', [OAuthController::class, 'providers'])->name('oauth.providers');
 
@@ -131,6 +131,10 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         'throttle:20,1',
     ])->group(function (): void {
         Route::post('/oauth/{provider}/start', [OAuthController::class, 'start'])->name('oauth.start');
+        Route::get('/oauth/identities', [OAuthController::class, 'identities'])
+            ->middleware('auth:sanctum')->name('oauth.identities');
+        Route::post('/oauth/{provider}/link', [OAuthController::class, 'linkStart'])
+            ->middleware(['auth:sanctum', 'throttle:10,1'])->name('oauth.link');
         // Apple posts the callback back as a form when scopes are requested; Google uses GET.
         Route::match(['get', 'post'], '/oauth/{provider}/callback', [OAuthController::class, 'callback'])
             ->name('oauth.callback');

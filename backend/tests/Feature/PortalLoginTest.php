@@ -12,8 +12,11 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use App\Support\Frontend;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -183,9 +186,88 @@ final class PortalLoginTest extends TestCase
         config(['services.google.client_id' => 'test-id', 'services.google.client_secret' => 'test-secret']);
 
         $this->get('/api/v1/auth/oauth/google/callback?code=abc&state=forged')
-            ->assertRedirect('/login?oauth=failed');
+            ->assertRedirect(Frontend::url('/login?oauth=failed'));
 
         $this->assertGuest();
+    }
+
+    /** The Google verifier must not accidentally remove replay protection from another provider. */
+    public function test_a_non_google_identity_token_still_has_to_match_the_flow_nonce(): void
+    {
+        config([
+            'services.apple.client_id' => 'apple-client',
+            'services.apple.client_secret' => 'apple-secret',
+        ]);
+
+        $url = $this->postJson('/api/v1/auth/oauth/apple/start')->assertOk()->json('data.authorize_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $encode = static fn (array $value): string => rtrim(strtr(base64_encode(json_encode($value, JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
+        $idToken = $encode(['alg' => 'none']).'.'.$encode([
+            'sub' => 'apple-user',
+            'nonce' => 'nonce-from-another-flow',
+            'email' => 'person@example.test',
+        ]).'.signature';
+
+        Http::fake(['https://appleid.apple.com/auth/token' => Http::response(['id_token' => $idToken])]);
+
+        $this->post('/api/v1/auth/oauth/apple/callback', [
+            'code' => 'apple-code',
+            'state' => $query['state'],
+        ])->assertRedirect(Frontend::url('/login?oauth=failed'));
+
+        $this->assertGuest();
+        $this->assertDatabaseCount('oauth_identities', 0);
+    }
+
+    public function test_google_linking_is_bound_to_the_authenticated_user_and_single_use(): void
+    {
+        $user = $this->member('link-owner', 'owner@a.test', Portal::App, 'brand');
+        config(['services.google.client_id' => 'test-id', 'services.google.client_secret' => 'test-secret']);
+
+        $url = $this->actingAs($user)->postJson('/api/v1/auth/oauth/google/link')
+            ->assertOk()->json('data.authorize_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $this->fakeGoogleIdentityToken((string) $query['nonce'], 'google-link-sub', 'owner@a.test');
+
+        $callback = '/api/v1/auth/oauth/google/callback?'.http_build_query([
+            'code' => 'google-code',
+            'state' => $query['state'],
+        ]);
+
+        $this->get($callback)->assertRedirect(Frontend::url('/account/security?oauth_link=connected&provider=google'));
+        $this->assertAuthenticatedAs($user);
+        $this->assertDatabaseHas('oauth_identities', [
+            'user_id' => $user->getKey(),
+            'provider' => 'google',
+            'provider_user_id' => 'google-link-sub',
+        ]);
+
+        $this->get($callback)->assertRedirect(Frontend::url('/login?oauth=failed'));
+        $this->assertDatabaseCount('oauth_identities', 1);
+    }
+
+    public function test_google_linking_fails_if_the_authenticated_user_changes_during_the_round_trip(): void
+    {
+        $starter = $this->member('link-starter', 'starter@a.test', Portal::App, 'brand');
+        $other = $this->member('link-other', 'other@a.test', Portal::App, 'brand');
+        config(['services.google.client_id' => 'test-id', 'services.google.client_secret' => 'test-secret']);
+
+        $url = $this->actingAs($starter)->postJson('/api/v1/auth/oauth/google/link')
+            ->assertOk()->json('data.authorize_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $this->fakeGoogleIdentityToken((string) $query['nonce'], 'google-cross-user-sub', 'starter@a.test');
+
+        $guard = Auth::guard('web');
+        $guard->forgetUser();
+
+        $this->withSession([$guard->getName() => $other->getAuthIdentifier()])
+            ->get('/api/v1/auth/oauth/google/callback?'.http_build_query([
+                'code' => 'google-code',
+                'state' => $query['state'],
+            ]))->assertRedirect(Frontend::url('/account/security?oauth_link=failed&provider=google'));
+
+        $this->assertDatabaseCount('oauth_identities', 0);
     }
 
     // ── Account linking ───────────────────────────────────────────────────────────────────────
@@ -260,5 +342,42 @@ final class PortalLoginTest extends TestCase
 
         $this->expectExceptionMessage('already connected to another user');
         app(ResolveOAuthIdentity::class)->link($second, 'google', $profile);
+    }
+
+    private function fakeGoogleIdentityToken(string $nonce, string $subject, string $email): void
+    {
+        $options = ['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA];
+        $windowsConfig = 'C:\\Program Files\\Git\\mingw64\\etc\\ssl\\openssl.cnf';
+        if (PHP_OS_FAMILY === 'Windows' && is_file($windowsConfig)) {
+            $options['config'] = $windowsConfig;
+        }
+
+        $privateKey = openssl_pkey_new($options);
+        $details = openssl_pkey_get_details($privateKey);
+        $encode = static fn (string $value): string => rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+        $header = $encode(json_encode(['alg' => 'RS256', 'kid' => 'feature-key'], JSON_THROW_ON_ERROR));
+        $payload = $encode(json_encode([
+            'iss' => 'https://accounts.google.com',
+            'aud' => 'test-id',
+            'sub' => $subject,
+            'nonce' => $nonce,
+            'iat' => time(),
+            'exp' => time() + 300,
+            'email' => $email,
+            'email_verified' => true,
+        ], JSON_THROW_ON_ERROR));
+        openssl_sign($header.'.'.$payload, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response([
+                'id_token' => $header.'.'.$payload.'.'.$encode($signature),
+            ]),
+            'https://www.googleapis.com/oauth2/v3/certs' => Http::response(['keys' => [[
+                'kid' => 'feature-key',
+                'kty' => 'RSA',
+                'n' => $encode($details['rsa']['n']),
+                'e' => $encode($details['rsa']['e']),
+            ]]]),
+        ]);
     }
 }

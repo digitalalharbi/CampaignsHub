@@ -5,7 +5,17 @@ import { renderWithProviders, signOut } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, login: vi.fn(), signInMethod: vi.fn(), emailCodeStart: vi.fn(), emailCodeVerify: vi.fn() }
+  return {
+    ...actual,
+    login: vi.fn(),
+    signInMethod: vi.fn(),
+    emailCodeStart: vi.fn(),
+    emailCodeVerify: vi.fn(),
+    fetchOAuthProviders: vi.fn().mockResolvedValue([
+      { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'live', available: true },
+    ]),
+    startOAuth: vi.fn(),
+  }
 })
 
 vi.mock('@/features/requests/clientPortalApi', async (orig) => {
@@ -13,7 +23,7 @@ vi.mock('@/features/requests/clientPortalApi', async (orig) => {
   return { ...actual, portalLoginStart: vi.fn(), portalLoginVerify: vi.fn() }
 })
 
-import { emailCodeStart, emailCodeVerify, login, signInMethod } from './api'
+import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, login, signInMethod, startOAuth } from './api'
 import { portalLoginStart } from '@/features/requests/clientPortalApi'
 
 const mockedMethod = vi.mocked(signInMethod)
@@ -44,6 +54,25 @@ async function reachCodeStep(identifier = 'agency@campaignshub.io', start: unkno
  * the server chose.
  */
 describe('LoginPage — the sign-in card', () => {
+  it('renders Google sign-in only as an available server-reported capability', async () => {
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await waitFor(() => expect(screen.getByTestId('login-google')).toBeEnabled())
+    expect(fetchOAuthProviders).toHaveBeenCalled()
+    expect(screen.getByTestId('login-google')).toHaveTextContent('Continue with Google')
+    expect(startOAuth).not.toHaveBeenCalled()
+  })
+
+  it('does not advertise Google when the server reports it unavailable', async () => {
+    vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
+      { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
+    ])
+
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await waitFor(() => expect(fetchOAuthProviders).toHaveBeenCalled())
+    expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
+  })
   afterEach(() => { signOut(); vi.clearAllMocks() })
 
   it('offers no portal choice at all', () => {
