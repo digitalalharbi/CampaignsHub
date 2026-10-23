@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -146,11 +147,36 @@ final class LaunchReadinessTest extends TestCase
 
         $out = $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/launch/options")->assertOk()->json('data');
 
-        $this->assertSame('sales_ready', $out['accounts'][0]['readiness']['tier']);
+        $measurement = $this->account('ga4', 'prop_1');
+        $out = $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/launch/options")->assertOk()->json('data');
+        $byId = collect($out['accounts'])->keyBy('id');
+        $this->assertNull($byId[(string) $measurement->id]['readiness'], 'A measurement account launches nothing and is never scored.');
+        $this->assertSame('sales_ready', $byId[(string) $account->id]['readiness']['tier']);
         $this->assertSame(30, $out['readiness']['window_days']);
         $this->assertFalse($out['readiness']['project']['store_linked']);
-        $this->assertFalse($out['readiness']['project']['ga4_linked']);
+        $this->assertTrue($out['readiness']['project']['ga4_linked'], 'The GA4 property bound above is a project signal, not an ad account.');
         $this->assertSame([], $out['readiness']['project']['live_conversion_destinations']);
+    }
+
+    public function test_a_multi_account_project_gets_a_proposal_per_account_each_on_its_own_evidence(): void
+    {
+        $this->configure('meta');
+        $this->configure('snapchat');
+        $ready = $this->account('meta', 'act_1');
+        $partial = $this->account('meta', 'act_2');
+        $none = $this->account('snapchat', 'sc_1');
+        $this->metric($ready, ['purchases' => 80]);
+        $this->metric($partial, ['purchases' => 4, 'add_to_cart' => 120]);
+
+        $out = $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/launch/strategy?goal=sales")->assertOk()->json('data');
+
+        $byId = collect($out['accounts'])->keyBy('account_id');
+        $this->assertSame(['sales', 'OUTCOME_SALES', 'Purchase'], [$byId[(string) $ready->id]['stage'], $byId[(string) $ready->id]['objective'], $byId[(string) $ready->id]['optimization_event']]);
+        $this->assertSame(['bridge', 'OUTCOME_SALES', 'AddToCart'], [$byId[(string) $partial->id]['stage'], $byId[(string) $partial->id]['objective'], $byId[(string) $partial->id]['optimization_event']]);
+        $this->assertSame(['measurement_first', 'TRAFFIC', null], [$byId[(string) $none->id]['stage'], $byId[(string) $none->id]['objective'], $byId[(string) $none->id]['optimization_event']]);
+        $this->assertSame(0, LaunchPlan::query()->count(), 'A proposal saves nothing.');
+
+        $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/launch/strategy?goal=profit")->assertStatus(422);
     }
 
     private function configure(string $platform): void

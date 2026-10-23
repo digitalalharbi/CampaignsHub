@@ -6,9 +6,9 @@ import { useProject } from '@/stores/project'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, useLaunchOptions: vi.fn(), useLaunchPlans: vi.fn(), savePlan: vi.fn(), publishPlan: vi.fn() }
+  return { ...actual, useLaunchOptions: vi.fn(), useLaunchPlans: vi.fn(), useLaunchStrategy: vi.fn(), savePlan: vi.fn(), publishPlan: vi.fn() }
 })
-import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans } from './api'
+import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, useLaunchStrategy } from './api'
 
 const ok = (data: unknown) => ({ data, isPending: false, isLoading: false, isError: false, error: null, refetch: vi.fn() })
 const options = (state: 'available' | 'awaiting_credentials' = 'available') => ({
@@ -34,6 +34,7 @@ describe('the launch page', () => {
     useProject.setState({ currentProjectId: 'p1' } as never)
     vi.mocked(useLaunchOptions).mockReturnValue(ok(options()) as never)
     vi.mocked(useLaunchPlans).mockReturnValue(ok([]) as never)
+    vi.mocked(useLaunchStrategy).mockReturnValue({ data: undefined, isPending: false } as never)
     vi.mocked(savePlan).mockResolvedValue(plan() as never)
   })
   afterEach(() => { signOut(); useProject.setState({ currentProjectId: null } as never) })
@@ -123,5 +124,29 @@ describe('the launch page', () => {
     expect(within(strip).getByTestId('launch-event-page_views')).toHaveTextContent('PageView · Eligible')
     expect(within(strip).getByTestId('launch-event-leads')).toHaveTextContent('Lead · Not reported')
     expect(strip.textContent).not.toMatch(/pixel/i)
+  })
+
+  /** LAUNCH-JOURNEY-001 — a proposal is applied only by pressing it, and it lands in the one plan the wizard saves. */
+  it('proposes an objective per account for the chosen goal and applies it only when asked', async () => {
+    vi.mocked(useLaunchStrategy).mockReturnValue(ok({
+      goal: 'sales',
+      accounts: [{
+        account_id: 'acc1', provider: 'meta', name: 'Razzah Meta', tier: 'none', objective_kind: 'traffic', stage: 'measurement_first',
+        objective: 'OUTCOME_TRAFFIC', objective_refusal: null, optimization_event: null, reasons: ['no_usable_conversion_event'],
+        measurement_plan: [{ event: 'Purchase', status: 'unavailable', action: 'link_the_store_and_send_the_purchase_event' }],
+        advance: { next: 'bridge', needs: [{ event: 'Purchase', observed: 0, needed: 50 }] },
+      }],
+    }) as never)
+    vi.mocked(savePlan).mockResolvedValue(plan() as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-goal-sales'))
+    const proposal = await screen.findByTestId('launch-proposal-measurement_first')
+    expect(proposal).toHaveTextContent('Traffic first')
+    expect(proposal).toHaveTextContent('Link the store and send the Purchase event.')
+
+    fireEvent.click(screen.getByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-apply-acc1'))
+    expect(screen.getByTestId('launch-apply-acc1')).toHaveTextContent('Applied to the plan')
   })
 })
