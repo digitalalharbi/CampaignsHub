@@ -79,6 +79,9 @@ import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { StoreInstallPage } from '@/features/integrations/StoreInstallPage'
 import { DrivePage } from '@/features/drive/DrivePage'
 import { ShortLinksPage } from '@/features/shortLinks/ShortLinksPage'
+import { FormsPage } from '@/features/forms/FormsPage'
+import { FormBuilderPage } from '@/features/forms/FormBuilderPage'
+import { PublicFormPage } from '@/features/forms/PublicFormPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { CreativesPage } from '@/features/content/CreativesPage'
 import { CreativeDetailPage } from '@/features/content/CreativeDetailPage'
@@ -184,6 +187,8 @@ export const router = createBrowserRouter(withErrorBoundary([
    */
   { path: '/data-deletion', element: <DataDeletionPage /> },
 
+  // FORMS-HUB-001 — a published lead form, as a stranger meets it. No sign-in, no workspace chrome.
+  { path: '/f/:slug', element: <PublicFormPage /> },
   { path: '/services', element: <PublicServicesPage /> },
   { path: '/services/:category', element: <PublicServicesPage /> },
   // ADR 0002: the request-tracking portal lives at /portal/*. It still runs its own OTP cookie
@@ -427,6 +432,9 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'reports', element: <ReportsPage /> },
           { path: 'tasks', element: <TasksPage /> },
           { path: 'short-links', element: <ShortLinksPage /> },
+          // FORMS-HUB-001 — the project's lead forms and their builder.
+          { path: 'forms', element: <FormsPage /> },
+          { path: 'forms/:formId', element: <FormBuilderPage /> },
           /*
            * `approvals`, `tracking`, `optimization` and `opportunities` are GONE (REVIEW-001).
            *
@@ -626,6 +634,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'delivery', element: <DeliveryOverviewPage /> },
             { path: 'tasks', element: <TasksPage /> },
           { path: 'short-links', element: <ShortLinksPage /> },
+            { path: 'forms', element: <FormsPage /> },
+            { path: 'forms/:formId', element: <FormBuilderPage /> },
             { path: 'files', element: <FilesLibraryPage /> },
           /*
            * INTEG-RUNTIME §2 — Drive is a FILE source, not one of the eight providers.
