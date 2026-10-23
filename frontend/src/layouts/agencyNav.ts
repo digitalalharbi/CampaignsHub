@@ -1,9 +1,4 @@
-import {
-  Workflow,
-  Bot,
-  Link2,
-  BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Send, Settings, TrendingUp, Users, Lightbulb, Wallet, Rocket, Rows3, RectangleHorizontal, ShieldCheck } from 'lucide-react'
+import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -88,6 +83,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
       { to: '/agency/delivery', ar: 'التسليم', en: 'Delivery', icon: Send, cap: 'reports.view' },
       { to: '/agency/portfolio', ar: 'الملخص', en: 'Portfolio', icon: Layers },
       { to: '/agency/short-links', ar: 'الروابط', en: 'Links', icon: Link2 },
+      { to: '/agency/forms', ar: 'النماذج', en: 'Forms', icon: ClipboardList },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
     ],
   },

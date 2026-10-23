@@ -56,6 +56,8 @@ const AGENCY_BEFORE = [
    * most. Pinned here, like the two below, so the NEXT addition is also a decision.
    */
   '/agency/short-links',
+  // FORMS-HUB-001 — the project's lead forms, beside the links that lead to them.
+  '/agency/forms',
   '/agency/integrations',
   /*
    * ADDED by AGENCY-DECISION-SURFACES-001, deliberately.
