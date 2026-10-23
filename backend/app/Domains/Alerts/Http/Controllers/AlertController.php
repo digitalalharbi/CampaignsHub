@@ -57,6 +57,8 @@ final class AlertController extends Controller
         // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the freshness engine's
         // verdict as an alert, and the measurement property's own sync as another.
         'sync_outage', 'measurement_outage',
+        // TRACKING-HEALTH-001 — the findings of the Tracking Health page, as alerts.
+        'tracking_health',
     ];
 
     /**

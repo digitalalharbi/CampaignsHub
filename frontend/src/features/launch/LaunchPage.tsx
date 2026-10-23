@@ -19,7 +19,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
-import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 
 /**
  * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
@@ -68,10 +68,13 @@ export function LaunchPage() {
   const { currentProjectId } = useProject()
   const options = useLaunchOptions(currentProjectId)
   const plans = useLaunchPlans(currentProjectId)
+  const [goal, setGoal] = useState<BusinessGoal | null>(null)
+  const strategy = useLaunchStrategy(currentProjectId, goal)
   const [step, setStep] = useState(0)
   const [spec, setSpec] = useState<LaunchSpec>(empty)
   const [plan, setPlan] = useState<LaunchPlan | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [spendOk, setSpendOk] = useState(false)
   const [errors, setErrors] = useState<FieldError[]>([])
 
   const title = ar ? 'إطلاق الحملات' : 'Launch'
@@ -94,7 +97,7 @@ export function LaunchPage() {
     },
   })
   const publish = useMutation({
-    mutationFn: () => publishPlan(currentProjectId!, plan!.id),
+    mutationFn: () => publishPlan(currentProjectId!, plan!.id, plan!.spend?.ack_token),
     onSuccess: (p) => { setPlan(p); setConfirming(false); setStep(6); void qc.invalidateQueries({ queryKey: ['launch', 'plans'] }); void qc.invalidateQueries({ queryKey: ['project', currentProjectId, 'campaigns'] }) },
   })
 
@@ -135,6 +138,7 @@ export function LaunchPage() {
                   <Link to={portal(`/projects/${currentProjectId}/integrations`)} className="font-bold text-brand-600 hover:underline">{ar ? 'اختر حسابات المشروع' : 'Choose the project’s accounts'}</Link>
                 </p>
               )}
+              <GoalChooser goal={goal} onChange={(g) => { setGoal(g); setSpec((s) => ({ ...s, business_goal: g })) }} ar={ar} />
               <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0" data-testid="launch-accounts">
                 {accounts.map((a) => (
                   <li key={a.id}>
@@ -151,6 +155,11 @@ export function LaunchPage() {
                           : <Badge tone="warning">{problemText(a.state, ar)}</Badge>}
                       </span>
                     </label>
+                    {a.readiness && <ReadinessStrip readiness={a.readiness} windowDays={options.data?.readiness?.window_days ?? 30} ar={ar} />}
+                    {goal && strategy.data?.accounts.filter((x) => x.account_id === a.id).map((x) => (
+                      <ProposalLine key={x.account_id} proposal={x} ar={ar} applied={spec.objectives?.[a.provider] === x.objective}
+                        onApply={() => x.objective && setSpec((s) => ({ ...s, objectives: { ...(s.objectives ?? {}), [a.provider]: x.objective! } }))} />
+                    ))}
                   </li>
                 ))}
               </ul>
@@ -188,7 +197,9 @@ export function LaunchPage() {
                   )
                 })}
               </div>
-              <p className="text-xs text-text-muted">{ar ? 'تُنشأ الحملة موقوفة بميزانية يومية على مستوى الحملة؛ لا يُنفق شيء قبل تشغيلها.' : 'The campaign is created paused with a campaign-level daily budget; nothing is spent before it runs.'}</p>
+              <BudgetPanel projectId={currentProjectId} spec={spec} accounts={accounts} ar={ar}
+                onChange={(budget) => setSpec((st) => ({ ...st, budget }))}
+                onApply={(amounts) => setSpec((st) => ({ ...st, accounts: st.accounts.map((a) => (amounts[a.external_account_id] !== undefined ? { ...a, daily_budget: amounts[a.external_account_id] } : a)) }))} />
             </div>
           )}
 
@@ -345,11 +356,22 @@ export function LaunchPage() {
       )}
 
       {confirming && plan && (
-        <Modal open onClose={() => setConfirming(false)} title={ar ? 'تأكيد النشر' : 'Confirm publishing'} size="md"
-          footer={<><Button variant="secondary" onClick={() => setConfirming(false)}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={publish.isPending} onClick={() => publish.mutate()} data-testid="launch-confirm">{ar ? 'نعم، انشر' : 'Yes, publish'}</Button></>}>
+        <Modal open onClose={() => { setConfirming(false); setSpendOk(false) }} title={ar ? 'تأكيد النشر' : 'Confirm publishing'} size="md"
+          footer={<><Button variant="secondary" onClick={() => setConfirming(false)}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={publish.isPending} disabled={Boolean(plan.spend?.ack_required) && !spendOk} onClick={() => publish.mutate()} data-testid="launch-confirm">{ar ? 'نعم، انشر' : 'Yes, publish'}</Button></>}>
           <div className="space-y-2 text-sm" data-testid="launch-confirm-dialog">
             <p>{ar ? `سيُنشأ «${plan.name}» عبر واجهات المنصات الرسمية — ${countedAccounts(plan.steps.length, 'ar')}.` : `«${plan.name}» will be created through the platforms’ official APIs — ${countedAccounts(plan.steps.length, 'en')}.`}</p>
             <p className="font-semibold">{spec.launch ? (ar ? 'ستُشغَّل الحملات فور إنشائها وسيبدأ الإنفاق.' : 'The campaigns will run at once and spend will start.') : (ar ? 'تُنشأ موقوفة — لا إنفاق قبل تشغيلها.' : 'Created paused — no spend before they run.')}</p>
+            {plan.spend?.ack_required && (
+              <div className="space-y-1.5 rounded-lg border border-border p-2" data-testid="launch-spend">
+                <p className="font-semibold">{ar ? 'حدود الإنفاق اليومي التي ستُشغَّل' : 'The daily spend that will run'}</p>
+                <ul className="space-y-0.5 text-xs">
+                  {plan.spend.lines.map((l) => (
+                    <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : `${l.daily_budget} ${l.currency}`}</span></li>
+                  ))}
+                </ul>
+                <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5 accent-brand-600" checked={spendOk} onChange={(e) => setSpendOk(e.target.checked)} data-testid="launch-spend-ack" />{ar ? 'أوافق على حدود الإنفاق هذه وأفوّض تشغيل الحملات.' : 'I approve these spend limits and authorise the campaigns to run.'}</label>
+              </div>
+            )}
             {publish.isError && <p className="text-danger">{toApiError(publish.error).message}</p>}
           </div>
         </Modal>
@@ -446,4 +468,196 @@ function Results({ plan, ar, projectId, accounts, onRetry, retrying }: { plan: L
       <p className="text-xs text-text-muted">{ar ? 'المعرّفات والحالات أعلاه هي ما أكّدته المنصات نفسها.' : 'The ids and states above are what the platforms themselves confirmed.'}</p>
     </div>
   )
+}
+
+const EVENT_LABEL: Record<string, { en: string; ar: string }> = {
+  page_views: { en: 'PageView', ar: 'مشاهدة الصفحة' },
+  add_to_cart: { en: 'AddToCart', ar: 'الإضافة للسلة' },
+  leads: { en: 'Lead', ar: 'عميل محتمل' },
+  purchases: { en: 'Purchase', ar: 'الشراء' },
+}
+
+/**
+ * LAUNCH-READINESS-001 — one line per account: which events the platform was seen to report. Never a claim about the pixel
+ * itself (no official API here reads it); «no events» is the honest word for an event with no figure in the window.
+ */
+function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadiness; windowDays: number; ar: boolean }) {
+  const word = (s: EventStatus) =>
+    s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'لا توجد أحداث' : 'No events'
+  return (
+    <div role="group" className="mt-1.5 flex flex-wrap gap-1.5 px-1" data-testid={`launch-readiness-${readiness.tier}`} aria-label={ar ? 'جاهزية التتبع' : 'Tracking readiness'}>
+      {(Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>).map((k) => {
+        const e = readiness.events[k]
+        return (
+          <span key={k} title={ar ? `ما أبلغت به المنصة في نافذة القياس (بالأيام: ${windowDays})` : `What the platform reported in the measurement window (days: ${windowDays})`}>
+            <Badge tone={e.status === 'eligible' ? 'success' : e.status === 'proven' ? 'neutral' : 'warning'}>
+              <span data-testid={`launch-event-${k}`}>{ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en} · {word(e.status)}</span>
+            </Badge>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+const GOALS: Array<{ id: BusinessGoal; en: string; ar: string }> = [
+  { id: 'sales', en: 'Sales', ar: 'مبيعات' },
+  { id: 'leads', en: 'Leads', ar: 'عملاء محتملون' },
+  { id: 'awareness', en: 'Awareness', ar: 'وعي' },
+  { id: 'traffic', en: 'Traffic', ar: 'زيارات' },
+]
+
+/** LAUNCH-JOURNEY-001 — the business goal; the proposals below follow it and change nothing until a person applies one. */
+function GoalChooser({ goal, onChange, ar }: { goal: BusinessGoal | null; onChange: (g: BusinessGoal | null) => void; ar: boolean }) {
+  return (
+    <div className="space-y-1.5" data-testid="launch-goal">
+      <p className="text-xs font-semibold text-text-secondary">{ar ? 'الهدف التجاري (اختياري — يقترح هدف كل حساب حسب ما قيس فعلًا)' : 'Business goal (optional — proposes each account’s objective from what it actually measured)'}</p>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={ar ? 'الهدف التجاري' : 'Business goal'}>
+        {GOALS.map((g) => (
+          <button key={g.id} type="button" aria-pressed={goal === g.id} data-testid={`launch-goal-${g.id}`}
+            onClick={() => onChange(goal === g.id ? null : g.id)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${goal === g.id ? 'border-brand-500 bg-brand-500/10 text-text-primary' : 'border-border text-text-secondary hover:border-brand-400'}`}>
+            {ar ? g.ar : g.en}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const STAGE_TEXT: Record<StrategyAccount['stage'], { en: string; ar: string }> = {
+  sales: { en: 'Sales campaign — Purchase is eligible', ar: 'حملة مبيعات — حدث الشراء مؤهل' },
+  leads: { en: 'Lead campaign — Lead is eligible', ar: 'حملة عملاء محتملين — حدث العميل مؤهل' },
+  awareness: { en: 'Awareness — needs no conversion event', ar: 'وعي — لا يحتاج حدث تحويل' },
+  traffic: { en: 'Traffic — needs no conversion event', ar: 'زيارات — لا تحتاج حدث تحويل' },
+  bridge: { en: 'Bridge — optimise for a lower-funnel event first', ar: 'مرحلة وسيطة — التحسين لحدث أدنى في المسار أولًا' },
+  measurement_first: { en: 'Traffic first — complete the measurement before selling', ar: 'زيارات أولًا — أكمل القياس قبل البيع' },
+}
+
+const ACTION_TEXT: Record<string, { en: string; ar: string }> = {
+  link_the_store_and_send_the_purchase_event: { en: 'Link the store and send the Purchase event.', ar: 'اربط المتجر وأرسل حدث الشراء.' },
+  store_linked_but_platform_reports_no_purchase: { en: 'The store is linked but the platform reports no Purchase — check the event it receives.', ar: 'المتجر مرتبط لكن المنصة لا تبلّغ عن أي شراء — راجع الحدث الذي تستقبله.' },
+  send_the_lead_event_from_the_form: { en: 'Send the Lead event when the form is submitted.', ar: 'أرسل حدث العميل المحتمل عند إرسال النموذج.' },
+  send_the_event: { en: 'Send this event.', ar: 'أرسل هذا الحدث.' },
+}
+
+function ProposalLine({ proposal, ar, applied, onApply }: { proposal: StrategyAccount; ar: boolean; applied: boolean; onApply: () => void }) {
+  const stage = STAGE_TEXT[proposal.stage]
+  return (
+    <div className="mt-1.5 space-y-1 rounded-lg border border-border bg-surface-hover/40 p-2 text-xs" data-testid={`launch-proposal-${proposal.stage}`}>
+      <p className="font-semibold text-text-primary">{ar ? stage.ar : stage.en}</p>
+      {proposal.objective_refusal
+        ? <p className="text-text-muted">{ar ? 'هذه المنصة لا تدعم هذا الهدف عبر واجهتها.' : 'This platform does not offer this objective through its API.'}</p>
+        : (
+          <p className="text-text-secondary">
+            <span dir="ltr" className="font-mono">{proposal.objective}</span>
+            {proposal.optimization_event && <> · {ar ? 'التحسين لحدث' : 'optimise for'} <span dir="ltr" className="font-mono">{proposal.optimization_event}</span></>}
+          </p>
+        )}
+      {proposal.measurement_plan.map((m) => (
+        <p key={m.event} className="text-text-muted">{(ACTION_TEXT[m.action] ?? ACTION_TEXT.send_the_event!)[ar ? 'ar' : 'en']}</p>
+      ))}
+      {proposal.objective && (
+        <button type="button" onClick={onApply} disabled={applied} data-testid={`launch-apply-${proposal.account_id}`}
+          className="rounded-md border border-border px-2 py-1 font-semibold text-text-primary hover:border-brand-400 disabled:opacity-60">
+          {applied ? (ar ? 'مُطبَّق على الخطة' : 'Applied to the plan') : (ar ? 'استخدم هذا الهدف' : 'Use this objective')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const MODE_TEXT: Record<BudgetMode, { en: string; ar: string }> = {
+  manual: { en: 'Manual — I set every budget', ar: 'يدوي — أحدد كل ميزانية بنفسي' },
+  assisted: { en: 'AI-assisted — proposals I approve', ar: 'بمساعدة الذكاء الاصطناعي — اقتراحات أوافق عليها' },
+  automated: { en: 'Authorised automation — needs an authorisation', ar: 'أتمتة مفوَّضة — تحتاج تفويضًا' },
+}
+
+const VIOLATION: Record<string, { en: string; ar: string }> = {
+  missing_rate: { en: 'No published exchange rate for this account’s currency.', ar: 'لا يوجد سعر صرف منشور لعملة هذا الحساب.' },
+  below_min: { en: 'Below this account’s minimum.', ar: 'أقل من الحد الأدنى لهذا الحساب.' },
+  above_max: { en: 'Above this account’s maximum.', ar: 'أعلى من الحد الأقصى لهذا الحساب.' },
+}
+
+/**
+ * LAUNCH-BUDGET-001 — one daily budget split over the chosen accounts, as percentages that total 100 and amounts that total the
+ * budget to the cent, in each account's own currency. The arithmetic is the server's; this shows it and applies it on request.
+ */
+function BudgetPanel({ projectId, spec, accounts, ar, onChange, onApply }: {
+  projectId: string
+  spec: LaunchSpec
+  accounts: Array<{ id: string; name: string | null; currency: string | null }>
+  ar: boolean
+  onChange: (b: NonNullable<LaunchSpec['budget']>) => void
+  onApply: (amounts: Record<string, number>) => void
+}) {
+  const budget = spec.budget ?? {}
+  const [total, setTotal] = useState(budget.total ? String(budget.total) : '')
+  const [currency, setCurrency] = useState(budget.currency ?? accounts.find((a) => a.id === spec.accounts[0]?.external_account_id)?.currency ?? 'SAR')
+  const [shares, setShares] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(budget.shares ?? {}).map(([k, v]) => [k, String(v)])))
+  const [result, setResult] = useState<BudgetAllocation | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const mode: BudgetMode = budget.mode ?? 'manual'
+  const calc = useMutation({
+    mutationFn: () => splitBudget(projectId, {
+      total: Number(total), currency: currency.toUpperCase(),
+      accounts: spec.accounts.map((a) => ({ external_account_id: a.external_account_id, share: shares[a.external_account_id] ? Number(shares[a.external_account_id]) : null })),
+    }),
+    onSuccess: (r) => { setResult(r); setError(null) },
+    onError: (e) => { setResult(null); setError(toApiError(e).message) },
+  })
+  const push = (patch: Partial<NonNullable<LaunchSpec['budget']>>) =>
+    onChange({ ...budget, mode, total: Number(total) || null, currency: currency.toUpperCase(), shares: Object.fromEntries(Object.entries(shares).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])), ...patch })
+  if (spec.accounts.length < 1) return null
+  return (
+    <section className="space-y-3 rounded-xl border border-border p-3" data-testid="launch-budget-panel">
+      <h3 className="text-sm font-bold text-text-primary">{ar ? 'توزيع الميزانية على الحسابات' : 'Split the budget across accounts'}</h3>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Field label={ar ? 'الميزانية اليومية الكلية' : 'Total daily budget'}>
+          <Input type="number" min={0} step="0.01" inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} onBlur={() => push({})} data-testid="launch-budget-total" />
+        </Field>
+        <Field label={ar ? 'العملة' : 'Currency'}>
+          <Input dir="ltr" maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} onBlur={() => push({})} data-testid="launch-budget-currency" />
+        </Field>
+        <Field label={ar ? 'وضع التحكم' : 'Control mode'}>
+          <select className="h-10 w-full rounded-lg border border-border bg-surface px-2 text-sm" value={mode} onChange={(e) => push({ mode: e.target.value as BudgetMode })} data-testid="launch-budget-mode">
+            {(Object.keys(MODE_TEXT) as BudgetMode[]).map((m) => <option key={m} value={m}>{ar ? MODE_TEXT[m].ar : MODE_TEXT[m].en}</option>)}
+          </select>
+        </Field>
+      </div>
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0">
+        {spec.accounts.map((a) => {
+          const acc = accounts.find((x) => x.id === a.external_account_id)
+          const slot = result?.slots.find((x) => x.id === a.external_account_id)
+          const bad = result?.violations.filter((v) => v.id === a.external_account_id) ?? []
+          return (
+            <li key={a.external_account_id} className="space-y-1 rounded-lg border border-border p-2 text-xs">
+              <Field label={`${acc?.name ?? ''} — ${ar ? 'النسبة % (اتركها فارغة للتقسيم المتساوي)' : 'Share % (leave blank to split evenly)'}`}>
+                <Input type="number" min={0} max={100} step="0.01" inputMode="decimal" value={shares[a.external_account_id] ?? ''} onChange={(e) => setShares((s) => ({ ...s, [a.external_account_id]: e.target.value }))} onBlur={() => push({})} data-testid={`launch-share-${a.external_account_id}`} />
+              </Field>
+              {slot && (
+                <p data-testid={`launch-split-${a.external_account_id}`} className="text-text-secondary">
+                  <span dir="ltr" className="font-mono">{slot.share_pct}%</span> · <span dir="ltr" className="font-mono">{slot.amount_in_account_currency ?? '—'} {slot.account_currency}</span>
+                </p>
+              )}
+              {bad.map((v) => <p key={v.kind} className="text-warning">{(VIOLATION[v.kind] ?? VIOLATION.missing_rate!)[ar ? 'ar' : 'en']}</p>)}
+            </li>
+          )
+        })}
+      </ul>
+      {error && <p role="alert" className="text-xs text-danger" data-testid="launch-split-error">{SPLIT_ERROR[error]?.[ar ? 'ar' : 'en'] ?? error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" loading={calc.isPending} disabled={!(Number(total) > 0)} onClick={() => { push({}); calc.mutate() }} data-testid="launch-split-calc">{ar ? 'احسب التوزيع' : 'Calculate the split'}</Button>
+        <Button disabled={!result?.ok} onClick={() => result && onApply(Object.fromEntries(result.slots.filter((x) => x.amount_in_account_currency !== null).map((x) => [x.id, x.amount_in_account_currency as number])))} data-testid="launch-split-apply">{ar ? 'طبّق على الحسابات' : 'Apply to the accounts'}</Button>
+      </div>
+      <p className="text-xs text-text-muted">{ar ? 'تُنشأ الحملة موقوفة بميزانية يومية على مستوى الحملة؛ لا يُنفق شيء قبل تشغيلها.' : 'The campaign is created paused with a campaign-level daily budget; nothing is spent before it runs.'}</p>
+    </section>
+  )
+}
+
+const SPLIT_ERROR: Record<string, { en: string; ar: string }> = {
+  shares_must_sum_to_100: { en: 'The shares must total exactly 100%.', ar: 'يجب أن يكون مجموع النسب 100% بالضبط.' },
+  shares_leave_nothing_for_the_rest: { en: 'The named shares leave nothing for the other accounts.', ar: 'النسب المحددة لا تترك شيئًا للحسابات الأخرى.' },
+  shares_must_not_be_negative: { en: 'A share cannot be negative.', ar: 'لا يمكن أن تكون النسبة سالبة.' },
+  account_not_selected: { en: 'An account is not selected for this project.', ar: 'حساب غير محدد لهذا المشروع.' },
 }

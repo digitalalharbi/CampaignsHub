@@ -10,6 +10,9 @@ use App\Domains\Agents\Services\ProposalService;
 use App\Domains\Agents\Support\ProposalAction;
 use App\Domains\Agents\Support\ProposalRules;
 use App\Domains\Automation\Services\AgentRuleTools;
+use App\Domains\Campaigns\Launch\JourneyPlanner;
+use App\Domains\Campaigns\Launch\LaunchPlan;
+use App\Domains\Campaigns\Launch\LaunchPlanService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -34,6 +37,7 @@ final class AgentToolbox
         private readonly AgentReadTools $read,
         private readonly ProposalService $proposals,
         private readonly AgentRuleTools $rules,
+        private readonly LaunchPlanService $launch,
     ) {}
 
     /**
@@ -63,6 +67,15 @@ final class AgentToolbox
                 'min_spend' => ['type' => 'number'], 'cooldown_hours' => ['type' => 'integer'],
                 'scope' => ['type' => 'object', 'properties' => ['platforms' => ['type' => 'array', 'items' => ['type' => 'string']]]],
             ], ['name', 'conditions', 'action']],
+            // LAUNCH-CHAT-001 — the chat edits the SAME LaunchPlan the launch wizard opens. A draft sends nothing.
+            'launch_strategy' => ['For a business goal (sales, leads, awareness, traffic), the objective each of this project\'s ad accounts has earned from what it was seen to measure: stage, objective, the event to optimise for, what measurement is still missing and what evidence moves it forward. Read-only; it saves and changes nothing.', ['goal' => ['type' => 'string', 'enum' => JourneyPlanner::GOALS]], ['goal']],
+            'draft_launch_plan' => ['Create or update a DRAFT launch plan for a person to review in the launch wizard (the same plan the wizard edits; nothing is lost either way). It is ALWAYS a draft that creates nothing on any platform and never runs campaigns: a person reviews it, approves the daily spend and publishes. Pass plan_id to change an existing draft; fields you omit are kept. Budgets are daily, in each account\'s currency; budget.mode is manual or assisted.', [
+                'plan_id' => ['type' => 'string'], 'name' => ['type' => 'string'], 'business_goal' => ['type' => 'string', 'enum' => JourneyPlanner::GOALS],
+                'objective' => ['type' => 'string'], 'objectives' => ['type' => 'object', 'description' => 'provider => that platform\'s objective token (see launch_strategy)'],
+                'accounts' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['external_account_id' => ['type' => 'string'], 'daily_budget' => ['type' => 'number']], 'required' => ['external_account_id']]],
+                'budget' => ['type' => 'object', 'properties' => ['mode' => ['type' => 'string', 'enum' => ['manual', 'assisted']], 'total' => ['type' => 'number'], 'currency' => ['type' => 'string'], 'shares' => ['type' => 'object']]],
+                'ad_set' => ['type' => 'object'], 'ad' => ['type' => 'object'], 'tracking' => ['type' => 'object', 'properties' => ['url' => ['type' => 'string'], 'utm_source' => ['type' => 'string'], 'utm_medium' => ['type' => 'string'], 'utm_campaign' => ['type' => 'string']]],
+            ], ['name', 'accounts']],
             'ask_agent' => ['Ask a specialist agent (analyst, campaign, creative, reports) a question and get its answer.', [
                 'agent' => ['type' => 'string', 'enum' => ['analyst', 'campaign', 'creative', 'reports']], 'question' => ['type' => 'string'],
             ], ['agent', 'question']],
@@ -111,6 +124,8 @@ final class AgentToolbox
                 'list_automation_rules' => $this->rules->list($project),
                 'explain_rule_run' => $this->rules->explain($project, (string) ($input['rule_id'] ?? '')),
                 'draft_automation_rule' => $this->rules->draft($project, $user, $agentKey, $input),
+                'launch_strategy' => $this->launchStrategy($project, $user, $input),
+                'draft_launch_plan' => $this->draftLaunchPlan($project, $user, $input),
                 'ask_agent' => ['answer' => $askAgent === null ? 'Delegation is not available here.' : $askAgent((string) ($input['agent'] ?? ''), (string) ($input['question'] ?? ''))],
                 default => throw new InvalidArgumentException('Unknown tool.'),
             };
@@ -127,6 +142,67 @@ final class AgentToolbox
         }
 
         return ['content' => (string) json_encode($result, JSON_UNESCAPED_UNICODE), 'ok' => true];
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function launchStrategy(Project $project, ?User $user, array $input): array
+    {
+        if ($user === null || ! $user->hasPermission('campaigns.view')) {
+            throw new InvalidArgumentException('Reading the launch strategy needs the campaigns.view permission.');
+        }
+        $goal = (string) ($input['goal'] ?? '');
+        if (! in_array($goal, JourneyPlanner::GOALS, true)) {
+            throw new InvalidArgumentException('goal must be one of: '.implode(', ', JourneyPlanner::GOALS).'.');
+        }
+
+        return $this->launch->strategy($user, (string) $project->getKey(), $goal);
+    }
+
+    /**
+     * The chat's way into the one LaunchPlan. It can only ever SAVE A DRAFT: `launch` is forced false, automation is refused, and
+     * nothing here reaches a platform — publishing stays a person's act, with the spend approval the wizard asks for.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function draftLaunchPlan(Project $project, ?User $user, array $input): array
+    {
+        if ($user === null || ! $user->hasPermission('campaigns.create')) {
+            throw new InvalidArgumentException('Drafting a launch plan needs the campaigns.create permission.');
+        }
+        $plan = null;
+        if (isset($input['plan_id'])) {
+            $plan = LaunchPlan::query()->where('project_id', $project->getKey())->find((string) $input['plan_id']);
+            if ($plan === null) {
+                throw new InvalidArgumentException('That launch plan does not exist in this project.');
+            }
+        }
+        $data = array_intersect_key($input, array_flip(['name', 'business_goal', 'objective', 'objectives', 'accounts', 'budget', 'ad_set', 'ad', 'tracking']));
+        if (($data['budget']['mode'] ?? null) === 'automated') {
+            throw new InvalidArgumentException('Authorised automation needs an authorisation a person grants; draft it as manual or assisted.');
+        }
+        if ($plan !== null) {
+            $data = array_replace((array) $plan->spec, $data);
+        }
+        $data['launch'] = false;
+        $saved = $this->launch->prepare($user, $project, $data, $plan);
+        $problems = [];
+        foreach ($this->launch->review($user, (string) $project->getKey(), $saved) as $row) {
+            if ($row['problems'] !== []) {
+                $problems[] = ['account_id' => $row['account_id'], 'provider' => $row['provider'], 'problems' => $row['problems']];
+            }
+        }
+
+        return [
+            'plan_id' => (string) $saved->getKey(),
+            'status' => $saved->status,
+            'runs_campaigns' => false,
+            'problems' => $problems,
+            'next' => 'A person opens this plan in the launch wizard, reviews it, approves the daily spend and publishes. Nothing has been created on any platform.',
+        ];
     }
 
     /** @param array<string, mixed> $input */

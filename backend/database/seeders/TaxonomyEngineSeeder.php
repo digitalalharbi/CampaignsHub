@@ -630,6 +630,8 @@ final class TaxonomyEngineSeeder extends Seeder
                     // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the feed's own alerts.
                     ['key' => 'sync_outage', 'label_ar' => 'انقطاع المزامنة', 'label_en' => 'Sync outage', 'color' => '#f97316', 'icon' => 'cloud-off'],
                     ['key' => 'measurement_outage', 'label_ar' => 'انقطاع القياس (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
+                    // TRACKING-HEALTH-001 — a broken form, a failing conversion delivery, a platform that reports more than the Leads Centre holds.
+                    ['key' => 'tracking_health', 'label_ar' => 'سلامة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
                 ],
             ],
             [
