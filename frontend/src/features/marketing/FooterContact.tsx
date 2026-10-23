@@ -30,7 +30,7 @@ const LINK =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500'
 
 /**
- * The one-line legal name shown in every public footer. The wording is the registered name, verbatim,
+ * The one-line legal name shown in the HOMEPAGE footer only (Owner 2026-10-23). The wording is the registered name, verbatim,
  * in both locales — it is a name, not a sentence, so it is not translated. It states nothing about the
  * company's role: it neither owns nor operates the platform (see /business-disclosure).
  */
