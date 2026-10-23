@@ -123,13 +123,26 @@ describe('the launch page', () => {
     vi.mocked(useLaunchOptions).mockReturnValue(ok(withReadiness) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
 
-    // One list item per ACCOUNT: the e2e gate walks `li` and expects every one to be an account row with its provider mark.
-    expect(within(await screen.findByTestId('launch-accounts')).getAllByRole('listitem')).toHaveLength(1)
-    const strip = await screen.findByTestId('launch-readiness-partial')
-    expect(within(strip).getByTestId('launch-event-purchases')).toHaveTextContent('Purchase · Proven')
-    expect(within(strip).getByTestId('launch-event-page_views')).toHaveTextContent('PageView · Eligible')
-    expect(within(strip).getByTestId('launch-event-leads')).toHaveTextContent('Lead · No events')
-    expect(strip.textContent).not.toMatch(/pixel/i)
+    // The account list stays CLEAN: one list item per account and no readiness text in it (the e2e gate walks `li`, and the Owner
+    // found the chips «filler» there). Readiness lives in the Tracking step.
+    const list = await screen.findByTestId('launch-accounts')
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(list).queryByTestId('launch-readiness')).not.toBeInTheDocument()
+    expect(list.textContent).not.toMatch(/Purchase|PageView|No events/)
+
+    fireEvent.click(screen.getByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))   // accounts → objective
+    fireEvent.change(screen.getByTestId('launch-name'), { target: { value: 'Ramadan' } })
+    fireEvent.click(screen.getByRole('combobox', { name: /Objective/ }))
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /OUTCOME_SALES|Sales/ }))
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByTestId('launch-next'))   // → ad group → ad → tracking
+    const table = await screen.findByTestId('launch-readiness')
+    expect(within(table).getByTestId('launch-event-acc1-purchases')).toHaveAttribute('data-status', 'proven')
+    expect(within(table).getByTestId('launch-event-acc1-page_views')).toHaveAttribute('data-status', 'eligible')
+    expect(within(table).getByTestId('launch-event-acc1-leads')).toHaveAttribute('data-status', 'unavailable')
+    expect(within(table).getByTestId('launch-event-acc1-leads')).toHaveAccessibleName('Lead: No events')
+    expect(within(table).getByTestId('launch-readiness-legend')).toHaveTextContent('Eligible')
+    expect(table.textContent).not.toMatch(/pixel/i)
   })
 
   /** LAUNCH-JOURNEY-001 — a proposal is applied only by pressing it, and it lands in the one plan the wizard saves. */
@@ -146,12 +159,15 @@ describe('the launch page', () => {
     vi.mocked(savePlan).mockResolvedValue(plan() as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
 
+    // The goal and its proposals sit with the objective they would set — not on the account list.
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    expect(screen.queryByTestId('launch-goal')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('launch-next'))
     fireEvent.click(await screen.findByTestId('launch-goal-sales'))
     const proposal = await screen.findByTestId('launch-proposal-measurement_first')
     expect(proposal).toHaveTextContent('Traffic first')
     expect(proposal).toHaveTextContent('Link the store and send the Purchase event.')
 
-    fireEvent.click(screen.getByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-apply-acc1'))
     expect(screen.getByTestId('launch-apply-acc1')).toHaveTextContent('Applied to the plan')
   })
