@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
 use App\Domains\Forms\Http\Controllers\LeadFormController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
@@ -178,6 +179,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         Route::patch('forms/{form}', [LeadFormController::class, 'update'])->name('forms.update');
         Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->name('forms.publish');
         Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->name('forms.archive');
+        // FORMS-DISPATCH-001 — where a lead's conversion is reported, and the ledger of every attempt.
+        Route::get('conversion-destinations', [ConversionDestinationController::class, 'index'])->name('conversions.index');
+        Route::post('conversion-destinations', [ConversionDestinationController::class, 'store'])->name('conversions.store');
+        Route::patch('conversion-destinations/{destination}', [ConversionDestinationController::class, 'update'])->name('conversions.update');
+        Route::delete('conversion-destinations/{destination}', [ConversionDestinationController::class, 'destroy'])->name('conversions.destroy');
+        Route::post('conversion-destinations/{destination}/diagnose', [ConversionDestinationController::class, 'diagnose'])->name('conversions.diagnose');
+        Route::get('conversion-deliveries', [ConversionDestinationController::class, 'deliveries'])->name('conversions.deliveries');
+        Route::post('conversion-deliveries/{delivery}/retry', [ConversionDestinationController::class, 'retry'])->name('conversions.retry');
     });
 
     /*
