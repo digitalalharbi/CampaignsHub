@@ -86,6 +86,10 @@ final class ConversionTransport
 
                 return [$payload['url'].'?'.http_build_query($query), []];
 
+            case ConversionKinds::SNAPCHAT:
+                // Snap documents validation as the same call with `/validate` appended to the path.
+                return [($validate ? $payload['url'].'/validate' : $payload['url']).'?'.http_build_query(['access_token' => $secrets['access_token'] ?? '']), []];
+
             default:
                 return [$payload['url'], isset($secrets['api_key']) ? ['X-API-Key' => (string) $secrets['api_key']] : []];
         }

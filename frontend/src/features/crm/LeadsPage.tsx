@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Modal } from '@/components/ui/Modal'
+import { ReferralLinkModal } from '@/features/forms/ReferralLinkModal'
 import { Select } from '@/components/ui/Select'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
@@ -31,6 +32,7 @@ export function LeadsPage() {
   const [source, setSource] = useState('')
   const [uniqueOnly, setUniqueOnly] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [referring, setReferring] = useState<Lead | null>(null)
   const [trail, setTrail] = useState<Lead | null>(null)
   /*
    * LEAD-DEDUP-001 — «not in this view» is an answer, and the honest one.
@@ -220,8 +222,14 @@ export function LeadsPage() {
       key: 'actions',
       header: t('actions'),
       align: 'end',
-      render: (r) =>
-        r.is_converted ? (
+      render: (r) => (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {r.project_id && r.name && (
+            <Button variant="ghost" onClick={() => setReferring(r)} data-testid={`lead-referral-${r.id}`}>
+              {locale === 'ar' ? 'رابط إحالة' : 'Referral link'}
+            </Button>
+          )}
+          {r.is_converted ? (
           <Badge tone="success">{t('converted')}</Badge>
         ) : canConvert ? (
           <Button
@@ -233,7 +241,9 @@ export function LeadsPage() {
           </Button>
         ) : (
           <span className="text-text-muted">—</span>
-        ),
+        )}
+        </div>
+      ),
     },
   ]
 
@@ -366,6 +376,7 @@ export function LeadsPage() {
       )}
 
       <NewLeadModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      {referring?.project_id && <ReferralLinkModal projectId={referring.project_id} leadId={referring.id} onClose={() => setReferring(null)} />}
       <Modal
         open={trail !== null}
         onClose={() => setTrail(null)}

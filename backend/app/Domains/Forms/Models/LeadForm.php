@@ -33,7 +33,9 @@ final class LeadForm extends Model
 
     public const ARCHIVED = 'archived';
 
-    protected $fillable = ['tenant_id', 'project_id', 'name', 'status', 'published_version_id', 'default_owner_id', 'retention_days', 'created_by'];
+    protected $fillable = ['tenant_id', 'project_id', 'name', 'status', 'published_version_id', 'default_owner_id', 'assignment_mode', 'assignment_owner_ids', 'follow_up_minutes', 'retention_days', 'created_by'];
+
+    protected $casts = ['assignment_owner_ids' => 'array'];
 
     protected static function booted(): void
     {

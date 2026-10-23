@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/States'
+import { days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { useTrackingHealth } from './api'
 import type { HealthSeverity } from './types'
@@ -37,7 +38,7 @@ export function HealthPanel({ projectId }: { projectId: string }) {
         </div>
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
           {PERIODS.map((p) => (
-            <button key={p} type="button" aria-pressed={days === p} onClick={() => setDays(p)} className={`rounded-lg border px-2 py-1 text-xs font-semibold ${days === p ? 'border-brand-500 text-brand-600' : 'border-border text-text-secondary'}`} data-testid={`health-period-${p}`}>{ar ? `${p} يومًا` : `${p} days`}</button>
+            <button key={p} type="button" aria-pressed={days === p} onClick={() => setDays(p)} className={`rounded-lg border px-2 py-1 text-xs font-semibold ${days === p ? 'border-brand-500 text-brand-600' : 'border-border text-text-secondary'}`} data-testid={`health-period-${p}`}>{countedDays(p, ar ? 'ar' : 'en')}</button>
           ))}
         </div>
       </div>
@@ -57,10 +58,10 @@ export function HealthPanel({ projectId }: { projectId: string }) {
               <li key={c.key} className="space-y-1 rounded-xl border border-border p-3" data-testid={`health-check-${c.key}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={TONE[c.severity]}>{label[c.severity]}</Badge>
-                  <span className="text-sm font-semibold text-text-primary">{c.title}</span>
+                  <span className="text-sm font-semibold text-text-primary">{ar ? c.title.ar : c.title.en}</span>
                 </div>
-                {c.detail && <p className="text-xs text-text-secondary">{c.detail}</p>}
-                {c.action && <p className="text-xs text-text-primary"><strong>{ar ? 'المطلوب: ' : 'Do this: '}</strong>{c.action}</p>}
+                {c.detail && <p className="text-xs text-text-secondary">{ar ? c.detail.ar : c.detail.en}</p>}
+                {c.action && <p className="text-xs text-text-primary"><strong>{ar ? 'المطلوب: ' : 'Do this: '}</strong>{ar ? c.action.ar : c.action.en}</p>}
               </li>
             ))}
           </ul>
@@ -68,7 +69,7 @@ export function HealthPanel({ projectId }: { projectId: string }) {
           <div data-testid="health-coverage" className="space-y-1">
             <p className="text-sm font-bold text-text-primary">{ar ? 'التغطية' : 'Coverage'}</p>
             <p className="text-xs text-text-secondary">
-              {ar ? `من ${h.coverage.form_leads} عميلًا محتملًا من النماذج: ` : `Of ${h.coverage.form_leads} form leads: `}
+              {ar ? 'من ' : 'Of '}<span data-testid="health-coverage-n">{h.coverage.form_leads}</span>{ar ? ' عميلًا محتملًا من النماذج: ' : ' form leads: '}
               {ar ? 'بوسم حملة ' : 'with a campaign tag '}{pct(h.coverage.with_campaign_tag)} · {ar ? 'بمعرّف نقرة ' : 'with a click id '}{pct(h.coverage.with_click_id)} · {ar ? 'بموافقة قياس ' : 'with measurement consent '}{pct(h.coverage.measurement_consent_granted)}
               {h.coverage.form_leads < h.coverage.minimum_for_a_rate && <em className="not-italic text-text-muted"> {ar ? `(أقل من ${h.coverage.minimum_for_a_rate}: لا نسبة)` : `(fewer than ${h.coverage.minimum_for_a_rate}: no rate)`}</em>}
             </p>
@@ -89,7 +90,7 @@ export function HealthPanel({ projectId }: { projectId: string }) {
             </div>
           )}
 
-          <p className="text-xs text-text-muted" data-testid="health-confidence">{h.confidence_note}</p>
+          <p className="text-xs text-text-muted" data-testid="health-confidence">{ar ? h.confidence_note.ar : h.confidence_note.en}</p>
         </Card>
       )}
     </section>

@@ -32,6 +32,7 @@ final class ConversionPayloads
             ConversionKinds::GA4 => self::ga4($d, $event, $e),
             ConversionKinds::META => self::meta($d, $event, $e),
             ConversionKinds::GTM_SERVER => self::gtm($d, $event, $e),
+            ConversionKinds::SNAPCHAT => self::snapchat($d, $event, $e),
             default => throw new \InvalidArgumentException('No payload builder for '.$d->kind),
         };
     }
@@ -89,6 +90,37 @@ final class ConversionPayloads
                 'event_source_url' => $e['source_url'],
                 'user_data' => $user,
                 'custom_data' => array_filter(['form_name' => $e['form_name'], 'utm_source' => $e['utm']['utm_source'] ?? null, 'utm_campaign' => $e['utm']['utm_campaign'] ?? null]),
+            ], static fn ($v): bool => $v !== null && $v !== [])]],
+        ];
+    }
+
+    /**
+     * Snapchat Conversions API v3. Every field below is one Snap's reference names: `event_name` from its standard list,
+     * `action_source` WEB, `event_time` as an epoch (milliseconds, which Snap encourages), `event_source_url`, `event_id` for
+     * deduplication against the browser pixel, and `user_data` with hashed `em` / `ph` and the visit's `sc_click_id`.
+     * The page names no hash algorithm for `em` / `ph`; its examples are 64-hex values, which is SHA-256, the same as the other platforms here.
+     *
+     * @param  Evidence  $e
+     * @return array{url: string, body: array<string,mixed>}
+     */
+    private static function snapchat(ConversionDestination $d, string $event, array $e): array
+    {
+        $user = array_filter([
+            'em' => $e['email'] === null ? null : [self::hash($e['email'])],
+            'ph' => $e['phone'] === null ? null : [self::hash(self::digits($e['phone']))],
+            'sc_click_id' => $e['click_ids']['sclid'] ?? null,
+        ]);
+
+        return [
+            'url' => 'https://tr.snapchat.com/v3/'.$d->config['pixel_id'].'/events',
+            'body' => ['data' => [array_filter([
+                'event_name' => $event,
+                'action_source' => 'WEB',
+                'event_time' => $e['occurred_at']->getTimestamp() * 1000,
+                'event_id' => $e['event_id'],
+                // Required by Snap; a conversion with no landing path cannot satisfy it, and is then simply refused by the platform's own check.
+                'event_source_url' => $e['source_url'],
+                'user_data' => $user,
             ], static fn ($v): bool => $v !== null && $v !== [])]],
         ];
     }

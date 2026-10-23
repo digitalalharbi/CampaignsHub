@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/States'
+import { days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { useCreateDestination, useDeleteDestination, useDeliveries, useDestinations, useDiagnose, useForms, useRetryDelivery, useUpdateDestination, type Diagnosis } from './api'
 import type { ConversionDestination, ConversionKind } from './types'
@@ -18,10 +19,11 @@ import type { ConversionDestination, ConversionKind } from './types'
 const KIND: Record<ConversionKind, { ar: string; en: string; config: Array<{ key: string; ar: string; en: string; placeholder: string }>; secrets: Array<{ key: string; ar: string; en: string }> }> = {
   ga4: { ar: 'GA4 (Measurement Protocol)', en: 'GA4 (Measurement Protocol)', config: [{ key: 'measurement_id', ar: 'معرّف القياس', en: 'Measurement id', placeholder: 'G-XXXXXXXXXX' }], secrets: [{ key: 'api_secret', ar: 'مفتاح API السري', en: 'API secret' }] },
   meta_capi: { ar: 'Meta (واجهة التحويلات)', en: 'Meta (Conversions API)', config: [{ key: 'pixel_id', ar: 'معرّف البيكسل / مجموعة البيانات', en: 'Pixel / dataset id', placeholder: '123456789012345' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
+  snapchat_capi: { ar: 'Snapchat (واجهة التحويلات)', en: 'Snapchat (Conversions API)', config: [{ key: 'pixel_id', ar: 'معرّف البيكسل', en: 'Pixel id', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
   gtm_server: { ar: 'GTM من جهة الخادم', en: 'Server-side GTM', config: [{ key: 'endpoint_url', ar: 'عنوان الحاوية (https)', en: 'Container address (https)', placeholder: 'https://gtm.example.com/collect' }], secrets: [{ key: 'api_key', ar: 'مفتاح API (اختياري)', en: 'API key (optional)' }] },
   gtm_web: { ar: 'GTM على الصفحة', en: 'Web GTM (on the page)', config: [{ key: 'container_id', ar: 'معرّف الحاوية', en: 'Container id', placeholder: 'GTM-XXXXXX' }], secrets: [] },
 }
-const PLANNED = ['TikTok Events API', 'Snapchat Conversions API', 'Google Ads', 'LinkedIn Conversions API', 'X']
+const PLANNED = ['TikTok Events API', 'Google Ads', 'LinkedIn Conversions API', 'X']
 const STATUS_TONE = { test: 'neutral', live: 'success', off: 'warning' } as const
 const DELIVERY_TONE = { queued: 'info', sent: 'success', failed: 'danger', skipped_consent: 'warning', test: 'neutral' } as const
 const input = 'w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text-primary'
@@ -150,7 +152,7 @@ function DestinationCard({ projectId, destination: d, formName }: { projectId: s
 
       {sendsFromServer && (
         <p className="text-xs text-text-secondary" data-testid={`destination-counts-${d.id}`}>
-          {ar ? 'آخر ٧ أيام' : 'Last 7 days'}: {ar ? 'أُرسل' : 'sent'} {counts.sent ?? 0} · {ar ? 'فشل' : 'failed'} {counts.failed ?? 0} · {ar ? 'بلا موافقة' : 'no consent'} {counts.skipped_consent ?? 0} · {ar ? 'اختبار' : 'test'} {counts.test ?? 0}
+          {ar ? 'آخر ' : 'Last '}{countedDays(7, ar ? 'ar' : 'en')}: {ar ? 'أُرسل' : 'sent'} {counts.sent ?? 0} · {ar ? 'فشل' : 'failed'} {counts.failed ?? 0} · {ar ? 'بلا موافقة' : 'no consent'} {counts.skipped_consent ?? 0} · {ar ? 'اختبار' : 'test'} {counts.test ?? 0}
         </p>
       )}
       {d.last_error?.error && <p className="rounded-lg bg-danger/10 p-2 text-xs text-danger" data-testid={`destination-last-error-${d.id}`}>{d.last_error.error}</p>}
@@ -214,7 +216,7 @@ function Deliveries({ projectId }: { projectId: string }) {
                 <td className="p-2">{r.event_name}</td>
                 <td className="p-2"><Badge tone={DELIVERY_TONE[r.status]}>{{ queued: ar ? 'في الانتظار' : 'Queued', sent: ar ? 'أُرسل' : 'Sent', failed: ar ? 'فشل' : 'Failed', skipped_consent: ar ? 'بلا موافقة' : 'No consent', test: ar ? 'اختبار' : 'Test' }[r.status]}</Badge></td>
                 <td className="p-2 tabular-nums">{r.attempts}</td>
-                <td className="p-2 text-text-secondary">{r.error ?? (r.response_code ? `HTTP ${r.response_code}` : '')}</td>
+                <td className="p-2 text-text-secondary">{r.status === 'skipped_consent' ? (ar ? 'لم يوافق الزائر على الإبلاغ، أو لم يسأله النموذج.' : 'The visitor did not agree to reporting, or the form did not ask.') : (r.error ?? (r.response_code ? `HTTP ${r.response_code}` : ''))}</td>
                 <td className="p-2">{r.status === 'failed' && <Button size="sm" variant="ghost" onClick={() => retry.mutate(r.id)} data-testid={`delivery-retry-${r.id}`}>{ar ? 'إعادة' : 'Retry'}</Button>}</td>
               </tr>
             ))}

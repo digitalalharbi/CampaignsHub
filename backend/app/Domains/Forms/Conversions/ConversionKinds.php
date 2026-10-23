@@ -22,14 +22,17 @@ final class ConversionKinds
 
     public const GTM_SERVER = 'gtm_server';
 
+    /** Snapchat Conversions API v3 — built from Snap's own published reference (endpoint, required fields, `/validate`). */
+    public const SNAPCHAT = 'snapchat_capi';
+
     /** The tag manager container the PUBLIC PAGE loads — no server delivery, only a script on the page once the team made it live. */
     public const GTM_WEB = 'gtm_web';
 
     /** @var list<string> */
-    public const IMPLEMENTED = [self::GA4, self::META, self::GTM_SERVER, self::GTM_WEB];
+    public const IMPLEMENTED = [self::GA4, self::META, self::GTM_SERVER, self::SNAPCHAT, self::GTM_WEB];
 
     /** @var list<string> official conversions interfaces whose builders are not written yet */
-    public const PLANNED = ['tiktok_events', 'snapchat_capi', 'google_ads', 'linkedin_capi', 'x_conversions'];
+    public const PLANNED = ['tiktok_events', 'google_ads', 'linkedin_capi', 'x_conversions'];
 
     /** Whether a kind is a server-side delivery. `gtm_web` is configuration for the page and has nothing to deliver. */
     public static function deliversFromServer(string $kind): bool
@@ -38,13 +41,13 @@ final class ConversionKinds
     }
 
     /** @var array<string,string> kind => the platform's own event name used when none is chosen */
-    private const DEFAULT_EVENT = [self::GA4 => 'generate_lead', self::META => 'Lead', self::GTM_SERVER => 'generate_lead', self::GTM_WEB => ''];
+    private const DEFAULT_EVENT = [self::GA4 => 'generate_lead', self::META => 'Lead', self::GTM_SERVER => 'generate_lead', self::SNAPCHAT => 'SIGN_UP', self::GTM_WEB => ''];
 
     /** @var array<string,list<string>> the secret keys each kind may hold */
-    private const SECRET_KEYS = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => ['api_key'], self::GTM_WEB => []];
+    private const SECRET_KEYS = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => ['api_key'], self::SNAPCHAT => ['access_token'], self::GTM_WEB => []];
 
     /** @var array<string,list<string>> the secret keys a destination needs before it may go live */
-    private const REQUIRED_FOR_LIVE = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => [], self::GTM_WEB => []];
+    private const REQUIRED_FOR_LIVE = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => [], self::SNAPCHAT => ['access_token'], self::GTM_WEB => []];
 
     /**
      * Normalise and validate a destination's non-secret settings.
@@ -89,6 +92,18 @@ final class ConversionKinds
                 }
 
                 return ['endpoint_url' => $url, 'event_name' => $event];
+
+            case self::SNAPCHAT:
+                $pixel = trim((string) ($raw['pixel_id'] ?? ''));
+                if (preg_match('/^[A-Za-z0-9-]{8,64}$/', $pixel) !== 1) {
+                    throw new InvalidArgumentException('A Snapchat destination needs its Pixel id.');
+                }
+                // Snap's own standard list has no LEAD event; SIGN_UP is the closest, with five custom slots for anything else.
+                if (! in_array($event, ['SIGN_UP', 'SUBSCRIBE', 'RESERVE', 'START_TRIAL', 'CUSTOM_EVENT_1', 'CUSTOM_EVENT_2', 'CUSTOM_EVENT_3', 'CUSTOM_EVENT_4', 'CUSTOM_EVENT_5'], true)) {
+                    throw new InvalidArgumentException('Choose one of Snapchat\'s events: SIGN_UP, SUBSCRIBE, RESERVE, START_TRIAL or CUSTOM_EVENT_1…5.');
+                }
+
+                return ['pixel_id' => $pixel, 'event_name' => $event];
 
             case self::GTM_WEB:
                 $container = strtoupper(trim((string) ($raw['container_id'] ?? '')));

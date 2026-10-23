@@ -20,6 +20,9 @@ export interface SaveFormPayload {
   name: string
   definition: FormDefinition
   default_owner_id?: number | null
+  assignment_mode?: 'fixed' | 'round_robin'
+  assignment_owner_ids?: number[]
+  follow_up_minutes?: number | null
   retention_days?: number | null
 }
 

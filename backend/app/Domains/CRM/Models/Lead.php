@@ -45,7 +45,7 @@ final class Lead extends Model
 
         // Operational — these DO change as the team works the lead.
         'qualification', 'assigned_at', 'first_attempt_at', 'first_contact_at', 'qualified_at',
-        'canonical_lead_id', 'duplicate_reason', 'phone_normalized', 'email_normalized',
+        'canonical_lead_id', 'duplicate_reason', 'phone_normalized', 'email_normalized', 'referred_by_lead_id',
     ];
 
     /**
@@ -63,7 +63,7 @@ final class Lead extends Model
         'external_campaign_id', 'campaign_name', 'external_adset_id', 'adset_name',
         'external_ad_id', 'ad_name', 'external_creative_id', 'creative_name', 'form_id', 'form_name',
         'landing_page', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
-        'click_id', 'form_answers',
+        'click_id', 'form_answers', 'referred_by_lead_id',
     ];
 
     protected $casts = [

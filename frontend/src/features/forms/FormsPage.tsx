@@ -39,7 +39,7 @@ export function FormsPage() {
   if (!currentProjectId) {
     return (
       <div className="space-y-6">
-        <PageIntro title={title} purpose={purpose} />
+        <PageIntro title={title} purpose={purpose} testid="forms-intro" />
         <ProjectChooser purpose="analytics" />
       </div>
     )
@@ -53,6 +53,7 @@ export function FormsPage() {
   return (
     <div className="space-y-6" data-testid="forms-page">
       <PageIntro
+        testid="forms-intro"
         title={title}
         purpose={purpose}
         actions={<Button onClick={start} loading={create.isPending} data-testid="forms-new"><Plus size={16} aria-hidden /> {ar ? 'نموذج جديد' : 'New form'}</Button>}

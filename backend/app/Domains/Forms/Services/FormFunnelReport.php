@@ -92,8 +92,11 @@ final class FormFunnelReport
             'clicks' => $since === null ? null : ['clicks' => (int) ($clicks->clicks ?? 0), 'machine' => (int) ($clicks->machine ?? 0), 'device_days' => (int) ($clicks->device_days ?? 0)],
             // How the leads were credited, in words, so the number is never read as more than it is.
             'attribution_rule' => $tagged
-                ? 'Leads in this project that arrived carrying this link\'s utm_campaign'.(isset($utm['utm_source']) ? ', utm_source' : '').(isset($utm['utm_medium']) ? ', utm_medium' : '').'.'
-                : 'This link carries no utm_campaign, so no lead can be credited to it.',
+                ? [
+                    'en' => 'Leads in this project that arrived carrying this link\'s utm_campaign'.(isset($utm['utm_source']) ? ', utm_source' : '').(isset($utm['utm_medium']) ? ', utm_medium' : '').'.',
+                    'ar' => 'العملاء المحتملون في هذا المشروع الذين وصلوا حاملين utm_campaign لهذا الرابط'.(isset($utm['utm_source']) ? ' وutm_source' : '').(isset($utm['utm_medium']) ? ' وutm_medium' : '').'.',
+                ]
+                : ['en' => 'This link carries no utm_campaign, so no lead can be credited to it.', 'ar' => 'هذا الرابط لا يحمل utm_campaign، فلا يمكن نسب أي عميل محتمل إليه.'],
             'credited' => $tagged,
             'click_to_lead_rate' => $tagged && $since !== null && (int) ($clicks->clicks ?? 0) > 0 ? round($report['leads']['people'] / (int) $clicks->clicks, 4) : null,
         ] + $report;
@@ -168,7 +171,7 @@ final class FormFunnelReport
     private function leads(string $tenant, array $leadIds, ?int $submissions): array
     {
         $rows = $leadIds === [] ? collect() : DB::table('leads')->where('tenant_id', $tenant)->whereIn('id', $leadIds)->whereNull('deleted_at')
-            ->get(['id', 'status', 'canonical_lead_id', 'first_contact_at', 'qualified_at', 'estimated_value', 'currency']);
+            ->get(['id', 'status', 'canonical_lead_id', 'referred_by_lead_id', 'first_contact_at', 'qualified_at', 'estimated_value', 'currency']);
 
         $people = $rows->whereNull('canonical_lead_id');
         $won = $rows->where('status', LeadStage::Won->value);
@@ -190,6 +193,9 @@ final class FormFunnelReport
                 'qualified' => $qualified,
                 'appointment' => $appointment,
                 'won' => $won->count(),
+                // Leads a verified referral code brought — and how many of those closed. Deal-stage attribution to the referrer.
+                'referred' => $rows->whereNotNull('referred_by_lead_id')->count(),
+                'referred_won' => $won->whereNotNull('referred_by_lead_id')->count(),
             ],
             'rates' => [
                 'lead_to_contacted' => $rate($contacted, $count),
@@ -199,8 +205,8 @@ final class FormFunnelReport
             ],
             // An ESTIMATE the team typed on the lead, not a booked revenue; per currency, never summed across them.
             'won_estimated_value' => $won->groupBy('currency')->map(fn ($g): float => round((float) $g->sum('estimated_value'), 2))->all(),
-            'cost' => ['cost_per_lead' => null, 'reason' => 'No ad spend is linked to a form or a link, so a cost per lead would be an invented division.'],
-            'stage_note' => 'Contacted and qualified are counted from the stamps the pipeline writes; appointment and won from where the lead stands now.',
+            'cost' => ['cost_per_lead' => null, 'reason' => ['en' => 'No ad spend is linked to a form or a link, so a cost per lead would be an invented division.', 'ar' => 'لا إنفاق إعلاني مربوط بنموذج أو رابط، وأي تكلفة لكل عميل ستكون قسمة مُختلقة.']],
+            'stage_note' => ['en' => 'Contacted and qualified are counted from the stamps the pipeline writes; appointment and won from where the lead stands now.', 'ar' => 'التواصل والتأهيل يُحسبان من الأختام التي يكتبها المسار؛ والموعد والصفقة من موضع العميل المحتمل الآن.'],
         ];
     }
 }

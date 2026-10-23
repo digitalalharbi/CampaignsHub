@@ -54,6 +54,9 @@ export function FormBuilderPage() {
   const [name, setName] = useState('')
   const [definition, setDefinition] = useState<FormDefinition | null>(null)
   const [ownerId, setOwnerId] = useState<number | null>(null)
+  const [mode, setMode] = useState<'fixed' | 'round_robin'>('fixed')
+  const [pool, setPool] = useState<number[]>([])
+  const [followUp, setFollowUp] = useState<number | null>(null)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -61,6 +64,9 @@ export function FormBuilderPage() {
       setName(form.data.name)
       setDefinition(form.data.definition)
       setOwnerId(form.data.default_owner_id)
+      setMode(form.data.assignment_mode ?? 'fixed')
+      setPool(form.data.assignment_owner_ids ?? [])
+      setFollowUp(form.data.follow_up_minutes ?? null)
     }
   }, [form.data, definition])
 
@@ -72,11 +78,11 @@ export function FormBuilderPage() {
   const failure = (e: unknown): string => (isAxiosError(e) && typeof e.response?.data?.message === 'string' ? e.response.data.message : (ar ? 'تعذّر الحفظ.' : 'Could not save.'))
 
   const save = () => update.mutate(
-    { name, definition, default_owner_id: ownerId },
+    { name, definition, default_owner_id: ownerId, assignment_mode: mode, assignment_owner_ids: pool, follow_up_minutes: followUp },
     { onSuccess: () => setMessage({ tone: 'ok', text: ar ? 'حُفظت المسودة.' : 'Draft saved.' }), onError: (e) => setMessage({ tone: 'error', text: failure(e) }) },
   )
   const saveAndPublish = () => update.mutate(
-    { name, definition, default_owner_id: ownerId },
+    { name, definition, default_owner_id: ownerId, assignment_mode: mode, assignment_owner_ids: pool, follow_up_minutes: followUp },
     {
       onSuccess: () => publish.mutate(undefined, {
         onSuccess: () => setMessage({ tone: 'ok', text: ar ? 'نُشر النموذج.' : 'Form published.' }),
@@ -91,6 +97,7 @@ export function FormBuilderPage() {
   return (
     <div className="space-y-6" data-testid="form-builder">
       <PageIntro
+        testid="form-builder-intro"
         title={name || (ar ? 'نموذج' : 'Form')}
         purpose={ar ? 'عدّل الحقول والمنطق والموافقة، وشاهد النموذج كما يراه الزائر قبل النشر.' : 'Edit the fields, logic and consent, and see the form as a visitor does before it goes live.'}
         actions={(
@@ -111,10 +118,29 @@ export function FormBuilderPage() {
             <label className="block text-sm font-semibold text-text-primary" htmlFor="form-name">{ar ? 'اسم النموذج (داخلي)' : 'Form name (internal)'}</label>
             <input id="form-name" className={input} value={name} onChange={(e) => { setName(e.target.value); setMessage(null) }} data-testid="form-name" />
             <label className="block text-sm font-semibold text-text-primary" htmlFor="form-owner">{ar ? 'يُسند العميل المحتمل إلى' : 'Assign new leads to'}</label>
-            <select id="form-owner" className={input} value={ownerId ?? ''} onChange={(e) => { setOwnerId(e.target.value === '' ? null : Number(e.target.value)); setMessage(null) }} data-testid="form-owner">
+            <select id="form-owner" className={input} value={mode === 'round_robin' ? 'round_robin' : (ownerId ?? '')} onChange={(e) => {
+              setMessage(null)
+              if (e.target.value === 'round_robin') { setMode('round_robin'); return }
+              setMode('fixed')
+              setOwnerId(e.target.value === '' ? null : Number(e.target.value))
+            }} data-testid="form-owner">
               <option value="">{ar ? 'بدون إسناد تلقائي' : 'No automatic assignment'}</option>
+              <option value="round_robin">{ar ? 'توزيع بالتناوب على فريق' : 'Round-robin across a team'}</option>
               {(users.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
+            {mode === 'round_robin' && (
+              <fieldset className="space-y-1 rounded-lg border border-border p-2" data-testid="form-pool">
+                <legend className="px-1 text-xs font-semibold text-text-secondary">{ar ? 'الفريق: يذهب كل عميل إلى صاحب أقل عدد من عملاء هذا النموذج' : 'The team: each lead goes to whoever holds the fewest of this form\u2019s leads'}</legend>
+                {(users.data ?? []).map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 text-sm text-text-primary">
+                    <input type="checkbox" checked={pool.includes(u.id)} onChange={(e) => { setPool(e.target.checked ? [...pool, u.id] : pool.filter((x) => x !== u.id)); setMessage(null) }} data-testid={`form-pool-${u.id}`} />
+                    {u.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <label className="block text-sm font-semibold text-text-primary" htmlFor="form-follow-up">{ar ? 'موعد المتابعة بعد وصول العميل (دقائق)' : 'Follow-up due after a lead arrives (minutes)'}</label>
+            <input id="form-follow-up" type="number" min={5} className={input} value={followUp ?? ''} placeholder={ar ? 'بدون' : 'None'} onChange={(e) => { setFollowUp(e.target.value === '' ? null : Number(e.target.value)); setMessage(null) }} data-testid="form-follow-up" />
           </Card>
 
           {definition.steps.map((step, si) => (

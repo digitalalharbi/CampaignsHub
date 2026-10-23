@@ -39,6 +39,9 @@ export interface LeadFormRow {
   slug: string
   public_url: string
   default_owner_id: number | null
+  assignment_mode?: 'fixed' | 'round_robin'
+  assignment_owner_ids?: number[]
+  follow_up_minutes?: number | null
   retention_days: number | null
   published_version_id: string | null
   created_at: string | null
@@ -52,7 +55,7 @@ export interface LeadFormDetail extends LeadFormRow {
 }
 
 /** FORMS-DISPATCH-001 — a place a lead's conversion is reported. Secrets are never in this shape: only which exist. */
-export type ConversionKind = 'ga4' | 'meta_capi' | 'gtm_server' | 'gtm_web'
+export type ConversionKind = 'ga4' | 'meta_capi' | 'snapchat_capi' | 'gtm_server' | 'gtm_web'
 export interface ConversionDestination {
   id: string
   kind: ConversionKind
@@ -79,7 +82,7 @@ export interface ConversionDelivery {
 }
 
 /** FORMS-DASHBOARDS-001 — a form's or a link's funnel. A `null` rate means its input was absent: never read it as zero. */
-export interface FunnelLeads { submissions: number | null; received: number; people: number; contacted: number; qualified: number; appointment: number; won: number }
+export interface FunnelLeads { submissions: number | null; received: number; people: number; contacted: number; qualified: number; appointment: number; won: number; referred?: number; referred_won?: number }
 export interface FunnelRates { lead_to_contacted: number | null; lead_to_qualified: number | null; lead_to_appointment: number | null; lead_to_won: number | null }
 export interface FunnelVisit {
   state: 'measured' | 'tracking_off' | 'no_events_yet'
@@ -97,19 +100,21 @@ export interface Funnel {
   visit?: FunnelVisit
   tracking?: { since: string | null }
   clicks?: { clicks: number; machine: number; device_days: number } | null
-  attribution_rule?: string
+  attribution_rule?: Bi
   credited?: boolean
   click_to_lead_rate?: number | null
   leads: FunnelLeads
   rates: FunnelRates
   won_estimated_value: Record<string, number>
-  cost: { cost_per_lead: number | null; reason: string }
-  stage_note: string
+  cost: { cost_per_lead: number | null; reason: Bi }
+  stage_note: Bi
 }
 
 /** TRACKING-HEALTH-001 */
 export type HealthSeverity = 'critical' | 'warning' | 'info' | 'unavailable' | 'ok'
-export interface HealthCheck { key: string; severity: HealthSeverity; title: string; detail: string | null; numbers: Record<string, number> | null; action: string | null }
+/** A sentence the server wrote in both languages. */
+export interface Bi { en: string; ar: string }
+export interface HealthCheck { key: string; severity: HealthSeverity; title: Bi; detail: Bi | null; numbers: Record<string, number> | null; action: Bi | null }
 export interface TrackingHealth {
   period: { from: string; to: string; timezone: string }
   tracking_enabled: boolean
@@ -118,5 +123,5 @@ export interface TrackingHealth {
   coverage: { form_leads: number; with_campaign_tag: number | null; with_click_id: number | null; measurement_consent_granted: number | null; minimum_for_a_rate: number }
   deliveries: Array<{ destination_id: string; name: string; kind: string; status: string; sent: number; failed: number; queued: number; queued_stuck: number; skipped_consent: number; test: number; eligible_leads: number; attempted: number; gap: number }>
   reconciliation: Array<{ provider: string; platform_reported: number; stored: number; difference: number; stored_to_reported: number | null }>
-  confidence_note: string
+  confidence_note: Bi
 }
