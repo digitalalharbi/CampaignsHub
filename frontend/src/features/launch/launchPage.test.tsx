@@ -68,6 +68,10 @@ describe('the launch page', () => {
     expect(await screen.findByTestId('launch-results')).toHaveTextContent('5001')
     expect(screen.getByTestId('launch-status-published')).toBeInTheDocument()
     expect(screen.getByTestId('launch-open-campaign')).toHaveAttribute('href', '/agency/campaigns/p1/uc1')
+    // Step 10 — the results are one click from the places that read them.
+    for (const [key, href] of [['campaigns', '/agency/campaigns'], ['analytics', '/agency/analytics'], ['leads', '/agency/leads'], ['forms', '/agency/forms'], ['reports', '/agency/reports']] as const) {
+      expect(screen.getByTestId(`launch-follow-${key}`)).toHaveAttribute('href', href)
+    }
   })
 
   it('keeps an account awaiting credentials unselectable and says so, and blocks publishing on review problems', async () => {
