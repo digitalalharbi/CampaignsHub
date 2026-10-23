@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { fetchPublicForm, submitPublicForm } from './api'
-import { FormRenderer } from './FormRenderer'
+import { fetchPublicForm, sendFunnelBeacon, submitPublicForm } from './api'
+import { FormRenderer, type FunnelSignal } from './FormRenderer'
 import { pick } from './formLogic'
 import { useUi } from '@/stores/ui'
 import type { Answers } from './types'
@@ -45,6 +45,18 @@ export function PublicFormPage() {
     return out
   }, [])
 
+  const beacon = (event: Parameters<typeof sendFunnelBeacon>[1]['event'], consent: boolean, step?: number) =>
+    sendFunnelBeacon(slug, { event, event_id: randomId(), session_id: sessionId.current, step, consent: consent ? 'granted' : 'unknown', attribution })
+
+  /* The page was seen — once, when the definition has arrived. Consent is «unknown» until the visitor ticks the box. */
+  const viewed = useRef(false)
+  useEffect(() => {
+    if (form.isSuccess && !viewed.current) { viewed.current = true; beacon('form_view', false) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.isSuccess])
+
+  const signal = (s: FunnelSignal, consent: boolean) => beacon(s.type, consent, 'step' in s ? s.step : undefined)
+
   const thankYou = form.data?.definition.thank_you
   useEffect(() => {
     if (done && thankYou?.redirect_url) window.location.assign(thankYou.redirect_url)
@@ -78,7 +90,7 @@ export function PublicFormPage() {
           <div className="relative">
             {/* A field no person sees and no label asks for; a bot that fills every input fills this one. */}
             <input ref={trap} type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" defaultValue="" data-testid="honeypot" />
-            <FormRenderer definition={form.data.definition} ar={ar} onSubmit={send} submitting={sending} serverError={error} />
+            <FormRenderer definition={form.data.definition} ar={ar} onSubmit={send} onSignal={signal} submitting={sending} serverError={error} />
           </div>
         )}
     </Shell>

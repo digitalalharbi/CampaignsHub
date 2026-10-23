@@ -6,6 +6,7 @@ namespace App\Domains\CRM\Actions;
 
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Forms\Services\FormFunnel;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -91,6 +92,9 @@ final class AdvanceLead
         }
 
         $lead->save();
+
+        // FORMS-FUNNEL-EVENTS-001 — a lead that came through a first-party form writes its own funnel event, once.
+        app(FormFunnel::class)->transition($lead, $to, $at);
 
         return $lead;
     }

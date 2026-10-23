@@ -7,13 +7,16 @@ namespace App\Domains\Forms\Http\Controllers;
 use App\Domains\Accounts\Capabilities\Capabilities;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Models\LeadFormVersion;
+use App\Domains\Forms\Services\FormFunnel;
 use App\Domains\Forms\Services\SubmitLeadForm;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tracking\Models\TrackingEvent;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 /**
  * FORMS-HUB-001 — the form as a stranger meets it: read the published version, send one submission.
@@ -24,7 +27,7 @@ use Illuminate\Http\Request;
  */
 final class PublicLeadFormController extends Controller
 {
-    public function __construct(private readonly SubmitLeadForm $submit, private readonly Capabilities $capabilities) {}
+    public function __construct(private readonly SubmitLeadForm $submit, private readonly Capabilities $capabilities, private readonly FormFunnel $funnel) {}
 
     public function show(string $slug): JsonResponse
     {
@@ -56,6 +59,23 @@ final class PublicLeadFormController extends Controller
             'duplicate' => $result['duplicate'],
             'reference' => substr((string) $result['submission']->id, 0, 8),
         ], 'Received.', status: $result['duplicate'] ? 200 : 201);
+    }
+
+    /**
+     * FORMS-FUNNEL-EVENTS-001 — the browser's account of a visit: viewed, started, finished a step, tried to send.
+     *
+     * Always 204. Whether anything was recorded depends on the workspace's tracking switch and the consent state
+     * the page reported, and a stranger is not told either; a refused event type is the one thing that is
+     * answered, so a broken page is found in testing rather than silently missing from a dashboard.
+     */
+    public function event(Request $request, string $slug): Response
+    {
+        [$form] = $this->live($slug);
+        abort_unless(in_array((string) $request->input('event'), TrackingEvent::BROWSER_FUNNEL, true), 422, 'Unknown event.');
+
+        $this->funnel->fromBrowser($form, $request->only(['event', 'event_id', 'session_id', 'step', 'consent', 'attribution']), $request);
+
+        return response()->noContent();
     }
 
     /** @return array{0: LeadForm, 1: LeadFormVersion} */

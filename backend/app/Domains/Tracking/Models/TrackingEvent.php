@@ -47,9 +47,46 @@ final class TrackingEvent extends Model
 
     public const CONVERSION_EVENT = 'conversion_event';
 
+    /*
+     * FORMS-FUNNEL-EVENTS-001 — the funnel of a first-party form, in the order a person meets it.
+     *
+     * The first five are written from the BROWSER (the visit as it happened, consent-aware); the rest are written
+     * by the Leads Centre when the thing they name happens to the lead — never by the browser, which cannot know.
+     * `referred` is reserved: no referral entity exists yet, and an event nothing writes is not a claim.
+     */
+    public const PAGE_VIEW = 'page_view';
+
+    public const FORM_VIEW = 'form_view';
+
+    public const FORM_START = 'form_start';
+
+    public const STEP_COMPLETED = 'step_completed';
+
+    public const SUBMIT_ATTEMPT = 'submit_attempt';
+
+    public const LEAD_CREATED = 'lead_created';
+
+    public const LEAD_CONTACTED = 'lead_contacted';
+
+    public const LEAD_QUALIFIED = 'lead_qualified';
+
+    public const LEAD_APPOINTMENT = 'lead_appointment';
+
+    public const LEAD_REFERRED = 'lead_referred';
+
+    public const LEAD_WON = 'lead_won';
+
+    /** What the browser may report about a form. Anything else sent to the public endpoint is refused. */
+    public const BROWSER_FUNNEL = [self::PAGE_VIEW, self::FORM_VIEW, self::FORM_START, self::STEP_COMPLETED, self::SUBMIT_ATTEMPT];
+
+    /** What only the server writes, by the lead's own transitions. */
+    public const SERVER_FUNNEL = [self::LEAD_CREATED, self::LEAD_CONTACTED, self::LEAD_QUALIFIED, self::LEAD_APPOINTMENT, self::LEAD_REFERRED, self::LEAD_WON];
+
     public const TYPES = [
         self::SHORT_LINK_OPEN, self::SHORT_LINK_REDIRECT, self::REPORT_VIEW, self::REPORT_DOWNLOAD, self::CAMPAIGN_CLICK,
         self::INFLUENCER_LINK_CLICK, self::BIO_BUTTON_CLICK, self::WHATSAPP_CLICK, self::CONVERSION_EVENT,
+        self::PAGE_VIEW, self::FORM_VIEW, self::FORM_START, self::STEP_COMPLETED, self::SUBMIT_ATTEMPT,
+        self::LEAD_CREATED, self::LEAD_CONTACTED, self::LEAD_QUALIFIED, self::LEAD_APPOINTMENT, self::LEAD_REFERRED, self::LEAD_WON,
     ];
 
     protected $table = 'tracking_events';
@@ -61,6 +98,7 @@ final class TrackingEvent extends Model
         'consent_state', 'visitor_key', 'visitor_hash', 'visitor_confidence',
         'is_bot', 'bot_reason', 'ua_family',
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'dedupe_key',
+        'session_id', 'lead_id', 'step', 'click_id_type',
     ];
 
     protected $casts = ['is_bot' => 'boolean', 'is_demo' => 'boolean', 'occurred_at' => 'datetime', 'recorded_at' => 'datetime'];
