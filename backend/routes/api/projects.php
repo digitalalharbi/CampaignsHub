@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Forms\Http\Controllers\LeadFormController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
@@ -166,6 +167,19 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * figures, the other deliberately does not.
      */
     Route::get('metrics/campaign-options', [MetricsController::class, 'campaignOptions'])->name('metrics.campaign-options');
+    /*
+     * FORMS-HUB-001 — the project's lead forms. `leads.view` reads, `leads.update` changes; both are asked of
+     * the project inside the controller, with the module gate on the route.
+     */
+    Route::middleware('module:forms_hub')->group(function (): void {
+        Route::get('forms', [LeadFormController::class, 'index'])->name('forms.index');
+        Route::post('forms', [LeadFormController::class, 'store'])->name('forms.store');
+        Route::get('forms/{form}', [LeadFormController::class, 'show'])->name('forms.show');
+        Route::patch('forms/{form}', [LeadFormController::class, 'update'])->name('forms.update');
+        Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->name('forms.publish');
+        Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->name('forms.archive');
+    });
+
     /*
      * CAMPAIGN-MGMT-DOMAIN-001 — the write-capability registry, read before any surface draws a
      * control. Project-scoped because the answer is per reader and per provider the project uses.

@@ -213,6 +213,20 @@ class AppServiceProvider extends ServiceProvider
          * `otp-check` already carries an allowance of this shape for the same reason. The production
          * control is untouched.
          */
+        /*
+         * FORMS-HUB-001 — a public lead form, per FORM and address.
+         *
+         * Keyed by the form as well as the address so one noisy page cannot spend another's allowance, and
+         * generous enough for an office behind one address filling the same form (a campaign landing page
+         * is exactly where that happens). Off-production the allowance is large for the same reason
+         * `auth-login`'s is: the acceptance suite submits back to back from one address.
+         */
+        RateLimiter::for('public-form', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production') ? 40 : 600;
+
+            return Limit::perMinute($perMinute)->by((string) $request->ip().'|'.(string) $request->route('slug'));
+        });
+
         RateLimiter::for('auth-login', function (Request $request): Limit {
             $perMinute = $this->app->environment('production')
                 ? (int) config('auth.login_throttle', 6)
