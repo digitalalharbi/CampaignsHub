@@ -11,6 +11,9 @@ export interface SavedViewFilters {
   /** CAMPAIGNS-TABLE-001 — what the campaigns table view keeps; unknown to the dashboard. */
   status?: string
   columns?: string[]
+  /** ADGROUPS-PAGE-001 / ADS-PAGE-001 — the entity pages keep the columns they HIDE and the search text. */
+  hidden?: string[]
+  search?: string
   sort?: string
   dir?: 'asc' | 'desc'
 }
