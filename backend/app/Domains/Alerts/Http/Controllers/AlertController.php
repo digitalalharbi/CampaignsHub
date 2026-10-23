@@ -59,6 +59,8 @@ final class AlertController extends Controller
         'sync_outage', 'measurement_outage',
         // TRACKING-HEALTH-001 — the findings of the Tracking Health page, as alerts.
         'tracking_health',
+        // LAUNCH-ADVANCE-001 — an account that earned a better launch stage since its plan went out.
+        'launch_advance',
     ];
 
     /**

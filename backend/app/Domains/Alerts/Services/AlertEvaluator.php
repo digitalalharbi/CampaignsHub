@@ -6,14 +6,20 @@ namespace App\Domains\Alerts\Services;
 
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
+use App\Domains\Campaigns\Launch\JourneyPlanner;
+use App\Domains\Campaigns\Launch\LaunchPlan;
+use App\Domains\Campaigns\Launch\LaunchReadiness;
+use App\Domains\Campaigns\Management\Write\WriteAdapterRegistry;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Services\TrackingHealth;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
@@ -70,6 +76,8 @@ final class AlertEvaluator
         'sync_outage', 'measurement_outage',
         // TRACKING-HEALTH-001 — what the Tracking Health page calls broken or lossy, raised as alerts so it reaches people who do not open that page.
         'tracking_health',
+        // LAUNCH-ADVANCE-001 — an account that now earns a better launch stage than it had when its plan went out: an opportunity, offered to a person, never applied.
+        'launch_advance',
     ];
 
     /** The default age, in hours, after which a measurement property with no successful sync is an outage. */
@@ -197,6 +205,7 @@ final class AlertEvaluator
             'sync_outage' => $this->syncOutages($rule, $now),
             'measurement_outage' => $this->measurementOutages($rule, $now),
             'tracking_health' => $this->trackingHealth($rule, $now),
+            'launch_advance' => $this->launchAdvance($rule),
             'token_expiry' => $this->tokenExpiries($rule, $now),
             'budget_risk' => $this->budgetRisks($rule, $now),
             'no_results' => $this->noResults($rule, $now),
@@ -1213,6 +1222,66 @@ final class AlertEvaluator
                     'title_ar' => $check['title']['ar'],
                     'message_ar' => trim(($check['detail']['ar'] ?? '').' '.($action === null ? '' : $action['ar'])),
                     'context' => ['check' => $check['key'], 'numbers' => $check['numbers'], 'title_ar' => $check['title']['ar'], 'message_ar' => trim(($check['detail']['ar'] ?? '').' '.($action === null ? '' : $action['ar']))],
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * LAUNCH-ADVANCE-001 — launched plans whose accounts have since earned a better stage.
+     *
+     * The stage recorded at launch (`spec.journey.stages`) is compared with what the same accounts' synced results support NOW, by the
+     * same readiness and planner the launch page uses — no second definition of «ready». Evidence, not elapsed days: an account that has
+     * not moved is silent however old the plan is. This only TELLS a person; it changes no optimisation goal, creates nothing and
+     * pauses nothing.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function launchAdvance(AlertRule $rule): array
+    {
+        $rank = ['measurement_first' => 0, 'bridge' => 1, 'sales' => 2, 'leads' => 2];
+        $plans = LaunchPlan::withoutGlobalScopes()
+            ->where('tenant_id', $rule->tenant_id)
+            ->whereIn('status', [LaunchPlan::PUBLISHED, LaunchPlan::PARTIAL])
+            ->when($rule->project_id, fn (Builder $q): Builder => $q->where('project_id', $rule->project_id))
+            ->get();
+
+        $out = [];
+        foreach ($plans as $plan) {
+            $journey = (array) ($plan->spec['journey'] ?? []);
+            $recorded = (array) ($journey['stages'] ?? []);
+            $goal = (string) ($journey['goal'] ?? '');
+            if ($recorded === [] || ! in_array($goal, JourneyPlanner::GOALS, true)) {
+                continue;
+            }
+            $accounts = ExternalAccount::withoutGlobalScopes()
+                ->where('tenant_id', $plan->tenant_id)
+                ->whereIn('id', array_keys($recorded))
+                ->whereIn('id', BoundAccountVisibility::activeAccountIds((string) $plan->project_id))
+                ->get(['id', 'provider', 'name']);
+            $readiness = app(LaunchReadiness::class)->forAccounts((string) $plan->tenant_id, (string) $plan->project_id, $accounts->map(fn ($a): array => ['id' => (string) $a->id, 'provider' => (string) $a->provider])->all());
+
+            foreach ($accounts as $account) {
+                $supported = app(WriteAdapterRegistry::class)->for((string) $account->provider)?->objectives() ?? [];
+                $now = app(JourneyPlanner::class)->plan($goal, (string) $account->provider, $readiness['accounts'][(string) $account->id] ?? [], $supported, $readiness['project']);
+                $before = (string) ($recorded[(string) $account->id] ?? '');
+                if (($rank[$now['stage']] ?? 0) <= ($rank[$before] ?? 99)) {
+                    continue;
+                }
+                $name = (string) ($account->name ?: $account->provider);
+                $event = $now['optimization_event'];
+                $out[] = [
+                    'entity_type' => 'launch_plan_account',
+                    'entity_id' => (string) $plan->getKey().':'.$account->id.':'.$now['stage'],
+                    'project_id' => (string) $plan->project_id,
+                    'severity' => 'info',
+                    'title' => "{$name} can move to a better launch stage",
+                    'message' => "When «{$plan->name}» went out, {$name} was at «{$before}»; its synced results now support «{$now['stage']}»".($event === null ? '' : " (optimise for {$event})").'. Nothing was changed — open the launch page to decide.',
+                    'title_ar' => "حساب {$name} صار مؤهلًا لمرحلة إطلاق أفضل",
+                    'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.',
+                    'context' => ['plan_id' => (string) $plan->getKey(), 'account_id' => (string) $account->id, 'from' => $before, 'to' => $now['stage'], 'title_ar' => "حساب {$name} صار مؤهلًا لمرحلة إطلاق أفضل", 'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.'],
                 ];
             }
         }

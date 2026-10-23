@@ -136,6 +136,13 @@ final class LaunchPlanService
             throw new InvalidArgumentException('Only a draft can be edited — a published plan is a record of what happened.');
         }
 
+        // A campaign name is unique within a project. Said here, on the field, rather than as a database error mid-publish.
+        $taken = UnifiedCampaign::query()->where('project_id', $project->getKey())->where('name', $spec['name'])
+            ->when($plan?->unified_campaign_id, fn ($q, $id) => $q->whereKeyNot($id))->exists();
+        if ($taken) {
+            throw ValidationException::withMessages(['name' => ['A campaign with this name already exists in this project — choose another name.']]);
+        }
+
         $plan ??= new LaunchPlan;
         $plan->forceFill([
             'tenant_id' => $project->tenant_id,
@@ -280,6 +287,7 @@ final class LaunchPlanService
             throw new InvalidArgumentException('launch_in_progress', 409);
         }
         $plan->refresh();
+        $this->recordJourney($user, $project, $plan);
         $campaign = $this->campaignFor($user, $project, $plan);
 
         $steps = $plan->steps;
@@ -300,6 +308,27 @@ final class LaunchPlanService
         );
 
         return $plan;
+    }
+
+    /**
+     * LAUNCH-ADVANCE-001 — the stage each account was on when the plan went out, kept in the plan.
+     *
+     * A later sweep compares this with what the same accounts have EARNED since and tells a person when a better stage is within
+     * reach. It is a memory, not a switch: nothing reads it to change an optimisation goal, and a plan without a goal records nothing.
+     */
+    private function recordJourney(User $user, Project $project, LaunchPlan $plan): void
+    {
+        $goal = $plan->spec['business_goal'] ?? null;
+        if (! in_array($goal, ['sales', 'leads'], true) || isset($plan->spec['journey'])) {
+            return;
+        }
+        $stages = [];
+        foreach ($this->strategy($user, (string) $project->getKey(), (string) $goal)['accounts'] as $row) {
+            $stages[(string) $row['account_id']] = (string) $row['stage'];
+        }
+        $spec = (array) $plan->spec;
+        $spec['journey'] = ['goal' => $goal, 'recorded_at' => Carbon::now()->toIso8601String(), 'stages' => $stages];
+        $plan->forceFill(['spec' => $spec])->save();
     }
 
     private function campaignFor(User $user, Project $project, LaunchPlan $plan): UnifiedCampaign
