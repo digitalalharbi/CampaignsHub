@@ -162,6 +162,9 @@ export interface ProjectDeletionImpact {
     metric_rows: number
     report_schedules: number
     active_shares: number
+    /** FORMS-PDPL-001 — published lead forms and live conversion destinations the deletion switches off. Absent from an older server. */
+    live_forms?: number
+    live_conversion_destinations?: number
   }
   /** Always false — deleting one consumer of an authorisation must not revoke it for the others. */
   revokes_provider_authorisation: boolean

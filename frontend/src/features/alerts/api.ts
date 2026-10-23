@@ -44,6 +44,8 @@ export const ALERT_TYPES = [
   'metric_anomaly',
   // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001
   'sync_outage', 'measurement_outage',
+  // TRACKING-HEALTH-001 — the findings of the Tracking Health page.
+  'tracking_health',
 ] as const
 
 export type AlertType = (typeof ALERT_TYPES)[number]

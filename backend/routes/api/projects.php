@@ -208,6 +208,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * runs the same per-campaign write services the control tab uses.
      */
     Route::get('launch/options', [LaunchPlanController::class, 'options'])->middleware('project.can:campaigns.view')->name('launch.options');
+    Route::get('launch/strategy', [LaunchPlanController::class, 'strategy'])->middleware('project.can:campaigns.view')->name('launch.strategy');
+    Route::post('launch/budget-split', [LaunchPlanController::class, 'budgetSplit'])->middleware('project.can:campaigns.view')->name('launch.budget-split');
     Route::get('launch/plans', [LaunchPlanController::class, 'index'])->middleware('project.can:campaigns.view')->name('launch.plans.index');
     Route::post('launch/plans', [LaunchPlanController::class, 'store'])->middleware('project.can:campaigns.manage')->name('launch.plans.store');
     Route::get('launch/plans/{plan}', [LaunchPlanController::class, 'show'])->middleware('project.can:campaigns.view')->name('launch.plans.show');

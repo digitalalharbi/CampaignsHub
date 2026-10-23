@@ -21,8 +21,41 @@ export interface LaunchProvider {
   bid_required: boolean
 }
 
+export type EventStatus = 'unavailable' | 'proven' | 'eligible'
+
+/** LAUNCH-READINESS-001 — what an account was seen to measure, from its own synced results. */
+export interface AccountReadiness {
+  provider: string | null
+  tier: 'sales_ready' | 'partial' | 'none'
+  pixel: { status: 'unavailable'; reason: string }
+  events: Record<'page_views' | 'add_to_cart' | 'leads' | 'purchases', { event: string; status: EventStatus; observed: number }>
+}
+
+export type ReadyAccountOption = CreateAccountOption & { readiness?: AccountReadiness | null }
+
+export type BudgetMode = 'manual' | 'assisted' | 'automated'
+
+export type BusinessGoal = 'sales' | 'leads' | 'awareness' | 'traffic'
+
+/** LAUNCH-JOURNEY-001 — the objective one account has earned for a business goal. A proposal; nothing is saved by reading it. */
+export interface StrategyAccount {
+  account_id: string
+  provider: string
+  name: string | null
+  tier: 'sales_ready' | 'partial' | 'none'
+  objective_kind: string
+  stage: 'sales' | 'leads' | 'awareness' | 'traffic' | 'bridge' | 'measurement_first'
+  objective: string | null
+  objective_refusal: string | null
+  optimization_event: string | null
+  reasons: string[]
+  measurement_plan: Array<{ event: string; status: EventStatus; action: string }>
+  advance: { next: string | null; needs: Array<{ event: string; observed: number; needed: number }> }
+}
+
 export interface LaunchOptions {
-  accounts: CreateAccountOption[]
+  accounts: ReadyAccountOption[]
+  readiness: { window_days: number; eligible_events: number; project: { store_linked: boolean; ga4_linked: boolean; live_conversion_destinations: string[] } } | null
   providers: LaunchProvider[]
   creatives: Record<string, CreativeOption[]>
   launch_permitted: boolean
@@ -32,6 +65,8 @@ export interface LaunchSpec {
   name: string
   objective: string
   objectives?: Record<string, string>
+  business_goal?: BusinessGoal | null
+  budget?: { mode?: BudgetMode; total?: number | null; currency?: string | null; shares?: Record<string, number> } | null
   accounts: Array<{ external_account_id: string; daily_budget?: number | null }>
   ad_set: {
     name: string
@@ -86,6 +121,32 @@ export interface LaunchPlan {
   published_at: string | null
   created_at: string | null
   review?: LaunchReviewRow[]
+  spend?: SpendSummary
+}
+
+/** LAUNCH-SPEND-001 — what a launch commits to, and the token a publish must echo to prove it was seen. */
+export interface SpendSummary {
+  launch: boolean
+  ack_required: boolean
+  lines: Array<{ account_id: string; daily_budget: number | null; currency: string }>
+  daily_by_currency: Record<string, number>
+  ad_set_daily_budget: number | null
+  mode: BudgetMode
+  ack_token: string
+}
+
+/** LAUNCH-BUDGET-001 — one daily budget split over accounts; amounts total the budget to the cent. */
+export interface BudgetAllocation {
+  ok: boolean
+  total: number
+  currency: string
+  slots: Array<{ id: string; share_pct: number; amount: number; currency: string; amount_in_account_currency: number | null; account_currency: string }>
+  violations: Array<{ id: string; kind: 'missing_rate' | 'below_min' | 'above_max' }>
+}
+
+export async function splitBudget(projectId: string, body: { total: number; currency: string; accounts: Array<{ external_account_id: string; share?: number | null }> }): Promise<BudgetAllocation> {
+  await ensureCsrfCookie()
+  return postData<BudgetAllocation>(`${base(projectId)}/budget-split`, body)
 }
 
 const base = (projectId: string) => `/projects/${projectId}/launch`
@@ -94,6 +155,13 @@ export const useLaunchOptions = (projectId: string | null) => useQuery({
   queryKey: ['launch', 'options', projectId],
   queryFn: () => getData<LaunchOptions>(`${base(projectId!)}/options`),
   enabled: Boolean(projectId),
+  retry: false,
+})
+
+export const useLaunchStrategy = (projectId: string | null, goal: BusinessGoal | null) => useQuery({
+  queryKey: ['launch', 'strategy', projectId, goal],
+  queryFn: () => getData<{ goal: BusinessGoal; accounts: StrategyAccount[] }>(`${base(projectId!)}/strategy?goal=${goal}`),
+  enabled: Boolean(projectId) && goal !== null,
   retry: false,
 })
 
@@ -110,9 +178,9 @@ export async function savePlan(projectId: string, spec: LaunchSpec, planId?: str
 }
 
 /** 200 published, 207 partial, 422 failed — all three carry the plan, so none of them is thrown away. */
-export async function publishPlan(projectId: string, planId: string): Promise<LaunchPlan> {
+export async function publishPlan(projectId: string, planId: string, spendAck?: string | null): Promise<LaunchPlan> {
   await ensureCsrfCookie()
-  const res = await api.post<{ data?: LaunchPlan; message?: string }>(`${base(projectId)}/plans/${planId}/publish`, { confirm: true }, { validateStatus: (s) => s === 200 || s === 207 || s === 422 })
+  const res = await api.post<{ data?: LaunchPlan; message?: string }>(`${base(projectId)}/plans/${planId}/publish`, { confirm: true, ...(spendAck ? { spend_ack: spendAck } : {}) }, { validateStatus: (s) => s === 200 || s === 207 || s === 422 })
   if (!res.data?.data) throw new Error(res.data?.message ?? 'The plan could not be published.')
   return res.data.data
 }

@@ -101,6 +101,7 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
   measurement_outage: { ar: 'انقطاع القياس (GA4)', en: 'Measurement outage (GA4)' },
+  tracking_health: { ar: 'سلامة التتبع', en: 'Tracking health' },
 }
 
 /** ALERTS-VISUAL-UI-001 — the severity read at a glance: the stripe on the card and the badge beside the title. */
@@ -993,7 +994,8 @@ function parseThreshold(raw: string, type: AlertType): Record<string, number> | 
   if (type === 'lead_unassigned' || type === 'lead_no_contact') return { minutes: n }
   // EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the box is hours: how long without a successful GA4 sync.
   if (type === 'measurement_outage') return { hours: n }
-  if (type === 'lead_follow_up_overdue') return undefined
+  // TRACKING-HEALTH-001 — the page's own findings carry their own severity and numbers; there is nothing for a person to set.
+  if (type === 'lead_follow_up_overdue' || type === 'tracking_health') return undefined
   return { ratio: n }
 }
 const fmt = (iso: string | null): string => fmtDateTime(iso)

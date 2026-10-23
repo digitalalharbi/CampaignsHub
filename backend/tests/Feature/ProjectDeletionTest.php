@@ -7,6 +7,9 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Forms\Models\LeadForm;
+use App\Domains\Forms\Models\LeadFormVersion;
+use App\Domains\Forms\Support\FormDefinition;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -22,6 +25,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -245,6 +249,64 @@ final class ProjectDeletionTest extends TestCase
 
         $this->assertFalse((bool) ReportSchedule::withoutGlobalScopes()->find($schedule->id)->active);
         $this->assertTrue((bool) ReportSchedule::withoutGlobalScopes()->find($neighbours->id)->active);
+    }
+
+    /**
+     * FORMS-PDPL-001 — a published form answers from a slug, not a session. A deleted project whose form still takes leads is the
+     * deletion undone from outside, and a live conversion destination would keep reporting them.
+     */
+    public function test_a_deleted_projects_public_form_stops_and_its_conversions_stop_and_a_neighbours_do_not(): void
+    {
+        $mine = $this->publishedForm($this->doomed);
+        $theirs = $this->publishedForm($this->neighbour);
+        $destId = (string) Str::uuid();
+        $other = (string) Str::uuid();
+        foreach ([[$destId, $this->doomed], [$other, $this->neighbour]] as [$id, $project]) {
+            \DB::table('conversion_destinations')->insert([
+                'id' => $id, 'tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'kind' => 'ga4', 'name' => 'GA4', 'status' => 'live',
+                'config' => json_encode(['measurement_id' => 'G-ABC123XYZ9', 'event_name' => 'generate_lead']), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $this->getJson("/api/v1/public/forms/{$mine}")->assertOk();
+        $impact = $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->doomed->id}/deletion-impact")->assertOk()->json('data.counts');
+        $this->assertSame(1, $impact['live_forms']);
+        $this->assertSame(1, $impact['live_conversion_destinations']);
+
+        $this->delete_it()->assertOk();
+
+        $this->getJson("/api/v1/public/forms/{$mine}")->assertNotFound();
+        $this->postJson("/api/v1/public/forms/{$mine}/submissions", ['submission_id' => 'sub-'.str_repeat('a', 16)])->assertNotFound();
+        $this->assertSame('archived', \DB::table('lead_forms')->where('slug', $mine)->value('status'), 'Kept as the record of what was asked and agreed, not destroyed.');
+        $this->assertSame('off', \DB::table('conversion_destinations')->where('id', $destId)->value('status'));
+
+        $this->getJson("/api/v1/public/forms/{$theirs}")->assertOk();
+        $this->assertSame('live', \DB::table('conversion_destinations')->where('id', $other)->value('status'));
+    }
+
+    /** Defence in depth: even a form left published on a soft-deleted project does not answer. */
+    public function test_a_form_left_published_on_a_deleted_project_still_does_not_answer(): void
+    {
+        $slug = $this->publishedForm($this->doomed);
+        $this->doomed->delete();
+
+        $this->getJson("/api/v1/public/forms/{$slug}")->assertNotFound();
+    }
+
+    private function publishedForm(Project $project): string
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $form = LeadForm::create(['tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'name' => 'F', 'status' => 'published']);
+        $version = LeadFormVersion::create([
+            'tenant_id' => $this->tenant->id, 'lead_form_id' => $form->id, 'version' => 1, 'published_at' => now(), 'checksum' => str_repeat('a', 64),
+            'definition' => FormDefinition::normalise([
+                'steps' => [['id' => 's1', 'fields' => [['id' => 'n', 'type' => 'text', 'label' => 'Name', 'maps_to' => 'name'], ['id' => 'm', 'type' => 'phone', 'label' => 'Mobile', 'maps_to' => 'phone']]]],
+                'consent' => ['required' => true, 'text' => ['en' => 'Contact me.']],
+            ]),
+        ]);
+        $form->forceFill(['published_version_id' => $version->id])->save();
+
+        return (string) $form->slug;
     }
 
     // ── refusals ──────────────────────────────────────────────────────────────────────────────
