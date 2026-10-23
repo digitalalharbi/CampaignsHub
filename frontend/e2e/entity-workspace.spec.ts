@@ -27,9 +27,18 @@ test.describe('the ads and ad-groups tables (agency, seeded data)', () => {
     expect(before).toBeGreaterThan(1)
 
     const manage = page.locator('[data-testid^="entity-manage-"]').first()
-    await manage.click()
     const dialog = page.getByTestId('entity-manage-dialog')
-    await expect(dialog).toBeVisible({ timeout: 20_000 })
+    /*
+     * Click, THEN assert, as one retried unit. The table re-sorts and re-renders while its figures settle, and on Firefox a click that
+     * landed on a button the next render replaced opened nothing — the dialog «was never found» although the control worked: three
+     * CI runs in a row failed here on firefox only and passed on the other two engines, and the failure page showed a fully loaded
+     * table with no dialog. A bounded retry of the user's own action is the documented remedy (`expect(...).toPass`); it asserts the same
+     * property (clicking «إدارة» opens the campaign controls on that row) and never accepts an unopened dialog.
+     */
+    await expect(async () => {
+      await manage.click({ timeout: 5_000 })
+      await expect(dialog).toBeVisible({ timeout: 4_000 })
+    }).toPass({ timeout: 40_000 })
     await expect(dialog.locator('[data-focused="true"]')).toHaveCount(1, { timeout: 20_000 })
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)

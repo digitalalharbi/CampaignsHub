@@ -177,7 +177,13 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await expect(page.getByText(/Move link|نقل الربط/)).toBeVisible()
   await page.getByRole('button', { name: /Confirm move|تأكيد النقل/ }).click()
   await expect(page.getByText(/Move link|نقل الربط/)).toHaveCount(0)
-  await page.getByRole('button', { name: 'Close' }).click()
+  // Closing the link modal and its being GONE are one retried unit: on Firefox the click occasionally landed while the modal was still
+  // settling, left it open, and the next click («Unlink») then spent its whole 90 seconds being intercepted by the overlay — a failure
+  // that named the wrong control. Same property as before (the modal closes, then B lists the campaign); it just stops depending on one click.
+  await expect(async () => {
+    if (await page.getByRole('dialog').count() > 0) await page.getByRole('button', { name: 'Close' }).click({ timeout: 5_000 })
+    await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 3_000 })
+  }).toPass({ timeout: 25_000 })
   // Campaign B now lists it (moved here).
   await expect(page.getByText(targetName).first()).toBeVisible()
 
