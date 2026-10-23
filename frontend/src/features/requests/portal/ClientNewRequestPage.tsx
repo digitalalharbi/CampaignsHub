@@ -7,6 +7,7 @@ import { getRequestMeta } from '../api'
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { fetchPortalOverview, fetchPortalVisibility } from './portalOverviewApi'
+import { listClientReports, listPortalInvoices } from './portalAccountApi'
 import { useClientSpacePath, useClientSpaceSlug } from './clientSpace'
 import { useUi } from '@/stores/ui'
 
@@ -37,6 +38,8 @@ export function ClientNewRequestPage() {
   const [projectId, setProjectId] = useState('')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
   const [message, setMessage] = useState('')
+  const [relatedKind, setRelatedKind] = useState<'' | 'report' | 'invoice'>('')
+  const [relatedId, setRelatedId] = useState('')
 
   const create = useMutation({
     mutationFn: () => createPortalRequest({
@@ -44,6 +47,7 @@ export function ClientNewRequestPage() {
       message: message.trim(),
       priority,
       ...(projectId === '' ? {} : { project_id: projectId }),
+      ...(relatedKind === '' || relatedId === '' ? {} : { related: { kind: relatedKind, id: relatedId } }),
     }),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['client', 'requests'] })
@@ -51,6 +55,13 @@ export function ClientNewRequestPage() {
     },
   })
 
+  // The record the request is about. Campaigns are not offered: an agency may show this client no campaign names, and a picker of
+  // blanks is worse than none. Reports and invoices always have a name a client recognises.
+  const reports = useQuery({ queryKey: ['client', 'reports'], queryFn: listClientReports, retry: false, enabled: relatedKind === 'report' })
+  const invoices = useQuery({ queryKey: ['client', 'invoices'], queryFn: listPortalInvoices, retry: false, enabled: relatedKind === 'invoice' })
+  const relatedOptions: Array<{ id: string; label: string }> = relatedKind === 'report'
+    ? (reports.data ?? []).map((r) => ({ id: r.id, label: r.name }))
+    : relatedKind === 'invoice' ? (invoices.data?.items ?? []).map((i) => ({ id: i.id, label: i.number })) : []
   const projects = overview.data?.projects ?? []
   const ready = type !== '' && message.trim().length >= 5 && !create.isPending
 
@@ -90,6 +101,28 @@ export function ClientNewRequestPage() {
                 <option value="">{ar ? 'بدون تحديد' : 'Not specific'}</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+            </label>
+          )}
+
+          <label className="grid gap-1.5 text-sm font-semibold text-text-primary">
+            {ar ? 'بخصوص (اختياري)' : 'About (optional)'}
+            <select data-testid="new-request-related-kind" value={relatedKind} onChange={(e) => { setRelatedKind(e.target.value as typeof relatedKind); setRelatedId('') }} className={field}>
+              <option value="">{ar ? 'بدون تحديد' : 'Nothing specific'}</option>
+              <option value="report">{ar ? 'تقرير' : 'A report'}</option>
+              <option value="invoice">{ar ? 'فاتورة' : 'An invoice'}</option>
+            </select>
+          </label>
+
+          {relatedKind !== '' && (
+            <label className="grid gap-1.5 text-sm font-semibold text-text-primary">
+              {relatedKind === 'report' ? (ar ? 'اختر التقرير' : 'Choose the report') : (ar ? 'اختر الفاتورة' : 'Choose the invoice')}
+              <select data-testid="new-request-related" value={relatedId} onChange={(e) => setRelatedId(e.target.value)} className={field}>
+                <option value="">{ar ? 'اختر…' : 'Choose…'}</option>
+                {relatedOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+              {relatedOptions.length === 0 && !(reports.isPending && relatedKind === 'report') && !(invoices.isPending && relatedKind === 'invoice') && (
+                <span className="text-xs font-normal text-text-muted" data-testid="new-request-related-empty">{ar ? 'لا توجد سجلات لاختيارها.' : 'There is nothing to choose from.'}</span>
+              )}
             </label>
           )}
 
