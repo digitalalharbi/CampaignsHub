@@ -4,8 +4,8 @@ import { PublicFormPage } from './PublicFormPage'
 import { starterDefinition } from './builderState'
 import { renderWithProviders } from '@/test/utils'
 
-vi.mock('./api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), fetchPublicForm: vi.fn(), submitPublicForm: vi.fn() }))
-import { fetchPublicForm, submitPublicForm } from './api'
+vi.mock('./api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), fetchPublicForm: vi.fn(), submitPublicForm: vi.fn(), sendFunnelBeacon: vi.fn() }))
+import { fetchPublicForm, sendFunnelBeacon, submitPublicForm } from './api'
 
 const fill = async () => {
   fireEvent.change(await screen.findByTestId('field-full_name'), { target: { value: 'Sara' } })
@@ -65,5 +65,23 @@ describe('the public form page', () => {
     vi.mocked(fetchPublicForm).mockRejectedValue(new Error('404'))
     renderWithProviders(<PublicFormPage />, { route: '/f/abcdefgh1234', path: '/f/:slug' })
     expect(await screen.findByTestId('public-form-missing')).toBeInTheDocument()
+  })
+
+  it('reports the visit as it happens: viewed, started, step done, tried to send — one session, consent only once given', async () => {
+    vi.mocked(submitPublicForm).mockResolvedValue({ accepted: true, duplicate: false })
+    window.history.pushState({}, '', '/f/abcdefgh1234?utm_source=meta&gclid=Cj0KCQiA-1')
+    renderWithProviders(<PublicFormPage />, { route: '/f/abcdefgh1234', path: '/f/:slug' })
+    await fill()
+    fireEvent.click(screen.getByTestId('form-next'))
+    await screen.findByTestId('public-form-thanks')
+
+    const beacons = vi.mocked(sendFunnelBeacon).mock.calls.map((c) => c[1])
+    expect(beacons.map((b) => b.event)).toEqual(['form_view', 'form_start', 'step_completed', 'submit_attempt'])
+    expect(new Set(beacons.map((b) => b.session_id)).size).toBe(1)
+    expect(new Set(beacons.map((b) => b.event_id)).size).toBe(4)
+    // The page was viewed and the form started before the box was ticked; the step and the attempt came after.
+    expect(beacons.map((b) => b.consent)).toEqual(['unknown', 'unknown', 'granted', 'granted'])
+    expect(beacons[2].step).toBe(1)
+    expect(beacons[0].attribution).toMatchObject({ utm_source: 'meta', gclid: 'Cj0KCQiA-1' })
   })
 })
