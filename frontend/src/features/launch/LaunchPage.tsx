@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { BarChart3, CheckCircle2, ClipboardList, FileText, Megaphone, Rocket, Users, XCircle } from 'lucide-react'
+import { BarChart3, CheckCircle2, CircleCheck, CircleDot, CircleSlash, ClipboardList, FileText, Megaphone, Rocket, Users, XCircle } from 'lucide-react'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -138,7 +138,6 @@ export function LaunchPage() {
                   <Link to={portal(`/projects/${currentProjectId}/integrations`)} className="font-bold text-brand-600 hover:underline">{ar ? 'اختر حسابات المشروع' : 'Choose the project’s accounts'}</Link>
                 </p>
               )}
-              <GoalChooser goal={goal} onChange={(g) => { setGoal(g); setSpec((s) => ({ ...s, business_goal: g })) }} ar={ar} />
               <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0" data-testid="launch-accounts">
                 {accounts.map((a) => (
                   <li key={a.id}>
@@ -155,11 +154,6 @@ export function LaunchPage() {
                           : <Badge tone="warning">{problemText(a.state, ar)}</Badge>}
                       </span>
                     </label>
-                    {a.readiness && <ReadinessStrip readiness={a.readiness} windowDays={options.data?.readiness?.window_days ?? 30} ar={ar} />}
-                    {goal && strategy.data?.accounts.filter((x) => x.account_id === a.id).map((x) => (
-                      <ProposalLine key={x.account_id} proposal={x} ar={ar} applied={spec.objectives?.[a.provider] === x.objective}
-                        onApply={() => x.objective && setSpec((s) => ({ ...s, objectives: { ...(s.objectives ?? {}), [a.provider]: x.objective! } }))} />
-                    ))}
                   </li>
                 ))}
               </ul>
@@ -171,6 +165,14 @@ export function LaunchPage() {
 
           {step === 1 && (
             <div className="space-y-4">
+              <GoalChooser goal={goal} onChange={(g) => { setGoal(g); setSpec((st) => ({ ...st, business_goal: g })) }} ar={ar} />
+              {goal && (strategy.data?.accounts ?? []).filter((x) => spec.accounts.some((a) => a.external_account_id === x.account_id)).map((x) => (
+                <div key={x.account_id} className="space-y-1">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-text-secondary"><ProviderMark provider={x.provider} size={16} className="shrink-0" />{x.name ?? providerLabel(x.provider, ar ? 'ar' : 'en')}</p>
+                  <ProposalLine proposal={x} ar={ar} applied={spec.objectives?.[x.provider] === x.objective}
+                    onApply={() => x.objective && setSpec((st) => ({ ...st, objectives: { ...(st.objectives ?? {}), [x.provider]: x.objective! } }))} />
+                </div>
+              ))}
               <Field label={ar ? 'اسم الحملة' : 'Campaign name'}>
                 <Input value={spec.name} onChange={(e) => setSpec((s) => ({ ...s, name: e.target.value }))} data-testid="launch-name" />
               </Field>
@@ -297,6 +299,7 @@ export function LaunchPage() {
 
           {step === 4 && (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <ReadinessTable accounts={accounts.filter((a) => chosen(a.id) && a.readiness)} windowDays={options.data?.readiness?.window_days ?? 30} ar={ar} />
               <div className="md:col-span-2"><Field label={ar ? 'رابط الوجهة (https)' : 'Destination URL (https)'}>
                 <Input value={spec.tracking?.url ?? ''} onChange={(e) => setSpec((s) => ({ ...s, tracking: { ...(s.tracking ?? {}), url: e.target.value } }))} data-testid="launch-url" />
               </Field></div>
@@ -512,24 +515,50 @@ const EVENT_LABEL: Record<string, { en: string; ar: string }> = {
 }
 
 /**
- * LAUNCH-READINESS-001 — one line per account: which events the platform was seen to report. Never a claim about the pixel
- * itself (no official API here reads it); «no events» is the honest word for an event with no figure in the window.
+ * LAUNCH-READINESS-001 — which events each chosen account was seen to report, in the Tracking step where tracking is decided.
+ *
+ * One row per account, one small monochrome mark per event; the words live in the legend, the tooltip and the accessible name, so the
+ * account list stays clean. Never a claim about the pixel itself (no official API here reads it): the empty mark means the platform
+ * reported nothing for that event in the window.
  */
-function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadiness; windowDays: number; ar: boolean }) {
-  const word = (s: EventStatus) =>
-    s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'لا توجد أحداث' : 'No events'
+function ReadinessTable({ accounts, windowDays, ar }: { accounts: Array<{ id: string; name: string | null; provider: string; readiness?: AccountReadiness | null }>; windowDays: number; ar: boolean }) {
+  if (accounts.length === 0) return null
+  const word = (s: EventStatus) => (s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'لا توجد أحداث' : 'No events')
+  const mark = (s: EventStatus) => (s === 'eligible' ? <CircleCheck size={16} className="text-success" aria-hidden /> : s === 'proven' ? <CircleDot size={16} className="text-text-secondary" aria-hidden /> : <CircleSlash size={16} className="text-text-muted" aria-hidden />)
+  const keys = Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>
   return (
-    <div role="group" className="mt-1.5 flex flex-wrap gap-1.5 px-1" data-testid={`launch-readiness-${readiness.tier}`} aria-label={ar ? 'جاهزية التتبع' : 'Tracking readiness'}>
-      {(Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>).map((k) => {
-        const e = readiness.events[k]
-        return (
-          <span key={k} title={ar ? `ما أبلغت به المنصة في نافذة القياس (بالأيام: ${windowDays})` : `What the platform reported in the measurement window (days: ${windowDays})`}>
-            <Badge tone={e.status === 'eligible' ? 'success' : e.status === 'proven' ? 'neutral' : 'warning'}>
-              <span data-testid={`launch-event-${k}`}>{ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en} · {word(e.status)}</span>
-            </Badge>
-          </span>
-        )
-      })}
+    <div className="space-y-2 md:col-span-2" data-testid="launch-readiness">
+      <p className="text-xs font-semibold text-text-secondary">{ar ? 'ما أبلغت به المنصات من أحداث' : 'Events the platforms reported'}</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-text-muted">
+              <th className="py-1 text-start font-medium" />
+              {keys.map((k) => <th key={k} scope="col" className="px-2 py-1 text-center font-medium">{ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map((a) => (
+              <tr key={a.id} className="border-t border-border" data-testid={`launch-readiness-${a.readiness!.tier}`}>
+                <th scope="row" className="py-1.5 text-start font-medium text-text-primary">{a.name ?? providerLabel(a.provider, ar ? 'ar' : 'en')}</th>
+                {keys.map((k) => {
+                  const e = a.readiness!.events[k]
+                  return (
+                    <td key={k} className="px-2 py-1.5 text-center" title={`${word(e.status)} — ${ar ? `نافذة القياس بالأيام: ${windowDays}` : `measurement window, days: ${windowDays}`}`}>
+                      <span data-testid={`launch-event-${a.id}-${k}`} data-status={e.status} className="inline-flex" role="img" aria-label={`${ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en}: ${word(e.status)}`}>{mark(e.status)}</span>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted" data-testid="launch-readiness-legend">
+        <span className="inline-flex items-center gap-1"><CircleCheck size={13} aria-hidden /> {word('eligible')}</span>
+        <span className="inline-flex items-center gap-1"><CircleDot size={13} aria-hidden /> {word('proven')}</span>
+        <span className="inline-flex items-center gap-1"><CircleSlash size={13} aria-hidden /> {word('unavailable')}</span>
+      </p>
     </div>
   )
 }
