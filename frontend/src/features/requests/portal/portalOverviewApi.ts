@@ -7,6 +7,12 @@ export interface PortalOverview {
   currency: string | null
   freshness: { state: string | null; last_sync_at: string | null }
   kpis: Record<string, number | null>
+  /**
+   * CP-PARITY-001 — each KPI's movement against the window before it, as the server computed it (0.12 = +12%).
+   * Absent when the server could not compare (a mixed-currency space, or no previous window); a key absent here
+   * is a card with no pill — never a pill drawn from figures the page would have to invent.
+   */
+  movement?: Record<string, number | null>
   platforms: Array<{ provider: string | null; impressions: number | null; clicks: number | null; conversions: number | null; spend?: number | null }>
   projects: Array<{ id: string; name: string; status: string | null; spend?: number }>
   campaigns: { total: number; by_status: Record<string, number> } | null
