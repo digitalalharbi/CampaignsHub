@@ -21,8 +21,9 @@ use Illuminate\Support\Facades\DB;
  * or reported as nothing, was not. «The pixel exists» cannot be read from any official API this product uses, so it is
  * never claimed — `pixel` says `unavailable` and names why, while the four events say what they were seen to do.
  *
- * Per event, three states:
- *   - `unavailable` — never reported in the window (no figure, or only zeros). Nothing is assumed about why.
+ * Per event, four states (absence is never read as «the event does not exist»):
+ *   - `no_data`      — the account has no synced results in the window at all: nothing is known about ANY event.
+ *   - `not_reported` — it has results, and none carries this event above zero: not seen, which is not the same as not there.
  *   - `proven`      — reported above zero, but under the volume an optimiser needs to learn from.
  *   - `eligible`    — proven AND at or above that volume (config `launch.readiness.eligible_events`, per window).
  *
@@ -33,7 +34,14 @@ final class LaunchReadiness
 {
     public const EVENTS = ['page_views' => 'PageView', 'add_to_cart' => 'AddToCart', 'leads' => 'Lead', 'purchases' => 'Purchase'];
 
+    /** Only the pixel still says this: it cannot be read from any API used here, whatever the data. */
     public const UNAVAILABLE = 'unavailable';
+
+    /** The account synced results in the window, and none of them carries this event above zero. NOT «the event does not exist». */
+    public const NOT_REPORTED = 'not_reported';
+
+    /** The account has no synced results in the window at all: nothing can be said about any event. */
+    public const NO_DATA = 'no_data';
 
     public const PROVEN = 'proven';
 
@@ -73,13 +81,15 @@ final class LaunchReadiness
                 $count = $row === null || $row->{$column} === null ? 0 : (int) round((float) $row->{$column});
                 $events[$column] = [
                     'event' => $label,
-                    'status' => $count <= 0 ? self::UNAVAILABLE : ($count >= $threshold ? self::ELIGIBLE : self::PROVEN),
+                    // Absence is not evidence of absence: with no synced rows nothing is known; with rows, the event was merely not seen.
+                    'status' => $count > 0 ? ($count >= $threshold ? self::ELIGIBLE : self::PROVEN) : ($row === null ? self::NO_DATA : self::NOT_REPORTED),
                     'observed' => $count,
                 ];
             }
 
             $out[(string) $account['id']] = [
                 'provider' => $account['provider'] ?? null,
+                'data' => $row === null ? 'none' : 'synced',
                 'events' => $events,
                 'pixel' => ['status' => self::UNAVAILABLE, 'reason' => 'not_readable_from_platform_api'],
                 'tier' => self::tier($events),
@@ -97,7 +107,7 @@ final class LaunchReadiness
     /** @param array<string,array{status:string}> $events */
     public static function tier(array $events): string
     {
-        $purchase = $events['purchases']['status'] ?? self::UNAVAILABLE;
+        $purchase = $events['purchases']['status'] ?? self::NO_DATA;
         if ($purchase === self::ELIGIBLE) {
             return 'sales_ready';
         }
