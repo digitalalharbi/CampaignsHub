@@ -15,6 +15,7 @@ import { useForm, useFormAction, useUpdateForm } from './api'
 import {
   FIELD_TYPES, addField, addStep, earlierFields, mapFor, moveField, optionsToText, removeField, removeStep, retype, setLoc, textToOptions, updateField,
 } from './builderState'
+import { FormFunnelPanel } from './FunnelPanel'
 import { FormRenderer } from './FormRenderer'
 import { pick } from './formLogic'
 import type { ConditionOp, FormDefinition, FormField } from './types'
@@ -101,6 +102,8 @@ export function FormBuilderPage() {
           </div>
         )}
       />
+
+      {detail.status !== 'draft' && currentProjectId && <FormFunnelPanel projectId={currentProjectId} formId={detail.id} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-4">

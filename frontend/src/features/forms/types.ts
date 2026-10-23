@@ -77,3 +77,46 @@ export interface ConversionDelivery {
   error: string | null
   created_at: string | null
 }
+
+/** FORMS-DASHBOARDS-001 — a form's or a link's funnel. A `null` rate means its input was absent: never read it as zero. */
+export interface FunnelLeads { submissions: number | null; received: number; people: number; contacted: number; qualified: number; appointment: number; won: number }
+export interface FunnelRates { lead_to_contacted: number | null; lead_to_qualified: number | null; lead_to_appointment: number | null; lead_to_won: number | null }
+export interface FunnelVisit {
+  state: 'measured' | 'tracking_off' | 'no_events_yet'
+  since: string | null
+  unit?: 'session'
+  views?: number
+  starts?: number
+  attempts?: number
+  steps?: Array<{ step: number; reached: number; completed: number; left: number }>
+  rates?: { view_to_start: number | null; start_to_attempt: number | null }
+}
+export interface Funnel {
+  scope: { type: 'form' | 'link'; id: string; name: string }
+  period: { from: string; to: string; timezone: string }
+  visit?: FunnelVisit
+  tracking?: { since: string | null }
+  clicks?: { clicks: number; machine: number; device_days: number } | null
+  attribution_rule?: string
+  credited?: boolean
+  click_to_lead_rate?: number | null
+  leads: FunnelLeads
+  rates: FunnelRates
+  won_estimated_value: Record<string, number>
+  cost: { cost_per_lead: number | null; reason: string }
+  stage_note: string
+}
+
+/** TRACKING-HEALTH-001 */
+export type HealthSeverity = 'critical' | 'warning' | 'info' | 'unavailable' | 'ok'
+export interface HealthCheck { key: string; severity: HealthSeverity; title: string; detail: string | null; numbers: Record<string, number> | null; action: string | null }
+export interface TrackingHealth {
+  period: { from: string; to: string; timezone: string }
+  tracking_enabled: boolean
+  summary: { critical: number; warning: number }
+  checks: HealthCheck[]
+  coverage: { form_leads: number; with_campaign_tag: number | null; with_click_id: number | null; measurement_consent_granted: number | null; minimum_for_a_rate: number }
+  deliveries: Array<{ destination_id: string; name: string; kind: string; status: string; sent: number; failed: number; queued: number; queued_stuck: number; skipped_consent: number; test: number; eligible_leads: number; attempted: number; gap: number }>
+  reconciliation: Array<{ provider: string; platform_reported: number; stored: number; difference: number; stored_to_reported: number | null }>
+  confidence_note: string
+}

@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
+use App\Domains\Forms\Http\Controllers\FormFunnelController;
 use App\Domains\Forms\Http\Controllers\LeadFormController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
@@ -179,6 +180,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         Route::patch('forms/{form}', [LeadFormController::class, 'update'])->middleware('project.can:leads.update')->name('forms.update');
         Route::post('forms/{form}/publish', [LeadFormController::class, 'publish'])->middleware('project.can:leads.update')->name('forms.publish');
         Route::post('forms/{form}/archive', [LeadFormController::class, 'archive'])->middleware('project.can:leads.update')->name('forms.archive');
+        // FORMS-DASHBOARDS-001 — the funnel of one form, and of one link, for this project.
+        Route::get('forms/{form}/funnel', [FormFunnelController::class, 'form'])->middleware('project.can:leads.view')->name('forms.funnel');
+        Route::get('tracking-health', [FormFunnelController::class, 'health'])->middleware('project.can:leads.view')->name('tracking-health');
+        Route::get('links/{link}/funnel', [FormFunnelController::class, 'link'])->middleware('project.can:leads.view')->name('links.funnel');
         // FORMS-DISPATCH-001 — where a lead's conversion is reported, and the ledger of every attempt.
         Route::get('conversion-destinations', [ConversionDestinationController::class, 'index'])->middleware('project.can:leads.view')->name('conversions.index');
         Route::post('conversion-destinations', [ConversionDestinationController::class, 'store'])->middleware('project.can:leads.update')->name('conversions.store');

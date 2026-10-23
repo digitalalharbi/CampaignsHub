@@ -1,6 +1,6 @@
 import { deleteData, getData, getEnvelope, patchData, postData } from '@/lib/api/client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Answers, ConversionDelivery, ConversionDestination, ConversionKind, FormDefinition, LeadFormDetail, LeadFormRow } from './types'
+import type { Answers, Funnel, TrackingHealth, ConversionDelivery, ConversionDestination, ConversionKind, FormDefinition, LeadFormDetail, LeadFormRow } from './types'
 
 /** FORMS-HUB-001 — the team's side, project-scoped. */
 const base = (projectId: string) => `/projects/${projectId}/forms`
@@ -128,4 +128,26 @@ export function useDiagnose(projectId: string | null) {
 export function useRetryDelivery(projectId: string | null) {
   const qc = useQueryClient()
   return useMutation({ mutationFn: (id: string) => postData(`/projects/${projectId}/conversion-deliveries/${id}/retry`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: deliveriesKey(projectId) }) })
+}
+
+/** FORMS-DASHBOARDS-001 — the funnel of one form or one link over the last `days`. */
+export function useFormFunnel(projectId: string | null, formId: string | undefined, days: number) {
+  return useQuery({ queryKey: ['form-funnel', projectId, formId, days], queryFn: () => getData<Funnel>(`/projects/${projectId}/forms/${formId}/funnel${range(days)}`), enabled: Boolean(projectId && formId) })
+}
+
+export function useLinkFunnel(projectId: string | null, linkId: string | undefined, days: number) {
+  return useQuery({ queryKey: ['link-funnel', projectId, linkId, days], queryFn: () => getData<Funnel>(`/projects/${projectId}/links/${linkId}/funnel${range(days)}`), enabled: Boolean(projectId && linkId) })
+}
+
+function range(days: number): string {
+  const to = new Date()
+  const from = new Date(to.getTime() - (days - 1) * 86_400_000)
+  const d = (x: Date) => x.toISOString().slice(0, 10)
+
+  return `?from=${d(from)}&to=${d(to)}`
+}
+
+/** TRACKING-HEALTH-001 */
+export function useTrackingHealth(projectId: string | null, days: number) {
+  return useQuery({ queryKey: ['tracking-health', projectId, days], queryFn: () => getData<TrackingHealth>(`/projects/${projectId}/tracking-health${range(days)}`), enabled: Boolean(projectId) })
 }
