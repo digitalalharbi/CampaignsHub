@@ -11,9 +11,16 @@ vi.mock('./portalOverviewApi', async (orig) => ({
   fetchPortalOverview: vi.fn(),
 }))
 
+vi.mock('./portalAccountApi', async (orig) => ({
+  ...(await orig<typeof import('./portalAccountApi')>()),
+  listClientReports: vi.fn(),
+  listPortalInvoices: vi.fn(),
+}))
+
 import { createPortalRequest } from '../clientPortalApi'
 import { getRequestMeta } from '../api'
 import { fetchPortalOverview, fetchPortalVisibility } from './portalOverviewApi'
+import { listClientReports, listPortalInvoices } from './portalAccountApi'
 
 const space = (create_requests: boolean) => [{ slug: 'razzah', mode: 'managed', visibility: {}, capabilities: { create_requests } }]
 
@@ -45,6 +52,30 @@ describe('ClientNewRequestPage', () => {
     await waitFor(() => expect(createPortalRequest).toHaveBeenCalledTimes(1))
     expect(vi.mocked(createPortalRequest).mock.calls[0][0]).toEqual({
       type: 'consulting', message: 'Please review the June plan.', priority: 'medium', project_id: 'p1',
+    })
+  })
+
+  it('attaches the report or invoice the request is about, and offers no campaign picker', async () => {
+    vi.mocked(fetchPortalVisibility).mockResolvedValue(space(true))
+    vi.mocked(listClientReports).mockResolvedValue([{ id: 'r1', name: 'June performance' }] as never)
+    vi.mocked(listPortalInvoices).mockResolvedValue({ items: [{ id: 'i1', number: 'INV-2026-014' }] } as never)
+    vi.mocked(createPortalRequest).mockResolvedValue({ reference: 'REQ-2026-DEF456', status: 'new', submitted_at: null })
+    renderWithProviders(<ClientNewRequestPage />, { locale: 'en', route: '/portal/razzah/requests/new' })
+
+    await screen.findByRole('option', { name: 'Consulting' })
+    fireEvent.change(screen.getByTestId('new-request-type'), { target: { value: 'consulting' } })
+    fireEvent.change(screen.getByTestId('new-request-message'), { target: { value: 'The June report looks off.' } })
+    const kind = screen.getByTestId('new-request-related-kind')
+    expect(Array.from((kind as HTMLSelectElement).options).map((o) => o.value)).toEqual(['', 'report', 'invoice'])
+    fireEvent.change(kind, { target: { value: 'report' } })
+    await screen.findByRole('option', { name: 'June performance' })
+    fireEvent.change(screen.getByTestId('new-request-related'), { target: { value: 'r1' } })
+    await waitFor(() => expect(screen.getByTestId('new-request-submit')).toBeEnabled())
+    fireEvent.click(screen.getByTestId('new-request-submit'))
+
+    await waitFor(() => expect(createPortalRequest).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createPortalRequest).mock.calls[0][0]).toEqual({
+      type: 'consulting', message: 'The June report looks off.', priority: 'medium', related: { kind: 'report', id: 'r1' },
     })
   })
 
