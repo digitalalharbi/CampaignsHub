@@ -40,6 +40,7 @@ final class LaunchPlanService
         private readonly AuditLogger $audit,
         private readonly LaunchReadiness $readiness,
         private readonly JourneyPlanner $journey,
+        private readonly BudgetSplit $split,
     ) {}
 
     /** What the builder may offer: the project's accounts with their write state, and each platform's vocabulary. */
@@ -103,6 +104,27 @@ final class LaunchPlanService
         }
 
         return ['goal' => $goal, 'accounts' => $rows, 'readiness' => $options['readiness']];
+    }
+
+    /**
+     * LAUNCH-BUDGET-001 — one daily budget split over the chosen accounts. Computes only: nothing is saved or sent.
+     *
+     * @param  list<array{external_account_id:string, share?:float|int|string|null}>  $rows
+     * @return array<string,mixed>
+     */
+    public function budgetSplit(User $user, string $projectId, float $total, string $currency, array $rows): array
+    {
+        $accounts = collect($this->writes->accountOptions($user, $projectId))->keyBy('id');
+        $slots = [];
+        foreach ($rows as $row) {
+            $account = $accounts->get((string) $row['external_account_id']);
+            if ($account === null) {
+                throw new InvalidArgumentException('account_not_selected');
+            }
+            $slots[] = ['id' => (string) $account['id'], 'currency' => (string) ($account['currency'] ?: $currency), 'share' => $row['share'] ?? null];
+        }
+
+        return $this->split->allocate($total, $currency, $slots);
     }
 
     /** Save (or re-save) a draft and say, per account, what publishing would do and what would refuse it. */
@@ -175,6 +197,9 @@ final class LaunchPlanService
             if ($plan->launch && ! $user->hasPermission(WriteCapabilityRegistry::CAPABILITIES['publish'])) {
                 $problems[] = 'launch:no_permission';
             }
+            if (($plan->spec['budget']['mode'] ?? 'manual') === 'automated') {
+                $problems[] = 'automation_requires_authorisation';
+            }
             $out[] = ['account_id' => $step['account_id'], 'provider' => $provider, 'account_name' => $account['name'] ?? null, 'currency' => $account['currency'] ?? null, 'problems' => $problems, 'step' => $step];
         }
 
@@ -182,10 +207,45 @@ final class LaunchPlanService
     }
 
     /**
+     * LAUNCH-SPEND-001 — what a launch commits to, and the token that proves the person saw it.
+     *
+     * The token is an HMAC of the plan, the launch flag and every budget line, so it changes the moment any of them does: an
+     * approval of yesterday's numbers cannot launch today's. It is required only when the plan RUNS the campaigns (`launch`);
+     * a plan that creates them paused spends nothing and asks for nothing.
+     *
+     * @return array<string,mixed>
+     */
+    public function spend(User $user, string $projectId, LaunchPlan $plan): array
+    {
+        $accounts = collect($this->writes->accountOptions($user, $projectId))->keyBy('id');
+        $lines = [];
+        $byCurrency = [];
+        foreach ((array) ($plan->spec['accounts'] ?? []) as $a) {
+            $budget = $a['daily_budget'] ?? null;
+            $currency = (string) ($accounts->get($a['external_account_id'])['currency'] ?? '');
+            $lines[] = ['account_id' => (string) $a['external_account_id'], 'daily_budget' => $budget === null ? null : (float) $budget, 'currency' => $currency];
+            if ($budget !== null) {
+                $byCurrency[$currency] = round(($byCurrency[$currency] ?? 0) + (float) $budget, 2);
+            }
+        }
+        $adSetBudget = $plan->spec['ad_set']['daily_budget'] ?? null;
+
+        return [
+            'launch' => (bool) $plan->launch,
+            'ack_required' => (bool) $plan->launch,
+            'lines' => $lines,
+            'daily_by_currency' => $byCurrency,
+            'ad_set_daily_budget' => $adSetBudget === null ? null : (float) $adSetBudget,
+            'mode' => (string) ($plan->spec['budget']['mode'] ?? 'manual'),
+            'ack_token' => hash_hmac('sha256', json_encode([(string) $plan->getKey(), (bool) $plan->launch, $lines, $adSetBudget], JSON_THROW_ON_ERROR), (string) config('app.key')),
+        ];
+    }
+
+    /**
      * Send the plan to the platforms. Steps that already hold a provider id are skipped, so calling this again
      * after a partial launch finishes the launch instead of starting another.
      */
-    public function publish(User $user, Project $project, LaunchPlan $plan): LaunchPlan
+    public function publish(User $user, Project $project, LaunchPlan $plan, ?string $spendAck = null): LaunchPlan
     {
         if ($plan->status === LaunchPlan::PUBLISHED) {
             return $plan;
@@ -197,8 +257,26 @@ final class LaunchPlanService
             throw new InvalidArgumentException('Running the campaigns after creation needs the campaigns.launch permission.');
         }
 
+        if (($plan->spec['budget']['mode'] ?? 'manual') === 'automated') {
+            throw new InvalidArgumentException('automation_requires_authorisation', 422);
+        }
+        if ($plan->launch) {
+            $spend = $this->spend($user, (string) $project->getKey(), $plan);
+            if ($spendAck === null || ! hash_equals($spend['ack_token'], $spendAck)) {
+                throw new InvalidArgumentException('spend_ack_required', 422);
+            }
+        }
+
+        // One publisher at a time: an atomic claim, so two clicks (or two tabs) cannot both send the same plan. A claim older than
+        // ten minutes belongs to a run that died and may be resumed — a step that holds a provider id is never sent again anyway.
+        $claimed = LaunchPlan::query()->whereKey($plan->getKey())
+            ->where(fn ($q) => $q->where('status', '!=', LaunchPlan::PUBLISHING)->orWhere('updated_at', '<', Carbon::now()->subMinutes(10)))
+            ->update(['status' => LaunchPlan::PUBLISHING, 'published_by' => $user->getKey(), 'updated_at' => Carbon::now()]);
+        if ($claimed === 0) {
+            throw new InvalidArgumentException('launch_in_progress', 409);
+        }
+        $plan->refresh();
         $campaign = $this->campaignFor($user, $project, $plan);
-        $plan->forceFill(['status' => LaunchPlan::PUBLISHING, 'published_by' => $user->getKey()])->save();
 
         $steps = $plan->steps;
         foreach ($steps as $i => $step) {

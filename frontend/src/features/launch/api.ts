@@ -33,6 +33,8 @@ export interface AccountReadiness {
 
 export type ReadyAccountOption = CreateAccountOption & { readiness?: AccountReadiness | null }
 
+export type BudgetMode = 'manual' | 'assisted' | 'automated'
+
 export type BusinessGoal = 'sales' | 'leads' | 'awareness' | 'traffic'
 
 /** LAUNCH-JOURNEY-001 — the objective one account has earned for a business goal. A proposal; nothing is saved by reading it. */
@@ -63,6 +65,8 @@ export interface LaunchSpec {
   name: string
   objective: string
   objectives?: Record<string, string>
+  business_goal?: BusinessGoal | null
+  budget?: { mode?: BudgetMode; total?: number | null; currency?: string | null; shares?: Record<string, number> } | null
   accounts: Array<{ external_account_id: string; daily_budget?: number | null }>
   ad_set: {
     name: string
@@ -117,6 +121,32 @@ export interface LaunchPlan {
   published_at: string | null
   created_at: string | null
   review?: LaunchReviewRow[]
+  spend?: SpendSummary
+}
+
+/** LAUNCH-SPEND-001 — what a launch commits to, and the token a publish must echo to prove it was seen. */
+export interface SpendSummary {
+  launch: boolean
+  ack_required: boolean
+  lines: Array<{ account_id: string; daily_budget: number | null; currency: string }>
+  daily_by_currency: Record<string, number>
+  ad_set_daily_budget: number | null
+  mode: BudgetMode
+  ack_token: string
+}
+
+/** LAUNCH-BUDGET-001 — one daily budget split over accounts; amounts total the budget to the cent. */
+export interface BudgetAllocation {
+  ok: boolean
+  total: number
+  currency: string
+  slots: Array<{ id: string; share_pct: number; amount: number; currency: string; amount_in_account_currency: number | null; account_currency: string }>
+  violations: Array<{ id: string; kind: 'missing_rate' | 'below_min' | 'above_max' }>
+}
+
+export async function splitBudget(projectId: string, body: { total: number; currency: string; accounts: Array<{ external_account_id: string; share?: number | null }> }): Promise<BudgetAllocation> {
+  await ensureCsrfCookie()
+  return postData<BudgetAllocation>(`${base(projectId)}/budget-split`, body)
 }
 
 const base = (projectId: string) => `/projects/${projectId}/launch`
@@ -148,9 +178,9 @@ export async function savePlan(projectId: string, spec: LaunchSpec, planId?: str
 }
 
 /** 200 published, 207 partial, 422 failed — all three carry the plan, so none of them is thrown away. */
-export async function publishPlan(projectId: string, planId: string): Promise<LaunchPlan> {
+export async function publishPlan(projectId: string, planId: string, spendAck?: string | null): Promise<LaunchPlan> {
   await ensureCsrfCookie()
-  const res = await api.post<{ data?: LaunchPlan; message?: string }>(`${base(projectId)}/plans/${planId}/publish`, { confirm: true }, { validateStatus: (s) => s === 200 || s === 207 || s === 422 })
+  const res = await api.post<{ data?: LaunchPlan; message?: string }>(`${base(projectId)}/plans/${planId}/publish`, { confirm: true, ...(spendAck ? { spend_ack: spendAck } : {}) }, { validateStatus: (s) => s === 200 || s === 207 || s === 422 })
   if (!res.data?.data) throw new Error(res.data?.message ?? 'The plan could not be published.')
   return res.data.data
 }

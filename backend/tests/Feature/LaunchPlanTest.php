@@ -71,7 +71,7 @@ final class LaunchPlanTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), [])->assertStatus(422);
         Http::assertNothingSent();
 
-        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertOk()->json('data');
+        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true, 'spend_ack' => $plan['spend']['ack_token']])->assertOk()->json('data');
         $this->assertSame('published', $out['status']);
         $step = $out['steps'][0];
         $this->assertSame(['done', '5001'], [$step['campaign']['status'], $step['campaign']['external_id']]);
@@ -92,7 +92,7 @@ final class LaunchPlanTest extends TestCase
         $this->assertSame(1, AuditLog::query()->where('action', 'campaign.launch_published')->count());
 
         // Publishing again sends nothing: the plan is a record now, not a request.
-        $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertOk();
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true, 'spend_ack' => $plan['spend']['ack_token']])->assertOk();
         Http::assertSentCount(4);
         $this->actingAs($this->owner, 'sanctum')->putJson($this->url("plans/{$plan['id']}"), $this->spec($account, $creative))->assertStatus(409);
     }
@@ -106,7 +106,7 @@ final class LaunchPlanTest extends TestCase
         Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['error' => ['message' => '(#100) Bad targeting', 'code' => 100]], 400)->push(['id' => '6001'])->push(['id' => '7001'])]);
         $plan = $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $this->spec($account, $creative))->assertCreated()->json('data');
 
-        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertStatus(207)->json('data');
+        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true, 'spend_ack' => $plan['spend']['ack_token']])->assertStatus(207)->json('data');
         $this->assertSame('partial', $out['status']);
         $this->assertSame('5001', $out['steps'][0]['campaign']['external_id']);
         $this->assertSame('failed', $out['steps'][0]['ad_set']['status']);
@@ -114,7 +114,7 @@ final class LaunchPlanTest extends TestCase
         $this->assertSame('pending', $out['steps'][0]['ad']['status']);
         $this->assertSame(1, ExternalCampaign::query()->count());
 
-        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertOk()->json('data');
+        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true, 'spend_ack' => $plan['spend']['ack_token']])->assertOk()->json('data');
         $this->assertSame('published', $out['status']);
         $this->assertSame('5001', $out['steps'][0]['campaign']['external_id'], 'the campaign already on the platform was kept');
         $this->assertSame('6001', $out['steps'][0]['ad_set']['external_id']);
@@ -132,7 +132,7 @@ final class LaunchPlanTest extends TestCase
         $plan = $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $this->spec($account, null, adSet: false))->assertCreated()->json('data');
         $this->assertSame(['awaiting_credentials'], $plan['review'][0]['problems']);
 
-        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertStatus(422)->json('data');
+        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true, 'spend_ack' => $plan['spend']['ack_token']])->assertStatus(422)->json('data');
         $this->assertSame('failed', $out['status']);
         $this->assertSame('awaiting_credentials', $out['steps'][0]['campaign']['refusal']);
         Http::assertNothingSent();
@@ -152,7 +152,7 @@ final class LaunchPlanTest extends TestCase
 
         $plan = $this->actingAs($maker, 'sanctum')->postJson($this->url('plans'), $this->spec($account, null, adSet: false, launch: true))->assertCreated()->json('data');
         $this->assertContains('launch:no_permission', $plan['review'][0]['problems']);
-        $this->actingAs($maker, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertForbidden();
+        $this->actingAs($maker, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true, 'spend_ack' => $plan['spend']['ack_token']])->assertForbidden();
         Http::assertNothingSent();
     }
 

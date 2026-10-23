@@ -19,7 +19,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
-import { publishPlan, savePlan, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 
 /**
  * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
@@ -74,6 +74,7 @@ export function LaunchPage() {
   const [spec, setSpec] = useState<LaunchSpec>(empty)
   const [plan, setPlan] = useState<LaunchPlan | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [spendOk, setSpendOk] = useState(false)
   const [errors, setErrors] = useState<FieldError[]>([])
 
   const title = ar ? 'إطلاق الحملات' : 'Launch'
@@ -96,7 +97,7 @@ export function LaunchPage() {
     },
   })
   const publish = useMutation({
-    mutationFn: () => publishPlan(currentProjectId!, plan!.id),
+    mutationFn: () => publishPlan(currentProjectId!, plan!.id, plan!.spend?.ack_token),
     onSuccess: (p) => { setPlan(p); setConfirming(false); setStep(6); void qc.invalidateQueries({ queryKey: ['launch', 'plans'] }); void qc.invalidateQueries({ queryKey: ['project', currentProjectId, 'campaigns'] }) },
   })
 
@@ -137,7 +138,7 @@ export function LaunchPage() {
                   <Link to={portal(`/projects/${currentProjectId}/integrations`)} className="font-bold text-brand-600 hover:underline">{ar ? 'اختر حسابات المشروع' : 'Choose the project’s accounts'}</Link>
                 </p>
               )}
-              <GoalChooser goal={goal} onChange={setGoal} ar={ar} />
+              <GoalChooser goal={goal} onChange={(g) => { setGoal(g); setSpec((s) => ({ ...s, business_goal: g })) }} ar={ar} />
               <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0" data-testid="launch-accounts">
                 {accounts.map((a) => (
                   <li key={a.id}>
@@ -196,7 +197,9 @@ export function LaunchPage() {
                   )
                 })}
               </div>
-              <p className="text-xs text-text-muted">{ar ? 'تُنشأ الحملة موقوفة بميزانية يومية على مستوى الحملة؛ لا يُنفق شيء قبل تشغيلها.' : 'The campaign is created paused with a campaign-level daily budget; nothing is spent before it runs.'}</p>
+              <BudgetPanel projectId={currentProjectId} spec={spec} accounts={accounts} ar={ar}
+                onChange={(budget) => setSpec((st) => ({ ...st, budget }))}
+                onApply={(amounts) => setSpec((st) => ({ ...st, accounts: st.accounts.map((a) => (amounts[a.external_account_id] !== undefined ? { ...a, daily_budget: amounts[a.external_account_id] } : a)) }))} />
             </div>
           )}
 
@@ -353,11 +356,22 @@ export function LaunchPage() {
       )}
 
       {confirming && plan && (
-        <Modal open onClose={() => setConfirming(false)} title={ar ? 'تأكيد النشر' : 'Confirm publishing'} size="md"
-          footer={<><Button variant="secondary" onClick={() => setConfirming(false)}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={publish.isPending} onClick={() => publish.mutate()} data-testid="launch-confirm">{ar ? 'نعم، انشر' : 'Yes, publish'}</Button></>}>
+        <Modal open onClose={() => { setConfirming(false); setSpendOk(false) }} title={ar ? 'تأكيد النشر' : 'Confirm publishing'} size="md"
+          footer={<><Button variant="secondary" onClick={() => setConfirming(false)}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={publish.isPending} disabled={Boolean(plan.spend?.ack_required) && !spendOk} onClick={() => publish.mutate()} data-testid="launch-confirm">{ar ? 'نعم، انشر' : 'Yes, publish'}</Button></>}>
           <div className="space-y-2 text-sm" data-testid="launch-confirm-dialog">
             <p>{ar ? `سيُنشأ «${plan.name}» عبر واجهات المنصات الرسمية — ${countedAccounts(plan.steps.length, 'ar')}.` : `«${plan.name}» will be created through the platforms’ official APIs — ${countedAccounts(plan.steps.length, 'en')}.`}</p>
             <p className="font-semibold">{spec.launch ? (ar ? 'ستُشغَّل الحملات فور إنشائها وسيبدأ الإنفاق.' : 'The campaigns will run at once and spend will start.') : (ar ? 'تُنشأ موقوفة — لا إنفاق قبل تشغيلها.' : 'Created paused — no spend before they run.')}</p>
+            {plan.spend?.ack_required && (
+              <div className="space-y-1.5 rounded-lg border border-border p-2" data-testid="launch-spend">
+                <p className="font-semibold">{ar ? 'حدود الإنفاق اليومي التي ستُشغَّل' : 'The daily spend that will run'}</p>
+                <ul className="space-y-0.5 text-xs">
+                  {plan.spend.lines.map((l) => (
+                    <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : `${l.daily_budget} ${l.currency}`}</span></li>
+                  ))}
+                </ul>
+                <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5 accent-brand-600" checked={spendOk} onChange={(e) => setSpendOk(e.target.checked)} data-testid="launch-spend-ack" />{ar ? 'أوافق على حدود الإنفاق هذه وأفوّض تشغيل الحملات.' : 'I approve these spend limits and authorise the campaigns to run.'}</label>
+              </div>
+            )}
             {publish.isError && <p className="text-danger">{toApiError(publish.error).message}</p>}
           </div>
         </Modal>
@@ -551,4 +565,99 @@ function ProposalLine({ proposal, ar, applied, onApply }: { proposal: StrategyAc
       )}
     </div>
   )
+}
+
+const MODE_TEXT: Record<BudgetMode, { en: string; ar: string }> = {
+  manual: { en: 'Manual — I set every budget', ar: 'يدوي — أحدد كل ميزانية بنفسي' },
+  assisted: { en: 'AI-assisted — proposals I approve', ar: 'بمساعدة الذكاء الاصطناعي — اقتراحات أوافق عليها' },
+  automated: { en: 'Authorised automation — needs an authorisation', ar: 'أتمتة مفوَّضة — تحتاج تفويضًا' },
+}
+
+const VIOLATION: Record<string, { en: string; ar: string }> = {
+  missing_rate: { en: 'No published exchange rate for this account’s currency.', ar: 'لا يوجد سعر صرف منشور لعملة هذا الحساب.' },
+  below_min: { en: 'Below this account’s minimum.', ar: 'أقل من الحد الأدنى لهذا الحساب.' },
+  above_max: { en: 'Above this account’s maximum.', ar: 'أعلى من الحد الأقصى لهذا الحساب.' },
+}
+
+/**
+ * LAUNCH-BUDGET-001 — one daily budget split over the chosen accounts, as percentages that total 100 and amounts that total the
+ * budget to the cent, in each account's own currency. The arithmetic is the server's; this shows it and applies it on request.
+ */
+function BudgetPanel({ projectId, spec, accounts, ar, onChange, onApply }: {
+  projectId: string
+  spec: LaunchSpec
+  accounts: Array<{ id: string; name: string | null; currency: string | null }>
+  ar: boolean
+  onChange: (b: NonNullable<LaunchSpec['budget']>) => void
+  onApply: (amounts: Record<string, number>) => void
+}) {
+  const budget = spec.budget ?? {}
+  const [total, setTotal] = useState(budget.total ? String(budget.total) : '')
+  const [currency, setCurrency] = useState(budget.currency ?? accounts.find((a) => a.id === spec.accounts[0]?.external_account_id)?.currency ?? 'SAR')
+  const [shares, setShares] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(budget.shares ?? {}).map(([k, v]) => [k, String(v)])))
+  const [result, setResult] = useState<BudgetAllocation | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const mode: BudgetMode = budget.mode ?? 'manual'
+  const calc = useMutation({
+    mutationFn: () => splitBudget(projectId, {
+      total: Number(total), currency: currency.toUpperCase(),
+      accounts: spec.accounts.map((a) => ({ external_account_id: a.external_account_id, share: shares[a.external_account_id] ? Number(shares[a.external_account_id]) : null })),
+    }),
+    onSuccess: (r) => { setResult(r); setError(null) },
+    onError: (e) => { setResult(null); setError(toApiError(e).message) },
+  })
+  const push = (patch: Partial<NonNullable<LaunchSpec['budget']>>) =>
+    onChange({ ...budget, mode, total: Number(total) || null, currency: currency.toUpperCase(), shares: Object.fromEntries(Object.entries(shares).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])), ...patch })
+  if (spec.accounts.length < 1) return null
+  return (
+    <section className="space-y-3 rounded-xl border border-border p-3" data-testid="launch-budget-panel">
+      <h3 className="text-sm font-bold text-text-primary">{ar ? 'توزيع الميزانية على الحسابات' : 'Split the budget across accounts'}</h3>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Field label={ar ? 'الميزانية اليومية الكلية' : 'Total daily budget'}>
+          <Input type="number" min={0} step="0.01" inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} onBlur={() => push({})} data-testid="launch-budget-total" />
+        </Field>
+        <Field label={ar ? 'العملة' : 'Currency'}>
+          <Input dir="ltr" maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} onBlur={() => push({})} data-testid="launch-budget-currency" />
+        </Field>
+        <Field label={ar ? 'وضع التحكم' : 'Control mode'}>
+          <select className="h-10 w-full rounded-lg border border-border bg-surface px-2 text-sm" value={mode} onChange={(e) => push({ mode: e.target.value as BudgetMode })} data-testid="launch-budget-mode">
+            {(Object.keys(MODE_TEXT) as BudgetMode[]).map((m) => <option key={m} value={m}>{ar ? MODE_TEXT[m].ar : MODE_TEXT[m].en}</option>)}
+          </select>
+        </Field>
+      </div>
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0">
+        {spec.accounts.map((a) => {
+          const acc = accounts.find((x) => x.id === a.external_account_id)
+          const slot = result?.slots.find((x) => x.id === a.external_account_id)
+          const bad = result?.violations.filter((v) => v.id === a.external_account_id) ?? []
+          return (
+            <li key={a.external_account_id} className="space-y-1 rounded-lg border border-border p-2 text-xs">
+              <Field label={`${acc?.name ?? ''} — ${ar ? 'النسبة % (اتركها فارغة للتقسيم المتساوي)' : 'Share % (leave blank to split evenly)'}`}>
+                <Input type="number" min={0} max={100} step="0.01" inputMode="decimal" value={shares[a.external_account_id] ?? ''} onChange={(e) => setShares((s) => ({ ...s, [a.external_account_id]: e.target.value }))} onBlur={() => push({})} data-testid={`launch-share-${a.external_account_id}`} />
+              </Field>
+              {slot && (
+                <p data-testid={`launch-split-${a.external_account_id}`} className="text-text-secondary">
+                  <span dir="ltr" className="font-mono">{slot.share_pct}%</span> · <span dir="ltr" className="font-mono">{slot.amount_in_account_currency ?? '—'} {slot.account_currency}</span>
+                </p>
+              )}
+              {bad.map((v) => <p key={v.kind} className="text-warning">{(VIOLATION[v.kind] ?? VIOLATION.missing_rate!)[ar ? 'ar' : 'en']}</p>)}
+            </li>
+          )
+        })}
+      </ul>
+      {error && <p role="alert" className="text-xs text-danger" data-testid="launch-split-error">{SPLIT_ERROR[error]?.[ar ? 'ar' : 'en'] ?? error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" loading={calc.isPending} disabled={!(Number(total) > 0)} onClick={() => { push({}); calc.mutate() }} data-testid="launch-split-calc">{ar ? 'احسب التوزيع' : 'Calculate the split'}</Button>
+        <Button disabled={!result?.ok} onClick={() => result && onApply(Object.fromEntries(result.slots.filter((x) => x.amount_in_account_currency !== null).map((x) => [x.id, x.amount_in_account_currency as number])))} data-testid="launch-split-apply">{ar ? 'طبّق على الحسابات' : 'Apply to the accounts'}</Button>
+      </div>
+      <p className="text-xs text-text-muted">{ar ? 'تُنشأ الحملة موقوفة بميزانية يومية على مستوى الحملة؛ لا يُنفق شيء قبل تشغيلها.' : 'The campaign is created paused with a campaign-level daily budget; nothing is spent before it runs.'}</p>
+    </section>
+  )
+}
+
+const SPLIT_ERROR: Record<string, { en: string; ar: string }> = {
+  shares_must_sum_to_100: { en: 'The shares must total exactly 100%.', ar: 'يجب أن يكون مجموع النسب 100% بالضبط.' },
+  shares_leave_nothing_for_the_rest: { en: 'The named shares leave nothing for the other accounts.', ar: 'النسب المحددة لا تترك شيئًا للحسابات الأخرى.' },
+  shares_must_not_be_negative: { en: 'A share cannot be negative.', ar: 'لا يمكن أن تكون النسبة سالبة.' },
+  account_not_selected: { en: 'An account is not selected for this project.', ar: 'حساب غير محدد لهذا المشروع.' },
 }

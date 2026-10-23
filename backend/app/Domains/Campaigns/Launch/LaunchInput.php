@@ -60,6 +60,13 @@ final class LaunchInput
             'tracking.utm_medium' => ['nullable', 'string', 'max:100'],
             'tracking.utm_campaign' => ['nullable', 'string', 'max:100'],
             'launch' => ['sometimes', 'boolean'],
+            'business_goal' => ['nullable', Rule::in(JourneyPlanner::GOALS)],
+            'budget' => ['nullable', 'array'],
+            'budget.mode' => ['nullable', Rule::in(BudgetSplit::MODES)],
+            'budget.total' => ['nullable', 'numeric', 'gt:0', 'max:100000000'],
+            'budget.currency' => ['nullable', 'string', 'size:3'],
+            'budget.shares' => ['nullable', 'array', 'max:10'],
+            'budget.shares.*' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ])->validate();
     }
 
