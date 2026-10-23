@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { CampaignViewsBar } from './CampaignViewsBar'
+import type { SavedView } from '@/features/dashboard/savedViews'
 import { useQuery } from '@tanstack/react-query'
 import { Columns3 } from 'lucide-react'
 import { EntityTab, type EntityWorkspaceControls } from '@/features/analytics/AnalyticsPage'
@@ -78,6 +80,17 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
     const next = hidden.includes(key) ? hidden.filter((k) => k !== key) : [...hidden, key]
     setHidden(next)
     try { localStorage.setItem(HIDDEN_KEY(level), JSON.stringify(next)) } catch { /* a private window keeps the choice for this visit only */ }
+  }
+
+  const applySavedView = (v: SavedView) => {
+    const f = v.filters ?? {}
+    setPlatform(Array.isArray(f.provider) && typeof f.provider[0] === 'string' ? f.provider[0] : 'all')
+    setStatus(f.status === 'all' || typeof f.status !== 'string' ? 'all' : (f.status as CampaignRelevance))
+    setSearch(typeof f.search === 'string' ? f.search : '')
+    const next = Array.isArray(f.hidden) ? f.hidden.filter((k): k is string => typeof k === 'string') : []
+    setHidden(next)
+    try { localStorage.setItem(HIDDEN_KEY(level), JSON.stringify(next)) } catch { /* a private window keeps the choice for this visit only */ }
+    if (typeof v.date_range?.days === 'number' && (PERIODS as readonly number[]).includes(v.date_range.days)) setDays(v.date_range.days as (typeof PERIODS)[number])
   }
 
   const workspace: EntityWorkspaceControls = { search, status, hidden, onManage: setManaging }
@@ -163,6 +176,15 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
           ))}
         </fieldset>
       )}
+
+      <CampaignViewsBar
+        module={`entities-${level}`}
+        testPrefix={`entity-${level}`}
+        current={{ provider: platform === 'all' ? undefined : [platform], status, search: search || undefined, hidden }}
+        days={days}
+        onApply={applySavedView}
+        ar={ar}
+      />
 
       {/* MGMT-PAGES-001 — the report's own blocks above the table: KPI strip, trend, where results came from. */}
       <ManagementOverview projectId={currentProjectId} range={range} filters={filters} testid={`entity-overview-${level}`} />
