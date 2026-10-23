@@ -46,6 +46,8 @@ export const ALERT_TYPES = [
   'sync_outage', 'measurement_outage',
   // TRACKING-HEALTH-001 — the findings of the Tracking Health page.
   'tracking_health',
+  // LAUNCH-ADVANCE-001 — a launched account that now earns a better stage.
+  'launch_advance',
 ] as const
 
 export type AlertType = (typeof ALERT_TYPES)[number]
