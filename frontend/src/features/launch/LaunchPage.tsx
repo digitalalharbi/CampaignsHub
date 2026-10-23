@@ -485,18 +485,18 @@ function ReadinessStrip({ readiness, windowDays, ar }: { readiness: AccountReadi
   const word = (s: EventStatus) =>
     s === 'eligible' ? (ar ? 'مؤهل للتحسين' : 'Eligible') : s === 'proven' ? (ar ? 'مثبت' : 'Proven') : ar ? 'لا توجد أحداث' : 'No events'
   return (
-    <ul className="mt-1.5 flex flex-wrap gap-1.5 px-1" data-testid={`launch-readiness-${readiness.tier}`} aria-label={ar ? 'جاهزية التتبع' : 'Tracking readiness'}>
+    <div role="group" className="mt-1.5 flex flex-wrap gap-1.5 px-1" data-testid={`launch-readiness-${readiness.tier}`} aria-label={ar ? 'جاهزية التتبع' : 'Tracking readiness'}>
       {(Object.keys(EVENT_LABEL) as Array<keyof AccountReadiness['events']>).map((k) => {
         const e = readiness.events[k]
         return (
-          <li key={k} title={ar ? `ما أبلغت به المنصة في نافذة القياس (بالأيام: ${windowDays})` : `What the platform reported in the measurement window (days: ${windowDays})`}>
+          <span key={k} title={ar ? `ما أبلغت به المنصة في نافذة القياس (بالأيام: ${windowDays})` : `What the platform reported in the measurement window (days: ${windowDays})`}>
             <Badge tone={e.status === 'eligible' ? 'success' : e.status === 'proven' ? 'neutral' : 'warning'}>
               <span data-testid={`launch-event-${k}`}>{ar ? EVENT_LABEL[k].ar : EVENT_LABEL[k].en} · {word(e.status)}</span>
             </Badge>
-          </li>
+          </span>
         )
       })}
-    </ul>
+    </div>
   )
 }
 

@@ -119,6 +119,8 @@ describe('the launch page', () => {
     vi.mocked(useLaunchOptions).mockReturnValue(ok(withReadiness) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
 
+    // One list item per ACCOUNT: the e2e gate walks `li` and expects every one to be an account row with its provider mark.
+    expect(within(await screen.findByTestId('launch-accounts')).getAllByRole('listitem')).toHaveLength(1)
     const strip = await screen.findByTestId('launch-readiness-partial')
     expect(within(strip).getByTestId('launch-event-purchases')).toHaveTextContent('Purchase · Proven')
     expect(within(strip).getByTestId('launch-event-page_views')).toHaveTextContent('PageView · Eligible')
