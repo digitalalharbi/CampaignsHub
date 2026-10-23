@@ -19,6 +19,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Tests\Concerns\GrantsMemberships;
 use Tests\TestCase;
 
@@ -292,5 +293,84 @@ final class LeadFormsTest extends TestCase
 
         $this->as()->postJson("/api/v1/projects/{$this->project->id}/forms", ['name' => 'F', 'definition' => $bad])->assertStatus(422);
         $this->assertSame(0, LeadForm::withoutGlobalScopes()->count());
+    }
+
+    public function test_another_workspace_can_neither_reach_nor_receive_into_this_workspaces_forms(): void
+    {
+        $slug = $this->publishedForm();
+        $form = LeadForm::withoutGlobalScopes()->where('slug', $slug)->firstOrFail();
+
+        $rival = Tenant::create(['name' => 'Rival', 'slug' => 'rv-'.uniqid(), 'status' => 'active']);
+        app(TenantContext::class)->setTenantId((string) $rival->id);
+        $role = Role::create(['tenant_id' => $rival->id, 'name' => 'O', 'slug' => 'o-'.uniqid()]);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $outsider = User::create(['name' => 'X', 'email' => uniqid().'@x.test', 'password' => 'secret123']);
+        $this->grantMembership($outsider, $rival);
+        $outsider->assignRole($role);
+        $theirClient = ClientWorkspace::create(['name' => 'Their client', 'slug' => 'tc-'.uniqid(), 'mode' => 'managed']);
+        $theirProject = Project::create(['client_workspace_id' => $theirClient->id, 'name' => 'T', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        // Their own project, our form id: nothing. Our project id from their session: refused.
+        $this->as($outsider)->getJson("/api/v1/projects/{$theirProject->id}/forms/{$form->id}")->assertNotFound();
+        $this->as($outsider)->patchJson("/api/v1/projects/{$theirProject->id}/forms/{$form->id}", ['name' => 'stolen'])->assertNotFound();
+        $this->as($outsider)->getJson("/api/v1/projects/{$this->project->id}/forms")->assertStatus(404);
+        $this->assertSame('Villa enquiry', LeadForm::withoutGlobalScopes()->findOrFail($form->id)->name);
+
+        // A submission through our public address lands in OUR workspace only, whoever is signed in.
+        $this->actingAs($outsider, 'sanctum')->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated();
+        $lead = Lead::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame((string) $this->tenant->id, (string) $lead->tenant_id);
+        $this->assertSame((string) $this->project->id, (string) $lead->project_id);
+    }
+
+    public function test_the_public_answer_carries_no_lead_data_and_the_team_listing_carries_no_submitter_pii(): void
+    {
+        $slug = $this->publishedForm();
+        $answer = $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated()->getContent();
+        foreach (['Sara', 'sara@example.test', '0500000001', 'lead_id', 'owner'] as $leak) {
+            $this->assertStringNotContainsString($leak, (string) $answer);
+        }
+
+        $team = $this->as()->getJson("/api/v1/projects/{$this->project->id}/forms")->assertOk()->getContent();
+        foreach (['Sara', 'sara@example.test', '0500000001'] as $pii) {
+            $this->assertStringNotContainsString($pii, (string) $team, 'The forms list counts submissions; the people are in the Leads Centre, behind its own permissions.');
+        }
+    }
+
+    public function test_every_public_route_is_rate_limited_per_form_and_address(): void
+    {
+        foreach (['api.v1.public.forms.show', 'api.v1.public.forms.submit', 'api.v1.public.forms.event'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+            $this->assertNotNull($route, $name);
+            $this->assertContains('throttle:public-form', $route->gatherMiddleware(), $name);
+        }
+    }
+
+    public function test_each_accepted_submission_is_exactly_one_lead_with_its_form_version_and_evidence(): void
+    {
+        $slug = $this->publishedForm();
+        $form = LeadForm::withoutGlobalScopes()->where('slug', $slug)->firstOrFail();
+        $ids = [];
+        foreach (range(1, 3) as $n) {
+            $body = $this->submission(['answers' => ['email' => "p{$n}@example.test", 'mobile' => '05000001'.str_pad((string) $n, 2, '0', STR_PAD_LEFT)]]);
+            $this->postJson("/api/v1/public/forms/{$slug}/submissions", $body)->assertCreated();
+            $ids[] = $body['submission_id'];
+        }
+
+        $this->assertSame(3, Lead::withoutGlobalScopes()->count());
+        $this->assertSame(3, LeadFormSubmission::withoutGlobalScopes()->count());
+        foreach (LeadFormSubmission::withoutGlobalScopes()->get() as $sub) {
+            $lead = Lead::withoutGlobalScopes()->findOrFail($sub->lead_id);
+            $this->assertSame((string) $form->id, (string) $lead->form_id);
+            $this->assertSame((string) $form->project_id, (string) $lead->project_id);
+            $this->assertSame((string) $form->published_version_id, (string) $sub->lead_form_version_id);
+            $this->assertNotNull($sub->consent_version);
+            $this->assertSame('granted', $sub->consent_state);
+            $this->assertSame('q4-villas', $sub->attribution['utm_campaign']);
+            $this->assertSame($sub->idempotency_key, $lead->provider_lead_id);
+            $this->assertNotEmpty($lead->form_answers);
+        }
+        $this->assertEqualsCanonicalizing($ids, LeadFormSubmission::withoutGlobalScopes()->pluck('idempotency_key')->all());
     }
 }
