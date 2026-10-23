@@ -158,6 +158,19 @@ final class LaunchReadinessTest extends TestCase
         $this->assertSame([], $out['readiness']['project']['live_conversion_destinations']);
     }
 
+    public function test_a_project_with_no_ad_accounts_answers_the_options_and_the_strategy_instead_of_failing(): void
+    {
+        // The seeded store project in the e2e gate has none: the launch page showed «the project's accounts could not be read» (a 500).
+        $options = $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/launch/options")->assertOk()->json('data');
+        $this->assertSame([], $options['accounts']);
+        $this->assertSame(30, $options['readiness']['window_days']);
+
+        $strategy = $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/launch/strategy?goal=sales")->assertOk()->json('data');
+        $this->assertSame([], $strategy['accounts']);
+
+        $this->assertSame([], $this->readiness([])['accounts']);
+    }
+
     public function test_a_multi_account_project_gets_a_proposal_per_account_each_on_its_own_evidence(): void
     {
         $this->configure('meta');
