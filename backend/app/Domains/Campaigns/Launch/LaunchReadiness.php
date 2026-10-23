@@ -8,6 +8,7 @@ use App\Domains\Forms\Models\ConversionDestination;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderDefinition;
 use App\Domains\Integrations\Catalogue\ProviderKind;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,8 @@ final class LaunchReadiness
         $threshold = max(1, (int) config('launch.readiness.eligible_events', 50));
         $since = ($now ?? Carbon::now())->copy()->subDays($days)->toDateString();
 
-        $sums = EntityDailyMetric::query()
+        // An account the project has de-selected contributes no evidence, whatever rows it once synced.
+        $sums = BoundAccountVisibility::apply(EntityDailyMetric::query(), 'entity_daily_metrics')
             ->where('tenant_id', $tenantId)
             ->where('project_id', $projectId)
             ->where('is_demo', false)
