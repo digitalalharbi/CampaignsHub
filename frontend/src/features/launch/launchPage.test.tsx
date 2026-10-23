@@ -122,7 +122,7 @@ describe('the launch page', () => {
     const strip = await screen.findByTestId('launch-readiness-partial')
     expect(within(strip).getByTestId('launch-event-purchases')).toHaveTextContent('Purchase · Proven')
     expect(within(strip).getByTestId('launch-event-page_views')).toHaveTextContent('PageView · Eligible')
-    expect(within(strip).getByTestId('launch-event-leads')).toHaveTextContent('Lead · Not reported')
+    expect(within(strip).getByTestId('launch-event-leads')).toHaveTextContent('Lead · No events')
     expect(strip.textContent).not.toMatch(/pixel/i)
   })
 
