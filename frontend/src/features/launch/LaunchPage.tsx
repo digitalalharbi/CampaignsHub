@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Rocket, XCircle } from 'lucide-react'
+import { BarChart3, CheckCircle2, ClipboardList, FileText, Megaphone, Rocket, Users, XCircle } from 'lucide-react'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -480,6 +480,26 @@ function Results({ plan, ar, projectId, accounts, onRetry, retrying }: { plan: L
       </ul>
       {plan.status !== 'published' && <Button loading={retrying} onClick={onRetry} data-testid="launch-retry">{ar ? 'أعد المحاولة للخطوات المتبقية' : 'Retry the remaining steps'}</Button>}
       <p className="text-xs text-text-muted">{ar ? 'المعرّفات والحالات أعلاه هي ما أكّدته المنصات نفسها.' : 'The ids and states above are what the platforms themselves confirmed.'}</p>
+      {plan.steps.some((s) => s.campaign.status === 'done') && (
+        <nav aria-label={ar ? 'تابع النتائج' : 'Follow the results'} className="space-y-1.5 border-t border-border pt-3" data-testid="launch-follow">
+          <p className="text-xs font-semibold text-text-secondary">{ar ? 'تابع النتائج من نفس المكان' : 'Follow the results from the same place'}</p>
+          <ul className="flex flex-wrap gap-2">
+            {[
+              { to: '/campaigns', icon: Megaphone, ar: 'إدارة الحملات', en: 'Campaigns' },
+              { to: '/analytics', icon: BarChart3, ar: 'التحليلات', en: 'Analytics' },
+              { to: '/leads', icon: Users, ar: 'العملاء المحتملون', en: 'Leads' },
+              { to: '/forms', icon: ClipboardList, ar: 'النماذج والتتبع', en: 'Forms & tracking' },
+              { to: '/reports', icon: FileText, ar: 'التقارير', en: 'Reports' },
+            ].map((l) => (
+              <li key={l.to}>
+                <Link to={portal(l.to)} data-testid={`launch-follow-${l.to.slice(1)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-text-primary hover:border-brand-400">
+                  <l.icon size={14} aria-hidden /> {ar ? l.ar : l.en}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
     </div>
   )
 }
