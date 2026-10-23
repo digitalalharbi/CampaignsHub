@@ -130,9 +130,9 @@ final class ProductionEdgeRoutingTest extends TestCase
     {
         foreach (['/welcome', '/welcome/'] as $path) {
             $this->assertMatchesRegularExpression(
-                '~location\s*=\s*'.preg_quote($path, '~').'\s*\{\s*return\s+301\s+/;\s*\}~',
+                '~location\s*=\s*'.preg_quote($path, '~').'\s*\{\s*absolute_redirect\s+off;\s*return\s+301\s+/;\s*\}~',
                 $this->conf,
-                "{$path} must be an exact match answering «return 301 /;» — no \$args, no \$request_uri",
+                "{$path} must be an exact match with «absolute_redirect off;» and «return 301 /;» — behind the TLS proxy an absolute Location is http://host:5173/, and no \$args may be copied",
             );
         }
         $this->assertStringNotContainsString('$args', (string) preg_replace('~#[^\n]*~', '', $this->conf), 'no redirect may copy the query string');
