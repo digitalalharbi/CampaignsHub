@@ -10,6 +10,8 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Forms\Models\LeadForm;
+use App\Domains\Forms\Services\TrackingHealth;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
@@ -66,6 +68,8 @@ final class AlertEvaluator
         // latest sync failed or whose last success is older than the threshold. Both read the
         // product's own freshness answers; neither invents a second definition of «stale».
         'sync_outage', 'measurement_outage',
+        // TRACKING-HEALTH-001 — what the Tracking Health page calls broken or lossy, raised as alerts so it reaches people who do not open that page.
+        'tracking_health',
     ];
 
     /** The default age, in hours, after which a measurement property with no successful sync is an outage. */
@@ -115,6 +119,8 @@ final class AlertEvaluator
         'sync_failure' => 'sync_failed',
         'sync_outage' => 'sync_failed',
         'measurement_outage' => 'sync_failed',
+        // A broken form or a failing conversion delivery is a data-pipeline failure to the person who is told about it.
+        'tracking_health' => 'sync_failed',
         'token_expiry' => 'token_expiring',
         'report_failed' => 'report_failed',
         'sla_warning' => 'security',
@@ -190,6 +196,7 @@ final class AlertEvaluator
             'sync_failure' => $this->syncFailures($rule),
             'sync_outage' => $this->syncOutages($rule, $now),
             'measurement_outage' => $this->measurementOutages($rule, $now),
+            'tracking_health' => $this->trackingHealth($rule, $now),
             'token_expiry' => $this->tokenExpiries($rule, $now),
             'budget_risk' => $this->budgetRisks($rule, $now),
             'no_results' => $this->noResults($rule, $now),
@@ -347,7 +354,7 @@ final class AlertEvaluator
                 'status' => 'open',
             ])->save();
             $this->notify($rule, $b);
-            $this->post($rule, $active, $b, $rule->severity, $now);
+            $this->post($rule, $active, $b, $b['severity'] ?? $rule->severity, $now);
 
             return false;
         }
@@ -371,14 +378,14 @@ final class AlertEvaluator
             'entity_id' => $b['entity_id'],
             'dedup_key' => $dedupKey,
             'status' => 'open',
-            'severity' => $rule->severity,
+            'severity' => $b['severity'] ?? $rule->severity,
             // Persist the human title/message alongside the measured values so the alerts UI can render them.
             'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
             'notification_id' => $notification,
             'task_id' => $taskId,
             'last_triggered_at' => $now,
         ]);
-        $this->post($rule, $event, $b, $rule->severity, $now);
+        $this->post($rule, $event, $b, $b['severity'] ?? $rule->severity, $now);
 
         return true;
     }
@@ -1159,6 +1166,55 @@ final class AlertEvaluator
                 'message' => $message($n),
                 'context' => $context + ['count' => $n],
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * TRACKING-HEALTH-001 — the findings of the Tracking Health page, as alerts.
+     *
+     * Only what that page calls `critical` or `warning` is raised: `info`, `unavailable` and `ok` are statements about
+     * what could or could not be checked, and an alert about «we could not look» is noise that trains people to ignore
+     * alerts. Each check is its own entity (the check's key, which carries the form or destination id), so the engine's
+     * dedup, cooldown, snooze and recovery work per finding: a form that was broken and is fixed RESOLVES its alert and
+     * says so, instead of leaving a stale one for a person to close.
+     *
+     * The alert carries the check's own severity (a broken form is critical even on a rule saved as «warning») and both
+     * languages of its title, detail and the action it asks for. A project with no published form has nothing to say.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function trackingHealth(AlertRule $rule, Carbon $now): array
+    {
+        $projects = LeadForm::withoutGlobalScopes()
+            ->where('tenant_id', $rule->tenant_id)
+            ->where('status', LeadForm::PUBLISHED)
+            ->when($rule->project_id, fn (Builder $q): Builder => $q->where('project_id', $rule->project_id))
+            ->distinct()->pluck('project_id');
+
+        $out = [];
+        foreach ($projects as $projectId) {
+            $health = app(TrackingHealth::class)->forProject((string) $rule->tenant_id, (string) $projectId, $now->copy()->subDays(6), $now);
+
+            foreach ($health['checks'] as $check) {
+                if (! in_array($check['severity'], ['critical', 'warning'], true)) {
+                    continue;
+                }
+
+                $action = $check['action'];
+                $out[] = [
+                    'entity_type' => 'tracking_check',
+                    'entity_id' => (string) $projectId.':'.$check['key'],
+                    'project_id' => (string) $projectId,
+                    'severity' => $check['severity'],
+                    'title' => $check['title']['en'],
+                    'message' => trim(($check['detail']['en'] ?? '').' '.($action === null ? '' : $action['en'])),
+                    'title_ar' => $check['title']['ar'],
+                    'message_ar' => trim(($check['detail']['ar'] ?? '').' '.($action === null ? '' : $action['ar'])),
+                    'context' => ['check' => $check['key'], 'numbers' => $check['numbers'], 'title_ar' => $check['title']['ar'], 'message_ar' => trim(($check['detail']['ar'] ?? '').' '.($action === null ? '' : $action['ar']))],
+                ];
+            }
         }
 
         return $out;
