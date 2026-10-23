@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
+import { patchData, ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
@@ -269,6 +269,27 @@ export interface ProjectMember {
   email: string | null
   role: string
   status: string
+  /** MEMBER-VISIBILITY-001 — capabilities this membership withholds (e.g. `money.view`); absent from an older server. */
+  denied?: string[]
+}
+
+/** MEMBER-VISIBILITY-001 — change what one membership withholds; the server subtracts it from the role. */
+export async function updateProjectMember(projectId: string, membershipId: string, input: { denied: string[] }): Promise<{ id: string }> {
+  await ensureCsrfCookie()
+  return patchData(`/projects/${projectId}/team/${membershipId}`, input)
+}
+
+/** MEMBER-VISIBILITY-001 — what one member may actually do here, resolved by the server's one authorisation engine. */
+export interface MemberEffective {
+  id: string
+  role: string
+  denied: string[]
+  effective: string[]
+  withheld: string[]
+}
+
+export function fetchMemberEffective(projectId: string, membershipId: string): Promise<MemberEffective> {
+  return getData<MemberEffective>(`/projects/${projectId}/team/${membershipId}/effective`)
 }
 
 export function listProjectTeam(projectId: string): Promise<ProjectMember[]> {

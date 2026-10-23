@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Badge } from '@/components/ui/Badge'
 import { Num } from '@/components/ui/Num'
 import { ChartCard, RankingBarChart } from '@/features/analytics/charts'
 import { useUi } from '@/stores/ui'
@@ -14,6 +15,21 @@ const stamp = (iso: string | null, ar: boolean): string => {
 
 /** A bucket start as a short label: «10-14» for a day or a week, «2026-10» for a month. */
 const bucketLabel = (period: string, granularity: ShareGranularity): string => (granularity === 'month' ? period.slice(0, 7) : period.slice(5))
+
+const STATE: Record<'active' | 'paused' | 'revoked' | 'expired', { ar: string; en: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
+  active: { ar: 'الرابط فعّال', en: 'Link active', tone: 'success' },
+  paused: { ar: 'الرابط متوقف', en: 'Link paused', tone: 'warning' },
+  revoked: { ar: 'الرابط ملغى', en: 'Link revoked', tone: 'danger' },
+  expired: { ar: 'الرابط منتهٍ', en: 'Link expired', tone: 'neutral' },
+}
+
+/** «+50%» / «−20%» / «—» when the earlier window had nothing to compare with. */
+const delta = (now: number, before: number): string => {
+  if (before === 0) return now === 0 ? '—' : '+∞'
+  const pct = Math.round(((now - before) / before) * 100)
+
+  return `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)}%`
+}
 
 const GRANULARITIES: Array<{ id: ShareGranularity; ar: string; en: string }> = [
   { id: 'day', ar: 'يومي', en: 'Daily' },
@@ -44,15 +60,25 @@ export function ShareAnalyticsStrip({ projectId, reportId, shareId }: { projectI
     [ar ? 'مرات الفتح' : 'Views', String(a.views)],
     [ar ? 'أجهزة فريدة (تقديري)' : 'Unique devices (estimate)', String(a.unique_views)],
     ...(a.repeat_visits === undefined ? [] : [[ar ? 'فتحات متكررة' : 'Repeat opens', String(a.repeat_visits)] as [string, string]]),
+    [ar ? 'التنزيلات' : 'Downloads', String(a.downloads)],
     [ar ? 'أول فتح' : 'First viewed', stamp(a.first_viewed_at, ar)],
     [ar ? 'آخر فتح' : 'Last viewed', stamp(a.last_viewed_at, ar)],
   ]
+  const state = a.state ? STATE[a.state] : null
+  const cmp = a.comparison
   const series = a.series ?? []
   const drawn = series.some((p) => p.views > 0)
 
   return (
     <div className="mb-3 space-y-3">
-      <dl data-testid="share-analytics" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      {state && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-text-secondary" data-testid="share-state" data-state={a.state}>
+          <Badge tone={state.tone}>{ar ? state.ar : state.en}</Badge>
+          {a.state_since && <span>{ar ? `منذ ${stamp(a.state_since, ar)}` : `since ${stamp(a.state_since, ar)}`}</span>}
+          {a.state === 'paused' && <span>{ar ? '— لا تُحتسب فتحات أثناء التوقف؛ الرقم أدناه يسبق التوقف.' : '— no opens are counted while paused; the figures below predate it.'}</span>}
+        </p>
+      )}
+      <dl data-testid="share-analytics" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {items.map(([label, value]) => (
           <div key={label} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
             <dt className="text-[11px] text-text-muted">{label}</dt>
@@ -60,6 +86,22 @@ export function ShareAnalyticsStrip({ projectId, reportId, shareId }: { projectI
           </div>
         ))}
       </dl>
+
+      {cmp && (
+        <dl data-testid="share-comparison" className="grid grid-cols-3 gap-2 rounded-xl border border-border px-3 py-2 text-xs">
+          <div className="col-span-3 text-[11px] text-text-muted">
+            {ar
+              ? `مقارنة بالفترة السابقة: ${cmp.current.from} → ${cmp.current.to} مقابل ${cmp.previous.from} → ${cmp.previous.to}`
+              : `Against the period before: ${cmp.current.from} → ${cmp.current.to} vs ${cmp.previous.from} → ${cmp.previous.to}`}
+          </div>
+          {([['views', ar ? 'مرات الفتح' : 'Views'], ['devices', ar ? 'أجهزة' : 'Devices'], ['downloads', ar ? 'التنزيلات' : 'Downloads']] as const).map(([key, label]) => (
+            <div key={key} data-testid={`share-compare-${key}`}>
+              <dt className="text-text-muted">{label}</dt>
+              <dd className="font-bold text-text-primary"><Num>{String(cmp.current[key])}</Num> <span className="font-normal text-text-secondary"><Num>{delta(cmp.current[key], cmp.previous[key])}</Num></span> <span className="font-normal text-text-muted">({ar ? 'سابقًا' : 'before'} <Num>{String(cmp.previous[key])}</Num>)</span></dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {drawn && (
         <ChartCard

@@ -127,6 +127,8 @@ export interface ShareRow {
   paused_at?: string | null
   logs_count: number | null
   created_at: string | null
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — what the link publishes per table; `{}` means every column. */
+  columns?: Record<string, string[]>
   /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
   mode: 'live' | 'snapshot'
   /** How much of the report this link is; null means the report's own. */
@@ -303,6 +305,8 @@ export interface ShareEdit {
   clear_expiry?: boolean
   /** Named switches only; the server merges them over the link's existing ones. */
   sections?: Record<string, boolean>
+  /** REPORT-TABLES-OWNER-COLUMNS-001 — the whole column choice per table; a table absent means every column. */
+  columns?: Record<string, string[]>
 }
 
 export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>
@@ -324,6 +328,11 @@ export interface ShareAnalytics {
   granularity?: 'day' | 'week' | 'month'
   period?: { from: string; to: string }
   series?: Array<{ period: string; views: number; devices: number }>
+  /** REPORT-LINK-ANALYTICS-003 — the link's own state beside its figures, and when it entered it. */
+  state?: 'active' | 'paused' | 'revoked' | 'expired'
+  state_since?: string | null
+  /** The drawn window against the equal window just before it, in the report's own days. */
+  comparison?: { current: ShareWindow; previous: ShareWindow }
 }
 
 /**
@@ -338,6 +347,8 @@ export interface AdsBasis {
   family_label_ar: string | null
   family_label_en: string | null
 }
+
+export interface ShareWindow { from: string; to: string; views: number; devices: number; downloads: number }
 
 export type ShareGranularity = 'day' | 'week' | 'month'
 

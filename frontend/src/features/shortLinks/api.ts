@@ -7,7 +7,7 @@ import { getData, getEnvelope, postData, deleteData, patchData } from '@/lib/api
  * above it. Naming it after either kind would put the technical distinction back into the request,
  * and the interface exists to keep it out.
  */
-export type ShortLinkKind = 'whatsapp' | 'link'
+export type ShortLinkKind = 'whatsapp' | 'link' | 'bio'
 
 export interface ShortLink {
   id: string
@@ -34,6 +34,24 @@ export interface ShortLink {
   mode?: 'redirect' | 'landing'
   destination_host?: string | null
   destination_is_whatsapp?: boolean
+  /** SMART-LINK-001 — each optional, each off by default; absent from an older server. */
+  expires_at?: string | null
+  utm?: Record<string, string> | null
+  custom_slug?: boolean
+  state?: 'active' | 'disabled' | 'expired'
+  /** BIO-PAGE-001 — the page body on a bio row; null on every other kind. */
+  bio?: BioBody | null
+}
+
+/** BIO-PAGE-001 — a page of buttons, each one of this workspace's own short links. */
+export interface BioButton { short_link_id: string; label?: string | null }
+export interface BioBody { title: string; subtitle?: string | null; buttons: BioButton[] }
+
+/** SMART-LINK-001 — the optional extras a link may be created with. Nothing here is required. */
+export interface ShortLinkOptions {
+  slug?: string
+  expires_at?: string
+  utm?: Partial<Record<'utm_source' | 'utm_medium' | 'utm_campaign' | 'utm_content' | 'utm_term', string>>
 }
 
 /** One day inside the RECORDED period. A day before it is absent, never a zero. */
@@ -89,14 +107,28 @@ export const shortLinkHistory = (id: string, from?: string, to?: string) => {
   }>
 }
 
-export const createShortLink = (kind: ShortLinkKind, value: string, message?: string) =>
-  postData<ShortLink>('/short-links', { kind, value, ...(message ? { message } : {}) })
+export const createShortLink = (kind: ShortLinkKind, value: string, message?: string, options: ShortLinkOptions = {}) =>
+  postData<ShortLink>('/short-links', {
+    kind,
+    value,
+    ...(message ? { message } : {}),
+    ...(options.slug ? { slug: options.slug } : {}),
+    ...(options.expires_at ? { expires_at: options.expires_at } : {}),
+    ...(options.utm && Object.values(options.utm).some((v) => (v ?? '').trim() !== '') ? { utm: options.utm } : {}),
+  })
+
+/** SMART-LINK-001 — set, move or clear a link's expiry; the slug and the recipient never change. */
+export const updateShortLinkExpiry = (id: string, expiresAt: string | null) =>
+  patchData<ShortLink>(`/short-links/${id}`, { expires_at: expiresAt })
 
 /** SHORT-LINK-COMPLIANCE-001 — edit the words waiting in the WhatsApp composer; the recipient never changes. */
 export const updateShortLinkMessage = (id: string, message: string) =>
   patchData<ShortLink>(`/short-links/${id}`, { message })
 
 export const disableShortLink = (id: string) => postData<ShortLink>(`/short-links/${id}/disable`, {})
+
+/** SHORT-LINK-RESUME-001 — the same slug resumes; nothing is minted and the counters continue. */
+export const enableShortLink = (id: string) => postData<ShortLink>(`/short-links/${id}/enable`, {})
 
 /**
  * SHORT-LINKS-001 — remove it from the library.
@@ -107,3 +139,9 @@ export const disableShortLink = (id: string) => postData<ShortLink>(`/short-link
  */
 export const deleteShortLink = (id: string) => deleteData<null>(`/short-links/${id}`)
 
+
+/** BIO-PAGE-001 — create a bio page (minted or chosen slug); served on the same /l/ hop as every link. */
+export const createBioPage = (body: BioBody & { slug?: string }) => postData<ShortLink>('/short-links/bio', body)
+
+/** BIO-PAGE-001 — the page's words and buttons; the slug never changes. */
+export const updateBioPage = (id: string, body: BioBody) => patchData<ShortLink>(`/short-links/bio/${id}`, body)

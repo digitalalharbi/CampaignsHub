@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, ExternalLink, Link2, MessageCircle, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Copy, ExternalLink, Link2, MessageCircle, QrCode, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/States'
@@ -10,9 +10,12 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytics/charts'
 import { StatCard } from '@/components/ui/StatCard'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
+import { DateField } from '@/components/ui/DateField'
 import { useUi } from '@/stores/ui'
-import { createShortLink, deleteShortLink, disableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
+import { createShortLink, deleteShortLink, disableShortLink, enableShortLink, listShortLinksWithMeta, updateShortLinkMessage, type ShortLink, type ShortLinkKind } from './api'
 import { Num } from '@/components/ui/Num'
+import { ShortLinkQr } from './ShortLinkQr'
+import { BioPageEditor } from './BioPageEditor'
 
 /**
  * SHORT-LINKS-001 — a utility a non-technical person finishes in two fields.
@@ -49,7 +52,19 @@ const COPY = {
     none_hint: 'أنشئ رابطاً مختصراً لمشاركته في إعلان أو رسالة.',
     clicks: 'نقرة',
     disabled: 'موقوف',
+    qr: 'رمز QR',
+    expired: 'منتهٍ',
+    expires: (d: string) => `ينتهي ${d}`,
+    advanced: 'خيارات متقدمة',
+    slug: 'الاسم المختصر (اختياري)',
+    slug_hint: 'حروف إنجليزية صغيرة وأرقام وشرطات، 3 إلى 32 حرفًا. يُترك فارغًا ليولّده النظام.',
+    expiry: 'تاريخ الانتهاء (اختياري)',
+    expiry_hint: 'بعده يُحوَّل الزائر إلى الموقع بدل الوجهة.',
+    utm: 'وسوم UTM (اختياري، للروابط فقط)',
+    utm_hint: 'تُضاف إلى الوجهة عند الإنشاء وتظهر في تحليلات موقعك.',
     disable: 'إيقاف',
+    enable: 'تفعيل',
+    disabled_hint: 'الرابط لا يُحوّل الآن؛ عنوانه محفوظ ويعود بالتفعيل.',
     delete: 'حذف',
     delete_confirm: 'تأكيد الحذف',
     delete_cancel: 'إلغاء',
@@ -86,7 +101,19 @@ const COPY = {
     none_hint: 'Create a short link to share in an ad or a message.',
     clicks: 'clicks',
     disabled: 'Disabled',
+    qr: 'QR code',
+    expired: 'Expired',
+    expires: (d: string) => `Expires ${d}`,
+    advanced: 'Advanced options',
+    slug: 'Custom slug (optional)',
+    slug_hint: 'Lowercase letters, digits and hyphens, 3 to 32 characters. Leave empty and the system mints one.',
+    expiry: 'Expiry date (optional)',
+    expiry_hint: 'After it the visitor is sent to the site instead of the destination.',
+    utm: 'UTM tags (optional, links only)',
+    utm_hint: 'Added to the destination at creation; they appear in your site analytics.',
     disable: 'Disable',
+    enable: 'Enable',
+    disabled_hint: 'The link does not resolve now; its address is kept and returns on enable.',
     delete: 'Delete',
     delete_confirm: 'Confirm delete',
     delete_cancel: 'Cancel',
@@ -145,6 +172,17 @@ export function ShortLinksPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [created, setCreated] = useState<ShortLink | null>(null)
+  /* SHORT-LINK-QR-001 — which link's code is open, drawn in the browser from its own address. */
+  const [qrFor, setQrFor] = useState<ShortLink | null>(null)
+  /*
+   * SMART-LINK-001 — the Owner's 2026-10-21 correction: a chosen slug, an expiry and UTM tags MAY be
+   * set. Behind a closed disclosure so the two-field path stays the two-field path: nothing technical
+   * is on screen until somebody asks for it.
+   */
+  const [advanced, setAdvanced] = useState(false)
+  const [slug, setSlug] = useState('')
+  const [expiresAt, setExpiresAt] = useState('')
+  const [utm, setUtm] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
   /*
@@ -159,6 +197,9 @@ export function ShortLinksPage() {
     setUrl('')
     setMessage('')
     setError(null)
+    setSlug('')
+    setExpiresAt('')
+    setUtm({})
   }
 
   const create = useMutation({
@@ -172,7 +213,19 @@ export function ShortLinksPage() {
 
       const note = kind === 'whatsapp' ? message.trim() : ''
 
-      return note === '' ? createShortLink(kind, value) : createShortLink(kind, value, note)
+      const filledUtm = Object.fromEntries(Object.entries(utm).filter(([, v]) => v.trim() !== ''))
+      const options = {
+        ...(slug.trim() ? { slug: slug.trim().toLowerCase() } : {}),
+        ...(expiresAt ? { expires_at: `${expiresAt}T23:59:59` } : {}),
+        ...(kind === 'link' && Object.keys(filledUtm).length > 0 ? { utm: filledUtm } : {}),
+      }
+
+      // The two-field call stays the two-field call: nothing travels that nobody filled.
+      if (Object.keys(options).length === 0) {
+        return note === '' ? createShortLink(kind, value) : createShortLink(kind, value, note)
+      }
+
+      return createShortLink(kind, value, note === '' ? undefined : note, options)
     },
     onSuccess: (link) => {
       setCreated(link)
@@ -182,7 +235,7 @@ export function ShortLinksPage() {
     },
     onError: (e: { response?: { data?: { errors?: Record<string, string[]>; message?: string } } }) => {
       const errors = e.response?.data?.errors
-      setError(errors?.value?.[0] ?? errors?.kind?.[0] ?? e.response?.data?.message ?? null)
+      setError(errors?.value?.[0] ?? errors?.kind?.[0] ?? errors?.slug?.[0] ?? errors?.expires_at?.[0] ?? e.response?.data?.message ?? null)
     },
   })
 
@@ -196,6 +249,12 @@ export function ShortLinksPage() {
 
   const disable = useMutation({
     mutationFn: (id: string) => disableShortLink(id),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['short-links'] }),
+  })
+
+  /* SHORT-LINK-RESUME-001 — the mirror of disable: the same address resumes, nothing is minted. */
+  const enable = useMutation({
+    mutationFn: (id: string) => enableShortLink(id),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['short-links'] }),
   })
 
@@ -233,7 +292,9 @@ export function ShortLinksPage() {
     )
   }
 
-  const rows = links.data?.data ?? []
+  const all = links.data?.data ?? []
+  // BIO-PAGE-001 — pages are drawn by their own editor below; the links list stays a list of links.
+  const rows = all.filter((l) => l.kind !== 'bio')
   const meta = links.data?.meta
   const recordingSince = meta?.recording_since ?? null
   const curve = meta?.daily ?? []
@@ -282,7 +343,7 @@ export function ShortLinksPage() {
         <Card>
           <div className="flex flex-col gap-3" data-testid="short-link-result">
             <span className="text-sm font-semibold text-text-secondary">{t.ready}</span>
-            <code dir="ltr" className="block rounded-xl bg-surface-secondary p-3 text-center text-base font-bold">
+            <code dir="ltr" className="block break-all rounded-xl bg-surface-secondary p-3 text-center text-base font-bold">
               {created.short_url}
             </code>
             <div className="flex flex-wrap gap-2">
@@ -294,6 +355,10 @@ export function ShortLinksPage() {
               <Button variant="secondary" onClick={() => window.open(created.short_url, '_blank', 'noopener')}>
                 <ExternalLink size={15} />
                 {t.open}
+              </Button>
+              <Button variant="secondary" onClick={() => setQrFor(created)} data-testid="short-link-qr-open">
+                <QrCode size={15} />
+                {t.qr}
               </Button>
               <Button variant="secondary" onClick={() => { setCreated(null); setOpen(true) }}>
                 {t.another}
@@ -367,6 +432,59 @@ export function ShortLinksPage() {
               </Field>
             )}
 
+            {/* SMART-LINK-001 — closed by default; opened, it offers the three optional extras and nothing else. */}
+            <div className="rounded-xl border border-border" data-testid="short-link-advanced">
+              <button
+                type="button"
+                onClick={() => setAdvanced((v) => !v)}
+                aria-expanded={advanced}
+                data-testid="short-link-advanced-toggle"
+                className="flex w-full items-center justify-between px-3 py-2 text-xs font-bold text-text-secondary"
+              >
+                {t.advanced}
+                <ChevronDown size={14} className={advanced ? 'rotate-180' : ''} aria-hidden />
+              </button>
+              {advanced && (
+                <div className="flex flex-col gap-3 border-t border-border p-3">
+                  <Field label={t.slug} htmlFor="short-link-slug" hint={t.slug_hint}>
+                    <input
+                      id="short-link-slug"
+                      dir="ltr"
+                      value={slug}
+                      maxLength={32}
+                      onChange={(e) => { setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); setError(null) }}
+                      placeholder="summer-sale"
+                      data-testid="short-link-slug"
+                      className="w-full rounded-xl border border-border bg-surface p-2.5 text-sm"
+                    />
+                    {slug.trim() !== '' && <code dir="ltr" className="mt-1 block text-xs text-text-muted" data-testid="short-link-slug-preview">{`${window.location.origin}/l/${slug.trim()}`}</code>}
+                  </Field>
+                  <Field label={t.expiry} htmlFor="short-link-expiry" hint={t.expiry_hint}>
+                    <DateField id="short-link-expiry" value={expiresAt} onChange={setExpiresAt} />
+                  </Field>
+                  {kind === 'link' && (
+                    <Field label={t.utm} htmlFor="short-link-utm-source" hint={t.utm_hint}>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        {(['utm_source', 'utm_medium', 'utm_campaign'] as const).map((key) => (
+                          <input
+                            key={key}
+                            id={`short-link-${key.replace('_', '-')}`}
+                            dir="ltr"
+                            value={utm[key] ?? ''}
+                            maxLength={100}
+                            onChange={(e) => setUtm((u) => ({ ...u, [key]: e.target.value }))}
+                            placeholder={key}
+                            data-testid={`short-link-${key}`}
+                            className="w-full rounded-xl border border-border bg-surface p-2.5 text-sm"
+                          />
+                        ))}
+                      </div>
+                    </Field>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2">
               <Button
                 onClick={() => create.mutate()}
@@ -380,6 +498,10 @@ export function ShortLinksPage() {
           </div>
         </Card>
       ) : null}
+
+      {qrFor && <ShortLinkQr url={qrFor.short_url} slug={qrFor.slug} ar={ar} onClose={() => setQrFor(null)} />}
+
+      <BioPageEditor links={all} ar={ar} />
 
       <Card>
         {rows.length === 0 ? (
@@ -420,12 +542,19 @@ export function ShortLinksPage() {
                 <div className="flex items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>
                   <span className="tnum text-xs text-text-secondary">{l.clicks} {t.clicks}</span>
-                  {!l.is_active && <Badge tone="warning">{t.disabled}</Badge>}
+                  {!l.is_active && <Badge tone="warning" data-testid={`short-link-state-${l.id}`}>{t.disabled}</Badge>}
+                  {l.is_active && l.state === 'expired' && <Badge tone="neutral" data-testid={`short-link-expired-${l.id}`}>{t.expired}</Badge>}
+                  {l.is_active && l.state !== 'expired' && l.expires_at && <span className="text-[11px] text-text-muted" data-testid={`short-link-expiry-${l.id}`}><Num>{t.expires(l.expires_at.slice(0, 10))}</Num></span>}
                   <Button variant="secondary" onClick={() => void copy(l.short_url)} aria-label={t.copy}>
                     {copied === l.short_url ? <Check size={14} /> : <Copy size={14} />}
                   </Button>
-                  {l.is_active && (
-                    <Button variant="secondary" onClick={() => disable.mutate(l.id)}>{t.disable}</Button>
+                  <Button variant="secondary" onClick={() => setQrFor(l)} aria-label={t.qr} data-testid={`short-link-qr-${l.id}`}>
+                    <QrCode size={14} />
+                  </Button>
+                                    {l.is_active ? (
+                    <Button variant="secondary" onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => enable.mutate(l.id)} disabled={enable.isPending} data-testid={`short-link-enable-${l.id}`}>{t.enable}</Button>
                   )}
                   {confirming === l.id ? (
                     <>

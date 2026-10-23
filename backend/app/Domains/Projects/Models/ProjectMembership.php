@@ -18,12 +18,13 @@ final class ProjectMembership extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'tenant_id', 'project_id', 'user_id', 'role', 'permissions', 'status',
+        'tenant_id', 'project_id', 'user_id', 'role', 'permissions', 'denied', 'status',
         'joined_at', 'expires_at', 'created_by',
     ];
 
     protected $casts = [
         'permissions' => 'array',
+        'denied' => 'array',
         'joined_at' => 'datetime',
         'expires_at' => 'datetime',
     ];

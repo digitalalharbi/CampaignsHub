@@ -68,7 +68,13 @@ final class DigestDeliveryTest extends TestCase
         $this->project = Project::create(['client_workspace_id' => $ws->id, 'name' => 'P', 'status' => 'active']);
 
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner-dd']);
-        $role->givePermissionTo('clients.view_all');
+        /*
+         * `clients.view_all` is the digest's own reach rule; `projects.view.all` + `campaigns.view` are what make this
+         * person an OWNER to the project engine (MEMBER-VISIBILITY-001: a non-member who could read campaigns keeps
+         * the money through the tenant role). Without them the engine, honestly, withholds the money — which the
+         * audience test below is not about.
+         */
+        $role->givePermissionTo('clients.view_all', 'projects.view.all', 'campaigns.view');
 
         $this->user = User::create(['name' => 'Ops', 'email' => 'ops@digest.test', 'password' => 'secret123']);
         Membership::create(['tenant_id' => $this->tenant->id, 'user_id' => $this->user->id, 'portal' => 'agency', 'status' => 'active']);

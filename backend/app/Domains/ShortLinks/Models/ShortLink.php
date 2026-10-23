@@ -34,6 +34,9 @@ final class ShortLink extends Model
 
     public const KIND_LINK = 'link';
 
+    /** BIO-PAGE-001 — a page of buttons, each another short link; served on the same hop. */
+    public const KIND_BIO = 'bio';
+
     public const MODE_REDIRECT = 'redirect';
 
     public const MODE_LANDING = 'landing';
@@ -41,11 +44,33 @@ final class ShortLink extends Model
     protected $fillable = [
         'tenant_id', 'project_id', 'slug', 'kind', 'destination', 'source_value', 'message', 'mode',
         'clicks', 'last_clicked_at', 'is_active', 'created_by',
+        // SMART-LINK-001 — each optional, each off by default.
+        'expires_at', 'utm', 'custom_slug', 'bio',
     ];
 
     protected $casts = [
         'clicks' => 'integer',
         'last_clicked_at' => 'datetime',
         'is_active' => 'boolean',
+        'expires_at' => 'datetime',
+        'utm' => 'array',
+        'custom_slug' => 'boolean',
+        'bio' => 'array',
     ];
+
+    /** SMART-LINK-001 — past its expiry, if it has one. */
+    public function isExpired(): bool
+    {
+        return $this->expires_at !== null && $this->expires_at->isPast();
+    }
+
+    /** What the row says about itself: active, disabled by the Owner, or expired by the clock. */
+    public function state(): string
+    {
+        if (! $this->is_active) {
+            return 'disabled';
+        }
+
+        return $this->isExpired() ? 'expired' : 'active';
+    }
 }

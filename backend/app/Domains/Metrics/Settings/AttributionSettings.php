@@ -53,7 +53,27 @@ final class AttributionSettings
             'lookback_days' => $row->lookback_days,
             'half_life_days' => $row->half_life_days,
             'weights' => $row->weights,
+            // ATTRIB-PRESETS-001 — the named preset and the advanced options (null unless ADVANCED or CUSTOM).
+            'preset' => $row->preset ?? AttributionPresets::DEFAULT,
+            'advanced' => $row->advanced,
         ];
+    }
+
+    /**
+     * ATTRIB-PRESETS-001 — the versions of this project's setting, newest first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function versions(string $tenantId, string $projectId, int $limit = 20): array
+    {
+        return ProjectAttributionSettingVersion::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)
+            ->orderByDesc('number')->limit($limit)->get()
+            ->map(static fn (ProjectAttributionSettingVersion $v): array => [
+                'number' => $v->number, 'preset' => $v->preset, 'models' => $v->models, 'lookback_days' => $v->lookback_days,
+                'half_life_days' => $v->half_life_days, 'weights' => $v->weights, 'advanced' => $v->advanced,
+                'version' => $v->version, 'changed_by' => $v->changed_by, 'created_at' => $v->created_at?->toIso8601String(),
+            ])->all();
     }
 
     /**
@@ -65,18 +85,47 @@ final class AttributionSettings
      */
     public function save(string $tenantId, string $projectId, array $raw, ?int $userId): ProjectAttributionSetting
     {
+        /*
+         * ATTRIB-PRESETS-001 — a preset names the configuration; the engine still validates it.
+         *
+         * A request without a preset is the pre-preset contract (models and the rest, stored as
+         * CUSTOM so the record says what it is). Every save writes a version row, so the comparison
+         * a reader opens tomorrow can be named with the configuration it was computed under.
+         */
+        $preset = (string) ($raw['preset'] ?? '');
+        $advanced = null;
+        if ($preset !== '') {
+            $resolved = AttributionPresets::resolve($preset, $raw);
+            $raw = $resolved['config'];
+            $advanced = $resolved['advanced'];
+        } else {
+            $preset = AttributionPresets::CUSTOM;
+        }
         $config = AttributionCredit::config($raw);
 
-        return ProjectAttributionSetting::withoutGlobalScopes()->updateOrCreate(
+        $row = ProjectAttributionSetting::withoutGlobalScopes()->updateOrCreate(
             ['tenant_id' => $tenantId, 'project_id' => $projectId],
             [
                 'models' => $config['models'],
                 'lookback_days' => $config['lookback_days'],
                 'half_life_days' => $config['half_life_days'],
                 'weights' => $config['weights'],
+                'preset' => $preset,
+                'advanced' => $advanced,
                 'version' => AttributionCredit::VERSION,
                 'updated_by' => $userId,
             ],
         );
+
+        $number = 1 + (int) ProjectAttributionSettingVersion::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)->max('number');
+        ProjectAttributionSettingVersion::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId, 'project_id' => $projectId, 'number' => $number,
+            'preset' => $preset, 'models' => $config['models'], 'lookback_days' => $config['lookback_days'],
+            'half_life_days' => $config['half_life_days'], 'weights' => $config['weights'], 'advanced' => $advanced,
+            'version' => AttributionCredit::VERSION, 'changed_by' => $userId, 'created_at' => now(),
+        ]);
+
+        return $row;
     }
 }
