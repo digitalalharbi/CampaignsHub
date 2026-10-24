@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ClipboardCopy, EyeOff, FileUp, Loader2, Pencil, Send, X } from 'lucide-react'
+import { Check, ClipboardCopy, EyeOff, FileUp, Loader2, Pencil, RotateCw, Send, X } from 'lucide-react'
 import { DeliverySettingsCard } from './DeliverySettingsCard'
 import { PackNotesEditor } from './PackNotesEditor'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -36,6 +36,7 @@ const COPY = {
     approve: 'اعتماد', hide: 'إخفاء', reject: 'رفض', edit: 'تعديل', save: 'حفظ', cancel: 'إلغاء',
     status: { draft: 'مسودة', reviewed: 'روجعت', approved: 'معتمدة', hidden: 'مخفية', rejected: 'مرفوضة' } as Record<string, string>,
     edited: 'معدّلة',
+    tooBig: 'حجم الملف أكبر من 10 ميغابايت. اختر لقطة أصغر.', badType: 'نوع الملف غير مقبول. المسموح: PNG أو JPG أو WebP أو PDF.', retry: 'إعادة المحاولة', uploading: 'جارٍ رفع',
     evidence: 'لقطات المنصات', drop: 'اسحب لقطة هنا أو اضغط للاختيار', provider: 'المنصة', note: 'ملاحظة (اختياري)', remove: 'حذف',
     pieces: 'ما يستلمه العميل',
     pieceNames: { whatsapp: 'ملخص واتساب', link: 'رابط التقرير', report_pdf: 'تقرير PDF', evidence: 'لقطات المنصات', invoice_pdf: 'فاتورة PDF', amount_due: 'المبلغ المستحق', spend: 'الإنفاق في الرسالة' } as Record<string, string>,
@@ -52,6 +53,7 @@ const COPY = {
     approve: 'Approve', hide: 'Hide', reject: 'Reject', edit: 'Edit', save: 'Save', cancel: 'Cancel',
     status: { draft: 'Draft', reviewed: 'Reviewed', approved: 'Approved', hidden: 'Hidden', rejected: 'Rejected' } as Record<string, string>,
     edited: 'Edited',
+    tooBig: 'The file is larger than 10 MB. Choose a smaller screenshot.', badType: 'This file type is not accepted. Use PNG, JPG, WebP or PDF.', retry: 'Try again', uploading: 'Uploading',
     evidence: 'Platform evidence', drop: 'Drop a screenshot here or click to choose', provider: 'Platform', note: 'Note (optional)', remove: 'Remove',
     pieces: 'What the client receives',
     pieceNames: { whatsapp: 'WhatsApp summary', link: 'Report link', report_pdf: 'Report PDF', evidence: 'Platform evidence', invoice_pdf: 'Invoice PDF', amount_due: 'Amount due', spend: 'Spend in the message' } as Record<string, string>,
@@ -244,17 +246,37 @@ function Recommendations({ pack, t, open, onChange }: { pack: PackDetail; t: typ
   )
 }
 
+const EVIDENCE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf']
+const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024
+
+/** What the server will refuse anyway, said before the bytes travel: a wrong type, or more than the 10 MB the API accepts. */
+export function checkEvidenceFile(f: File): 'type' | 'size' | null {
+  if (!EVIDENCE_MIMES.includes(f.type)) return 'type'
+  return f.size > EVIDENCE_MAX_BYTES ? 'size' : null
+}
+
 function Evidence({ pack, clientId, t, ar, open, onChange }: { pack: PackDetail; clientId: string; t: typeof COPY.ar; ar: boolean; open: boolean; onChange: () => void }) {
   const input = useRef<HTMLInputElement>(null)
   const [provider, setProvider] = useState<string>(PLATFORM_ORDER[0])
   const [note, setNote] = useState('')
   const [over, setOver] = useState(false)
+  // The file being sent (or that failed), kept so it can be previewed and retried without choosing it again.
+  const [pending, setPending] = useState<{ file: File; url: string | null } | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+  useEffect(() => () => { if (pending?.url) URL.revokeObjectURL(pending.url) }, [pending])
   const upload = useMutation({
     mutationFn: (file: File) => uploadEvidence({ clientId, projectId: pack.project_id, provider, from: pack.period.from, to: pack.period.to, file, note }),
-    onSuccess: () => { setNote(''); onChange() },
+    onSuccess: () => { setNote(''); setPending(null); onChange() },
   })
   const remove = useMutation({ mutationFn: (id: string) => deleteEvidence(id), onSuccess: onChange })
-  const take = (files: FileList | null) => { const f = files?.[0]; if (f) upload.mutate(f) }
+  const send = (f: File) => {
+    const refusal = checkEvidenceFile(f)
+    setProblem(refusal === 'size' ? t.tooBig : refusal === 'type' ? t.badType : null)
+    if (refusal) { setPending(null); return }
+    setPending({ file: f, url: f.type.startsWith('image/') && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(f) : null })
+    upload.mutate(f)
+  }
+  const take = (files: FileList | null) => { const f = files?.[0]; if (f) send(f) }
 
   return (
     <div>
@@ -279,12 +301,26 @@ function Evidence({ pack, clientId, t, ar, open, onChange }: { pack: PackDetail;
           <input ref={input} data-testid="evidence-input" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" hidden onChange={(e) => { take(e.target.files); e.target.value = '' }} />
         </div>
       )}
-      {upload.isError && <p role="alert" className="mb-2 text-xs text-danger">{toApiError(upload.error).message}</p>}
+      {problem && <p role="alert" data-testid="evidence-problem" className="mb-2 text-xs text-danger">{problem}</p>}
+      {pending && (
+        <div data-testid="evidence-pending" className="mb-2 flex items-center gap-2 rounded-xl border border-border p-2.5 text-xs">
+          {pending.url ? <img src={pending.url} alt={pending.file.name} className="h-10 w-10 rounded object-cover" /> : <FileUp size={16} />}
+          <span className="min-w-0 flex-1 truncate text-text-primary">{pending.file.name}</span>
+          {upload.isPending && <span className="flex items-center gap-1 text-text-secondary"><Loader2 size={13} className="animate-spin" /> {t.uploading}</span>}
+          {upload.isError && (
+            <>
+              <span role="alert" className="text-danger">{toApiError(upload.error).message}</span>
+              <button type="button" data-testid="evidence-retry" onClick={() => upload.mutate(pending.file)} className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 font-medium text-text-primary hover:bg-surface-secondary"><RotateCw size={13} /> {t.retry}</button>
+              <button type="button" onClick={() => { setPending(null); upload.reset() }} aria-label={t.remove} className="rounded p-1 text-text-muted hover:text-danger"><X size={14} /></button>
+            </>
+          )}
+        </div>
+      )}
       <ul className="grid gap-2 sm:grid-cols-2">
         {pack.evidence.map((e) => (
           <li key={e.id} data-testid={`evidence-${e.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-border p-2.5">
             <a href={evidenceFileUrl(e.id)} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 hover:underline">
-              <ProviderMark provider={e.provider} />
+              {e.mime?.startsWith('image/') ? <img src={evidenceFileUrl(e.id)} alt={e.original_name} loading="lazy" className="h-9 w-9 shrink-0 rounded object-cover" /> : <ProviderMark provider={e.provider} />}
               <span className="truncate text-xs text-text-primary">{e.note || e.original_name}</span>
             </a>
             {open && <button type="button" onClick={() => remove.mutate(e.id)} aria-label={t.remove} className="rounded p-1 text-text-muted hover:text-danger"><X size={14} /></button>}
