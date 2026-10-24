@@ -9,11 +9,10 @@ first PR that is still open, and does exactly one thing for it per run:
 4. **all of backend, frontend, image and the three browser gates green** — squash-merges, starts the
    production deploy, and moves on to the next PR.
 
-A merged or closed PR is skipped, so lines can stay — but the list below is kept to the PRs that are actually waiting (2026-10-24: #838 login wording; #837 is merged), because a list of 700-series numbers that all merged months ago hides the one that matters. To change the order, edit this file in a PR.
+A merged or closed PR is skipped, so lines can stay — but the list below is kept to the PRs that are actually waiting (2026-10-24: empty — #837, #838 and #839 are merged; a PR number is added only when it is actually waiting), because a list of 700-series numbers that all merged months ago hides the one that matters. To change the order, edit this file in a PR.
 The queue never bypasses a failing check and never merges a head whose checks are missing.
 
 ```
-838
 ```
 
 ## How a stale PR is refreshed without a secret
