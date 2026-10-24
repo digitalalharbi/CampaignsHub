@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FileText, Plus, Share2 } from 'lucide-react'
-import { createClientReport, listClientReports, shareClientReport, type ClientDetail, type ClientReport } from './api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { FileText, Link2, Plus, Share2 } from 'lucide-react'
+import { listClientReports, type ClientDetail, type ClientReport } from './api'
+import { LiveLinkBuilder } from '@/features/reports/LiveLinkBuilder'
+import { ReportBuilder, ShareManager } from '@/features/reports/ReportsPage'
 import { useT } from '@/lib/i18n'
-
-const REPORT_TYPES = ['executive', 'monthly', 'weekly', 'project', 'campaign', 'platform', 'platform_comparison', 'custom']
+import { useUi } from '@/stores/ui'
 
 function statusLabel(s: ClientReport['status'], t: ReturnType<typeof useT>): string {
   return { processing: t('rp_processing'), completed: t('rp_completed'), failed: t('rp_failed'), draft: t('rp_draft') }[s]
@@ -13,83 +14,48 @@ function statusTone(s: ClientReport['status']): string {
   return s === 'completed' ? 'bg-success/15 text-success' : s === 'failed' ? 'bg-danger/15 text-danger' : 'bg-surface-secondary text-text-muted'
 }
 
+const COPY = {
+  ar: { newReport: 'تقرير جديد', live: 'رابط مباشر', manage: 'المشاركة', project: 'المشروع', hint: 'التقرير الجديد يتيح اختيار «مباشر» (يتحدّث مع البيانات) أو «ثابت» (نسخة للفترة)، ونفس إعدادات الحسابات والمؤشرات والأقسام والهوية في صفحة التقارير.' },
+  en: { newReport: 'New report', live: 'Live link', manage: 'Sharing', project: 'Project', hint: 'A new report can be Live (follows the synced data) or a Snapshot (fixed for its period), with the same accounts, metrics, sections and identity controls as the Reports page.' },
+}
+
+/**
+ * CLIENT-REPORTS-UNIFIED-001 — the client file's Reports tab is the SAME report builder and share manager the Reports page uses.
+ *
+ * It used to carry a thin form of its own (name, type, audience) and a one-click share that minted a link with no scope, no
+ * pause and no revoke. Creation, live links and link management are now the existing components, started from here with this
+ * client's projects, so nothing is configured twice and nothing here can drift from the Reports page.
+ */
 export function TabReports({ d }: { d: ClientDetail }) {
   const t = useT()
+  const c = COPY[useUi((s) => s.locale) === 'ar' ? 'ar' : 'en']
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['app', 'client', d.id, 'reports'], queryFn: () => listClientReports(d.id) })
-  const [showNew, setShowNew] = useState(false)
-  const [shareLink, setShareLink] = useState<string | null>(null)
-  const [form, setForm] = useState({ project_id: d.projects[0]?.id ?? '', name: '', type: 'monthly', audience: 'client' as ClientReport['audience'] })
-
-  const create = useMutation({
-    mutationFn: () => createClientReport(d.id, form),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['app', 'client', d.id, 'reports'] }); setShowNew(false); setForm((f) => ({ ...f, name: '' })) },
-  })
-  const share = useMutation({
-    mutationFn: (reportId: string) => shareClientReport(d.id, reportId, { allow_download: true }),
-    onSuccess: (r) => setShareLink(r.url),
-  })
+  const [projectId, setProjectId] = useState(d.projects[0]?.id ?? '')
+  const [open, setOpen] = useState<'report' | 'live' | null>(null)
+  const [sharing, setSharing] = useState<ClientReport | null>(null)
 
   const reports = q.data?.reports ?? []
-  const field = 'h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-500'
+  const refresh = () => qc.invalidateQueries({ queryKey: ['app', 'client', d.id, 'reports'] })
+  const field = 'h-10 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-500'
+  const button = 'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold'
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-text-muted">{t('rp_internal_note')}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="max-w-prose text-xs text-text-muted">{t('rp_internal_note')} {c.hint}</p>
         {d.can.view_reports && (
-          <button onClick={() => setShowNew((v) => !v)} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"><Plus size={15} /> {t('rp_new')}</button>
+          <div className="flex flex-wrap items-center gap-2">
+            {d.projects.length > 1 && (
+              <select aria-label={c.project} data-testid="client-reports-project" className={field} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                {d.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
+            <button type="button" data-testid="client-reports-new" disabled={!projectId} onClick={() => setOpen('report')} className={`${button} bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60`}><Plus size={15} /> {c.newReport}</button>
+            <button type="button" data-testid="client-reports-live" disabled={!projectId} onClick={() => setOpen('live')} className={`${button} border border-border text-text-primary hover:bg-surface-secondary disabled:opacity-60`}><Link2 size={15} /> {c.live}</button>
+          </div>
         )}
       </div>
-
-      {showNew && (
-        <form onSubmit={(e) => { e.preventDefault(); create.mutate() }} className="grid gap-3 rounded-xl border border-border bg-surface-secondary p-4 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-text-secondary">{t('rp_name')}
-            <input className={field} required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          </label>
-          <label className="text-xs font-semibold text-text-secondary">{t('rp_project')}
-            <select className={field} value={form.project_id} onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}>
-              {d.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-text-secondary">{t('rp_type')}
-            <select className={field} value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-              {REPORT_TYPES.map((ty) => <option key={ty} value={ty}>{ty}</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-text-secondary">{t('rp_audience')}
-            <select className={field} value={form.audience} onChange={(e) => setForm((f) => ({ ...f, audience: e.target.value as ClientReport['audience'] }))}>
-              <option value="client">{t('rp_aud_client')}</option>
-              <option value="internal">{t('rp_aud_internal')}</option>
-              <option value="executive">{t('rp_aud_executive')}</option>
-            </select>
-          </label>
-          <div className="sm:col-span-2">
-            <button type="submit" disabled={create.isPending || !form.project_id} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{t('rp_create')}</button>
-          </div>
-        </form>
-      )}
-
-      {/*
-        SAVE-FAILURE-TRUTH-001 — a refused create or share is said, not swallowed.
-
-        Neither mutation had an error surface. A failed «create» left the form filled and the button
-        re-enabled, and a failed «share» left no link and no sentence — so the operator's reading was
-        «I have a link» or «nothing happened», and one of those sends a client nothing while the
-        other sends them looking for a URL that was never minted.
-      */}
-      {(create.isError || share.isError) && (
-        <p className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-xs font-semibold text-danger" data-testid="client-reports-failed">
-          {create.isError ? t('rp_create_failed') : t('rp_share_failed')}
-        </p>
-      )}
-
-      {shareLink && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
-          <span className="truncate">{t('rp_shared')} <span className="font-mono text-xs" dir="ltr">{shareLink}</span></span>
-          <button onClick={() => navigator.clipboard?.writeText(shareLink)} className="flex items-center gap-1 whitespace-nowrap text-xs font-semibold"><Copy size={13} /> {t('rp_copy')}</button>
-        </div>
-      )}
 
       {q.isLoading ? (
         <div className="h-24 animate-pulse rounded-xl bg-surface-secondary" />
@@ -107,13 +73,17 @@ export function TabReports({ d }: { d: ClientDetail }) {
               <div className="flex items-center gap-2">
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(r.status)}`}>{statusLabel(r.status, t)}</span>
                 {r.shareable && d.can.view_reports && (
-                  <button onClick={() => share.mutate(r.id)} disabled={share.isPending} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary"><Share2 size={13} /> {t('rp_share')}</button>
+                  <button type="button" data-testid={`client-report-share-${r.id}`} onClick={() => setSharing(r)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary"><Share2 size={13} /> {c.manage}</button>
                 )}
               </div>
             </li>
           ))}
         </ul>
       )}
+
+      {open === 'report' && projectId && <ReportBuilder projectId={projectId} onClose={() => setOpen(null)} onCreated={() => { setOpen(null); refresh() }} />}
+      {open === 'live' && projectId && <LiveLinkBuilder projectId={projectId} onClose={() => { setOpen(null); refresh() }} />}
+      {sharing && <ShareManager projectId={sharing.project_id} reportId={sharing.id} onClose={() => setSharing(null)} />}
     </div>
   )
 }
