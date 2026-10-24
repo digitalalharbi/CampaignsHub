@@ -8,7 +8,9 @@ use App\Domains\Agents\Jobs\RunAgentTurnJob;
 use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Support\AgentRoles;
+use App\Domains\Agents\Services\AgentChatRetention;
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
@@ -149,10 +151,10 @@ final class AgentChatController extends Controller
         });
     }
 
-    /** How long a conversation is kept after its last message — shown on screen and enforced by `agents:purge-chat`. */
+    /** How long THIS workspace keeps a conversation after its last message — shown on screen and enforced by `agents:purge-chat`. */
     public static function retentionDays(): int
     {
-        return max(1, (int) config('agents.chat_retention_days', 90));
+        return AgentChatRetention::forTenant(app(TenantContext::class)->tenantId());
     }
 
     /** Start a thread with a first message, or add one to an existing thread; the reply is queued. */

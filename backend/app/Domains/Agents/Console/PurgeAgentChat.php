@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Console;
 
-use App\Domains\Agents\Http\Controllers\AgentChatController;
+use App\Domains\Agents\Services\AgentChatRetention;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Ops\Services\ScheduledRunRows;
@@ -26,19 +27,21 @@ final class PurgeAgentChat extends Command
     public function handle(): int
     {
         $now = $this->option('now') !== null ? Carbon::parse((string) $this->option('now')) : Carbon::now();
-        $cutoff = $now->copy()->subDays(AgentChatController::retentionDays());
-
-        $ids = AgentThread::withoutGlobalScopes()->where('updated_at', '<', $cutoff)->where('status', '!=', 'thinking')->pluck('id');
         $deleted = 0;
-        foreach ($ids->chunk(200) as $chunk) {
-            DB::transaction(function () use ($chunk, &$deleted): void {
-                AgentMessage::withoutGlobalScopes()->whereIn('thread_id', $chunk)->delete();
-                $deleted += AgentThread::withoutGlobalScopes()->whereIn('id', $chunk)->delete();
-            });
+        // Each workspace keeps conversations for ITS own retention; a threads' tenant decides, never another's choice.
+        foreach (Tenant::withoutGlobalScopes()->pluck('id') as $tenantId) {
+            $cutoff = $now->copy()->subDays(AgentChatRetention::forTenant((string) $tenantId));
+            $ids = AgentThread::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('updated_at', '<', $cutoff)->where('status', '!=', 'thinking')->pluck('id');
+            foreach ($ids->chunk(200) as $chunk) {
+                DB::transaction(function () use ($chunk, &$deleted): void {
+                    AgentMessage::withoutGlobalScopes()->whereIn('thread_id', $chunk)->delete();
+                    $deleted += AgentThread::withoutGlobalScopes()->whereIn('id', $chunk)->delete();
+                });
+            }
         }
 
         app(ScheduledRunRows::class)->report($deleted);
-        $this->line(sprintf('  %d conversation(s) older than %d days deleted.', $deleted, AgentChatController::retentionDays()));
+        $this->line(sprintf('  %d conversation(s) past their workspace\'s retention deleted.', $deleted));
 
         return self::SUCCESS;
     }
