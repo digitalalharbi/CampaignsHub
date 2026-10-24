@@ -8,6 +8,7 @@ use App\Domains\Agents\Http\Controllers\AgentChatController;
 use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
 use App\Domains\Automation\Http\Controllers\AutomationRulesController;
+use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
@@ -153,6 +154,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         ->middleware('project.can:reports.view')
         ->whereIn('role', ['agency', 'client'])
         ->name('report-identity.logo.remove');
+
+    // LOGO-UPLOAD-001 — the project's own logo as a file (falls back to the client's, then the agency's).
+    Route::get('logo', [ScopedLogoController::class, 'showProject'])->middleware('project.can:reports.view')->name('logo.show');
+    Route::get('logo/file', [ScopedLogoController::class, 'fileProject'])->middleware('project.can:reports.view')->name('logo.file');
+    Route::post('logo', [ScopedLogoController::class, 'storeProject'])->middleware('project.can:reports.view')->name('logo.store');
+    Route::delete('logo', [ScopedLogoController::class, 'destroyProject'])->middleware('project.can:reports.view')->name('logo.destroy');
 
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');

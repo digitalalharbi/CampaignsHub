@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientActivityController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientAnalyticsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientFilesController;
@@ -26,6 +27,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     // Classification management + settings + archive lifecycle.
     Route::patch('/{client}/classification', [ClientManagementController::class, 'updateClassification'])->name('classification');
     Route::patch('/{client}/settings', [ClientManagementController::class, 'updateSettings'])->name('settings');
+    // LOGO-UPLOAD-001 — the client's logo as a file: upload / replace / remove / preview.
+    Route::get('/{client}/logo', [ScopedLogoController::class, 'showClient'])->name('logo.show');
+    Route::get('/{client}/logo/file', [ScopedLogoController::class, 'fileClient'])->name('logo.file');
+    Route::post('/{client}/logo', [ScopedLogoController::class, 'storeClient'])->name('logo.store');
+    Route::delete('/{client}/logo', [ScopedLogoController::class, 'destroyClient'])->name('logo.destroy');
     Route::post('/{client}/archive', [ClientManagementController::class, 'archive'])->name('archive');
     Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore');
 
