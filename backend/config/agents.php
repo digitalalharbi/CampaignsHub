@@ -16,6 +16,9 @@ return [
         'daily_budget_ceiling' => null,
     ],
 
+    // AGENT-CHAT-PRIVACY-001 — how long a conversation is kept after its last message; `agents:purge-chat` deletes older ones daily.
+    'chat_retention_days' => (int) env('AGENTS_CHAT_RETENTION_DAYS', 90),
+
     // How long an unanswered proposal stays decidable.
     'proposal_ttl_hours' => 72,
 

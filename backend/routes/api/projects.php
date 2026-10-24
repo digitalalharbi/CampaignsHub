@@ -378,6 +378,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('agents', [AgentChatController::class, 'roles'])->middleware('project.can:campaigns.view')->name('agents.roles');
     Route::get('agent-threads', [AgentChatController::class, 'threads'])->middleware('project.can:campaigns.view')->name('agent-threads.index');
     Route::get('agent-threads/{thread}', [AgentChatController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-threads.show');
+    Route::delete('agent-threads/{thread}', [AgentChatController::class, 'destroy'])->middleware('project.can:campaigns.view')->name('agent-threads.destroy');
+    Route::delete('agent-threads', [AgentChatController::class, 'clear'])->middleware('project.can:campaigns.view')->name('agent-threads.clear');
     Route::post('agent-threads', [AgentChatController::class, 'send'])->middleware('project.can:campaigns.view')->name('agent-threads.send');
     // AGENTS-CLIENT-RULES-001 — goals, decision rules and gateway limits; the comparison agents start from.
     Route::get('agent-rules', [AgentRulesController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-rules.show');
