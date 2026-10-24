@@ -54,6 +54,8 @@ COPY backend/composer.json backend/composer.lock ./
 RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --optimize-autoloader
 
 COPY backend/ ./
+# UPLOAD-LIMITS-001 — PHP's 2 MB per-file default rejected ordinary screenshots.
+COPY backend/docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
 RUN composer dump-autoload --optimize \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache

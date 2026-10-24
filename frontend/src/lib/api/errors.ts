@@ -64,6 +64,7 @@ const COPY = {
     notFound: 'العنصر المطلوب غير موجود.',
     expired: 'انتهت صلاحية الصفحة. الرجاء تحديثها والمحاولة مرة أخرى.',
     invalid: 'البيانات المُدخلة غير صحيحة.',
+    tooLarge: 'حجم الملف أكبر من الحد المسموح. اختر ملفًا أصغر (الحد 10 ميغابايت).',
     tooMany: 'عدد كبير من المحاولات. الرجاء الانتظار قليلًا ثم المحاولة مرة أخرى.',
     server: 'حدث خطأ في الخادم. لم يكن السبب من جهتك — حاول مرة أخرى بعد قليل.',
     unavailable: 'الخدمة غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل.',
@@ -78,6 +79,7 @@ const COPY = {
     notFound: 'That could not be found.',
     expired: 'This page has expired. Refresh it and try again.',
     invalid: 'Some of the details are not valid.',
+    tooLarge: 'The file is larger than allowed. Choose a smaller one (limit 10 MB).',
     tooMany: 'Too many attempts. Please wait a moment and try again.',
     server: 'Something went wrong on our side. It was not your fault — please try again shortly.',
     unavailable: 'The service is temporarily unavailable. Please try again shortly.',
@@ -111,6 +113,7 @@ export function describeFailure(failure: HttpFailure, locale: Locale): string {
     case 403: return c.forbidden
     case 404: return c.notFound
     case 419: return c.expired
+    case 413: return c.tooLarge
     case 422: return c.invalid
     case 429: return c.tooMany
     case 408:
