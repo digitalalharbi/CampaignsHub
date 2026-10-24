@@ -19,10 +19,12 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -113,10 +115,15 @@ final class DeliveryController extends Controller
             'cadence' => ['sometimes', 'in:'.implode(',', DeliverySettings::CADENCES)],
             'week_start' => ['sometimes', 'in:'.implode(',', array_keys(DeliverySettings::WEEK_STARTS))],
             'mode' => ['sometimes', 'in:'.implode(',', DeliverySettings::MODES)],
+            'reviewer_id' => ['sometimes', 'nullable', 'integer'],
+            'reminder_hours' => ['sometimes', 'integer', 'min:1', 'max:168'],
             'components' => ['sometimes', 'array'],
             'components.*' => ['boolean'],
         ]);
         $workspace = $this->authorise($request, $data['client_workspace_id'], 'reports.approve');
+        if (! empty($data['reviewer_id']) && ! $this->reviewers($workspace)->contains('id', (int) $data['reviewer_id'])) {
+            return ApiResponse::error('The reviewer must be a member of this workspace who may approve reports.', status: 422);
+        }
         $before = DeliverySettings::for($workspace);
         DeliverySettings::save($workspace, $data);
         $after = DeliverySettings::for($workspace->refresh());
@@ -125,13 +132,24 @@ final class DeliveryController extends Controller
         return ApiResponse::success($this->settingsShape($workspace), 'Delivery settings saved.');
     }
 
+    /** Members of the client's workspace tenant who may approve reports — the only people a draft can be assigned to. */
+    private function reviewers(ClientWorkspace $workspace): Collection
+    {
+        return User::query()->inTenant((string) $workspace->tenant_id)->orderBy('name')->get(['id', 'name', 'email'])
+            ->filter(fn (User $u): bool => $u->hasPermission('reports.approve'))
+            ->map(fn (User $u): array => ['id' => (int) $u->id, 'name' => (string) $u->name]);
+    }
+
     /** @return array<string,mixed> */
     private function settingsShape(ClientWorkspace $workspace): array
     {
         $settings = DeliverySettings::for($workspace);
         [$from, $to] = DeliverySettings::period($settings);
 
-        return $settings + ['next_period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()]];
+        return $settings + [
+            'next_period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'reviewers' => $this->reviewers($workspace)->values()->all(),
+        ];
     }
 
     /** POST /delivery/packs — prepare the previous week for a project. */

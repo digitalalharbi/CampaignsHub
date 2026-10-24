@@ -196,6 +196,9 @@ Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
  */
 Schedule::command('delivery:prepare-weekly')->dailyAt('06:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 
+// DELIVERY-REMINDERS-001 — the chosen reviewer is nudged about a waiting, failed or unsent delivery (once a day per reason).
+Schedule::command('delivery:remind')->dailyAt('09:00')->timezone('Asia/Riyadh')->withoutOverlapping();
+
 /*
  * AGENTS-ROUTINES-001 — the agent routines, each run only for projects that switched it on (each run
  * spends the tenant's own model tokens). Times are the client's (Riyadh). A change an agent wants is a
