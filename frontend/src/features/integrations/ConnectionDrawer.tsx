@@ -491,8 +491,8 @@ function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReautho
         </Button>
         <p className="mt-1 ps-1 text-[11px] text-text-muted">
           {ar
-            ? 'ينهي المصادقة لكل العملاء الذين يعتمدون عليها. لإيقاف حساب واحد عن عميل، استخدم «إدارة الحسابات».'
-            : 'Ends the authorisation for every client that depends on it. To stop one account for one client, use Manage accounts.'}
+            ? 'ينهي المصادقة لكل العملاء الذين يعتمدون عليها ويمسح بيانات التفويض المخزّنة. تبقى الأرقام المقروءة وروابط المشاريع محفوظة، وتعود بعد «إعادة المصادقة». لإيقاف حساب واحد عن عميل، استخدم «إدارة الحسابات».'
+            : 'Ends the authorisation for every client that depends on it and erases the stored token. Figures already read and project links are kept, and return after you reconnect. To stop one account for one client, use Manage accounts.'}
         </p>
       </div>
     </div>

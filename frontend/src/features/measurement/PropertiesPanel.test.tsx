@@ -8,15 +8,18 @@ vi.mock('./api', () => ({
   listMeasurementProviders: vi.fn(),
   startMeasurementOAuth: vi.fn(),
   syncMeasurementProperty: vi.fn(),
+  disconnectMeasurement: vi.fn(),
+  measurementRuns: vi.fn(),
 }))
 vi.mock('@/features/projects/api', () => ({
   bindAccount: vi.fn(),
+  detachBinding: vi.fn(),
   listClientWorkspaces: vi.fn(),
   listProjects: vi.fn(),
 }))
 
-import { listMeasurementProviders, startMeasurementOAuth, syncMeasurementProperty } from './api'
-import { bindAccount, listClientWorkspaces, listProjects } from '@/features/projects/api'
+import { disconnectMeasurement, listMeasurementProviders, measurementRuns, startMeasurementOAuth, syncMeasurementProperty } from './api'
+import { bindAccount, detachBinding, listClientWorkspaces, listProjects } from '@/features/projects/api'
 
 function property(over: Partial<MeasurementProperty> = {}): MeasurementProperty {
   return {
@@ -232,5 +235,56 @@ describe('PropertiesPanel', () => {
 
     const panel = await screen.findByTestId('measurement-panel')
     expect(panel.textContent).toContain('لا يُجمع مع أرقام المنصات الإعلانية')
+  })
+
+  /** INTEGRATION-LIFECYCLE-001 — the authorisation can be reauthorised, changed, disconnected (after a yes), and its history read. */
+  const connected = (over: Partial<MeasurementProvider> = {}, prop: Partial<MeasurementProperty> = {}) => provider({
+    state: 'connected', connection_id: 'cn1', connection_status: 'connected', discovered_count: 1, selected_count: 1,
+    properties: [property({ is_selected: true, project_id: 'p1', binding_id: 'b1', ...prop })], ...over,
+  })
+
+  it('disconnects only after an explicit yes, and says what is kept', async () => {
+    vi.mocked(listMeasurementProviders).mockResolvedValue([connected()])
+    vi.mocked(disconnectMeasurement).mockResolvedValue({ disabled_bindings: 1 })
+    renderWithProviders(<PropertiesPanel />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('measurement-disconnect-ga4'))
+    expect(screen.getByTestId('measurement-disconnect-confirm-ga4').textContent).toMatch(/kept/)
+    expect(disconnectMeasurement).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('measurement-disconnect-yes-ga4'))
+    await waitFor(() => expect(disconnectMeasurement).toHaveBeenCalledWith('cn1'))
+  })
+
+  it('starts a fresh consent from «reauthorise / change Google account»', async () => {
+    vi.mocked(listMeasurementProviders).mockResolvedValue([connected()])
+    vi.mocked(startMeasurementOAuth).mockResolvedValue({ authorization_url: 'about:blank#g' })
+    renderWithProviders(<PropertiesPanel />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('measurement-reconnect-ga4'))
+    await waitFor(() => expect(startMeasurementOAuth).toHaveBeenCalledWith('ga4', null))
+  })
+
+  it('keeps a disconnected property listed with its history note, and offers reconnect — not disconnect', async () => {
+    vi.mocked(listMeasurementProviders).mockResolvedValue([connected({ state: 'disconnected', connection_status: 'revoked' }, { disconnected: true })])
+    renderWithProviders(<PropertiesPanel />, { locale: 'en' })
+
+    expect(await screen.findByTestId('ga4-disconnected-111')).toBeInTheDocument()
+    expect(screen.getByTestId('measurement-reconnect-ga4').textContent).toMatch(/Reconnect/)
+    expect(screen.queryByTestId('measurement-disconnect-ga4')).toBeNull()
+    expect(screen.queryByTestId('ga4-remove-111')).toBeNull()
+  })
+
+  it('removes a property from its project through the existing detach, and shows its sync history on request', async () => {
+    vi.mocked(listMeasurementProviders).mockResolvedValue([connected()])
+    vi.mocked(detachBinding).mockResolvedValue(null)
+    vi.mocked(measurementRuns).mockResolvedValue([{ id: 'r1', status: 'failed', records: 0, error: 'quota exhausted', started_at: '2026-10-24T08:00:00Z', finished_at: null }])
+    renderWithProviders(<PropertiesPanel />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('ga4-remove-111'))
+    await waitFor(() => expect(detachBinding).toHaveBeenCalledWith('p1', 'b1'))
+
+    expect(measurementRuns).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('ga4-history-toggle-acc-1'))
+    await waitFor(() => expect(screen.getByTestId('ga4-history-acc-1').textContent).toContain('quota exhausted'))
   })
 })

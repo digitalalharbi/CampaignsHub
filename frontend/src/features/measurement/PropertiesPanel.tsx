@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BarChart3, Clock, Loader2, RefreshCw } from 'lucide-react'
+import { BarChart3, Clock, History, Loader2, PlugZap, RefreshCw, Unplug, X } from 'lucide-react'
 import {
-  listMeasurementProviders, startMeasurementOAuth, syncMeasurementProperty,
+  disconnectMeasurement, listMeasurementProviders, measurementRuns, startMeasurementOAuth, syncMeasurementProperty,
   type MeasurementProperty, type MeasurementProvider, type MeasurementState,
 } from './api'
-import { bindAccount, listClientWorkspaces, listProjects } from '@/features/projects/api'
+import { bindAccount, detachBinding, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { projectOptionLabels } from '@/features/projects/projectOptionLabels'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -63,12 +63,45 @@ function stamp(iso: string | null, ar: boolean): string {
   })
 }
 
-function PropertyRow({ property, ar, projectId, onSelect, onSync, busy }: {
+/** INTEGRATION-LIFECYCLE-001 — the property's own sync history, opened on demand (last 20 runs, newest first). */
+function PropertyHistory({ accountId, ar }: { accountId: string; ar: boolean }) {
+  const [open, setOpen] = useState(false)
+  const runs = useQuery({ queryKey: ['measurement-runs', accountId], queryFn: () => measurementRuns(accountId), enabled: open })
+
+  return (
+    <div className="mt-2">
+      <button type="button" data-testid={`ga4-history-toggle-${accountId}`} aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline">
+        <History size={12} /> {ar ? 'سجل المزامنة' : 'Sync history'}
+      </button>
+      {open && (
+        <div data-testid={`ga4-history-${accountId}`} className="mt-1.5 text-[11px] text-text-secondary">
+          {runs.isLoading && <Loader2 size={12} className="animate-spin" />}
+          {runs.isError && <span className="text-danger">{toApiError(runs.error).message}</span>}
+          {runs.data && runs.data.length === 0 && <span>{ar ? 'لا توجد عمليات قراءة بعد.' : 'No reads yet.'}</span>}
+          <ul className="space-y-1">
+            {(runs.data ?? []).map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 rounded-md bg-surface px-2 py-1">
+                <span className="font-semibold">{r.status}</span>
+                <span className="tnum">{stamp(r.finished_at ?? r.started_at, ar)}</span>
+                <span className="tnum">{r.records} {ar ? 'سجل' : 'records'}</span>
+                {r.error && <span className="text-danger">{r.error}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PropertyRow({ property, ar, projectId, onSelect, onSync, onRemove, busy }: {
   property: MeasurementProperty
   ar: boolean
   projectId: string | null
   onSelect: () => void
   onSync: () => void
+  /** Take the property off its project — the binding is switched off, nothing already read is deleted. */
+  onRemove: () => void
   busy: boolean
 }) {
   return (
@@ -93,10 +126,15 @@ function PropertyRow({ property, ar, projectId, onSelect, onSync, busy }: {
             <Badge tone="success" data-testid={`ga4-selected-${property.property_id}`}>
               {ar ? 'مختارة' : 'Selected'}
             </Badge>
-            <Button size="sm" variant="secondary" onClick={onSync} disabled={busy}>
+            <Button size="sm" variant="secondary" onClick={onSync} disabled={busy || property.disconnected === true}>
               {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
               {ar ? 'اقرأ الآن' : 'Read now'}
             </Button>
+            {property.binding_id && property.disconnected !== true && (
+              <Button size="sm" variant="ghost" data-testid={`ga4-remove-${property.property_id}`} onClick={onRemove} disabled={busy}>
+                <X size={13} /> {ar ? 'إزالة من المشروع' : 'Remove from project'}
+              </Button>
+            )}
           </div>
         ) : (
           /*
@@ -117,6 +155,13 @@ function PropertyRow({ property, ar, projectId, onSelect, onSync, busy }: {
           </Button>
         )}
       </div>
+
+      {property.disconnected === true && (
+        <p data-testid={`ga4-disconnected-${property.property_id}`} className="mt-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] text-text-secondary">
+          {ar ? 'مفصولة: الأرقام المقروءة محفوظة ولا تُقرأ بيانات جديدة حتى تعيد الربط.' : 'Disconnected: the figures already read are kept and nothing new is read until you reconnect.'}
+        </p>
+      )}
+      <PropertyHistory accountId={property.id} ar={ar} />
 
       <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-secondary">
         <div>
@@ -202,6 +247,16 @@ export function PropertiesPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['measurement-properties'] }),
   })
 
+  const disconnect = useMutation({
+    mutationFn: (connectionId: string) => disconnectMeasurement(connectionId),
+    onSuccess: () => { setConfirming(null); void queryClient.invalidateQueries({ queryKey: ['measurement-properties'] }) },
+  })
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const remove = useMutation({
+    mutationFn: ({ project, binding }: { project: string; binding: string }) => detachBinding(project, binding),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['measurement-properties'] }),
+  })
+
   const sync = useMutation({
     mutationFn: (accountId: string) => syncMeasurementProperty(accountId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['measurement-properties'] }),
@@ -218,7 +273,7 @@ export function PropertiesPanel() {
   }
 
   const providers = query.data ?? []
-  const actionError = [authorize, select, sync].map((m) => (m.isError ? toApiError(m.error) : null)).find((e) => e !== null) ?? null
+  const actionError = [authorize, select, sync, disconnect, remove].map((m) => (m.isError ? toApiError(m.error) : null)).find((e) => e !== null) ?? null
   const projectChoices = projects.data ?? []
   /* ANALYTICS-PROJECT-IDENTITY-001 — a project two clients share a name for says whose it is. */
   const projectLabels = projectOptionLabels(projectChoices, clients.data)
@@ -363,9 +418,40 @@ export function PropertiesPanel() {
                               select.mutate({ accountId: property.id, project: destination })
                             }}
                             onSync={() => sync.mutate(property.id)}
+                            onRemove={() => { if (property.project_id && property.binding_id) remove.mutate({ project: property.project_id, binding: property.binding_id }) }}
                           />
                         ))}
                       </ul>
+
+                      {/* INTEGRATION-LIFECYCLE-001 — what can be done to the AUTHORISATION: reconnect (a fresh consent, also how another Google identity replaces this one) and disconnect (reading stops, the token is erased, every figure and project link is kept). */}
+                      {provider.connection_id && (
+                        <div data-testid={`measurement-actions-${provider.key}`} className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                          <Button size="sm" variant="secondary" data-testid={`measurement-reconnect-${provider.key}`} onClick={() => authorize.mutate(provider.key)} disabled={authorize.isPending}>
+                            {authorize.isPending ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
+                            {provider.connection_status === 'revoked' ? (ar ? 'إعادة الربط' : 'Reconnect') : (ar ? 'إعادة التفويض / تغيير الحساب' : 'Reauthorise / change Google account')}
+                          </Button>
+                          {provider.connection_status !== 'revoked' && confirming !== provider.connection_id && (
+                            <Button size="sm" variant="ghost" data-testid={`measurement-disconnect-${provider.key}`} onClick={() => setConfirming(provider.connection_id ?? null)}>
+                              <Unplug size={13} /> {ar ? 'فصل الاتصال' : 'Disconnect'}
+                            </Button>
+                          )}
+                          {confirming === provider.connection_id && (
+                            <div role="alert" data-testid={`measurement-disconnect-confirm-${provider.key}`} className="w-full rounded-lg border border-warning/40 bg-[var(--warning-background)] p-3 text-xs text-text-primary">
+                              <p className="mb-2">
+                                {ar
+                                  ? 'ستتوقف قراءة كل خصائص هذا الحساب وتُمسح بيانات التفويض المخزّنة. تبقى الأرقام المقروءة وربط المشاريع محفوظة، ويمكنك إعادة الربط لاحقًا. لسحب الصلاحية من جهة جوجل افتح «حسابك ← الأمان ← التطبيقات المتصلة».'
+                                  : 'Reading every property of this account stops and the stored authorisation is erased. Figures already read and project links are kept; you can reconnect later. To withdraw access on Google’s side, open Your account → Security → Third-party access.'}
+                              </p>
+                              <div className="flex gap-2">
+                                <Button size="sm" data-testid={`measurement-disconnect-yes-${provider.key}`} onClick={() => disconnect.mutate(provider.connection_id as string)} disabled={disconnect.isPending}>
+                                  {disconnect.isPending ? <Loader2 size={13} className="animate-spin" /> : null} {ar ? 'نعم، افصل' : 'Yes, disconnect'}
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </>

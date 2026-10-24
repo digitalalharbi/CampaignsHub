@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
-use App\Domains\Audit\AuditLogger;
-use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\ConnectionLifecycle;
 use App\Domains\Integrations\Services\ConnectionWizardState;
-use App\Domains\Projects\Concerns\ProjectScope;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 /** Tenant-level provider connection management (list, revoke). */
 final class ProviderConnectionController extends Controller
@@ -61,27 +57,11 @@ final class ProviderConnectionController extends Controller
      * Revoke the OAuth connection. This disables EVERY project binding that uses any of its
      * discovered accounts (across all projects), and marks the connection revoked.
      */
-    public function revoke(Request $request, ProviderConnection $connection, AuditLogger $audit): JsonResponse
+    public function revoke(Request $request, ProviderConnection $connection): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.disconnect'), 403);
 
-        DB::transaction(function () use ($connection, $audit): void {
-            $accountIds = ExternalAccount::where('provider_connection_id', $connection->id)->pluck('id');
-
-            // Disable bindings across ALL projects (bypass project scope on purpose).
-            $affected = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
-                ->whereIn('external_account_id', $accountIds)
-                ->update(['is_active' => false]);
-
-            $connection->update(['status' => 'revoked', 'last_error' => 'Revoked by user']);
-
-            $audit->log(
-                action: 'integration.connection.revoked',
-                entityType: ProviderConnection::class,
-                entityId: (string) $connection->id,
-                after: ['disabled_bindings' => $affected],
-            );
-        });
+        app(ConnectionLifecycle::class)->disconnect($connection, 'integration.connection.revoked');
 
         return ApiResponse::success(
             ['status' => 'revoked'],

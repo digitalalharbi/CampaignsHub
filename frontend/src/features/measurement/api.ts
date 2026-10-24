@@ -39,13 +39,21 @@ export interface MeasurementProperty {
   project_id: string | null
   last_synced_at: string | null
   discovered_at: string | null
+  /** The project's binding, so «remove from project» can use the existing detach route. */
+  binding_id?: string | null
+  /** INTEGRATION-LIFECYCLE-001 — history of an authorisation that was disconnected (read-only). */
+  disconnected?: boolean
 }
+
+export interface MeasurementRun { id: string; status: string; records: number; error: string | null; started_at: string | null; finished_at: string | null }
 
 export interface MeasurementProvider {
   key: string
   label: string
   label_ar: string
   state: MeasurementState
+  connection_id?: string | null
+  connection_status?: string | null
   connection_error: string | null
   /** «2 of 17 properties» — the sentence that stops «all of them are being read». */
   discovered_count: number
@@ -91,4 +99,13 @@ export function syncMeasurementProperty(accountId: string, days?: number): Promi
     `/measurement/properties/${accountId}/sync`,
     days === undefined ? {} : { days },
   ))
+}
+
+export async function disconnectMeasurement(connectionId: string): Promise<{ disabled_bindings: number }> {
+  await ensureCsrfCookie()
+  return postData<{ disabled_bindings: number }>(`/measurement/connections/${connectionId}/disconnect`)
+}
+
+export function measurementRuns(accountId: string): Promise<MeasurementRun[]> {
+  return getData<MeasurementRun[]>(`/measurement/properties/${accountId}/runs`)
 }

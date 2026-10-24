@@ -12,9 +12,11 @@ use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
 use App\Domains\Integrations\Measurement\Ga4PropertySync;
 use App\Domains\Integrations\Measurement\Ga4ReportFailed;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Domains\Integrations\Services\ConnectionLifecycle;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -83,20 +85,27 @@ final class MeasurementPropertyController extends Controller
              * own methods — `modelKeys()` below was the one that noticed, and only under static
              * analysis, because the null branch never reaches it at runtime.
              */
-            $properties = $connection === null
+            // INTEGRATION-LIFECYCLE-001 — a disconnected property is still the client's history: the latest REVOKED authorisation's
+            // properties stay listed (read-only, marked) with «Reconnect» beside them, instead of vanishing behind a connect button.
+            $past = $connection !== null ? null : ProviderConnection::withoutGlobalScopes()->where('tenant_id', $tenantId)
+                ->where('provider', $definition->key)->where('status', 'revoked')->latest('updated_at')->first();
+            $shown = $connection ?? $past;
+
+            $properties = $shown === null
                 ? new EloquentCollection
                 : ExternalAccount::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
-                    ->where('provider_connection_id', $connection->getKey())
+                    ->where('provider_connection_id', $shown->getKey())
                     ->where('account_type', Ga4PropertyDiscovery::ACCOUNT_TYPE)
                     ->orderBy('parent_name')
                     ->orderBy('name')
                     ->get();
 
-            $selected = $properties->isEmpty() ? collect() : ProjectIntegrationBinding::withoutGlobalScopes()
+            $bindings = $properties->isEmpty() ? collect() : ProjectIntegrationBinding::withoutGlobalScopes()
                 ->whereIn('external_account_id', $properties->modelKeys())
                 ->where('is_active', true)
-                ->pluck('project_id', 'external_account_id');
+                ->get(['id', 'project_id', 'external_account_id'])->keyBy('external_account_id');
+            $selected = $bindings->map(fn ($b) => $b->project_id);
 
             $state = match (true) {
                 /*
@@ -116,6 +125,8 @@ final class MeasurementPropertyController extends Controller
                 'label' => $definition->label,
                 'label_ar' => $definition->labelAr,
                 'state' => $state,
+                'connection_id' => $shown?->getKey(),
+                'connection_status' => $shown?->status,
                 'connection_error' => $connection?->last_error,
                 /*
                  * «2 of 17 properties» is this family's version of the sentence the hub rows carry.
@@ -140,6 +151,9 @@ final class MeasurementPropertyController extends Controller
                     'currency' => $a->currency,
                     'is_selected' => $selected->has((string) $a->getKey()),
                     'project_id' => $selected->get((string) $a->getKey()),
+                    // The binding the project holds, so «remove from project» can use the existing detach route.
+                    'binding_id' => ($bindings->get((string) $a->getKey()))?->id,
+                    'disconnected' => $connection === null,
                     'last_synced_at' => optional($a->last_synced_at)->toIso8601String(),
                     'discovered_at' => optional($a->discovered_at)->toIso8601String(),
                 ])->values()->all(),
@@ -150,6 +164,37 @@ final class MeasurementPropertyController extends Controller
     }
 
     /** POST /measurement/properties/{account}/sync — pull a selected property's days now. */
+    /** POST measurement/connections/{connection}/disconnect — INTEGRATION-LIFECYCLE-001; Google Analytics connections only. */
+    public function disconnect(Request $request, string $connection): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.disconnect'), 403);
+
+        $keys = array_map(static fn ($d): string => $d->key, ProviderCatalogue::ofKind(ProviderKind::Measurement));
+        $model = ProviderConnection::withoutGlobalScopes()->where('tenant_id', (string) $this->tenant->tenantId())->find($connection);
+        abort_if($model === null || ! in_array($model->provider, $keys, true), 404, 'Connection not found.');
+
+        $result = app(ConnectionLifecycle::class)->disconnect($model, 'measurement.connection.disconnected');
+
+        return ApiResponse::success(['status' => 'revoked', 'history_kept' => true] + $result, 'Disconnected. Synced data is kept; nothing syncs until you reconnect.');
+    }
+
+    /** GET measurement/properties/{account}/runs — the property's recent sync runs, newest first (at most 20). */
+    public function runs(Request $request, string $account): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.view'), 403);
+
+        $model = ExternalAccount::withoutGlobalScopes()->where('tenant_id', (string) $this->tenant->tenantId())
+            ->where('account_type', Ga4PropertyDiscovery::ACCOUNT_TYPE)->find($account);
+        abort_if($model === null, 404);
+
+        $runs = IntegrationSyncRun::withoutGlobalScopes()->where('tenant_id', (string) $this->tenant->tenantId())->where('type', 'measurement')
+            ->where('provider_connection_id', $model->provider_connection_id)->latest('started_at')->limit(20)
+            ->get(['id', 'status', 'records', 'error', 'started_at', 'finished_at'])
+            ->map(fn (IntegrationSyncRun $r): array => ['id' => (string) $r->getKey(), 'status' => $r->status, 'records' => $r->records, 'error' => $r->error === null ? null : ProviderErrorText::forDisplay($r->error), 'started_at' => $r->started_at?->toIso8601String(), 'finished_at' => $r->finished_at?->toIso8601String()])->all();
+
+        return ApiResponse::success($runs, 'Sync history.');
+    }
+
     public function sync(Request $request, string $account, Ga4PropertySync $sync): JsonResponse
     {
         /*

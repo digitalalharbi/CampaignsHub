@@ -8,6 +8,8 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Commerce\Services\ProjectOrders;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
@@ -185,5 +187,42 @@ final class StoreLifecycleTest extends TestCase
         $other = Tenant::create(['name' => 'Other', 'slug' => 'ot-'.uniqid(), 'status' => 'active']);
         $theirs = $this->store($other);
         $this->actingAs($this->operator)->getJson("/api/v1/commerce/stores/{$theirs->id}/runs")->assertNotFound();
+    }
+
+    /** @return array{0: ExternalAccount, 1: Project} a store bound to its own project, with one order */
+    private function storeWithOrder(string $ref, float $total): array
+    {
+        $store = $this->store();
+        $project = $this->bound($store);
+        CommerceOrder::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'external_account_id' => $store->id, 'provider' => 'salla',
+            'external_id' => $ref, 'reference' => $ref, 'status' => 'paid', 'payment_status' => 'paid', 'placed_at' => Carbon::parse('2026-10-20 10:00'),
+            'currency' => 'SAR', 'subtotal' => $total, 'total' => $total, 'placed_on' => '2026-10-20',
+        ]);
+
+        return [$store, $project];
+    }
+
+    private function refs(Project $project): array
+    {
+        return app(ProjectOrders::class)->forWindow((string) $this->tenant->id, (string) $project->id, Carbon::parse('2026-10-01'), Carbon::parse('2026-10-31 23:59'))['orders']->pluck('reference')->sort()->values()->all();
+    }
+
+    public function test_switching_stores_never_mixes_one_stores_orders_into_another_project_and_keeps_the_old_history_with_its_store(): void
+    {
+        [$a, $projectA] = $this->storeWithOrder('A-1', 100);
+        [$b, $projectB] = $this->storeWithOrder('B-1', 250);
+        $this->assertSame(['A-1'], $this->refs($projectA));
+        $this->assertSame(['B-1'], $this->refs($projectB));
+
+        // The merchant disconnects store A and connects a different store for the same client.
+        $this->actingAs($this->operator)->postJson("/api/v1/commerce/connections/{$a->provider_connection_id}/disconnect")->assertOk();
+        [$c] = [$this->store(), null];
+
+        $this->assertSame(['A-1'], $this->refs($projectA), 'the old store\'s orders are still the old project\'s history');
+        $this->assertSame(['B-1'], $this->refs($projectB), 'the other project is untouched by A being disconnected');
+        $this->assertSame(0, CommerceOrder::withoutGlobalScopes()->where('external_account_id', $c->id)->count(), 'a newly connected store starts empty — it inherits nothing');
+        $this->assertSame($a->id, (string) CommerceOrder::withoutGlobalScopes()->where('reference', 'A-1')->value('external_account_id'), 'each order still names the store it came from');
+        $this->assertSame($b->id, (string) CommerceOrder::withoutGlobalScopes()->where('reference', 'B-1')->value('external_account_id'));
     }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Commerce\Http\Controllers;
 
-use App\Domains\Audit\AuditLogger;
 use App\Domains\Commerce\Models\CommerceAbandonedCart;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceProduct;
@@ -13,20 +12,17 @@ use App\Domains\Commerce\Services\StoreAssignment;
 use App\Domains\Commerce\Services\StoreSyncQueue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
-use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Services\AccountAssignment;
-use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Integrations\Services\ConnectionLifecycle;
 use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * COMMERCE-001 — the tenant's view of its own connected stores.
@@ -180,7 +176,7 @@ final class StoreController extends Controller
      * comes back under «Reconnect». It does not call the platform: Salla/Zid have no token-revocation endpoint this product uses, so the
      * merchant can also remove the app from the platform's own side, and the answer says so.
      */
-    public function disconnect(Request $request, string $connection, AuditLogger $audit): JsonResponse
+    public function disconnect(Request $request, string $connection): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.disconnect'), 403);
 
@@ -188,16 +184,7 @@ final class StoreController extends Controller
         $model = ProviderConnection::query()->find($connection);
         abort_if($model === null || ! in_array($model->provider, array_keys($this->registry->all()), true), 404, 'Store connection not found.');
 
-        $disabled = 0;
-        DB::transaction(function () use ($model, $audit, &$disabled): void {
-            $ids = ExternalAccount::query()->where('provider_connection_id', $model->getKey())->pluck('id');
-            $disabled = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)->whereIn('external_account_id', $ids)->where('is_active', true)->update(['is_active' => false]);
-            $model->update(['status' => 'revoked', 'last_error' => 'Disconnected by user']);
-            if ($model->credential_id !== null && ($credential = IntegrationCredential::query()->find($model->credential_id)) !== null) {
-                $credential->forceFill(['encrypted_payload' => '', 'status' => 'revoked'])->save();
-            }
-            $audit->log(action: 'commerce.connection.disconnected', entityType: ProviderConnection::class, entityId: (string) $model->getKey(), after: ['provider' => $model->provider, 'disabled_bindings' => $disabled]);
-        });
+        $disabled = app(ConnectionLifecycle::class)->disconnect($model, 'commerce.connection.disconnected')['disabled_bindings'];
 
         return ApiResponse::success(
             ['status' => 'revoked', 'disabled_bindings' => $disabled, 'history_kept' => true, 'platform_side_hint' => true],

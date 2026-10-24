@@ -54,6 +54,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
          * TOKENS per property per day — a reader clicking repeatedly would spend a client's quota,
          * and exhaustion arrives as `RESOURCE_EXHAUSTED` for everybody on that property.
          */
+        Route::get('properties/{account}/runs', [MeasurementPropertyController::class, 'runs'])->name('properties.runs');
+        Route::post('connections/{connection}/disconnect', [MeasurementPropertyController::class, 'disconnect'])->name('connections.disconnect');
         Route::post('properties/{account}/sync', [MeasurementPropertyController::class, 'sync'])
             ->middleware('throttle:12,1')->name('properties.sync');
     });
