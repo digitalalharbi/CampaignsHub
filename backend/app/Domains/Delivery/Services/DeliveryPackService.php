@@ -61,28 +61,28 @@ final class DeliveryPackService
     /** Prepare the previous week's pack for a project, and queue its report. Asking again returns the same pack. */
     public function prepare(Project $project, ?Carbon $anchor = null, ?User $by = null): DeliveryPack
     {
-        [$from, $to] = self::previousWeek($anchor);
+        $workspace = ClientWorkspace::query()->findOrFail($project->client_workspace_id);
+        $settings = DeliverySettings::for($workspace);
+        [$from, $to] = DeliverySettings::period($settings, $anchor);
 
         $existing = DeliveryPack::query()->where('project_id', $project->getKey())->whereDate('period_start', $from)->first();
         if ($existing !== null) {
             return $existing;
         }
 
-        $workspace = ClientWorkspace::query()->findOrFail($project->client_workspace_id);
-
         $report = new Report;
         $report->forceFill([
             'tenant_id' => $project->tenant_id,
             'project_id' => $project->getKey(),
             'name' => $workspace->name.' — '.$from->toDateString().' → '.$to->toDateString(),
-            'type' => 'weekly',
+            'type' => $settings['cadence'] === 'monthly' ? 'monthly' : 'weekly',
             'audience' => 'client',
-            'mode' => 'snapshot',
+            'mode' => $settings['mode'],
             'status' => 'processing',
             'period_start' => $from->toDateString(),
             'period_end' => $to->toDateString(),
             'currency' => ReportingCurrency::DEFAULT,
-            'config' => ['period_kind' => 'weekly'],
+            'config' => ['period_kind' => $settings['cadence'] === 'monthly' ? 'monthly' : 'weekly'],
             'created_by' => $by?->id,
         ])->save();
         GenerateReportJob::dispatch((string) $report->id);
