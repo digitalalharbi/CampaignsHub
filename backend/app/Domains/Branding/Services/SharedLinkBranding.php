@@ -158,9 +158,10 @@ final class SharedLinkBranding
             ? ['client', (string) $client->id]
             : ['tenant', null];
 
-        $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
+        $asset = ($scope === 'client' ? $this->clientLayerAsset($report, $client, $tenantId) : null)
+            ?? $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
         $agencyMark = $this->markFor('agency', $client, $tenantId);
-        $clientMark = $client === null ? null : $this->markFor('client', $client, $tenantId);
+        $clientMark = $client === null ? null : $this->markFor('client', $client, $tenantId, $report);
 
         return [
             /*
@@ -310,10 +311,11 @@ final class SharedLinkBranding
         $client = $this->clientOfReport($report, $tenantId);
 
         if ($role !== null) {
-            $asset = $role === 'client' && $client === null ? null : $this->markFor($role, $client, $tenantId);
+            $asset = $role === 'client' && $client === null ? null : $this->markFor($role, $client, $tenantId, $report);
         } else {
             [$scope, $scopeId] = $client !== null ? ['client', (string) $client->id] : ['tenant', null];
-            $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
+            $asset = ($scope === 'client' ? $this->clientLayerAsset($report, $client, $tenantId) : null)
+                ?? $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
         }
 
         if ($asset === null || ! Storage::disk($asset->disk)->exists($asset->path)) {
@@ -330,8 +332,13 @@ final class SharedLinkBranding
      * named mark: the agency's slot filled with CampaignsHub's, or the client's with the agency's, puts
      * one identity where the report says another. Only an asset from the role's own layer counts.
      */
-    private function markFor(string $role, ?ClientWorkspace $client, string $tenantId): mixed
+    private function markFor(string $role, ?ClientWorkspace $client, string $tenantId, ?Report $report = null): mixed
     {
+        // LOGO-UPLOAD-001 — the client's mark is the nearest of report → project → client, each only its OWN layer's file.
+        if ($role === 'client') {
+            return $this->clientLayerAsset($report, $client, $tenantId);
+        }
+
         [$scope, $scopeId] = match ($role) {
             'agency' => ['tenant', null],
             'client' => ['client', $client === null ? null : (string) $client->id],
@@ -348,6 +355,50 @@ final class SharedLinkBranding
         foreach (self::kinds() as $kind) {
             $asset = $assets[$kind] ?? null;
             if ($asset !== null && $asset->scope === $scope && $asset->scope_id === $scopeId) {
+                return $asset;
+            }
+        }
+
+        return null;
+    }
+
+    /** One layer's own logo (the layer's rows only, never an inherited one), kinds in this surface's preference order. */
+    private function ownAt(string $scope, ?string $scopeId, string $tenantId): mixed
+    {
+        $assets = $this->inTenant($tenantId, fn () => $this->branding->resolve($scope, $scopeId, anyStoredTheme: true));
+        foreach (self::kinds() as $kind) {
+            $asset = $assets[$kind] ?? null;
+            if ($asset !== null && $asset->scope === $scope && $asset->scope_id === $scopeId) {
+                return $asset;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * LOGO-UPLOAD-001 — report → project → client: the first of those layers that holds a logo of its own.
+     *
+     * A report-specific mark wins, then the project's, then the client's; with none of them the caller falls to the agency's.
+     */
+    private function clientLayerAsset(?Report $report, ?ClientWorkspace $client, string $tenantId): mixed
+    {
+        if ($client === null) {
+            return null;
+        }
+        $layers = [];
+        // A report being previewed has no id yet and has no layer of its own; the guard keeps an empty string out of a uuid query.
+        if ($report !== null && (string) $report->getKey() !== '') {
+            $layers[] = ['report', (string) $report->getKey()];
+        }
+        if ($report !== null && (string) $report->project_id !== '') {
+            $layers[] = ['project', (string) $report->project_id];
+        }
+        $layers[] = ['client', (string) $client->id];
+
+        foreach ($layers as [$scope, $id]) {
+            $asset = $this->ownAt($scope, $id, $tenantId);
+            if ($asset !== null) {
                 return $asset;
             }
         }
