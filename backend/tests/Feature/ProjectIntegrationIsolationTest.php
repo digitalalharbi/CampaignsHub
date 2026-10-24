@@ -17,6 +17,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -76,8 +77,15 @@ final class ProjectIntegrationIsolationTest extends TestCase
         return ClientWorkspace::create(['name' => $name, 'slug' => strtolower($name), 'mode' => 'managed']);
     }
 
-    private function account(string $externalId, ClientWorkspace $ws): ExternalAccount
+    private function account(string $externalId, ClientWorkspace $ws, ?ProviderConnection $on = null): ExternalAccount
     {
+        if ($on !== null) {
+            return ExternalAccount::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'client_workspace_id' => $ws->id, 'provider_connection_id' => $on->id,
+                'provider' => 'sandbox', 'account_type' => 'ad_account', 'external_id' => $externalId, 'name' => $externalId, 'status' => 'active',
+            ]);
+        }
+
         $credential = new IntegrationCredential(['provider' => 'sandbox', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
         $credential->setPayload('token');
         $credential->save();
@@ -122,24 +130,49 @@ final class ProjectIntegrationIsolationTest extends TestCase
         $this->assertFalse((bool) ProjectIntegrationBinding::withoutGlobalScopes()->find($this->betaBinding->id)->is_active);
     }
 
-    public function test_another_clients_account_cannot_be_bound_alone_or_inside_a_batch_and_nothing_partial_is_left(): void
+    /** The refusal is the account-scope rule, by name — not validation, not a crash. */
+    private function assertScopeRefusal(TestResponse $res): void
     {
-        $single = $this->actingAs($this->user, 'sanctum')
-            ->postJson("/api/v1/projects/{$this->alpha->id}/integrations/bindings", ['external_account_id' => $this->betaAccount->id, 'purpose' => 'advertising']);
-        $this->assertContains($single->status(), [403, 404, 409, 422], 'another client\'s account is refused, whatever the refusal code');
+        $this->assertContains($res->status(), [403, 409], 'refused by the scope rule (got '.$res->status().': '.$res->getContent().')');
+        $this->assertLessThan(500, $res->status());
+        $this->assertNull($res->json('errors'), 'a validation error is not an isolation refusal');
+        $this->assertStringContainsString('different client workspace', (string) $res->json('message'));
+    }
 
-        $before = ProjectIntegrationBinding::withoutGlobalScopes()->count();
+    public function test_another_clients_account_cannot_be_bound_to_my_project_alone(): void
+    {
+        // Control first: the same call with the member's OWN client's account is accepted, so the refusal below is the scope rule.
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->alpha->id}/integrations/bindings", ['external_account_id' => $this->alphaAccount->id, 'purpose' => 'advertising'])
+            ->assertCreated();
+
         $res = $this->actingAs($this->user, 'sanctum')
-            ->postJson("/api/v1/projects/{$this->alpha->id}/integrations/bindings/batch", [
-                'accounts' => [
-                    ['external_account_id' => $this->alphaAccount->id, 'purpose' => 'advertising'],
-                    ['external_account_id' => $this->betaAccount->id, 'purpose' => 'advertising'],
-                ],
-            ]);
+            ->postJson("/api/v1/projects/{$this->alpha->id}/integrations/bindings", ['external_account_id' => $this->betaAccount->id, 'purpose' => 'advertising']);
+        $this->assertScopeRefusal($res);
 
-        $this->assertGreaterThanOrEqual(400, $res->status(), 'a batch containing another client\'s account is refused');
-        $this->assertSame($before, ProjectIntegrationBinding::withoutGlobalScopes()->count(), 'no binding — not even Alpha\'s own account — was created by the refused batch');
+        $this->assertSame(0, ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $this->alpha->id)->where('external_account_id', $this->betaAccount->id)->count());
         $this->assertSame($this->beta->id, ProjectIntegrationBinding::withoutGlobalScopes()->find($this->betaBinding->id)->project_id);
+    }
+
+    public function test_a_batch_with_another_clients_account_is_refused_whole_and_leaves_nothing_partial(): void
+    {
+        $connection = $this->alphaAccount->connection ?? ProviderConnection::withoutGlobalScopes()->find($this->alphaAccount->provider_connection_id);
+        $own2 = $this->account('act-alpha-2', ClientWorkspace::withoutGlobalScopes()->find($this->alpha->client_workspace_id), $connection);
+        $foreign = $this->account('act-beta-shared', ClientWorkspace::withoutGlobalScopes()->find($this->beta->client_workspace_id), $connection);
+        $url = "/api/v1/projects/{$this->alpha->id}/integrations/bindings/batch";
+        $base = ['connection_id' => $connection->id, 'purpose' => 'advertising'];
+        $count = fn () => ProjectIntegrationBinding::withoutGlobalScopes()->count();
+
+        $before = $count();
+        $res = $this->actingAs($this->user, 'sanctum')->postJson($url, $base + ['external_account_ids' => [$this->alphaAccount->id, $foreign->id]]);
+        $this->assertScopeRefusal($res);
+        $this->assertSame($before, $count(), 'the refused batch created nothing — not even the member\'s own account');
+
+        // Control: the same batch shape with only the member's own client's accounts is accepted.
+        $this->actingAs($this->user, 'sanctum')->postJson($url, $base + ['external_account_ids' => [$this->alphaAccount->id, $own2->id]])
+            ->assertCreated()->assertJsonPath('data.connected', 2);
+        $this->assertSame($before + 2, $count());
+        $this->assertSame(0, ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $this->alpha->id)->where('external_account_id', $foreign->id)->count());
     }
 
     public function test_binding_an_unowned_account_does_not_move_another_clients_binding(): void
