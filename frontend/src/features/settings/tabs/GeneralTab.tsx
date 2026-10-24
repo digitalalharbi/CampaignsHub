@@ -10,6 +10,8 @@ import { Alert } from '@/components/ui/Alert'
 import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { LogoUploader } from '@/features/branding/LogoUploader'
 
 /** Server error key → input id, so the ErrorSummary can focus the offending control. */
 const GENERAL_FIELD_IDS: Record<string, string> = { name: 'org-name', 'general.logo_url': 'logo', 'general.contact_email': 'cemail' }
@@ -44,6 +46,7 @@ const TIMEZONES = ['Asia/Riyadh', 'Asia/Dubai', 'Asia/Kuwait', 'Asia/Qatar', 'Af
 
 export function GeneralTab() {
   const ar = useUi((u) => u.locale) === 'ar'
+  const canManageBranding = useAuth((a) => a.hasPermission('branding.manage'))
   const { data, isLoading } = useOrgSettings()
   const save = useUpdateOrgSettings()
   const [name, setName] = useState('')
@@ -102,9 +105,10 @@ export function GeneralTab() {
           <Select id="acct" value={g.account_type} onChange={(e) => set('account_type', e.target.value)}
             options={(data?.options.account_types ?? []).map((v) => ({ value: v, label: ACCOUNT_LABELS[v] ? (ar ? ACCOUNT_LABELS[v].ar : ACCOUNT_LABELS[v].en) : v }))} />
         </Field>
-        <Field label={ar ? 'رابط الشعار' : 'Logo URL'} htmlFor="logo" hint={ar ? 'رابط صورة مباشر (https)' : 'A direct image link (https)'} error={errors['general.logo_url']}>
-          <Input id="logo" type="url" value={g.logo_url ?? ''} onChange={(e) => set('logo_url', e.target.value || null)} placeholder="https://…" />
-        </Field>
+        <div data-testid="agency-logo-field" className="sm:col-span-2">
+          <span className="mb-1.5 block text-sm font-medium text-text-primary">{ar ? 'شعار الوكالة' : 'Agency logo'}</span>
+          <LogoUploader endpoint="/branding/logo" ar={ar} canEdit={canManageBranding} testId="agency-logo" />
+        </div>
         <Field label={ar ? 'بريد التواصل' : 'Contact email'} htmlFor="cemail" error={errors['general.contact_email']}>
           <Input id="cemail" type="email" value={g.contact_email ?? ''} onChange={(e) => set('contact_email', e.target.value || null)} />
         </Field>

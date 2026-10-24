@@ -6,9 +6,13 @@ import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { LogoUploader, useLogoState } from '@/features/branding/LogoUploader'
 
 export function BrandingTab() {
   const ar = useUi((u) => u.locale) === 'ar'
+  const canManageBranding = useAuth((a) => a.hasPermission('branding.manage'))
+  const logo = useLogoState('/branding/logo')
   const { data, isLoading } = useBranding()
   const save = useSaveBranding()
   const [b, setB] = useState<Branding | null>(null)
@@ -27,7 +31,10 @@ export function BrandingTab() {
         {saved && <div className="mb-4"><Alert severity="positive" title={ar ? 'تم حفظ الهوية' : 'Branding saved'} /></div>}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={ar ? 'اسم البوابة' : 'Portal name'} htmlFor="pn"><Input id="pn" value={b.portal_name} onChange={(e) => set('portal_name', e.target.value)} /></Field>
-          <Field label={ar ? 'رابط الشعار' : 'Logo URL'} htmlFor="lg"><Input id="lg" type="url" value={b.logo_url ?? ''} onChange={(e) => set('logo_url', e.target.value || null)} placeholder="https://…" /></Field>
+        <div data-testid="agency-logo-field" className="sm:col-span-2">
+            <span className="mb-1.5 block text-sm font-medium text-text-primary">{ar ? 'شعار الوكالة' : 'Agency logo'}</span>
+            <LogoUploader endpoint="/branding/logo" ar={ar} canEdit={canManageBranding} testId="agency-logo" />
+          </div>
           <Field label={ar ? 'اللون الأساسي' : 'Primary colour'} htmlFor="pc">
             <div className="flex items-center gap-2"><input id="pc" type="color" value={b.primary_color} onChange={(e) => set('primary_color', e.target.value)} className="h-10 w-14 cursor-pointer rounded-lg border border-border" /><Input value={b.primary_color} onChange={(e) => set('primary_color', e.target.value)} className="tnum" /></div>
           </Field>
@@ -35,7 +42,6 @@ export function BrandingTab() {
             <div className="flex items-center gap-2"><input id="ra" type="color" value={b.report_accent} onChange={(e) => set('report_accent', e.target.value)} className="h-10 w-14 cursor-pointer rounded-lg border border-border" /><Input value={b.report_accent} onChange={(e) => set('report_accent', e.target.value)} className="tnum" /></div>
           </Field>
           <Field label={ar ? 'تذييل التقارير' : 'Report footer'} htmlFor="rf" hint={ar ? 'يظهر أسفل تقارير العملاء' : 'Shown at the foot of client reports'}><Input id="rf" value={b.report_footer ?? ''} onChange={(e) => set('report_footer', e.target.value || null)} /></Field>
-          <Field label={ar ? 'رابط شعار العميل (اختياري)' : 'Client logo URL (optional)'} htmlFor="cl"><Input id="cl" type="url" value={b.client_logo_url ?? ''} onChange={(e) => set('client_logo_url', e.target.value || null)} placeholder="https://…" /></Field>
         </div>
         <div className="mt-5 flex justify-end border-t border-border pt-4"><Button onClick={submit} disabled={save.isPending}>{save.isPending ? (ar ? 'جارٍ الحفظ…' : 'Saving…') : (ar ? 'حفظ' : 'Save')}</Button></div>
       </div>
@@ -45,7 +51,7 @@ export function BrandingTab() {
         <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'معاينة مباشرة' : 'Live preview'}</h3>
         <div className="overflow-hidden rounded-xl border border-border">
           <div className="flex items-center gap-2 p-3 text-white" style={{ background: b.primary_color }}>
-            {b.logo_url ? <img src={b.logo_url} alt="" className="h-6 w-6 rounded object-contain" /> : <span className="grid h-6 w-6 place-items-center rounded bg-white/25 text-xs font-bold">{b.portal_name.slice(0, 1)}</span>}
+            {logo.data?.url ? <img src={logo.data.url} alt="" className="h-6 w-6 rounded object-contain" /> : <span className="grid h-6 w-6 place-items-center rounded bg-white/25 text-xs font-bold">{b.portal_name.slice(0, 1)}</span>}
             <span className="font-bold">{b.portal_name}</span>
           </div>
           <div className="p-4">
