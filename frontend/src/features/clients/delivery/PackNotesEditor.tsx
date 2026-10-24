@@ -68,7 +68,7 @@ export function PackNotesEditor({ packId, notes, ar, open, onChange }: { packId:
                 <span className="ms-auto flex items-center gap-1">
                   <button type="button" aria-label={t.up} disabled={busy || i === 0} onClick={() => move(i, -1)} className="rounded p-1 text-text-muted hover:text-text-primary disabled:opacity-30"><ArrowUp size={14} /></button>
                   <button type="button" aria-label={t.down} disabled={busy || i === notes.length - 1} onClick={() => move(i, 1)} className="rounded p-1 text-text-muted hover:text-text-primary disabled:opacity-30"><ArrowDown size={14} /></button>
-                  <button type="button" data-testid={`note-audience-${n.id}`} disabled={busy} onClick={() => patch.mutate({ id: n.id, body: { audience: n.audience === 'client' ? 'internal' : 'client' } })} className={chip(false)}>{n.audience === 'client' ? t.internal : t.client}</button>
+                  <button type="button" data-testid={`note-audience-${n.id}`} disabled={busy} onClick={() => patch.mutate({ id: n.id, body: { audience: n.audience === 'internal' ? 'client' : 'internal' } })} className={chip(false)}>{n.audience === 'internal' ? t.client : t.internal}</button>
                   <button type="button" data-testid={`note-delete-${n.id}`} aria-label={t.remove} disabled={busy} onClick={() => remove.mutate(n.id)} className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
                 </span>
               )}
