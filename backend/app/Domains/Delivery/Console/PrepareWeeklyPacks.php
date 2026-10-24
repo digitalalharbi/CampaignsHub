@@ -6,6 +6,8 @@ namespace App\Domains\Delivery\Console;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Services\DeliveryPackService;
+use App\Domains\Delivery\Services\DeliverySettings;
+use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -18,6 +20,8 @@ use Illuminate\Support\Carbon;
  * It only PREPARES: a draft pack and its queued report. Nothing is approved or sent — the Owner still
  * reviews the observations and decides what the client receives, so a Monday-morning run can never
  * tell a client something unreviewed.
+ *
+ * Runs daily and prepares each client on ITS day (DELIVERY-SETTINGS-001: the first day of its week, or the 1st for a monthly cadence).
  *
  * Opt-in per client (`settings.delivery.weekly`), because an automatic weekly report for a client the
  * agency has not agreed one with is an unrequested deliverable. Asking again for the same week returns
@@ -34,6 +38,7 @@ final class PrepareWeeklyPacks extends Command
     public function handle(DeliveryPackService $packs, TenantContext $tenants): int
     {
         $anchor = $this->option('date') !== null ? Carbon::parse((string) $this->option('date')) : null;
+        $today = ($anchor ?? Carbon::now(ReportingTimezone::DEFAULT))->copy()->startOfDay();
 
         $workspaces = ClientWorkspace::withoutGlobalScopes()
             ->where('status', 'active')
@@ -41,6 +46,9 @@ final class PrepareWeeklyPacks extends Command
             ->when($this->option('client') !== null, fn ($q) => $q->whereKey((string) $this->option('client')))
             ->get()
             ->filter(fn (ClientWorkspace $w): bool => data_get($w->settings, 'delivery.weekly') === true);
+        // Runs every day; a client is prepared only on ITS day (its week's first day, or the 1st for monthly).
+        // A manual `--client` run is an explicit request and ignores the day.
+        $workspaces = $workspaces->filter(fn (ClientWorkspace $w): bool => $this->option('client') !== null || DeliverySettings::isPrepareDay(DeliverySettings::for($w), $today));
 
         $prepared = 0;
         foreach ($workspaces as $workspace) {
