@@ -111,6 +111,39 @@ describe('TabDelivery', () => {
     await waitFor(() => expect(api.uploadEvidence).toHaveBeenCalledWith(expect.objectContaining({ clientId: 'c1', projectId: 'p1', from: '2026-10-05', to: '2026-10-11', file })))
   })
 
+  it('refuses an oversized or unsupported file before sending it, in words', async () => {
+    vi.mocked(api.uploadEvidence).mockReset()
+    mount()
+    fireEvent.click(await screen.findByTestId('pack-pk1'))
+    await screen.findByTestId('pack-panel')
+
+    const big = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' })
+    fireEvent.drop(screen.getByTestId('evidence-drop'), { dataTransfer: { files: [big] } })
+    expect((await screen.findByTestId('evidence-problem')).textContent).toMatch(/10/)
+
+    fireEvent.drop(screen.getByTestId('evidence-drop'), { dataTransfer: { files: [new File(['x'], 'a.exe', { type: 'application/x-msdownload' })] } })
+    await waitFor(() => expect(screen.getByTestId('evidence-problem').textContent).toMatch(/PNG/))
+    expect(api.uploadEvidence).not.toHaveBeenCalled()
+  })
+
+  it('keeps a failed upload on screen with its reason and retries it without choosing the file again', async () => {
+    vi.mocked(api.uploadEvidence).mockReset()
+    vi.mocked(api.uploadEvidence).mockRejectedValueOnce({ response: { status: 413, data: '<html>413</html>' }, isAxiosError: true }).mockResolvedValue({} as never)
+    mount()
+    fireEvent.click(await screen.findByTestId('pack-pk1'))
+    await screen.findByTestId('pack-panel')
+
+    const file = new File(['x'], 'snap.png', { type: 'image/png' })
+    fireEvent.drop(screen.getByTestId('evidence-drop'), { dataTransfer: { files: [file] } })
+
+    const retry = await screen.findByTestId('evidence-retry')
+    expect(screen.getByTestId('evidence-pending').textContent).toMatch(/snap\.png/)
+    fireEvent.click(retry)
+    await waitFor(() => expect(api.uploadEvidence).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByTestId('evidence-pending')).toBeNull())
+  })
+
+
   it('saves the delivery settings one choice at a time and shows the period they produce', async () => {
     vi.mocked(api.saveDeliverySettings).mockImplementation(async (_id, body) => settings({ ...body, next_period: { from: '2026-10-01', to: '2026-10-31' } }))
     mount()
