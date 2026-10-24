@@ -14,6 +14,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -165,6 +166,59 @@ final class LaunchSafetyTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->postJson($this->url('budget-split'), [
             'total' => 100, 'currency' => 'SAR', 'accounts' => [['external_account_id' => '00000000-0000-0000-0000-000000000000']],
         ])->assertStatus(422);
+    }
+
+    private function limit(float $amount, string $currency = 'SAR', string $scope = 'project', ?string $scopeId = null): void
+    {
+        SpendLimit::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'scope' => $scope, 'scope_id' => $scopeId,
+            'amount' => $amount, 'currency' => $currency, 'starts_on' => Carbon::now()->subDay()->toDateString(), 'ends_on' => Carbon::now()->addDays(9)->toDateString(),
+            'thresholds' => [50, 80, 100], 'active' => true,
+        ]);
+    }
+
+    public function test_the_approval_shows_each_spend_limit_against_what_the_launch_commits_and_it_only_warns(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['id' => '6001'])->push(['id' => '7001'])->push(['success' => true])]);
+        $this->limit(1000);                                 // 200 a day for ten days = 2000: over
+        $this->limit(500000, 'SAR', 'platform', 'meta');    // plenty of room
+        $this->limit(1000, 'USD');                          // another currency: never converted behind the reader's back
+        $plan = $this->draft(launch: true);
+
+        $checks = collect($plan['spend']['limit_checks'])->keyBy(fn ($c) => $c['scope'].'/'.$c['currency']);
+        $this->assertSame('exceeds', $checks['project/SAR']['status']);
+        $this->assertEquals(1000, $checks['project/SAR']['over_by']);
+        $this->assertEquals(2000, $checks['project/SAR']['committed_until_period_end']);
+        $this->assertSame('within', $checks['platform/SAR']['status']);
+        $this->assertNull($checks['platform/SAR']['over_by']);
+        $this->assertSame('not_comparable', $checks['project/USD']['status']);
+        foreach ($plan['spend']['limit_checks'] as $c) {
+            $this->assertSame('internal_monitoring', $c['enforcement']);
+        }
+
+        // A warning is not a gate: this product cannot stop a platform spending, so the approved launch still goes through.
+        $this->publish($plan, ['spend_ack' => $plan['spend']['ack_token']])->assertOk();
+    }
+
+    public function test_a_plan_with_no_budget_in_a_limits_scope_raises_no_check_for_it(): void
+    {
+        $this->limit(1000, 'SAR', 'platform', 'tiktok');
+        $plan = $this->draft(launch: true);
+
+        $this->assertSame([], $plan['spend']['limit_checks']);
+    }
+
+    public function test_a_campaign_name_already_used_in_the_project_is_refused_on_the_field_not_as_a_database_error_mid_publish(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['id' => '6001'])->push(['id' => '7001'])]);
+        $first = $this->draft(launch: false);
+        $this->publish($first)->assertOk();
+
+        $account = $this->account('meta', 'act_2');
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $this->spec($account, null, adSet: false))
+            ->assertStatus(422)->assertJsonValidationErrors('name');
     }
 
     public function test_the_goal_and_the_budget_choices_survive_in_the_one_plan(): void

@@ -15,21 +15,21 @@ final class JourneyPlannerTest extends TestCase
 {
     private const META = ['OUTCOME_AWARENESS', 'OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT', 'OUTCOME_LEADS', 'OUTCOME_APP_PROMOTION', 'OUTCOME_SALES'];
 
-    /** @param array<string,string> $status event key => unavailable|proven|eligible */
-    private function readiness(array $status): array
+    /** @param array<string,string> $status event key => no_data|not_reported|proven|eligible */
+    private function readiness(array $status, string $data = 'synced'): array
     {
         $events = [];
         foreach (['page_views', 'add_to_cart', 'leads', 'purchases'] as $k) {
-            $s = $status[$k] ?? 'unavailable';
+            $s = $status[$k] ?? ($data === 'none' ? 'no_data' : 'not_reported');
             $events[$k] = ['event' => $k, 'status' => $s, 'observed' => $s === 'eligible' ? 80 : ($s === 'proven' ? 4 : 0)];
         }
 
-        return ['events' => $events];
+        return ['events' => $events, 'data' => $data];
     }
 
-    private function plan(string $goal, array $status, string $provider = 'meta', array $supported = self::META, array $project = []): array
+    private function plan(string $goal, array $status, string $provider = 'meta', array $supported = self::META, array $project = [], string $data = 'synced'): array
     {
-        return (new JourneyPlanner)->plan($goal, $provider, $this->readiness($status), $supported, $project);
+        return (new JourneyPlanner)->plan($goal, $provider, $this->readiness($status, $data), $supported, $project);
     }
 
     public function test_an_eligible_purchase_goes_straight_to_a_sales_campaign(): void
@@ -62,10 +62,24 @@ final class JourneyPlannerTest extends TestCase
     public function test_no_tracking_is_traffic_first_with_a_measurement_plan_that_reads_the_store_signal(): void
     {
         $none = $this->plan('sales', []);
-        $this->assertSame(['measurement_first', 'link_the_store_and_send_the_purchase_event'], [$none['stage'], $none['measurement_plan'][0]['action']]);
+        $this->assertSame(['measurement_first', 'check_the_platform_receives_the_purchase_event'], [$none['stage'], $none['measurement_plan'][0]['action']]);
 
         $linked = $this->plan('sales', [], project: ['store_linked' => true]);
         $this->assertSame('store_linked_but_platform_reports_no_purchase', $linked['measurement_plan'][0]['action']);
+    }
+
+    public function test_an_account_with_no_synced_data_is_told_to_sync_first_and_never_that_an_event_is_missing(): void
+    {
+        $p = $this->plan('sales', [], data: 'none');
+
+        $this->assertSame(['traffic', 'measurement_first', ['no_synced_data']], [$p['objective_kind'], $p['stage'], $p['reasons']]);
+        $this->assertSame([['event' => null, 'status' => 'no_data', 'action' => 'sync_the_account_first']], $p['measurement_plan']);
+        $this->assertSame('sync_the_account_first', $this->plan('leads', [], data: 'none')['measurement_plan'][0]['action']);
+
+        // With results that merely lack the event, the wording is «check», not «it is missing».
+        $seen = $this->plan('sales', []);
+        $this->assertSame(['no_usable_conversion_event'], $seen['reasons']);
+        $this->assertStringStartsWith('check_the_platform_receives', $seen['measurement_plan'][0]['action']);
     }
 
     public function test_a_proposal_never_changes_anything_silently_and_never_stops_a_campaign(): void

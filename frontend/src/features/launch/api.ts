@@ -21,12 +21,14 @@ export interface LaunchProvider {
   bid_required: boolean
 }
 
-export type EventStatus = 'unavailable' | 'proven' | 'eligible'
+/** Absence is never «the event does not exist»: `no_data` = nothing synced at all; `not_reported` = results exist, this event was not in them. */
+export type EventStatus = 'no_data' | 'not_reported' | 'proven' | 'eligible'
 
 /** LAUNCH-READINESS-001 — what an account was seen to measure, from its own synced results. */
 export interface AccountReadiness {
   provider: string | null
   tier: 'sales_ready' | 'partial' | 'none'
+  data: 'synced' | 'none'
   pixel: { status: 'unavailable'; reason: string }
   events: Record<'page_views' | 'add_to_cart' | 'leads' | 'purchases', { event: string; status: EventStatus; observed: number }>
 }
@@ -49,7 +51,7 @@ export interface StrategyAccount {
   objective_refusal: string | null
   optimization_event: string | null
   reasons: string[]
-  measurement_plan: Array<{ event: string; status: EventStatus; action: string }>
+  measurement_plan: Array<{ event: string | null; status: EventStatus; action: string }>
   advance: { next: string | null; needs: Array<{ event: string; observed: number; needed: number }> }
 }
 
@@ -132,7 +134,24 @@ export interface SpendSummary {
   daily_by_currency: Record<string, number>
   ad_set_daily_budget: number | null
   mode: BudgetMode
+  limit_checks: LimitCheck[]
   ack_token: string
+}
+
+/** LAUNCH-SPEND-LIMIT-001 — a spend limit read against what this launch commits. It warns; it never blocks. */
+export interface LimitCheck {
+  limit_id: string
+  scope: 'project' | 'platform' | 'account'
+  scope_id: string | null
+  currency: string
+  period_ends_on: string
+  days_left: number
+  remaining: number | null
+  daily_commitment: number
+  committed_until_period_end: number
+  over_by: number | null
+  status: 'within' | 'exceeds' | 'not_comparable'
+  enforcement: string
 }
 
 /** LAUNCH-BUDGET-001 — one daily budget split over accounts; amounts total the budget to the cent. */

@@ -49,7 +49,7 @@ final class JourneyPlanner
             throw new InvalidArgumentException("Unknown business goal '{$goal}'.");
         }
         $events = $readiness['events'] ?? [];
-        $status = static fn (string $e): string => (string) ($events[$e]['status'] ?? LaunchReadiness::UNAVAILABLE);
+        $status = static fn (string $e): string => (string) ($events[$e]['status'] ?? LaunchReadiness::NO_DATA);
 
         if ($goal === 'awareness' || $goal === 'traffic') {
             return $this->proposal($goal, $goal, $provider, $supported, null, ['goal_needs_no_conversion_event'], [], $events);
@@ -60,7 +60,7 @@ final class JourneyPlanner
                 return $this->proposal('leads', 'leads', $provider, $supported, 'Lead', ['lead_event_eligible'], [], $events);
             }
 
-            return $this->proposal('traffic', 'measurement_first', $provider, $supported, null, ['lead_event_not_eligible'], $this->measurement(['leads'], $events, $project), $events);
+            return $this->proposal('traffic', 'measurement_first', $provider, $supported, null, [$this->noData($readiness) ? 'no_synced_data' : 'lead_event_not_eligible'], $this->measurement(['leads'], $events, $project, $readiness), $events);
         }
 
         // sales
@@ -69,11 +69,11 @@ final class JourneyPlanner
         }
         foreach (self::BRIDGE_EVENTS as $key => $label) {
             if ($status($key) === LaunchReadiness::ELIGIBLE) {
-                return $this->proposal('sales', 'bridge', $provider, $supported, $label, ['purchase_event_not_eligible', 'intermediate_event_eligible'], $this->measurement(['purchases'], $events, $project), $events);
+                return $this->proposal('sales', 'bridge', $provider, $supported, $label, ['purchase_event_not_eligible', 'intermediate_event_eligible'], $this->measurement(['purchases'], $events, $project, $readiness), $events);
             }
         }
 
-        return $this->proposal('traffic', 'measurement_first', $provider, $supported, null, ['no_usable_conversion_event'], $this->measurement(['purchases', 'add_to_cart'], $events, $project), $events);
+        return $this->proposal('traffic', 'measurement_first', $provider, $supported, null, [$this->noData($readiness) ? 'no_synced_data' : 'no_usable_conversion_event'], $this->measurement(['purchases', 'add_to_cart'], $events, $project, $readiness), $events);
     }
 
     /**
@@ -122,27 +122,39 @@ final class JourneyPlanner
         ];
     }
 
+    /** @param array<string,mixed> $readiness */
+    private function noData(array $readiness): bool
+    {
+        return ($readiness['data'] ?? null) === 'none';
+    }
+
     /**
      * @param  list<string>  $missing  event keys the stage would like measured
      * @param  array<string,mixed>  $events
      * @param  array<string,mixed>  $project
+     * @param  array<string,mixed>  $readiness
      * @return list<array<string,mixed>>
      */
-    private function measurement(array $missing, array $events, array $project): array
+    private function measurement(array $missing, array $events, array $project, array $readiness = []): array
     {
+        // An account with no synced results says nothing about any event: the honest first step is to get its data in, not to assert
+        // that a Purchase or a Lead event is missing from it.
+        if ($this->noData($readiness)) {
+            return [['event' => null, 'status' => LaunchReadiness::NO_DATA, 'action' => 'sync_the_account_first']];
+        }
         $out = [];
         foreach ($missing as $key) {
-            if (($events[$key]['status'] ?? LaunchReadiness::UNAVAILABLE) === LaunchReadiness::ELIGIBLE) {
+            if (($events[$key]['status'] ?? LaunchReadiness::NO_DATA) === LaunchReadiness::ELIGIBLE) {
                 continue;
             }
             $label = LaunchReadiness::EVENTS[$key] ?? $key;
             $action = match (true) {
                 $key === 'purchases' && ! empty($project['store_linked']) => 'store_linked_but_platform_reports_no_purchase',
-                $key === 'purchases' => 'link_the_store_and_send_the_purchase_event',
-                $key === 'leads' => 'send_the_lead_event_from_the_form',
-                default => 'send_the_event',
+                $key === 'purchases' => 'check_the_platform_receives_the_purchase_event',
+                $key === 'leads' => 'check_the_platform_receives_the_lead_event',
+                default => 'check_the_platform_receives_the_event',
             };
-            $out[] = ['event' => $label, 'status' => (string) ($events[$key]['status'] ?? LaunchReadiness::UNAVAILABLE), 'action' => $action];
+            $out[] = ['event' => $label, 'status' => (string) ($events[$key]['status'] ?? LaunchReadiness::NO_DATA), 'action' => $action];
         }
 
         return $out;
