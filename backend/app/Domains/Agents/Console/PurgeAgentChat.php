@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Console;
 
-use App\Domains\Agents\Services\AgentChatRetention;
-use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
+use App\Domains\Agents\Services\AgentChatRetention;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
