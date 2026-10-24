@@ -11,6 +11,9 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
+# UPLOAD-LIMITS-001 — PHP's 2 MB per-file default rejected ordinary screenshots.
+COPY docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
+
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --optimize-autoloader
 
