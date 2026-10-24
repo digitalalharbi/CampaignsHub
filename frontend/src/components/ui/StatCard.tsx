@@ -184,7 +184,14 @@ export function StatCard({
         present exactly when a comparison window produced one, so on any real KPI row some cards
         carry it and some do not.
       */}
-      <div className="flex min-h-6 items-center justify-between gap-2">
+      {/*
+        `flex-wrap`, so a movement too wide for the row drops under its label instead of out of the card.
+
+        Three cards in a row at 375px leave about 85px of header, and a four-digit movement («+2,681%») is a 76px pill that does not fit
+        beside a two-word label: it overflowed its card by 10px and scrolled the whole page sideways on Firefox and WebKit — found the day
+        the seeded comparison window slid and every PR went red on the same two specs. Wrapping costs nothing on a card whose pill fits.
+      */}
+      <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
         <span className={`flex items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
           {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
           {label}
