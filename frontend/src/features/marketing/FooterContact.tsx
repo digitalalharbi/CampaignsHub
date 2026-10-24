@@ -29,21 +29,6 @@ const LINK =
   'rounded-sm font-semibold text-brand-600 underline-offset-2 hover:underline ' +
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500'
 
-/**
- * The one-line legal name shown in the HOMEPAGE footer only (Owner 2026-10-23). The wording is the registered name, verbatim,
- * in both locales — it is a name, not a sentence, so it is not translated. It states nothing about the
- * company's role: it neither owns nor operates the platform (see /business-disclosure).
- */
-export const FOOTER_LEGAL_NAME = 'شركة حنكة الترويج للخدمات التسويقية شخص واحد'
-
-export function FooterLegalName({ className = '' }: { className?: string }) {
-  return (
-    <p data-testid="footer-legal-name" dir="rtl" lang="ar" className={`text-xs leading-relaxed text-text-muted ${className}`.trim()}>
-      {FOOTER_LEGAL_NAME}
-    </p>
-  )
-}
-
 export function FooterContact({
   locale,
   variant = 'block',
