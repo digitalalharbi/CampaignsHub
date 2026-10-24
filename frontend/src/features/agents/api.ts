@@ -192,3 +192,11 @@ export async function proposeChange(projectId: string, body: { provider: string;
   await ensureCsrfCookie()
   return postData<Proposal>(`${base(projectId)}`, body)
 }
+
+/** AGENT-CHAT-RETENTION-001 — how long this workspace keeps conversations (a limit; there is no «forever»). */
+export interface ChatRetention { days: number; min: number; max: number; default: number }
+export const getChatRetention = () => getData<ChatRetention>('/ai/chat-retention')
+export async function setChatRetention(days: number) {
+  await ensureCsrfCookie()
+  return putData<ChatRetention>('/ai/chat-retention', { days })
+}

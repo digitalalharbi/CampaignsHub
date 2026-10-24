@@ -200,7 +200,7 @@ final class AgentChatPrivacyTest extends TestCase
         $stuck = $this->thread($this->ana, 'Old but answering', at: $now->copy()->subDays(200), status: 'thinking');
         $routine = $this->thread(null, 'Old routine', at: $now->copy()->subDays(120));
 
-        $this->artisan('agents:purge-chat', ['--now' => $now->toIso8601String()])->expectsOutputToContain('2 conversation(s) older than 90 days deleted')->assertSuccessful();
+        $this->artisan('agents:purge-chat', ['--now' => $now->toIso8601String()])->expectsOutputToContain('2 conversation(s) past their workspace')->assertSuccessful();
 
         foreach ([$old, $routine] as $gone) {
             $this->assertNull(AgentThread::withoutGlobalScopes()->find($gone->id), $gone->title);
@@ -209,5 +209,67 @@ final class AgentChatPrivacyTest extends TestCase
         foreach ([$edge, $stuck] as $kept) {
             $this->assertNotNull(AgentThread::withoutGlobalScopes()->find($kept->id), $kept->title);
         }
+    }
+
+    // ── AGENT-CHAT-RETENTION-001 — the workspace chooses how long conversations are kept ───────────────────────────────────
+
+    private function retention(User $as, ?int $days = null)
+    {
+        $c = $this->actingAs($as, 'sanctum');
+
+        return $days === null ? $c->getJson('/api/v1/ai/chat-retention') : $c->putJson('/api/v1/ai/chat-retention', ['days' => $days]);
+    }
+
+    public function test_the_workspace_default_is_ninety_days_and_anyone_who_may_view_the_agents_can_read_it(): void
+    {
+        $this->retention($this->ben)->assertOk()->assertJsonPath('data.days', 90)->assertJsonPath('data.min', 7)->assertJsonPath('data.max', 730);
+    }
+
+    public function test_only_a_manager_sets_it_within_seven_and_seven_hundred_thirty_days_and_there_is_no_forever(): void
+    {
+        $this->retention($this->ben, 30)->assertForbidden();
+        $this->retention($this->admin)->assertJsonPath('data.days', 90);
+
+        $this->retention($this->admin, 30)->assertOk()->assertJsonPath('data.days', 30);
+        foreach ([0, 6, 731, 100000] as $bad) {
+            $this->retention($this->admin, $bad)->assertStatus(422);
+        }
+        $this->actingAs($this->admin, 'sanctum')->putJson('/api/v1/ai/chat-retention', ['days' => null])->assertStatus(422);
+        $this->actingAs($this->admin, 'sanctum')->putJson('/api/v1/ai/chat-retention', ['days' => 'forever'])->assertStatus(422);
+        $this->retention($this->ben)->assertJsonPath('data.days', 30);
+    }
+
+    public function test_the_chat_screen_reports_the_workspaces_value_and_the_purge_uses_it(): void
+    {
+        $this->retention($this->admin, 30)->assertOk();
+        $now = Carbon::parse('2026-10-25 12:00');
+        $old = $this->thread($this->ana, 'Old by 30', at: $now->copy()->subDays(31));
+        $kept = $this->thread($this->ana, 'Kept by 30', at: $now->copy()->subDays(29));
+
+        $this->assertSame(30, $this->list($this->ana)->json('data.retention_days'));
+        $this->artisan('agents:purge-chat', ['--now' => $now->toIso8601String()])->assertSuccessful();
+
+        $this->assertNull(AgentThread::withoutGlobalScopes()->find($old->id));
+        $this->assertNotNull(AgentThread::withoutGlobalScopes()->find($kept->id));
+    }
+
+    public function test_one_workspaces_choice_never_changes_another_workspaces_conversations(): void
+    {
+        $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
+        app(TenantContext::class)->setTenantId($other->id);
+        $ws = ClientWorkspace::create(['tenant_id' => $other->id, 'name' => 'C2', 'slug' => 'c2', 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
+        $theirProject = Project::create(['tenant_id' => $other->id, 'client_workspace_id' => $ws->id, 'name' => 'T', 'status' => 'active']);
+        $theirs = AgentThread::query()->create(['project_id' => $theirProject->id, 'agent_key' => 'orchestrator', 'title' => 'Theirs', 'status' => 'idle', 'created_by' => null]);
+        $now = Carbon::parse('2026-10-25 12:00');
+        AgentThread::withoutGlobalScopes()->whereKey($theirs->id)->toBase()->update(['updated_at' => $now->copy()->subDays(60)]);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        // This workspace shortens to 7 days; the other keeps the 90-day default, so its 60-day-old thread survives.
+        $this->retention($this->admin, 7)->assertOk();
+        $mineOld = $this->thread($this->ana, 'Mine old', at: $now->copy()->subDays(60));
+        $this->artisan('agents:purge-chat', ['--now' => $now->toIso8601String()])->assertSuccessful();
+
+        $this->assertNull(AgentThread::withoutGlobalScopes()->find($mineOld->id));
+        $this->assertNotNull(AgentThread::withoutGlobalScopes()->find($theirs->id), 'another workspace keeps its own retention');
     }
 }
