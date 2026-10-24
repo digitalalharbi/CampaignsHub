@@ -63,8 +63,15 @@ final class ClientReportView
         // 2. Only APPROVED recommendations reach the client; findings (observations) stay.
         $out['recommendations'] = array_values(array_filter(
             $data['recommendations'] ?? [],
-            fn ($r) => ($r['status'] ?? 'draft') === 'approved',
+            fn ($r) => ($r['status'] ?? 'draft') === 'approved' && ($r['audience'] ?? 'client') !== 'internal',
         ));
+        // DELIVERY-NOTES-001 — a hand-written note reaches the client only when approved AND meant for the client.
+        if (array_key_exists('findings', $data)) {
+            $out['findings'] = array_values(array_filter(
+                $data['findings'],
+                fn ($f) => ($f['source'] ?? null) !== 'manual' || ((($f['status'] ?? 'draft') === 'approved') && ($f['audience'] ?? 'client') !== 'internal'),
+            ));
+        }
 
         /*
          * 2b. REPORT-RECOMMENDATION-BLOCKS-001 — attention items: operator-internal ones only when

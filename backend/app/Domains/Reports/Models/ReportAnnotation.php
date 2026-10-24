@@ -22,7 +22,7 @@ final class ReportAnnotation extends Model
     protected $fillable = [
         'tenant_id', 'report_id', 'annotation_id', 'type', 'text_ar', 'text_en', 'platform', 'campaign_id',
         'kpi', 'evidence', 'source', 'priority', 'proposed_action', 'assignee_id', 'due_date', 'status',
-        'is_ai_generated', 'version', 'created_by', 'reviewed_by', 'approved_by', 'rejected_by',
+        'audience', 'position', 'is_ai_generated', 'version', 'created_by', 'reviewed_by', 'approved_by', 'rejected_by',
         'reviewed_at', 'approved_at', 'rejected_at', 'is_demo',
     ];
 

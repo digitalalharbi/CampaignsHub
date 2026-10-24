@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Services\CampaignDestinations;
+use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -434,8 +435,8 @@ final class ReportGenerator
              */
             'observations' => [],
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
-            'findings' => $this->tagAnnotations($this->findings($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''), 'finding', $report),
-            'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($lens, $platforms, $campaigns, $currency ?? ''), 'recommendation', $report)),
+            'findings' => array_merge($this->tagAnnotations($this->findings($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''), 'finding', $report), $this->manualNotes($report, 'finding')),
+            'recommendations' => ($recs = array_merge($this->tagAnnotations($this->recommendations($lens, $platforms, $campaigns, $currency ?? ''), 'recommendation', $report), $this->manualNotes($report, 'recommendation'))),
             // Client "Next Steps" — built ONLY from approved recommendations (action/priority/owner/due).
             'next_steps' => $this->nextSteps($recs),
             /*
@@ -891,6 +892,30 @@ final class ReportGenerator
     }
 
     /**
+     * DELIVERY-NOTES-001 — the notes a person wrote for this report, in the shape of a generated item so every surface that draws
+     * findings and recommendations draws them. `audience` and `source` travel with the item: the client view drops what is internal.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function manualNotes(Report $report, string $type): array
+    {
+        $out = [];
+        foreach (ReportAnnotation::withoutGlobalScopes()->where('report_id', $report->id)->where('source', 'manual')->where('type', $type)
+            ->orderByRaw('position is null')->orderBy('position')->orderBy('created_at')->get() as $note) {
+            $kind = (string) ($note->evidence['kind'] ?? '');
+            $out[] = [
+                'id' => $note->annotation_id, 'type' => $type,
+                'severity' => PackNotes::KINDS[$kind][1] ?? 'info',
+                'title' => $note->text_ar ?: $note->text_en, 'title_en' => $note->text_en, 'detail' => '', 'platform' => null, 'kpi' => null,
+                'status' => $note->status, 'audience' => $note->audience, 'source' => 'manual', 'kind' => $kind,
+                'is_ai_generated' => false, 'priority' => 'normal', 'evidence' => [],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Stamp each auto-generated finding/recommendation with a stable id + approval status. Findings are
      * factual observations (client-visible). Recommendations are AI-generated and start as `draft`;
      * only `approved` ones reach a client (approval ids live in report.config). Demo reports are
@@ -964,7 +989,7 @@ final class ReportGenerator
                 // What the reason sentence states, carried from the recommendation it restates.
                 'reveals' => $r['reveals'] ?? null,
             ],
-            array_filter($recommendations, fn ($r) => ($r['status'] ?? 'draft') === 'approved'),
+            array_filter($recommendations, fn ($r) => ($r['status'] ?? 'draft') === 'approved' && ($r['audience'] ?? 'client') !== 'internal'),
         ));
     }
 

@@ -49,8 +49,23 @@ export interface PackEvidence {
   include_in_report: boolean
 }
 
+export const NOTE_KINDS = ['observation', 'challenge', 'opportunity', 'recommendation'] as const
+export type NoteKind = (typeof NOTE_KINDS)[number]
+/** DELIVERY-NOTES-001 — a note the Owner wrote. `audience: internal` never reaches a client surface. */
+export interface PackNote {
+  id: string
+  kind: NoteKind
+  text_ar: string | null
+  text_en: string | null
+  audience: 'client' | 'internal'
+  position: number | null
+  status: string
+  version: number
+}
+
 export interface PackDetail extends DeliveryPack {
   recommendations: PackRecommendation[]
+  notes: PackNote[]
   evidence: PackEvidence[]
 }
 
@@ -125,3 +140,8 @@ export interface DeliverySettingsData {
 export const getDeliverySettings = (clientId: string) => getData<DeliverySettingsData>(`/delivery/settings?client=${encodeURIComponent(clientId)}`)
 export const saveDeliverySettings = (clientId: string, body: Partial<Omit<DeliverySettingsData, 'next_period'>>) =>
   putData<DeliverySettingsData>('/delivery/settings', { client_workspace_id: clientId, ...body })
+
+export const addNote = (packId: string, body: { kind: NoteKind; text_ar?: string; text_en?: string; audience: PackNote['audience'] }) => postData<PackNote>(`/delivery/packs/${packId}/notes`, body)
+export const updateNote = (packId: string, id: string, body: Partial<Pick<PackNote, 'kind' | 'text_ar' | 'text_en' | 'audience'>>) => patchData<PackNote>(`/delivery/packs/${packId}/notes/${id}`, body)
+export const deleteNote = (packId: string, id: string) => api.delete(`/delivery/packs/${packId}/notes/${id}`)
+export const orderNotes = (packId: string, ids: string[]) => putData<PackNote[]>(`/delivery/packs/${packId}/notes/order`, { ids })
