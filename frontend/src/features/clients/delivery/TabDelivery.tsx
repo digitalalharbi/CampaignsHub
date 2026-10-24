@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ClipboardCopy, EyeOff, FileUp, Loader2, Pencil, Send, X } from 'lucide-react'
+import { DeliverySettingsCard } from './DeliverySettingsCard'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Num } from '@/components/ui/Num'
 import { ProviderMark } from '@/components/ProviderMark'
@@ -16,7 +17,7 @@ import {
 } from './deliveryApi'
 
 /**
- * WD-PACK-001, WD-DRAFTS-001, WD-WHATSAPP-001, WD-EVIDENCE-001 — the weekly delivery, as the Owner works it.
+ * WD-PACK-001, WD-DRAFTS-001, WD-WHATSAPP-001, WD-EVIDENCE-001 — the periodic delivery, as the Owner works it.
  *
  * One list of weeks and one panel for the week in front of them: what stands between it and approval
  * (the report, every recommendation's decision, evidence, the invoice), the choices that make it theirs
@@ -26,7 +27,7 @@ import {
  */
 const COPY = {
   ar: {
-    title: 'التسليم الأسبوعي', prepare: 'تجهيز الأسبوع الماضي', none: 'لا توجد حزم تسليم بعد. جهّز الأسبوع الماضي لتبدأ.',
+    title: 'التسليم الدوري', prepare: 'تجهيز الأسبوع الماضي', none: 'لا توجد حزم تسليم بعد. جهّز الأسبوع الماضي لتبدأ.',
     week: 'الأسبوع', draft: 'مسودة', approved: 'معتمدة', sent: 'أُرسلت', ready: 'جاهزة للاعتماد',
     checklist: 'قبل الاعتماد', report: 'التقرير', reportStates: { completed: 'جاهز', processing: 'قيد الإعداد', failed: 'فشل', missing: 'غير موجود' } as Record<string, string>,
     undecided: 'توصيات بلا قرار', evidenceCount: 'لقطات منصات', invoice: 'الفاتورة', invoiceNone: 'غير مرتبطة',
@@ -42,7 +43,7 @@ const COPY = {
     wa: 'رسالة واتساب', copy: 'نسخ', copied: 'تم النسخ', markSent: 'تم الإرسال للعميل', 
   },
   en: {
-    title: 'Weekly delivery', prepare: 'Prepare last week', none: 'No delivery packs yet. Prepare last week to begin.',
+    title: 'Periodic delivery', prepare: 'Prepare last week', none: 'No delivery packs yet. Prepare last week to begin.',
     week: 'Week', draft: 'Draft', approved: 'Approved', sent: 'Sent', ready: 'Ready to approve',
     checklist: 'Before approval', report: 'Report', reportStates: { completed: 'Ready', processing: 'Building', failed: 'Failed', missing: 'Missing' } as Record<string, string>,
     undecided: 'Recommendations without a decision', evidenceCount: 'Platform screenshots', invoice: 'Invoice', invoiceNone: 'Not linked',
@@ -74,7 +75,7 @@ export function TabDelivery({ clientId, projects }: { clientId: string; projects
   })
 
   if (packs.isLoading) return <div className="h-40 animate-pulse rounded-xl bg-surface-secondary" />
-  if (packs.isError) return <QueryFailure error={packs.error} ar={ar} testId="delivery-failure" onRetry={() => void packs.refetch()} fallbackTitle={ar ? 'تعذّر تحميل التسليم الأسبوعي.' : 'Could not load the weekly delivery.'} />
+  if (packs.isError) return <QueryFailure error={packs.error} ar={ar} testId="delivery-failure" onRetry={() => void packs.refetch()} fallbackTitle={ar ? 'تعذّر تحميل التسليم الدوري.' : 'Could not load the periodic delivery.'} />
 
   const rows = packs.data ?? []
 
@@ -94,6 +95,7 @@ export function TabDelivery({ clientId, projects }: { clientId: string; projects
         </div>
       </div>
       {prepare.isError && <p role="alert" className="text-xs text-danger">{toApiError(prepare.error).message}</p>}
+      <DeliverySettingsCard clientId={clientId} ar={ar} canEdit />
 
       {rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-text-secondary">{t.none}</p>

@@ -92,7 +92,7 @@ export function ClientCommandCenterPage() {
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
     { key: 'requests', label: t('tab_requests') },
-    ...(d.can.view_reports ? [{ key: 'delivery' as Tab, label: lang === 'ar' ? 'التسليم الأسبوعي' : 'Weekly delivery' }] : []),
+    ...(d.can.view_reports ? [{ key: 'delivery' as Tab, label: lang === 'ar' ? 'التسليم الدوري' : 'Periodic delivery' }] : []),
     { key: 'billing' as Tab, label: lang === 'ar' ? 'الاشتراكات' : 'Billing' },
     { key: 'messages' as Tab, label: lang === 'ar' ? 'المحادثات' : 'Conversations' },
     ...(d.can.manage_settings || d.can.manage_team ? [{ key: 'portal' as Tab, label: lang === 'ar' ? 'بوابة العميل' : 'Client portal' }] : []),

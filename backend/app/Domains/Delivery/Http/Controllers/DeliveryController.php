@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Delivery\Http\Controllers;
 
+use App\Domains\Audit\AuditLogger;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
@@ -11,6 +12,7 @@ use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Delivery\Models\PlatformEvidence;
 use App\Domains\Delivery\Services\DeliveryOverview;
 use App\Domains\Delivery\Services\DeliveryPackService;
+use App\Domains\Delivery\Services\DeliverySettings;
 use App\Domains\Delivery\Services\PlatformEvidenceService;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
@@ -91,6 +93,45 @@ final class DeliveryController extends Controller
             ->values()->all();
 
         return ApiResponse::success($rows, 'Delivery overview.');
+    }
+
+    /** GET /delivery/settings?client= — how this client's periodic delivery is prepared. */
+    public function settings(Request $request): JsonResponse
+    {
+        $data = $request->validate(['client' => ['required', 'uuid']]);
+        $workspace = $this->authorise($request, $data['client'], 'reports.view');
+
+        return ApiResponse::success($this->settingsShape($workspace), 'Delivery settings.');
+    }
+
+    /** PUT /delivery/settings — DELIVERY-SETTINGS-001. Only the keys sent change; nothing already prepared is touched. */
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'client_workspace_id' => ['required', 'uuid'],
+            'enabled' => ['sometimes', 'boolean'],
+            'cadence' => ['sometimes', 'in:'.implode(',', DeliverySettings::CADENCES)],
+            'week_start' => ['sometimes', 'in:'.implode(',', array_keys(DeliverySettings::WEEK_STARTS))],
+            'mode' => ['sometimes', 'in:'.implode(',', DeliverySettings::MODES)],
+            'components' => ['sometimes', 'array'],
+            'components.*' => ['boolean'],
+        ]);
+        $workspace = $this->authorise($request, $data['client_workspace_id'], 'reports.approve');
+        $before = DeliverySettings::for($workspace);
+        DeliverySettings::save($workspace, $data);
+        $after = DeliverySettings::for($workspace->refresh());
+        app(AuditLogger::class)->log('delivery_settings.updated', 'client_workspace', (string) $workspace->getKey(), $before, $after);
+
+        return ApiResponse::success($this->settingsShape($workspace), 'Delivery settings saved.');
+    }
+
+    /** @return array<string,mixed> */
+    private function settingsShape(ClientWorkspace $workspace): array
+    {
+        $settings = DeliverySettings::for($workspace);
+        [$from, $to] = DeliverySettings::period($settings);
+
+        return $settings + ['next_period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()]];
     }
 
     /** POST /delivery/packs — prepare the previous week for a project. */
