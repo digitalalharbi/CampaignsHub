@@ -26,12 +26,19 @@ export interface StoreRow {
   last_synced_at: string | null
   counts: { products: number; orders: number; abandoned_carts: number }
   last_run: { status: string; records: number; error: string | null; finished_at: string | null } | null
+  /** STORE-LIFECYCLE-001 — read-only history of an authorisation that was disconnected. */
+  disconnected?: boolean
 }
+
+export interface StoreRun { id: string; status: string; records: number; error: string | null; started_at: string | null; finished_at: string | null }
 
 export interface StoreProvider {
   key: string
   label: string
   state: StoreState
+  /** The authorisation Disconnect acts on, and its status (`connected` | `error` | `revoked`). */
+  connection_id?: string | null
+  connection_status?: string | null
   connection_error: string | null
   token_expires_at: string | null
   stores: StoreRow[]
@@ -81,4 +88,14 @@ export async function syncStore(storeId: string): Promise<{ queued: number; wind
 export async function assignStore(storeId: string, projectId: string | null): Promise<StoreRow> {
   await ensureCsrfCookie()
   return patchData<StoreRow>(`/commerce/stores/${storeId}`, { project_id: projectId })
+}
+
+/** STORE-LIFECYCLE-001 — stop reading and erase the token; synced data and project links are kept. */
+export async function disconnectStore(connectionId: string): Promise<{ disabled_bindings: number }> {
+  await ensureCsrfCookie()
+  return postData<{ disabled_bindings: number }>(`/commerce/connections/${connectionId}/disconnect`)
+}
+
+export function storeRuns(storeId: string): Promise<StoreRun[]> {
+  return getData<StoreRun[]>(`/commerce/stores/${storeId}/runs`)
 }

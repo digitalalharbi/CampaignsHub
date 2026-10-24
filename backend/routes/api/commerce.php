@@ -51,6 +51,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         Route::post('store-installs/{claim}/claim', [StoreOAuthController::class, 'installClaim'])
             ->middleware('throttle:10,1')->name('installs.claim');
         Route::patch('stores/{store}', [StoreController::class, 'update'])->name('stores.update');
+        Route::get('stores/{store}/runs', [StoreController::class, 'runs'])->name('stores.runs');
+        Route::post('connections/{connection}/disconnect', [StoreController::class, 'disconnect'])->name('connections.disconnect');
         Route::post('stores/{store}/sync', [StoreController::class, 'sync'])
             ->middleware('throttle:12,1')->name('stores.sync');
     });

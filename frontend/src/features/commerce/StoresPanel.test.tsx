@@ -9,10 +9,12 @@ vi.mock('./api', () => ({
   startStoreOAuth: vi.fn(),
   syncStore: vi.fn(),
   assignStore: vi.fn(),
+  disconnectStore: vi.fn(),
+  storeRuns: vi.fn(),
 }))
 vi.mock('@/features/projects/api', () => ({ listClientWorkspaces: vi.fn(), listProjects: vi.fn() }))
 
-import { assignStore, listStoreProviders, startStoreOAuth, syncStore } from './api'
+import { assignStore, disconnectStore, listStoreProviders, startStoreOAuth, storeRuns, syncStore } from './api'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 
 function provider(over: Partial<StoreProvider> = {}): StoreProvider {
@@ -200,5 +202,64 @@ describe('StoresPanel', () => {
 
     fireEvent.change(screen.getByTestId('store-project-s1'), { target: { value: '' } })
     await waitFor(() => expect(assignStore).toHaveBeenCalledWith('s1', null))
+  })
+
+  /** STORE-LIFECYCLE-001 — a connected store can be reauthorised, changed, disconnected (after a confirmation) and read back as history. */
+  const row = (over = {}) => ({
+    id: 's1', external_id: '1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
+    last_synced_at: null, counts: { products: 3, orders: 9, abandoned_carts: 1 }, last_run: null, ...over,
+  })
+
+  it('offers reauthorise and disconnect on a connected store, and disconnects only after an explicit yes', async () => {
+    vi.mocked(disconnectStore).mockResolvedValue({ disabled_bindings: 1 })
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', connection_id: 'c1', connection_status: 'connected', stores: [row()] })])
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('disconnect-store-salla'))
+    expect(screen.getByTestId('disconnect-confirm-salla').textContent).toMatch(/kept/)
+    expect(disconnectStore).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('disconnect-yes-salla'))
+    await waitFor(() => expect(disconnectStore).toHaveBeenCalledWith('c1'))
+  })
+
+  it('cancelling the confirmation changes nothing', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', connection_id: 'c1', connection_status: 'connected', stores: [row()] })])
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('disconnect-store-salla'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByTestId('disconnect-confirm-salla')).toBeNull()
+    expect(disconnectStore).not.toHaveBeenCalled()
+  })
+
+  it('starts a fresh consent from «reauthorise / change store»', async () => {
+    vi.mocked(startStoreOAuth).mockResolvedValue({ authorization_url: 'about:blank#salla' })
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', connection_id: 'c1', connection_status: 'connected', stores: [row()] })])
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('reconnect-store-salla'))
+    await waitFor(() => expect(startStoreOAuth).toHaveBeenCalledWith('salla', null))
+  })
+
+  it('keeps a disconnected store and its counts visible, says the data is kept, and offers reconnect — not disconnect', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'disconnected', connection_id: 'c1', connection_status: 'revoked', stores: [row({ disconnected: true })] })])
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    expect(await screen.findByTestId('store-disconnected-s1')).toBeInTheDocument()
+    expect(screen.getByTestId('store-s1').textContent).toContain('9')
+    expect(screen.getByTestId('reconnect-store-salla').textContent).toMatch(/Reconnect/)
+    expect(screen.queryByTestId('disconnect-store-salla')).toBeNull()
+  })
+
+  it('shows the store’s sync history on request', async () => {
+    vi.mocked(storeRuns).mockResolvedValue([{ id: 'r1', status: 'failed', records: 0, error: 'token expired', started_at: '2026-10-24T08:00:00Z', finished_at: '2026-10-24T08:01:00Z' }])
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', connection_id: 'c1', connection_status: 'connected', stores: [row()] })])
+    renderWithProviders(<StoresPanel />, { locale: 'en' })
+
+    expect(storeRuns).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByTestId('store-history-toggle-s1'))
+    await waitFor(() => expect(screen.getByTestId('store-history-s1').textContent).toContain('token expired'))
+    expect(storeRuns).toHaveBeenCalledWith('s1')
   })
 })

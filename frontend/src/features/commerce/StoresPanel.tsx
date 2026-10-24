@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Store } from 'lucide-react'
-import { assignStore, listStoreProviders, startStoreOAuth, syncStore, type StoreProvider, type StoreRow, type StoreState } from './api'
+import { History, Loader2, PlugZap, RefreshCw, Store, Unplug } from 'lucide-react'
+import { assignStore, disconnectStore, listStoreProviders, startStoreOAuth, storeRuns, syncStore, type StoreProvider, type StoreRow, type StoreState } from './api'
 import { listClientWorkspaces, listProjects, type Project } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -51,6 +51,37 @@ function stamp(iso: string | null, ar: boolean): string {
   return new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   })
+}
+
+/** STORE-LIFECYCLE-001 — the store's own sync history, opened on demand (the last 20 runs, newest first). */
+function StoreHistory({ storeId, ar }: { storeId: string; ar: boolean }) {
+  const [open, setOpen] = useState(false)
+  const runs = useQuery({ queryKey: ['commerce-store-runs', storeId], queryFn: () => storeRuns(storeId), enabled: open })
+
+  return (
+    <div className="mt-2">
+      <button type="button" data-testid={`store-history-toggle-${storeId}`} aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline">
+        <History size={12} /> {ar ? 'سجل المزامنة' : 'Sync history'}
+      </button>
+      {open && (
+        <div data-testid={`store-history-${storeId}`} className="mt-1.5 text-[11px] text-text-secondary">
+          {runs.isLoading && <Loader2 size={12} className="animate-spin" />}
+          {runs.isError && <span className="text-danger">{toApiError(runs.error).message}</span>}
+          {runs.data && runs.data.length === 0 && <span>{ar ? 'لا توجد عمليات مزامنة بعد.' : 'No sync runs yet.'}</span>}
+          <ul className="space-y-1">
+            {(runs.data ?? []).map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 rounded-md bg-surface px-2 py-1">
+                <span className="font-semibold">{r.status}</span>
+                <span className="tnum">{stamp(r.finished_at ?? r.started_at, ar)}</span>
+                <span className="tnum">{r.records} {ar ? 'سجل' : 'records'}</span>
+                {r.error && <span className="text-danger">{r.error}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function StoreCard({ store, provider, ar, onSync, syncing, projects, onAssign, assigning }: {
@@ -126,6 +157,13 @@ function StoreCard({ store, provider, ar, onSync, syncing, projects, onAssign, a
         </div>
       </dl>
 
+      {store.disconnected && (
+        <p data-testid={`store-disconnected-${store.id}`} className="mt-2 rounded-lg bg-surface px-2 py-1.5 text-[11px] text-text-secondary">
+          {ar ? 'المتجر مفصول: البيانات المقروءة محفوظة ولا تتم مزامنة جديدة حتى تعيد الربط.' : 'Disconnected: the data already read is kept and nothing new syncs until you reconnect.'}
+        </p>
+      )}
+      <StoreHistory storeId={store.id} ar={ar} />
+
       <p className="mt-2 text-[11px] text-text-muted">
         {ar ? 'آخر مزامنة' : 'Last sync'}: <span className="tnum">{stamp(store.last_synced_at, ar)}</span>
         {store.last_run?.status === 'no_data' && (
@@ -176,6 +214,12 @@ export function StoresPanel() {
     onSuccess: ({ authorization_url }) => { window.location.assign(authorization_url) },
   })
 
+  const disconnect = useMutation({
+    mutationFn: (connectionId: string) => disconnectStore(connectionId),
+    onSuccess: () => { setConfirming(null); void queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }) },
+  })
+  const [confirming, setConfirming] = useState<string | null>(null)
+
   const sync = useMutation({
     mutationFn: syncStore,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
@@ -190,7 +234,7 @@ export function StoresPanel() {
   }
 
   const providers = query.data ?? []
-  const failed = authorize.isError ? authorize.error : assign.isError ? assign.error : sync.isError ? sync.error : null
+  const failed = authorize.isError ? authorize.error : assign.isError ? assign.error : sync.isError ? sync.error : disconnect.isError ? disconnect.error : null
   const actionError = failed ? toApiError(failed) : null
 
   return (
@@ -312,6 +356,40 @@ export function StoresPanel() {
                         />
                       ))}
                     </ul>
+                  )}
+
+                  {/*
+                    STORE-LIFECYCLE-001 — what can be done to the CONNECTION, not just to a store: reconnect (a fresh consent, which
+                    also replaces the store when another one is chosen on the platform's screen) and disconnect (stop reading, erase
+                    the token, keep everything already read).
+                  */}
+                  {provider.stores.length > 0 && provider.connection_id && (
+                    <div data-testid={`store-actions-${provider.key}`} className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                      <Button size="sm" variant="secondary" data-testid={`reconnect-store-${provider.key}`} onClick={() => authorize.mutate(provider.key)} disabled={authorize.isPending}>
+                        {authorize.isPending ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
+                        {provider.connection_status === 'revoked' ? (ar ? 'إعادة الربط' : 'Reconnect') : (ar ? 'إعادة التفويض / تغيير المتجر' : 'Reauthorise / change store')}
+                      </Button>
+                      {provider.connection_status !== 'revoked' && confirming !== provider.connection_id && (
+                        <Button size="sm" variant="ghost" data-testid={`disconnect-store-${provider.key}`} onClick={() => setConfirming(provider.connection_id ?? null)}>
+                          <Unplug size={13} /> {ar ? 'فصل الاتصال' : 'Disconnect'}
+                        </Button>
+                      )}
+                      {confirming === provider.connection_id && (
+                        <div role="alert" data-testid={`disconnect-confirm-${provider.key}`} className="w-full rounded-lg border border-warning/40 bg-[var(--warning-background)] p-3 text-xs text-text-primary">
+                          <p className="mb-2">
+                            {ar
+                              ? 'سيتوقف قراءة هذا المتجر وتُمسح بيانات التفويض المخزّنة. تبقى الطلبات والمنتجات المقروءة وربط المشروع محفوظة، ويمكنك إعادة الربط لاحقًا. لإلغاء الصلاحية من جهة المنصة أزل التطبيق من لوحة تحكم متجرك أيضًا.'
+                              : 'Reading this store stops and the stored authorisation is erased. Orders and products already read, and the project link, are kept; you can reconnect later. To withdraw access on the platform’s side, also remove the app in your store’s dashboard.'}
+                          </p>
+                          <div className="flex gap-2">
+                            <Button size="sm" data-testid={`disconnect-yes-${provider.key}`} onClick={() => disconnect.mutate(provider.connection_id as string)} disabled={disconnect.isPending}>
+                              {disconnect.isPending ? <Loader2 size={13} className="animate-spin" /> : null} {ar ? 'نعم، افصل' : 'Yes, disconnect'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {sync.isSuccess && (
