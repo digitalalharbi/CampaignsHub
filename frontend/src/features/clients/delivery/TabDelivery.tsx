@@ -306,7 +306,7 @@ function Evidence({ pack, clientId, t, ar, open, onChange }: { pack: PackDetail;
           {upload.isError && (
             <>
               <span role="alert" className="text-danger">{toApiError(upload.error).message}</span>
-              <button type="button" data-testid="evidence-retry" onClick={() => upload.mutate(pending.file)} className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 font-medium text-text-primary hover:bg-surface-muted"><RotateCw size={13} /> {t.retry}</button>
+              <button type="button" data-testid="evidence-retry" onClick={() => upload.mutate(pending.file)} className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 font-medium text-text-primary hover:bg-surface-secondary"><RotateCw size={13} /> {t.retry}</button>
               <button type="button" onClick={() => { setPending(null); upload.reset() }} aria-label={t.remove} className="rounded p-1 text-text-muted hover:text-danger"><X size={14} /></button>
             </>
           )}
