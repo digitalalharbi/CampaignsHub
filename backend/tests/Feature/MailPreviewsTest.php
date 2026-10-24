@@ -59,6 +59,8 @@ final class MailPreviewsTest extends TestCase
             // case. Four separate `alert-*` previews would picture a product that no longer exists.
             'alerts-bundle', 'alerts-one',
             'report-ready', 'billing', 'approval', 'message',
+            // EMAIL-TRANSACTIONAL-SET-001 — what a member is owed about their own access.
+            'member-welcome', 'role-changed',
             // MAIL-009 — the messages about somebody's account rather than their campaigns.
             'account-password-reset', 'account-email-verification', 'account-sign-in-code',
             'account-member-setup', 'account-invitation', 'account-invitation-unknown-role',
@@ -68,8 +70,8 @@ final class MailPreviewsTest extends TestCase
             $this->assertArrayHasKey("{$kind}.en.html", $files, "{$kind} has no English preview");
         }
 
-        // 19 messages × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery).
-        $this->assertCount(38, $files);
+        // 21 messages × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
+        $this->assertCount(42, $files);
     }
 
     /**

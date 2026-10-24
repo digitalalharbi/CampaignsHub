@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Services;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Notifications\Mail\InvitationMail;
+use App\Domains\Notifications\Services\MemberNotices;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Projects\Access\ProjectRole;
@@ -224,7 +225,7 @@ final class InvitationService
     {
         $inv = $this->resolve($token);
 
-        return DB::transaction(function () use ($inv, $name, $password): User {
+        $user = DB::transaction(function () use ($inv, $name, $password): User {
             // Re-check inside the transaction (race): the email must still be free.
             if (User::where('email', $inv->email)->exists()) {
                 throw ValidationException::withMessages(['email' => 'A user with this email already exists.']);
@@ -262,6 +263,11 @@ final class InvitationService
 
             return $user;
         });
+
+        // EMAIL-TRANSACTIONAL-SET-001 — welcomed AFTER the grant is committed, so a message can never undo access.
+        app(MemberNotices::class)->welcome($user, Tenant::findOrFail($inv->tenant_id), (string) (Role::where('slug', $inv->role_slug)->where(fn ($q) => $q->where('tenant_id', $inv->tenant_id)->orWhereNull('tenant_id'))->value('name') ?? $inv->role_slug));
+
+        return $user;
     }
 
     /** The role, project memberships and workspace membership an invitation confers; marks it accepted. */
