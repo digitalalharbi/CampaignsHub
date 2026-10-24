@@ -197,15 +197,25 @@ test.describe('signing out from a refusal', () => {
      */
     await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 20000 })
 
-    const state = await page.evaluate(() => ({
-      project: window.localStorage.getItem('campaign-hub-project-storage'),
-      locale: window.localStorage.getItem('campaign-hub-locale'),
-    }))
-    expect(state.project, 'the previous person’s project selection survived sign-out').toBeNull()
-    // A preference of the PERSON, not of the session — resetting it reads as a bug.
-    expect(state.locale, 'the language preference was wiped as a side effect').toBe('ar')
+    /*
+     * Read storage as a POLLED assertion that survives the navigation it is racing.
+     *
+     * Two hardenings of the same read were not enough: the login form can be on screen in the document that is about to be replaced, and a
+     * single `page.evaluate` then lands mid-reload — «Execution context was destroyed», seen on firefox and again on webkit in CI. A read
+     * that can be torn out from under a call is retried until it returns once, on whichever document is final; what it must return is the
+     * same: no project selection left, the person's language kept.
+     */
+    await expect.poll(
+      async () => page.evaluate(() => ({
+        project: window.localStorage.getItem('campaign-hub-project-storage'),
+        locale: window.localStorage.getItem('campaign-hub-locale'),
+      })).catch(() => 'navigating'),
+      { timeout: 20_000, message: 'the previous person’s project selection survived sign-out, or the language preference was wiped as a side effect' },
+    ).toEqual({ project: null, locale: 'ar' })
 
-    const status = await page.evaluate(async () => (await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })).status)
-    expect(status, 'the session outlived the sign-out').toBe(401)
+    await expect.poll(
+      async () => page.evaluate(async () => (await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })).status).catch(() => 0),
+      { timeout: 20_000, message: 'the session outlived the sign-out' },
+    ).toBe(401)
   })
 })
