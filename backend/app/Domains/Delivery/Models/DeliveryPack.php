@@ -36,10 +36,14 @@ final class DeliveryPack extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'project_id', 'report_id', 'invoice_id', 'period_start', 'period_end',
-        'status', 'components', 'approved_by', 'approved_at', 'sent_at', 'created_by',
+        'share_id', 'share_token', 'status', 'components', 'approved_by', 'approved_at', 'sent_at', 'created_by',
     ];
 
+    /** The report link's bearer token is for the message, never for an API payload. */
+    protected $hidden = ['share_token'];
+
     protected $casts = [
+        'share_token' => 'encrypted',
         'period_start' => 'date',
         'period_end' => 'date',
         'components' => 'array',

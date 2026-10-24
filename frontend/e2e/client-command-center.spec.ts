@@ -73,12 +73,24 @@ test('owner drives a converted client through every command-center tab', async (
   await tab(page, /^Analytics$|^التحليلات$/).click()
   await expect(page.getByText(/No performance data|source of truth|لا توجد بيانات|مصدر البيانات/i).first()).toBeVisible()
 
-  // 5) Reports tab → create a client report (queued) appears.
+  // 5) Reports tab → the SAME report builder and live-link builder the Reports page uses (CLIENT-REPORTS-UNIFIED-001).
+  //    A brand-new client has no connected ad account, so creating a saved report is the Reports page's own account-gated flow
+  //    (covered by report-builder.ts); here the tab must open the real builder with the Live/Snapshot choice and the live-link builder.
   await tab(page, /^Reports$|^التقارير$/).click()
-  await page.getByRole('button', { name: /New report|تقرير جديد/ }).click()
-  await page.getByLabel(/Report name|اسم التقرير/).fill('Monthly CC')
-  await page.getByRole('button', { name: /^Create$|^إنشاء$/ }).click()
-  await expect(page.getByText('Monthly CC')).toBeVisible()
+  await page.getByTestId('client-reports-new').click()
+  const builder = page.getByRole('dialog')
+  await expect(builder).toBeVisible()
+  await builder.getByLabel(/Report name|اسم التقرير/).fill('Monthly CC')
+  await expect(builder.getByTestId('rb-mode-snapshot')).toHaveAttribute('aria-pressed', 'true')
+  await builder.getByTestId('rb-mode-live').click()
+  await expect(builder.getByTestId('rb-mode-live')).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByTestId('client-reports-live').click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 
   // 6) Team tab → grant access to a same-tenant user, then remove.
   await tab(page, /^Team$|^الفريق$/).click()
