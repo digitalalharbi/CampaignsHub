@@ -7,6 +7,7 @@ namespace App\Domains\Settings\Http\Controllers;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Services\InvitationService;
+use App\Domains\Notifications\Services\MemberNotices;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -183,7 +184,7 @@ final class TeamController extends Controller
         return ApiResponse::success(null, 'Invitation withdrawn.');
     }
 
-    public function updateRole(Request $request, string $user, AuditLogger $audit): JsonResponse
+    public function updateRole(Request $request, string $user, AuditLogger $audit, MemberNotices $notices): JsonResponse
     {
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $target = $this->member($user);
@@ -200,6 +201,12 @@ final class TeamController extends Controller
         $target->roles()->syncWithoutDetaching([$role->id]);
 
         $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before], after: ['roles' => [$role->slug]]);
+
+        // EMAIL-TRANSACTIONAL-SET-001 — the person is told, in their language, unless they changed their own role.
+        if ($target->id !== $request->user()->id) {
+            $names = Role::where('tenant_id', $this->tenantId())->whereIn('slug', $before)->pluck('name')->implode('، ');
+            $notices->roleChanged($target, Tenant::findOrFail($this->tenantId()), $names !== '' ? (string) $names : implode(', ', $before), (string) $role->name, $request->user());
+        }
 
         return ApiResponse::success(null, 'Role updated.');
     }

@@ -171,6 +171,29 @@ final class MailGallery
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/conversations', action: $ar ? 'فتح المحادثة' : 'Open the conversation',
             ),
+
+            // EMAIL-TRANSACTIONAL-SET-001 — the two messages a member is owed about their own access.
+            'member-welcome' => new OperationalMail(
+                kind: 'member_welcome', severity: 'positive',
+                title: $ar ? 'أهلًا بك في وكالة العرض' : 'Welcome to Demo Agency',
+                detail: $ar
+                    ? 'انضممت إلى مساحة العمل بدور «محلل». يمكنك الآن متابعة الحملات والتقارير من لوحة التحكم.'
+                    : 'You have joined the workspace as «Analyst». You can now follow campaigns and reports from the dashboard.',
+                context: $ar ? 'وكالة العرض' : 'Demo Agency',
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+                path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+            ),
+
+            'role-changed' => new OperationalMail(
+                kind: 'role_changed', severity: 'warning',
+                title: $ar ? 'تغيّر دورك في مساحة العمل' : 'Your role in the workspace changed',
+                detail: $ar
+                    ? 'تغيّر دورك في وكالة العرض بواسطة سارة: من «محلل» إلى «مدير». إن لم تكن تتوقع هذا التغيير فتواصل مع مسؤول الفريق.'
+                    : 'Your role in Demo Agency was changed by Sara: from «Analyst» to «Manager». If you did not expect this, contact a workspace administrator.',
+                context: $ar ? 'وكالة العرض' : 'Demo Agency',
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+                path: '/app/dashboard', action: $ar ? 'فتح كامبينز هب' : 'Open CampaignsHub',
+            ),
         ];
     }
 

@@ -313,6 +313,42 @@ final class PortfolioScopeTest extends TestCase
         $this->assertCount(2, $points);
     }
 
+    /**
+     * MONEY-RECON-RUNGS-001 — the portfolio rung: the same money, read as total, as trend and as contribution, adds up.
+     *
+     * The ladder below the portfolio (account → campaign → platform → project) reconciles in `MoneyReconciliationLadderTest`. This is the top rung:
+     * three projects across two currencies on several days, and per currency the headline spend, the sum of the trend's points and the sum of
+     * the contribution bars must all be the one figure that was put in — computed here by hand, not by the code under test — so no surface of
+     * the portfolio can drift from another by a rounding, a missing day or a project counted twice.
+     */
+    public function test_the_portfolio_total_trend_and_contribution_are_one_figure_per_currency(): void
+    {
+        $a = $this->project($this->acme, 'A', 'active');
+        $b = $this->project($this->acme, 'B', 'active');
+        $c = $this->project($this->beta, 'C', 'active');
+
+        $this->spend($a, 'SAR', 120.25, null, Carbon::today()->subDays(4)->toDateString());
+        $this->spend($a, 'SAR', 80.50, null, Carbon::today()->subDays(3)->toDateString());
+        $this->spend($b, 'SAR', 300.00, null, Carbon::today()->subDays(3)->toDateString());
+        $this->spend($b, 'SAR', 99.25, null, Carbon::today()->subDays(1)->toDateString());
+        $this->spend($c, 'USD', 55.10, null, Carbon::today()->subDays(2)->toDateString());
+        $this->spend($c, 'USD', 44.90, null, Carbon::today()->subDays(1)->toDateString());
+
+        $data = $this->portfolio($this->agencyWide);
+        $expected = ['SAR' => 600.00, 'USD' => 100.00];
+
+        $total = collect($data['spend']['by_currency'])->mapWithKeys(fn ($r) => [$r['currency'] => (float) $r['spend']]);
+        $trend = collect($data['trend']['by_currency'])->mapWithKeys(fn ($r) => [$r['currency'] => array_sum(array_map(fn ($p) => (float) $p['spend'], $r['points']))]);
+        $contribution = collect($data['contribution']['by_currency'])->mapWithKeys(fn ($r) => [$r['currency'] => array_sum(array_map(fn ($p) => (float) $p['spend'], $r['projects']))]);
+
+        foreach ($expected as $currency => $amount) {
+            $this->assertEqualsWithDelta($amount, $total[$currency], 0.005, "headline spend in {$currency}");
+            $this->assertEqualsWithDelta($amount, $trend[$currency], 0.005, "the trend's points in {$currency} do not add up to the headline");
+            $this->assertEqualsWithDelta($amount, $contribution[$currency], 0.005, "the contribution bars in {$currency} do not add up to the headline");
+        }
+        $this->assertSame(['SAR', 'USD'], $total->keys()->sort()->values()->all(), 'no currency invented, none dropped');
+    }
+
     /** «Who moved it» — ranked, per currency, and never across currencies. */
     public function test_contribution_ranks_the_projects_that_produced_the_spend(): void
     {
