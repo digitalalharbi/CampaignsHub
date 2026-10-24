@@ -18,6 +18,7 @@ use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
 use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Delivery\Console\PrepareWeeklyPacks;
+use App\Domains\Delivery\Console\RemindDeliveryReviewers;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
@@ -111,6 +112,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,
         PrepareWeeklyPacks::class,
+        RemindDeliveryReviewers::class,
         RefreshCreativeCoversCommand::class,
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.

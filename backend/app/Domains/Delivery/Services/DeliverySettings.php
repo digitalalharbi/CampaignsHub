@@ -17,6 +17,8 @@ use Illuminate\Support\Carbon;
  *  - `week_start` the day a delivery week begins: `monday` (default, what every pack so far used) or `sunday`
  *  - `mode`       the report behind the pack: `snapshot` (fixed for its period, default) or `live` (follows the synced data)
  *  - `components` what the client receives by default (see DeliveryPack::COMPONENTS)
+ *  - `reviewer_id` the person each prepared draft is assigned to (its review task, and the reminders); null = nobody in particular
+ *  - `reminder_hours` how long a draft may wait before the reviewer is reminded (1–168, default 24)
  *
  * The period is derived here and nowhere else: the sweep, the manual «prepare» and the overview's «what is due» all ask this class.
  */
@@ -28,7 +30,7 @@ final class DeliverySettings
 
     public const MODES = ['snapshot', 'live'];
 
-    /** @return array{enabled:bool,cadence:string,week_start:string,mode:string,components:array<string,bool>} */
+    /** @return array{enabled:bool,cadence:string,week_start:string,mode:string,components:array<string,bool>,reviewer_id:int|null,reminder_hours:int} */
     public static function for(ClientWorkspace $workspace): array
     {
         $s = (array) data_get($workspace->settings, 'delivery', []);
@@ -38,7 +40,7 @@ final class DeliverySettings
 
     /**
      * @param  array<string,mixed>  $in
-     * @return array{cadence:string,week_start:string,mode:string,components:array<string,bool>}
+     * @return array{cadence:string,week_start:string,mode:string,components:array<string,bool>,reviewer_id:int|null,reminder_hours:int}
      */
     public static function sanitise(array $in): array
     {
@@ -54,6 +56,8 @@ final class DeliverySettings
             'week_start' => array_key_exists((string) ($in['week_start'] ?? ''), self::WEEK_STARTS) ? (string) $in['week_start'] : 'monday',
             'mode' => in_array($in['mode'] ?? null, self::MODES, true) ? (string) $in['mode'] : 'snapshot',
             'components' => $components,
+            'reviewer_id' => isset($in['reviewer_id']) && is_numeric($in['reviewer_id']) && (int) $in['reviewer_id'] > 0 ? (int) $in['reviewer_id'] : null,
+            'reminder_hours' => max(1, min(168, (int) ($in['reminder_hours'] ?? 24) ?: 24)),
         ];
     }
 
@@ -65,7 +69,7 @@ final class DeliverySettings
     {
         $current = (array) data_get($workspace->settings, 'delivery', []);
         $merged = $current;
-        foreach (['cadence', 'week_start', 'mode'] as $key) {
+        foreach (['cadence', 'week_start', 'mode', 'reviewer_id', 'reminder_hours'] as $key) {
             if (array_key_exists($key, $input)) {
                 $merged[$key] = $input[$key];
             }

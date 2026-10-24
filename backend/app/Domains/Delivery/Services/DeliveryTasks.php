@@ -51,6 +51,7 @@ final class DeliveryTasks
             'client_workspace_id' => $pack->client_workspace_id,
             'project_id' => $pack->project_id,
             'created_by' => $pack->created_by,
+            'assignee_id' => $workspace === null ? null : DeliverySettings::for($workspace)['reviewer_id'],
             'title' => 'مراجعة واعتماد التسليم الأسبوعي — '.($workspace->name ?? '').' ('.$period.')',
             'description' => 'راجع التقرير والتوصيات واعتمد الحزمة قبل إرسالها للعميل. تُغلق هذه المهمة تلقائيًا عند تسجيل الإرسال فقط.',
             'status' => 'todo',

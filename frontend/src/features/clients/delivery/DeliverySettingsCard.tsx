@@ -9,12 +9,14 @@ const COPY = {
     title: 'إعداد التسليم الدوري', auto: 'تجهيز مسودة التقرير تلقائيًا', autoHint: 'تُجهَّز مسودة فقط؛ لا يُرسل شيء للعميل قبل مراجعتك واعتمادك.',
     cadence: 'الدورة', weekly: 'أسبوعي', monthly: 'شهري', weekStart: 'بداية الأسبوع', monday: 'الاثنين', sunday: 'الأحد',
     mode: 'نوع التقرير', snapshot: 'ثابت للفترة', live: 'مباشر (يتحدّث مع البيانات)', next: 'الفترة القادمة', saving: 'جارٍ الحفظ…',
+    reviewer: 'مسؤول المراجعة', nobody: 'بدون تعيين', remind: 'تذكير المراجع بعد', hours: 'ساعة',
     liveNote: 'الرابط المباشر يعرض أحدث بيانات متزامنة؛ يبقى الملف PDF ثابتًا للفترة.',
   },
   en: {
     title: 'Periodic delivery settings', auto: 'Prepare the report draft automatically', autoHint: 'Only a draft is prepared; nothing reaches the client before you review and approve it.',
     cadence: 'Cadence', weekly: 'Weekly', monthly: 'Monthly', weekStart: 'Week begins on', monday: 'Monday', sunday: 'Sunday',
     mode: 'Report type', snapshot: 'Snapshot (fixed for the period)', live: 'Live (follows the synced data)', next: 'Next period', saving: 'Saving…',
+    reviewer: 'Reviewer', nobody: 'Not assigned', remind: 'Remind the reviewer after', hours: 'hours',
     liveNote: 'A live link shows the latest synced data; the PDF stays fixed for the period.',
   },
 }
@@ -69,6 +71,22 @@ export function DeliverySettingsCard({ clientId, ar, canEdit }: { clientId: stri
             {(['snapshot', 'live'] as const).map((m) => <button key={m} type="button" data-testid={`delivery-mode-${m}`} aria-pressed={s.mode === m} disabled={busy} onClick={() => save.mutate({ mode: m })} className={seg(s.mode === m)}>{t[m]}</button>)}
           </div>
         </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-semibold text-text-secondary">{t.reviewer}
+          <select data-testid="delivery-reviewer" disabled={busy} value={s.reviewer_id ?? ''} onChange={(e) => save.mutate({ reviewer_id: e.target.value === '' ? null : Number(e.target.value) })} className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-2 text-xs font-normal">
+            <option value="">{t.nobody}</option>
+            {s.reviewers.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-text-secondary">{t.remind}
+          <span className="mt-1 flex items-center gap-2">
+            <input data-testid="delivery-remind-hours" type="number" min={1} max={168} disabled={busy} defaultValue={s.reminder_hours} key={s.reminder_hours}
+              onBlur={(e) => { const v = Math.max(1, Math.min(168, Number(e.target.value) || 24)); if (v !== s.reminder_hours) save.mutate({ reminder_hours: v }) }}
+              className="h-9 w-24 rounded-lg border border-border bg-surface px-2 text-xs font-normal" />
+            <span className="font-normal">{t.hours}</span>
+          </span>
+        </label>
       </div>
       {s.mode === 'live' && <p className="text-xs text-text-muted">{t.liveNote}</p>}
       <p className="text-xs text-text-secondary">{t.next}: <span dir="ltr"><Num>{s.next_period.from} → {s.next_period.to}</Num></span></p>

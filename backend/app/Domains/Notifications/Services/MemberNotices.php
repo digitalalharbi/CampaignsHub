@@ -73,6 +73,32 @@ final class MemberNotices
         );
     }
 
+    /**
+     * DELIVERY-REMINDERS-001 — a delivery needs its reviewer. One message per pack, per reason, per day (the dedup key), in the
+     * reviewer's language; it is a nudge to open the pack, never a report and never sent to a client.
+     *
+     * @param  string  $reason  review_due | report_failed | send_due
+     */
+    public function deliveryReminder(User $reviewer, Tenant $tenant, string $reason, string $clientName, string $period, string $packId): string
+    {
+        $ar = $this->lang($reviewer) === 'ar';
+        [$titleAr, $titleEn, $detailAr, $detailEn, $severity] = match ($reason) {
+            'report_failed' => ['فشل تجهيز تقرير التسليم', 'A delivery report failed to build', "تعذّر توليد تقرير {$clientName} للفترة {$period}. افتح الحزمة وأعد المحاولة.", "The report for {$clientName} ({$period}) could not be built. Open the pack and try again.", 'critical'],
+            'send_due' => ['تقرير معتمد بانتظار الإرسال', 'An approved report is waiting to be sent', "تقرير {$clientName} للفترة {$period} معتمد ولم يُسجَّل إرساله بعد.", "The report for {$clientName} ({$period}) is approved but not yet marked as sent.", 'warning'],
+            default => ['تقرير بانتظار مراجعتك', 'A report is waiting for your review', "مسودة تقرير {$clientName} للفترة {$period} جاهزة للمراجعة والاعتماد.", "The draft report for {$clientName} ({$period}) is ready for your review and approval.", 'warning'],
+        };
+
+        return $this->send(
+            $reviewer, $tenant, 'delivery_'.$reason, "delivery:{$packId}:{$reason}:".now()->format('Ymd'),
+            new OperationalMail(
+                kind: 'delivery_'.$reason, severity: $severity,
+                title: $ar ? $titleAr : $titleEn, detail: $ar ? $detailAr : $detailEn, context: $clientName,
+                lang: $this->lang($reviewer), recipientName: (string) $reviewer->name,
+                path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
+            ),
+        );
+    }
+
     private function send(User $user, Tenant $tenant, string $kind, string $dedup, OperationalMail $mail): string
     {
         try {
