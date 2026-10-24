@@ -112,3 +112,16 @@ export interface DeliveryOverviewRow {
 
 export const getDeliveryOverview = () => getData<DeliveryOverviewRow[]>('/delivery/overview')
 
+
+/** DELIVERY-SETTINGS-001 — how a client's periodic delivery is prepared. */
+export interface DeliverySettingsData {
+  enabled: boolean
+  cadence: 'weekly' | 'monthly'
+  week_start: 'monday' | 'sunday'
+  mode: 'snapshot' | 'live'
+  components: Record<string, boolean>
+  next_period: { from: string; to: string }
+}
+export const getDeliverySettings = (clientId: string) => getData<DeliverySettingsData>(`/delivery/settings?client=${encodeURIComponent(clientId)}`)
+export const saveDeliverySettings = (clientId: string, body: Partial<Omit<DeliverySettingsData, 'next_period'>>) =>
+  putData<DeliverySettingsData>('/delivery/settings', { client_workspace_id: clientId, ...body })

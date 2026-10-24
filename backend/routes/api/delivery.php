@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Route;
 // (reports.view / reports.approve) and scoped to the clients the operator can reach.
 Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->prefix('delivery')->name('delivery.')->group(function (): void {
     Route::get('overview', [DeliveryController::class, 'overview'])->name('overview');
+    Route::get('settings', [DeliveryController::class, 'settings'])->name('settings.show');
+    Route::put('settings', [DeliveryController::class, 'updateSettings'])->name('settings.update');
     Route::get('packs', [DeliveryController::class, 'index'])->name('packs.index');
     Route::post('packs', [DeliveryController::class, 'prepare'])->name('packs.prepare');
     Route::get('packs/{pack}', [DeliveryController::class, 'show'])->name('packs.show');

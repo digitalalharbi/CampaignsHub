@@ -47,12 +47,12 @@ export function DeliveryOverviewPage() {
   return (
     <div className="space-y-5">
       <PageIntro
-        title={ar ? 'التسليم الأسبوعي والفوترة' : 'Weekly delivery & billing'}
+        title={ar ? 'التسليم الدوري والفوترة' : 'Periodic delivery & billing'}
         purpose={ar ? 'حالة تقرير كل عميل وفاتورته، والخطوة التالية المطلوبة منك.' : 'Where each client’s report and invoice stand, and the next step for you.'}
       />
 
       {q.isError ? (
-        <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل التسليم الأسبوعي' : 'Could not load the weekly delivery'} />
+        <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل التسليم الدوري' : 'Could not load the periodic delivery'} />
       ) : q.isLoading ? (
         <div className="h-40 animate-pulse rounded-2xl bg-surface-secondary" />
       ) : rows.length === 0 ? (

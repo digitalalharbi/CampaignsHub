@@ -189,12 +189,12 @@ Schedule::command('integrations:prune-raw')->dailyAt('03:30');
 Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
 
 /*
- * The weekly delivery packs (WD-SCHEDULE-001) — Monday morning, Riyadh time.
+ * The periodic delivery packs (WD-SCHEDULE-001, DELIVERY-SETTINGS-001) — every morning, Riyadh time; each client is prepared on its own day.
  *
  * Prepares last ISO week's DRAFT pack for each client that opted in; sending is the Owner's decision.
  * Idempotent per project and week, so a late retry or a manual preparation cannot double it.
  */
-Schedule::command('delivery:prepare-weekly')->weeklyOn(1, '06:00')->timezone('Asia/Riyadh')->withoutOverlapping();
+Schedule::command('delivery:prepare-weekly')->dailyAt('06:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 
 /*
  * AGENTS-ROUTINES-001 — the agent routines, each run only for projects that switched it on (each run

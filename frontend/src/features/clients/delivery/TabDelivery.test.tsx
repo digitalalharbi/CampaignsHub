@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { TabDelivery } from './TabDelivery'
 import { renderWithProviders } from '@/test/utils'
-import type { DeliveryPack, PackDetail } from './deliveryApi'
+import type { DeliveryPack, DeliverySettingsData, PackDetail } from './deliveryApi'
 
 vi.mock('./deliveryApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./deliveryApi')>()
   return {
     ...actual,
     listPacks: vi.fn(), getPack: vi.fn(), preparePack: vi.fn(), setComponents: vi.fn(), attachInvoice: vi.fn(), approvePack: vi.fn(),
-    markPackSent: vi.fn(), whatsappText: vi.fn(), editRecommendation: vi.fn(), setRecommendationStatus: vi.fn(), uploadEvidence: vi.fn(), deleteEvidence: vi.fn(),
+    markPackSent: vi.fn(), whatsappText: vi.fn(), editRecommendation: vi.fn(), setRecommendationStatus: vi.fn(), uploadEvidence: vi.fn(), deleteEvidence: vi.fn(), getDeliverySettings: vi.fn(), saveDeliverySettings: vi.fn(),
   }
 })
 vi.mock('@/features/billing/api', async (importOriginal) => {
@@ -44,11 +44,14 @@ const detail = (over: Partial<PackDetail> = {}): PackDetail => ({
 
 const mount = () => renderWithProviders(<TabDelivery clientId="c1" projects={[{ id: 'p1', name: 'Store' }]} />, { locale: 'en' })
 
+const settings = (o: Partial<DeliverySettingsData> = {}): DeliverySettingsData => ({ enabled: false, cadence: 'weekly', week_start: 'monday', mode: 'snapshot', components: {}, next_period: { from: '2026-10-12', to: '2026-10-18' }, ...o })
+
 describe('TabDelivery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(api.listPacks).mockResolvedValue([pack()])
     vi.mocked(api.getPack).mockResolvedValue(detail())
+    vi.mocked(api.getDeliverySettings).mockResolvedValue(settings())
     vi.mocked(listInvoices).mockResolvedValue({ items: [], total: 0, withheld: 0 } as never)
   })
 
@@ -138,6 +141,30 @@ describe('TabDelivery', () => {
     fireEvent.click(retry)
     await waitFor(() => expect(api.uploadEvidence).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.queryByTestId('evidence-pending')).toBeNull())
+  })
+
+
+  it('saves the delivery settings one choice at a time and shows the period they produce', async () => {
+    vi.mocked(api.saveDeliverySettings).mockImplementation(async (_id, body) => settings({ ...body, next_period: { from: '2026-10-01', to: '2026-10-31' } }))
+    mount()
+    const card = await screen.findByTestId('delivery-settings')
+    expect(card.textContent).toContain('2026-10-12')
+
+    fireEvent.click(within(card).getByTestId('delivery-auto'))
+    await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { enabled: true }))
+
+    fireEvent.click(within(card).getByTestId('delivery-cadence-monthly'))
+    await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { cadence: 'monthly' }))
+    await waitFor(() => expect(screen.getByTestId('delivery-settings').textContent).toContain('2026-10-31'))
+    fireEvent.click(within(screen.getByTestId('delivery-settings')).getByTestId('delivery-mode-live'))
+    await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { mode: 'live' }))
+  })
+
+  it('only a weekly cadence asks which day the week begins', async () => {
+    vi.mocked(api.getDeliverySettings).mockResolvedValue(settings({ cadence: 'monthly' }))
+    mount()
+    const card = await screen.findByTestId('delivery-settings')
+    expect(within(card).queryByTestId('delivery-weekstart-sunday')).toBeNull()
   })
 
   it('lets the Owner choose which pieces this client receives', async () => {
