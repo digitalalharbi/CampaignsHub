@@ -20,7 +20,7 @@ import { portalLoginStart, portalLoginVerify } from '@/features/requests/clientP
  * ## The shape, and how it got here
  *
  * The credentials sit in a single card: address, password, «تذكرني», «نسيت كلمة المرور؟», and one
- * primary button. Below a hairline, «أو الدخول بدون كلمة مرور» offers the second route — a code sent
+ * primary button. Below a hairline, «أو اختر طريقة أخرى للدخول» offers the second route — a code sent
  * to the address that was just typed — as an outlined button that reads as an alternative rather
  * than as a competitor to the green one.
  *
@@ -58,10 +58,10 @@ const COPY = {
     remember: 'تذكرني',
     forgot: 'نسيت كلمة المرور؟',
     signIn: 'تسجيل الدخول',
-    orPasswordless: 'أو الدخول بدون كلمة مرور',
-    sendCode: 'إرسال رمز إلى البريد الإلكتروني',
-    secureTitle: 'دخول آمن ومشفّر لحماية بياناتك',
-    secureBody: 'نستخدم أفضل ممارسات الأمان لحماية حسابك',
+    orPasswordless: 'أو اختر طريقة أخرى للدخول',
+    sendCode: 'الدخول برمز البريد',
+    secureTitle: 'حماية حسابك',
+    secureBody: 'نستخدم إجراءات أمان لحماية بياناتك',
     noAccount: 'ليس لديك حساب؟',
     register: 'إنشاء حساب',
     emailRequired: 'أدخل بريدك الإلكتروني أولاً لإرسال الرمز.',
@@ -78,7 +78,7 @@ const COPY = {
     phoneHint: 'سنرسل رمز تحقق إلى هذا الرقم.',
     phoneInvalid: 'أدخل رقم جوال صحيحًا.',
     continue: 'متابعة',
-    google: 'المتابعة عبر Google',
+    google: 'الدخول عبر Google',
   },
   en: {
     title: 'Welcome back',

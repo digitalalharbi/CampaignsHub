@@ -130,8 +130,20 @@ describe('LoginPage — the sign-in card', () => {
     expect(screen.getByRole('checkbox')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'نسيت كلمة المرور؟' })).toHaveAttribute('href', '/forgot-password')
     expect(screen.getByTestId('login-request-code')).toBeInTheDocument()
-    expect(screen.getByText('دخول آمن ومشفّر لحماية بياناتك')).toBeInTheDocument()
+    expect(screen.getByText('حماية حسابك')).toBeInTheDocument()
+    expect(screen.getByText('نستخدم إجراءات أمان لحماية بياناتك')).toBeInTheDocument()
+    expect(screen.getByText('أو اختر طريقة أخرى للدخول')).toBeInTheDocument()
+    expect(screen.getByTestId('login-request-code')).toHaveTextContent('الدخول برمز البريد')
     expect(screen.getByRole('link', { name: 'إنشاء حساب' })).toHaveAttribute('href', '/register')
+  })
+
+  /** Owner 2026-10-23 — the wording of the Arabic sign-in card; nothing else about it changed. */
+  it('words the Google route in Arabic as «الدخول عبر Google»', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
+
+    await waitFor(() => expect(screen.getByTestId('login-google')).toBeEnabled())
+    expect(screen.getByTestId('login-google')).toHaveTextContent('الدخول عبر Google')
   })
 
   /**
@@ -201,7 +213,7 @@ describe('LoginPage — the sign-in card', () => {
 })
 
 /**
- * «أو الدخول بدون كلمة مرور» — the second route out of the same card.
+ * «أو اختر طريقة أخرى للدخول» — the second route out of the same card.
  */
 describe('LoginPage — the code route', () => {
   afterEach(() => { signOut(); vi.clearAllMocks() })
