@@ -57,7 +57,7 @@ final class DeliveryOverview
         $overdue = $invoiceState === 'overdue';
         $followUp = $viewed && $overdue;
 
-        [$action, $visual] = $this->next($pack, $readiness, $overdue, $today);
+        [$action, $visual] = $this->next($pack, $readiness, $overdue, $today, DeliverySettings::for($client));
 
         return [
             'client_id' => (string) $client->getKey(),
@@ -90,11 +90,12 @@ final class DeliveryOverview
      * The single next step, and how loudly to say so.
      *
      * @param  array<string,mixed>|null  $readiness
+     * @param  array<string,mixed>  $settings  the client's DeliverySettings
      * @return array{0: string, 1: string}
      */
-    private function next(?DeliveryPack $pack, ?array $readiness, bool $overdue, Carbon $today): array
+    private function next(?DeliveryPack $pack, ?array $readiness, bool $overdue, Carbon $today, array $settings): array
     {
-        $expected = DeliveryPackService::previousWeek($today)[0]->toDateString();
+        $expected = DeliverySettings::period($settings, $today)[0]->toDateString();
 
         if ($pack === null || $pack->period_start->toDateString() < $expected) {
             return ['prepare_pack', $overdue ? 'urgent' : 'attention'];
