@@ -11,6 +11,8 @@ use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Branding\Services\WhiteLabelEntitlement;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -81,13 +83,25 @@ final class BrandingCenterController extends Controller
             return;
         }
 
-        if ($scope !== 'client') {
+        /*
+         * BRANDING-TARGET-PICKER-001 — a project, report, portal or email brand names a record too, and that record is checked the
+         * same way a client's is: it must exist in this tenant and belong to a client the caller can reach. Before, only `client`
+         * was checked, so a project/report scope accepted any uuid — including another tenant's — and stored a row keyed to it.
+         * A null target stays what it was for those scopes (the layer's default).
+         */
+        if ($scope === 'client') {
+            abort_if($scopeId === null, 422, 'A client-scoped brand needs the client it belongs to.');
+        }
+        if ($scopeId === null || ! in_array($scope, ['client', 'portal', 'email', 'project', 'report'], true)) {
             return;
         }
 
-        abort_if($scopeId === null, 422, 'A client-scoped brand needs the client it belongs to.');
-
-        $client = ClientWorkspace::query()->whereKey($scopeId)->first();
+        $clientId = match ($scope) {
+            'project' => Project::query()->whereKey($scopeId)->value('client_workspace_id'),
+            'report' => Project::query()->whereKey(Report::query()->whereKey($scopeId)->value('project_id'))->value('client_workspace_id'),
+            default => $scopeId,
+        };
+        $client = $clientId === null ? null : ClientWorkspace::query()->whereKey($clientId)->first();
 
         abort_if($client === null, 404);
         abort_unless($this->clients->canAccessClient($request->user(), $client), 404);

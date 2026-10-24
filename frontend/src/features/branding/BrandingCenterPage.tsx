@@ -1,3 +1,4 @@
+import { BrandingTargetPicker, targetKind } from './BrandingTargetPicker'
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Image as ImageIcon, Palette, Trash2, Upload } from 'lucide-react'
@@ -40,6 +41,7 @@ const COPY = {
   ar: {
     title: 'مركز الهوية', subtitle: 'ارفع أصول العلامة لكل نطاق، وأدِر الألوان والخطوط وإعدادات العلامة البيضاء.',
     tab_assets: 'الأصول', tab_settings: 'الألوان والخطوط',
+    pick_first: 'اختر العميل أو المشروع أو التقرير أولًا لعرض هويته وتعديلها.',
     scope: 'النطاق', scope_id: 'معرّف النطاق (اختياري)', scope_id_hint: 'UUID للعميل/المشروع/التقرير عند اختيار نطاق مخصّص.',
     required_sizes: 'المقاسات المطلوبة', accepted: 'الصيغ المقبولة', max_size: 'الحد الأقصى', max_2mb: '2 ميجابايت',
     theme_light: 'فاتح', theme_dark: 'داكن', theme_any: 'موحّد',
@@ -57,6 +59,7 @@ const COPY = {
   en: {
     title: 'Branding Center', subtitle: 'Upload brand assets per scope, and manage colors, fonts, and white-label settings.',
     tab_assets: 'Assets', tab_settings: 'Colors & fonts',
+    pick_first: 'Choose the client, project or report first to see and edit its identity.',
     scope: 'Scope', scope_id: 'Scope id (optional)', scope_id_hint: 'The client/project/report UUID when a scoped target is used.',
     required_sizes: 'Required sizes', accepted: 'Accepted formats', max_size: 'Max size', max_2mb: '2 MB',
     theme_light: 'Light', theme_dark: 'Dark', theme_any: 'Any',
@@ -103,6 +106,7 @@ export function BrandingCenterPage() {
   const [tab, setTab] = useState<Tab>('assets')
   const [scope, setScope] = useState<BrandingScope>('tenant')
   const [scopeId, setScopeId] = useState('')
+  const [reportProject, setReportProject] = useState('')
 
   if (!canView) {
     return (
@@ -130,17 +134,12 @@ export function BrandingCenterPage() {
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-end">
         <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-text-secondary">
           {c.scope}
-          <select value={scope} onChange={(e) => setScope(e.target.value as BrandingScope)}
+          <select data-testid="branding-scope" value={scope} onChange={(e) => { setScope(e.target.value as BrandingScope); setScopeId(''); setReportProject('') }}
             className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary">
             {BRANDING_SCOPES.map((s) => <option key={s} value={s}>{SCOPE_LABEL[s][locale]}</option>)}
           </select>
         </label>
-        <label className="flex flex-[2] flex-col gap-1 text-xs font-semibold text-text-secondary">
-          {c.scope_id}
-          <input value={scopeId} onChange={(e) => setScopeId(e.target.value)} placeholder="—"
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
-          <span className="text-[11px] font-normal text-text-muted">{c.scope_id_hint}</span>
-        </label>
+        <BrandingTargetPicker scope={scope} value={scopeId} onChange={setScopeId} locale={locale} projectForReport={reportProject} onProjectForReport={setReportProject} />
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-border">
@@ -163,7 +162,9 @@ export function BrandingCenterPage() {
         </p>
       )}
 
-      {tab === 'assets'
+      {targetKind(scope) !== null && scopeId === ''
+        ? <p data-testid="branding-pick-first" className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.pick_first}</p>
+        : tab === 'assets'
         ? <AssetsTab c={c} locale={locale} scope={scope} scopeId={scopeId.trim() || null} canManage={canManage} />
         : <SettingsTab c={c} scope={scope} scopeId={scopeId.trim() || null} canManage={canManage} />}
     </div>
