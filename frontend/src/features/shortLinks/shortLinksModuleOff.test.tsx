@@ -15,7 +15,8 @@ describe('ShortLinksPage when its module is switched off', () => {
     vi.mocked(listShortLinksWithMeta).mockRejectedValue({ response: { status: 403, data: { errors: { module: 'smart_links', reason: 'tenant_off' } } } })
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
-    expect(await screen.findByText('Smart links are switched off for this organisation')).toBeTruthy()
+    // A generous wait: the page is a lazy chunk, and under the full suite's load its first render has taken longer than findBy's 1 s default (it failed once there and passed alone).
+    expect(await screen.findByText('Smart links are switched off for this organisation', undefined, { timeout: 8000 })).toBeTruthy()
     expect(screen.getByText(/Links already shared keep working/)).toBeTruthy()
     expect(screen.getByText(/Settings → Modules/)).toBeTruthy()
   })
@@ -24,6 +25,6 @@ describe('ShortLinksPage when its module is switched off', () => {
     vi.mocked(listShortLinksWithMeta).mockRejectedValue({ response: { status: 403, data: { errors: { module: 'smart_links', reason: 'tenant_off' } } } })
     renderWithProviders(<ShortLinksPage />, { locale: 'ar' })
 
-    expect(await screen.findByText('الروابط الذكية متوقفة لهذه المنظمة')).toBeTruthy()
+    expect(await screen.findByText('الروابط الذكية متوقفة لهذه المنظمة', undefined, { timeout: 8000 })).toBeTruthy()
   })
 })
