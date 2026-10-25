@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
-import { FooterContact, FooterLegalName } from './FooterContact'
+import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
 import { journeyTo } from './journeys'
@@ -478,7 +478,6 @@ export function PublicHomePage() {
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-text-secondary">{c.footer.tagline}</p>
 
             <FooterContact locale={locale} />
-            <FooterLegalName className="mt-4" />
           </div>
 
           {c.footer.groups.map((group) => (

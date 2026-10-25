@@ -34,6 +34,7 @@ final class ScheduledWorkInventoryTest extends TestCase
      */
     private const EXPECTED = [
         // AGENTS-ROUTINES-001 — four schedules of one command, each only for projects that opted in.
+        'agents:purge-chat',
         'agents:run-routines',
         'alerts:evaluate',
         // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.

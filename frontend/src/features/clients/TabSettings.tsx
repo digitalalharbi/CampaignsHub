@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Archive, RotateCcw } from 'lucide-react'
 import { archiveClient, restoreClient, updateSettings, type ClientDetail } from './api'
+import { LogoUploader } from '@/features/branding/LogoUploader'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
 /**
  * Client-level settings — deliberately separate from user + org settings. Display name, logo, client report
@@ -10,6 +12,7 @@ import { useT } from '@/lib/i18n'
  */
 export function TabSettings({ d }: { d: ClientDetail }) {
   const t = useT()
+  const ar = useUi((u) => u.locale) === 'ar'
   const qc = useQueryClient()
   const s = (d as unknown as { settings?: Record<string, unknown> }).settings ?? {}
   const reportIdentity = (s.report_identity as Record<string, string>) ?? {}
@@ -17,7 +20,6 @@ export function TabSettings({ d }: { d: ClientDetail }) {
 
   const [form, setForm] = useState({
     name: d.name,
-    logo_url: '',
     week_start: (s.week_start as string) ?? 'sunday',
     report_display_name: reportIdentity.display_name ?? '',
     report_footer: reportIdentity.footer ?? '',
@@ -28,7 +30,6 @@ export function TabSettings({ d }: { d: ClientDetail }) {
   const save = useMutation({
     mutationFn: () => updateSettings(d.id, {
       name: form.name,
-      branding: form.logo_url ? { logo_url: form.logo_url } : undefined,
       settings: {
         week_start: form.week_start,
         report_identity: { display_name: form.report_display_name, footer: form.report_footer },
@@ -56,9 +57,10 @@ export function TabSettings({ d }: { d: ClientDetail }) {
         <label className="text-xs font-semibold text-text-secondary">{t('cc_settings_name')}
           <input className={field} value={form.name} onChange={(e) => set({ name: e.target.value })} disabled={!d.can.manage_settings} />
         </label>
-        <label className="text-xs font-semibold text-text-secondary">{t('cc_settings_logo')}
-          <input className={field} value={form.logo_url} placeholder="https://…" onChange={(e) => set({ logo_url: e.target.value })} disabled={!d.can.manage_settings} />
-        </label>
+        <div className="text-xs font-semibold text-text-secondary sm:col-span-2" data-testid="client-logo-field">
+          <span className="mb-1.5 block">{t('cc_settings_logo')}</span>
+          <LogoUploader endpoint={`/app/clients/${d.id}/logo`} ar={ar} canEdit={d.can.manage_settings} testId="client-logo" invalidate={[['app', 'client', d.id]]} />
+        </div>
         <label className="text-xs font-semibold text-text-secondary">{t('cc_week_start')}
           <select className={field} value={form.week_start} onChange={(e) => set({ week_start: e.target.value })} disabled={!d.can.manage_settings}>
             <option value="sunday">{t('cc_week_sunday')}</option>

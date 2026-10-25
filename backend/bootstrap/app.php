@@ -8,6 +8,7 @@ use App\Console\Commands\ProvisionPlatformCommand;
 use App\Console\Commands\SallaReviewCommand;
 use App\Domains\Accounts\Middleware\EnsureCapability;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
+use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
@@ -113,6 +114,7 @@ return Application::configure(basePath: dirname(__DIR__))
         SendAlerts::class,
         PrepareWeeklyPacks::class,
         RemindDeliveryReviewers::class,
+        PurgeAgentChat::class,
         RefreshCreativeCoversCommand::class,
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.

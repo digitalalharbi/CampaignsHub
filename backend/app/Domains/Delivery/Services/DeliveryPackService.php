@@ -15,6 +15,8 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
+use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ShareService;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -45,7 +47,7 @@ final class DeliveryPackService
     /** What a client receives unless the agency says otherwise. Money in the message is opt-in. */
     private const DEFAULTS = ['whatsapp' => true, 'link' => true, 'report_pdf' => true, 'evidence' => true, 'invoice_pdf' => true, 'amount_due' => true, 'spend' => false];
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly ShareService $shares) {}
 
     /** The ISO week (Monday to Sunday) before the one containing $anchor, in the reporting timezone. */
     public static function previousWeek(?Carbon $anchor = null): array
@@ -132,6 +134,15 @@ final class DeliveryPackService
         $this->requireOpen($pack);
         $pack->update(['components' => $this->sanitise($components + (array) $pack->components)]);
 
+        // An approved pack's link follows the choices made after approval too: what the link may show is never wider than the pack says.
+        if ($pack->approved_at !== null) {
+            if ($pack->share_id !== null) {
+                ReportShare::withoutGlobalScopes()->whereKey($pack->share_id)
+                    ->update(['allow_download' => $pack->includes('report_pdf'), 'hide_spend' => ! $pack->includes('spend')]);
+            }
+            $this->ensureLink($pack);
+        }
+
         return $pack;
     }
 
@@ -193,8 +204,51 @@ final class DeliveryPackService
 
         $pack->update(['status' => 'approved', 'approved_by' => $by->id, 'approved_at' => Carbon::now()]);
         $this->audit->log('delivery_pack.approved', 'delivery_pack', (string) $pack->id);
+        $this->ensureLink($pack, $by);
 
         return $pack;
+    }
+
+    /**
+     * DELIVERY-LINK-001 — the one report link this pack sends, minted at approval and reused by every message built from the pack.
+     *
+     * Only when the client is to receive a link at all. What the link shows follows the pack's own choices: spend stays hidden
+     * unless the Owner switched it on, and the PDF download is offered only if the PDF is part of the delivery. Asking again returns
+     * the same address while that link is alive; a revoked or expired link is replaced rather than sent dead.
+     */
+    public function ensureLink(DeliveryPack $pack, ?User $by = null): ?string
+    {
+        if (! $pack->includes('link') || $pack->report_id === null) {
+            return null;
+        }
+        $current = $this->linkUrl($pack);
+        if ($current !== null) {
+            return $current;
+        }
+        $report = Report::withoutGlobalScopes()->find($pack->report_id);
+        if ($report === null) {
+            return null;
+        }
+
+        [$share, $raw] = $this->shares->create($report, [
+            'allow_download' => $pack->includes('report_pdf'),
+            'hide_spend' => ! $pack->includes('spend'),
+        ], $by?->id);
+        $pack->forceFill(['share_id' => $share->id, 'share_token' => $raw])->save();
+        $this->audit->log('delivery_pack.link_created', 'delivery_pack', (string) $pack->id, null, ['share' => (string) $share->id]);
+
+        return ShareService::urlFor($raw);
+    }
+
+    /** The pack's report link, if it has one that is still alive (not revoked, not expired). */
+    public function linkUrl(DeliveryPack $pack): ?string
+    {
+        $raw = $pack->share_token;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return $this->shares->resolveActive((string) $raw) === null ? null : ShareService::urlFor((string) $raw);
     }
 
     /** Record that the pack went out. The invoice is NOT touched — sending a report is not issuing a bill. */
@@ -246,7 +300,7 @@ final class DeliveryPackService
         }
 
         $steps = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)
-            ->where('type', 'recommendation')->where('status', 'approved')->orderByDesc('priority')->limit(3)->get();
+            ->where('type', 'recommendation')->where('status', 'approved')->where('audience', '!=', 'internal')->orderByRaw('position is null')->orderBy('position')->orderByDesc('priority')->limit(3)->get();
         if ($steps->isNotEmpty()) {
             $lines[] = $ar ? 'أبرز الخطوات القادمة:' : 'Next steps:';
             foreach ($steps as $step) {
@@ -254,6 +308,7 @@ final class DeliveryPackService
             }
         }
 
+        $link ??= $this->linkUrl($pack);
         if ($link !== null && $pack->includes('link')) {
             $lines[] = ($ar ? 'التقرير التفاعلي: ' : 'Interactive report: ').$link;
         }

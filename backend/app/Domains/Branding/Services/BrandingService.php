@@ -8,6 +8,7 @@ use App\Domains\Branding\BrandingSpec;
 use App\Domains\Branding\Models\BrandingAsset;
 use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Tenancy\Context\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -130,6 +131,57 @@ final class BrandingService
         }
 
         return $asset;
+    }
+
+    /**
+     * LOGO-UPLOAD-001 — the one mark a layer carries, set from a file.
+     *
+     * A layer (agency, a client, a project, a report) shows ONE logo. Setting it replaces whatever logo-kind rows that layer held —
+     * from here or from the Branding Center — so the picture the person just uploaded is the picture every surface draws, rather
+     * than losing to an older slot of a kind the resolver prefers. Theme is `any`: one file serves light and dark.
+     */
+    public function setLogo(string $scope, ?string $scopeId, UploadedFile $file): BrandingAsset
+    {
+        $kind = $scope === 'tenant' ? 'primary_horizontal' : 'client_logo';
+        $asset = $this->storeAsset($scope, $scopeId, $kind, BrandingSpec::THEME_ANY, $file);
+        foreach ($this->logoRows($scope, $scopeId)->where('id', '!=', $asset->id)->get() as $old) {
+            $this->removeAsset($old);
+        }
+
+        return $asset;
+    }
+
+    /** Remove the layer's own logo (every logo-kind row it holds). The layers above it are untouched. */
+    public function removeLogo(string $scope, ?string $scopeId): int
+    {
+        $rows = $this->logoRows($scope, $scopeId)->get();
+        foreach ($rows as $row) {
+            $this->removeAsset($row);
+        }
+
+        return $rows->count();
+    }
+
+    /** The layer's OWN logo row in the order the resolver prefers its kinds, or null. */
+    public function ownLogo(string $scope, ?string $scopeId): ?BrandingAsset
+    {
+        $rows = $this->logoRows($scope, $scopeId)->get();
+        foreach (SharedLinkBranding::kinds() as $kind) {
+            $row = $rows->firstWhere('kind', $kind);
+            if ($row !== null) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return Builder<BrandingAsset> */
+    private function logoRows(string $scope, ?string $scopeId)
+    {
+        $query = BrandingAsset::query()->where('scope', $scope)->whereIn('kind', SharedLinkBranding::kinds());
+
+        return $scopeId === null ? $query->whereNull('scope_id') : $query->where('scope_id', $scopeId);
     }
 
     /** Delete a brand asset and the private bytes behind it. */
