@@ -209,28 +209,65 @@ final class ReportPlatformsAndFixedPeriodTest extends TestCase
         $this->assertEqualsCanonicalizing(self::PROVIDERS, $slidePlatforms);
     }
 
-    public function test_an_objective_filter_keeps_platforms_whose_campaigns_are_unclassified_and_still_drops_other_objectives(): void
+    /** @param array<string, mixed> $scope */
+    private function objectiveReport(array $scope): Report
     {
-        // Meta: a sales campaign. TikTok: traffic. Google Ads and ChatGPT Ads: stored as `other` — their sync cannot classify them.
-        $this->spend('meta', 100.0, '2026-08-05');
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        return Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Sales week', 'type' => 'weekly', 'form' => 'detailed',
+            'audience' => 'client', 'status' => 'processing', 'period_start' => '2026-08-03', 'period_end' => '2026-08-09', 'currency' => 'SAR',
+            'scope' => $scope,
+        ]);
+    }
+
+    private function seedFourObjectives(): void
+    {
+        $this->spend('meta', 100.0, '2026-08-05')->update(['objective' => 'sales']);
         $this->spend('tiktok', 50.0, '2026-08-05')->update(['objective' => 'traffic']);
         $this->spend('google_ads', 70.0, '2026-08-05')->update(['objective' => 'other']);
         $this->spend('openai_ads', 30.0, '2026-08-05')->update(['objective' => 'other']);
-        app(TenantContext::class)->setTenantId($this->tenant->id);
-        $report = Report::create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Sales week', 'type' => 'weekly', 'form' => 'detailed',
-            'audience' => 'client', 'status' => 'processing', 'period_start' => '2026-08-03', 'period_end' => '2026-08-09', 'currency' => 'SAR',
-            'scope' => ['objectives' => ['sales', 'conversions', 'purchases', 'add_to_cart']],
-        ]);
+    }
+
+    public function test_choosing_the_sales_objective_is_a_template_not_a_filter_every_platform_with_data_appears(): void
+    {
+        $this->seedFourObjectives();
+        // Exactly what the builder stored on the Razzah report: the Sales group in the scope, and no instruction to filter.
+        $report = $this->objectiveReport(['objectives' => ['sales', 'conversions', 'purchases', 'add_to_cart']]);
 
         $data = app(ReportGenerator::class)->generate($report);
 
-        $this->assertEqualsCanonicalizing(['meta', 'google_ads', 'openai_ads'], array_column($data['platforms'], 'provider'), 'unclassified platforms stay; the traffic campaign is outside a sales report');
-        $this->assertEquals(200.0, $data['kpis']['spend'], 'no platform counted twice');
+        $this->assertEqualsCanonicalizing(['meta', 'tiktok', 'google_ads', 'openai_ads'], array_column($data['platforms'], 'provider'));
+        $this->assertEquals(250.0, $data['kpis']['spend'], 'every platform counted once, none twice');
+        $this->assertSame('sales', $data['objective'], 'the objective chose the sales template');
+        $this->assertSame(['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas'], $data['metric_set'], 'the sales KPI template');
+        $this->assertEqualsCanonicalizing(['meta', 'tiktok', 'google_ads', 'openai_ads'], $data['platform_order']);
+    }
 
-        // The dashboard's own objective filter keeps its strict meaning.
+    public function test_campaigns_are_filtered_by_objective_only_when_the_operator_chose_to(): void
+    {
+        $this->seedFourObjectives();
+        $report = $this->objectiveReport(['objectives' => ['sales'], 'objective_filter' => true]);
+
+        $data = app(ReportGenerator::class)->generate($report);
+
+        $this->assertSame(['meta'], array_column($data['platforms'], 'provider'), 'an explicit «filter campaigns by objective» keeps its strict meaning');
+        $this->assertEquals(100.0, $data['kpis']['spend']);
+
+        // The dashboard's own objective filter is unchanged.
         $strict = app(MetricsAggregator::class)->forProjects([(string) $this->project->id])->forObjectives(['sales'])->byProvider(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
         $this->assertSame(['meta'], array_column($strict, 'provider'));
+    }
+
+    public function test_an_existing_scope_with_objectives_and_no_flag_stops_dropping_platforms_and_keeps_its_objectives(): void
+    {
+        $this->seedFourObjectives();
+        $report = $this->objectiveReport(['objectives' => ['sales', 'conversions'], 'account_ids' => []]);
+
+        app(ReportGenerator::class)->generate($report);
+
+        $this->assertSame(['sales', 'conversions'], $report->fresh()->scope['objectives'], 'campaign objective classifications and the stored scope are not rewritten');
+        $this->assertArrayNotHasKey('objective_filter', $report->fresh()->scope);
     }
 
     public function test_a_link_built_from_a_saved_report_covers_the_platforms_in_the_metrics_not_the_frozen_payload(): void

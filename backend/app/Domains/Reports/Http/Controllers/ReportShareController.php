@@ -486,7 +486,7 @@ final class ReportShareController extends Controller
         }
 
         // The report's own scope bounds the ceiling: a link may be narrower than its report, never wider.
-        $scope = ReportScope::fromArray($model->scope);
+        $scope = ReportScope::fromReport($model->scope);
         $named = $scope->resolvedCampaignIds();
         if ($named !== null && $named !== []) {
             return array_values(array_map(strval(...), $named));
@@ -521,7 +521,7 @@ final class ReportShareController extends Controller
      */
     private function providersOf(Report $model): array
     {
-        $scope = ReportScope::fromArray($model->scope);
+        $scope = ReportScope::fromReport($model->scope);
         if ($scope->providers !== []) {
             return $scope->providers;
         }

@@ -574,7 +574,7 @@ final class ReportScopeController extends Controller
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
         $model = Report::query()->where('project_id', $project)->findOrFail($report);
-        $scope = ReportScope::fromArray($model->scope);
+        $scope = ReportScope::fromReport($model->scope);
 
         return ApiResponse::success([
             'scope' => $scope->toArray(),
@@ -741,7 +741,7 @@ final class ReportScopeController extends Controller
             'scope.to' => ['nullable', 'date'],
         ]);
 
-        $submitted = ReportScope::fromArray((array) $request->input('scope', []));
+        $submitted = ReportScope::fromReport((array) $request->input('scope', []));
 
         $keep = function (array $asked, array $available): array {
             if ($asked === []) {
@@ -756,7 +756,8 @@ final class ReportScopeController extends Controller
         $campaignIds = UnifiedCampaign::query()->where('project_id', $project)
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
 
-        return ReportScope::fromArray([
+        return ReportScope::fromReport([
+            'objective_filter' => $submitted->objectiveFilter,
             'project_ids' => $submitted->projectIds === [] ? [] : [$project],
             'providers' => $submitted->providers,
             'account_ids' => $keep($submitted->accountIds, DailyMetric::query()

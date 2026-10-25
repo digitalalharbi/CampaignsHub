@@ -839,6 +839,11 @@ export interface ReportScopeShape {
   ad_ids?: string[]
   creative_ids?: string[]
   objectives?: string[]
+  /**
+   * REPORT-OBJECTIVE-TEMPLATE-001 — true only when the operator chose «filter campaigns by this objective». Without it `objectives` is the
+   * report's measurement template (which funnel and KPIs it presents) and every authorised platform with data is included.
+   */
+  objective_filter?: boolean
   /** LEAD-DESTINATION-001 — lead_form · website · whatsapp · messenger · instagram_direct · calls · mixed. */
   destinations?: string[]
   paths?: string[]
