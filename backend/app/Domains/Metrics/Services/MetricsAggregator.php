@@ -375,7 +375,8 @@ final class MetricsAggregator
     public function forProviders(array $providers): self
     {
         $clone = clone $this;
-        $clone->providers = $providers === [] ? null : array_values($providers);
+        // Every spelling a row may carry: a scope saying `google` must still find the `google_ads` rows the connector stored.
+        $clone->providers = $providers === [] ? null : AdPlatforms::variants($providers);
 
         return $clone;
     }

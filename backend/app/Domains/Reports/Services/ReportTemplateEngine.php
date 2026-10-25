@@ -17,14 +17,6 @@ final class ReportTemplateEngine
     public const VERSION = 1;
 
     /** Default platform ordering; unknown platforms fall to the end in encounter order. */
-    /**
-     * The product's platform order, read from the one place that decides it (PLATFORM-ORDER-001).
-     *
-     * This list was correct and was also a second copy — which is how the other five surfaces came to
-     * disagree with it without anybody noticing.
-     */
-    private const PLATFORM_ORDER = AdPlatforms::ORDER;
-
     /** Objective → the KPIs that matter most (drives KPI emphasis + creative ranking). */
     private const METRIC_SETS = [
         /*
@@ -274,20 +266,94 @@ final class ReportTemplateEngine
         ];
     }
 
+    /**
+     * The product's platform order, read from the one place that decides it (PLATFORM-ORDER-001).
+     *
+     * This list was correct and was also a second copy — which is how the other five surfaces came to
+     * disagree with it without anybody noticing.
+     */
+    private const PLATFORM_ORDER = AdPlatforms::ORDER;
+
     /** @param list<string> $platforms */
     private function orderPlatforms(array $platforms): array
     {
         $unique = array_values(array_unique($platforms));
-        usort($unique, function (string $a, string $b) {
-            $ia = array_search($a, self::PLATFORM_ORDER, true);
-            $ib = array_search($b, self::PLATFORM_ORDER, true);
-            $ia = $ia === false ? 999 : $ia;
-            $ib = $ib === false ? 999 : $ib;
+        // Ranked by the CANONICAL key, so a connector's `google_ads` sits where `google` does instead of after every known platform.
+        usort($unique, static function (string $a, string $b): int {
+            $ia = array_search(AdPlatforms::canonical($a), self::PLATFORM_ORDER, true);
+            $ib = array_search(AdPlatforms::canonical($b), self::PLATFORM_ORDER, true);
 
-            return $ia <=> $ib;
+            return ($ia === false ? 999 : $ia) <=> ($ib === false ? 999 : $ib);
         });
 
         return $unique;
+    }
+
+    /**
+     * REPORT-PLATFORM-RECONCILE-001 — bring a stored layout in line with the platforms the data holds now.
+     *
+     * Kept: the operator's platform order, every slide they authored or hid. Added: a per-platform slide (and a place in the order) for
+     * each platform that has data and none. Dropped: a per-platform slide whose platform no longer has data — never an empty slide.
+     *
+     * @param  array<string, mixed>  $config
+     * @param  list<string>  $platforms  providers present in the data
+     * @return array<string, mixed>
+     */
+    public function reconcilePlatforms(array $config, array $platforms, string $form = 'detailed'): array
+    {
+        $present = $this->orderPlatforms($platforms);
+        $kept = array_values(array_filter(
+            (array) ($config['platform_order'] ?? []),
+            static fn ($p): bool => is_string($p) && in_array($p, $present, true),
+        ));
+        $order = array_merge($kept, array_values(array_diff($present, $kept)));
+
+        $slides = (array) ($config['slides'] ?? []);
+        usort($slides, static fn ($a, $b): int => ((int) ($a['order'] ?? 0)) <=> ((int) ($b['order'] ?? 0)));
+
+        $isPlatformSlide = static fn ($s): bool => is_array($s) && in_array($s['type'] ?? null, self::PER_PLATFORM_SLIDES, true) && isset($s['platform']);
+        $slides = array_values(array_filter($slides, static fn ($s): bool => ! $isPlatformSlide($s) || in_array($s['platform'], $present, true)));
+
+        if ($form !== 'executive_summary') {
+            $has = array_map(static fn ($s): string => (string) $s['platform'], array_filter($slides, $isPlatformSlide));
+            $last = -1;
+            foreach ($slides as $i => $s) {
+                if ($isPlatformSlide($s)) {
+                    $last = $i;
+                }
+            }
+            foreach (array_diff($order, $has) as $platform) {
+                foreach (self::PER_PLATFORM_SLIDES as $type) {
+                    $slide = ['id' => "{$platform}-{$type}", 'type' => $type, 'platform' => $platform, 'order' => 0, 'visible' => true];
+                    // After the last platform slide; with none yet, after the opening four.
+                    $at = $last >= 0 ? $last + 1 : min(4, count($slides));
+                    array_splice($slides, $at, 0, [$slide]);
+                    $last = $at;
+                }
+            }
+        }
+
+        // The comparison closes the platform pages once there is more than one platform to compare.
+        $hasComparison = array_filter($slides, static fn ($s): bool => is_array($s) && ($s['type'] ?? null) === 'platform_comparison') !== [];
+        if (count($order) > 1 && ! $hasComparison) {
+            $at = 0;
+            foreach ($slides as $i => $s) {
+                if (is_array($s) && in_array($s['type'] ?? null, self::PER_PLATFORM_SLIDES, true)) {
+                    $at = $i + 1;
+                }
+            }
+            array_splice($slides, $at, 0, [['id' => 'platform_comparison', 'type' => 'platform_comparison', 'order' => 0, 'visible' => true]]);
+        }
+
+        foreach ($slides as $i => &$s) {
+            $s['order'] = $i + 1;
+        }
+        unset($s);
+
+        $config['platform_order'] = $order;
+        $config['slides'] = $slides;
+
+        return $config;
     }
 
     /**

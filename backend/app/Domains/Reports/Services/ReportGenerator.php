@@ -188,6 +188,21 @@ final class ReportGenerator
              */
             $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form);
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
+        } else {
+            /*
+             * REPORT-PLATFORM-RECONCILE-001 — the layout is authored once, but the platforms are not.
+             *
+             * `platform_order` and the per-platform slides were written the FIRST time a report was generated and then kept, so a
+             * platform that started reporting afterwards (Google Ads, ChatGPT Ads) had data in the totals and no slide, no place in
+             * the order and no row in anything keyed on it: the saved report showed the platforms it had met on day one while the
+             * live link, which reads the metrics every time, showed them all. Each generation reconciles the layout with the
+             * platforms the data actually holds — the operator's order and hidden slides are kept, the missing ones are added.
+             */
+            $reconciled = $this->template->reconcilePlatforms((array) $config, $providerList, (string) $report->form);
+            if ($reconciled !== $config) {
+                $config = $reconciled;
+                $report->forceFill(['config' => $config])->saveQuietly();
+            }
         }
 
         $topCreatives = $this->ranking->rank($objective, $campaigns);

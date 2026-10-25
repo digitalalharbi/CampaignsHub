@@ -669,9 +669,12 @@ export interface LivePayload {
  */
 export async function fetchLiveShared(
   token: string,
-  opts: { from: string; to: string; providers: string[]; campaigns: string[]; password?: string },
+  opts: { from?: string; to?: string; providers: string[]; campaigns: string[]; password?: string },
 ) {
-  const qs = new URLSearchParams({ from: opts.from, to: opts.to })
+  // A FIXED report sends no window: the server answers with exactly the saved dates (REPORT-PERIOD-MODE-001).
+  const qs = new URLSearchParams()
+  if (opts.from) qs.set('from', opts.from)
+  if (opts.to) qs.set('to', opts.to)
   opts.providers.forEach((p) => qs.append('providers[]', p))
   opts.campaigns.forEach((c) => qs.append('campaigns[]', c))
 

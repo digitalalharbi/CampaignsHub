@@ -375,9 +375,12 @@ final class LiveReportService
          * A daily/weekly/monthly link is anchored on the day the reader asked for (today by default),
          * not on a free range; a custom link is exactly the range asked for.
          */
-        $periodKind = ((array) ($share->report->config ?? []))['period_kind'] ?? null;
-        $window = ReportPeriod::resolve(is_string($periodKind) ? $periodKind : null, $from, $to);
-        if ($window['kind'] !== 'custom') {
+        $ownReport = $this->reportOf($share);
+        $periodKind = ((array) ($ownReport->config ?? []))['period_kind'] ?? null;
+        // REPORT-PERIOD-MODE-001 — a FIXED link is exactly its saved dates: no kind re-anchors it on the reader's day.
+        $fixed = ReportPeriod::modeOfReport($ownReport) === 'fixed';
+        $window = ReportPeriod::resolve($fixed || ! is_string($periodKind) ? null : $periodKind, $from, $to);
+        if (! $fixed && $window['kind'] !== 'custom') {
             $from = $window['from'];
             $to = $window['to'];
         }
@@ -481,6 +484,8 @@ final class LiveReportService
                 'from' => $from->toDateString(),
                 'to' => $to->toDateString(),
                 'days' => $from->diffInDays($to) + 1,
+                // REPORT-PERIOD-MODE-001 — fixed windows are exactly the saved dates; the page offers no rolling presets for them.
+                'mode' => $fixed ? 'fixed' : 'rolling',
                 // REPORT-PERIOD-001 — what kind of window this is and what it is compared with.
                 'kind' => $window['kind'],
                 'grain' => $window['grain'],
@@ -1176,6 +1181,14 @@ final class LiveReportService
         return $payload;
     }
 
+    /** The share's report, read past the tenant scope: a public request has no tenant context, and a missing report must not read as «not fixed». */
+    private function reportOf(ReportShare $share): Report
+    {
+        // Never through `$share->report`: that lazy-loads under whatever tenant context is set at the moment of the call and caches a
+        // null when there is none, which silently changed what every later read of the relation (the objective lens) meant.
+        return $share->relationLoaded('report') && $share->report !== null ? $share->report : Report::withoutGlobalScopes()->findOrFail($share->report_id);
+    }
+
     /**
      * The ceiling, normalised, with every value forced into the shape the rest of this class expects.
      *
@@ -1189,13 +1202,28 @@ final class LiveReportService
     private function ceiling(ReportShare $share): array
     {
         $scope = $share->scope ?? [];
+        $earliest = (string) ($scope['earliest'] ?? Carbon::now()->subDays(30)->toDateString());
+        $latest = (string) ($scope['latest'] ?? Carbon::now()->toDateString());
+
+        /*
+         * REPORT-PERIOD-MODE-001 — a FIXED report's window is its saved dates, whatever the link's stored ceiling says.
+         *
+         * Links made before the mode ran their ceiling out to «today + a year», so «the data refreshes» silently became «the window
+         * grows»: a weekly report opened a month later showed a month. The saved dates cap the ceiling on read, which fixes the links
+         * that already exist as well as the ones made from now on. The ceiling can only narrow here, never widen.
+         */
+        $report = $this->reportOf($share);
+        if (ReportPeriod::modeOfReport($report) === 'fixed' && $report->period_start !== null && $report->period_end !== null) {
+            $earliest = max($earliest, $report->period_start->toDateString());
+            $latest = min($latest, $report->period_end->toDateString());
+        }
 
         return [
             'project_id' => (string) ($scope['project_id'] ?? ''),
             'campaign_ids' => array_values(array_filter((array) ($scope['campaign_ids'] ?? []))),
             'providers' => array_values(array_filter((array) ($scope['providers'] ?? []))),
-            'earliest' => (string) ($scope['earliest'] ?? Carbon::now()->subDays(30)->toDateString()),
-            'latest' => (string) ($scope['latest'] ?? Carbon::now()->toDateString()),
+            'earliest' => $earliest,
+            'latest' => $latest,
         ];
     }
 
@@ -1217,6 +1245,21 @@ final class LiveReportService
 
         $earliest = Carbon::parse($scope['earliest'])->startOfDay();
         $latest = Carbon::parse($scope['latest'])->startOfDay();
+
+        /*
+         * A request that lies wholly OUTSIDE the ceiling is not a request for its nearest edge.
+         *
+         * Clamping each end on its own turned «the last 30 days», asked of a window that ended last month, into a single day (both ends
+         * pinned to the last date) — a page that looked like data and was one day of it. No overlap means the request says nothing
+         * about this window, so the window answers in full.
+         */
+        foreach (['from', 'to'] as $edge) {
+            $asked = $this->parseDate($requested[$edge] ?? null);
+            if ($asked !== null && (($edge === 'from' && $asked->greaterThan($latest)) || ($edge === 'to' && $asked->lessThan($earliest)))) {
+                unset($requested['from'], $requested['to']);
+                break;
+            }
+        }
 
         $from = $this->clamp($requested['from'] ?? null, $earliest, $latest, $earliest);
         $to = $this->clamp($requested['to'] ?? null, $earliest, $latest, $latest);
@@ -1288,6 +1331,19 @@ final class LiveReportService
     }
 
     /** A requested date, pinned inside the granted window; unparseable or absent falls back to `$default`. */
+    private function parseDate(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function clamp(mixed $value, Carbon $min, Carbon $max, Carbon $default): Carbon
     {
         if (! is_string($value) || $value === '') {

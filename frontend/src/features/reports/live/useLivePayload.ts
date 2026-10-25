@@ -39,7 +39,8 @@ export function useLivePayload({
 }: {
   token: string
   secret?: string
-  days: number
+  /** Null on a FIXED report: no rolling window is asked for, and the server answers with the saved dates. */
+  days: number | null
   providers: string[]
   enabled?: boolean
   failedMessage: string
@@ -62,8 +63,7 @@ export function useLivePayload({
     let body: { data?: unknown; message?: string } = {}
     try {
       const res = await fetchLiveShared(token, {
-        from: isoDaysAgo(days),
-        to: new Date().toISOString().slice(0, 10),
+        ...(days === null ? {} : { from: isoDaysAgo(days), to: new Date().toISOString().slice(0, 10) }),
         providers: key === '' ? [] : key.split(','),
         campaigns: [],
         password: secret,
