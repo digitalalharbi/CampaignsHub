@@ -1,4 +1,5 @@
 import type { FormatIntelligencePayload } from '@/features/content/api'
+import { kpiRowClass } from './kpiRow'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
 import { sectionShown, withDailyRecordsSlides, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
@@ -883,7 +884,7 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         Six columns made the seventh a second row of one, which grew this slide past the print fit floor (0.811 < 0.85) and failed every PDF;
         a row that matches the card count keeps it one row.
       */}
-      <div className={`grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 ${cards.length >= 7 ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}>
+      <div className={`grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 ${kpiRowClass(cards.length, 'xl')}`}>
         {cards.map((m) => (
           <Kpi
             key={m.key}
@@ -995,7 +996,8 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
   return (
     <div>
       <Title platform={platform} sub={`أداء ${plat(platform)} خلال الفترة`}>أداء {plat(platform)}</Title>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {/* REPORT-OBJECTIVE-TEMPLATE-001 — seven funnel cards stay one row, or each platform page overflows the print fit floor (0.72–0.79 < 0.85 on real data). */}
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${kpiRowClass(cards.length, 'lg')}`}>
         {cards.map((m) => (
           <Kpi
             key={m.key}
