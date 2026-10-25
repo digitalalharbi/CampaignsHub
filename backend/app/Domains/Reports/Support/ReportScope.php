@@ -286,7 +286,7 @@ final class ReportScope
             $engine = $engine->forAccounts($this->accountIds);
         }
         if ($this->objectives !== [] || $this->paths !== []) {
-            $engine = $engine->forObjectives($this->objectivesIncludingPaths());
+            $engine = $engine->forObjectives($this->objectivesIncludingPaths(), keepUnclassified: true);
         }
 
         return $engine;

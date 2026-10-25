@@ -385,15 +385,23 @@ final class MetricsAggregator
      * Return a copy scoped to campaigns with these objectives (DASH-010-D objective filter). Objective lives
      * on unified_campaigns; we scope daily_metrics via the campaign id. Empty → no objective filter.
      *
+     * `$keepUnclassified` — REPORT-OBJECTIVE-UNCLASSIFIED-001. A campaign whose objective the platform's sync could not classify
+     * (`other`, or none) says nothing about being outside the filter, so a REPORT keeps it: an objective filter narrows the campaigns
+     * it can read and never silently drops a platform whose campaigns it cannot (Google Ads and ChatGPT Ads store `other`). The
+     * dashboard filter keeps its strict meaning.
+     *
      * @param  list<string>  $objectives
      */
-    public function forObjectives(array $objectives): self
+    public function forObjectives(array $objectives, bool $keepUnclassified = false): self
     {
         $clone = clone $this;
         $clone->objectives = $objectives === [] ? null : array_values($objectives);
+        $clone->keepUnclassifiedObjectives = $keepUnclassified;
 
         return $clone;
     }
+
+    private bool $keepUnclassifiedObjectives = false;
 
     /**
      * Return a copy scoped to campaigns that bought these actions — CAMPAIGN-OUTCOME-DIMENSION-001.
@@ -559,7 +567,12 @@ final class MetricsAggregator
 
         if ($this->objectives !== null) {
             $query->whereIn('daily_metrics.unified_campaign_id', function ($sub) {
-                $sub->select('id')->from('unified_campaigns')->whereIn('objective', $this->objectives);
+                $sub->select('id')->from('unified_campaigns')->where(function ($w) {
+                    $w->whereIn('objective', $this->objectives);
+                    if ($this->keepUnclassifiedObjectives) {
+                        $w->orWhereNull('objective')->orWhere('objective', 'other');
+                    }
+                });
             });
         }
 

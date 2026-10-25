@@ -209,6 +209,30 @@ final class ReportPlatformsAndFixedPeriodTest extends TestCase
         $this->assertEqualsCanonicalizing(self::PROVIDERS, $slidePlatforms);
     }
 
+    public function test_an_objective_filter_keeps_platforms_whose_campaigns_are_unclassified_and_still_drops_other_objectives(): void
+    {
+        // Meta: a sales campaign. TikTok: traffic. Google Ads and ChatGPT Ads: stored as `other` — their sync cannot classify them.
+        $this->spend('meta', 100.0, '2026-08-05');
+        $this->spend('tiktok', 50.0, '2026-08-05')->update(['objective' => 'traffic']);
+        $this->spend('google_ads', 70.0, '2026-08-05')->update(['objective' => 'other']);
+        $this->spend('openai_ads', 30.0, '2026-08-05')->update(['objective' => 'other']);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $report = Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Sales week', 'type' => 'weekly', 'form' => 'detailed',
+            'audience' => 'client', 'status' => 'processing', 'period_start' => '2026-08-03', 'period_end' => '2026-08-09', 'currency' => 'SAR',
+            'scope' => ['objectives' => ['sales', 'conversions', 'purchases', 'add_to_cart']],
+        ]);
+
+        $data = app(ReportGenerator::class)->generate($report);
+
+        $this->assertEqualsCanonicalizing(['meta', 'google_ads', 'openai_ads'], array_column($data['platforms'], 'provider'), 'unclassified platforms stay; the traffic campaign is outside a sales report');
+        $this->assertEquals(200.0, $data['kpis']['spend'], 'no platform counted twice');
+
+        // The dashboard's own objective filter keeps its strict meaning.
+        $strict = app(MetricsAggregator::class)->forProjects([(string) $this->project->id])->forObjectives(['sales'])->byProvider(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
+        $this->assertSame(['meta'], array_column($strict, 'provider'));
+    }
+
     public function test_a_link_built_from_a_saved_report_covers_the_platforms_in_the_metrics_not_the_frozen_payload(): void
     {
         foreach (self::PROVIDERS as $p) {
