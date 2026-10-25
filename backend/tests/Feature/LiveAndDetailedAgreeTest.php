@@ -156,7 +156,8 @@ final class LiveAndDetailedAgreeTest extends TestCase
 
         // The page is told which period the file covers, because its own window may be another.
         $this->assertSame(
-            ['from' => $from, 'to' => $to],
+            // `mode` (REPORT-PERIOD-MODE-001): a report with explicit saved dates and no stated mode is fixed.
+            ['from' => $from, 'to' => $to, 'mode' => 'fixed'],
             $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.period'),
             'the live link does not say which period its downloads cover',
         );

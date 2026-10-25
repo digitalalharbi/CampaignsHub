@@ -266,12 +266,25 @@ final class ReportTemplateEngine
         ];
     }
 
+    /**
+     * The product's platform order, read from the one place that decides it (PLATFORM-ORDER-001).
+     *
+     * This list was correct and was also a second copy — which is how the other five surfaces came to
+     * disagree with it without anybody noticing.
+     */
+    private const PLATFORM_ORDER = AdPlatforms::ORDER;
+
     /** @param list<string> $platforms */
     private function orderPlatforms(array $platforms): array
     {
         $unique = array_values(array_unique($platforms));
         // Ranked by the CANONICAL key, so a connector's `google_ads` sits where `google` does instead of after every known platform.
-        usort($unique, static fn (string $a, string $b): int => AdPlatforms::rank($a) <=> AdPlatforms::rank($b));
+        usort($unique, static function (string $a, string $b): int {
+            $ia = array_search(AdPlatforms::canonical($a), self::PLATFORM_ORDER, true);
+            $ib = array_search(AdPlatforms::canonical($b), self::PLATFORM_ORDER, true);
+
+            return ($ia === false ? 999 : $ia) <=> ($ib === false ? 999 : $ib);
+        });
 
         return $unique;
     }

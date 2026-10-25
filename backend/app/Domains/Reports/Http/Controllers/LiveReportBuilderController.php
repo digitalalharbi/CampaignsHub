@@ -515,8 +515,7 @@ final class LiveReportBuilderController extends Controller
              * No `data` snapshot on purpose — this report IS the live definition, and a stale copy
              * beside it would be a second answer nobody asked for.
              */
-            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'period_mode' => $periodMode] + ($level === null ? [] : ['detail_level' => $level->value]),
-            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind]
+            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'period_mode' => $periodMode]
                 + ($level === null ? [] : ['detail_level' => $level->value])
                 + (($names = array_filter(['prepared_for_name' => trim((string) ($data['prepared_for_name'] ?? '')), 'prepared_by_name' => trim((string) ($data['prepared_by_name'] ?? ''))], static fn (string $v): bool => $v !== '')) === [] ? [] : ['branding' => $names]),
             /*

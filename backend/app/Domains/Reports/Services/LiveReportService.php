@@ -1184,7 +1184,9 @@ final class LiveReportService
     /** The share's report, read past the tenant scope: a public request has no tenant context, and a missing report must not read as «not fixed». */
     private function reportOf(ReportShare $share): Report
     {
-        return $share->report ?? Report::withoutGlobalScopes()->findOrFail($share->report_id);
+        // Never through `$share->report`: that lazy-loads under whatever tenant context is set at the moment of the call and caches a
+        // null when there is none, which silently changed what every later read of the relation (the objective lens) meant.
+        return $share->relationLoaded('report') && $share->report !== null ? $share->report : Report::withoutGlobalScopes()->findOrFail($share->report_id);
     }
 
     /**
