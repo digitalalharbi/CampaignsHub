@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
+import { api, ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 
 /**
  * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue.
@@ -62,7 +62,12 @@ export interface AgentThreadSummary {
   title: string | null
   status: 'idle' | 'thinking' | 'failed'
   updated_at: string | null
+  /** A scheduled run: the project's, not a person's. */
+  shared?: boolean
 }
+
+export interface ThreadFilters { q?: string; agent?: string; status?: string }
+export interface ThreadList { threads: AgentThreadSummary[]; total?: number; retention_days?: number }
 
 export interface AgentMessage {
   id: string
@@ -84,7 +89,22 @@ export interface AgentThread {
 
 export const listAgents = (projectId: string) => getData<{ agents: AgentRole[] }>(`/projects/${projectId}/agents`)
 
-export const listThreads = (projectId: string) => getData<{ threads: AgentThreadSummary[] }>(`/projects/${projectId}/agent-threads`)
+export function listThreads(projectId: string, filters: ThreadFilters = {}) {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v)
+
+  return getData<ThreadList>(`/projects/${projectId}/agent-threads${qs.size > 0 ? `?${qs}` : ''}`)
+}
+
+/** AGENT-CHAT-PRIVACY-001 — delete one of MY conversations, or clear all of mine in this project. */
+export async function deleteThread(projectId: string, id: string) {
+  await ensureCsrfCookie()
+  return api.delete(`/projects/${projectId}/agent-threads/${id}`)
+}
+export async function clearThreads(projectId: string) {
+  await ensureCsrfCookie()
+  return api.delete(`/projects/${projectId}/agent-threads`).then((r) => r.data.data as { deleted: number })
+}
 
 export const getThread = (projectId: string, id: string) => getData<AgentThread>(`/projects/${projectId}/agent-threads/${id}`)
 

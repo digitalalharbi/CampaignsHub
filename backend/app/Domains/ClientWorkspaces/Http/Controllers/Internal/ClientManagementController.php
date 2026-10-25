@@ -68,7 +68,6 @@ final class ClientManagementController
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'min:2', 'max:120'],
-            'branding.logo_url' => ['sometimes', 'nullable', 'url'],
             'settings.week_start' => ['sometimes', 'nullable', 'in:sunday,monday'],
             'settings.report_identity.display_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'settings.report_identity.footer' => ['sometimes', 'nullable', 'string', 'max:280'],

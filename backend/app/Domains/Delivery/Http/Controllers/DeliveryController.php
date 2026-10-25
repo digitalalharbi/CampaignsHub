@@ -13,16 +13,19 @@ use App\Domains\Delivery\Models\PlatformEvidence;
 use App\Domains\Delivery\Services\DeliveryOverview;
 use App\Domains\Delivery\Services\DeliveryPackService;
 use App\Domains\Delivery\Services\DeliverySettings;
+use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Delivery\Services\PlatformEvidenceService;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -113,10 +116,15 @@ final class DeliveryController extends Controller
             'cadence' => ['sometimes', 'in:'.implode(',', DeliverySettings::CADENCES)],
             'week_start' => ['sometimes', 'in:'.implode(',', array_keys(DeliverySettings::WEEK_STARTS))],
             'mode' => ['sometimes', 'in:'.implode(',', DeliverySettings::MODES)],
+            'reviewer_id' => ['sometimes', 'nullable', 'integer'],
+            'reminder_hours' => ['sometimes', 'integer', 'min:1', 'max:168'],
             'components' => ['sometimes', 'array'],
             'components.*' => ['boolean'],
         ]);
         $workspace = $this->authorise($request, $data['client_workspace_id'], 'reports.approve');
+        if (! empty($data['reviewer_id']) && ! $this->reviewers($workspace)->contains('id', (int) $data['reviewer_id'])) {
+            return ApiResponse::error('The reviewer must be a member of this workspace who may approve reports.', status: 422);
+        }
         $before = DeliverySettings::for($workspace);
         DeliverySettings::save($workspace, $data);
         $after = DeliverySettings::for($workspace->refresh());
@@ -125,13 +133,24 @@ final class DeliveryController extends Controller
         return ApiResponse::success($this->settingsShape($workspace), 'Delivery settings saved.');
     }
 
+    /** Members of the client's workspace tenant who may approve reports — the only people a draft can be assigned to. */
+    private function reviewers(ClientWorkspace $workspace): Collection
+    {
+        return User::query()->inTenant((string) $workspace->tenant_id)->orderBy('name')->get(['id', 'name', 'email'])
+            ->filter(fn (User $u): bool => $u->hasPermission('reports.approve'))
+            ->map(fn (User $u): array => ['id' => (int) $u->id, 'name' => (string) $u->name]);
+    }
+
     /** @return array<string,mixed> */
     private function settingsShape(ClientWorkspace $workspace): array
     {
         $settings = DeliverySettings::for($workspace);
         [$from, $to] = DeliverySettings::period($settings);
 
-        return $settings + ['next_period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()]];
+        return $settings + [
+            'next_period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'reviewers' => $this->reviewers($workspace)->values()->all(),
+        ];
     }
 
     /** POST /delivery/packs — prepare the previous week for a project. */
@@ -154,10 +173,70 @@ final class DeliveryController extends Controller
         return ApiResponse::success($this->shape($pack) + [
             'recommendations' => ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)->where('type', 'recommendation')->orderByDesc('priority')
                 ->get(['id', 'annotation_id', 'platform', 'kpi', 'text_ar', 'text_en', 'proposed_action', 'priority', 'status', 'source', 'version'])->all(),
+            'notes' => array_map(fn ($n) => $this->noteShape($n), app(PackNotes::class)->list($pack)),
             'evidence' => PlatformEvidence::query()->where('client_workspace_id', $pack->client_workspace_id)
                 ->whereDate('period_start', '<=', $pack->period_end)->whereDate('period_end', '>=', $pack->period_start)
                 ->get(['id', 'provider', 'period_start', 'period_end', 'original_name', 'mime', 'size', 'captured_at', 'note', 'include_in_report'])->all(),
         ], 'Delivery pack.');
+    }
+
+    /** POST /delivery/packs/{pack}/notes — DELIVERY-NOTES-001, the Owner's own note. */
+    public function addNote(Request $request, DeliveryPack $pack, PackNotes $notes): JsonResponse
+    {
+        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $data = $request->validate([
+            'kind' => ['required', 'in:'.implode(',', array_keys(PackNotes::KINDS))],
+            'text_ar' => ['nullable', 'string', 'max:600'], 'text_en' => ['nullable', 'string', 'max:600'],
+            'audience' => ['nullable', 'in:'.implode(',', PackNotes::AUDIENCES)],
+        ]);
+
+        return $this->guard(fn () => $this->noteShape($notes->add($pack, $data['kind'], $data['text_ar'] ?? null, $data['text_en'] ?? null, $data['audience'] ?? 'client', $request->user())));
+    }
+
+    /** PATCH /delivery/packs/{pack}/notes/{note} */
+    public function updateNote(Request $request, DeliveryPack $pack, string $note, PackNotes $notes): JsonResponse
+    {
+        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $data = $request->validate([
+            'kind' => ['sometimes', 'in:'.implode(',', array_keys(PackNotes::KINDS))],
+            'text_ar' => ['sometimes', 'nullable', 'string', 'max:600'], 'text_en' => ['sometimes', 'nullable', 'string', 'max:600'],
+            'audience' => ['sometimes', 'in:'.implode(',', PackNotes::AUDIENCES)],
+        ]);
+        $model = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)->where('id', $note)->firstOrFail();
+
+        return $this->guard(fn () => $this->noteShape($notes->update($pack, $model, $data)));
+    }
+
+    /** DELETE /delivery/packs/{pack}/notes/{note} */
+    public function deleteNote(Request $request, DeliveryPack $pack, string $note, PackNotes $notes): JsonResponse
+    {
+        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $model = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)->where('id', $note)->firstOrFail();
+
+        return $this->guard(function () use ($notes, $pack, $model) {
+            $notes->delete($pack, $model);
+
+            return null;
+        });
+    }
+
+    /** PUT /delivery/packs/{pack}/notes/order */
+    public function reorderNotes(Request $request, DeliveryPack $pack, PackNotes $notes): JsonResponse
+    {
+        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $data = $request->validate(['ids' => ['required', 'array', 'max:200'], 'ids.*' => ['string']]);
+
+        return $this->guard(function () use ($notes, $pack, $data) {
+            $notes->reorder($pack, $data['ids']);
+
+            return array_map(fn ($n) => $this->noteShape($n), $notes->list($pack));
+        });
+    }
+
+    /** @return array<string,mixed> */
+    private function noteShape(ReportAnnotation $n): array
+    {
+        return ['id' => $n->id, 'kind' => (string) ($n->evidence['kind'] ?? 'observation'), 'type' => $n->type, 'text_ar' => $n->text_ar, 'text_en' => $n->text_en, 'audience' => $n->audience, 'position' => $n->position, 'status' => $n->status, 'version' => $n->version];
     }
 
     /** PUT /delivery/packs/{pack}/components */

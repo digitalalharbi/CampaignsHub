@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ClipboardCopy, EyeOff, FileUp, Loader2, Pencil, RotateCw, Send, X } from 'lucide-react'
 import { DeliverySettingsCard } from './DeliverySettingsCard'
+import { PackNotesEditor } from './PackNotesEditor'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Num } from '@/components/ui/Num'
 import { ProviderMark } from '@/components/ProviderMark'
@@ -155,6 +156,7 @@ function PackPanel({ packId, clientId, t, ar }: { packId: string; clientId: stri
       </div>
 
       <Recommendations pack={p} t={t} open={open} onChange={refresh} />
+      <PackNotesEditor packId={p.id} notes={p.notes ?? []} ar={ar} open={open} onChange={refresh} />
       <Evidence pack={p} clientId={clientId} t={t} ar={ar} open={open} onChange={refresh} />
       <Pieces pack={p} t={t} open={open} onChange={refresh} />
       <InvoiceLink pack={p} clientId={clientId} t={t} open={open} onChange={refresh} />

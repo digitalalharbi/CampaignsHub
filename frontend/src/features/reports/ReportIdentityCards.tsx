@@ -7,6 +7,7 @@ import { uploadBrandingAsset } from '@/features/branding/api'
 import { projectReportIdentity, removeReportIdentityLogo } from './api'
 import { toApiError } from '@/lib/api/client'
 import { Skeleton } from '@/components/ui/States'
+import { LogoUploader } from '@/features/branding/LogoUploader'
 
 /**
  * REPORT-IDENTITY-CONTROLS-001 — the two identities, as things you can SEE and CHANGE.
@@ -86,6 +87,14 @@ export function ReportIdentityCards({ projectId, ar }: { projectId: string; ar: 
           />
         )}
       </div>
+
+      {canManage && data.client != null && (
+        <div data-testid="report-identity-project" className="grid gap-1.5 rounded-xl border border-border bg-surface p-3">
+          <span className="text-xs font-bold text-text-primary">{ar ? 'شعار هذا المشروع (اختياري)' : 'This project’s logo (optional)'}</span>
+          <span className="text-[11px] text-text-muted">{ar ? 'يظهر في تقارير هذا المشروع بدل شعار العميل. بدونه يُستخدم شعار العميل.' : 'Shown on this project’s reports instead of the client’s. Without it the client’s logo is used.'}</span>
+          <LogoUploader endpoint={`/projects/${projectId}/logo`} ar={ar} canEdit testId="project-logo" invalidate={[['report-identity', projectId]]} />
+        </div>
+      )}
 
       {canManage && (
         <p className="text-[11px] leading-5 text-text-muted" data-testid="builder-upload-guidance">
