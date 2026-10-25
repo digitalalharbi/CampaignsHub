@@ -9,7 +9,7 @@ vi.mock('./deliveryApi', async (importOriginal) => {
   return {
     ...actual,
     listPacks: vi.fn(), getPack: vi.fn(), preparePack: vi.fn(), setComponents: vi.fn(), attachInvoice: vi.fn(), approvePack: vi.fn(),
-    markPackSent: vi.fn(), whatsappText: vi.fn(), editRecommendation: vi.fn(), setRecommendationStatus: vi.fn(), uploadEvidence: vi.fn(), deleteEvidence: vi.fn(), getDeliverySettings: vi.fn(), saveDeliverySettings: vi.fn(),
+    markPackSent: vi.fn(), addNote: vi.fn(), updateNote: vi.fn(), deleteNote: vi.fn(), orderNotes: vi.fn(), whatsappText: vi.fn(), editRecommendation: vi.fn(), setRecommendationStatus: vi.fn(), uploadEvidence: vi.fn(), deleteEvidence: vi.fn(), getDeliverySettings: vi.fn(), saveDeliverySettings: vi.fn(),
   }
 })
 vi.mock('@/features/billing/api', async (importOriginal) => {
@@ -34,7 +34,7 @@ const pack = (over: Partial<DeliveryPack> = {}): DeliveryPack => ({
 })
 
 const detail = (over: Partial<PackDetail> = {}): PackDetail => ({
-  ...pack(), evidence: [],
+  ...pack(), evidence: [], notes: [],
   recommendations: [
     { id: 'a1', platform: 'snapchat', text_ar: 'انقل الميزانية إلى سناب', text_en: 'Move budget to Snapchat', proposed_action: null, priority: 'high', status: 'draft', source: 'auto' },
     { id: 'a2', platform: null, text_ar: 'أوقف المجموعة الضعيفة', text_en: 'Pause the weak set', proposed_action: null, priority: 'normal', status: 'reviewed', source: 'edited' },
@@ -165,6 +165,47 @@ describe('TabDelivery', () => {
     mount()
     const card = await screen.findByTestId('delivery-settings')
     expect(within(card).queryByTestId('delivery-weekstart-sunday')).toBeNull()
+  })
+
+  it('adds a note of a chosen kind and audience, and refuses an empty one before sending', async () => {
+    vi.mocked(api.addNote).mockResolvedValue({} as never)
+    mount()
+    fireEvent.click(await screen.findByTestId('pack-pk1'))
+    const notes = await screen.findByTestId('pack-notes')
+
+    fireEvent.click(within(notes).getByTestId('note-add'))
+    expect(await within(notes).findByText(/Write the note first/)).toBeInTheDocument()
+    expect(api.addNote).not.toHaveBeenCalled()
+
+    fireEvent.click(within(notes).getByTestId('note-kind-challenge'))
+    fireEvent.click(within(notes).getByTestId('note-new-audience-internal'))
+    fireEvent.change(within(notes).getByTestId('note-new-en'), { target: { value: 'Creative delivery slipped' } })
+    fireEvent.click(within(notes).getByTestId('note-add'))
+
+    await waitFor(() => expect(api.addNote).toHaveBeenCalledWith('pk1', { kind: 'challenge', text_ar: '', text_en: 'Creative delivery slipped', audience: 'internal' }))
+  })
+
+  it('edits, hides from the client, orders and deletes an existing note; a sent pack only reads', async () => {
+    const mk = (id: string, over = {}) => ({ id, kind: 'observation' as const, text_ar: `n-${id}`, text_en: null, audience: 'client' as const, position: 1, status: 'approved', version: 1, ...over })
+    vi.mocked(api.getPack).mockResolvedValue(detail({ notes: [mk('n1'), mk('n2')] }))
+    vi.mocked(api.updateNote).mockResolvedValue({} as never)
+    vi.mocked(api.deleteNote).mockResolvedValue({} as never)
+    vi.mocked(api.orderNotes).mockResolvedValue([] as never)
+    mount()
+    fireEvent.click(await screen.findByTestId('pack-pk1'))
+
+    fireEvent.change(await screen.findByTestId('note-text-n1'), { target: { value: 'edited words' } })
+    fireEvent.blur(screen.getByTestId('note-text-n1'))
+    await waitFor(() => expect(api.updateNote).toHaveBeenCalledWith('pk1', 'n1', { text_ar: 'edited words' }))
+
+    fireEvent.click(screen.getByTestId('note-audience-n2'))
+    await waitFor(() => expect(api.updateNote).toHaveBeenCalledWith('pk1', 'n2', { audience: 'internal' }))
+
+    fireEvent.click(within(screen.getByTestId('note-n1')).getByLabelText('Move down'))
+    await waitFor(() => expect(api.orderNotes).toHaveBeenCalledWith('pk1', ['n2', 'n1']))
+
+    fireEvent.click(screen.getByTestId('note-delete-n2'))
+    await waitFor(() => expect(api.deleteNote).toHaveBeenCalledWith('pk1', 'n2'))
   })
 
   it('lets the Owner choose which pieces this client receives', async () => {
