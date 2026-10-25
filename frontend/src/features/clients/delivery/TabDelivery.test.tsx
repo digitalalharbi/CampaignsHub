@@ -44,7 +44,7 @@ const detail = (over: Partial<PackDetail> = {}): PackDetail => ({
 
 const mount = () => renderWithProviders(<TabDelivery clientId="c1" projects={[{ id: 'p1', name: 'Store' }]} />, { locale: 'en' })
 
-const settings = (o: Partial<DeliverySettingsData> = {}): DeliverySettingsData => ({ enabled: false, cadence: 'weekly', week_start: 'monday', mode: 'snapshot', components: {}, next_period: { from: '2026-10-12', to: '2026-10-18' }, ...o })
+const settings = (o: Partial<DeliverySettingsData> = {}): DeliverySettingsData => ({ enabled: false, cadence: 'weekly', week_start: 'monday', mode: 'snapshot', components: {}, reviewer_id: null, reminder_hours: 24, reviewers: [{ id: 7, name: 'Sara' }], next_period: { from: '2026-10-12', to: '2026-10-18' }, ...o })
 
 describe('TabDelivery', () => {
   beforeEach(() => {
@@ -158,6 +158,21 @@ describe('TabDelivery', () => {
     await waitFor(() => expect(screen.getByTestId('delivery-settings').textContent).toContain('2026-10-31'))
     fireEvent.click(within(screen.getByTestId('delivery-settings')).getByTestId('delivery-mode-live'))
     await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { mode: 'live' }))
+  })
+
+  it('assigns a reviewer and a reminder time from the people who may approve', async () => {
+    vi.mocked(api.saveDeliverySettings).mockImplementation(async (_id, body) => settings({ ...body }))
+    mount()
+    const card = await screen.findByTestId('delivery-settings')
+    expect(within(card).getByRole('option', { name: 'Sara' })).toBeInTheDocument()
+
+    fireEvent.change(within(card).getByTestId('delivery-reviewer'), { target: { value: '7' } })
+    await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { reviewer_id: 7 }))
+
+    const hours = within(screen.getByTestId('delivery-settings')).getByTestId('delivery-remind-hours')
+    fireEvent.change(hours, { target: { value: '48' } })
+    fireEvent.blur(hours)
+    await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { reminder_hours: 48 }))
   })
 
   it('only a weekly cadence asks which day the week begins', async () => {

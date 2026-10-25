@@ -135,10 +135,13 @@ export interface DeliverySettingsData {
   week_start: 'monday' | 'sunday'
   mode: 'snapshot' | 'live'
   components: Record<string, boolean>
+  reviewer_id: number | null
+  reminder_hours: number
+  reviewers: { id: number; name: string }[]
   next_period: { from: string; to: string }
 }
 export const getDeliverySettings = (clientId: string) => getData<DeliverySettingsData>(`/delivery/settings?client=${encodeURIComponent(clientId)}`)
-export const saveDeliverySettings = (clientId: string, body: Partial<Omit<DeliverySettingsData, 'next_period'>>) =>
+export const saveDeliverySettings = (clientId: string, body: Partial<Omit<DeliverySettingsData, 'next_period' | 'reviewers'>>) =>
   putData<DeliverySettingsData>('/delivery/settings', { client_workspace_id: clientId, ...body })
 
 export const addNote = (packId: string, body: { kind: NoteKind; text_ar?: string; text_en?: string; audience: PackNote['audience'] }) => postData<PackNote>(`/delivery/packs/${packId}/notes`, body)
