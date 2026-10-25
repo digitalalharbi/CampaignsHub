@@ -492,6 +492,13 @@ final class ReportShareController extends Controller
             return array_values(array_map(strval(...), $named));
         }
 
+        // The report's own scope bounds the ceiling: a link may be narrower than its report, never wider.
+        $scope = ReportScope::fromArray($model->scope);
+        $named = $scope->resolvedCampaignIds();
+        if ($named !== null && $named !== []) {
+            return array_values(array_map(strval(...), $named));
+        }
+
         return DB::table('daily_metrics')
             ->where('project_id', $projectId)
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
@@ -522,6 +529,29 @@ final class ReportShareController extends Controller
     private function providersOf(Report $model): array
     {
         $scope = ReportScope::fromReport($model->scope);
+        if ($scope->providers !== []) {
+            return $scope->providers;
+        }
+
+        $projectId = (string) ($model->project_id ?? '');
+        $fromMetrics = $projectId === '' ? [] : DB::table('daily_metrics')
+            ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->when($scope->accountIds !== [], fn ($q) => $q->whereIn('external_account_id', $scope->accountIds))
+            ->when(
+                $model->period_start !== null && $model->period_end !== null,
+                fn ($q) => $q->whereBetween('metric_date', [$model->period_start->toDateString(), $model->period_end->toDateString()]),
+            )
+            ->distinct()
+            ->pluck('provider')
+            ->map(static fn ($p): string => (string) $p)
+            ->all();
+
+        if ($fromMetrics !== []) {
+            return array_values(array_unique($fromMetrics));
+        }
+
+        $scope = ReportScope::fromArray($model->scope);
         if ($scope->providers !== []) {
             return $scope->providers;
         }
