@@ -52,19 +52,33 @@ export function MarketingPage() {
     <div className="min-h-screen bg-background text-text-primary">
       {/* Nav */}
       <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1240px] items-center gap-3 px-6 py-3">
+        <div className="mx-auto flex max-w-[1240px] items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
           {/*
             BRAND-CANONICAL-001 — the identity, not the brand NAME painted green.
             
             `brand.name` is the locale-agnostic string, so this header said «CampaignsHub» in an
             Arabic page and carried no mark at all — a wordmark assembled here rather than the lockup.
           */}
-          <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
-          <nav className="ms-auto flex items-center gap-2">
-            <Button variant="secondary" onClick={toggleLocale}>{ar ? 'EN' : 'ع'}</Button>
-            <Button variant="secondary" onClick={toggleTheme}>{theme === 'light' ? '🌙' : '☀️'}</Button>
-            <Link to="/login"><Button variant="ghost">{ar ? 'الدخول' : 'Sign in'}</Button></Link>
-            <Link to="/login"><Button>{ar ? 'إنشاء حساب' : 'Get started'}</Button></Link>
+          {/*
+            PHONE-WIDTH — this row asked for 385px at 375px wide in Arabic, so /welcome scrolled
+            sideways on every phone: five full-size controls and the wordmark do not fit on one line,
+            and the primary button wrapped onto two. Same remedy as `PublicHeader`: the wordmark
+            yields to the mark below 480px, the secondary action is hidden below `md:`, the controls
+            take their small size and refuse to wrap. The homepage header already does all four.
+          */}
+          <span className="flex shrink-0 items-center">
+            <span className="max-[479px]:hidden">
+              <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
+            </span>
+            <span className="hidden max-[479px]:inline-flex">
+              <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="mark" size="sm" />
+            </span>
+          </span>
+          <nav className="ms-auto flex items-center gap-1.5 sm:gap-2">
+            <Button variant="secondary" size="sm" aria-label="Toggle language" onClick={toggleLocale}>{ar ? 'EN' : 'ع'}</Button>
+            <Button variant="secondary" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>{theme === 'light' ? '🌙' : '☀️'}</Button>
+            <Link to="/login" className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{ar ? 'الدخول' : 'Sign in'}</Button></Link>
+            <Link to="/login"><Button size="sm" className="whitespace-nowrap">{ar ? 'إنشاء حساب' : 'Get started'}</Button></Link>
           </nav>
         </div>
       </header>
