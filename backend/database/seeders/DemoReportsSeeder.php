@@ -127,6 +127,10 @@ final class DemoReportsSeeder extends Seeder
             (array) (($report->data ?? [])['platforms'] ?? []),
         ))));
 
+        // The demo link is a rolling dashboard by design (its ceiling runs a year forward): a report with explicit dates and no stated mode
+        // would read as FIXED (REPORT-PERIOD-MODE-001) and offer no 7/30/90-day presets.
+        $report->forceFill(['config' => array_merge((array) $report->config, ['period_mode' => 'rolling'])])->saveQuietly();
+
         $share = [
             'tenant_id' => $report->tenant_id,
             'report_id' => $report->id,
