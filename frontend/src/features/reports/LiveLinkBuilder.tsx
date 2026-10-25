@@ -15,7 +15,7 @@ import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
-import { ReportIdentityCards } from './ReportIdentityCards'
+import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -216,12 +216,16 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [otherCols, setOtherCols] = useState<Record<'accounts' | 'content' | 'days', string[] | null>>({ accounts: null, content: null, days: null })
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // REPORT-IDENTITY-NAMES-001 — the printed names; null = the stored names.
+  const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
 
   const create = useMutation({
     mutationFn: () =>
       createLiveLink(projectId, {
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
+        ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
+        ...(names.by === null || names.by.trim() === '' ? {} : { prepared_by_name: names.by.trim() }),
         account_ids: selectedAccounts,
         accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
@@ -354,7 +358,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             where somebody DECIDES to send it showed neither, so an operator could only find out
             whose marks a client would see by making the link and opening it.
           */}
-          <ReportIdentityCards projectId={projectId} ar={ar} />
+          <ReportIdentityCards projectId={projectId} ar={ar} names={names} onNames={setNames} />
 
           <Field label={ar ? 'اسم التقرير' : 'Report name'} required>
             <input

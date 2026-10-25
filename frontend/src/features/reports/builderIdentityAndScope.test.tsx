@@ -59,10 +59,10 @@ describe('the report link builder', () => {
 
     // Awaited: the block arrives with the query, so asserting synchronously would assert the loader.
     expect(await screen.findByTestId('report-identity-cards')).toHaveTextContent('هوية التقرير')
-    expect(screen.getByTestId('report-identity-company')).toHaveTextContent('من إعداد')
-    expect(screen.getByTestId('report-identity-company-name')).toHaveTextContent('الشركة')
+    expect(screen.getByTestId('report-identity-company')).toHaveTextContent('مقدم من')
+    expect(screen.getByTestId('report-identity-company-name-input')).toHaveValue('الشركة')
     expect(screen.getByTestId('report-identity-client')).toHaveTextContent('مقدم إلى')
-    expect(screen.getByTestId('report-identity-client-name')).toHaveTextContent('العميل')
+    expect(screen.getByTestId('report-identity-client-name-input')).toHaveValue('العميل')
   })
 
   /**
@@ -99,7 +99,7 @@ describe('the report link builder', () => {
     await screen.findByTestId('report-identity-cards')
     expect(screen.queryByTestId('report-identity-company-upload')).toBeNull()
     // And the identities are still SHOWN — what is withheld is the ability to change them.
-    expect(screen.getByTestId('report-identity-company-name')).toHaveTextContent('الشركة')
+    expect(screen.getByTestId('report-identity-company-name-input')).toHaveValue('الشركة')
 
     state.identity = withUpload
   })
