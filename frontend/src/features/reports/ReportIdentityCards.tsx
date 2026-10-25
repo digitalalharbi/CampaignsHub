@@ -38,7 +38,15 @@ import { LogoUploader } from '@/features/branding/LogoUploader'
  * version is bumped locally on every success, which busts that cache without changing what the
  * server stores or how the report resolves it.
  */
-export function ReportIdentityCards({ projectId, ar }: { projectId: string; ar: boolean }) {
+/**
+ * REPORT-IDENTITY-NAMES-001 — the two printed names, editable per report.
+ *
+ * `null` means «not touched»: the card shows the stored client's / company's own name as the starting value, and a value equal to it is
+ * sent as no override at all, so a report keeps following a renamed client until somebody types something different.
+ */
+export interface IdentityNames { for: string | null; by: string | null }
+
+export function ReportIdentityCards({ projectId, ar, names, onNames }: { projectId: string; ar: boolean; names?: IdentityNames; onNames?: (n: IdentityNames) => void }) {
   const identity = useQuery({
     queryKey: ['report-identity', projectId],
     queryFn: () => projectReportIdentity(projectId),
@@ -65,9 +73,11 @@ export function ReportIdentityCards({ projectId, ar }: { projectId: string; ar: 
           projectId={projectId}
           ar={ar}
           role="agency"
-          roleLabel={ar ? 'من إعداد' : 'Prepared by'}
+          roleLabel={ar ? 'مقدم من' : 'Prepared by'}
           name={data.agency?.name ?? ''}
           logoUrl={data.agency?.logo_url ?? null}
+          nameValue={names ? (names.by ?? (data.agency?.name ?? '')) : undefined}
+          onName={names && onNames ? (v) => onNames({ ...names, by: v === (data.agency?.name ?? '') ? null : v }) : undefined}
           target={data.upload?.company ?? null}
           canManage={canManage}
           testid="report-identity-company"
@@ -81,6 +91,8 @@ export function ReportIdentityCards({ projectId, ar }: { projectId: string; ar: 
             roleLabel={ar ? 'مقدم إلى' : 'Prepared for'}
             name={data.client.name}
             logoUrl={data.client.logo_url}
+            nameValue={names ? (names.for ?? data.client.name) : undefined}
+            onName={names && onNames ? (v) => onNames({ ...names, for: v === data.client!.name ? null : v }) : undefined}
             target={data.upload?.client ?? null}
             canManage={canManage}
             testid="report-identity-client"
@@ -107,13 +119,16 @@ export function ReportIdentityCards({ projectId, ar }: { projectId: string; ar: 
 
 type Role = 'agency' | 'client'
 
-function IdentityCard({ projectId, ar, role, roleLabel, name, logoUrl, target, canManage, testid }: {
+function IdentityCard({ projectId, ar, role, roleLabel, name, logoUrl, nameValue, onName, target, canManage, testid }: {
   projectId: string
   ar: boolean
   role: Role
   roleLabel: string
   name: string
   logoUrl: string | null
+  /** The editable printed name, when the card is inside a builder that saves it. */
+  nameValue?: string
+  onName?: (value: string) => void
   target: { scope: string; scope_id: string | null } | null
   canManage: boolean
   testid: string
@@ -190,8 +205,24 @@ function IdentityCard({ projectId, ar, role, roleLabel, name, logoUrl, target, c
             {ar ? 'لا يوجد شعار' : 'No logo'}
           </span>
         )}
-        <span className="truncate text-sm font-bold text-text-primary" data-testid={`${testid}-name`}>{name}</span>
+        {nameValue === undefined && <span className="truncate text-sm font-bold text-text-primary" data-testid={`${testid}-name`}>{name}</span>}
       </div>
+
+      {nameValue !== undefined && onName && (
+        <label className="grid gap-1 text-[11px] font-semibold text-text-secondary">
+          {roleLabel}
+          <input
+            type="text"
+            maxLength={120}
+            value={nameValue}
+            placeholder={name}
+            onChange={(e) => onName(e.target.value)}
+            data-testid={`${testid}-name-input`}
+            className="h-9 w-full rounded-lg border border-border bg-surface px-2.5 text-sm font-bold text-text-primary outline-none focus:border-brand-500"
+          />
+          <span className="text-[10px] font-normal text-text-muted">{ar ? 'اتركه فارغًا لاستخدام الاسم المسجّل.' : 'Leave it empty to use the stored name.'}</span>
+        </label>
+      )}
 
       {canManage && (
         <div className="flex flex-wrap items-center gap-1.5">
