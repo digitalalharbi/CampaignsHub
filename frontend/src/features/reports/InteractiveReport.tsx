@@ -878,7 +878,12 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         pins its sparkline to the bottom, so the six lines share one baseline instead of floating at
         six different heights.
       */}
-      <div className="grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 xl:grid-cols-6">
+      {/*
+        REPORT-OBJECTIVE-TEMPLATE-001 — the sales funnel is seven cards (spend · impressions · clicks · add to cart · purchases · revenue · ROAS).
+        Six columns made the seventh a second row of one, which grew this slide past the print fit floor (0.811 < 0.85) and failed every PDF;
+        a row that matches the card count keeps it one row.
+      */}
+      <div className={`grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 ${cards.length >= 7 ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}>
         {cards.map((m) => (
           <Kpi
             key={m.key}
