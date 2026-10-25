@@ -3,18 +3,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Lock, Search, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { toApiError } from '@/lib/api/client'
+import { days } from '@/lib/counted'
 import { clearThreads, deleteThread, listThreads, type AgentRole } from './api'
 
 const COPY = {
   ar: {
     title: 'المحادثات', neu: 'جديدة', search: 'ابحث في المحادثات…', all: 'كل الوكلاء', anyStatus: 'كل الحالات', failed: 'فشلت', thinking: 'قيد الرد',
-    none: 'لا محادثات بعد.', noMatch: 'لا نتائج مطابقة.', private: 'محادثاتك خاصة بك — لا يراها زملاؤك.', keep: (d: number) => `تُحذف المحادثات تلقائيًا بعد ${d} يومًا من آخر رسالة.`,
+    none: 'لا محادثات بعد.', noMatch: 'لا نتائج مطابقة.', private: 'محادثاتك خاصة بك — لا يراها زملاؤك.', keep: (d: number) => `تُحذف المحادثات تلقائيًا بعد ${days(d, 'ar')} من آخر رسالة.`,
     shared: 'تشغيل مجدول', remove: 'حذف المحادثة', clear: 'حذف كل محادثاتي', yes: 'نعم، احذف', cancel: 'إلغاء',
     confirmOne: 'سيُحذف هذا الحوار نهائيًا.', confirmAll: 'ستُحذف كل محادثاتك في هذا المشروع نهائيًا (لا تُحذف محادثات الزملاء).', more: (n: number) => `يعرض أحدث 30 من ${n}.`,
   },
   en: {
     title: 'Conversations', neu: 'New', search: 'Search conversations…', all: 'All agents', anyStatus: 'Any status', failed: 'Failed', thinking: 'Answering',
-    none: 'No conversations yet.', noMatch: 'Nothing matches.', private: 'Your conversations are private to you — colleagues cannot see them.', keep: (d: number) => `Conversations are deleted automatically ${d} days after their last message.`,
+    none: 'No conversations yet.', noMatch: 'Nothing matches.', private: 'Your conversations are private to you — colleagues cannot see them.', keep: (d: number) => `Conversations are deleted automatically ${days(d, 'en')} after their last message.`,
     shared: 'Scheduled run', remove: 'Delete conversation', clear: 'Delete all my conversations', yes: 'Yes, delete', cancel: 'Cancel',
     confirmOne: 'This conversation will be deleted permanently.', confirmAll: 'All your conversations in this project will be deleted permanently (colleagues’ are not touched).', more: (n: number) => `Showing the latest 30 of ${n}.`,
   },
