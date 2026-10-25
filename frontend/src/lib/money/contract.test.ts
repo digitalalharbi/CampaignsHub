@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateMoney, moneyState, rankableMoney, readMoney, readCostPer, readRoas, resolveMoneySeries } from './contract'
+import { aggregateMoney, moneyState, rankableMoney, rankMoney, readMoney, readCostPer, readRoas, resolveMoneySeries, spendComparableAmount } from './contract'
 
 /**
  * PARTIAL-WITHHELD-001 — the contract must distinguish «some converted + some withheld» from «all
@@ -138,59 +138,80 @@ describe('aggregateMoney — a total exists only for one comparable currency', (
   })
 })
 
-describe('rankableMoney — a chart drops and discloses where a total fails closed', () => {
+describe('rankableMoney — chart values only when comparable', () => {
   it('gives per-row values for all-withheld one currency', () => {
     expect(rankableMoney([WITHHELD_USD, { spend: 0, spend_original: 200, spend_withheld_rows: 1, money_original_currency: 'USD', money_original_currencies: 1 }], 'spend', 'SAR'))
-      .toEqual({ values: [500, 200], currency: 'USD', dropped: 0 })
+      .toEqual({ values: [500, 200], currency: 'USD' })
   })
 
-  /*
-   * The rule the totals do NOT follow. `aggregateMoney` refuses the moment one row is unreadable,
-   * because a sum of part of a scope printed as the scope is the defect. A chart is a different
-   * claim: refusing six platforms because one is partial hides five that are known. So the partial
-   * row is left out, its absence is COUNTED, and the caller must render that count.
-   */
-  it('drops a partial row, keeps the readable ones, and reports how many it dropped', () => {
-    expect(rankableMoney([CONVERTED_ROW, PARTIAL], 'spend', 'SAR'))
-      .toEqual({ values: [1000, null], currency: 'SAR', dropped: 1 })
+  it('null when a partial row is present — the chart must not draw a fake share', () => {
+    expect(rankableMoney([CONVERTED_ROW, PARTIAL], 'spend', 'SAR')).toBeNull()
   })
 
-  it('drops withheld rows that would put a second currency on the same axis', () => {
-    // Riyals cannot be drawn beside dollars, so the withheld row goes rather than the whole chart.
-    expect(rankableMoney([CONVERTED_ROW, WITHHELD_USD], 'spend', 'SAR'))
-      .toEqual({ values: [1000, null], currency: 'SAR', dropped: 1 })
-  })
-
-  it('null across two withheld currencies — nothing comparable is left to draw', () => {
+  it('null across currencies — no cross-currency ranking', () => {
     expect(rankableMoney([WITHHELD_USD, WITHHELD_EUR], 'spend', 'SAR')).toBeNull()
-  })
-
-  it('null only when EVERY row is unreadable, never for an empty set', () => {
-    expect(rankableMoney([PARTIAL], 'spend', 'SAR')).toBeNull()
-    // «No rows yet» is the caller's own empty state, not «this money cannot be shown».
-    expect(rankableMoney([], 'spend', 'SAR')).toEqual({ values: [], currency: 'SAR', dropped: 0 })
   })
 })
 
-/**
- * PARTIAL-WITHHELD-001 (d/f) — a money TIMESERIES fails closed where a donut drops-and-discloses.
- *
- * A trend line is a claim in one currency at every point; it cannot omit a day and stay honest, so a
- * single partial/withheld/cross-currency point closes the whole series to «unavailable». Contrast
- * `rankableMoney`, which keeps the comparable rows and reports how many it dropped.
- */
+// ── Required integration fixtures (reviewer A–E) ──────────────────────────────────────────────────
+
+describe('spendComparableAmount — reporting vs target currency, never assumed equal', () => {
+  const CONVERTED = { spend: 5000, spend_original: 0, spend_withheld_rows: 0 }
+  const WITHHELD_USD_ROW = { spend: 0, spend_original: 500, spend_withheld_rows: 4, money_original_currency: 'USD', money_original_currencies: 1 }
+
+  it('A — a partial scope has no comparable amount', () => {
+    expect(spendComparableAmount(PARTIAL, 'spend', 'SAR', 'SAR')).toBeNull()
+  })
+
+  it('B — complete converted in USD is NOT usable against a SAR budget', () => {
+    expect(spendComparableAmount(CONVERTED, 'spend', 'USD', 'SAR')).toBeNull()
+  })
+
+  it('B — complete converted is usable when reporting equals the target', () => {
+    expect(spendComparableAmount(CONVERTED, 'spend', 'SAR', 'SAR')).toBe(5000)
+  })
+
+  it('C — all withheld USD against a USD budget is a valid comparison', () => {
+    expect(spendComparableAmount(WITHHELD_USD_ROW, 'spend', 'SAR', 'USD')).toBe(500)
+  })
+
+  it('a withheld USD spend is not usable against a SAR budget', () => {
+    expect(spendComparableAmount(WITHHELD_USD_ROW, 'spend', 'SAR', 'SAR')).toBeNull()
+  })
+
+  it('zero compares to any currency; absent/target-null do not', () => {
+    expect(spendComparableAmount({ spend: 0, spend_withheld_rows: 0 }, 'spend', 'SAR', 'USD')).toBe(0)
+    expect(spendComparableAmount(CONVERTED, 'spend', 'SAR', null)).toBeNull()
+  })
+})
+
+describe('D — rankMoney actually ranks (not the first N rows)', () => {
+  it('returns indices sorted by real spend, so top-N is the biggest', () => {
+    const rows = [100, 900, 500, 700, 300, 200, 1000, 50].map((v) => ({ spend: v, spend_withheld_rows: 0 }))
+    const ranked = rankMoney(rows, 'spend', 'SAR')!
+    expect(ranked.order.slice(0, 3).map((i) => ranked.values[i])).toEqual([1000, 900, 700])
+    expect(ranked.order[ranked.order.length - 1]).toBe(7) // the 50 is last
+  })
+})
+
+describe('E — a platform with unavailable ROAS is not ranked as best', () => {
+  it('readRoas returns null for a partial platform, so a caller must exclude it from a global «best»', () => {
+    const partialPlatform = { spend: 1000, spend_original: 500, spend_withheld_rows: 2, revenue: 3000, revenue_original: 1500, revenue_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 }
+    const goodPlatform = { spend: 1000, revenue: 4000, roas: 4, spend_withheld_rows: 0, revenue_withheld_rows: 0 }
+    expect(readRoas(partialPlatform, false).value).toBeNull()
+    expect(readRoas(goodPlatform, false).value).toBe(4)
+  })
+})
+
 describe('resolveMoneySeries — a chartable money timeseries, or null', () => {
   it('all-converted days pass through with the reporting currency', () => {
-    const rows = [
-      { date: 'd1', spend: 100, revenue: 300, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
-      { date: 'd2', spend: 200, revenue: 500, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
-    ]
+    const rows = [{ date: 'd1', spend: 100, revenue: 300, spend_withheld_rows: 0, revenue_withheld_rows: 0 }, { date: 'd2', spend: 200, revenue: 500, spend_withheld_rows: 0, revenue_withheld_rows: 0 }]
     const r = resolveMoneySeries(rows, ['spend', 'revenue'], 'SAR')!
     expect(r.currency).toBe('SAR')
     expect(r.rows.map((x) => x.spend)).toEqual([100, 200])
   })
 
-  it('a fully-withheld series is replaced by ORIGINAL values in their own currency, not a coalesced 0', () => {
+  it('withheld days are replaced by their ORIGINAL value, not a coalesced 0', () => {
     const rows = [
       { date: 'd1', spend: 0, spend_original: 400, spend_withheld_rows: 2, revenue: 0, revenue_original: 1200, revenue_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 },
     ]
@@ -200,7 +221,7 @@ describe('resolveMoneySeries — a chartable money timeseries, or null', () => {
     expect(r.rows[0].revenue).toBe(1200)
   })
 
-  it('a partial day (some rows converted, some withheld) makes the WHOLE series unavailable', () => {
+  it('a partial day makes the whole series unavailable', () => {
     const rows = [
       { date: 'd1', spend: 1000, revenue: 3000, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
       { date: 'd2', spend: 1000, spend_original: 500, spend_withheld_rows: 2, revenue: 3000, revenue_withheld_rows: 0, money_original_currency: 'USD', money_original_currencies: 1 },
@@ -212,7 +233,7 @@ describe('resolveMoneySeries — a chartable money timeseries, or null', () => {
     const rows = [
       { date: 'd1', spend: 100, spend_withheld_rows: 0, revenue: 0, revenue_original: 900, revenue_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 },
     ]
-    // spend converted (SAR) beside revenue withheld (USD) → two currencies → null.
+    // spend converted (SAR), revenue withheld (USD) → two currencies → null.
     expect(resolveMoneySeries(rows, ['spend', 'revenue'], 'SAR')).toBeNull()
   })
 })

@@ -1,68 +1,27 @@
-import { comparableWindows } from '@/lib/coverage/contract'
-import { useEffect, useMemo, useState } from 'react'
-import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
-import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
-import { PeriodLabel } from '@/components/patterns/Status'
-import { listProjects } from '@/features/projects/api'
-import { portfolioBudget } from '@/lib/money/portfolioBudget'
-import { CampaignLink } from './CampaignLink'
-import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
-import { Link, useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
+import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
 import { listCampaigns } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
 import { CampaignComparison } from './CampaignComparison'
 import { attentionFlags, attentionRank, type AttentionMetrics } from './campaignInsights'
 import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './labels'
-import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
-import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
-import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
-import { campaignEfficiency, campaignHeadline, campaignReturn, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
-import { CAMPAIGN_COLUMNS, CAMPAIGN_PRESETS, columnLabel, presetOf, readCampaignColumns, rememberCampaignColumns, type CampaignPreset } from './campaignColumns'
-import { CampaignViewsBar } from './CampaignViewsBar'
-import { BulkCampaignActions } from './BulkCampaignActions'
-import { readMetric, SPECS } from '@/features/analytics/metricCatalog'
-import type { SavedView } from '@/features/dashboard/savedViews'
-import { Columns3 } from 'lucide-react'
-import type { MetricReading } from '@/components/ui/MetricStrip'
-import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
-import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
-import { useSpendLimits, type SpendLimitsPage } from '@/features/budget/spendLimitsApi'
-import { bandCounts, byPriority, campaignBand, type CampaignBand } from './campaignPriority'
-import { ProjectChangeHistory } from './ProjectChangeHistory'
-import { movers } from './campaignMovers'
-import { objectiveMix } from './objectiveMix'
-import { campaignState } from './campaignState'
-import { landingAnswer } from './campaignsLanding'
-
-/** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
-const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
-  active: { ar: 'النشطة', en: 'Active' },
-  inactive: { ar: 'غير النشطة', en: 'Inactive' },
-  all: { ar: 'الكل', en: 'All' },
-}
-import { MetricTable } from '@/components/ui/MetricTable'
-import { Num } from '@/components/ui/Num'
-import { useUrlNumber, useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
+import { CAMPAIGN_OBJECTIVES, CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
-import { ChartCard, PlatformDonutChart, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
-import { useBudget, useCampaigns, useFreshness, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
+import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
-import { compact, money, num } from '@/features/analytics/format'
-import { campaigns as countedCampaigns } from '@/lib/counted'
-import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
+import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { rankableMoney, rankMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
-import { useProjectFromUrl } from '@/features/projects/useProjectFromUrl'
-import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
-import { orderAttention } from './attentionOrdering'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -70,58 +29,14 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 /** The five ways to look at a project's campaigns (CAMPAIGN-010). */
-type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention' | 'history'
-
-/**
- * CAMPAIGNS-OVERVIEW-FIRST-001 — the order the owner asked for, and the reason it is an order at all.
- *
- * «Overview first, then Analytics / deeper analysis, then Table / list, optional Cards, optional
- * Comparison. Do NOT let cards/grid feel like the main default analytical surface.»
- *
- * The list already opened with Overview and the page still landed on CARDS, because the default was
- * hard-coded past it — so the first thing anybody saw was a grid of tiles, one campaign each, with no
- * portfolio answer anywhere. «Needs attention» keeps its own entry at the end: it is a filtered
- * TABLE rather than a mode of reading the portfolio, and the count beside it is what makes it
- * findable without competing with the first screen.
- */
-/**
- * The five bands the portfolio is classified into — the owner's own words, in the owner's own order.
- *
- * Kept beside `VIEWS` rather than inside the component: these are the product's vocabulary, and a
- * label defined at a call site is a label the next surface will spell differently.
- */
-const BANDS: Array<{ id: CampaignBand; ar: string; en: string }> = [
-  { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention' },
-  { id: 'spending', ar: 'نشطة وتنفق', en: 'Active and spending' },
-  { id: 'weak', ar: 'نشطة وضعيفة', en: 'Active but weak' },
-  { id: 'paused', ar: 'متوقفة', en: 'Paused' },
-  // CAMPAIGN-VIEWS-001 — record states beside the measurement bands; each chip narrows the table.
-  { id: 'scheduled', ar: 'مجدولة', en: 'Scheduled' },
-  { id: 'drafts', ar: 'مسودات', en: 'Drafts' },
-  { id: 'ended', ar: 'منتهية', en: 'Ended' },
-]
+type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention'
 
 const VIEWS: Array<{ id: ViewMode; ar: string; en: string; icon: typeof LayoutGrid }> = [
   { id: 'overview', ar: 'نظرة عامة', en: 'Overview', icon: BarChart3 },
-  { id: 'table', ar: 'جدول', en: 'Table', icon: Rows },
   { id: 'cards', ar: 'بطاقات', en: 'Cards', icon: LayoutGrid },
+  { id: 'table', ar: 'جدول', en: 'Table', icon: Rows },
   { id: 'compare', ar: 'مقارنة', en: 'Comparison', icon: GitCompare },
-  /*
-   * «الأسباب», not «تحتاج تدخلًا» — the same words were on screen three times.
-   *
-   * The KPI card counts them, the band beside it counts them AND narrows the table to them, and
-   * this tab repeated the phrase a third time directly underneath. Three controls stacked
-   * vertically saying «Needs attention 1» is the repetition §34 names, and the three are not
-   * interchangeable: a count, a filter and an explanation.
-   *
-   * So this one is named for what it alone does. Every other entry in this switcher is a VIEW —
-   * Overview, Table, Cards, Comparison — and «Needs attention» was a filter wearing a view's
-   * clothes. What it actually shows is the REASON each campaign was flagged, which is the one
-   * thing neither the card nor the band can say.
-   */
-  { id: 'attention', ar: 'الأسباب', en: 'Reasons', icon: TriangleAlert },
-  // CAMPAIGN-VIEWS-001 — the project's change history across its campaigns.
-  { id: 'history', ar: 'سجل التغييرات', en: 'Change history', icon: History },
+  { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention', icon: TriangleAlert },
 ]
 
 export function CampaignsPage() {
@@ -130,236 +45,43 @@ export function CampaignsPage() {
   const ar = locale === 'ar'
   const navigate = useNavigate()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
-
   const { currentProjectId: projectId } = useProject()
-  /* DASHBOARD-DRILLDOWN-001 — `?project=<id>` from a dashboard or budget link is chosen on arrival. */
-  useProjectFromUrl()
-  /*
-   * BUDGET-CONNECTED-001 — the project's active spend limits, read once for the whole board.
-   *
-   * One request rather than one per card: a project with four hundred campaigns is the case this
-   * feature is for, and the limits are a short list whatever the campaign count is. `useSpendLimits`
-   * is the same hook the limits page uses, so the two cannot disagree about a state.
-   *
-   * A failure is silent by design — the chip simply does not draw. A campaigns board that fails to
-   * load because a governance sidecar did would be a worse outcome than the missing chip.
-   */
-  const spendLimits = useSpendLimits(projectId)
 
-  const [days, setDays] = useUrlNumber('days', 30)
+  const [days, setDays] = useState(30)
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
   // five metric queries on first paint made the page slow to become interactive on Firefox under load —
   // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
-  /*
-    OVERVIEW, not cards — CAMPAIGNS-OVERVIEW-FIRST-001.
-
-    «The first thing the user sees on entering Campaigns must be a strong campaign portfolio
-    overview.» It was a grid of tiles: one campaign per card, no portfolio total, no pacing, nothing
-    ranked. A reader arriving to answer «what needs me today» had to find the control that would tell
-    them before they could start.
-  */
-  /*
-   * Which view is open is part of the ADDRESS — the same rule the filters below already follow.
-   *
-   * It was `useState` alone, so `?view=cards` did nothing: the board always opened on the overview
-   * whatever the link said, Back walked out of the page instead of back a view, and a reload lost
-   * the reader's place. The default is untouched — the overview is what an operator should meet
-   * first, and that is a product decision, not a consequence of where the state was kept.
-   */
-  const [view, setView] = useUrlState('view', 'overview') as [ViewMode, (v: string) => void]
-  /* CAMPAIGN-VIEWS-001 — a band chip narrows the table to its band; empty means every band. */
-  const [band] = useUrlState('band', '') as [CampaignBand | '', (v: string) => void]
-  /* For the handlers that change the view AND a filter together — see the band button below. */
-  const writeUrl = useUrlWriter()
+  const [view, setView] = useState<ViewMode>('cards')
   const [compareIds, setCompareIds] = useState<string[]>([])
-  /*
-   * ANALYTICS-FILTER-TRUTH-001 — these live in the URL, so a refresh, Back and a shared link all
-   * show the same list. `search` deliberately does not: it is typed a character at a time, and
-   * writing every keystroke into the history would make Back unusable on this page.
-   */
-  const [lifecycle, setLifecycle] = useUrlState('lifecycle', 'active') as [Lifecycle, (v: string) => void]
-  const [status, setStatus] = useUrlState('status', '')
-  const [objective, setObjective] = useUrlState('objective', '')
+  const [status, setStatus] = useState('')
+  const [objective, setObjective] = useState('')
   const [search, setSearch] = useState('')
-  /*
-   * CAMPAIGNS-TABLE-COMPARISON-001 — the chosen column travels to the SERVER.
-   *
-   * `''` means «no column chosen», which is not the same as a default column: with nothing chosen
-   * the list keeps the relevance ranking the workspace is designed around, and the server falls back
-   * to it for any name it does not recognise. Clicking the same header twice turns the direction
-   * round rather than re-sorting the same way.
-   */
-  const [sort, setSort] = useState('')
-  const [dir, setDir] = useState<'asc' | 'desc'>('desc')
-  /*
-   * CAMPAIGNS-TABLE-001 — which metric columns the table shows: a preset or a hand-picked set, remembered per reader;
-   * a saved view restores columns, filters and order in ONE state change (one setter per concern, applied together).
-   */
-  const [columns, setColumnsState] = useState<string[]>(() => readCampaignColumns())
-  const [choosingColumns, setChoosingColumns] = useState(false)
-  /* CAMPAIGNS-TABLE-002 — rows ticked for a bulk pause/resume; cleared when the list changes under them. */
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const toggleSelected = (id: string) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  const setColumns = (keys: string[]) => { setColumnsState(keys); rememberCampaignColumns(keys) }
-  const applyPreset = (name: Exclude<CampaignPreset, 'custom'>) => setColumns([...CAMPAIGN_PRESETS[name].columns])
-  const toggleColumn = (key: string) => setColumns(columns.includes(key) ? columns.filter((k) => k !== key) : [...columns, key])
-  const applySavedView = (v: SavedView) => {
-    const f = v.filters ?? {}
-    if (Array.isArray(f.columns) && f.columns.length > 0) setColumns(f.columns)
-    setStatus(typeof f.status === 'string' ? f.status : '')
-    setObjective(typeof f.objective === 'string' ? f.objective : '')
-    setSort(typeof f.sort === 'string' ? f.sort : '')
-    setDir(f.dir === 'asc' ? 'asc' : 'desc')
-    if (typeof v.date_range?.days === 'number') setDays(v.date_range.days)
-  }
-  const visibleColumns = CAMPAIGN_COLUMNS.filter((c) => columns.includes(c.key)).sort((a, b) => columns.indexOf(a.key) - columns.indexOf(b.key))
-
-  const applySort = (column: string) => {
-    if (sort === column) {
-      setDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-
-      return
-    }
-
-    setSort(column)
-    /* Names read A→Z; figures read largest first, which is what «show me the biggest» means. */
-    setDir(column === 'name' ? 'asc' : 'desc')
-  }
-
   const [modalOpen, setModalOpen] = useState(false)
-  /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» in the rail is this page with its builder open (`?launch=1`). The builder is the
-   * same one the «new campaign» button opens; the address only says «open it», and closing it removes the parameter so
-   * Back and a reload do not reopen it. Someone without `campaigns.create` is not shown a builder they cannot submit;
-   * they are told why instead.
-   */
-  const [launch, setLaunch] = useUrlState('launch', '')
-  const launching = launch === '1'
-  const closeBuilder = () => {
-    setModalOpen(false)
-    if (launching) setLaunch('')
-  }
   const range = useLastNDaysRange(days)
 
-  /*
-   * The canonical key expanded into the raw objectives the API filters on — the same expansion the
-   * dashboard and Analytics do, through the same mirror. Undefined rather than an empty string when
-   * nothing is chosen, because an empty value is «no filter» and must not be sent as one.
-   */
-  const objectiveParam = useMemo(() => {
-    const raw = rawObjectivesFor(objective === '' ? 'all' : (objective as CanonicalObjectiveKey))
-
-    return raw.length === 0 ? undefined : raw.join(',')
-  }, [objective])
-
   // Everything below is PROJECT-SCOPED — cache keys + endpoints carry projectId; disabled without one.
-  /*
-   * A change of scope puts the reader back on page one — page 3 of a narrower list is nowhere, and
-   * the relevance ranking it was cut from no longer exists.
-   */
-  const [page, setPage] = useState(1)
-
-  useEffect(() => setPage(1), [projectId, status, objectiveParam, search])
-
-  const metricCampaigns = useCampaigns(projectId, range)
-
-  /* Relevance is read from the metrics window; before it answers, nothing about it is known. */
-  const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
-  /*
-   * CAMPAIGNS-PROVISIONAL-LIST-001 — pending and failed are two different answers.
-   *
-   * FAILED never resolves, so the page shows every campaign and says why (`lifecycle-degraded`).
-   * PENDING resolves in a moment, and a list shown in that moment is PROVISIONAL: the unfiltered
-   * answer, replaced by the narrowed one once the figures land. Measured on firefox, that swap lifted
-   * every card 44px, reordered them and removed one — so a click in the window hit a card that moved
-   * or vanished. Nothing clickable is offered until the figures answer.
-   */
-  const metricsPending = metricCampaigns.isPending && !metricCampaigns.isError
-
   const campaignsQuery = useQuery({
-    /*
-     * ANALYTICS-OBJECTIVE-SYSTEM-001 — the reader picks a canonical objective, the server gets the
-     * raw ones it covers.
-     *
-     * `objectiveParam` is part of the key as well as the request: it is what actually narrows the
-     * query, and keying on the canonical label instead would be one cache entry per label over
-     * whatever the previous scope fetched.
-     */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown }, page],
-    /*
-     * The answer records whether it was JUDGED — asked with the figures in hand — because
-     * `placeholderData` holds the previous answer while the next one loads, and the previous answer
-     * across the pending → known flip is exactly the provisional list this must never show.
-     */
-    queryFn: async () => ({ ...(await listCampaigns(projectId!, {
-      status: status || undefined, objective: objectiveParam, search: search || undefined,
-      /*
-       * «all» is the absence of the filter, not a third value the server has to know about.
-       *
-       * And nothing is asked for while the metrics window has not answered. The rule this page has
-       * always kept is that a view which cannot be computed is not «nothing is active»: narrowing
-       * before the reader's own metrics have arrived would render a short list, and a short list is
-       * read as a fact about the account rather than as a request still in flight. The server could
-       * answer — it computes relevance from its own query — but the page cannot yet TELL the reader
-       * which of the two they are looking at, and that is the part that matters.
-       */
-      lifecycle: lifecycle === 'all' || !metricsKnown ? undefined : lifecycle,
-      /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
-      sort: sort || undefined, dir: sort ? dir : undefined,
-      page, from: range.from, to: range.to,
-    })), judged: metricsKnown }),
+    queryKey: ['project', projectId, 'campaigns', { status, objective, search }],
+    queryFn: () => listCampaigns(projectId!, { status: status || undefined, objective: objective || undefined, search: search || undefined }),
     enabled: Boolean(projectId),
-    placeholderData: (prev) => prev,
   })
-  /* The provisional window: figures in flight, or held over from an answer asked without them. */
-  const listProvisional = metricsPending || (metricsKnown && campaignsQuery.data?.judged === false)
   const summary = useSummary(projectId, range)
-  /* CAMPAIGNS-MONEY-CURRENCY-001 — the window's reporting currency, for every money reading on a row. */
-  const reportingCurrency = summary.data?.currency ?? null
-
-  /*
-   * WHICH project, and HOW CURRENT — the two head facts this page could not answer.
-   *
-   * The project name comes from the list the switcher already holds, so no request is added for it.
-   * Freshness is the newest arrival across the project's own sources, from the canonical freshness
-   * endpoint every analytics surface reads — not a second rule invented here.
-   */
-  const projectList = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
-  const projectName = projectList.data?.find((p) => p.id === projectId)?.name ?? null
-
-  const freshness = useFreshness(projectId, range)
-  const freshestAt = useMemo(
-    () => (freshness.data?.rows ?? [])
-      .map((row) => row.data_freshness_at)
-      .filter((at): at is string => at !== null)
-      .sort()
-      .at(-1) ?? null,
-    [freshness.data],
-  )
   const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
   const platforms = usePlatforms(view === 'overview' ? projectId : null, range)
   const budget = useBudget(projectId, range)
+  const metricCampaigns = useCampaigns(projectId, range)
 
-  /*
-   * CAMPAIGNS-LEDGER-001 — the rows are a page; the counts are the PROJECT's.
-   *
-   * The endpoint handed over every campaign and these counts were taken from the array it returned.
-   * Campaigns are the one list here that grows without a ceiling, and a donut of the first
-   * twenty-five looks exactly like a donut of the project — which is why the counts could not simply
-   * follow the rows into a page.
-   *
-   * The ordering moved to the server with the page, for the same reason: re-ordering twenty-five rows
-   * in the browser would make «what is running» mean «what is running among the newest twenty-five».
-   */
-  const campaigns = campaignsQuery.data?.campaigns ?? []
+  const campaigns = campaignsQuery.data ?? []
   const counts = useMemo(() => {
-    const server = campaignsQuery.data?.counts ?? {}
-    const c: Record<string, number> = { total: campaignsQuery.data?.total ?? 0 }
-    for (const s of CAMPAIGN_STATUSES) c[s] = server[s] ?? 0
-
+    const c: Record<string, number> = { total: campaigns.length }
+    for (const s of CAMPAIGN_STATUSES) c[s] = campaigns.filter((x) => x.status === s).length
     return c
-  }, [campaignsQuery.data])
+  }, [campaigns])
 
+  const statusDonut = useMemo(
+    () => CAMPAIGN_STATUSES.map((s) => ({ name: campaignStatusLabel(s, locale), value: counts[s] ?? 0 })).filter((d) => d.value > 0),
+    [counts, locale],
+  )
   /*
    * CAMP-BUDGET-CURRENCY-001 — «الميزانية 80K · مصروف 3.7K». Eighty thousand of what?
    *
@@ -385,21 +107,9 @@ export function CampaignsPage() {
      * figure (a partial or mixed row carries `spent: null`) AND they all agree on one currency. A
      * partial campaign is not 0, and summing only the convertible subset states less than was spent
      * as though it were the whole. Any of those ⇒ unavailable, never `Number(r.spent ?? 0)`.
-     *
-     * A TOTAL fails closed. The two spend CHARTS below deliberately do not: see `rankableMoney`.
      */
     const spendComplete = b.length > 0 && b.every((r) => r.spent !== null) && spentCurrencies.size <= 1
     const spent = spendComplete ? b.reduce((a, r) => a + Number(r.spent ?? 0), 0) : null
-    /*
-     * CAMPAIGN-BUDGET-TRUTH-001 — WHY there is no single spend figure, counted by cause.
-     *
-     * The strip said «partial or multi-currency» for every refusal. On the demo project every row is
-     * SAR and none is partial; seven campaigns simply have nothing measured in the window (Owner
-     * directive 2026-10-09 §19 — an absence, not a zero), and the sentence named a cause that was not
-     * there. The two causes are counted apart so the strip can name the one that applies.
-     */
-    const unmeasured = b.filter((r) => r.spent === null && r.pacing_basis === 'nothing_measured_in_window').length
-    const unreadable = b.filter((r) => r.spent === null).length - unmeasured
 
     const budgetCurrency = currencies.size === 1 ? [...currencies][0] : null
     const spentCurrency = spentCurrencies.size === 1 ? [...spentCurrencies][0] : null
@@ -417,8 +127,6 @@ export function CampaignsPage() {
       currency: budgetCurrency,
       spentCurrency,
       currencyCount: currencies.size,
-      unmeasured,
-      unreadable,
       /*
        * Whether there is a budget to speak about at all.
        *
@@ -429,51 +137,24 @@ export function CampaignsPage() {
       known: b.length > 0,
     }
   }, [budget.data])
-  /*
-   * PARTIAL-WITHHELD-001 — the spend CHARTS drop and disclose, where the totals above fail closed.
-   *
-   * A donut and a ranking are not a total. Refusing all six platforms because one is withheld hides
-   * five that are perfectly known, so `rankableMoney` keeps every row that has a comparable
-   * magnitude in one currency, leaves the rest off, and reports how many it left — which each card's
-   * subtitle then states. A chart quietly showing fewer rows than the account has would be the same
-   * lie in another shape, so the count is never dropped on the floor.
-   */
+  // PARTIAL-WITHHELD-001 — «best campaigns by spend» must actually RANK: validate the WHOLE candidate
+  // set (null unless comparable in one currency), sort by real spend descending, THEN take the top 6.
+  // Slicing first and calling it «best» is arbitrary; a comparable subset is never ranked as global best.
   const topCampaigns = useMemo(() => {
-    const rows = (metricCampaigns.data ?? []).slice(0, 6)
-    const r = rankableMoney(rows as MoneyTotals[], 'spend', summary.data?.currency ?? null)
-    if (r === null) return null
-    return {
-      data: rows.flatMap((c, i) => {
-        const spend = r.values[i]
-        return spend === null ? [] : [{ label: String(c.campaign_name ?? '—'), spend, platform: String(c.provider ?? '') }]
-      }),
-      dropped: r.dropped,
-    }
+    const rows = metricCampaigns.data ?? []
+    const ranked = rankMoney(rows as MoneyTotals[], 'spend', summary.data?.currency ?? null)
+    if (ranked === null) return null
+    return ranked.order.slice(0, 6).map((i) => ({ label: String(rows[i].campaign_name ?? '—'), spend: ranked.values[i], platform: String(rows[i].provider ?? '') }))
   }, [metricCampaigns.data, summary.data?.currency])
 
-  const platformSpend = useMemo(() => {
-    const rows = platforms.data ?? []
-    const r = rankableMoney(rows as MoneyTotals[], 'spend', summary.data?.currency ?? null)
-    if (r === null) return null
-    return {
-      data: rows.flatMap((pl, i) => {
-        const value = r.values[i]
-        return value === null ? [] : [{ name: String(pl.provider), value }]
-      }),
-      dropped: r.dropped,
-    }
-  }, [platforms.data, summary.data?.currency])
+  // PARTIAL-WITHHELD-001 — the spend/revenue trend must plot effective money in one currency, or
+  // nothing: raw rows draw a withheld day as 0 and a partial day as a fabricated figure.
+  const moneySeries = resolveMoneySeries((timeseries.data ?? []) as Array<Record<string, unknown>>, ['spend', 'revenue'], summary.data?.currency ?? null)
 
-  /*
-   * PARTIAL-WITHHELD-001 (d/f) — the spend/revenue trend must plot EFFECTIVE money in one currency,
-   * or nothing. Raw rows draw a withheld day as 0 and a partial day as a fabricated figure; a trend
-   * cannot drop a point and stay honest, so it fails closed to «unavailable» (unlike the donut/
-   * ranking above, which drop-and-disclose).
-   */
-  const moneySeries = useMemo(
-    () => resolveMoneySeries((timeseries.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], summary.data?.currency ?? null),
-    [timeseries.data, summary.data?.currency],
-  )
+  const platformRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', summary.data?.currency ?? null)
+  const platformDonut = platformRank === null
+    ? null
+    : (platforms.data ?? []).map((p, i) => ({ name: String(p.provider), value: platformRank.values[i] }))
 
   // Per-campaign metric slice, keyed by campaign id — the needs-attention rules read from this and
   // report "no data" rather than assuming a campaign without metrics is healthy.
@@ -486,243 +167,13 @@ export function CampaignsPage() {
     return map
   }, [metricCampaigns.data])
 
-  /*
-   * CAMPAIGN-INTELLIGENCE-HUB — the workspace opens on what is RUNNING.
-   *
-   * It listed every campaign the project has ever had, newest first, so a project with two years of
-   * history opened on whatever was created last. The lifecycle is read through the shared
-   * `campaignRelevance` rule — status alone is the definition REPORT-SCOPE-SELECTION-001 warns
-   * against — joined to the two facts the metrics window carries.
-   *
-   * `metricsKnown` is the honest half: relevance cannot be computed before those rows arrive, and
-   * «active only» over unknown relevance would render an empty workspace as a statement about the
-   * account rather than about a request that has not answered.
-   */
-
-  const lifecycleRows = useMemo(
-    () => campaigns.map((c) => {
-      const m = metricsByCampaign.get(c.id) as (AttentionMetrics & { last_active_on?: string | null }) | undefined
-
-      return { ...c, last_active_on: m?.last_active_on ?? null, spend: m?.spend ?? null }
-    }),
-    [campaigns, metricsByCampaign],
-  )
-
-  /*
-   * CAMPAIGNS-LEDGER-001 — the SERVER narrowed this set; the browser only describes it.
-   *
-   * `lifecycleView` used to do the filtering here, over the twenty-five rows the page held, which
-   * made «active and spending» mean «whichever of the first page are active». The request carries
-   * the lifecycle now, so these rows are already the right ones and re-filtering them would be a
-   * second opinion about the same question.
-   *
-   * It is still called, for the one thing it knows that the server's answer cannot express: whether
-   * relevance was computable at all. When the metrics window has not answered, «active only» would
-   * render an empty workspace as a statement about the account rather than about a request still in
-   * flight, and the view says so instead.
-   */
-  const lifecycleShown = useMemo(
-    () => lifecycleView(lifecycleRows, { lifecycle: 'all', windowEnd: range.to, metricsKnown }),
-    [lifecycleRows, range.to, metricsKnown],
-  )
-
-  /*
-   * Counted by the server over the project, before it narrowed. A chip's number has to describe the
-   * list that chip leads to, and counting the rows we were handed would report «inactive 0» beside a
-   * control that reveals thirty.
-   */
-  const lifecycleCounts = campaignsQuery.data?.lifecycleCounts ?? lifecycleShown.counts
-
-  const visibleCampaigns = lifecycleShown.rows
-
-  /*
-   * The points the efficiency chart may plot, and the ones it must not.
-   *
-   * A point needs BOTH coordinates. A campaign whose spend is withheld, or whose cost per result the
-   * platform never reported, has no position — and placing it at zero would put the campaigns we know
-   * LEAST about in the corner that reads «cheap and efficient», which is the most confident spot on
-   * the chart handed to the least evidence. They are excluded and counted; the card states the count.
-   *
-   * Read through the same objective-aware helpers the table uses, so the chart and the row beneath it
-   * cannot disagree about the same campaign.
-   */
-  const efficiency = useMemo(() => {
-    const points: Array<{ id: string; name: string; spend: number; costPer: number }> = []
-    let excluded = 0
-
-    for (const c of visibleCampaigns) {
-      const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
-      const spendReading = campaignSpendReading(m, ar, reportingCurrency)
-      const cost = campaignEfficiency(c.objective, m, ar, reportingCurrency)
-
-      /*
-       * The READING decides whether there is a figure; the ROW supplies it.
-       *
-       * Only a `value` reading is the platform answering — withheld, not-provided and unavailable are
-       * all declines, and each must keep the campaign off the chart. But the reading carries display
-       * text («36.3K», «36,339.30»), and the first version of this parsed that: `Number('36.3K')` is
-       * NaN, so every campaign was excluded and the card announced «3 without both figures» over an
-       * estate where three had them. Caught by opening the page.
-       */
-      const plotted = spendReading !== null && spendReading.kind === 'value' && cost !== null && cost.reading.kind === 'value'
-      const spend = plotted ? Number(m?.spend ?? Number.NaN) : Number.NaN
-      const costPer = plotted ? Number((m ?? {})[cost.key] ?? Number.NaN) : Number.NaN
-
-      if (Number.isFinite(spend) && Number.isFinite(costPer) && spend > 0) {
-        points.push({ id: c.id, name: c.name, spend, costPer })
-      } else {
-        excluded += 1
-      }
-    }
-
-    return { points, excluded }
-  }, [visibleCampaigns, metricsByCampaign, ar])
-
-  /*
-   * ATTENTION-REQUEST-STATE-001 — a request that has not answered is not a finding about the account.
-   *
-   * Every flag below reads `metricsByCampaign.get(id)`, and that lookup is `undefined` for three
-   * different facts: the platform reported nothing for this campaign, the request is still in flight,
-   * and the request FAILED. `attentionFlags` then raises `no_metrics` — «لا توجد بيانات أداء لهذه
-   * الحملة في الفترة المحددة» — for all three, so opening the workspace flashed «تحتاج تدخلًا N» in
-   * warning tone with a banner offering to open the reasons, and a 403 or a dead metrics endpoint made
-   * that permanent: a claim about the customer's account assembled out of a request that never
-   * answered.
-   *
-   * `metricsKnown` is the page's OWN distinction, already used by the lifecycle view one memo below
-   * with a comment saying the same thing — a short list «is read as a fact about the account rather
-   * than as a request still in flight». Asking it here rather than inventing a second notion of
-   * «known». No verdict is produced until the figures are in, and the card says which of the two
-   * silences it is looking at rather than printing a zero that would read as «nothing is wrong».
-   *
-   * Found by the gate: `campaigns-overview-first.spec.ts` lost webkit four times in two days on this
-   * transient, because the slowest engine is the one that looks while the count is still wrong.
-   */
   const attention = useMemo(
-    () => !metricsKnown ? [] : orderAttention(campaigns
+    () => campaigns
+      // Pass the reporting currency so the over-budget flag never assumes reporting == budget currency.
       .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
       .filter((x) => x.flags.length > 0)
-      /*
-        ENTITY-RELEVANCE-ORDERING-001 — rank first, then a key that cannot move.
-
-        Severity is a small integer, so a dozen flagged campaigns are mostly ties, and `sort` left
-        those in whatever order the campaigns API returned. An operator working down a half-finished
-        list cannot tell whether it moved because something happened or because nothing did.
-      */
-      .map((x) => ({ ...x, id: x.c.id, rank: attentionRank(x.flags), name: x.c.name }))),
-    // The reporting currency decides whether an over-budget comparison is possible at all, so the
-    // flags must recompute when it arrives — otherwise the first render's «no verdict» would stick.
-    [campaigns, metricsByCampaign, summary.data?.currency, metricsKnown],
-  )
-
-  /*
-   * CAMPAIGNS-OVERVIEW-FIRST-001 — the portfolio in the order the owner asked to read it in.
-   *
-   * «Needs attention, active and spending, active but weak, paused recently, ended.» The lifecycle
-   * view already separates running from stopped; what it cannot express is whether the reader has
-   * something to DO about a row. The attention set is computed just above from the same flags the
-   * «تحتاج تدخلًا» list is built from, so the first campaign in this list and the first campaign in
-   * that one are the same campaign — two rankings over one set of flags would drift the moment
-   * either changed.
-   */
-  const attentionIds = useMemo(() => new Set(attention.map((a) => a.id)), [attention])
-
-  /*
-   * Computed over the campaigns the reader is actually looking at, not the whole project: an answer
-   * about «what needs attention» must describe the same set the list below it shows, or the two
-   * disagree and the reader cannot tell which is wrong.
-   *
-   * NEEDS-ATTENTION-ONE-DEFINITION-001 — and it is handed `attentionIds` rather than deciding for
-   * itself. It used to ask a second engine, so this strip and the card above it printed two
-   * different counts under the same words. It now sorts the rows the flags did NOT raise into
-   * «examined and fine» and «nothing could be said», which is the part it alone knows.
-   */
-  const landing = useMemo(
-    () => landingAnswer(
-      visibleCampaigns.map((c) => ({ id: c.id, objective: c.objective })),
-      metricsByCampaign as Map<string, Record<string, unknown>>,
-      budget.data,
-      attentionIds,
-    ),
-    [visibleCampaigns, metricsByCampaign, budget.data, attentionIds],
-  )
-
-  const orderedCampaigns = useMemo(
-    () => byPriority(
-      visibleCampaigns.map((c) => ({
-        ...c,
-        campaign_id: c.id,
-        needs_attention: attentionIds.has(c.id),
-        /*
-         * Efficiency is left UNJUDGED here rather than guessed.
-         *
-         * The server has no per-campaign efficiency verdict on this payload, and inventing one from
-         * a ratio would be a score — which this product does not draw. An unjudged campaign bands as
-         * «spending», not as «weak»: a verdict conjured from an absence is the coalesced zero again.
-         */
-        efficient: null,
-      })),
-      range.to,
-    ),
-    [visibleCampaigns, attentionIds, range.to],
-  )
-
-  /*
-   * CAMPAIGNS-OVERVIEW-FIRST-001 — «which campaigns are deteriorating, which are improving».
-   *
-   * The bands say what state a campaign is IN; they cannot say what CHANGED, and a reader scanning
-   * for a problem is usually looking for movement rather than for a level. `spend_change` is the
-   * per-campaign comparison the server already computes — `byCampaign()` takes the immediately
-   * preceding window, the same one the KPI strip's deltas are measured against, so the two cannot
-   * disagree about what «previous» means.
-   *
-   * SPEND movement, and the block says so. There is no per-campaign result or efficiency comparison
-   * on this payload, and deriving one from a single window would be a trend invented out of an
-   * absence.
-   */
-  const movement = useMemo(
-    () => movers(visibleCampaigns.map((c) => {
-      const m = metricsByCampaign.get(c.id) as { spend?: number | null; previous_spend?: number | null; spend_change?: number | null } | undefined
-
-      return {
-        id: c.id,
-        name: c.name,
-        spend: m?.spend ?? null,
-        previous_spend: m?.previous_spend ?? null,
-        spend_change: m?.spend_change ?? null,
-      }
-    })),
-    [visibleCampaigns, metricsByCampaign],
-  )
-
-  /*
-   * CAMPAIGNS-OVERVIEW-FIRST-001 — how the portfolio's money splits across what it is FOR.
-   *
-   * The overview could say what was spent and which platform took it; it could not say how much was
-   * buying sales and how much was buying awareness, which is the composition question a review
-   * actually asks. Deliberately NOT the conversion funnel — Analytics draws that, and «Analytics must
-   * go materially deeper, not the same blocks reordered» is a standing rule. A funnel decomposes one
-   * journey; this decomposes the portfolio.
-   */
-  const mix = useMemo(
-    () => objectiveMix(
-      (metricCampaigns.data ?? []) as Parameters<typeof objectiveMix>[0],
-      summary.data?.currency ?? null,
-    ),
-    [metricCampaigns.data, summary.data?.currency],
-  )
-
-  const bands = useMemo(
-    () => bandCounts(orderedCampaigns, range.to),
-    [orderedCampaigns, range.to],
-  )
-  /*
-   * CAMPAIGN-VIEWS-001 — the chip narrows the list to its band; the counts above stay over the
-   * whole set, so the strip keeps saying what the project holds while the table shows the band.
-   */
-  const shownCampaigns = useMemo(
-    () => (band === '' ? orderedCampaigns : orderedCampaigns.filter((c) => campaignBand(c, range.to) === band)),
-    [orderedCampaigns, band, range.to],
+      .sort((a, b) => attentionRank(b.flags) - attentionRank(a.flags)),
+    [campaigns, metricsByCampaign, summary.data?.currency],
   )
 
   const toggleCompare = (id: string) =>
@@ -742,14 +193,8 @@ export function CampaignsPage() {
    * Read through the canonical helpers, so this screen cannot disagree with the two that already
    * read the same totals correctly.
    */
-  /*
-   * Spend through the canonical reader, so this screen cannot disagree with the two that already
-   * read the same totals — a withheld or multi-currency total renders as the contract says, never
-   * as a zero.
-   */
-  /* Spend through the canonical reader, so this screen cannot disagree with the two that read the
-   * same totals — a withheld or multi-currency total renders as the contract says, never as zero. */
-  const spendText = formatMoneyReading(readMoney(k, 'spend', summary.data?.currency ?? null, ar), money)
+  const cpaText = rowCostPer(k, 'cpa', 'conversions', summary.data?.currency ?? null)
+  const roasText = rowRoas(k)
 
   /*
    * CAMP-COMPARE-001 — a delta is absent when there is nothing to compare against, not «unchanged».
@@ -757,8 +202,7 @@ export function CampaignsPage() {
    * `undefined` removes the pill; `null` renders the «— —» that made a missing comparison window
    * look like a flat month. Same reading the board uses, from the same field.
    */
-  // ANALYTICS-COVERAGE-COMPARABILITY-001 — and both windows whole, not merely populated.
-  const comparable = comparableWindows(summary.data)
+  const comparable = summary.data?.previous_rows_in_scope !== false
   const cmp = (v: number | null | undefined) => (comparable ? v ?? null : undefined)
 
   /*
@@ -775,138 +219,69 @@ export function CampaignsPage() {
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
           {ar ? 'الحملات' : 'Campaigns'}
         </h1>
-        {/* PROJECT-FIRST-VISIT-001 — the choice on the page, not a sentence pointing at the sidebar. */}
-        <ProjectChooser purpose="campaigns" />
+        <EmptyState
+          title={ar ? 'اختر مشروعًا' : 'Select a project'}
+          description={ar
+            ? 'حملات كل مشروع مستقلة — اختر مشروعًا من المبدّل لعرض حملاته.'
+            : 'Each project has its own campaigns — pick one from the switcher to see them.'}
+        />
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      {/*
-        PRODUCT-VISUAL-001 §4 §13 — the head answers WHERE, WHAT SCOPE, WHAT PERIOD, HOW FRESH.
-
-        It answered the first and nothing else: a 3xl «Campaigns», a provenance chip and a count.
-        WHICH project these campaigns belong to was only in the switcher on the rail, the period was
-        a button group three controls into the row below, and how current the figures were was
-        nowhere on the page at all — on a surface whose whole content is figures from a window.
-
-        Same `PageIntro` as the portfolio, the projects list, the dashboard and the project context,
-        so a reader crossing between them is not re-learning where the answers live.
-      */}
-      <PageIntro
-        testid="campaigns-intro"
-        eyebrow={projectName ?? ''}
-        title={ar ? 'الحملات' : 'Campaigns'}
-        badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
-        meta={
-          <>
-            <PeriodLabel from={range.from} to={range.to} testId="campaigns-period" />
-            {/*
-              Freshness from the project's own freshness endpoint — the newest arrival across its
-              sources. `null` while it answers, which `DataFreshness` already draws as «لم تصل
-              بيانات بعد» rather than as a guess.
-            */}
-            <DataFreshness
-              lastSyncAt={freshestAt}
-              ar={ar}
-              staleAfterHours={STALE_AFTER_HOURS}
-              testid="campaigns-freshness"
-            />
-          </>
-        }
-        actions={
-          /*
-           * VISUAL-DECISION-001 — the operational header: find, narrow, choose a window, create.
-           *
-           * Search and the two taxonomy selects sat below the view switcher, so «find the campaign I
-           * came for» lived underneath the charts rather than beside the title. They are controls
-           * over the whole page and read as one row with it. The state chips stay where they are —
-           * they are a narrowing OF the list and belong against the list.
-           */
-          <>
-          <div className="relative w-full sm:w-56">
-            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="campaigns-search"
-              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
-              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-            />
+      {/* Header — project context */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الحملات' : 'Campaigns'}</h1>
+            <ProvenanceBadge provenance={summary.data?.provenance} />
           </div>
-          {/* Sized, because the control is `w-full` by default and a full-width select in a header
-              row pushes everything after it onto a line of its own. */}
-          <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-          <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
+          <p className="mt-1 text-sm text-text-secondary">
+            <span className="tnum font-semibold text-text-primary">{counts.total}</span>{ar ? ' حملة في المشروع الحالي — كل مشروع معزول عن غيره.' : ' campaigns in the current project — each project is isolated from the others.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />
           {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
-          </>
-        }
-        kpis={
-          <>
-            {/*
-              The total, counted through the shared rule rather than written beside the number.
-              «1 in total» was fine; «1 campaigns» would not have been, and the noun is what makes
-              the sub readable on its own — «Active 1 · 2 campaigns in total».
-            */}
-            <StatCard
-              label={ar ? 'نشطة' : 'Active'}
-              value={String(counts.active ?? 0)}
-              sub={ar
-                ? `${countedCampaigns(counts.total, 'ar')} إجمالًا`
-                : `${countedCampaigns(counts.total, 'en')} in total`}
-              tone="success"
-            />
-            {/*
-              ATTENTION-REQUEST-STATE-001 — «0» is an answer, and there is not one yet.
-              Pending and failed are kept apart because they need different people: one resolves
-              itself, the other is a request somebody has to look at.
-            */}
-            <StatCard
-              testid="campaigns-attention"
-              label={ar ? 'تحتاج تدخلًا' : 'Needs attention'}
-              value={metricsKnown ? String(attention.length) : '—'}
-              sub={!metricsKnown
-                ? (metricCampaigns.isError
-                    ? (ar ? 'تعذّر قراءة أرقام الحملات' : 'The campaign figures could not be read')
-                    : (ar ? 'بانتظار أرقام الحملات' : 'Waiting for the campaign figures'))
-                : attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
-              tone={metricsKnown && attention.length > 0 ? 'warning' : undefined}
-            />
-            <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
-            <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
-          </>
-        }
-      />
+        </div>
+      </div>
 
-      {/*
-        * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.
-        *
-        * This was seven oversized cards over a budget block of four more, so eleven numbers stood
-        * between opening the page and seeing a campaign. The operator's questions on arrival are
-        * «what is running», «what needs me», «what is it costing», «what is it returning», and each
-        * now has one card.
-        *
-        * The rest did not become less true, only less loud. Budget, remaining, forecast, cost per
-        * result, ROAS and the paused count moved into a compact strip that reads in one line — and
-        * every money guarantee moved WITH them, through the same canonical readers, proved in
-        * `campaignSecondaryStrip.test.tsx` where the cards' own tests now live. Nothing is restated
-        * in a second place and nothing is computed twice.
+      {/* Summary cards — CURRENT PROJECT only */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
+        {/*
+          CAMP-COPY-001 — «تحتاج مراجعة» under a zero asserted that nothing needed reviewing and
+          that it needed reviewing. The caption follows the count, and the warning tone with it.
         */}
-
-      {/*
-        * The forecast comes from `portfolioBudget`, the same function the pacing block below reads,
-        * so the two cannot disagree about where the period is heading. The rest of the strip's
-        * budget figures keep the page's stricter spend rule — see the strip's own note.
-        */}
-      <CampaignSecondaryStrip
-        totals={k}
-        budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
-        currency={summary.data?.currency ?? null}
-        paused={counts.paused ?? 0}
-        ar={ar}
-      />
+        <StatCard
+          label={ar ? 'متوقفة' : 'Paused'}
+          value={String(counts.paused ?? 0)}
+          sub={(counts.paused ?? 0) > 0 ? (ar ? 'تحتاج مراجعة' : 'Need a look') : (ar ? 'لا شيء متوقف' : 'None paused')}
+          tone={(counts.paused ?? 0) > 0 ? 'warning' : undefined}
+        />
+        <StatCard
+          label={ar ? 'الميزانية' : 'Budget'}
+          value={!budgetTotals.known
+            ? '—'
+            : budgetTotals.currencyCount > 1
+              ? (ar ? `${budgetTotals.currencyCount} عملات` : `${budgetTotals.currencyCount} currencies`)
+              : money(budgetTotals.total, budgetTotals.currency ?? undefined)}
+          sub={!budgetTotals.known
+            ? (ar ? 'لم تُحدَّد ميزانية لأي حملة' : 'No campaign has a budget set')
+            : budgetTotals.currencyCount > 1
+              ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
+              : budgetTotals.spent === null
+                ? (ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency')
+                : ar
+                  ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
+                  : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
+        />
+        <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
+        <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
+        <StatCard label="ROAS" value={roasText} delta={cmp(d.roas)} />
+      </div>
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface-secondary p-1">
@@ -934,67 +309,6 @@ export function CampaignsPage() {
 
       {view === 'overview' ? (
         <>
-          {/*
-            CAMPAIGNS-OVERVIEW-FIRST-001 — the portfolio's SHAPE, before any one campaign.
-
-            «Segment campaigns visually by active, needs attention, healthy, paused, ended.» Five
-            counts, in the order the list below them is ranked, so the strip and the list are the
-            same statement read twice rather than two answers a reader has to reconcile. Each band is
-            a door: clicking one narrows the list to it.
-
-            A band holding nothing is shown at zero rather than hidden — «no campaigns need
-            attention» is the answer somebody came for, and a strip that silently loses its most
-            important word when the news is good is a strip that cannot be trusted when it is bad.
-          */}
-          <div data-testid="campaigns-bands" className="flex flex-wrap gap-2">
-            {BANDS.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                data-testid={`campaigns-band-${b.id}`}
-                data-count={bands[b.id]}
-                /*
-                  Both keys in ONE write — `useUrlWriter` exists for exactly this.
-                  
-                  Two `useUrlState` setters in one handler do not compose: each functional update is
-                  applied against the params of the render it was created in, so the second silently
-                  drops the first. Moving `view` into the URL turned this pair from two `useState`
-                  calls into that trap, and the overview spec caught it on all three browsers — the
-                  band opened the list and the view stayed where it was.
-                */
-                aria-pressed={band === b.id}
-                onClick={() => writeUrl({
-                  view: { value: 'table', fallback: 'overview' },
-                  lifecycle: { value: 'all', fallback: 'active' },
-                  band: { value: band === b.id ? '' : b.id, fallback: '' },
-                })}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-                  band === b.id
-                    ? 'border-brand-500 bg-brand-500/10 text-text-primary'
-                    : b.id === 'attention' && bands[b.id] > 0
-                      ? 'border-warning/40 bg-warning/10 text-text-primary'
-                      : 'border-border bg-surface text-text-secondary hover:border-brand-400'
-                }`}
-              >
-                <span className="font-semibold">{ar ? b.ar : b.en}</span>
-                <span className="tnum font-bold text-text-primary" dir="ltr">{bands[b.id]}</span>
-              </button>
-            ))}
-          </div>
-
-          {/*
-            BUDGET-GOVERNANCE-001 — what is LEFT, where the period ENDS, and whether that is over.
-
-            The page showed a budget and what had been spent and stopped there, while the server had
-            already computed the remaining, the straight-line projection and the pace for every
-            campaign. DATA → VISUAL → COMPARISON → SHORT INTERPRETATION: four figures, a bar against
-            the elapsed budget, and one sentence that names the overrun in money rather than leaving
-            a ratio to be interpreted.
-
-            An incomparable scope reads «—» and says why. It never reads 0%, which an operator takes
-            as «we have spent nothing» when the truth is that nothing here could be added up.
-          */}
-          <BudgetPacingRow rows={budget.data ?? []} ar={ar} />
           {/* Charts — all from the project-scoped metrics API. */}
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
@@ -1004,195 +318,35 @@ export function CampaignsPage() {
                   ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
                   : <SpendRevenueAreaChart data={moneySeries.rows} currency={moneySeries.currency ?? undefined} height={200} />}
             </ChartCard>
-            <ChartCard
-              title={ar ? 'توزيع الإنفاق' : 'Where the spend went'}
-              subtitle={
-                platformSpend !== null && platformSpend.dropped > 0
-                  ? (ar ? `حسب المنصة — ${platformSpend.dropped} غير محتسَبة` : `By platform — ${platformSpend.dropped} withheld`)
-                  : (ar ? 'حسب المنصة' : 'By platform')
-              }
-            >
+            <ChartCard title={ar ? 'توزيع الإنفاق' : 'Where the spend went'} subtitle={ar ? 'حسب المنصة' : 'By platform'}>
               {platforms.isLoading
                 ? <Skeleton className="h-[200px]" />
-                : platformSpend === null
+                : platformDonut === null
                   ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — partial or multi-currency amounts'}</div>
-                  : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={200} currency={reportingCurrency ?? ''} />}
+                  : <PlatformDonutChart data={platformDonut} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
             </ChartCard>
           </div>
-          {/*
-            * VISUAL-DECISION-001 — the status donut is gone, and the ranking took its column.
-            *
-            * Status IS part-to-whole, so the shape was not wrong; the chart was. Every figure in it
-            * — active, paused, needs attention — is already a number in the health strip at the top
-            * of this page, so it restated what the reader had just read, as a picture, in a third of
-            * a row. One visualisation answers one decision, and «how do my campaigns break down by
-            * status» is not a decision anybody opens this page to make.
-            *
-            * The spend ranking underneath it answers one: which campaign is taking the money. It now
-            * has the width to show more than two bars.
-            */}
-          <div className="grid gap-4">
-            <ChartCard
-              title={ar ? 'أفضل الحملات' : 'Best campaigns'}
-              subtitle={
-                topCampaigns !== null && topCampaigns.dropped > 0
-                  ? (ar ? `حسب الإنفاق — ${topCampaigns.dropped} غير محتسَبة` : `By spend — ${topCampaigns.dropped} withheld`)
-                  : (ar ? 'حسب الإنفاق' : 'By spend')
-              }
-            >
+          <div className="grid gap-4 lg:grid-cols-3">
+            <ChartCard title={ar ? 'حالات الحملات' : 'Campaign statuses'} subtitle={ar ? 'توزيع الحالة' : 'How they break down'}>
+              {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel={ar ? 'الحملات' : 'Campaigns'} centerValue={String(counts.total)} height={190} /> : <EmptyState title={ar ? 'لا حملات' : 'No campaigns'} />}
+            </ChartCard>
+            <ChartCard title={ar ? 'أفضل الحملات' : 'Best campaigns'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'} className="lg:col-span-2">
               {topCampaigns === null
                 ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
-                : topCampaigns.data.length >= 2
-                  ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform currency={reportingCurrency ?? ''} />
-                  /*
-                   * One campaign is not a ranking, and the card says so instead of drawing something else.
-                   *
-                   * Observed on a seeded project with a single campaign: the card headed «Best campaigns
-                   * · By spend» rendered a 0% BUDGET ring. Two different measurements under one title is
-                   * worse than an empty card — a reader takes the figure for the one the heading promised,
-                   * and «0%» read as «this campaign has spent nothing» when it had spent 3.67K.
-                   *
-                   * The budget consumption it was borrowing is already on this page twice: in the pacing
-                   * row above and in the secondary strip. Nothing is lost by not restating it here.
-                   */
-                  : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted" data-testid="campaigns-top-single">
-                      {ar
-                        ? 'حملة واحدة فقط في هذا النطاق — لا ترتيب بلا شيء تُقارن به.'
-                        : 'Only one campaign in this scope — a ranking needs something to rank against.'}
-                    </div>}
+                : topCampaigns.length >= 2
+                  ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform />
+                  : budgetTotals.consumed !== null && budgetTotals.spent !== null
+                    ? <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>
+                    : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'استهلاك الميزانية غير متاح — المصروف بمبالغ جزئية أو بعملة مختلفة عن الميزانية' : 'Budget consumption unavailable — spend is partial or in a different currency'}</div>}
             </ChartCard>
           </div>
-          {/*
-            * VISUAL-DECISION-001 — the one chart the ranking and the column cannot replace.
-            *
-            * «Where is money going that is not working» needs both axes at once, and the campaign it
-            * names can sit mid-table on spend and mid-table on cost. The subtitle states how many
-            * campaigns could not be placed, because a chart that silently drops rows lies about the
-            * estate it claims to describe.
-            */}
-          <div className="grid gap-4">
-            <ChartCard
-              title={ar ? 'الإنفاق مقابل الكفاءة' : 'Spend against efficiency'}
-              subtitle={
-                efficiency.excluded > 0
-                  ? (ar ? `${efficiency.excluded} بلا إحداثيَّين — غير مرسومة` : `${efficiency.excluded} without both figures — not plotted`)
-                  : (ar ? 'أعلى يمينًا: إنفاق أكبر بتكلفة أعلى' : 'Up and right: more spend at a higher cost')
-              }
-            >
-              <SpendEfficiencyScatter points={efficiency.points} currency={summary.data?.currency ?? null} ar={ar} />
-            </ChartCard>
-          </div>
-          {mix !== null && mix.rows.length > 0 && (
-            <div data-testid="campaigns-objective-mix" className="rounded-2xl border border-border bg-surface p-4">
-              <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'}</h3>
-
-              {/*
-                TABLE-NUMERIC-ALIGNMENT-001 §58 — a consumer, not a twelfth hand-rolled table.
-                
-                This one needed nothing the primitive lacks: four columns, no row click, no sort, no
-                per-row identity anything reads. It was hand-rolled only because it was written
-                before the primitive was reachable, which is the whole category §58 asked to be
-                emptied rather than recorded. The numeric columns take the primitive's convention by
-                construction now, so they cannot drift from it again.
-                
-                What it keeps is the absence rule: a spend nobody could add stays «—», never a zero.
-              */}
-              <MetricTable
-                head={ar
-                  ? ['الهدف', 'الحملات', 'الإنفاق', 'النتائج']
-                  : ['Objective', 'Campaigns', 'Spend', 'Results']}
-                rows={mix.rows.map((r) => [
-                  canonicalObjectiveLabel(r.key, ar ? 'ar' : 'en'),
-                  <Num key="c">{num(r.campaigns)}</Num>,
-                  r.spend === null
-                    ? <span key="s" className="text-text-muted">—</span>
-                    : <Num key="s">{money(r.spend, mix.currency ?? undefined)}</Num>,
-                  <Num key="r">{num(r.results)}</Num>,
-                ])}
-              />
-
-              {(mix.dropped > 0 || mix.unclassified > 0) && (
-                <p data-testid="campaigns-objective-mix-note" className="mt-2 text-xs text-text-muted">
-                  {/*
-                    What this table could NOT place, said rather than dropped. A composition that
-                    quietly omits rows reads as the whole portfolio.
-                  */}
-                  {ar
-                    ? `${mix.dropped > 0 ? `${countedCampaigns(mix.dropped, 'ar')} بمبالغ غير قابلة للجمع. ` : ''}${mix.unclassified > 0 ? `${countedCampaigns(mix.unclassified, 'ar')} بهدف خارج التصنيف.` : ''}`
-                    : `${mix.dropped > 0 ? `${countedCampaigns(mix.dropped, 'en')} could not be added to this total. ` : ''}${mix.unclassified > 0 ? `${countedCampaigns(mix.unclassified, 'en')} carry an objective outside the taxonomy.` : ''}`}
-                </p>
-              )}
-            </div>
-          )}
-
-          {(movement.up.length > 0 || movement.down.length > 0) && (
-            <div data-testid="campaigns-movers" className="grid gap-3 lg:grid-cols-2">
-              {([['up', movement.up], ['down', movement.down]] as const).map(([dir, rows]) => (
-                <div key={dir} className="rounded-2xl border border-border bg-surface p-4">
-                  <h3 className="mb-2 text-sm font-bold text-text-primary">
-                    {dir === 'up'
-                      ? (ar ? 'الأكثر ارتفاعًا في الإنفاق' : 'Biggest rises in spend')
-                      : (ar ? 'الأكثر انخفاضًا في الإنفاق' : 'Biggest falls in spend')}
-                  </h3>
-
-                  {rows.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-text-muted">
-                      {dir === 'up'
-                        ? (ar ? 'لا حملة ارتفع إنفاقها في هذه الفترة.' : 'No campaign spent more this period.')
-                        : (ar ? 'لا حملة انخفض إنفاقها في هذه الفترة.' : 'No campaign spent less this period.')}
-                    </p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {rows.map((r) => (
-                        <li key={r.id} data-testid={`campaigns-mover-${r.id}`} className="flex items-center justify-between gap-3 text-sm">
-                          <Link to={`/app/campaigns/${r.id}`} className="truncate text-text-primary hover:text-brand-600">{r.name}</Link>
-                          <TrendPill delta={r.spend_change} />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/*
-            And what could NOT be ranked, said rather than dropped.
-
-            A campaign with no baseline did not «not move» — it did not exist in the comparison
-            window, or nothing was reported for it. Leaving those out silently would make the two
-            lists read as the whole portfolio.
-          */}
-          {movement.withoutBaseline > 0 && (
-            <p data-testid="campaigns-movers-unranked" className="text-xs text-text-muted">
-              {/* Counted through `lib/counted`: «1 حملة» and «3 حملات» are different words. */}
-              {ar
-                ? `${countedCampaigns(movement.withoutBaseline, 'ar')} بلا أساس للمقارنة — لم تكن تعمل في الفترة السابقة.`
-                : `${countedCampaigns(movement.withoutBaseline, 'en')} ${movement.withoutBaseline === 1 ? 'has' : 'have'} no baseline to compare against — ${movement.withoutBaseline === 1 ? 'it was' : 'they were'} not running in the previous period.`}
-            </p>
-          )}
-
           {attention.length > 0 && (
             <button onClick={() => setView('attention')} className="flex w-full items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-start text-sm text-text-primary hover:bg-warning/15">
               <TriangleAlert size={16} className="shrink-0 text-warning" />
-              {/*
-                Counted through the shared rule, and the VERB agrees with it.
-
-                «1 campaigns need attention» was on screen: the number was right, the noun was
-                plural and the verb was plural with it. Arabic had the same defect one word along —
-                «1 حملة تحتاج» is correct and «2 حملة تحتاج» is not, and the hand-written singular
-                was going to meet every other number.
-              */}
-              <span>
-                {ar
-                  ? `${countedCampaigns(attention.length, 'ar')} تحتاج تدخلًا — اعرض التفاصيل والأسباب.`
-                  : `${countedCampaigns(attention.length, 'en')} ${attention.length === 1 ? 'needs' : 'need'} attention — open ${attention.length === 1 ? 'it' : 'them'} for the detail and the reason.`}
-              </span>
+              <span><span className="tnum font-bold">{attention.length}</span>{ar ? ' حملة تحتاج تدخلًا — اعرض التفاصيل والأسباب.' : ' campaigns need attention — open them for the detail and the reason.'}</span>
             </button>
           )}
         </>
-      ) : view === 'history' ? (
-        <ProjectChangeHistory projectId={projectId} />
       ) : view === 'compare' ? (
         <CampaignComparison
           projectId={projectId}
@@ -1207,166 +361,51 @@ export function CampaignsPage() {
         <>
           {/* Filters — search + taxonomy chips for status and objective. */}
           <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'} className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
+              </div>
+              <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))]} />
+            </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
-            {/*
-              CAMPAIGN-INTELLIGENCE-HUB — what the workspace answers before the reader scrolls.
-
-              Counts of rows that carry their own evidence, never a score. «Nothing needs attention»
-              and «nothing could be examined» are separate answers, and a pacing question nobody
-              could measure is not answered «no».
-            */}
-            <LandingAnswer answer={landing} ar={ar} />
-              {/*
-                CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
-                Inactive is one click away with its count beside it: a campaign silently missing from a
-                list is worse than one sorted low.
-              */}
-              {LIFECYCLE_KEYS.map((key) => (
-                <Chip key={key} testid="lifecycle-chip" active={lifecycle === key} onClick={() => setLifecycle(key)}>
-                  {LIFECYCLE_LABELS[key][ar ? 'ar' : 'en']}{' '}
-                  <span className="tnum" data-testid={`lifecycle-count-${key}`}>{lifecycleCounts[key]}</span>
-                </Chip>
-              ))}
               <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
               {CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
                 <Chip key={s} active={status === s} onClick={() => setStatus(status === s ? '' : s)}>
                   {campaignStatusLabel(s, locale)} <span className="tnum">{counts[s]}</span>
                 </Chip>
               ))}
-              {/*
-                The chips offer the canonical objectives this project actually HAS campaigns for —
-                `canonicalOfRaw` maps each campaign's raw objective up, so a project of video buys
-                offers «الوعي والتفاعل» rather than a chip nobody can use.
-              */}
-              {CANONICAL_OBJECTIVE_KEYS.filter((o) => campaigns.some((c) => c.objective !== null && canonicalOfRaw(c.objective) === o)).map((o) => (
+              {CAMPAIGN_OBJECTIVES.filter((o) => campaigns.some((c) => c.objective === o)).map((o) => (
                 <Chip key={o} active={objective === o} onClick={() => setObjective(objective === o ? '' : o)}>
-                  {canonicalObjectiveLabel(o, locale)}
+                  {objectiveLabel(o, locale)}
                 </Chip>
               ))}
             </div>
-            {/*
-              A view that could not be computed is not «nothing is running».
-            
-              Relevance is read from the metrics window; before it arrives, or when it failed, every
-              campaign looks dark. Showing «active only» then would render an empty workspace as a fact
-              about the account rather than about a request that has not answered — so everything is
-              shown, and the page says why.
-            */}
-            {lifecycleShown.degraded && metricCampaigns.isError && (
-              <p data-testid="lifecycle-degraded" className="text-xs text-text-secondary">
-                {ar
-                  ? 'يُعرض كل الحملات — تعذّر تحديد النشِط منها حتى تصل مؤشرات الفترة.'
-                  : 'Showing every campaign — which of them are running cannot be told until this period’s metrics arrive.'}
-              </p>
-            )}
           </div>
 
-          {/*
-            CAMPAIGN-VIEWS-001 — the band the list is narrowed to, named, with its way out. The strip
-            of chips lives on the overview; once a chip has opened the list the reader must still see
-            what narrowed it and be able to widen it again without going back.
-          */}
-          {band !== '' && view !== 'attention' && (
-            <div data-testid="campaigns-band-active" className="flex items-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-sm text-text-primary">
-              <span>{ar ? 'المعروض:' : 'Showing:'}</span>
-              <span className="font-semibold">{(() => { const b = BANDS.find((x) => x.id === band); return b ? (ar ? b.ar : b.en) : band })()}</span>
-              <span className="tnum" dir="ltr">{shownCampaigns.length}</span>
-              <button
-                type="button"
-                data-testid="campaigns-band-clear"
-                onClick={() => writeUrl({ band: { value: '', fallback: '' } })}
-                className="ms-auto rounded-lg border border-border px-2 py-0.5 text-xs text-text-secondary hover:border-brand-400"
-              >
-                {ar ? 'عرض الكل' : 'Show all'}
-              </button>
-            </div>
-          )}
-
           {/* Campaign list */}
-          {campaignsQuery.isLoading || (listProvisional && view !== 'attention') ? (
-            <div data-testid="campaigns-list-pending" aria-busy="true" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
+          {campaignsQuery.isLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
           ) : campaigns.length === 0 ? (
             <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
           ) : view === 'attention' ? (
-            /*
-              ATTENTION-REQUEST-STATE-001 — «nothing needs attention» is an answer, and there is not
-              one yet.
-
-              Every rule this list runs reads the period's per-campaign figures. Before they arrive,
-              or when the request for them failed, the list used to fabricate a verdict out of their
-              absence — «no performance data for this campaign», on every campaign — and, once that
-              was gated, it swung to the opposite false claim and told the reader their whole project
-              was fine. The same distinction `lifecycle-degraded` already draws three blocks above,
-              drawn here: the page says which silence it is in, and a refusal says so separately
-              because it needs somebody to look rather than resolving itself.
-            */
-            !metricsKnown ? (
-              <EmptyState
-                title={ar ? 'لم تُقيَّم الحملات بعد' : 'The campaigns have not been judged yet'}
-                description={metricCampaigns.isError
-                  ? (ar
-                      ? 'تعذّر قراءة مؤشرات الفترة، فلا يمكن تحديد الحملات التي تحتاج تدخلًا. أعد المحاولة أو راجع صلاحياتك.'
-                      : 'This period’s figures could not be read, so the campaigns that need attention cannot be identified. Retry, or check your access.')
-                  : (ar
-                      ? 'ما إن تصل مؤشرات الفترة حتى تُعرض الحملات التي تحتاج تدخلًا وأسبابها.'
-                      : 'Once this period’s figures arrive, the campaigns that need attention will be listed with their reasons.')}
-              />
-            ) : attention.length === 0 ? (
+            attention.length === 0 ? (
               <EmptyState title={ar ? 'لا توجد حملات تحتاج تدخلًا' : 'Nothing needs attention'} description={ar ? 'كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة.' : 'Every campaign in this project is linked to its platform, spending within budget and producing results in the selected period.'} />
             ) : (
               <div className="space-y-2">
-                {/*
-                  * A container with a link in it, not a button with a link inside it.
-                  *
-                  * This was a `<button>` wrapping the whole card, and putting the campaign's own link
-                  * inside one nests an interactive element in an interactive element: invalid HTML,
-                  * ambiguous to a screen reader, unpredictable under keyboard. The name is the
-                  * control now — which is also the rule this page is held to, that a campaign name
-                  * is the way into its detail.
-                  */}
                 {attention.map(({ c, flags }) => (
-                  <div
+                  <button
                     key={c.id}
                     data-testid="attention-row"
+                    onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}
                     className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      {/*
-                        * The attention list is the most actionable surface here, so its names are
-                        * links too — a reader triaging six campaigns opens them in tabs. The card
-                        * around it still navigates, for the rest of its area.
-                        */}
-                      <span className="font-bold">
-                        <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
-                      </span>
+                      <span className="font-bold text-text-primary">{c.name}</span>
                       <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
                       <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
-                      {/*
-                        * VISUAL-DECISION-001 — what is at stake, beside why it is flagged.
-                        *
-                        * The list was ranked by severity and said nothing about size, so «three
-                        * campaigns need you» gave no way to choose between them. An operator triages
-                        * by impact: the one burning 36K outranks the one burning 300, whatever the
-                        * flag count says. Read through the same objective-aware helpers the table
-                        * uses, so a withheld spend or an unreported result says so here too.
-                        */}
-                      <span className="ms-auto flex items-center gap-3 text-xs text-text-secondary">
-                        <span className="inline-flex items-baseline gap-1">
-                          <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
-                          <MetricCell reading={campaignSpendReading(metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)} locale={locale} />
-                        </span>
-                        {(() => {
-                          const head = campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)
-
-                          return head === null ? null : (
-                            <span className="inline-flex items-baseline gap-1">
-                              <span className="text-text-muted">{head.label}</span>
-                              <MetricCell reading={head.reading} locale={locale} />
-                            </span>
-                          )
-                        })()}
-                      </span>
                     </div>
                     <ul className="space-y-1">
                       {flags.map((f) => (
@@ -1376,152 +415,28 @@ export function CampaignsPage() {
                         </li>
                       ))}
                     </ul>
-                  </div>
+                  </button>
                 ))}
               </div>
             )
-          ) : visibleCampaigns.length === 0 ? (
-            /*
-              A real empty active view — every campaign in this project has finished. The reader is told
-              that, with the count of what is there instead, rather than being shown the history as
-              though it were live.
-            */
-            <EmptyState
-              title={ar ? 'لا توجد حملات نشطة في هذه الفترة' : 'Nothing is running in this period'}
-              description={
-                ar
-                  ? `${countedCampaigns(lifecycleCounts.inactive, 'ar')} متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
-                  : `${countedCampaigns(lifecycleCounts.inactive, 'en')} have stopped or finished — open «Inactive» to see them.`
-              }
-            />
           ) : view === 'cards' ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {shownCampaigns.map((c) => (
-                <CampaignCard
-                  key={c.id}
-                  c={c}
-                  locale={locale}
-                  limits={spendLimits.data}
-                  headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)}
-                  efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar, reportingCurrency)}
-                  state={campaignState(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined)}
-                  /*
-                    Freshness from the SHARED relevance rule — the same one the lifecycle view and the
-                    ordering already read. A second definition of «is this still running» is how the
-                    list and the chip on its own rows end up disagreeing.
-                  */
-                  trend={{
-                    change: (metricsByCampaign.get(c.id) as { spend_change?: number | null } | undefined)?.spend_change ?? null,
-                    hasBaseline: ((metricsByCampaign.get(c.id) as { previous_spend?: number | null } | undefined)?.previous_spend ?? null) !== null,
-                  }}
-                  freshness={{
-                    relevance: campaignRelevance(
-                      {
-                        campaign_id: c.id,
-                        status: c.status,
-                        last_active_on: (metricsByCampaign.get(c.id) as { last_active_on?: string | null } | undefined)?.last_active_on ?? null,
-                        // Not read by the rule — spend decides ORDER, never relevance — but the row
-                        // shape is shared with the ordering, so it is supplied rather than widened.
-                        spend: (metricsByCampaign.get(c.id) as { spend?: number | null } | undefined)?.spend ?? null,
-                      },
-                      range.to,
-                    ),
-                    lastActiveOn: (metricsByCampaign.get(c.id) as { last_active_on?: string | null } | undefined)?.last_active_on ?? null,
-                  }}
-                  onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)}
-                />
-              ))}
+              {campaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-              <div className="flex flex-col gap-2 border-b border-border p-3" data-testid="campaigns-table-controls">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold text-text-secondary">{ar ? 'المقاييس:' : 'Metrics:'}</span>
-                  {(Object.keys(CAMPAIGN_PRESETS) as Array<Exclude<CampaignPreset, 'custom'>>).map((name) => (
-                    <button key={name} type="button" onClick={() => applyPreset(name)} aria-pressed={presetOf(columns) === name} data-testid={`campaigns-preset-${name}`}
-                      className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${presetOf(columns) === name ? 'border-brand-600 bg-brand-600 text-white' : 'border-border text-text-secondary hover:border-brand-400'}`}>
-                      {ar ? CAMPAIGN_PRESETS[name].ar : CAMPAIGN_PRESETS[name].en}
-                    </button>
-                  ))}
-                  {presetOf(columns) === 'custom' && <span className="rounded-lg border border-brand-600 px-2.5 py-1 text-xs font-bold text-brand-600" data-testid="campaigns-preset-custom">{ar ? 'مخصص' : 'Custom'}</span>}
-                  <button type="button" onClick={() => setChoosingColumns((v) => !v)} aria-expanded={choosingColumns} data-testid="campaigns-columns-toggle"
-                    className="ms-auto inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400">
-                    <Columns3 size={14} aria-hidden /> {ar ? 'الأعمدة' : 'Columns'}
-                  </button>
-                </div>
-                {choosingColumns && (
-                  <fieldset className="flex flex-wrap gap-2" data-testid="campaigns-columns">
-                    <legend className="sr-only">{ar ? 'الأعمدة الظاهرة' : 'Visible columns'}</legend>
-                    {CAMPAIGN_COLUMNS.map((c) => (
-                      <label key={c.key} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-text-primary">
-                        <input type="checkbox" checked={columns.includes(c.key)} onChange={() => toggleColumn(c.key)} data-testid={`campaigns-column-${c.key}`} />
-                        {columnLabel(c, locale)}
-                      </label>
-                    ))}
-                  </fieldset>
-                )}
-                <CampaignViewsBar
-                  current={{ status, objective, columns, sort: sort || undefined, dir }}
-                  days={days}
-                  onApply={applySavedView}
-                  ar={ar}
-                />
-                <BulkCampaignActions
-                  projectId={projectId}
-                  selected={shownCampaigns.filter((c) => selectedIds.includes(c.id)).map((c) => ({ id: c.id, name: c.name }))}
-                  onClear={() => setSelectedIds([])}
-                  ar={ar}
-                />
-              </div>
-              <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm" data-testid="campaigns-table">
-                <thead>
-                  <tr className="border-b border-border text-xs text-text-muted">
-                    <th className="p-3 text-start">
-                      <input type="checkbox" aria-label={ar ? 'تحديد الكل' : 'Select all'} data-testid="campaigns-select-all"
-                        checked={shownCampaigns.length > 0 && shownCampaigns.every((c) => selectedIds.includes(c.id))}
-                        onChange={(e) => setSelectedIds(e.target.checked ? shownCampaigns.map((c) => c.id) : [])} />
-                    </th>
-                    <SortableHeader id="name" label={ar ? 'الحملة' : 'Campaign'} sort={sort} dir={dir} onSort={applySort} ar={ar} />
-                    <th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th>
-                    <th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th>
-                    {visibleColumns.map((col) => col.sort
-                      ? <SortableHeader key={col.key} id={col.sort} label={columnLabel(col, locale)} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
-                      : <th key={col.key} className={`p-3 ${col.align === 'start' ? 'text-start' : 'text-center'}`} data-testid={`campaigns-head-${col.key}`}>{columnLabel(col, locale)}</th>)}
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
+                <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">{ar ? 'الحملة' : 'Campaign'}</th><th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th><th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th><th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th><th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th></tr></thead>
                 <tbody>
-                  {shownCampaigns.map((c) => {
-                    const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
-                    const cell = (key: string) => {
-                      const col = CAMPAIGN_COLUMNS.find((x) => x.key === key)!
-                      switch (col.kind) {
-                        case 'spend': return <MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} />
-                        case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
-                        case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
-                        case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
-                        case 'budget': return <span className="tnum">{money(c.total_budget, c.budget_currency)}</span>
-                        case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
-                        case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
-                        default: {
-                          const spec = SPECS[key]
-                          return spec && m ? <MetricCell reading={readMetric(key, spec, m as Record<string, number | null>, undefined, reportingCurrency)} locale={locale} /> : <span className="text-text-muted">—</span>
-                        }
-                      }
-                    }
-                    return (
-                      <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
-                        <td className="p-3"><input type="checkbox" aria-label={c.name} checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} data-testid={`campaigns-select-${c.id}`} /></td>
-                        <td className="p-3 font-semibold" data-testid="campaign-row-name">
-                          <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
-                        </td>
-                        <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
-                        <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
-                        {visibleColumns.map((col) => (
-                          <td key={col.key} className={`p-3 ${col.align === 'start' ? 'text-start' : 'text-center'}`} data-testid={`campaigns-cell-${col.key}`}>{cell(col.key)}</td>
-                        ))}
-                      </tr>
-                    )
-                  })}
+                  {campaigns.map((c) => (
+                    <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
+                      <td className="p-3 font-semibold text-text-primary">{c.name}</td>
+                      <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
+                      <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
+                      <td className="tnum p-3 text-end">{money(c.total_budget, c.budget_currency)}</td>
+                      <td className="tnum p-3 text-end">{c.external_campaigns_count ?? 0}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table></div>
             </div>
@@ -1529,60 +444,15 @@ export function CampaignsPage() {
         </>
       )}
 
-      {/*
-        No silent caps. Twenty-five of two hundred with nothing saying so is indistinguishable from a
-        project that has twenty-five campaigns — and the rows are the most RELEVANT twenty-five, not
-        the newest, which is a promise worth stating where it is kept.
-      */}
-      {(campaignsQuery.data?.lastPage ?? 1) > 1 && (
-        <nav className="flex items-center justify-between gap-3 text-sm" data-testid="campaigns-pager">
-          <span className="text-text-secondary">
-            {ar
-              ? `${campaigns.length} من ${counts.total} — صفحة ${campaignsQuery.data?.page ?? 1} من ${campaignsQuery.data?.lastPage ?? 1}`
-              : `${campaigns.length} of ${counts.total} — page ${campaignsQuery.data?.page ?? 1} of ${campaignsQuery.data?.lastPage ?? 1}`}
-          </span>
-          <span className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={(campaignsQuery.data?.page ?? 1) <= 1}
-              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
-            >
-              {ar ? 'السابق' : 'Previous'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={(campaignsQuery.data?.page ?? 1) >= (campaignsQuery.data?.lastPage ?? 1)}
-              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
-            >
-              {ar ? 'التالي' : 'Next'}
-            </button>
-          </span>
-        </nav>
-      )}
-
-      <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
-      {launching && !canCreate && (
-        <p role="status" data-testid="launch-not-permitted" className="mt-3 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
-          {ar ? 'إطلاق الحملات يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
-        </p>
-      )}
+      <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} projectId={projectId} />
     </div>
   )
 }
 
-/**
- * `testid` defaults to `taxonomy-chip` — the status and objective chips, which narrow the QUERY.
- *
- * The lifecycle chips pass their own, because they are a different kind of control: they group the
- * campaigns already fetched by whether they are running, and a test reaching for «the second
- * taxonomy chip» must not silently land on one of them.
- */
-function Chip({ active, onClick, children, testid = 'taxonomy-chip' }: { active: boolean; onClick: () => void; children: React.ReactNode; testid?: string }) {
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
-      data-testid={testid}
+      data-testid="taxonomy-chip"
       aria-pressed={active}
       onClick={onClick}
       className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
@@ -1594,173 +464,20 @@ function Chip({ active, onClick, children, testid = 'taxonomy-chip' }: { active:
   )
 }
 
-/**
- * UX-KPI-PRESENTATION-001 — the shared card.
- *
- * This one drew its value with no `dir`, which in an Arabic layout lets the bidi algorithm reorder
- * «1.2K SAR» into «SAR 1.2K» and move a minus sign to the wrong end of a delta.
- */
-/**
- * This page's shorthand over the shared card — `testid` included, deliberately.
- *
- * It was dropped here, which made the PROJECT total unaddressable: a test asserting «the subset is
- * not shown as the whole» could only search the whole document, and the moment the overview drew a
- * truthful per-campaign figure on the same screen the two became indistinguishable. A wrapper that
- * silently discards a prop is a wrapper that decides what may be asserted.
- */
-function StatCard({ label, value, sub, delta, invert, tone, testid }: { label: string; value: string; sub?: string; delta?: number | null; invert?: boolean; tone?: 'success' | 'warning'; testid?: string }) {
+function StatCard({ label, value, sub, delta, invert, tone }: { label: string; value: string; sub?: string; delta?: number | null; invert?: boolean; tone?: 'success' | 'warning' }) {
   return (
-    <SharedStatCard
-      label={label}
-      value={value}
-      hint={sub}
-      tone={tone ?? 'neutral'}
-      testid={testid}
-      trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invert} /> : undefined}
-    />
-  )
-}
-
-/**
- * A column header that orders the whole SET, not the page.
- *
- * `aria-sort` because a sortable table that only signals with an arrow is a table a screen-reader
- * user cannot navigate — and the arrow is drawn from the same state, so the two cannot disagree.
- */
-function SortableHeader({
-  id, label, sort, dir, onSort, ar, align = 'start',
-}: {
-  id: string
-  label: string
-  sort: string
-  dir: 'asc' | 'desc'
-  onSort: (column: string) => void
-  ar: boolean
-  align?: 'start' | 'end'
-}) {
-  const on = sort === id
-
-  return (
-    <th
-      className={`p-0 text-${align}`}
-      aria-sort={on ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    >
-      <button
-        type="button"
-        data-testid={`campaigns-sort-${id}`}
-        onClick={() => onSort(id)}
-        className={`flex w-full items-center gap-1 p-3 text-${align} ${on ? 'font-bold text-text-primary' : 'text-text-muted hover:text-text-secondary'} ${align === 'end' ? 'justify-end' : ''}`}
-        aria-label={ar ? `رتّب حسب ${label}` : `Sort by ${label}`}
-      >
-        <span>{label}</span>
-        {on && <span aria-hidden className="text-[10px]">{dir === 'asc' ? '▲' : '▼'}</span>}
-      </button>
-    </th>
-  )
-}
-
-/**
- * One figure in a comparison column, or nothing where the product has no answer.
- *
- * `null` is «this campaign's objective has no such figure» — a brand campaign has no cost per order
- * — and it renders as «—» rather than as a zero or a blank. `ReadingCell` below is the richer card
- * version; this is the compact one a table needs.
- */
-function MetricCell({ reading, locale }: { reading: MetricReading | null; locale: 'ar' | 'en' }) {
-  if (reading === null) {
-    return <span className="text-text-muted">—</span>
-  }
-
-  return <ReadingCell reading={{ key: '', label: '', reading }} locale={locale} />
-}
-
-/** One named figure, or the honest reason there is not one. Never a score. */
-function ReadingCell({ reading, locale }: { reading: CampaignHeadline; locale: 'ar' | 'en' }) {
-  return (
-    <span
-      className="rounded-lg bg-surface-secondary px-2 py-1.5"
-      data-testid={`campaign-headline-${reading.key}`}
-      data-state={reading.reading.kind}
-    >
-      {reading.label}
-      <b className="tnum block text-text-primary">
-        {reading.reading.kind === 'value'
-          ? reading.reading.text
-          : reading.reading.kind === 'not_provided'
-            ? (locale === 'ar' ? 'لم ترسله المنصة' : 'Not provided')
-            : '—'}
-      </b>
-    </span>
-  )
-}
-
-/** Freshness, in the shared rule's own vocabulary — never a second definition of «running». */
-const FRESHNESS_COPY: Record<CampaignRelevance, { ar: string; en: string }> = {
-  serving: { ar: 'تعمل', en: 'Serving' },
-  idle: { ar: 'خاملة', en: 'Idle' },
-  stopped: { ar: 'متوقفة', en: 'Stopped' },
-}
-
-/** The row's own short phrasing — the panel explains, the row labels. */
-const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
-  not_delivering: { ar: 'لا تُعرض', en: 'Not delivering' },
-  weak_attraction: { ar: 'ضعف الجذب', en: 'Weak attraction' },
-  clicks_not_arriving: { ar: 'الضغطات لا تصل', en: 'Clicks not arriving' },
-  visits_lost: { ar: 'فقد زيارات', en: 'Visits lost' },
-  no_conversions: { ar: 'بلا تحويلات', en: 'No conversions' },
-  conversions_without_value: { ar: 'تحويلات بلا قيمة', en: 'Conversions without value' },
-}
-
-/**
- * The three answers, and the silences between them.
- *
- * Each count is rows that carry their own evidence — the diagnostic engine's finding, the backend's
- * own pacing — never a derived score. A count of zero is shown; a count that could not be computed
- * is said in words, because «0 overspending» and «nothing could be paced» are different answers and
- * a zero is read as the first.
- */
-function LandingAnswer({ answer, ar }: { answer: ReturnType<typeof landingAnswer>; ar: boolean }) {
-  const nothing = answer.needsAttention === 0 && answer.healthy === 0 && answer.unexamined === 0
-
-  if (nothing) return null
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="campaigns-landing-answer">
-      {answer.needsAttention > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-attention">
-          <TriangleAlert size={13} className="text-warning" />
-          {ar ? `${answer.needsAttention} تحتاج انتباهًا` : `${answer.needsAttention} need attention`}
-        </span>
-      )}
-      {answer.healthy > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-secondary" data-testid="landing-healthy">
-          {ar ? `${answer.healthy} بلا ملاحظات` : `${answer.healthy} with nothing to flag`}
-        </span>
-      )}
-      {/*
-        Never folded into «healthy». A campaign whose connector reported nothing is not a healthy
-        campaign, and counting it as one publishes an absence of evidence as evidence of health on the
-        first figure a reader sees.
-      */}
-      {answer.unexamined > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-text-muted" data-testid="landing-unexamined">
-          {ar ? `${answer.unexamined} بلا قياس` : `${answer.unexamined} not measured`}
-        </span>
-      )}
-      {answer.overpacing === null ? (
-        <span className="text-[11px] text-text-muted" data-testid="landing-pacing-unknown">
-          {ar ? 'لا يمكن قياس وتيرة الصرف لأي حملة' : 'No campaign’s pacing could be measured'}
-        </span>
-      ) : answer.overpacing > 0 ? (
-        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-overpacing">
-          {ar ? `${answer.overpacing} تصرف أسرع من الخطة` : `${answer.overpacing} spending ahead of plan`}
-        </span>
-      ) : null}
+    <div className="rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-text-secondary">{label}</span>
+        {delta !== undefined && <TrendPill delta={delta} invertGood={invert} />}
+      </div>
+      <div className={`tnum mt-1 text-2xl font-extrabold ${tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-text-primary'}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-text-muted">{sub}</div>}
     </div>
   )
 }
 
-function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend, limits, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; trend?: { change: number | null; hasBaseline: boolean }; limits?: SpendLimitsPage; onOpen: () => void }) {
+function CampaignCard({ c, locale, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -1771,213 +488,12 @@ function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend
       <div className="flex flex-wrap gap-1.5">
         <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
         <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
-        {/*
-          BUDGET-CONNECTED-001 — the internal spend limit, on the campaign it constrains.
-          
-          It reached its own page, the alert evaluator and the daily digest, and nowhere an operator
-          works: a campaign at 94% of a limit looked exactly like one with no limit at all here. The
-          chip draws nothing while everything is fine — a badge on every card teaches a reader to
-          stop seeing the badges, and the one that matters is the one they then miss.
-          
-          No `provider`: a unified campaign may carry externals on several platforms, so a
-          platform-scoped limit is undecidable from this row and is reported as unmatched rather
-          than guessed at. The project and campaign rungs match exactly.
-        */}
-        {limits !== undefined && (
-          <SpendLimitChip
-            campaign={{ campaign_id: c.id }}
-            limits={limits.limits}
-            enforcementNote={locale === 'ar' ? limits.enforcement_note_ar : limits.enforcement_note_en}
-            locale={locale}
-          />
-        )}
       </div>
-      <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+      <div className="grid grid-cols-2 gap-1.5 text-xs">
         <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
-        {/*
-          CAMPAIGN-INTELLIGENCE-HUB — the result this campaign was BOUGHT for, beside what it cost.
-          A budget and a count of linked platform campaigns say nothing about whether the money is
-          working; `campaignHeadline` names the metric the objective is judged on and states it, or
-          says the platform never sent it. Never a score.
-        */}
-        {headline ? (
-          <ReadingCell reading={headline} locale={locale} />
-        ) : (
-          <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'مرتبطة' : 'Linked'} <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
-        )}
-        {/*
-          What that result COST — a result on its own decides nothing. Forty orders is good or bad
-          depending on what was paid for them, and `readMetric` refuses a cost with nothing to divide
-          rather than printing a zero that was never measured.
-        */}
-        {efficiency && <ReadingCell reading={efficiency} locale={locale} />}
-        {/*
-          CAMPAIGN-INTELLIGENCE-HUB — the concise state, from the shared engine and NOT a score.
-          Rendered only when the row was actually judged: a campaign whose connector reported
-          nothing is unjudged, and showing it the same «fine» as an examined healthy campaign is the
-          opaque score this requirement forbids, wearing a word instead of a number.
-        */}
-        {/*
-          «Not measured» is its own state, and the row says it.
-
-          Without this the unexamined campaign and the examined-healthy one look identical — a blank
-          — which is the opaque score this requirement forbids, expressed as an absence instead of a
-          number. `judged` is false when nothing was spent or nothing was reported, and that is a
-          fact about the connector, not a verdict on the campaign.
-        */}
-        {/*
-          CAMPAIGN-INTELLIGENCE-HUB — freshness, said as a fact rather than a verdict.
-
-          A campaign that reported no active day in this window is NOT «stopped»: the platform did
-          not say it ended, and the window is the only evidence there is. So the chip names the
-          shared relevance rule's own answer and, where there is one, the day itself.
-        */}
-        {/*
-          CAMPAIGN-INTELLIGENCE-HUB — spend against the previous window, and only where there IS one.
-
-          A campaign with no row in that window did not exist yet or reported nothing, and a pill
-          reading «-100%» there is a collapse that never happened. The row says «لا أساس للمقارنة»
-          instead, because a missing trend and a flat trend are different facts and a muted pill
-          reading «—» is easily taken for the second.
-        */}
-        {trend !== undefined && (
-          trend.change !== null ? (
-            <span className="self-start" data-testid="campaign-trend">
-              <TrendPill delta={trend.change} />
-            </span>
-          ) : (
-            <span className="self-start text-[11px] text-text-muted" data-testid="campaign-trend-no-baseline">
-              {trend.hasBaseline
-                ? (locale === 'ar' ? 'لا تغيّر يمكن قياسه' : 'No measurable change')
-                : (locale === 'ar' ? 'لا أساس للمقارنة' : 'No baseline to compare')}
-            </span>
-          )
-        )}
-        {freshness !== undefined && (
-          <span
-            className="inline-flex items-center gap-1 self-start text-[11px] text-text-muted"
-            data-testid={`campaign-freshness-${freshness.relevance}`}
-          >
-            {locale === 'ar' ? FRESHNESS_COPY[freshness.relevance].ar : FRESHNESS_COPY[freshness.relevance].en}
-            {freshness.lastActiveOn !== null
-              ? ` · ${freshness.lastActiveOn}`
-              : ` · ${locale === 'ar' ? 'لا يوم نشط في هذه الفترة' : 'no active day in this window'}`}
-          </span>
-        )}
-        {state?.judged === false && (
-          <span
-            className="inline-flex items-center gap-1 self-start rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-text-muted"
-            data-testid="campaign-state-unmeasured"
-          >
-            {locale === 'ar' ? 'لا قياس بعد' : 'Not measured yet'}
-          </span>
-        )}
-        {state?.judged === true && state.finding !== null && (
-          <span
-            className="inline-flex items-center gap-1 self-start rounded-full border border-border px-2 py-0.5 text-[11px] text-text-secondary"
-            data-testid={`campaign-state-${state.finding.code}`}
-          >
-            <TriangleAlert size={11} className="text-warning" />
-            {CAMPAIGN_STATE_COPY[state.finding.code]
-              ? (locale === 'ar' ? CAMPAIGN_STATE_COPY[state.finding.code].ar : CAMPAIGN_STATE_COPY[state.finding.code].en)
-              : state.finding.code}
-            {state.finding.confidence === 'probable' && (
-              <span className="text-text-muted">{locale === 'ar' ? '· مرجَّح' : '· inferred'}</span>
-            )}
-          </span>
-        )}
+        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'مرتبطة' : 'Linked'} <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
       </div>
       {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> {locale === 'ar' ? 'بلا حملات خارجية مرتبطة' : 'No linked platform campaign'}</div>}
     </button>
   )
 }
-
-
-/**
- * The portfolio's budget as a decision, not a total.
- *
- * `portfolioBudget` owns the arithmetic and the refusals; this owns the reading. The sentence is
- * deliberately one line and names the overrun in MONEY: «سيتجاوز ٤٬٤٠٠ ر.س» is actionable, «1.1×»
- * is a ratio somebody has to convert before they can act on it.
- */
-export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }) {
-  const b = useMemo(() => portfolioBudget(rows), [rows])
-
-  if (b.budget === null) {
-    // Nothing to pace against is a fact worth stating once, not a row of dashes.
-    if (b.excluded === 0 && b.currencies === 0) return null
-
-    return (
-      <p className="text-xs text-text-muted" data-testid="budget-pacing-unavailable">
-        {b.currencies > 1
-          ? (ar ? `تعذّر جمع الميزانية — ${b.currencies} عملات مختلفة` : `Budget not totalled — ${b.currencies} different currencies`)
-          : (ar ? `لا ميزانية قابلة للمقارنة — ${countedCampaigns(b.excluded, 'ar')} خارج الحساب` : `No comparable budget — ${countedCampaigns(b.excluded, 'en')} excluded`)}
-      </p>
-    )
-  }
-
-  /*
-   * The third refusal — Owner directive 2026-10-09 §19. A budget whose window nobody read has no pace
-   * to draw; a bar at 0% here once said «nothing spent» about a project nobody had measured. The
-   * committed budget stays in the strip; here, the reason the pace is not stated.
-   */
-  if (b.pace === null && b.unmeasured > 0) {
-    return (
-      <p className="text-xs text-text-muted" data-testid="budget-pacing-unavailable">
-        {ar
-          ? `لا أرقام مقاسة لهذه الفترة — ${countedCampaigns(b.unmeasured, 'ar')} بميزانية لم تُقرأ مصادرها، فلا سرعة تُحسب على الميزانية`
-          : `No measured figures in this period — ${countedCampaigns(b.unmeasured, 'en')} with a budget whose sources were not read, so no pace against the budget is stated`}
-      </p>
-    )
-  }
-
-  const over = b.pace !== null && b.pace > 1
-  const overBy = b.projected !== null && b.budget !== null ? b.projected - b.budget : null
-
-  return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4" data-testid="budget-pacing">
-      {/*
-        The bar and the sentence. NOT the four figures again.
-
-        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · المصروف 3.67K · المتبقي
-        791K · المتوقع 3.67K» in the secondary strip and then the same four numbers, same order,
-        same currency, in this card a few hundred pixels below. A reader meeting a figure twice does
-        not read it twice — they stop to work out which of the two to believe.
-
-        The strip keeps them, because it is where the budget's REFUSALS live: «ميزانيات بعملات
-        مختلفة — لا تُجمع» and «المصروف غير متاح» are its wording, under a stricter spend rule than
-        this card applies. What this card has that nothing else does is the pacing — a bar drawn
-        against the budget so an overrun is visible past the end rather than clamped away, and one
-        sentence naming the overrun in money. That is what it now shows.
-      */}
-      {b.pace !== null && (
-        <div className="flex flex-col gap-1">
-          {/* The bar is against the BUDGET, so «past the end» is visible rather than clamped away. */}
-          <div className="h-2 overflow-hidden rounded-full bg-surface-secondary">
-            <div
-              className={`h-full rounded-full ${over ? 'bg-danger' : 'bg-brand-600'}`}
-              style={{ width: `${Math.min(100, (b.pace ?? 0) * 100)}%` }}
-            />
-          </div>
-          <span className={`text-xs font-semibold ${over ? 'text-danger' : 'text-text-secondary'}`} data-testid="budget-pacing-reading">
-            {over
-              ? (ar
-                  ? `بهذا المعدل سيتجاوز الإنفاق الميزانية بـ ${money(overBy, b.currency ?? undefined)}`
-                  : `At this rate spend will exceed the budget by ${money(overBy, b.currency ?? undefined)}`)
-              : (ar
-                  ? `ضمن الميزانية — متوقع ${money(b.projected, b.currency ?? undefined)} من ${money(b.budget, b.currency ?? undefined)}`
-                  : `Within budget — forecast ${money(b.projected, b.currency ?? undefined)} of ${money(b.budget, b.currency ?? undefined)}`)}
-          </span>
-        </div>
-      )}
-
-      {/* No silent caps: a campaign left out of the total is counted where the total is read. */}
-      {b.excluded > 0 && (
-        <span className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
-          {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
-        </span>
-      )}
-    </div>
-  )
-}
-

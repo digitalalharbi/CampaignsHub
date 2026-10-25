@@ -16,19 +16,6 @@
  */
 
 /** Everything a surface needs to render money honestly. */
-/**
- * The currency every figure in this product is aggregated and compared in (MONEY-USD-001).
- *
- * This is NOT a display preference and not a per-workspace setting. `value` is the column every read
- * path sums, so one basis is what makes two accounts — or two projects — addable at all. The backend
- * fixes it in `ReportingCurrency::DEFAULT`; this is the same fact for the surfaces that have to name
- * it when a payload does not.
- *
- * Reach for it only as a FALLBACK for a missing label. A payload that states its own currency is
- * telling you something this constant cannot: which currency that particular figure is really in.
- */
-export const CANONICAL_CURRENCY = 'USD'
-
 export type MoneyReading = {
   /** `converted` — a real figure in the reporting currency. `withheld` — real, in its own currency.
    *  `zero` — measured as nothing. `absent` — never reported. `unavailable` — cannot be stated. */
@@ -228,21 +215,35 @@ export function aggregateMoney(
 }
 
 /**
- * The spend as ONE figure in `targetCurrency`, or null — the single comparability rule.
+ * Per-row money values for a ranking or share chart — only when the whole set is comparable in one
+ * currency. Null (the chart must show «unavailable», not zero-height bars) when it is not, because a
+ * bar chart of riyals beside dollars, or a share of a partial total, is a monetary ranking nobody
+ * measured. Order matches `rows`.
+ */
+export function rankableMoney(
+  rows: MoneyTotals[],
+  key: 'spend' | 'revenue',
+  reportingCurrency: string | null,
+): { values: number[]; currency: string | null } | null {
+  const agg = aggregateMoney(rows, key, reportingCurrency)
+  if (agg === null) return null
+
+  const values = rows.map((row) => {
+    const s = moneyState(row, key)
+    return s.state === 'complete_withheld' ? s.original : (s.converted ?? 0)
+  })
+
+  return { values, currency: agg.currency }
+}
+
+/**
+ * A money key as ONE figure in a target currency (e.g. a campaign's budget currency), or null.
  *
- * A budget comparison is subtraction, so both sides must be the same unit. Two independent fields
- * decide that: the scope's money state, and which currency its figure is actually denominated in.
- * A converted total is in the project's REPORTING currency, which is not required to equal the
- * campaign's `budget_currency` — a project reporting in SAR may hold a campaign budgeted in USD.
- * Reading the converted number as if it were the budget's unit computes «budget − spend» across two
- * currencies and prints the result as money.
- *
- * So: a converted total counts only when the reporting currency IS the target; a withheld total only
- * when its own original currency is; partial and mixed have no single figure at all. Anything else
- * is null, and every caller renders «unavailable» rather than pacing against a number nobody can
- * compare. `rankableMoney` answers the neighbouring question for charts — which rows share an axis —
- * and deliberately may drop rows; this one never drops anything, because a total that omits part of
- * its scope is not that scope's total.
+ * The subtlety a comment cannot fix: `complete_converted` is in the REPORTING/project currency, which
+ * is not necessarily the target currency — so the reporting currency is passed and checked, never
+ * assumed equal. `zero` compares to anything; `complete_withheld` is usable only if its own currency
+ * is the target's; `partial`/`mixed`/`absent` have no single figure. Callers use this for remaining,
+ * utilization, over-budget — every spend-vs-budget derivation — and treat null as «unavailable».
  */
 export function spendComparableAmount(
   totals: MoneyTotals | undefined,
@@ -252,12 +253,10 @@ export function spendComparableAmount(
 ): number | null {
   if (targetCurrency === null || targetCurrency === '') return null
   const target = targetCurrency.toUpperCase()
-  const s = moneyState(totals as MoneyTotals, key)
+  const s = moneyState(totals, key)
   if (s.state === 'zero') return 0
   if (s.state === 'complete_converted') {
-    return reportingCurrency !== null && reportingCurrency !== '' && reportingCurrency.toUpperCase() === target
-      ? s.converted ?? 0
-      : null
+    return reportingCurrency !== null && reportingCurrency !== '' && reportingCurrency.toUpperCase() === target ? s.converted ?? 0 : null
   }
   if (s.state === 'complete_withheld') {
     return s.originalCurrency !== null && s.originalCurrency.toUpperCase() === target ? s.original : null
@@ -266,98 +265,25 @@ export function spendComparableAmount(
 }
 
 /**
- * Per-row money values for a ranking or share chart — DROP AND DISCLOSE, not all-or-nothing.
- *
- * A chart is not a total, and the two do not fail the same way. `aggregateMoney()` refuses the whole
- * figure the moment one row is unreadable, because a sum of half a scope printed as the scope is the
- * defect this contract exists to stop. A donut of six platforms is different: refusing all six
- * because one is withheld hides five that are perfectly known, and «unavailable» is then a worse
- * answer than the truth.
- *
- * So a row with no comparable magnitude is LEFT OFF and COUNTED, and every caller must render
- * `dropped` — a chart that silently shows fewer rows than the account has is the same lie in another
- * shape. What remains must still be honest on its own, which is the whole point of the currency rule
- * below: the kept rows are always one single currency, never riyals drawn beside dollars.
- *
- *   - `complete_converted` / `zero` — kept, in the reporting currency.
- *   - `complete_withheld`          — a platform figure, NOT comparable with a converted one. Kept
- *                                    only when no converted row exists and every withheld row agrees
- *                                    on one currency, which is the case where the whole chart can
- *                                    honestly be drawn in the platform's own unit.
- *   - `partial` / `mixed_currency` / `absent` — no single magnitude at all. Always dropped.
- *
- * A measured zero joins either group: it adds nothing and contradicts no currency.
- *
- * Returns null when NOTHING is comparable — then there is no chart to draw and the caller says so.
- * `values` is index-aligned with `rows`; a dropped row is null.
- */
-export function rankableMoney(
-  rows: MoneyTotals[],
-  key: 'spend' | 'revenue',
-  reportingCurrency: string | null,
-): { values: Array<number | null>; currency: string | null; dropped: number } | null {
-  const states = rows.map((row) => moneyState(row, key))
-
-  const hasConverted = states.some((s) => s.state === 'complete_converted')
-  const withheldCurrencies = new Set(
-    states.flatMap((s) => (s.state === 'complete_withheld' && s.originalCurrency !== null ? [s.originalCurrency] : [])),
-  )
-  /*
-   * Withheld rows are drawable only when they are the ONLY money on the axis and they agree on a
-   * unit. Beside a converted row they would be a second currency in the same donut; a withheld row
-   * with no currency name cannot be labelled at all.
-   */
-  const keepWithheld = ! hasConverted
-    && withheldCurrencies.size === 1
-    && states.every((s) => s.state !== 'complete_withheld' || s.originalCurrency !== null)
-
-  const values = states.map((s) => {
-    switch (s.state) {
-      case 'complete_converted':
-        return s.converted as number
-      case 'zero':
-        return 0
-      case 'complete_withheld':
-        return keepWithheld ? s.original : null
-      default:
-        return null
-    }
-  })
-
-  const dropped = values.filter((v) => v === null).length
-  // Nothing comparable to draw ⇒ no chart. An EMPTY set is not that case: it is «no rows yet», which
-  // the caller renders as its own empty state, not as «this money cannot be shown».
-  if (values.length > 0 && dropped === values.length) return null
-
-  return { values, currency: keepWithheld ? [...withheldCurrencies][0]! : reportingCurrency, dropped }
-}
-
-/**
  * Resolve a timeseries into EFFECTIVE money a chart may plot, or null when it may not.
  *
- * A money line/area is a claim in ONE currency at EVERY point. Plotting the raw/coalesced `spend`
+ * A money line/area is a claim in one currency at every point. Plotting the raw/coalesced `spend`
  * draws a withheld day as 0 (its real value lives in the original-amount provenance) and a partial or
- * mixed day as a fabricated figure — a false trend, which is worse than no trend.
- *
- * Unlike a donut, a trend line cannot DROP a point and stay honest: a gap day reads as a real dip,
- * not as an omission the reader was told about. So where `rankableMoney` keeps the comparable rows
- * and discloses a count, a series fails CLOSED — the moment any point is not a single figure in the
- * one shared currency (`rankableMoney` reports that as a dropped row), the whole series is «—». For
- * each money key every row must be a single figure in one currency, and the keys must agree on that
- * currency (SAR spend beside USD revenue is not one chart). When they do, each key is REPLACED by its
- * effective value (withheld→original, converted→converted, zero→0) and the currency returned.
+ * mixed day as a fabricated figure. This is the ONE place a caller turns rows into a chartable series:
+ * for each money key EVERY row must be a single figure in one shared currency, and the keys must
+ * agree on that currency (SAR spend beside USD revenue is not one chart). When they do, each money key
+ * is REPLACED by its effective value (withheld → original, converted → converted, zero → 0) and the
+ * currency returned; otherwise null, and the caller shows «unavailable» rather than a false trend.
  */
 export function resolveMoneySeries<T extends Record<string, unknown>>(
   rows: T[],
   keys: Array<'spend' | 'revenue'>,
   reportingCurrency: string | null,
 ): { rows: T[]; currency: string | null } | null {
-  const perKey = new Map<string, { values: Array<number | null>; currency: string | null }>()
+  const perKey = new Map<string, { values: number[]; currency: string | null }>()
   for (const key of keys) {
     const r = rankableMoney(rows as MoneyTotals[], key, reportingCurrency)
-    // null ⇒ nothing comparable; dropped > 0 ⇒ some point is partial/mixed/cross-currency. A trend
-    // tolerates neither, so either one closes the whole series.
-    if (r === null || r.dropped > 0) return null
+    if (r === null) return null // some row is partial / mixed / cross-currency for this key
     perKey.set(key, r)
   }
 
@@ -367,12 +293,32 @@ export function resolveMoneySeries<T extends Record<string, unknown>>(
 
   const out = rows.map((row, i) => {
     const copy: Record<string, unknown> = { ...row }
-    // Guarded above: dropped === 0, so every value is a real number, not null.
     for (const key of keys) copy[key] = perKey.get(key)!.values[i]
     return copy as T
   })
 
   return { rows: out, currency }
+}
+
+/**
+ * Rank rows by real money, descending — the honest engine behind a «top N by spend».
+ *
+ * `rankableMoney` proves comparability but does NOT order, and a `slice(0, N)` before it ranks the
+ * FIRST N rows, not the biggest. This validates the WHOLE candidate set (null unless every row is a
+ * single figure in one currency), then returns indices sorted by effective amount with a stable
+ * tie-break, so the caller maps + slices a true ranking. A comparable subset is never ranked and
+ * called «best»: if any candidate is not comparable, the ranking is unavailable.
+ */
+export function rankMoney(
+  rows: MoneyTotals[],
+  key: 'spend' | 'revenue',
+  reportingCurrency: string | null,
+): { order: number[]; values: number[]; currency: string | null } | null {
+  const r = rankableMoney(rows, key, reportingCurrency)
+  if (r === null) return null
+
+  const order = rows.map((_, i) => i).sort((a, b) => r.values[b] - r.values[a] || a - b)
+  return { order, values: r.values, currency: r.currency }
 }
 
 /**

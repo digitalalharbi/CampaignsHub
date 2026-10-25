@@ -39,14 +39,10 @@ final class DemoAnalyticsSeeder extends Seeder
     private const DEMO_UUID_NS = 'campaignshub-demo-analytics';
 
     /** archetype: [provider, name, ctr, cpc(orig currency), cvr, aov, spendScale, currency, phase, seasonal, note] */
-    /**
-     * The demo campaigns, grouped by platform IN THE PRODUCT'S ORDER (PLATFORM-ORDER-001).
-     *
-     * Demo data is the first thing a reviewer sees, and a demo whose platform sequence differs from
-     * the live product teaches the wrong shape. The rows, the figures and the `phase` ordinals are
-     * untouched — only which platform's block comes first.
-     */
     private const CAMPAIGNS = [
+        ['google', 'Google Search — Brand', 0.085, 0.90, 0.075, 420, 1.0, 'USD', 0, false, 'best_roas'],
+        ['google', 'Google Shopping — Catalog', 0.020, 0.72, 0.045, 380, 1.4, 'USD', 1, false, 'best_roas'],
+        ['google', 'Google PMax — Prospecting', 0.012, 0.58, 0.030, 350, 1.2, 'USD', 2, false, null],
         ['snapchat', 'Snap — Story Ads', 0.014, 0.9, 0.055, 300, 1.1, 'SAR', 0, false, 'best_cpa'],
         ['snapchat', 'Snap — Collection', 0.016, 1.1, 0.060, 320, 1.0, 'SAR', 1, false, 'best_cpa'],
         ['snapchat', 'Snap — Dynamic', 0.013, 1.0, 0.048, 290, 0.9, 'SAR', 2, false, null],
@@ -57,9 +53,6 @@ final class DemoAnalyticsSeeder extends Seeder
         ['meta', 'Meta — Retargeting', 0.024, 1.5, 0.070, 360, 1.1, 'SAR', 1, false, 'volume'],
         ['meta', 'Meta — Prospecting Broad', 0.015, 1.1, 0.038, 320, 1.5, 'SAR', 2, false, null],
         ['meta', 'Meta — Lead Gen (burner)', 0.021, 1.6, 0.0009, 0, 1.2, 'SAR', 3, false, 'burner'],
-        ['google', 'Google Search — Brand', 0.085, 0.90, 0.075, 420, 1.0, 'USD', 0, false, 'best_roas'],
-        ['google', 'Google Shopping — Catalog', 0.020, 0.72, 0.045, 380, 1.4, 'USD', 1, false, 'best_roas'],
-        ['google', 'Google PMax — Prospecting', 0.012, 0.58, 0.030, 350, 1.2, 'USD', 2, false, null],
         ['snapchat', 'Snap — White Friday (seasonal)', 0.017, 1.0, 0.058, 380, 1.4, 'SAR', 1, true, 'seasonal'],
         ['meta', 'Meta — White Friday (seasonal)', 0.020, 1.35, 0.055, 400, 1.9, 'SAR', 2, true, 'seasonal'],
     ];
@@ -81,7 +74,7 @@ final class DemoAnalyticsSeeder extends Seeder
         }
         $ws->save();
         $project = Project::firstOrCreate(
-            ['client_workspace_id' => $ws->id, 'name' => self::STORE_PROJECT],
+            ['client_workspace_id' => $ws->id, 'name' => 'متجر تجريبي — Demo'],
             ['status' => 'active', 'setup_completion' => 100],
         );
 
@@ -113,27 +106,14 @@ final class DemoAnalyticsSeeder extends Seeder
 
             for ($d = 0; $d < self::DAYS; $d++) {
                 $date = $start->copy()->addDays($d);
-                /*
-                 * Every COUNT is whole where it is computed, not where it is written.
-                 *
-                 * These were rounded at the `$add()` call and left fractional in the arithmetic
-                 * behind it, so spend was `1,043.7 clicks × CPC` while the report showed 1,044
-                 * clicks — a CPC nobody could reproduce by dividing the two figures printed beside
-                 * each other. Conversions kept two decimals all the way to the client, which is how
-                 * «1,288.75 طلبًا» reached a card: an impression is a real event that happened a
-                 * whole number of times, and a fraction of one is not a measurement.
-                 *
-                 * Money stays fractional — a riyal genuinely has halalas — and every derived figure
-                 * is now the exact quotient of two numbers the reader can see.
-                 */
-                $impr = round($this->impressions($i, $d, $spendScale, $phase, $seasonal));
+                $impr = $this->impressions($i, $d, $spendScale, $phase, $seasonal);
                 if ($impr <= 0) {
                     continue;
                 }
-                $clicks = round($impr * $ctr);
+                $clicks = $impr * $ctr;
                 // Late attribution: last 3 days show only ~55% of conversions/revenue (not yet attributed).
                 $lateFactor = $d >= self::DAYS - 3 ? 0.55 + 0.15 * ($d - (self::DAYS - 3)) : 1.0;
-                $conv = round($clicks * $cvr * 0.42 * $lateFactor);
+                $conv = $clicks * $cvr * 0.42 * $lateFactor; // realism factor → CPA/ROAS in a believable range
                 $spendOrig = $clicks * $cpc;
                 $revenueOrig = $conv * $aov;
 
@@ -168,98 +148,23 @@ final class DemoAnalyticsSeeder extends Seeder
                     );
                 };
 
-                // Conversion funnel with realistic stage drop-off (deterministic), stage by stage in
-                // whole events — a funnel of fractions cannot describe people walking through it.
-                $landing = round($clicks * 0.86);
-                $addToCart = round($landing * 0.34);
-                $checkout = round($addToCart * 0.52);
+                // Conversion funnel with realistic stage drop-off (deterministic).
+                $landing = $clicks * 0.86;
+                $addToCart = $landing * 0.34;
+                $checkout = $addToCart * 0.52;
 
-                $add('impressions', $impr);
-                $add('clicks', $clicks);
-                $add('landing_page_views', $landing);
-                $add('add_to_cart', $addToCart);
-                $add('checkout', $checkout);
-                $add('conversions', $conv);
-                /*
-                 * `purchases` as well as `conversions`, because a store reports both and they are not
-                 * the same column.
-                 *
-                 * The funnel labels `conversions` «Purchase», so the seeded story looked complete — but
-                 * anything reading the `purchases` metric key found nothing and rendered a zero. On the
-                 * client's live report that put «Purchases: 0» directly beside «Add to cart: 17,812»,
-                 * which reads as a catastrophic checkout failure rather than as a metric nobody wrote.
-                 *
-                 * Equal to conversions here because for this demo store the conversion IS the purchase.
-                 * A product with several conversion events would seed them apart.
-                 */
-                $add('purchases', $conv);
+                $add('impressions', round($impr));
+                $add('clicks', round($clicks));
+                $add('landing_page_views', round($landing));
+                $add('add_to_cart', round($addToCart));
+                $add('checkout', round($checkout));
+                $add('conversions', round($conv, 2));
                 $add('spend', 0, $spendOrig);
                 $add('revenue', 0, $revenueOrig);
             }
         }
 
         $upsert->handle($metrics);
-
-        /*
-         * One campaign that exists and never ran — REPORT-SCOPE-SELECTION-001 §B.
-         *
-         * Every campaign above reports metrics on every day of the window, so the demo could not show
-         * the state an operator meets constantly: a campaign created, budgeted and not yet launched.
-         * The report builder groups its campaign list by what ran in the report's own period, and with
-         * no such campaign the «recorded no activity» heading was unreachable — so the grouping could
-         * not be exercised in a browser on real seeded data, which is the evidence a visible UX change
-         * owes.
-         *
-         * Deliberately NOT added to `self::CAMPAIGNS`: that list divides `total_budget` by its own
-         * count, so appending to it would move every other campaign's budget and shift figures this
-         * seed is the fixture for. It carries its own budget and no metrics at all, which is what makes
-         * it «did not run» in every window rather than only in some.
-         */
-        UnifiedCampaign::firstOrCreate(
-            ['project_id' => $project->id, 'name' => 'حملة الإطلاق — لم تُشغَّل بعد'],
-            [
-                'client_workspace_id' => $ws->id,
-                'objective' => 'sales',
-                'status' => 'draft',
-                'total_budget' => 15000,
-                'budget_currency' => self::PROJECT_CURRENCY,
-                'meta' => ['is_demo' => true, 'primary_platform' => 'meta'],
-            ],
-        );
-
-        $this->seedScaleProject($ws);
-
-        /*
-         * One AWARENESS campaign, because a demo with one objective cannot exercise objective-awareness.
-         *
-         * OBJECTIVE-ANALYTICS-DEPTH-001. Every campaign in `self::CAMPAIGNS` is `sales`, so every ad set
-         * and ad beneath them is too — and the whole point of that row is that an ad table must show a
-         * sales buy its return and an awareness buy its reach, and must REFUSE to blend the two when the
-         * rows span both. With one objective in the world, the mixed case was unreachable in a browser
-         * and the single-family case could not be told apart from the old fixed column set.
-         *
-         * It runs: `DemoIntegrationsSeeder` mirrors every unified campaign into an external campaign with
-         * ad sets and ads beneath it, and `DemoAdCreativeLinkSeeder` writes the ad-grain
-         * `entity_daily_metrics` — so this campaign reaches the Ads table the same way the others do,
-         * without a second seeding path.
-         *
-         * Additive and OUTSIDE `self::CAMPAIGNS`, for the reason the never-launched campaign is: that
-         * list divides `total_budget` by its own count, and appending to it would move every other
-         * campaign's budget and shift figures this seed is the fixture for. Its own objective is the only
-         * thing that differs from its neighbours.
-         */
-        UnifiedCampaign::updateOrCreate(
-            ['project_id' => $project->id, 'name' => 'ميتا — الوعي بالعلامة'],
-            [
-                'client_workspace_id' => $ws->id,
-                'objective' => 'awareness',
-                'status' => 'active',
-                'total_budget' => 40000,
-                'budget_currency' => self::PROJECT_CURRENCY,
-                'meta' => ['is_demo' => true, 'primary_platform' => 'meta'],
-            ],
-        );
-
         app(TenantContext::class)->forget();
     }
 
@@ -294,22 +199,7 @@ final class DemoAnalyticsSeeder extends Seeder
             ['meta', 'success', $today, 2400, null],
             ['google', 'success', $today, 1800, null],
             ['tiktok', 'success', $today, 1600, null],
-            /*
-             * `partial_mapping`, and a sentence that means it.
-             *
-             * This row said `partial` — a word INTEG-RUNTIME §8 retired, because it answered two
-             * questions at once: «the provider had nothing» and «the provider answered and we could
-             * not place some rows». The migration that split it re-labelled every historical row
-             * from its own error text and `SyncRunStatus` has held the six words since; the demo
-             * seeder kept writing the fifth. So the one non-green run a reader meets in this
-             * environment carried a status the product no longer defines, and every surface that
-             * matches on the vocabulary fell through to «unknown» for it.
-             *
-             * The sentence changes with it. «Rate limited; retried» is not what `partial_mapping`
-             * means, and a demo row whose status and error disagree teaches the wrong reading of
-             * both.
-             */
-            ['snapchat', 'partial_mapping', $today, 900, '3 provider campaign ids are not linked to a campaign here; their rows were not attached.'],
+            ['snapchat', 'partial', $today, 900, 'Rate limited on 1 account; retried.'],
             ['meta', 'failed', $today->copy()->subDays(1), 0, 'Token expired — reconnect required.'],
         ];
         foreach ($runs as [$provider, $status, $day, $upserted, $error]) {
@@ -339,59 +229,5 @@ final class DemoAnalyticsSeeder extends Seeder
         $ns = Uuid::uuid5(Uuid::NAMESPACE_DNS, self::DEMO_UUID_NS)->toString();
 
         return Uuid::uuid5($ns, $seed)->toString();
-    }
-
-    /** The campaign-picker cap the scale project has to exceed — `MetricsController::OPTION_LIMIT`. */
-    private const SCALE_CAMPAIGNS = 241;
-
-    /** The analytics demo's own project — the one the integration chain and the ad library belong to. */
-    public const STORE_PROJECT = 'متجر تجريبي — Demo';
-
-    public const SCALE_PROJECT = 'Scale — 241 campaigns';
-
-    /** Sorts after every «Scale campaign NNN», so it sits past the cap and is reachable only by search. */
-    public const SCALE_HIDDEN_CAMPAIGN = 'Zayed launch — past the cap';
-
-    /**
-     * A project at real production cardinality — UX-MULTISELECT-SCALE-001.
-     *
-     * The requirement is «usable at 5, 50, 200+ campaigns», and the demo store carries fifteen. So the
-     * campaign picker's cap (`OPTION_LIMIT = 120`, one row fetched past it so «more exist» is a fact)
-     * and the control's «narrow the search to reach the rest» note were unreachable in a browser on
-     * seeded data: `option-scale.spec.ts` could prove that a typed term reaches the server and nothing
-     * about what two hundred campaigns look like on screen, which is the whole of the row.
-     *
-     * A SEPARATE project, deliberately. Adding two hundred campaigns to the demo store would move
-     * every count a spec asserts on it and every figure it is the fixture for. This one carries no
-     * metrics at all — the cardinality is the point, not the figures — and one campaign whose name
-     * sorts after all the others, so the cap hides it and only the search can reach it.
-     *
-     * Idempotent by count: a reseed that finds the campaigns already there creates nothing, and a
-     * partial earlier run is completed rather than duplicated.
-     */
-    private function seedScaleProject(ClientWorkspace $ws): void
-    {
-        $project = Project::firstOrCreate(
-            ['client_workspace_id' => $ws->id, 'name' => self::SCALE_PROJECT],
-            ['status' => 'active', 'setup_completion' => 100],
-        );
-
-        $names = array_map(static fn (int $i): string => sprintf('Scale campaign %03d', $i), range(1, self::SCALE_CAMPAIGNS - 1));
-        $names[] = self::SCALE_HIDDEN_CAMPAIGN;
-
-        $existing = UnifiedCampaign::query()->where('project_id', $project->id)->pluck('name')->all();
-
-        foreach (array_diff($names, $existing) as $name) {
-            UnifiedCampaign::create([
-                'project_id' => $project->id,
-                'client_workspace_id' => $ws->id,
-                'name' => $name,
-                'objective' => 'sales',
-                'status' => 'active',
-                'total_budget' => 1000,
-                'budget_currency' => self::PROJECT_CURRENCY,
-                'meta' => ['is_demo' => true, 'primary_platform' => 'meta'],
-            ]);
-        }
     }
 }

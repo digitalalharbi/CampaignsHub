@@ -1,21 +1,7 @@
-import type { FormatIntelligencePayload } from '@/features/content/api'
-import { kpiRowClass } from './kpiRow'
-import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { sectionShown, withDailyRecordsSlides, withStreamsSlide, type PrintEvidence } from './reportSections'
-import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
-import { productName } from '@/lib/brand'
-import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
-import { ReportAdDetail } from './ReportAdDetail'
-import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
-import { cutColumns } from './reportColumns'
-import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
-import { ReportLinksSection } from './ReportLinksSection'
 import { providerLabel } from '@/features/campaigns/labels'
-import { ProviderMark, ProviderName } from '@/components/ProviderMark'
 import { canonicalPlatform } from '@/lib/platforms'
-import { campaigns as countedCampaigns } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
@@ -30,69 +16,22 @@ import {
 } from '@/features/analytics/charts'
 import { platformColor } from '@/features/analytics/components'
 import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
+import { rankableMoney, rankMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { TrendPill } from '@/features/analytics/components'
-import { ReportFooter } from './reportFooter'
+import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
-import type { TimePoint } from '@/features/analytics/api'
-import { SPECS, sparkFor } from '@/features/analytics/metricCatalog'
-import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
-import { useUi } from '@/stores/ui'
-import { ReportOutline } from './ReportOutline'
-import { ObjectiveAnalyticsSection } from './ObjectiveAnalyticsSection'
-import type { ObjectiveAnalytics } from './objectiveAnalytics'
-import { AttentionBlocks } from './AttentionBlocks'
-import type { AttentionItem } from './attention'
-import { hideBrokenLogo } from './sharedBranding'
+import { SPECS } from '@/features/analytics/metricCatalog'
+import { type ReportMetric, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 
-export interface Slide {
-  id: string; type: string; platform?: string; order: number; visible: boolean
-  /** `__attention` on a fixed printed page only: which slice of the items this page carries. */
-  range?: [number, number]
-}
+export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
-export interface ReportSection {
-  key: string
-  title_ar: string
-  title_en: string
-  present: boolean
-  /** The figures this section presents — absent when the section is. */
-  figures?: string[]
-  /** Why this section shows a figure an earlier one already showed. */
-  repeat_reason?: string
-  absent_reason?: string
-  absent_reason_ar?: string
-  absent_reason_en?: string
-}
-
 export interface ReportData {
-  /** WD-EVIDENCE-001 — the PDF appendix's platform screenshots, from the print payload only. */
-  platform_evidence?: PrintEvidence[]
-  /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention», already cut for this reader by the server. */
-  attention?: AttentionItem[] | null
-  /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
-  report_sections?: string[]
-  /** REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table; absent = every column. */
-  report_columns?: Record<string, string[]>
-  /**
-   * CREATIVE-FORMAT-INTELLIGENCE-001 — «أداء أنواع المحتوى», the same answer in every document.
-   *
-   * SAME NUMBERS EVERYWHERE: the interactive report, the PDF and the operator's own Analytics read
-   * one service. Only the depth drawn differs, never the figures — a print renderer that recomputed
-   * would be the second answer this contract exists to prevent.
-   */
-  content_formats?: FormatIntelligencePayload | null
-  business_streams?: BusinessStreamRow[]
-  business_streams_cover_total?: boolean
   period: { from: string; to: string }
-  /** REPORT-DRILLDOWN-001 — the PDF's optional platform drill-down; sent only when the operator enabled it. */
-  platform_drilldowns?: import('./PrintPlatformDrilldowns').PrintPlatformDrilldown[]
   currency: string
   objective?: string
   kpis: Record<string, number | null>
   delta?: Record<string, number | null>
-  /** REPORT-SNAPSHOT-COMPARABILITY-001 — why every delta is null when it is. */
-  comparison?: { comparable: boolean; window: 'current' | 'previous' | null; contributors: string[]; through: string | null }
   /**
    * §14.6 — the metrics this report leads with, chosen by the objective at generation time.
    *
@@ -101,8 +40,6 @@ export interface ReportData {
    * the catalogue's layout for the objective.
    */
   metric_set?: string[]
-  /** LEAD-DESTINATION-001 — where a lead report's results happen (`whatsapp`, `direct_message`, …). */
-  lead_destination?: string | null
   /**
    * Which base metrics any connected platform actually SENT over the window.
    *
@@ -115,65 +52,8 @@ export interface ReportData {
   timeseries: Row[]
   platform_series?: Record<string, Row[]>
   platforms: Row[]
-  /** REPORT-ACCOUNT-BREAKDOWN-001 — the provider → ad-account split, present only where the section is on. */
-  accounts?: Row[]
   campaigns: Row[]
   top_creatives?: Row[]
-  /**
-   * REPORT-AD-PREVIEW-001 — the ADS, with the media that ran with them.
-   *
-   * `top_creatives` above ranks CAMPAIGNS and has said so since it was written. These are ad-level
-   * rows carrying the canonical preview block, so an ad whose file the platform withheld says the
-   * same sentence here as in the library.
-   */
-  ads?: ReportAd[]
-  ads_level?: string | null
-  ads_absent_reason?: string | null
-  /** REPORT-AD-PREVIEW-001 §A — ranked inside each objective, with the metric that ordered it. */
-  ads_groups?: AdGroup[]
-  /**
-   * REPORT-LINK-SECTION-001 — the short links this window can speak for.
-   *
-   * Absent, or empty, where the generator reported the section absent; the outline carries the
-   * reason, which is either «none in this scope» or «this window closed before follows were
-   * recorded». The two are different facts and a renderer must print whichever it was given rather
-   * than deciding one.
-   */
-  links?: Array<{
-    slug: string
-    short_url: string
-    destination: string
-    kind: string
-    /** Measured INSIDE the report's window. */
-    follows: number
-    /** The lifetime counter — carried for context, never summed with `follows`. */
-    clicks_all_time: number
-    is_active: boolean
-  }>
-  /** When this installation began timing follows at all — null if it never has. */
-  links_recording_since?: string | null
-  /** Which absence applies — «none in scope» or «this window closed before recording». */
-  links_absent_reason?: string | null
-  /** REPORT-DETAIL-PARITY-001 — the same ads ranked inside each platform. */
-  ads_platform_groups?: AdPlatformGroup[]
-  /**
-   * REPORT-CREATIVE-TRUTH-001 §B — every creative that ran, beside the ones that worked.
-   *
-   * `ads` above is a ranking; this is an inventory, and they answer different questions. The two
-   * counts are taken from the SCOPE before any bound was applied, so a curated list can never
-   * report its own length as the whole account.
-   */
-  ads_roster?: RosterRow[]
-  creatives_in_scope?: number | null
-  creatives_withheld?: number | null
-  /** REPORT-OWNER-CONTROLS-ALL-001 — creatives the Owner took off this link; the totals still include them. */
-  creatives_hidden?: number | null
-  /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
-  form?: string | null
-  /** The five-step reading of the ranked grid — absent where no range could be read. */
-  ads_reading?: AdsReading
-  /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
-  worst_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
   /**
    * The leader board, ranked on the metric this report's money was buying (§14.6).
@@ -213,23 +93,6 @@ export interface ReportData {
     failing?: Array<{ name?: string | null; provider?: string | null }>
   }
   summary?: string[]
-  /**
-   * REPORT-ANALYTICAL-DEPTH-001 — what this report contains, and why anything is missing.
-   *
-   * Derived server-side from the assembled snapshot AFTER every figure is in place, so the contents
-   * cannot promise a section the report does not have. A section that is not supported by the
-   * evidence is absent rather than present-and-empty, and carries the reason: «Findings» over an
-   * empty state tells a client the analysis failed, which is a different statement from «nothing in
-   * this period was worth reporting».
-   *
-   * Called `outline` and not `sections` because a SHARE already has `sections` — the toggles an
-   * operator sets on a link. Two different things under one word on the same screen is how a reader
-   * ends up believing the share settings decide the analysis.
-   *
-   * Optional because a snapshot written before this existed has no outline; a reader that finds none
-   * simply renders what it always did.
-   */
-  outline?: ReportSection[]
   findings?: NoteCardData[]
   recommendations?: NoteCardData[]
   next_steps?: NextStep[]
@@ -251,8 +114,6 @@ export interface ReportData {
    * one heading, and the gap between them is not a change in performance.
    */
   objective_performance_previous?: ObjectivePerformance
-  /** REPORT-OBJECTIVE-ANALYTICS-001 — KPI blocks per objective family, leaders and contribution. */
-  objective_analytics?: ObjectiveAnalytics | null
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
@@ -269,17 +130,6 @@ export interface ObjectivePath {
   label_en: string
   headline_metrics: string[]
   spend: number
-  /**
-   * AGGREGATION-TRUTH-001 — what the sync HELD when it could not convert.
-   *
-   * `spend` is the converted figure and is honestly 0 when no rate existed. Without these beside it
-   * a path whose money is entirely withheld is indistinguishable from a path nobody ran, and this
-   * table dropped it at `spend > 0` — which took the whole objective decomposition off the report.
-   */
-  spend_original?: number | null
-  spend_withheld_rows?: number | null
-  revenue_original?: number | null
-  revenue_withheld_rows?: number | null
   impressions: number
   clicks: number
   orders: number
@@ -291,13 +141,7 @@ export interface ObjectivePath {
   roas: number | null
   /** False on the paths that were never meant to sell — their CPA and ROAS are null, not zero. */
   result_metrics_apply: boolean
-  /** What `orders` is made of: one entry per objective that actually produced a result. */
-  result_composition?: ResultPart[]
-  /** True when `cpa` averages across more than one kind of result — it must not be shown bare. */
-  cpa_mixes_result_types?: boolean
-  /** Emptied for a client — CLIENT-REPORT-ENTITY-BOUNDARY-001. `campaigns_count` survives it. */
   campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
-  campaigns_count?: number
 }
 export interface ObjectivePerformance {
   paths: ObjectivePath[]
@@ -306,18 +150,8 @@ export interface ObjectivePerformance {
     spend: number; orders: number; revenue: number
     cpa: number | null; roas: number | null; aov: number | null
     formula: { cpa: string; roas: string }
-    /**
-     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — always empty, and typed so nothing reads a name back out.
-     *
-     * They carried the roster on each side of the direct/blended split, with names and primary keys.
-     * The ARITHMETIC they explained is kept: `excluded_spend` is the whole account of why the sales
-     * figure is smaller than the programme's total, and `excluded_reasons` says what kind of spend
-     * that was. An operator who needs the roster reads it on their own analytics screen.
-     */
-    included_campaigns: []
-    excluded_campaigns: []
-    excluded_spend?: number
-    excluded_reasons?: string[]
+    included_campaigns: Array<{ id: string; name: string; objective: string }>
+    excluded_campaigns: Array<{ id: string; name: string; objective: string; spend: number; reason: string }>
   }
   blended: {
     label_ar: string; label_en: string
@@ -357,93 +191,36 @@ export interface NextStep {
   owner?: string
   due?: string | null
 }
-export interface Meta { reportName: string; clientName?: string; agencyName?: string; agencyLogoUrl?: string | null; clientLogoUrl?: string | null; platforms: string[]; isDemo?: boolean }
-
-/**
- * Whether this document is addressed to a CLIENT — CLIENT-DIAGNOSTIC-SEPARATION-001.
- *
- * `executive` is a client audience for this purpose: it is the shorter document a client's own
- * management reads, and nobody in that room can act on a connector state either. `internal` and an
- * absent audience are the operator's, because an unlabelled report is one somebody generated for
- * themselves.
- */
-export function isClientAudience(audience: string | undefined): boolean {
-  return audience === 'client' || audience === 'executive'
-}
+export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
 
 /** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
-export function SlideBody({ slide, data, meta, paged = false }: {
-  slide: Slide
-  data: ReportData
-  meta: Meta
-  /**
-   * Rendered onto a FIXED page — a deck slide — rather than a scrolling document.
-   *
-   * The printed deck reuses this switch, so a section that is merely long on screen becomes a
-   * section that cannot fit in print. The ads slide is the one where that bites: with the full
-   * roster on it the renderer's auto-fit came out at 16.6% with 406 elements clipped, which fails
-   * its own readable-limit gate and blocks the PDF export outright.
-   */
-  paged?: boolean
-}) {
+export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportData; meta: Meta }) {
   switch (slide.type) {
-    case '__evidence': return <EvidenceSlide data={data} index={slide.range?.[0] ?? 0} />
-    case '__daily': return <DailyRecordsSlide data={data} range={slide.range} />
-    case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
     case 'executive_summary': return <ExecutiveSlide data={data} />
     case 'platform_performance': return <PlatformSlide data={data} platform={slide.platform!} />
     case 'platform_screenshot': return <ScreenshotSlide platform={slide.platform!} />
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
-    case 'ads': return <AdsSlide data={data} paged={paged} />
-    case 'links': return <LinksSlide data={data} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
-    case 'objective_performance': return <GeneralPerformanceSlide data={data} />
+    case 'objective_performance': return <ObjectiveSplitSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
-    case 'accounts': return <AccountsSlide data={data} />
-    case 'campaigns': return <CampaignsSlide data={data} />
     case 'observations': return <ObservationsSlide data={data} />
-    /*
-     * CLIENT-DIAGNOSTIC-SEPARATION-001 — the data-quality slide is the OPERATOR's.
-     *
-     * It lists every source, its state, and when we last read it — «تعذّرت المزامنة»، «آخر مزامنة» —
-     * and closes with «مؤشرات لا ترسلها المنصات المرتبطة». That is the sentence the owner found on
-     * their own client link. Every line of it is a fact about our plumbing, and a client can act on
-     * none of it.
-     *
-     * A client audience gets the one thing that IS theirs, in their own words: which metrics are
-     * absent from these figures. `PrintReport` already applied the same rule to the methodology
-     * slide (`payload.audience !== 'client'`), so the concept was here — the deck simply never
-     * consulted it.
-     */
-    case 'data_quality':
-      return isClientAudience(data.audience)
-        ? <MissingMetricsNotice data={data} />
-        : <DataQualitySlide data={data} />
+    case 'data_quality': return <DataQualitySlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
-    case '__attention': return <AttentionBlocks items={slide.range ? (data.attention ?? []).slice(...slide.range) : data.attention} ar />
+    case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
     default: return null
   }
 }
-
-/** REPORT-RECOMMENDATION-BLOCKS-001 — the attention page, placed after every template slide. */
-export const ATTENTION_SLIDE: Slide = { id: '__attention', type: '__attention', order: 9998, visible: true }
 
 const OBJECTIVE_LABEL: Record<string, string> = {
   sales: 'المبيعات', awareness: 'الوعي', traffic: 'الزيارات', leads: 'العملاء المحتملون', app_installs: 'تثبيت التطبيق', video: 'الفيديو', custom: 'مخصص',
 }
 
 export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta }) {
-  /*
-   * The rest of this file is Arabic-only by design — it is the deck a Saudi agency sends a client.
-   * The outline is new copy, and new copy follows the reader: a client who has set the product to
-   * English should not meet an Arabic contents page above an Arabic deck they can at least skim.
-   */
-  const ar = useUi((s) => s.locale) === 'ar'
   const [mode, setMode] = useState<'deck' | 'scroll'>('deck')
   const [i, setI] = useState(0)
   const slides = useMemo(() => {
@@ -452,29 +229,21 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       // Drop the Next Steps slide entirely when there are no approved steps (never show it empty).
       .filter((s) => s.type !== 'next_steps' || (data.next_steps?.length ?? 0) > 0)
       .sort((a, b) => a.order - b.order)
-    // The story ends with what needs attention — a page only when the server sent something to show.
-    if ((data.attention?.length ?? 0) > 0) visible.push(ATTENTION_SLIDE)
-    withDailyRecordsSlides(visible, data)
-    withStreamsSlide(visible, data)
+    if (data.disclaimer) {
+      visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
+    }
     return visible
-  }, [data])
+  }, [data.slides, data.disclaimer, data.next_steps])
   const cur = slides[i]
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />
   // Short performance note repeated quietly under each slide (footer), except the cover.
-  // REPORT-FOOTER-001 — the per-slide note is gone; one external footer ends the report (`ReportFooter`).
-  const footer = (_s: Slide) => null
+  const footer = (s: Slide) => (s.type !== 'cover' && data.disclaimer ? <div className="mt-3 border-t border-border pt-2"><PerformanceNotice data={data.disclaimer} variant="footer" /></div> : null)
 
   if (slides.length === 0) return <p className="py-8 text-center text-sm text-text-secondary">لا شرائح مرئية.</p>
 
   return (
     <div>
-      {/*
-        The contents, including what is not here — REPORT-ANALYTICAL-DEPTH-001. Above the mode
-        switcher because it describes the document rather than the way it is being displayed.
-      */}
-      <ReportOutline outline={data.outline} ar={ar} />
-
       <div className="mb-3 flex items-center justify-between">
         <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
           <button onClick={() => setMode('deck')} className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold ${mode === 'deck' ? 'bg-surface shadow-[var(--shadow-small)]' : 'text-text-secondary'}`}><LayoutGrid size={15} /> شرائح</button>
@@ -494,37 +263,15 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       ) : (
         <div className="space-y-4">{slides.map((s) => <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{render(s)}{footer(s)}</div>)}</div>
       )}
-      {/* REPORT-FOOTER-001 — outside the body, not a section: the one footer the page, the preview and the deck end with. */}
-      <ReportFooter
-        locale={ar ? 'ar' : 'en'}
-        facts={{
-          updatedAt: data.generated_at ?? null,
-          period: data.period ?? null,
-          currency: data.currency ?? null,
-          timezone: data.timezone ?? 'Asia/Riyadh',
-          objective: typeof data.objective === 'string' ? data.objective : null,
-        }}
-      />
     </div>
   )
-}
-
-/**
- * A platform's NAME, from its key. «tiktok» is a database value; «تيك توك» is a platform.
- *
- * The deck printed the key in every platform heading, in the leader tiles and in the donut's legend.
- * It is the same defect as an untranslated string and it reads as one, in the document a client
- * keeps — so it goes through the one catalogue the rest of the product uses.
- */
-function plat(key: string): string {
-  return providerLabel(canonicalPlatform(key), 'ar')
 }
 
 function Title({ platform, children, sub }: { platform?: string; children: React.ReactNode; sub?: string }) {
   return (
     <div className="mb-3">
       <div className="flex items-center gap-2">
-        {platform && <ProviderMark provider={platform} size={26} />}
+        {platform && <span className="h-3.5 w-3.5 rounded-full" style={{ background: platformColor(platform) }} />}
         <h2 className="text-2xl font-extrabold tracking-tight text-text-primary">{children}</h2>
       </div>
       {sub && <p className="mt-0.5 text-sm text-text-secondary">{sub}</p>}
@@ -532,72 +279,19 @@ function Title({ platform, children, sub }: { platform?: string; children: React
   )
 }
 
-/**
- * One metric, whole: its name, its figure, the exact figure behind it, and its own line.
- *
- * ## Why every part is in the card and nothing is beside it
- *
- * The exact figures used to sit in a strip UNDER the grid — six labels and six numbers in a row of
- * small grey text, repeating what the cards had just said. A reader who wanted the precise spend had
- * to find «الإنفاق» in that line and trust that the number after it belonged to the card three
- * columns away. Two places for one figure is one place too many, and the second place is the one
- * nobody designed.
- *
- * It is under its own headline now. Nothing is lost that the strip provided: it is the same
- * selectable text carrying the same `data-exact` mark, so a PDF still extracts it — it simply sits
- * with the number it makes exact.
- *
- * ## Why the parts are in fixed slots
- *
- * Every card holds the same four rows whether or not it has content for them, so a row of six reads
- * as a row: the labels line up, the figures line up, and the sparklines sit on one baseline. Without
- * that, a card with a note is taller than its neighbour and the grid steps up and down across the
- * page — which is what «توازي» asks for and what a variable-height stack cannot give.
- */
 function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface-secondary p-3">
-      <div className="flex min-h-[20px] items-center justify-between gap-2">
-        <span className="truncate text-sm text-text-secondary" title={label}>{label}</span>
+    <div className="rounded-2xl border border-border bg-surface-secondary p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-text-secondary">{label}</span>
         {delta !== undefined && <TrendPill delta={delta} invertGood={invert} />}
       </div>
-
-      {/*
-        The figure, on one line and never wrapped.
-        A KPI that breaks across two lines drops the card below its neighbours and takes the row's
-        alignment with it — and a number split over two lines is harder to read than a smaller one.
-      */}
-      <div className="tnum mt-1 truncate text-[24px] font-extrabold leading-none tracking-tight text-text-primary" title={value}>
-        {value}
-      </div>
-
-      {/*
-        The exact figure, under the headline it makes exact — see the note above for why it is not in
-        a strip. `min-h` rather than a conditional row, so a card without one is the same height as a
-        card with one.
-      */}
-      <div className="tnum mt-1 min-h-[14px] text-[11px] leading-tight text-text-muted" data-exact>
-        {/*
-          Shown only when there IS something more exact to say.
-          A dash here would be the card's second «nothing was reported» under a headline that already
-          says it, and a repeat of the headline would be the same figure twice in two sizes — both
-          add a row that carries no information and cost the reader a glance.
-        */}
-        {exact && exact !== value && exact !== '—' ? exact : ''}
-      </div>
-
+      <div className="tnum mt-1 text-[24px] font-extrabold leading-none tracking-tight text-text-primary">{value}</div>
+      {/* Exact value under the (possibly compact) headline, so the precise figure is always in the PDF. */}
+      {exact && exact !== value && <div className="tnum mt-0.5 text-[11px] text-text-muted" data-exact>{exact}</div>}
       {/* Why a figure is not in the project's currency — the reader of a report has no other screen. */}
       {note && <div className="mt-0.5 text-[11px] leading-tight text-text-muted">{note}</div>}
-
-      {/*
-        The line sits on the bottom edge of every card — `mt-auto` — so six sparklines share one
-        baseline however much text is above them.
-      */}
-      <div className="mt-auto pt-2">
-        {spark && spark.length > 1
-          ? <KpiSparkline points={spark} color={accent} height={22} />
-          : <div className="h-[22px]" aria-hidden />}
-      </div>
+      {spark && spark.length > 1 && <div className="mt-1"><KpiSparkline points={spark} color={accent} height={22} /></div>}
     </div>
   )
 }
@@ -610,17 +304,11 @@ function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { labe
  * bottom of a card, which reads as «this was zero every day» rather than «this was never plotted».
  */
 const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
-  /*
-   * REPORT-CHARTS-COMPLETE-001 — the product's one sparkline rule, not a second copy. The old map
-   * coalesced a day nobody reported to zero and drew it, and a withheld money day (spend null,
-   * the original amount beside it) became a dip to the floor. `sparkFor` leaves holes out, refuses
-   * a series more than a third missing or flat, and never draws a metric nobody sent.
-   */
-  if (!k) return undefined
+  if (!k || !rows.some((r) => r[k] !== undefined && r[k] !== null)) return undefined
 
-  return sparkFor(k, rows as unknown as readonly TimePoint[], undefined)
+  return rows.map((r) => Number(r[k] ?? 0))
 }
-const pRow = (data: ReportData, p: string) => (data.platforms ?? []).find((r) => r.provider === p) as Record<string, number> | undefined
+const pRow = (data: ReportData, p: string) => data.platforms.find((r) => r.provider === p) as Record<string, number> | undefined
 
 /** How an absent reading is written on a card — the same two states the dashboard uses. */
 /**
@@ -644,7 +332,7 @@ const readingNote = (r: MetricReading): string | null =>
 /** The un-abbreviated figure for the selectable strip under the cards. */
 const exactOf = (m: ReportMetric, data: ReportData): string => {
   const direct = data.objective_performance?.direct
-  const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : (data.kpis ?? {})[m.key]
+  const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : data.kpis[m.key]
 
   /*
    * The READING decides first, before the raw value is consulted.
@@ -671,69 +359,22 @@ const ACCENTS: Record<string, string> = {
   leads: 'var(--purple)', cpl: 'var(--teal)', landing_page_views: 'var(--info)',
 }
 
-/*
- * REPORT-COVER-SHARE-CARD-001 — the cover is the link-share card at slide size.
- *
- * The card a client sees when the link is pasted (ShareCardRenderer, og-card.blade.php) is the one
- * cover they praised: a light ground, the CLIENT's mark whole in a panel of its own, the report's
- * title large beside it, the period under it, and the kicker with the preparer on a footer row. The
- * deck cover was a gradient with two small chips; the first page of the PDF contradicted the card
- * that led to it. Same composition now, same rules: no figures on the cover, and a missing mark is
- * the name, never an empty box. The panel shows the client's mark, then the preparer's.
- */
-export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
-  const ar = useUi((s) => s.locale) === 'ar'
-  const mark = meta.clientLogoUrl ?? (meta.clientName === undefined ? meta.agencyLogoUrl : null)
-  const subject = meta.clientName ?? meta.agencyName ?? productName(ar ? 'ar' : 'en')
-  const long = meta.reportName.length > 26
-
+function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
   return (
-    <div className="report-cover relative flex h-full min-h-[380px] flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-border bg-surface p-8 text-text-primary sm:p-10">
-      <span aria-hidden className="pointer-events-none absolute -top-24 h-64 w-64 rounded-full opacity-15 [inset-inline-end:-6rem]" style={{ background: 'var(--warning)' }} />
-      <span aria-hidden className="pointer-events-none absolute inset-y-0 w-2 [inset-inline-start:0]" style={{ background: 'var(--brand-600)' }} />
-      {meta.isDemo && <span className="absolute top-4 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary [inset-inline-end:1rem]">بيانات تجريبية · Demo</span>}
-
-      <div className="relative grid min-w-0 flex-1 items-center gap-8 sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
-        <div data-testid="report-cover-client" className="flex min-w-0 flex-col items-center gap-2">
-          <div className="flex aspect-square w-full max-w-[17rem] items-center justify-center rounded-3xl border-2 border-border bg-white p-5 shadow-lg">
-            {mark ? (
-              <img src={mark} alt="" data-testid="report-cover-client-logo" onError={hideBrokenLogo} className="h-full w-full object-contain" />
-            ) : (
-              <span className="text-center text-2xl font-extrabold leading-snug text-brand-600">{subject}</span>
-            )}
-          </div>
-          {/* Only when there IS a subject: «مقدم إلى» above an agency's own report names nobody. */}
-          <span className="sr-only">
-            {meta.clientName !== undefined && (ar ? 'مقدم إلى ' : 'Prepared for ')}
-            {meta.clientName ?? subject}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <div className="text-xs font-bold uppercase tracking-[0.14em] text-text-secondary">
-            {meta.clientName !== undefined ? (ar ? 'مقدم إلى' : 'Prepared for') : (ar ? 'تقرير الأداء' : 'Performance report')}
-            {meta.clientName !== undefined && <span className="ms-2 text-text-primary">{meta.clientName}</span>}
-          </div>
-          <h1 data-testid="report-cover-title" className={`mt-2 line-clamp-2 text-balance font-extrabold leading-tight ${long ? 'text-4xl' : 'text-5xl'}`}>{meta.reportName}</h1>
-          <p className="tnum mt-4 text-xl font-medium text-text-secondary"><bdi dir="ltr">{data.period.from} → {data.period.to}</bdi></p>
-          {meta.platforms.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="inline-flex items-center rounded-full border border-border bg-surface-secondary px-2.5 py-1 text-xs font-semibold"><ProviderName provider={canonicalPlatform(p)} locale="ar" size={16} /></span>)}</div>
-          )}
-        </div>
+    <div className="report-cover flex h-full min-h-[380px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-600 to-brand-700 p-8 text-white">
+      <div className="flex items-center justify-between">
+        <span className="rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">{meta.agencyName ?? 'CampaignsHub'}</span>
+        {meta.isDemo && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">بيانات تجريبية · Demo</span>}
       </div>
-
-      <div className="relative flex flex-wrap items-center justify-between gap-3 text-sm text-text-secondary">
-        <span>{ar ? 'تقرير أداء الحملات المدفوعة' : 'Paid campaign performance'}{data.objective ? ` · ${OBJECTIVE_LABEL[data.objective] ?? data.objective}` : ''} · {data.currency}</span>
-        {/*
-          REPORT-IDENTITY-001 — the preparer is labelled with its ROLE, and a mark that fails to load
-          hides itself while the name beside it stands.
-        */}
-        <span data-testid="report-cover-agency" className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-secondary px-3 py-1 font-bold text-text-primary">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted">{ar ? 'من إعداد' : 'Prepared by'}</span>
-          {meta.agencyLogoUrl && meta.agencyLogoUrl !== mark && (
-            <img src={meta.agencyLogoUrl} alt="" data-testid="report-cover-agency-logo" onError={hideBrokenLogo} className="h-6 w-auto max-w-[120px] object-contain" />
-          )}
-          {meta.agencyName ?? productName(ar ? 'ar' : 'en')}
-        </span>
+      <div>
+        <div className="text-sm opacity-80">{meta.clientName ?? 'تقرير الأداء'}</div>
+        <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
+        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), 'ar')}</span>)}</div>
+      </div>
+      <div className="flex flex-wrap gap-4 text-sm opacity-90">
+        <span>الفترة: <span className="tnum">{data.period.from} → {data.period.to}</span></span>
+        {data.objective && <span>الهدف: {OBJECTIVE_LABEL[data.objective] ?? data.objective}</span>}
+        <span>العملة: {data.currency}</span>
       </div>
     </div>
   )
@@ -767,51 +408,10 @@ function NoteCard({ note }: { note: NoteCardData }) {
   )
 }
 
-/**
- * REPORT-SUMMARY-DECISION-001 — how many of these a SUMMARY shows.
- *
- * A decision-length report that prints eleven recommendations is a full report with a shorter
- * cover. It shows the few at the top of the list and SAYS it is showing a few: a silent truncation
- * teaches a reader that the list they can see is the list that exists, which is the one thing a
- * summary must not do to somebody who will act on it.
- */
-const SUMMARY_NOTES = 3
-
-function trimmedForForm<T>(items: T[], form: string | null | undefined): { shown: T[]; hidden: number } {
-  if (form !== 'executive_summary' || items.length <= SUMMARY_NOTES) {
-    return { shown: items, hidden: 0 }
-  }
-
-  return { shown: items.slice(0, SUMMARY_NOTES), hidden: items.length - SUMMARY_NOTES }
-}
-
-/*
- * The sentence that stops a short list reading as the whole list — in the reader's own language.
- *
- * It was written in Arabic only, in a file whose other components all read the locale. An English
- * reader of a summary report was told «و٨ أخرى في التقرير التفصيلي.»: a line whose entire job is to
- * correct an impression, delivered in a script they may not read. The count was localised and the
- * sentence holding it was not.
- */
-function MoreInTheFullReport({ hidden }: { hidden: number }) {
-  const ar = useUi((s) => s.locale) === 'ar'
-  if (hidden < 1) return null
-
-  return (
-    <p className="mt-2 text-xs text-text-muted" data-testid="summary-trimmed-note">
-      {ar ? `و${hidden} أخرى في التقرير التفصيلي.` : `And ${hidden} more in the detailed report.`}
-    </p>
-  )
-}
-
 function RecommendationsSlide({ data }: { data: ReportData }) {
   // Two balanced columns: findings (right in RTL) + recommendations (left in RTL).
-  const allFindings = data.findings ?? []
-  const allRecs = data.recommendations ?? []
-  const findingsTrim = trimmedForForm(allFindings, data.form)
-  const recsTrim = trimmedForForm(allRecs, data.form)
-  const findings = findingsTrim.shown
-  const recs = recsTrim.shown
+  const findings = data.findings ?? []
+  const recs = data.recommendations ?? []
   const legacy = findings.length === 0 && recs.length === 0 ? (data.summary ?? []) : []
   return (
     <div>
@@ -830,25 +430,26 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><CircleCheck size={15} className="text-brand-600" /> أبرز النتائج والملاحظات</h3>
             <div className="space-y-2">{findings.length ? findings.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا ملاحظات.</p>}</div>
-            <MoreInTheFullReport hidden={findingsTrim.hidden} />
           </section>
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><ArrowRight size={15} className="text-brand-600" /> التوصيات والخطوات القادمة</h3>
             <div className="space-y-2">{recs.length ? recs.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا توصيات.</p>}</div>
-            <MoreInTheFullReport hidden={recsTrim.hidden} />
           </section>
         </div>
       )}
+      {data.disclaimer && <div className="mt-3"><PerformanceNotice data={data.disclaimer} variant="footer" /></div>}
     </div>
   )
 }
 
 function ExecutiveSlide({ data }: { data: ReportData }) {
-  // REPORT-SECTION-SURFACES-001 — the trend and the spend split are sections of their own.
-  const showTrend = sectionShown(data, 'trends')
-  const showSplit = sectionShown(data, 'platform_comparison')
-  const donut = (data.platforms ?? []).map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
-  const totalSpend = donut.reduce((a, b) => a + b.value, 0)
+  const k = data.kpis
+  // PARTIAL-WITHHELD-001 — a spend-share donut / spend trend must go through the money contract, not
+  // raw `Number(p.spend ?? 0)` (a withheld platform coalesces to 0, a partial one to a subset).
+  const donutRank = rankableMoney(data.platforms as MoneyTotals[], 'spend', data.currency)
+  const donut = donutRank === null ? null : data.platforms.map((p, i) => ({ name: String(p.provider), value: donutRank.values[i] }))
+  const totalSpend = donut === null ? 0 : donut.reduce((a, b) => a + b.value, 0)
+  const trendMoney = resolveMoneySeries(data.timeseries as Array<Record<string, unknown>>, ['spend', 'revenue'], data.currency)
   /*
     §14.6 — the cards follow the objective, and the DIRECT pair still leads where it exists.
 
@@ -858,46 +459,36 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
   */
   const cards = reportMetrics(data)
   const trend = trendSeries(data.objective)
-  const cmp = data.comparison
-  const who = (cmp?.contributors ?? []).map((c) => plat(String(c))).join('، ')
   return (
     <div>
       <Title sub="نظرة سريعة على أداء الحملة خلال الفترة">الملخص التنفيذي</Title>
-      {/*
-        REPORT-SNAPSHOT-COMPARABILITY-001 — the cards below carry no change pill when the two windows are
-        unlike, and this says why in one sentence: which window stopped short, who stopped, through when.
-      */}
-      {cmp && !cmp.comparable && (
-        <p data-testid="report-comparison-withheld" className="mb-3 rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
-          {cmp.through
-            ? `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} مغطاة حتى ${cmp.through} فقط (${who} لم تُبلّغ بعدها)، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`
-            : `${cmp.window === 'previous' ? 'الفترة السابقة' : 'هذه الفترة'} غير مكتملة (${who})، فلا تُقارَن بالفترة ${cmp.window === 'previous' ? 'الحالية' : 'السابقة'}.`}
-        </p>
-      )}
-      {/*
-        `items-stretch` is what makes the row a row: every card fills the tallest cell, and `Kpi`
-        pins its sparkline to the bottom, so the six lines share one baseline instead of floating at
-        six different heights.
-      */}
-      {/*
-        REPORT-OBJECTIVE-TEMPLATE-001 — the sales funnel is seven cards (spend · impressions · clicks · add to cart · purchases · revenue · ROAS).
-        Six columns made the seventh a second row of one, which grew this slide past the print fit floor (0.811 < 0.85) and failed every PDF;
-        a row that matches the card count keeps it one row.
-      */}
-      <div className={`grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 ${kpiRowClass(cards.length, 'xl')}`}>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cards.map((m) => (
           <Kpi
             key={m.key}
             label={m.label}
             value={readingText(m.reading)}
-            exact={exactOf(m, data)}
             note={readingNote(m.reading)}
             delta={m.reading.kind === 'withheld' ? undefined : (m.delta ?? undefined)}
             invert={m.invertGood}
-            spark={m.reading.kind === 'value' ? seriesOf(data.timeseries ?? [], m.series) : undefined}
+            spark={m.reading.kind === 'value' ? seriesOf(data.timeseries, m.series) : undefined}
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
           />
         ))}
+      </div>
+      {/*
+        Exact figures (compact strip) so precise values are always in the report + PDF-extractable.
+
+        It follows the same cards: it used to name spend, revenue, results and CPA outright, so a
+        brand report printed «الإيرادات 0» and «النتائج 0» in text a PDF reader can select — the
+        clearest possible statement of a number that was never being measured. Spend is pinned
+        because it is the one figure that means the same thing on every report.
+      */}
+      <div className="tnum mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted" data-exact>
+        <span>الإنفاق {moneyExact(k.spend, data.currency)}</span>
+        {cards
+          .filter((m) => m.key !== 'spend' && m.reading.kind === 'value')
+          .map((m) => <span key={m.key}>{m.label} {exactOf(m, data)}</span>)}
       </div>
       {/*
         The trend follows the objective too.
@@ -907,27 +498,29 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         that the campaign earned nothing rather than that it was not selling anything. The chart
         now plots spend against whatever this money was buying.
       */}
-      {(showTrend || showSplit) && (
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        {showTrend && (
-        <ChartCard title={trend.title} subtitle="الاتجاه اليومي" className={showSplit ? 'lg:col-span-2' : 'lg:col-span-3'}>
-          {trend.key === 'revenue'
-            ? <SpendRevenueAreaChart data={data.timeseries ?? []} currency={data.currency} height={200} />
-            : <MetricLineChart
-                data={data.timeseries ?? []}
-                currency={data.currency}
-                series={[
-                  { key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' },
-                  { key: trend.key, name: trend.name, color: 'var(--info)', kind: trend.kind },
-                ]}
-                height={200}
-                rightAxisFor={trend.key}
-              />}
+        <ChartCard title={trend.title} subtitle="الاتجاه اليومي" className="lg:col-span-2">
+          {trendMoney === null
+            ? <div className="flex h-[200px] items-center justify-center text-center text-sm text-text-muted">الاتجاه المالي غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة</div>
+            : trend.key === 'revenue'
+              ? <SpendRevenueAreaChart data={trendMoney.rows} currency={trendMoney.currency ?? data.currency} height={200} />
+              : <MetricLineChart
+                  data={trendMoney.rows}
+                  currency={trendMoney.currency ?? data.currency}
+                  series={[
+                    { key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' },
+                    { key: trend.key, name: trend.name, color: 'var(--info)', kind: trend.kind },
+                  ]}
+                  height={200}
+                  rightAxisFor={trend.key}
+                />}
         </ChartCard>
-        )}
-        {showSplit && <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة" className={showTrend ? undefined : 'lg:col-span-3'}><PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={data.currency} height={200} /></ChartCard>}
+        <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة">
+          {donut === null
+            ? <div className="flex h-[200px] items-center justify-center text-center text-sm text-text-muted">توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة</div>
+            : <PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={donutRank!.currency ?? data.currency} height={200} />}
+        </ChartCard>
       </div>
-      )}
       {/*
         The leader board names the metric it ranked on (§14.6).
 
@@ -935,17 +528,10 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         is null and the sort returned whichever row came first — a winner of a competition nobody
         entered, under a trophy.
       */}
-      {/*
-        «أعلى حملة إنفاقًا» stood at the end of this row — CLIENT-REPORT-ENTITY-BOUNDARY-001.
-
-        It was the single most quotable line in a client deck and the one purely internal thing on
-        it: the name of a container the client never chose. `best.campaign` is null now, so the tile
-        would read «—», and a highlight showing a dash teaches a reader that the row is decoration.
-      */}
-      <div className={`mt-3 grid gap-2 ${data.best?.platform_by_cpa ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
+      <div className={`mt-3 grid gap-2 ${data.best?.platform_by_cpa ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <Highlight
           label={`أفضل منصة (${data.best?.basis?.label_ar ?? 'الأداء'})`}
-          value={data.best?.platform ? plat(data.best.platform) : '—'}
+          value={data.best?.platform ?? '—'}
           note={data.best?.platform_value ?? undefined}
         />
         {/*
@@ -953,7 +539,8 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
           not a highlight, and putting one there to keep three columns invites the reader to treat
           it as one.
         */}
-        {data.best?.platform_by_cpa && <Highlight label="أقل تكلفة نتيجة" value={plat(data.best.platform_by_cpa)} />}
+        {data.best?.platform_by_cpa && <Highlight label="أقل تكلفة نتيجة" value={data.best.platform_by_cpa} />}
+        <Highlight label="أعلى حملة إنفاقًا" value={data.best?.campaign ?? '—'} />
       </div>
     </div>
   )
@@ -975,7 +562,14 @@ function Highlight({ label, value, note }: { label: string; value: string; note?
 function PlatformSlide({ data, platform }: { data: ReportData; platform: string }) {
   const p = pRow(data, platform)
   const series = data.platform_series?.[platform] ?? []
-  if (!p) return <Title platform={platform}>{plat(platform)}</Title>
+  // PARTIAL-WITHHELD-001 — money series/ranking through the contract, never raw coalesced spend.
+  const seriesMoney = resolveMoneySeries(series as Array<Record<string, unknown>>, ['spend', 'revenue'], data.currency)
+  const platformCampaigns = data.campaigns.filter((c) => c.provider === platform)
+  const campaignsRank = rankMoney(platformCampaigns as MoneyTotals[], 'spend', data.currency)
+  const campaigns = campaignsRank === null
+    ? null
+    : campaignsRank.order.slice(0, 6).map((i) => ({ label: String(platformCampaigns[i].campaign_name ?? '—'), spend: campaignsRank.values[i], platform }))
+  if (!p) return <Title platform={platform}>{platform}</Title>
   /*
     The platform page follows the report's objective too (§14.6).
 
@@ -995,9 +589,8 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
   })
   return (
     <div>
-      <Title platform={platform} sub={`أداء ${plat(platform)} خلال الفترة`}>أداء {plat(platform)}</Title>
-      {/* REPORT-OBJECTIVE-TEMPLATE-001 — seven funnel cards stay one row, or each platform page overflows the print fit floor (0.72–0.79 < 0.85 on real data). */}
-      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${kpiRowClass(cards.length, 'lg')}`}>
+      <Title platform={platform} sub={`أداء ${platform} خلال الفترة`}>أداء {platform}</Title>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {cards.map((m) => (
           <Kpi
             key={m.key}
@@ -1009,17 +602,21 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
           />
         ))}
       </div>
-      {/*
-        CLIENT-REPORT-ENTITY-BOUNDARY-001 — «أفضل الحملات» stood beside this chart and is gone.
-
-        It ranked this platform's campaigns by spend, by internal name, on every platform page of
-        every client deck. The trend takes the whole row: it answers what this platform did over the
-        period, which is the question the page is for, and the ad section further on shows the work
-        that did it.
-      */}
-      <div className="mt-3">
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <ChartCard title="الأداء بمرور الوقت" subtitle="الإنفاق والإيرادات والنتائج">
-          <MetricLineChart data={series} currency={data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={155} />
+          {seriesMoney === null
+            ? <div className="flex h-[155px] items-center justify-center text-center text-sm text-text-muted">الاتجاه المالي غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة</div>
+            : <MetricLineChart data={seriesMoney.rows} currency={seriesMoney.currency ?? data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={155} />}
+        </ChartCard>
+        <ChartCard title="أفضل الحملات" subtitle={campaigns !== null && campaigns.length >= 3 ? 'حسب الإنفاق' : 'أبرز الحملات'}>
+          {/* Adaptive: a bar chart needs ≥3 bars to read well; otherwise ranking cards, not lonely bars. */}
+          {campaigns === null
+            ? <p className="py-10 text-center text-sm text-text-muted">ترتيب الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة.</p>
+            : campaigns.length >= 3
+              ? <RankingBarChart data={campaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={155} colorByPlatform />
+              : campaigns.length >= 1
+                ? <CampaignRankingFallback data={data} platform={platform} campaigns={campaigns} />
+                : <p className="py-10 text-center text-sm text-text-muted">لا حملات مرتبطة بهذه المنصة.</p>}
         </ChartCard>
       </div>
       <PlatformInsights data={data} platform={platform} />
@@ -1031,16 +628,7 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
 /** Bottom row of a platform slide: top creative + strengths/weaknesses + recommendations — fills the
  * slide so each platform is one rich page instead of several sparse ones. */
 function PlatformInsights({ data, platform }: { data: ReportData; platform: string }) {
-  /*
-   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — «أفضل محتوى» shows the AD, not the campaign.
-   *
-   * It read `top_creatives`, whose `creative_level` has honestly said `campaign` since it was
-   * written: the card printed a campaign name under the word «محتوى». `ads` is the real ad-level
-   * ranking — the creative, the picture that ran, and the objective's own indicators — and it is
-   * exactly what a client may be shown. Where a platform has no ad-level row the card says so,
-   * rather than falling back to the container the ads sat in.
-   */
-  const creative = (data.ads ?? []).find((a) => a.provider === platform) as Row | undefined
+  const creative = (data.top_creatives ?? []).find((c) => c.provider === platform)
   const notes = data.platform_notes?.[platform]
   const recs = (data.recommendations ?? []).filter((r) => r.platform === platform).slice(0, 1)
   return (
@@ -1049,15 +637,15 @@ function PlatformInsights({ data, platform }: { data: ReportData; platform: stri
         <h4 className="mb-1.5 text-sm font-bold text-text-primary">أفضل محتوى</h4>
         {creative ? (
           <div>
-            <div className="truncate font-semibold text-text-primary" title={String(creative.name ?? '')}>{String(creative.name ?? '—')}</div>
+            <div className="truncate font-semibold text-text-primary" title={String(creative.campaign_name ?? '')}>{String(creative.campaign_name ?? '—')}</div>
             <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-xs">
-              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported, true, data.currency ?? null, data.lead_destination ?? null).slice(0, 2).map((r) => (
+              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported).slice(0, 2).map((r) => (
                 <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
               ))}
             </div>
             {creative.reason && <div className="mt-1.5 rounded-lg bg-[var(--brand-background)] px-2 py-1 text-xs text-brand-700">{String(creative.reason)}</div>}
           </div>
-        ) : <p className="text-xs text-text-muted">لم تُسجَّل إعلانات على مستوى الإعلان لهذه المنصة في هذه الفترة.</p>}
+        ) : <p className="text-xs text-text-muted">لا محتوى مصنّف لهذه المنصة.</p>}
       </div>
       <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
         <h4 className="mb-2 text-sm font-bold text-text-primary">ملاحظات</h4>
@@ -1075,10 +663,33 @@ function PlatformInsights({ data, platform }: { data: ReportData; platform: stri
   )
 }
 
+/** Ranking cards used when a bar chart would otherwise show one or two lonely bars in empty space. */
+function CampaignRankingFallback({ data, platform, campaigns }: { data: ReportData; platform: string; campaigns: Array<{ label: string; spend: number }> }) {
+  const rows = campaigns.slice(0, 3).map((c) => ({ c, row: data.campaigns.find((x) => x.provider === platform && String(x.campaign_name ?? '—') === c.label) as Record<string, number | string> | undefined }))
+  return (
+    <div className="flex h-[240px] flex-col justify-center gap-2.5">
+      {rows.map(({ c, row }, i) => (
+        <div key={c.label} className="rounded-xl border border-border bg-surface-secondary p-3">
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-extrabold text-white" style={{ background: platformColor(platform) }}>#{i + 1}</span>
+            <div className="min-w-0 flex-1 truncate font-bold text-text-primary" title={c.label}>{c.label}</div>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-1.5 text-xs">
+            <span className="rounded-lg bg-surface px-2 py-1">إنفاق <b className="tnum">{compact(c.spend)}</b></span>
+            <span className="rounded-lg bg-surface px-2 py-1">إيراد <b className="tnum">{compact(Number(row?.revenue ?? 0))}</b></span>
+            <span className="rounded-lg bg-surface px-2 py-1">ROAS <b className="tnum">{ratio(row?.roas as number)}</b></span>
+            <span className="rounded-lg bg-surface px-2 py-1">نتائج <b className="tnum">{num(Number(row?.conversions ?? 0))}</b></span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function ScreenshotSlide({ platform }: { platform: string }) {
   return (
     <div>
-      <Title platform={platform}>لقطات {plat(platform)}</Title>
+      <Title platform={platform}>لقطات {platform}</Title>
       <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border text-text-muted">
         <ImageIcon size={28} />
         <p className="text-sm">لم تُرفع لقطات بعد — تُضاف يدويًا من محرّر التقرير.</p>
@@ -1088,178 +699,32 @@ function ScreenshotSlide({ platform }: { platform: string }) {
   )
 }
 
-/**
- * REPORT-AD-PREVIEW-001 — the ads that ran, in the copy the client keeps.
- *
- * The section itself is shared with the live link and the printed document, so the three cannot
- * drift into showing different ads — or the same ad with different figures — for one scope.
- */
-/**
- * REPORT-LINK-SECTION-001 — where the ads SENT people.
- *
- * It sits after the ads for that reason, and it is rendered whenever the outline promises it: a
- * contents list naming a section the document does not have is the defect REPORT-DETAIL-PARITY-001
- * was opened for, in the other direction.
- */
-function LinksSlide({ data }: { data: ReportData }) {
-  const ar = useUi((s) => s.locale) === 'ar'
-
-  return (
-    <div>
-      <Title sub={ar ? 'العناوين التي وجّه إليها الإنفاق' : 'The addresses the spend pointed at'}>
-        {ar ? 'الروابط المختصرة' : 'Short links'}
-      </Title>
-      <ReportLinksSection
-        links={data.links}
-        absentReason={data.links_absent_reason}
-        recordingSince={data.links_recording_since}
-        locale={ar ? 'ar' : 'en'}
-      />
-    </div>
-  )
-}
-
-function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }) {
-  const ar = useUi((s) => s.locale) === 'ar'
-  const [open, setOpen] = useState<ReportAd | null>(null)
-
-  return (
-    <div>
-      <ReportAdsSection
-        ads={data.ads}
-        groups={data.ads_groups}
-        currency={data.currency ?? null}
-        absentReason={data.ads_absent_reason}
-        level={data.ads_level}
-        reading={data.ads_reading}
-        locale={ar ? 'ar' : 'en'}
-        /* A deck slide cannot grow; see the prop's note for the measurement. */
-        paged={paged}
-        onOpen={setOpen}
-        windowEnd={data.period?.to ?? null}
-        /*
-         * A PAGED slide offers no toggle: a deck page cannot grow to fit a table, and a control
-         * that cannot be pressed in a PDF is a control that should not be drawn.
-         */
-        browsable={!paged}
-      />
-
-      {/*
-        REPORT-CREATIVE-TRUTH-001 §B — and then everything that ran.
-
-        The section above ranks; this one inventories. A client paying for sixty-five creatives who
-        can see six has no way to tell whether the other fifty-nine exist, and the report was not
-        saying. It opens the SAME detail as the cards — one reader for one creative.
-      */}
-      <ReportCreativeRoster
-        chosen={data.report_columns?.content}
-        roster={data.ads_roster}
-        inScope={data.creatives_in_scope}
-        withheld={data.creatives_withheld}
-        hidden={data.creatives_hidden}
-        currency={data.currency ?? null}
-        locale={ar ? 'ar' : 'en'}
-        form={data.form}
-        /*
-         * A deck slide states the count; the list lives where it can scroll.
-         * See the prop's own note for the measurement that made this necessary.
-         */
-        countOnly={paged}
-        onOpen={setOpen}
-      />
-
-      {/*
-        REPORT-AD-PREVIEW-001 §C — the card opens its own detail.
-
-        Production rendered these as inert `<article>`s: a client pressing their best ad got
-        silence. The detail is READ-ONLY and shows only what the report already carries.
-      */}
-      {open && (
-        <ReportAdDetail
-          ad={open}
-          currency={data.currency ?? null}
-          locale={ar ? 'ar' : 'en'}
-          onClose={() => setOpen(null)}
-        />
-      )}
-    </div>
-  )
-}
-
-/**
- * REPORT-DETAIL-PARITY-001 — one platform's own leaders, and the fallback for reports that predate them.
- *
- * `data.ads` is the scope-wide ranking, so filtering it by provider answers «which of the report's
- * best ads happen to run here». That is a different question, and its answer is EMPTY for any
- * platform that did not place in the overall cut — a platform running twenty creatives got a slide
- * under its own name saying it had none.
- *
- * `ads_platform_groups` is ranked inside each platform and inside each objective there. A stored
- * snapshot generated before that section existed carries none, and falls back to the filtered list
- * so a report already in a client's hands keeps rendering exactly as it did.
- */
-export function platformAds(
-  data: { ads?: ReportAd[]; ads_platform_groups?: AdPlatformGroup[] },
-  platform: string,
-): { ads: ReportAd[]; groups?: AdGroup[] } {
-  const own = (data.ads_platform_groups ?? []).find((p) => p.provider === platform)
-
-  if (own === undefined) {
-    return { ads: (data.ads ?? []).filter((a) => a.provider === platform) }
-  }
-
-  return { ads: own.groups.flatMap((g) => g.ads), groups: own.groups }
-}
-
-/**
- * CLIENT-REPORT-ENTITY-BOUNDARY-001 — «أفضل الإعلانات» shows ads.
- *
- * It showed CAMPAIGNS. `top_creatives` and `worst_creatives` ranked campaigns — `creative_level` said
- * so in the payload the whole time — and this slide drew them, three medals deep, under a heading
- * promising the client's best ADS. That is the leak the owner saw: a campaign roster wearing the
- * word «إعلانات», in the copy they send to a merchant.
- *
- * The real ad-level ranking has existed since REPORT-AD-PREVIEW-001 — creative rows with the media
- * that ran — and a client MAY have it: the picture and its performance, with no campaign name or
- * hierarchy attached. So this slide now renders that section, narrowed to its platform, through the
- * SAME component the live link and the printed document use. One implementation, three surfaces.
- *
- * The slide type is no longer emitted by default, but it survives in saved configs and in every
- * report already generated, so it has to render something true rather than an empty heading.
- */
 function CreativesSlide({ data, platform }: { data: ReportData; platform: string }) {
-  const ar = useUi((s) => s.locale) === 'ar'
-  const [open, setOpen] = useState<ReportAd | null>(null)
-
-  const { ads, groups } = platformAds(data, platform)
-
+  const items = (data.top_creatives ?? []).filter((c) => c.provider === platform).slice(0, 3)
+  const medal = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-500', 'from-orange-400 to-orange-600']
   return (
     <div>
-      <Title platform={platform} sub="مُرتّبة حسب هدف الحملة مع سبب التصنيف">أفضل الإعلانات — {plat(platform)}</Title>
-
-      <ReportAdsSection
-        ads={ads}
-        groups={groups}
-        currency={data.currency ?? null}
-        /*
-         * The scope-wide reason only where THIS platform is the reason it is empty. A platform with
-         * no ad-level rows inside a report that has plenty of them elsewhere is its own fact, and
-         * borrowing the scope's sentence would tell the reader the wrong thing about it.
-         */
-        absentReason={ads.length === 0 && (data.ads ?? []).length > 0 ? 'no_ads_to_show' : data.ads_absent_reason}
-        level={data.ads_level}
-        locale={ar ? 'ar' : 'en'}
-        onOpen={setOpen}
-        windowEnd={data.period?.to ?? null}
-      />
-
-      {open && (
-        <ReportAdDetail
-          ad={open}
-          currency={data.currency ?? null}
-          locale={ar ? 'ar' : 'en'}
-          onClose={() => setOpen(null)}
-        />
+      <Title platform={platform} sub="مُرتّبة حسب هدف الحملة مع سبب التصنيف">أفضل المحتويات — {platform}</Title>
+      {items.length === 0 ? <p className="text-sm text-text-muted">لا محتويات مصنّفة لهذه المنصة.</p> : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {items.map((c, idx) => (
+            <div key={idx} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-secondary">
+              <div className={`flex h-28 items-center justify-center bg-gradient-to-br ${medal[idx] ?? medal[2]} text-white`}>
+                <span className="text-3xl font-extrabold">#{idx + 1}</span>
+              </div>
+              <div className="flex flex-1 flex-col gap-2 p-3">
+                <div className="truncate font-bold text-text-primary" title={String(c.campaign_name ?? '')}>{String(c.campaign_name ?? '—')}</div>
+                {/* §14.8 — judged on what this content was made to do, not on a fixed four. */}
+                <div className="grid grid-cols-2 gap-1.5 text-xs">
+                  {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported).map((r) => (
+                    <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
+                  ))}
+                </div>
+                <div className="mt-auto rounded-lg bg-[var(--brand-background)] px-2 py-1.5 text-xs text-brand-700">{String(c.reason ?? '')}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -1269,7 +734,7 @@ function NotesSlide({ data, platform }: { data: ReportData; platform: string }) 
   const n = data.platform_notes?.[platform]
   return (
     <div>
-      <Title platform={platform}>ملاحظات {plat(platform)}</Title>
+      <Title platform={platform}>ملاحظات {platform}</Title>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-border bg-[var(--positive-background)] p-4">
           <h4 className="mb-2 text-sm font-bold text-success">نقاط القوة</h4>
@@ -1286,77 +751,37 @@ function NotesSlide({ data, platform }: { data: ReportData; platform: string }) 
 }
 
 function ComparisonSlide({ data }: { data: ReportData }) {
-  const donut = (data.platforms ?? []).map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
+  // PARTIAL-WITHHELD-001 — validate + rank the platforms by real spend; unavailable when not comparable.
+  const platRank = rankMoney(data.platforms as MoneyTotals[], 'spend', data.currency)
+  const bars = platRank === null ? null : platRank.order.map((i) => ({ label: String(data.platforms[i].provider), platform: String(data.platforms[i].provider), spend: platRank.values[i] }))
+  const donut = platRank === null ? null : platRank.order.map((i) => ({ name: String(data.platforms[i].provider), value: platRank.values[i] }))
+  const unavailable = <div className="flex h-[240px] items-center justify-center text-center text-sm text-text-muted">غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُقارَن</div>
   return (
     <div>
       <Title sub="الإنفاق والعائد والمساهمة عبر المنصات">مقارنة المنصات</Title>
-      {/*
-        One statement of spend-by-platform, not three — handoff §10 «too much card/box repetition»
-        and §11 «when comparison is the job, prefer a clean table».
-
-        This slide drew a RANKING BAR CHART of spend per platform beside a DONUT of the same spend,
-        above a table carrying that spend as a column and its share as another. The same quantity,
-        four times, on one slide. The table is the comparison; the donut is the one thing a table
-        cannot show at a glance, which is part-to-whole. The bar chart added a third rendering of a
-        figure the reader already had twice.
-        
-        It is also what made the slide unprintable. The deck's renderer auto-fits a slide and fails
-        it below 0.85; this one measured 0.847 — three thousandths under — and that single page
-        blocked the whole client PDF export. Removing a redundant chart is the honest way past that:
-        the gate was right, the slide was overfull, and nothing true was taken off it.
-      */}
-      {/*
-        Side by side, and the TABLE gets the room — handoff §11, «when comparison is the job, prefer
-        a clean table». Stacked, this slide stood 18% taller than a landscape page, which the deck's
-        auto-fit answered by shrinking it to 0.847 — under the 0.85 readable floor, so the layout
-        gate failed it and that one page blocked the entire client PDF export.
-      */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="مساهمة الإنفاق"><PlatformDonutChart data={donut} height={200} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={data.currency} /></ChartCard>
-      {/*
-        TABLE-NUMERIC-ALIGNMENT-001 — through the primitive, in a document a client reads.
-
-        Every numeric header and cell here was `text-end`, which under `dir="rtl"` is the LEFT edge
-        of the cell: each figure sat as far from its Arabic heading as the column is wide. Five
-        columns, in the report deck, in front of the client. The primitive centres numerics so the
-        heading and its digits share one alignment in both directions, and it decides the
-        abbreviation, the currency and what a missing figure looks like, so this slide can no longer
-        answer any of those differently from the slide beside it.
-      */}
-      <ChartCard title="ترتيب المنصات" className="lg:col-span-2">
-        <DataMetricTable
-          /* REPORT-TABLES-OWNER-COLUMNS-001 — the saved report's own column choice, the same cut the print and the files make. */
-          columns={cutColumns(data.report_columns?.platforms, [
-            { key: 'platform', label: 'المنصة', kind: 'text' },
-            { key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency },
-            { key: 'conversions', label: 'النتائج', kind: 'number' },
-            { key: 'cpa', label: 'CPA', kind: 'money', currency: data.currency },
-            { key: 'roas', label: 'ROAS', kind: 'ratio' },
-            { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
-          ], { spend: 'spend', conversions: 'results', cpa: 'cost' })}
-          rows={(data.platforms ?? []).map((p) => ({
-            platform: (
-              <span className="inline-flex items-center gap-1.5 font-semibold">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(String(p.provider)) }} />
-                {/*
-                  The platform's NAME, not its key. This printed «google», «snapchat», «tiktok» —
-                  our stored provider values — down the first column of a table in the client's own
-                  PDF, while the donut directly above it said «جوجل». One slide, two vocabularies,
-                  and one of them is a database value. `plat()` is the same resolver the donut uses.
-                */}
-                {plat(String(p.provider))}
-              </span>
-            ),
-            spend: p.spend as number,
-            conversions: p.conversions as number,
-            cpa: p.cpa as number,
-            roas: p.roas as number,
-            spend_share: p.spend_share as number,
-          }))}
-          initialSort={{ column: 1, dir: 'desc' }}
-        />
-      </ChartCard>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="الإنفاق حسب المنصة">{bars === null ? unavailable : <RankingBarChart data={bars} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} colorByPlatform height={240} currency={platRank!.currency ?? data.currency} />}</ChartCard>
+        <ChartCard title="مساهمة الإنفاق">{donut === null ? unavailable : <PlatformDonutChart data={donut} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={platRank!.currency ?? data.currency} />}</ChartCard>
       </div>
+      <ChartCard title="ترتيب المنصات" className="mt-4">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead><tr className="border-b border-border text-text-muted"><th className="py-2 text-start">المنصة</th><th className="py-2 text-end">الإنفاق</th><th className="py-2 text-end">النتائج</th><th className="py-2 text-end">CPA</th><th className="py-2 text-end">ROAS</th><th className="py-2 text-end">المساهمة</th></tr></thead>
+            <tbody>
+              {data.platforms.map((p, idx) => (
+                <tr key={idx} className="border-b border-border last:border-0">
+                  <td className="py-2"><span className="inline-flex items-center gap-1.5 font-semibold"><span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(String(p.provider)) }} />{String(p.provider)}</span></td>
+                  <td className="tnum py-2 text-end">{money(p.spend as number, data.currency)}</td>
+                  <td className="tnum py-2 text-end">{num(p.conversions as number)}</td>
+                  <td className="tnum py-2 text-end">{money(p.cpa as number, data.currency)}</td>
+                  <td className="tnum py-2 text-end font-semibold">{ratio(p.roas as number)}</td>
+                  <td className="tnum py-2 text-end">{percent(p.spend_share as number, 1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
     </div>
   )
 }
@@ -1404,140 +829,98 @@ function NextStepsSlide({ data }: { data: ReportData }) {
 }
 
 /**
- * REPORT-GENERAL-PERFORMANCE-001 — «الأداء العام», and each objective family answering for itself.
+ * Direct against Blended, side by side, with what each one counted (REPORT-OBJECTIVE-003/004).
  *
- * ## What this replaced
+ * The whole section exists to make one substitution impossible. `Total spend ÷ sales orders` is a
+ * real figure and a legitimate question — «what did this programme cost per order?» — but it is not
+ * the cost of an order, and a month with a large brand campaign makes the two differ by the entire
+ * brand budget. Printing the second under the first's name is the critical defect §14.3 names.
  *
- * Two blocks side by side: «الأداء المباشر» — the sales campaigns' own cost per order — and «الأداء
- * المدمج», the whole programme's spend over the same orders. Both figures were right and the slide
- * was careful to say they were not interchangeable.
- *
- * They are internal vocabulary on a page a client reads. «مدمج» describes how WE compute, not what
- * happened to their money, and a reader who does not already hold the distinction meets two costs
- * per order and concludes one of them is wrong. So the CONCEPT goes, not just the label.
- *
- * ## The shape that replaces it
- *
- * «الأداء العام» answers «what did the whole programme deliver» in figures that survive campaigns
- * with different goals — spend, and the delivery the paths report. It carries no universal «results»
- * number, because purchases plus visits plus impressions is not a quantity, and a portfolio headline
- * that adds them is the most confident lie this page could tell.
- *
- * Underneath, each objective family answers for its own outcome against its own spend: orders and
- * their cost inside المبيعات والتحويلات, cost per visit inside الزيارات, CPM inside الوعي. That is
- * where the old «direct» figure belongs — beside the 600 that bought the orders, not beside the
- * 1,000 the programme spent on three different goals.
- *
- * ## Old reports still render
- *
- * A report saved last quarter holds `objective_performance` with `direct` and `blended` keys. Those
- * keys are its DATA; refusing them would break a client's archive. They are read exactly as before
- * and only the presentation changed — `blended.spend` is the programme's total spend whatever it was
- * once called, and `direct` is the sales family's own figures.
+ * So both are here, under names that cannot be confused, each with its formula printed beneath it
+ * and the campaigns it counted named. A reader who disagrees with a number can see exactly which
+ * spend produced it rather than having to trust it.
  */
-function GeneralPerformanceSlide({ data }: { data: ReportData }) {
-  const ar = useUi((st) => st.locale) === 'ar'
+function ObjectiveSplitSlide({ data }: { data: ReportData }) {
   const op = data.objective_performance
   if (!op) {
     return (
       <div>
-        <Title sub="لم يُحتسب هذا القسم في هذه النسخة من التقرير">الأداء العام</Title>
-        <p className="text-sm text-text-muted">أعد توليد التقرير لعرض الأداء العام وأداء كل هدف.</p>
+        <Title sub="لم يُحتسب هذا القسم في هذه النسخة من التقرير">الأداء حسب هدف الحملة</Title>
+        <p className="text-sm text-text-muted">أعد توليد التقرير لعرض الفصل بين الأداء المباشر والمدمج.</p>
       </div>
     )
   }
 
   const c = data.currency
-  /*
-   * The programme's whole spend. Read from the legacy `blended.spend` because that is where a saved
-   * report keeps it — the field's NAME was the problem, never the figure.
-   */
-  const programmeSpend = op.blended.spend
-  const nonSalesSpend = op.blended.includes_non_sales_spend ?? 0
+  const excluded = op.direct.excluded_campaigns
 
   return (
-    <div data-testid="general-performance">
-      <Title sub="ما حققه البرنامج كله، ثم أداء كل هدف على حدة بمقاييسه هو">
-        الأداء العام
+    <div data-testid="objective-split">
+      <Title sub="إنفاق حملات المبيعات وحدها مقابل إنفاق البرنامج كله — رقمان مختلفان لسؤالين مختلفين">
+        الأداء حسب هدف الحملة
       </Title>
 
-      <div className="rounded-2xl border border-brand-500/40 bg-brand-500/5 p-4">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Highlight label="الإنفاق" value={money(programmeSpend, c)} />
-          <Highlight label="عدد الأهداف" value={String(op.paths.length)} />
-          {/*
-            Deliberately no «النتائج» here. Purchases, visits and impressions are different things,
-            and a single figure over them would be the one number on this page nobody could check.
-          */}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div data-testid="direct-block" className="rounded-2xl border border-brand-500/40 bg-brand-500/5 p-4">
+          <h4 className="text-sm font-extrabold text-text-primary">{op.direct.label_ar}</h4>
+          <p className="mt-0.5 text-[11px] text-text-secondary">حملات المبيعات وحدها. هذا هو الرقم الذي يُقاس عليه القرار.</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Highlight label="الإنفاق" value={money(op.direct.spend, c)} />
+            <Highlight label="CPA" value={money(op.direct.cpa, c)} />
+            <Highlight label="ROAS" value={ratio(op.direct.roas)} />
+          </div>
+          <p className="tnum mt-2 text-[11px] text-text-muted" dir="ltr">{op.direct.formula.cpa}</p>
+          <p className="tnum text-[11px] text-text-muted" dir="ltr">{op.direct.formula.roas}</p>
         </div>
-        <p className="mt-2 text-[11px] text-text-secondary">
-          الحملات في هذا التقرير لها أهداف مختلفة، لذلك تُعرض نتيجة كل هدف داخل قسمه بدل جمعها في رقم واحد.
-        </p>
+
+        <div data-testid="blended-block" className="rounded-2xl border border-border bg-surface-secondary p-4">
+          <h4 className="text-sm font-extrabold text-text-primary">{op.blended.label_ar}</h4>
+          <p className="mt-0.5 text-[11px] text-text-secondary">
+            كل المسارات مقابل نفس الطلبات. يجيب عن «كم كلّفني البرنامج كله لكل طلب» — ولا يحل محل الرقم المباشر.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Highlight label="الإنفاق" value={money(op.blended.spend, c)} />
+            <Highlight label="Blended CPA" value={money(op.blended.blended_cpa, c)} />
+            <Highlight label="Blended ROAS" value={ratio(op.blended.blended_roas)} />
+          </div>
+          <p className="mt-2 text-[11px] text-text-muted">
+            يشمل {money(op.blended.includes_non_sales_spend, c)} من إنفاق لا يستهدف المبيعات.
+          </p>
+        </div>
       </div>
 
-      {/* Each family, judged by its own metric — where a cost per order does not apply, it is absent. */}
+      {/* Every path, including the ones that were never meant to sell — where CPA is absent, not zero. */}
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {op.paths.map((p) => (
-          <div
-            key={p.path}
-            data-testid={`objective-family-${p.path}`}
-            className="rounded-xl border border-border bg-surface p-3"
-          >
+          <div key={p.path} data-testid={`path-${p.path}`} className="rounded-xl border border-border bg-surface p-3">
             <div className="text-xs font-bold text-text-primary">{p.label_ar}</div>
             <div className="tnum mt-1 text-lg font-extrabold text-text-primary">{money(p.spend, c)}</div>
             <div className="mt-1 space-y-0.5 text-[11px] text-text-muted">
-              {p.path === 'awareness' && <div>تكلفة الألف ظهور {p.cpm === null ? '—' : p.cpm}</div>}
-              {p.path === 'traffic' && <div>تكلفة الزيارة {moneyExact(p.cpc, c ?? null)}</div>}
+              {p.path === 'awareness' && <div>CPM {p.cpm === null ? '—' : p.cpm}</div>}
+              {p.path === 'traffic' && <div>CPC {money(p.cpc, c)}</div>}
               {p.result_metrics_apply
-                ? (
-                  <div>
-                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · العائد على الإنفاق {ratio(p.roas)}
-                  </div>
-                )
-                : <div>لا تنطبق تكلفة الطلب على هذا الهدف</div>}
-              {/*
-                CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the cost above can be a blend of result types,
-                and says so. Leads, installs, add-to-cart and sales all file on the conversion path,
-                so this cost could be a lead programme's price averaged with a sale's. It always
-                averages downwards, which is the direction a client is least able to check.
-              */}
-              {p.cpa_mixes_result_types && mixedResultsNote(p.result_composition, true) !== null && (
-                <div data-testid={`path-${p.path}-mixed-results`} className="text-warning">
-                  {mixedResultsNote(p.result_composition, true)!.note}
-                </div>
-              )}
-              {/*
-                How many, never which — CLIENT-REPORT-ENTITY-BOUNDARY-001. A count names nothing, and
-                the digest email has always told a client «3 حملة» on a path.
-              */}
-              <div>{countedCampaigns(p.campaigns_count ?? p.campaigns.length, 'ar')}</div>
+                ? <div>CPA {money(p.cpa, c)} · ROAS {ratio(p.roas)}</div>
+                : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
+              <div>{p.campaigns.length} حملة</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/*
-        The spend that was never buying orders, stated without naming the old split.
-
-        A reader comparing the sales family's spend with the programme's needs to know the difference
-        is real money doing other work — not a discrepancy, and not an exclusion from a calculation
-        they were never shown.
-      */}
-      {nonSalesSpend > 0 && (
-        <div data-testid="non-sales-spend" className="mt-3 rounded-xl border border-dashed border-border p-3">
-          <div className="text-xs font-bold text-text-primary">إنفاق لا يستهدف المبيعات</div>
-          <p className="mt-0.5 text-[11px] text-text-secondary">
-            <span className="tnum" dir="ltr">{money(nonSalesSpend, c)}</span>
-            {' — '}
-            إنفاق حقيقي على أهداف أخرى، ولا يدخل في تكلفة الطلب لأنه لم يكن يشتري طلبًا.
-          </p>
+      {excluded.length > 0 && (
+        <div data-testid="excluded-campaigns" className="mt-3 rounded-xl border border-dashed border-border p-3">
+          <div className="text-xs font-bold text-text-primary">حملات خارج حساب الأداء المباشر</div>
+          <p className="mt-0.5 text-[11px] text-text-secondary">إنفاقها حقيقي ومحسوب في المدمج، ولا يدخل في تكلفة الطلب.</p>
+          <ul className="mt-2 space-y-1 text-[11px] text-text-muted">
+            {excluded.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-3">
+                <span className="truncate">{e.name}</span>
+                <span className="tnum whitespace-nowrap" dir="ltr">{money(e.spend, c)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-
-      {/* REPORT-OBJECTIVE-ANALYTICS-001 — the same section the live link and the PDF carry. */}
-      <div className="mt-5">
-        <ObjectiveAnalyticsSection section={data.objective_analytics} currency={c} ar={ar} />
-      </div>
     </div>
   )
 }
@@ -1586,14 +969,14 @@ function FunnelSlide({ data }: { data: ReportData }) {
               <div className="rounded-2xl border border-border bg-[var(--warning-background)] p-4">
                 <div className="mb-1 flex items-center gap-1.5 text-sm font-bold text-warning"><TriangleAlert size={15} /> أكبر تسرّب</div>
                 <div className="font-semibold text-text-primary">{worst.label}</div>
-                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)} · تكلفة {moneyExact(worst.cost_per, data.currency)}</div>
+                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)} · تكلفة {money(worst.cost_per, data.currency)}</div>
               </div>
             )}
             <div className="rounded-2xl border border-border bg-surface-secondary p-4">
               <div className="mb-1 text-sm font-bold text-text-primary">تكلفة كل مرحلة</div>
               <div className="space-y-1 text-xs">
                 {stages.filter((s) => s.cost_per !== null).slice(-4).map((s) => (
-                  <div key={s.label} className="flex justify-between"><span className="text-text-secondary">{s.label}</span><span className="tnum font-semibold">{moneyExact(s.cost_per, data.currency)}</span></div>
+                  <div key={s.label} className="flex justify-between"><span className="text-text-secondary">{s.label}</span><span className="tnum font-semibold">{money(s.cost_per, data.currency)}</span></div>
                 ))}
               </div>
             </div>
@@ -1604,120 +987,47 @@ function FunnelSlide({ data }: { data: ReportData }) {
   )
 }
 
-/**
- * Budget against spend, per PLATFORM — CLIENT-REPORT-ENTITY-BOUNDARY-001.
- *
- * These rows were campaigns, by internal name, in the deck a client keeps. The slide's question —
- * «is anything about to run out?» — survives the fold to platforms; the campaign plan does not. An
- * OLD snapshot's per-campaign rows never reach here: `ClientReportView` empties them rather than
- * printing an anonymous pacing table, which would show a reader that something is overspending and
- * never what.
- */
 function BudgetSlide({ data }: { data: ReportData }) {
-  const all = data.budget ?? []
-  const rows = all.slice(0, 5)
-
-  /*
-   * REPORT-ANALYTICAL-DEPTH-001 — the ring contradicted the table printed beneath it.
-   *
-   * This summed the five-row SLICE and coerced a null spend to zero, so an account running six
-   * platforms had a headline consumption computed from five of them, and a spend the money contract
-   * refused to state — withheld, partial, two currencies — counted as «nothing was spent there» and
-   * pulled the ring down. The pacing table below already refuses exactly that, with a dash and a
-   * reason, so the two halves of one slide disagreed on a page a CLIENT reads.
-   *
-   * `portfolioBudget` is the rule the campaigns overview and the client rollup use: every platform
-   * counted, the incomparable ones excluded and COUNTED, and two currencies refusing the total
-   * rather than adding riyals to dollars.
-   */
-  const total = portfolioBudget(all as unknown as Parameters<typeof portfolioBudget>[0])
-  const totalBudget = total.budget ?? 0
-  const totalSpent = total.spent ?? 0
-  const consumed = total.budget !== null && total.budget > 0 && total.spent !== null
-    ? total.spent / total.budget
-    : null
-  /*
-   * A spend the contract withholds is not a bar of length zero.
-   *
-   * This coerced `r.spent ?? 0`, so a platform whose spend cannot be stated got a full budget bar
-   * beside an empty spend bar — «budgeted, spent nothing», which is the claim the ring above it
-   * stopped making. A row that cannot be drawn truthfully is left out and COUNTED, in the same place
-   * and the same words the ring uses for the rows it excluded.
-   */
-  const drawable = rows.filter((r) => typeof r.spent === 'number' && typeof r.budget === 'number')
-  const undrawable = rows.length - drawable.length
-  const bars = drawable.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget), spent: Number(r.spent) }))
+  const rows = (data.budget ?? []).slice(0, 5)
+  const totalBudget = rows.reduce((a, b) => a + Number(b.budget ?? 0), 0)
+  const totalSpent = rows.reduce((a, b) => a + Number(b.spent ?? 0), 0)
+  const consumed = totalBudget > 0 ? totalSpent / totalBudget : 0
+  const bars = rows.map((r) => ({ label: String(r.campaign_name ?? '—'), budget: Number(r.budget ?? 0), spent: Number(r.spent ?? 0) }))
   return (
     <div>
       <Title sub="المخطط مقابل المصروف وسرعة الصرف">تحليل الميزانية</Title>
       <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" className="flex flex-col items-center justify-center gap-2">
-          {consumed === null ? (
-            /* A total that cannot be stated says so — a ring at 0% would be read as «nothing spent». */
-            <p className="px-3 text-center text-xs text-text-muted" data-testid="report-budget-unavailable">
-              {total.currencies > 1
-                ? `تعذّر جمع الميزانية — ${total.currencies} عملات مختلفة`
-                : 'لا ميزانية قابلة للمقارنة في هذه الفترة'}
-            </p>
-          ) : (
-            <>
-              <ProgressRing value={consumed} sublabel={`${compact(totalSpent)} / ${compact(totalBudget)}`} size={128} tone={consumed > 0.95 ? 'danger' : consumed > 0.8 ? 'warning' : 'brand'} />
-              {/* No silent caps: what the total left out is said where the total is read. */}
-              {total.excluded > 0 && (
-                <span className="text-[11px] text-text-muted" data-testid="report-budget-excluded">
-                  {`${total.excluded} منصة خارج الحساب`}
-                </span>
-              )}
-            </>
-          )}
+        <ChartCard title="استهلاك الميزانية" className="flex items-center justify-center">
+          <ProgressRing value={consumed} sublabel={`${compact(totalSpent)} / ${compact(totalBudget)}`} size={128} tone={consumed > 0.95 ? 'danger' : consumed > 0.8 ? 'warning' : 'brand'} />
         </ChartCard>
         <ChartCard title="المخطط مقابل المصروف" className="lg:col-span-2">
           <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
-          {undrawable > 0 && (
-            <p className="mt-1 text-[11px] text-text-muted" data-testid="report-bars-excluded">
-              {`${undrawable} منصة بلا مصروف معلن — غير مرسومة`}
-            </p>
-          )}
         </ChartCard>
       </div>
       {rows.length > 0 && (
         <ChartCard title="سرعة الصرف والتوقعات" subtitle="Pace >1 صرف أسرع من المخطط" className="mt-4">
-          {/*
-            PARTIAL-WITHHELD-001 is now the primitive's rule, not this table's.
-
-            A null spend, remaining or projected figure is «no single figure», never «0», and every
-            column of every table says that with the same dash. Pace keeps its own colouring because
-            «spending faster than planned» is a judgement this slide makes and no other does.
-          */}
-          <DataMetricTable
-            columns={[
-              { key: 'platform', label: 'المنصة', kind: 'text' },
-              { key: 'budget', label: 'الميزانية', kind: 'money', currency: data.currency },
-              { key: 'spent', label: 'المصروف', kind: 'money', currency: data.currency },
-              { key: 'remaining', label: 'المتبقي', kind: 'money', currency: data.currency },
-              { key: 'consumed', label: 'الاستهلاك', kind: 'percent', digits: 0 },
-              { key: 'pace', label: 'Pace', kind: 'text' },
-              { key: 'projected', label: 'الصرف المتوقع', kind: 'money', currency: data.currency },
-            ]}
-            rows={rows.map((r) => {
-              const pace = Number(r.pace ?? 0)
-
-              return {
-                platform: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'),
-                budget: r.budget as number,
-                spent: r.spent as number,
-                remaining: r.remaining as number,
-                consumed: r.consumed_pct as number,
-                pace: pace ? (
-                  <span className={`tnum font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 ? 'text-warning' : 'text-text-primary'}`}>
-                    {pace.toFixed(2)}
-                  </span>
-                ) : null,
-                projected: r.projected_spend as number,
-              }
-            })}
-            initialSort={{ column: 2, dir: 'desc' }}
-          />
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead><tr className="border-b border-border text-text-muted"><th className="py-2 text-start">الحملة</th><th className="py-2 text-end">الميزانية</th><th className="py-2 text-end">المصروف</th><th className="py-2 text-end">المتبقي</th><th className="py-2 text-end">الاستهلاك</th><th className="py-2 text-end">Pace</th><th className="py-2 text-end">الصرف المتوقع</th></tr></thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const pace = Number(r.pace ?? 0)
+                  return (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="py-2 font-semibold text-text-primary">{String(r.campaign_name ?? '—')}</td>
+                      <td className="tnum py-2 text-end">{money(Number(r.budget ?? 0), data.currency)}</td>
+                      {/* PARTIAL-WITHHELD-001 — a null spend/remaining/projected is «no single figure», not «0». */}
+                      <td className="tnum py-2 text-end">{r.spent === null || r.spent === undefined ? '—' : money(Number(r.spent), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.remaining === null || r.remaining === undefined ? '—' : money(Number(r.remaining), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.consumed_pct !== null && r.consumed_pct !== undefined ? percent(Number(r.consumed_pct), 0) : '—'}</td>
+                      <td className={`tnum py-2 text-end font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 && pace > 0 ? 'text-warning' : 'text-text-primary'}`}>{pace ? pace.toFixed(2) : '—'}</td>
+                      <td className="tnum py-2 text-end">{r.projected_spend === null || r.projected_spend === undefined ? '—' : money(Number(r.projected_spend), data.currency)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </ChartCard>
       )}
     </div>
@@ -1741,33 +1051,33 @@ function PeriodComparisonSlide({ data }: { data: ReportData }) {
   return (
     <div>
       <Title sub="الفترة الحالية مقابل الفترة السابقة بنفس الطول">المقارنات والاتجاهات</Title>
-      {/*
-        The opposite alignment defect from the platform table, in the same document.
-
-        Every column here was `text-start`, so the figures hugged the right edge under RTL while the
-        platform slide pushed them to the left — two tables in one report, disagreeing about where a
-        number belongs. The primitive settles it once.
-
-        The readings are already formatted strings (a reading carries its own units and its own
-        refusals), so they travel as text; «لا مقارنة» stays a dash rather than a zero, which is the
-        primitive's rule now.
-      */}
-      <DataMetricTable
-        columns={[
-          { key: 'label', label: 'المؤشر', kind: 'text' },
-          { key: 'now', label: 'الفترة الحالية', kind: 'text' },
-          { key: 'before', label: 'الفترة السابقة', kind: 'text' },
-          { key: 'change', label: 'التغير', kind: 'text' },
-        ]}
-        rows={rows.map((r) => ({
-          label: r.label,
-          now: <span className="tnum font-bold text-text-primary">{readingText(r.reading)}</span>,
-          before: <span className="tnum text-text-secondary">{r.before.text ?? '—'}</span>,
-          change: r.before.change === null
-            ? null
-            : <TrendPill delta={r.before.change} invertGood={r.invertGood} />,
-        }))}
-      />
+      <div className="overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead className="bg-surface-secondary text-text-secondary">
+            <tr>
+              <th className="p-2.5 text-start font-semibold">المؤشر</th>
+              <th className="p-2.5 text-start font-semibold">الفترة الحالية</th>
+              <th className="p-2.5 text-start font-semibold">الفترة السابقة</th>
+              <th className="p-2.5 text-start font-semibold">التغير</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-t border-border">
+                <td className="p-2.5 text-text-primary">{r.label}</td>
+                <td className="tnum p-2.5 font-bold text-text-primary">{readingText(r.reading)}</td>
+                {/* «لا مقارنة» is not «0» — an absent previous period has nothing to compare with. */}
+                <td className="tnum p-2.5 text-text-secondary">{r.before.text ?? '—'}</td>
+                <td className="p-2.5">
+                  {r.before.change === null
+                    ? <span className="text-text-muted">—</span>
+                    : <TrendPill delta={r.before.change} invertGood={r.invertGood} />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="mt-2 text-xs text-text-muted">
         تُقارن الفترة بفترة سابقة مساوية لها في عدد الأيام، وتُترك المقارنة فارغة عند غياب بيانات الفترة السابقة.
       </p>
@@ -1790,161 +1100,6 @@ const NOTE_TONE: Record<string, { border: string; text: string; Icon: typeof Tri
  * nothing alarming in it is a result, and filling the space with generic advice would teach a
  * reader that this section is decoration.
  */
-/**
- * REPORT-DETAIL-DEPTH-001 — campaign analysis, for the report that is allowed to have it.
- *
- * The owner's depth contract asks a detailed report for campaign analysis by name. It reaches this
- * component only for an INTERNAL report: the generator does not produce the roster for any other
- * audience and `ClientReportView` drops this whole section, so a client never meets a heading over
- * a list that was removed for their benefit.
- *
- * Sorted by spend, because the operator's first question about a roster is where the money went.
- */
-/**
- * REPORT-COMPOSITION-CONTROL-001 — «السجل اليومي», the day-by-day ledger, in the deck and its PDF.
- *
- * Present only when the report's section list names `daily_records` (off for a new client report),
- * eight days to a page. Money appears only where the document carries it: a link that hides spend
- * has no spend in its rows, and then the column is not drawn rather than drawn empty.
- */
-function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number, number] }) {
-  const all = [...(data.timeseries ?? [])].sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')))
-  const days = range ? all.slice(range[0], range[1]) : all
-  const money = all.some((d) => typeof d.spend === 'number')
-  const numberOf = (v: unknown): number | null => (typeof v === 'number' ? v : null)
-  const columns: Column[] = [
-    { key: 'date', label: 'اليوم', kind: 'text' },
-    { key: 'impressions', label: 'الظهور', kind: 'number' },
-    { key: 'clicks', label: 'النقرات', kind: 'number' },
-    { key: 'results', label: 'النتائج', kind: 'number' },
-    ...(money ? [{ key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency ?? null } as Column] : []),
-  ]
-  const rows: TableRow[] = days.map((d) => ({
-    date: String(d.date ?? '—'),
-    impressions: numberOf(d.impressions),
-    clicks: numberOf(d.clicks),
-    results: numberOf(d.conversions),
-    ...(money ? { spend: numberOf(d.spend) } : {}),
-  }))
-
-  return (
-    <div data-testid="report-daily-records">
-      <Title sub="كل يوم في فترة التقرير">السجل اليومي</Title>
-      <DataMetricTable columns={cutColumns(data.report_columns?.days, columns, { impressions: 'impressions', clicks: 'clicks', results: 'results', spend: 'spend' })} rows={rows} />
-    </div>
-  )
-}
-
-/**
- * WD-EVIDENCE-001 — one platform screenshot, a page of the appendix: which platform, which period, when
- * it was captured and the Owner's note. Evidence for trust, never a figure; a PDF screenshot cannot be
- * drawn on a page, so it is named instead.
- */
-function EvidenceSlide({ data, index }: { data: ReportData; index: number }) {
-  const e = (data.platform_evidence ?? [])[index]
-  if (!e) return null
-  const period = e.period_start && e.period_end ? (e.period_start === e.period_end ? e.period_start : `${e.period_start} → ${e.period_end}`) : null
-
-  return (
-    <div data-testid={`report-evidence-${e.id}`} className="flex h-full min-h-0 flex-col gap-3">
-      <Title platform={e.provider} sub={[period, e.captured_at ? `التُقطت ${fmtDateTime(e.captured_at)}` : null].filter(Boolean).join(' · ')}>
-        {`لقطة من ${providerLabel(e.provider, 'ar')}`}
-      </Title>
-      {e.image && e.url ? (
-        <img src={e.url} alt={`لقطة من ${providerLabel(e.provider, 'ar')}`} className="mx-auto min-h-0 max-w-full flex-1 rounded-xl border border-border object-contain" />
-      ) : (
-        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">مرفق PDF: {e.name ?? '—'}</p>
-      )}
-      {e.note && <p className="text-sm text-text-secondary">{e.note}</p>}
-      <p className="text-[11px] text-text-muted">لقطة للاطلاع فقط — أرقام التقرير من بيانات المنصات المنظّمة، لا من هذه الصورة.</p>
-    </div>
-  )
-}
-
-function CampaignsSlide({ data }: { data: ReportData }) {
-  const c = data.currency
-  const rows = [...(data.campaigns ?? [])].sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
-
-  /*
-   * TABLE-NUMERIC-ALIGNMENT-001 — the shared primitive, not a table written here.
-   *
-   * My first draft was a hand-rolled `<table>` with its own `tnum` classes and its own idea of how
-   * money and RTL behave. That is the requirement's own words for the defect: «no page-specific
-   * table formatting». `DataMetricTable` already owns column widths, numeric alignment in both
-   * directions, sorting, compact values, the exact-value tooltip and the money contract — including
-   * the rule that a null currency prints the figure BARE rather than under a guessed one.
-   */
-  const columns: Column[] = [
-    { key: 'name', label: 'الحملة', kind: 'text' },
-    { key: 'platform', label: 'المنصة', kind: 'text' },
-    { key: 'spend', label: 'الإنفاق', kind: 'money', currency: c ?? null },
-    { key: 'results', label: 'النتائج', kind: 'number' },
-    { key: 'cost', label: 'تكلفة النتيجة', kind: 'cost', currency: c ?? null },
-  ]
-
-  const table: TableRow[] = rows.map((r) => ({
-    name: String(r.campaign_name ?? '—'),
-    platform: r.provider ? providerLabel(String(r.provider), 'ar') : '—',
-    spend: typeof r.spend === 'number' ? r.spend : null,
-    results: typeof r.conversions === 'number' ? r.conversions : null,
-    cost: typeof r.cpa === 'number' ? r.cpa : null,
-  }))
-
-  return (
-    <div>
-      <Title sub="أين ذهب الإنفاق، وما الذي عاد منه — نسخة الفريق الداخلية">تحليل الحملات</Title>
-      {table.length === 0 ? (
-        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">
-          لا توجد حملات بأرقام في هذا النطاق.
-        </p>
-      ) : (
-        <div data-testid="report-campaigns-table">
-          <DataMetricTable columns={columns} rows={table} initialSort={{ column: 2, dir: 'desc' }} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * REPORT-ACCOUNT-BREAKDOWN-001 — the Detailed deck's provider → ad-account split.
- *
- * One row per ad account with its platform and what it produced; money columns follow the money
- * contract (the table prints a null as «—» and a null currency bare). Present only where the report's
- * own section settings carry the section, so a Standard deck never has this page.
- */
-function AccountsSlide({ data }: { data: ReportData }) {
-  const c = data.currency
-  const rows = [...(data.accounts ?? [])]
-  const columns: Column[] = [
-    { key: 'name', label: 'الحساب الإعلاني', kind: 'text' },
-    { key: 'platform', label: 'المنصة', kind: 'text' },
-    { key: 'spend', label: 'الإنفاق', kind: 'money', currency: c ?? null },
-    { key: 'results', label: 'النتائج', kind: 'number' },
-    { key: 'cost', label: 'تكلفة النتيجة', kind: 'cost', currency: c ?? null },
-  ]
-  const table: TableRow[] = rows.map((r) => ({
-    name: String(r.account_name ?? 'حساب بلا اسم'),
-    platform: r.provider ? providerLabel(String(r.provider), 'ar') : '—',
-    spend: typeof r.spend === 'number' ? r.spend : null,
-    results: typeof r.conversions === 'number' ? r.conversions : null,
-    cost: typeof r.cpa === 'number' ? r.cpa : null,
-  }))
-
-  return (
-    <div>
-      <Title sub="كل حساب إعلاني على حدة: ماذا أنتج، وبأي تكلفة">تفصيل الحسابات الإعلانية</Title>
-      {table.length === 0 ? (
-        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">لا حسابات بأرقام في هذا النطاق.</p>
-      ) : (
-        <div data-testid="report-accounts-table">
-          <DataMetricTable columns={cutColumns(data.report_columns?.accounts, columns, { platform: 'platform', spend: 'spend', results: 'results', cost: 'cost' })} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function ObservationsSlide({ data }: { data: ReportData }) {
   const notes = data.observations ?? []
 
@@ -1999,35 +1154,6 @@ const FRESHNESS_LABEL: Record<string, { ar: string; tone: string }> = {
  * when something is wrong teaches its reader that its absence means nothing, so the one time it
  * matters they have no baseline to read it against.
  */
-/**
- * What a CLIENT is told instead — CLIENT-DIAGNOSTIC-SEPARATION-001.
- *
- * One fact, in their vocabulary: which figures the platforms did not report for this period, so a
- * blank in the report is not read as a zero. No source list, no states, no clock, and no
- * «المنصات المرتبطة» — a client does not know which platforms are «connected», they know which
- * platforms they buy on.
- *
- * Nothing at all when every metric arrived: a slide whose only content is «all good» is a slide that
- * teaches a reader to skip the section, including on the day it says something.
- */
-function MissingMetricsNotice({ data }: { data: ReportData }) {
-  const missing = Object.entries(data.reported ?? {})
-    .filter(([, sent]) => !sent)
-    .map(([key]) => SPECS[key]?.label.ar ?? key)
-
-  if (missing.length === 0) return null
-
-  return (
-    <div>
-      <Title sub="ما لم تُبلِّغ عنه المنصات في هذه الفترة">اكتمال الأرقام</Title>
-      <p className="rounded-2xl border border-border bg-surface-secondary p-4 text-sm leading-relaxed text-text-secondary">
-        لم تصل هذه المؤشرات لهذه الفترة: {missing.join('، ')} — تظهر في التقرير بلا قيمة بدلًا من صفر،
-        لأن «لم يُبلَّغ عنه» و«صفر» ليسا الشيء نفسه.
-      </p>
-    </div>
-  )
-}
-
 function DataQualitySlide({ data }: { data: ReportData }) {
   const f = data.freshness
   const state = FRESHNESS_LABEL[f?.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown
@@ -2052,23 +1178,27 @@ function DataQualitySlide({ data }: { data: ReportData }) {
         </div>
       </div>
       {(f?.sources?.length ?? 0) > 0 && (
-        <div className="mt-3">
-          <DataMetricTable
-            columns={[
-              { key: 'source', label: 'المصدر', kind: 'text' },
-              { key: 'state', label: 'الحالة', kind: 'text' },
-              { key: 'synced', label: 'آخر مزامنة', kind: 'text' },
-            ]}
-            rows={f!.sources!.map((s) => ({
-              source: s.name ?? s.provider,
-              state: (
-                <span className={(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}>
-                  {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
-                </span>
-              ),
-              synced: s.last_sync_at ? fmtDateTime(s.last_sync_at) : null,
-            }))}
-          />
+        <div className="mt-3 overflow-x-auto rounded-2xl border border-border">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead className="bg-surface-secondary text-text-secondary">
+              <tr>
+                <th className="p-2.5 text-start font-semibold">المصدر</th>
+                <th className="p-2.5 text-start font-semibold">الحالة</th>
+                <th className="p-2.5 text-start font-semibold">آخر مزامنة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {f!.sources!.map((s, i) => (
+                <tr key={`${s.provider}-${i}`} className="border-t border-border">
+                  <td className="p-2.5 text-text-primary">{s.name ?? s.provider}</td>
+                  <td className={`p-2.5 ${(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}`}>
+                    {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
+                  </td>
+                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? fmtDateTime(s.last_sync_at) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       {missing.length > 0 && (
@@ -2108,7 +1238,7 @@ function SnapshotAge({ data }: { data: ReportData }) {
   return (
     <p className="mb-3 text-xs text-text-secondary" data-testid="report-snapshot-age">
       {live ? (
-        'الأرقام محسوبة الآن من أحدث البيانات'
+        'تقرير مباشر — الأرقام محسوبة الآن من أحدث البيانات'
       ) : (
         <>
           لقطة بتاريخ{' '}
