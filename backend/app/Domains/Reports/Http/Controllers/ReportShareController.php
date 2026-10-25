@@ -222,6 +222,30 @@ final class ReportShareController extends Controller
     }
 
     /**
+     * GET …/shares/{share}/link — REPORT-LINK-COPY-001: copy an existing link again, without creating another.
+     *
+     * Requires `reports.share` and the same report-bound lookup every other action here uses, so a link of another report or project
+     * is a 404. Allowed for a paused or expired link (it is still the owner's link to hand out; whether it OPENS is the link's own
+     * status). A revoked link is refused: handing out a dead address is a mistake nobody asked for.
+     */
+    public function link(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $model = $this->findShare($this->findReport($report), $share);
+        abort_if($model->revoked_at !== null, 409, 'A revoked link has no address to copy.');
+
+        $resolved = $this->shares->retrievableToken($model);
+        $audit->log(action: 'report.shared_link_copied', entityType: ReportShare::class, entityId: (string) $model->id, after: ['alias_minted' => $resolved['minted']]);
+
+        return ApiResponse::success([
+            'url' => ShareService::urlFor($resolved['token']),
+            'path' => ShareService::pathFor($resolved['token']),
+            // True when this link predates aliases: the address copied is a second way in to the SAME link, and the original still works.
+            'alias_minted' => $resolved['minted'],
+        ]);
+    }
+
+    /**
      * PATCH …/shares/{share} — REPORT-LINK-EDIT-IN-PLACE-001: the Owner changes a published link and the SAME
      * URL reflects it at once.
      *
@@ -580,6 +604,8 @@ final class ReportShareController extends Controller
             'id' => $s->id,
             'active' => $s->isActive(),
             'mode' => $s->isLive() ? 'live' : 'snapshot',
+            // REPORT-SHARE-MODES-001 — what the link says about its own period, so the manager can state it: frozen, fixed or rolling.
+            'period' => $this->periodOf($s),
             // Two independent facts — see the store() validation. `form` is null when the link takes
             // the report's own, which is what every link made before §15.12 does.
             'form' => $s->form,
@@ -604,5 +630,27 @@ final class ReportShareController extends Controller
             'logs_count' => $s->logs_count ?? null,
             'created_at' => $s->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * @return array{kind: string, from: string|null, to: string|null}
+     *
+     * `frozen` — a snapshot: the figures were published once and never move. `fixed` — live, refreshing only inside the report's saved
+     * start and end. `rolling` — live, following the reader's day from the link's earliest date.
+     */
+    private function periodOf(ReportShare $s): array
+    {
+        $report = Report::withoutGlobalScopes()->find($s->report_id);
+        $from = $report?->period_start?->toDateString();
+        $to = $report?->period_end?->toDateString();
+
+        if (! $s->isLive()) {
+            return ['kind' => 'frozen', 'from' => $from, 'to' => $to];
+        }
+        if ($report !== null && ReportPeriod::modeOfReport($report) === 'fixed') {
+            return ['kind' => 'fixed', 'from' => $from, 'to' => $to];
+        }
+
+        return ['kind' => 'rolling', 'from' => (string) ($s->scope['earliest'] ?? $from), 'to' => null];
     }
 }

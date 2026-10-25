@@ -13,6 +13,7 @@ use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -77,6 +78,9 @@ final class ShareService
             'tenant_id' => $report->tenant_id,
             'report_id' => $report->id,
             'token_hash' => $this->hashToken($raw),
+            // REPORT-LINK-COPY-001 — the link's own token is its alias, so «copy» returns the exact URL that was sent.
+            'alias_hash' => $this->hashToken($raw),
+            'alias_cipher' => Crypt::encryptString($raw),
             'password_hash' => ! empty($opts['password']) ? Hash::make($opts['password']) : null,
             'allow_download' => $opts['allow_download'] ?? true,
             'hide_spend' => $opts['hide_spend'] ?? false,
@@ -150,9 +154,36 @@ final class ShareService
 
     public function resolveActive(string $rawToken): ?ReportShare
     {
-        $share = ReportShare::withoutGlobalScopes()->where('token_hash', $this->hashToken($rawToken))->first();
+        $hash = $this->hashToken($rawToken);
+        // The original token, or the alias minted for a link made before aliases existed — one share either way.
+        $share = ReportShare::withoutGlobalScopes()->where('token_hash', $hash)->orWhere('alias_hash', $hash)->first();
 
         return $share && $share->isActive() ? $share : null;
+    }
+
+    /**
+     * REPORT-LINK-COPY-001 — the address of an existing link, retrievable for an authorised operator.
+     *
+     * Never a replacement: a link that already has an alias returns it; an older link (token stored one-way) is given an alias that
+     * resolves to the SAME share row, so its expiry, password, restrictions and audit history are the link's own. The original URL
+     * keeps working. The alias is encrypted at rest and appears only in this authorised response.
+     *
+     * @return array{token: string, minted: bool}
+     */
+    public function retrievableToken(ReportShare $share): array
+    {
+        if ($share->alias_cipher !== null) {
+            try {
+                return ['token' => Crypt::decryptString((string) $share->alias_cipher), 'minted' => false];
+            } catch (\Throwable) {
+                // An unreadable ciphertext (a rotated key) is replaced rather than served.
+            }
+        }
+
+        $raw = Str::random(self::TOKEN_LENGTH);
+        $share->forceFill(['alias_hash' => $this->hashToken($raw), 'alias_cipher' => Crypt::encryptString($raw)])->save();
+
+        return ['token' => $raw, 'minted' => true];
     }
 
     public function log(ReportShare $share, string $action, Request $request, ?string $detail = null): void

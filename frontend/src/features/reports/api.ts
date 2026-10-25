@@ -134,6 +134,11 @@ export interface ShareRow {
   columns?: Record<string, string[]>
   /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
   mode: 'live' | 'snapshot'
+  /**
+   * REPORT-SHARE-MODES-001 — what the link says about its own period. `frozen`: a snapshot, published once and never moving. `fixed`: live,
+   * refreshing only inside the report's saved start and end. `rolling`: live, following the reader's day.
+   */
+  period?: { kind: 'frozen' | 'fixed' | 'rolling'; from: string | null; to: string | null }
   /** How much of the report this link is; null means the report's own. */
   form?: 'executive_summary' | 'detailed' | null
   sections?: { previous_comparison?: boolean } & Record<string, boolean | undefined>
@@ -150,6 +155,9 @@ export interface CreatedShare extends ShareRow {
   token: string
 }
 
+/** REPORT-LINK-COPY-001 — the address of an existing link, for copying. Never creates a link. */
+export const shareLinkAddress = (p: string, reportId: string, shareId: string) =>
+  getData<{ url: string; path: string; alias_minted: boolean }>(`${base(p)}/${reportId}/shares/${shareId}/link`)
 export const listShares = (p: string, reportId: string) => getData<ShareRow[]>(`${base(p)}/${reportId}/shares`)
 export const createShare = (p: string, reportId: string, opts: Record<string, unknown>) =>
   postData<CreatedShare>(`${base(p)}/${reportId}/shares`, opts)

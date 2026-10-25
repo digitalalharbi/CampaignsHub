@@ -465,6 +465,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // Secure client links for a report (reports.share).
     Route::get('reports/{report}/shares', [ReportShareController::class, 'index'])->middleware('project.can:reports.view')->name('reports.shares.index');
     Route::post('reports/{report}/shares', [ReportShareController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.shares.store');
+    Route::get('reports/{report}/shares/{share}/link', [ReportShareController::class, 'link'])->middleware('project.can:reports.manage')->name('reports.shares.link');
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
     Route::post('reports/{report}/shares/{share}/pause', [ReportShareController::class, 'pause'])->middleware('project.can:reports.manage')->name('reports.shares.pause');
     Route::post('reports/{report}/shares/{share}/resume', [ReportShareController::class, 'resume'])->middleware('project.can:reports.manage')->name('reports.shares.resume');

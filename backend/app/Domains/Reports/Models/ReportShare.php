@@ -24,7 +24,7 @@ final class ReportShare extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'tenant_id', 'report_id', 'mode', 'form', 'token_hash', 'password_hash', 'allow_download',
+        'tenant_id', 'report_id', 'mode', 'form', 'token_hash', 'alias_hash', 'alias_cipher', 'password_hash', 'allow_download',
         'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'settings', 'scope',
         'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'paused_at', 'created_by', 'is_demo', 'trace_mark',
     ];

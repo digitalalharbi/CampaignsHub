@@ -28,6 +28,7 @@ import {
   getReport,
   listReports,
   listShares,
+  shareLinkAddress,
   regenerateReport,
   renewShare,
   revokeShare,
@@ -1338,27 +1339,35 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
         ) : (
           <div className="space-y-3">
             {/*
-              Live or fixed, chosen first, because it changes what the rest of this form means.
-              A fixed link shares the document that was signed off; a live one shares a dashboard the
-              client can filter, bounded by the two pickers below and by nothing else.
+              REPORT-SHARE-MODES-001 — Live or Snapshot, an explicit choice, made first because it changes what the rest of this form means.
+
+              Snapshot publishes the figures once and they never move. Live refreshes — and for a report with saved dates it refreshes ONLY
+              inside them: the period, metrics, platforms and branding chosen here travel with the link in both modes.
             */}
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-surface-secondary p-3">
-              <input
-                type="checkbox"
-                data-testid="share-live"
-                checked={live}
-                onChange={(e) => setLive(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-brand-600"
-              />
-              <span className="text-sm">
-                <b className="block font-semibold">{ar ? 'رابط لحظي يتحدث تلقائيًا' : 'A live link that keeps updating'}</b>
-                <span className="text-xs text-text-secondary">
-                  {ar
-                    ? 'يرى العميل أحدث الأرقام ويستطيع تغيير الفترة والمنصة والحملة، ضمن ما تختاره أدناه فقط.'
-                    : 'The client sees current figures and can change period, platform and campaign — only within what you choose below.'}
-                </span>
-              </span>
-            </label>
+            <div role="radiogroup" aria-label={ar ? 'نوع المشاركة' : 'Share mode'} className="grid gap-2 sm:grid-cols-2" data-testid="share-mode">
+              {([
+                { value: false, testid: 'share-snapshot', titleAr: 'نسخة ثابتة (Snapshot)', titleEn: 'Snapshot',
+                  noteAr: 'تُنشر الأرقام الحالية مرة واحدة وتبقى كما هي إلى الأبد.', noteEn: 'The figures are published once and never change.' },
+                { value: true, testid: 'share-live', titleAr: 'رابط لحظي (Live)', titleEn: 'Live link',
+                  noteAr: 'تتحدّث الأرقام تلقائيًا داخل الفترة المحفوظة للتقرير فقط، ويستطيع العميل التضييق ضمن ما تختاره أدناه.',
+                  noteEn: 'Figures refresh automatically, only inside the report’s saved dates; the client can narrow within what you choose below.' },
+              ] as const).map((o) => (
+                <label key={o.testid} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 ${live === o.value ? 'border-brand-600 bg-brand-600/5' : 'border-border bg-surface-secondary'}`}>
+                  <input
+                    type="radio"
+                    name="share-mode"
+                    data-testid={o.testid}
+                    checked={live === o.value}
+                    onChange={() => setLive(o.value)}
+                    className="mt-0.5 h-4 w-4 accent-brand-600"
+                  />
+                  <span className="text-sm">
+                    <b className="block font-semibold">{ar ? o.titleAr : o.titleEn}</b>
+                    <span className="text-xs text-text-secondary">{ar ? o.noteAr : o.noteEn}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
 
             {live && (
               <div className="grid gap-2 rounded-xl border border-border p-3" data-testid="share-scope">
@@ -1477,15 +1486,25 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.active ? 'bg-[var(--positive-background)] text-success' : 'bg-surface-secondary text-text-muted'}`}>{s.active ? (ar ? 'نشط' : 'Active') : s.revoked_at ? (ar ? 'مُلغى' : 'Revoked') : s.paused_at ? (ar ? 'متوقف' : 'Paused') : (ar ? 'منتهٍ' : 'Expired')}</span>
                     {/* Which kind of link this is, said plainly — the client's experience differs entirely. */}
-                    <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-text-secondary">
-                      {s.mode === 'live' ? (ar ? 'لحظي' : 'Live') : (ar ? 'ثابت' : 'Fixed')}
+                    <span data-testid={`share-mode-${s.id}`} data-kind={s.period?.kind ?? s.mode} className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-text-secondary">
+                      {s.period?.kind === 'frozen' || (s.period === undefined && s.mode !== 'live')
+                        ? (ar ? 'نسخة ثابتة' : 'Snapshot')
+                        : s.period?.kind === 'fixed'
+                          ? (ar ? 'لحظي · فترة ثابتة' : 'Live · fixed dates')
+                          : s.period?.kind === 'rolling' ? (ar ? 'لحظي · فترة متحركة' : 'Live · rolling') : (ar ? 'لحظي' : 'Live')}
                     </span>
+                    {s.period && (s.period.from || s.period.to) && (
+                      <span data-testid={`share-period-${s.id}`} className="tnum text-xs text-text-muted" dir="ltr">
+                        {s.period.from ?? '…'} → {s.period.to ?? (ar ? 'اليوم' : 'today')}
+                      </span>
+                    )}
                     {s.password_protected && <span className="text-xs text-text-muted">🔒 {ar ? 'محمي' : 'Protected'}</span>}
                     {s.hide_spend && <span className="text-xs text-text-muted">{ar ? 'إنفاق مخفي' : 'Spend hidden'}</span>}
                     <span className="tnum text-xs text-text-muted">{s.view_count} {ar ? 'مشاهدة' : 'views'}</span>
                     {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {fmtDate(s.expires_at)}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    {!s.revoked_at && <CopyShareLink projectId={projectId} reportId={reportId} shareId={s.id} ar={ar} />}
                     <button onClick={() => setLogsFor(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
                       {ar ? 'سجل الفتح' : 'Access history'}
                     </button>
@@ -1540,6 +1559,46 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
         )}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * REPORT-LINK-COPY-001 — copy an EXISTING link's address. Asks the server for it; creates nothing.
+ *
+ * An older link's token is stored one-way, so for it the server hands back a stable alias that opens the SAME link (same expiry,
+ * password and history) and says so — the original URL keeps working.
+ */
+function CopyShareLink({ projectId, reportId, shareId, ar }: { projectId: string; reportId: string; shareId: string; ar: boolean }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'alias' | 'failed'>('idle')
+  const copy = useMutation({
+    mutationFn: () => shareLinkAddress(projectId, reportId, shareId),
+    onSuccess: async (r) => {
+      try {
+        await navigator.clipboard.writeText(r.url)
+        setState(r.alias_minted ? 'alias' : 'copied')
+      } catch {
+        setState('failed')
+        window.prompt(ar ? 'انسخ الرابط:' : 'Copy the link:', r.url)
+      }
+    },
+    onError: () => setState('failed'),
+  })
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        data-testid={`share-copy-${shareId}`}
+        disabled={copy.isPending}
+        onClick={() => { setState('idle'); copy.mutate() }}
+        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline disabled:opacity-60"
+      >
+        <Copy size={12} /> {ar ? 'نسخ الرابط' : 'Copy link'}
+      </button>
+      {state === 'copied' && <span role="status" className="text-[11px] text-success">{ar ? 'تم النسخ' : 'Copied'}</span>}
+      {state === 'alias' && <span role="status" className="text-[11px] text-success">{ar ? 'تم النسخ — رابط ثابت يفتح التقرير نفسه، والرابط الأصلي ما زال يعمل' : 'Copied — a stable address for this same link; the original still works'}</span>}
+      {state === 'failed' && <span role="alert" className="text-[11px] text-danger">{ar ? 'تعذّر نسخ الرابط' : 'Could not copy the link'}</span>}
+    </span>
   )
 }
 
