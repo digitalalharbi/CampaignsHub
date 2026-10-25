@@ -34,6 +34,7 @@ final class ScheduledWorkInventoryTest extends TestCase
      */
     private const EXPECTED = [
         // AGENTS-ROUTINES-001 — four schedules of one command, each only for projects that opted in.
+        'agents:purge-chat',
         'agents:run-routines',
         'alerts:evaluate',
         // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.
@@ -45,6 +46,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'creatives:refresh-covers',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
         'delivery:prepare-weekly',
+        // DELIVERY-REMINDERS-001 — the chosen reviewer is nudged about a waiting, failed or unsent delivery.
+        'delivery:remind',
         // FORMS-PDPL-001 — the evidence around a form submission is anonymised past its form's retention (02:30 daily); the consent record is kept.
         'forms:purge-evidence',
         'fx:rates',
