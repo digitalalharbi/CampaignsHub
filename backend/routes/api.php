@@ -18,6 +18,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/health', [HealthController::class, 'health'])->name('health');
     Route::get('/ready', [HealthController::class, 'ready'])->name('ready');
 
+
+
     // Public brand/domain identity, consumed by the SPA and marketing site.
     Route::get('/brand', fn () => ApiResponse::success([
         'name' => config('brand.name'),

@@ -150,8 +150,8 @@ export function ProjectsPage() {
                   <Link to={`/projects/${p.id}/team`} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Users size={13} /> {t('team')}
                   </Link>
-                  <Link to={`/projects/${p.id}/integrations`} className="ms-auto font-bold text-brand-600 hover:underline">
-                    {t('integrations')} →
+                  <Link to={`/projects/${p.id}/overview`} className="ms-auto font-bold text-brand-600 hover:underline">
+                    {t('open')} →
                   </Link>
                 </div>
               </Card>

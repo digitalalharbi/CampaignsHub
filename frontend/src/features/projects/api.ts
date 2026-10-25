@@ -121,6 +121,36 @@ export function listProjectTasks(projectId: string): Promise<ProjectTask[]> {
   return getData<ProjectTask[]>(`/projects/${projectId}/tasks`)
 }
 
+export interface ProjectOverview {
+  project: { id: string; name: string; status: string; setup_completion: number; client_workspace_id: string; account_manager_id: number | null }
+  built: {
+    team_members: number
+    bound_accounts: number
+    open_tasks: number
+    overdue_tasks: number
+    unread_notifications: number
+  }
+  not_available_yet: string[]
+}
+
+export function getProjectOverview(projectId: string): Promise<ProjectOverview> {
+  return getData<ProjectOverview>(`/projects/${projectId}/overview`)
+}
+
+export function updateProjectMember(
+  projectId: string,
+  membershipId: string,
+  input: { role?: string; status?: string },
+): Promise<{ id: string; role: string; status: string }> {
+  return ensureCsrfCookie().then(async () => {
+    const res = await api.patch<ApiEnvelope<{ id: string; role: string; status: string }>>(
+      `/projects/${projectId}/team/${membershipId}`,
+      input,
+    )
+    return res.data.data
+  })
+}
+
 export function listClientWorkspaces(): Promise<ClientWorkspace[]> {
   return getData<ClientWorkspace[]>('/client-workspaces')
 }

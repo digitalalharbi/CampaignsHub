@@ -22,8 +22,11 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('project
     Route::post('{project}/resume', [ProjectController::class, 'resume'])->name('resume');
 });
 
+use App\Domains\Reports\Http\Controllers\ProjectReportsController;
+
 // Project-scoped resources (ResolveProject enforces project isolation).
 Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
+    Route::get('reports', ProjectReportsController::class)->name('reports.show');
     Route::get('overview', [ProjectOverviewController::class, 'show'])->name('overview');
     Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');
     Route::post('team', [ProjectMembershipController::class, 'store'])->name('team.store');
