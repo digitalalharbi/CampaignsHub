@@ -6,6 +6,7 @@ import { compact, moneyExact, moneyFromTotals, percent } from '@/features/analyt
 import { formatMoneyReading, moneyState, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { mixedResultsNote } from './reportMetrics'
 import { spendHiddenByLink } from './live/liveMetrics'
+import { columnHidden, hiddenMetricsOf } from './metricVisibility'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
 
@@ -274,8 +275,11 @@ export function LivePlatformComparison({
    */
   const COLUMN_KEYS = ['platform', 'spend', 'results', 'cost', 'impressions', 'clicks', 'ctr']
   const chosen = Array.isArray(payload.columns) ? undefined : payload.columns?.platforms
+  // REPORT-KPI-VISIBILITY-001 — a column whose metric the report hides is not drawn at all.
+  const hiddenMetrics = hiddenMetricsOf(payload)
   const keep = (noSpend ? [0, 2, 4, 5, 6] : [0, 1, 2, 3, 4, 5, 6])
     .filter((i) => i === 0 || chosen === undefined || chosen.includes(COLUMN_KEYS[i]))
+    .filter((i) => i === 0 || !columnHidden(hiddenMetrics, COLUMN_KEYS[i]))
   const pick = <T,>(cells: T[]): T[] => keep.map((i) => cells[i])
 
   return (
@@ -288,7 +292,7 @@ export function LivePlatformComparison({
           exact={built.exact.map(pick)}
           initialSort={keep.length > 1 ? { column: 1, dir: 'desc' } : undefined}
         />
-        {!noSpend && <p className="mt-2 text-xs text-text-muted">{t.blend}</p>}
+        {!noSpend && keep.includes(3) && <p className="mt-2 text-xs text-text-muted">{t.blend}</p>}
       </Section>
     </div>
   )

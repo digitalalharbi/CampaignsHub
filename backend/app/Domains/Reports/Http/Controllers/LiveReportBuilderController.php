@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
@@ -20,6 +21,8 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportMetricTemplate;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
@@ -375,6 +378,9 @@ final class LiveReportBuilderController extends Controller
             'providers.*' => ['string', 'max:40'],
             'metrics' => ['array'],
             'metrics.*' => ['string', 'max:40'],
+            // REPORT-KPI-VISIBILITY-001 — the metrics this link never shows; absent = the client's template, else the preset.
+            'hidden_metrics' => ['nullable', 'array'],
+            'hidden_metrics.*' => ['string', 'max:40'],
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom. The first three anchor on `to`.
@@ -473,6 +479,10 @@ final class LiveReportBuilderController extends Controller
             array_column(self::METRICS, 'key'),
         ));
 
+        $hiddenMetrics = isset($data['hidden_metrics'])
+            ? ReportMetricVisibility::normalise($data['hidden_metrics'])
+            : ReportMetricTemplate::startingPoint(Project::query()->findOrFail($project));
+
         $report = Report::create([
             'project_id' => $project,
             'name' => $data['name'],
@@ -507,7 +517,7 @@ final class LiveReportBuilderController extends Controller
              * No `data` snapshot on purpose — this report IS the live definition, and a stale copy
              * beside it would be a second answer nobody asked for.
              */
-            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind] + ($level === null ? [] : ['detail_level' => $level->value]),
+            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'hidden_metrics' => $hiddenMetrics] + ($level === null ? [] : ['detail_level' => $level->value]),
             /*
              * REPORT-ARCHITECTURE-001 — the level's sections are the report's OWN section settings.
              *
@@ -531,6 +541,7 @@ final class LiveReportBuilderController extends Controller
             'settings' => [
                 'section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? []))),
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
+                'hidden_metrics' => $hiddenMetrics,
             ],
             'scope' => [
                 'project_id' => (string) $project,

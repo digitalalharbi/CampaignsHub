@@ -55,6 +55,8 @@ type Input = {
   previous?: Record<string, number | null>
   currency: string
   metric_set?: string[]
+  /** REPORT-KPI-VISIBILITY-001 — metrics the report never shows; they leave the strip whatever else chose it. */
+  hidden_metrics?: readonly string[]
   /** LEAD-DESTINATION-001 — where a lead report's results happen; null when unstated or not a lead report. */
   lead_destination?: string | null
 }
@@ -184,8 +186,10 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
   const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective).primary
   const direct = data.objective_performance?.direct
 
+  const hidden = new Set(data.hidden_metrics ?? [])
+
   return keys
-    .filter((key) => SPECS[key])
+    .filter((key) => SPECS[key] && !hidden.has(key))
     .map((key) => {
       const spec = SPECS[key]
       const substituted = direct && (key === 'cpa' || key === 'roas')

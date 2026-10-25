@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Models;
 
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
@@ -90,8 +91,57 @@ final class ReportShare extends Model
     protected function hideSpend(): Attribute
     {
         return Attribute::make(
-            get: fn (mixed $value): bool => (bool) $value && ! $this->selectsSpend(),
+            // REPORT-KPI-VISIBILITY-001 — a metric hidden BY NAME is the same switch, and it beats the KPI selection: hidden is hidden.
+            get: fn (mixed $value): bool => ((bool) $value && ! $this->selectsSpend()) || in_array('spend', $this->hiddenMetrics(), true),
         );
+    }
+
+    protected function hideRevenue(): Attribute
+    {
+        return Attribute::make(
+            get: fn (mixed $value): bool => (bool) $value || in_array('revenue', $this->hiddenMetrics(), true),
+        );
+    }
+
+    /**
+     * REPORT-KPI-VISIBILITY-001 — the metrics this link never shows, by catalog key.
+     *
+     * Stored in `settings.hidden_metrics` (copied from the report when the link is made). Absent means the link predates the choice
+     * and hides nothing by name.
+     *
+     * @return list<string>
+     */
+    public function hiddenMetrics(): array
+    {
+        $own = ((array) ($this->settings ?? []))['hidden_metrics'] ?? null;
+        if (ReportMetricVisibility::isChosen($own)) {
+            return ReportMetricVisibility::normalise($own);
+        }
+
+        // A link that never stated a choice follows its report. Read past the tenant scope: a public request has no tenant context,
+        // and a lookup that came back empty there would turn «follow the report» into «hide nothing».
+        $reportId = $this->getAttribute('report_id');
+        if ($reportId === null) {
+            return [];
+        }
+        $this->reportHidden ??= ReportMetricVisibility::normalise(
+            ((array) (Report::withoutGlobalScopes()->find($reportId)?->config ?? []))['hidden_metrics'] ?? null,
+        );
+
+        return $this->reportHidden;
+    }
+
+    /** @var list<string>|null the report's own list, read once per instance */
+    private ?array $reportHidden = null;
+
+    /**
+     * The payload keys behind those metrics, other than spend and revenue (which ride the existing flags).
+     *
+     * @return list<string>
+     */
+    public function hiddenMetricKeys(): array
+    {
+        return ReportMetricVisibility::payloadKeys($this->hiddenMetrics());
     }
 
     public function selectsSpend(): bool

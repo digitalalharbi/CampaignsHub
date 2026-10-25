@@ -46,29 +46,37 @@ final class HiddenMoney
     /** Keys whose value is a SENTENCE about money, handled by what it reveals rather than nulled blind. */
     private const PROSE_LISTS = ['recommendations', 'next_steps'];
 
-    /** @return list<string> */
-    public static function keys(bool $hideSpend, bool $hideRevenue): array
+    /**
+     * @param  list<string>  $metricKeys  REPORT-KPI-VISIBILITY-001 — payload keys of metrics hidden BY NAME (see {@see ReportMetricVisibility})
+     * @return list<string>
+     */
+    public static function keys(bool $hideSpend, bool $hideRevenue, array $metricKeys = []): array
     {
         return array_values(array_unique(array_merge(
             $hideSpend ? self::SPEND : [],
             $hideRevenue ? self::REVENUE : [],
             $hideSpend && $hideRevenue ? self::CURRENCY : [],
+            $metricKeys,
         )));
     }
 
     /**
      * Redact a client payload for a link hiding spend and/or revenue. A no-op when neither is hidden.
      *
+     * `$metricKeys` are the keys of metrics hidden by NAME. Unlike money, which is nulled so the shape survives, these are REMOVED
+     * (and struck from any list that names the metric), so a hidden metric is absent from the payload rather than present and empty.
+     *
      * @param  array<string, mixed>  $data
+     * @param  list<string>  $metricKeys
      * @return array<string, mixed>
      */
-    public static function redact(array $data, bool $hideSpend, bool $hideRevenue): array
+    public static function redact(array $data, bool $hideSpend, bool $hideRevenue, array $metricKeys = []): array
     {
-        if (! $hideSpend && ! $hideRevenue) {
+        if (! $hideSpend && ! $hideRevenue && $metricKeys === []) {
             return $data;
         }
 
-        $keys = self::keys($hideSpend, $hideRevenue);
+        $keys = self::keys($hideSpend, $hideRevenue, $metricKeys);
 
         foreach (self::PROSE_LISTS as $list) {
             if (isset($data[$list]) && is_array($data[$list])) {
@@ -97,19 +105,32 @@ final class HiddenMoney
             }
         }
 
-        return self::walk($data, $keys);
+        return self::walk($data, $keys, $metricKeys);
     }
 
     /**
      * @param  array<string|int, mixed>  $node
      * @param  list<string>  $keys
+     * @param  list<string>  $removed  the keys that are REMOVED rather than nulled (metrics hidden by name)
      * @return array<string|int, mixed>
      */
-    private static function walk(array $node, array $keys): array
+    private static function walk(array $node, array $keys, array $removed = []): array
     {
         foreach ($node as $key => $value) {
-            if (is_string($key) && in_array($key, $keys, true) && ! is_array($value)) {
+            if (! is_string($key)) {
+                continue;
+            }
+            if (in_array($key, $removed, true)) {
+                unset($node[$key]);
+
+                continue;
+            }
+            if (in_array($key, $keys, true) && ! is_array($value)) {
                 $node[$key] = null;
+            }
+            // A list that NAMES metrics (the KPI selection, the metric set) loses the hidden ones.
+            if ($removed !== [] && in_array($key, ['metrics', 'metric_set', 'selected_metrics', 'kpi_keys', 'columns'], true) && is_array($value) && array_is_list($value)) {
+                $node[$key] = array_values(array_filter($value, static fn ($m): bool => ! is_string($m) || ! in_array($m, $removed, true)));
             }
         }
 
@@ -150,7 +171,7 @@ final class HiddenMoney
 
         foreach ($node as $key => $value) {
             if (is_array($value)) {
-                $node[$key] = self::walk($value, $keys);
+                $node[$key] = self::walk($value, $keys, $removed);
             }
         }
 

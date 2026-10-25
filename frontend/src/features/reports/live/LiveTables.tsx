@@ -1,4 +1,5 @@
 import { ProviderName } from '@/components/ProviderMark'
+import { columnHidden, hiddenMetricsOf } from '../metricVisibility'
 import { compact, percent } from '@/features/analytics/format'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { ChartCard } from '@/features/analytics/charts'
@@ -68,7 +69,9 @@ export function TablesView({
   }
   const build = <T,>(table: string, cols: Array<Col<T> | null>, items: T[]) => {
     const chosen = chosenFor(table)
-    const shown = cols.filter((c): c is Col<T> => c !== null).filter((c, i) => i === 0 || chosen === undefined || chosen.includes(c.key))
+    // REPORT-KPI-VISIBILITY-001 — a column whose metric the report hides is not drawn at all.
+    const hiddenMetrics = hiddenMetricsOf(payload)
+    const shown = cols.filter((c): c is Col<T> => c !== null).filter((c, i) => i === 0 || chosen === undefined || chosen.includes(c.key)).filter((c, i) => i === 0 || !columnHidden(hiddenMetrics, c.key))
 
     return {
       head: shown.map((c) => c.head),

@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
@@ -18,6 +19,8 @@ use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportMetricTemplate;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
@@ -131,10 +134,21 @@ final class ReportController extends Controller
              * did — so nothing that already exists changes meaning.
              */
             'branding_identity' => ['nullable', Rule::in(['client', 'agency'])],
+            // REPORT-KPI-VISIBILITY-001 — the metrics this report never shows a client; absent = the client's template, else the preset.
+            'hidden_metrics' => ['nullable', 'array'],
+            'hidden_metrics.*' => ['string', 'max:40'],
             'scope' => ['nullable', 'array'],
         ]);
 
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+
+        // A client-facing report starts from the client's template (else the preset); an internal one starts hiding nothing.
+        $hiddenMetrics = isset($data['hidden_metrics'])
+            ? ReportMetricVisibility::normalise($data['hidden_metrics'])
+            : (($data['audience'] ?? 'client') === 'internal' ? [] : ReportMetricTemplate::startingPoint(Project::query()->findOrFail($project)));
+        if ($hiddenMetrics !== [] || isset($data['hidden_metrics'])) {
+            $data['config'] = ['hidden_metrics' => $hiddenMetrics] + (array) ($data['config'] ?? []);
+        }
 
         $periodKind = in_array($data['period_kind'] ?? null, ReportPeriod::KINDS, true) ? (string) $data['period_kind'] : 'custom';
         if ($periodKind !== 'custom') {
@@ -224,10 +238,24 @@ final class ReportController extends Controller
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'mode' => ['sometimes', Rule::in(['live', 'snapshot'])],
             'config' => ['sometimes', 'array'],
+            // REPORT-KPI-VISIBILITY-001 — reopen and change which metrics this report hides; the rest of the config is untouched.
+            'hidden_metrics' => ['sometimes', 'array'],
+            'hidden_metrics.*' => ['string', 'max:40'],
         ]);
+        $hiddenMetrics = array_key_exists('hidden_metrics', $data) ? ReportMetricVisibility::normalise($data['hidden_metrics']) : null;
+        unset($data['hidden_metrics']);
         if (array_key_exists('config', $data)) {
             // REPORT-TABLES-OWNER-COLUMNS-001 — the same cut on an edit as on creation.
             $data['config'] = ReportColumns::normaliseConfig(is_array($data['config']) ? $data['config'] : null);
+            // A whole-config replacement that does not mention the hidden metrics must not bring them back: fail closed.
+            if (is_array($data['config']) && ! array_key_exists('hidden_metrics', $data['config']) && isset(((array) ($model->config ?? []))['hidden_metrics'])) {
+                $data['config']['hidden_metrics'] = ((array) $model->config)['hidden_metrics'];
+            }
+        }
+        if ($hiddenMetrics !== null) {
+            $base = array_key_exists('config', $data) ? (array) $data['config'] : (array) ($model->config ?? []);
+            $base['hidden_metrics'] = $hiddenMetrics;
+            $data['config'] = $base;
         }
         $model->update($data);
 

@@ -1,4 +1,5 @@
 import { compact, moneyExact, moneyFromTotals, percent, ratio } from '@/features/analytics/format'
+import { useHiddenMetrics } from './hiddenMetricsContext'
 import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { TrendPill } from '@/features/analytics/components'
 import type { Locale } from '@/stores/ui'
@@ -66,6 +67,8 @@ export function ReportPlatformSummary({
 
   type Cell = { key: string; label: string; value: string; delta?: number | null; invertGood?: boolean }
 
+  // REPORT-KPI-VISIBILITY-001 — a cell for a metric the report hides is not drawn.
+  const hiddenMetrics = useHiddenMetrics()
   const cells: Cell[] = [
     { key: 'spend', label: ar ? 'الإنفاق' : 'Spend', value: spend.text, delta: movement.spend ?? null },
     { key: 'conversions', label: ar ? 'النتائج' : 'Results', value: compact(num('conversions')), delta: movement.conversions ?? null },
@@ -141,7 +144,7 @@ export function ReportPlatformSummary({
       data-testid="report-platform-summary"
       className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4"
     >
-      {cells.map((cell) => (
+      {cells.filter((cell) => !hiddenMetrics.has(cell.key)).map((cell) => (
         <div key={cell.key} data-testid={`report-platform-summary-${cell.key}`} className="min-w-0">
           <dt className="text-[11px] text-text-muted">{cell.label}</dt>
           <dd className="flex flex-wrap items-baseline gap-1">

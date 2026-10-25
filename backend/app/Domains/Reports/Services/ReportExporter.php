@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
 use App\Domains\Reports\Support\ReportIdentity;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -92,6 +93,46 @@ final class ReportExporter
     ];
 
     /**
+     * REPORT-KPI-VISIBILITY-001 — a column whose metric is hidden on this document is not in the file at all.
+     *
+     * Matched on the header's own word (`cpa`, `CPA`, `Revenue`…) against the payload keys of every hidden metric, so a hidden CPA is a
+     * missing column — not an empty one that still says what was withheld. The first column (the row's name) is never dropped.
+     *
+     * @param  array<string,mixed>  $data
+     * @param  list<string>  $head
+     * @param  list<array<int,mixed>>  $rows
+     * @return array{0: list<string>, 1: list<array<int,mixed>>}
+     */
+    private static function withoutHiddenMetrics(array $data, array $head, array $rows): array
+    {
+        $hidden = ReportMetricVisibility::normalise($data['hidden_metrics'] ?? null);
+        if ($hidden === []) {
+            return [$head, $rows];
+        }
+
+        $words = array_map('strtolower', array_merge(
+            ReportMetricVisibility::payloadKeys($hidden),
+            in_array('spend', $hidden, true) ? ['spend'] : [],
+            in_array('revenue', $hidden, true) ? ['revenue'] : [],
+            in_array('cpa', $hidden, true) ? ['cost per', 'cost'] : [],
+        ));
+        $keep = [];
+        foreach ($head as $i => $label) {
+            if ($i === 0 || ! in_array(strtolower((string) $label), $words, true)) {
+                $keep[] = $i;
+            }
+        }
+        if (count($keep) === count($head)) {
+            return [$head, $rows];
+        }
+
+        return [
+            array_map(static fn (int $i) => $head[$i], $keep),
+            array_map(static fn (array $row) => array_map(static fn (int $i) => $row[$i] ?? null, $keep), $rows),
+        ];
+    }
+
+    /**
      * Cut a table to the Owner's column choice, identically for CSV and XLSX.
      *
      * Hiding a column is a display decision: money a link withholds is already null in `$data`, so
@@ -104,6 +145,7 @@ final class ReportExporter
      */
     private static function chosenColumns(array $data, string $table, array $head, array $rows): array
     {
+        [$head, $rows] = self::withoutHiddenMetrics($data, $head, $rows);
         $chosen = $data['report_columns'][$table] ?? null;
         if (! is_array($chosen)) {
             return [$head, $rows];
@@ -412,15 +454,16 @@ final class ReportExporter
          */
         if (! empty($data['funnel'])) {
             $put([]);
-            $put(['Funnel', 'count', 'step rate', 'cost per', 'exceeds previous']);
-            foreach ($data['funnel'] as $stage) {
-                $put([
-                    $stage['label'] ?? $stage['stage'] ?? '',
-                    ($stage['reported'] ?? false) ? ($stage['count'] ?? '') : '',
-                    $stage['step_rate'] ?? '',
-                    $stage['cost_per'] ?? '',
-                    ($stage['exceeds_previous'] ?? false) ? 'yes' : '',
-                ]);
+            [$funnelHead, $funnelRows] = self::withoutHiddenMetrics($data, ['Funnel', 'count', 'step rate', 'cost per', 'exceeds previous'], array_map(static fn ($stage) => [
+                $stage['label'] ?? $stage['stage'] ?? '',
+                ($stage['reported'] ?? false) ? ($stage['count'] ?? '') : '',
+                $stage['step_rate'] ?? '',
+                $stage['cost_per'] ?? '',
+                ($stage['exceeds_previous'] ?? false) ? 'yes' : '',
+            ], $data['funnel']));
+            $put($funnelHead);
+            foreach ($funnelRows as $funnelRow) {
+                $put($funnelRow);
             }
         }
 
@@ -451,9 +494,14 @@ final class ReportExporter
 
         if (! empty($data['campaigns'])) {
             $put([]);
-            $put(['Campaigns', 'platform', 'spend', 'revenue', 'conversions', 'roas', 'cpa']);
-            foreach ($data['campaigns'] as $c) {
-                $put([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? '', $c['revenue'] ?? '', $c['conversions'] ?? '', $c['roas'] ?? '', $c['cpa'] ?? '']);
+            [$campHead, $campRows] = self::withoutHiddenMetrics(
+                $data,
+                ['Campaigns', 'platform', 'spend', 'revenue', 'conversions', 'roas', 'cpa'],
+                array_map(static fn ($c) => [$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? '', $c['revenue'] ?? '', $c['conversions'] ?? '', $c['roas'] ?? '', $c['cpa'] ?? ''], $data['campaigns']),
+            );
+            $put($campHead);
+            foreach ($campRows as $campRow) {
+                $put($campRow);
             }
         }
         /*
@@ -602,10 +650,15 @@ final class ReportExporter
         if (! empty($data['campaigns'])) {
             $cs = $book->createSheet();
             $cs->setTitle('Campaigns');
-            $cs->fromArray(['Campaign', 'Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'], null, 'A1');
+            [$campHead, $campRows] = self::withoutHiddenMetrics(
+                $data,
+                ['Campaign', 'Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'],
+                array_map(static fn ($c) => [$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? null, $c['revenue'] ?? null, $c['conversions'] ?? null, $c['roas'] ?? null, $c['cpa'] ?? null], $data['campaigns']),
+            );
+            $cs->fromArray($campHead, null, 'A1');
             $row = 2;
-            foreach ($data['campaigns'] as $c) {
-                $cs->fromArray([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? null, $c['revenue'] ?? null, $c['conversions'] ?? null, $c['roas'] ?? null, $c['cpa'] ?? null], null, "A{$row}");
+            foreach ($campRows as $campRow) {
+                $cs->fromArray($campRow, null, "A{$row}");
                 $row++;
             }
         }
@@ -655,10 +708,11 @@ final class ReportExporter
             $add('Daily Records', $dayHead, $dayRows);
         }
         if (! empty($data['funnel']) && $audience !== 'executive') {
-            $add('Funnel', ['Stage', 'Count', 'Step Rate', 'Cost Per'], array_map(
+            [$funnelHead, $funnelRows] = self::withoutHiddenMetrics($data, ['Stage', 'Count', 'Step Rate', 'Cost Per'], array_map(
                 fn ($s) => [$s['label'] ?? '', $s['count'] ?? null, $s['step_rate'] ?? null, $s['cost_per'] ?? null],
                 $data['funnel'],
             ));
+            $add('Funnel', $funnelHead, $funnelRows);
         }
         $this->budgetSheet($add, $data);
 

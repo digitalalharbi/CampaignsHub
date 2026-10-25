@@ -51,7 +51,7 @@ export interface ReportRow {
   error: string | null
   exports: ReportExportRow[]
   /** REPORT-DRILLDOWN-001 — only the part of the config this list reads: the PDF's optional sections. */
-  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } } } | null
+  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } }; hidden_metrics?: string[] } | null
 }
 export interface ReportsIndex {
   reports: ReportRow[]
@@ -262,6 +262,22 @@ export interface ReportIdentityPayload extends SharedBranding {
   } | null
 }
 
+/** REPORT-KPI-VISIBILITY-001 — the client's reusable «metrics my reports hide» template. */
+export interface ReportMetricTemplate {
+  catalog: Array<{ key: string; group: string; ar: string; en: string }>
+  preset: string[]
+  /** The client's saved list, or null when none was ever saved. */
+  template: string[] | null
+  /** What a NEW client-facing report starts from: the template, else the preset. */
+  starting_point: string[]
+}
+export const reportMetricTemplate = (p: string) => getData<ReportMetricTemplate>(`${base(p)}/metric-template`)
+export const saveReportMetricTemplate = (p: string, hidden_metrics: string[]) =>
+  putData<{ template: string[]; starting_point: string[] }>(`${base(p)}/metric-template`, { hidden_metrics })
+/** Reopen a saved report and change which metrics it hides; the rest of its configuration is untouched. */
+export const updateReportHiddenMetrics = (p: string, id: string, hidden_metrics: string[]) =>
+  patchData<ReportRow>(`${base(p)}/${id}`, { hidden_metrics })
+
 export const projectReportIdentity = (projectId: string) =>
   getData<ReportIdentityPayload>(`/projects/${encodeURIComponent(projectId)}/report-identity`)
 
@@ -397,6 +413,8 @@ export interface StoreFunnelPayload {
 }
 
 export interface LivePayload {
+  /** REPORT-KPI-VISIBILITY-001 — the metrics this report never shows; their figures are already out of the payload. */
+  hidden_metrics?: string[]
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */

@@ -1,4 +1,5 @@
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { HiddenMetricsProvider } from './hiddenMetricsContext'
 import { selectColumns } from './reportColumns'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -493,6 +494,7 @@ export function PrintDocument({
   }
 
   return (
+    <HiddenMetricsProvider hidden={data.hidden_metrics}>
     <div className="doc-root">
       <style>{DOC_CSS}</style>
       {/*
@@ -952,6 +954,7 @@ export function PrintDocument({
         </p>
       </footer>
     </div>
+    </HiddenMetricsProvider>
   )
 }
 

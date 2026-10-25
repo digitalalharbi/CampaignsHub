@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards } from './ReportIdentityCards'
+import { MetricVisibilityPicker, useStartingHidden } from './MetricVisibilityPicker'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -214,6 +215,9 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   // REPORT-TABLES-OWNER-COLUMNS-001 — null means «every column», which is also what is sent.
   const [platformCols, setPlatformCols] = useState<string[] | null>(null)
   const [otherCols, setOtherCols] = useState<Record<'accounts' | 'content' | 'days', string[] | null>>({ accounts: null, content: null, days: null })
+  /* REPORT-KPI-VISIBILITY-001 — null until the selector is touched: the server then starts the link from the client's template. */
+  const startingHidden = useStartingHidden(projectId)
+  const [hiddenChoice, setHiddenChoice] = useState<string[] | null>(null)
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -233,6 +237,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         detail_level: level,
         hide_spend: hideSpend,
         hide_revenue: hideRevenue,
+        ...(hiddenChoice === null ? {} : { hidden_metrics: hiddenChoice }),
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
         ...(() => {
@@ -355,6 +360,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             whose marks a client would see by making the link and opening it.
           */}
           <ReportIdentityCards projectId={projectId} ar={ar} />
+          <MetricVisibilityPicker ar={ar} hidden={hiddenChoice ?? startingHidden ?? []} onChange={setHiddenChoice} projectId={projectId} />
 
           <Field label={ar ? 'اسم التقرير' : 'Report name'} required>
             <input

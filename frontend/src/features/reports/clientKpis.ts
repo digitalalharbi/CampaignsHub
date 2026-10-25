@@ -35,6 +35,8 @@ interface Path {
 export interface KpiSource {
   /** The operator's own selection. When set it wins — LIVEREP-002. */
   metrics?: string[] | null
+  /** REPORT-KPI-VISIBILITY-001 — metrics the report never shows; they leave the block whatever else chose it. */
+  hidden_metrics?: readonly string[] | null
   objective_performance?: { paths?: Path[] | null } | null
   totals?: Record<string, unknown> | null
 }
@@ -68,6 +70,13 @@ const ALIASES: Array<[string, string]> = [['purchases', 'conversions']]
 const CARD_FOR: Record<string, string> = { orders: 'conversions' }
 
 export function clientKpiKeys(source: KpiSource, renderable: ReadonlySet<string>): string[] {
+  const hidden = new Set(source.hidden_metrics ?? [])
+  const keys = shownKeys(source, renderable)
+
+  return hidden.size === 0 ? keys : keys.filter((key) => !hidden.has(key))
+}
+
+function shownKeys(source: KpiSource, renderable: ReadonlySet<string>): string[] {
   if ((source.metrics?.length ?? 0) > 0) return source.metrics as string[]
 
   const spending = (source.objective_performance?.paths ?? []).filter((p) => (p.spend ?? 0) > 0)

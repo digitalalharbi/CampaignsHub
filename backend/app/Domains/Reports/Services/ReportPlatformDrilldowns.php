@@ -126,6 +126,6 @@ final class ReportPlatformDrilldowns
          */
         return $share === null
             ? $blocks
-            : HiddenMoney::redact(['platform_drilldowns' => $blocks], (bool) $share->hide_spend, (bool) $share->hide_revenue)['platform_drilldowns'];
+            : HiddenMoney::redact(['platform_drilldowns' => $blocks], (bool) $share->hide_spend, (bool) $share->hide_revenue, $share->hiddenMetricKeys())['platform_drilldowns'];
     }
 }

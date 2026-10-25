@@ -190,7 +190,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     count,
     /* Which cards this report shows — decided by what it is ABOUT, not by a fixed list (`clientKpis.ts`). */
     keys: (payload: LivePayload | null | undefined) => clientKpiKeys(
-      { metrics: payload?.metrics, objective_performance: payload?.objective_performance, totals: payload?.totals },
+      { metrics: payload?.metrics, hidden_metrics: payload?.hidden_metrics, objective_performance: payload?.objective_performance, totals: payload?.totals },
       new Set(Object.keys(METRIC_META)),
     ),
   // eslint-disable-next-line react-hooks/exhaustive-deps

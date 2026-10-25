@@ -1,4 +1,5 @@
 import { basisLine } from './ExecutiveSummary'
+import { hiddenMetricsOf } from '../metricVisibility'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -531,7 +532,7 @@ function PlatformDetail({
             {resultShare !== null && <ProgressRing value={resultShare} sublabel={ar ? 'من النتائج' : 'of results'} size={116} tone="success" />}
             {spendShare === null && resultShare === null && <span className="text-sm text-text-muted">—</span>}
           </div>
-          {wholeRow && (
+          {wholeRow && !hiddenMetricsOf(payload).has('cpa') && (
             <p className="tnum mt-2 text-center text-xs text-text-secondary">
               {ar ? 'تكلفة النتيجة' : 'Cost per result'}: <Num>{formatMoneyReading(readCostPer(wholeRow as unknown as MoneyTotals, 'cpa', 'conversions', currency, ar), (v) => reader.asExactMoney(v))}</Num>
             </p>

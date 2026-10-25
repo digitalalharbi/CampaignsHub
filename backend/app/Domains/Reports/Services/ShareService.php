@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
@@ -260,6 +261,10 @@ final class ShareService
                     $row[$k] = null;
                 }
             }
+            // REPORT-KPI-VISIBILITY-001 — a metric hidden by name is removed, not blanked.
+            foreach ($share->hiddenMetricKeys() as $k) {
+                unset($row[$k]);
+            }
         };
 
         /*
@@ -309,6 +314,7 @@ final class ShareService
             $data['objective_analytics'] = ObjectiveReportAnalytics::redact($data['objective_analytics'], array_merge(
                 $share->hide_spend ? CreativeVisibility::COST_METRICS : [],
                 $share->hide_revenue ? CreativeVisibility::REVENUE_METRICS : [],
+                $share->hiddenMetricKeys(),
             ));
         }
 
@@ -396,6 +402,8 @@ final class ShareService
         if ($share->hide_spend || $share->hide_revenue) {
             unset($data['summary']); // summary embeds spend/revenue figures
         }
+        $metricKeys = $share->hiddenMetricKeys();
+        $data = ReportMetricVisibility::withoutSentencesNaming($data, $share->hiddenMetrics());
 
         /*
          * A note that states a hidden figure in PROSE is not covered by column redaction.
@@ -412,6 +420,7 @@ final class ShareService
         $hidden = array_merge(
             $share->hide_spend ? ['spend'] : [],
             $share->hide_revenue ? ['revenue'] : [],
+            $metricKeys,
         );
         if ($hidden !== [] && ! empty($data['observations'])) {
             $data['observations'] = array_values(array_filter(
@@ -435,13 +444,13 @@ final class ShareService
          */
         if (array_key_exists('attention', $data)) {
             $data['attention'] = is_array($data['attention'])
-                ? AttentionAudience::redact($data['attention'], (bool) $share->hide_spend, (bool) $share->hide_revenue)
+                ? AttentionAudience::redact($data['attention'], (bool) $share->hide_spend, (bool) $share->hide_revenue, $metricKeys)
                 : null;
             $data = ReportStructure::refresh($data, 'recommendations');
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
-        return HiddenMoney::redact($data, (bool) $share->hide_spend, (bool) $share->hide_revenue);
+        return HiddenMoney::redact($data, (bool) $share->hide_spend, (bool) $share->hide_revenue, $metricKeys) + ($share->hiddenMetrics() === [] ? [] : ['hidden_metrics' => $share->hiddenMetrics()]);
     }
 
     /**
@@ -466,11 +475,12 @@ final class ShareService
     {
         $payload = $this->withoutCampaignIdentity($payload);
 
-        if (! $share->hide_spend && ! $share->hide_revenue) {
+        if (! $share->hide_spend && ! $share->hide_revenue && $share->hiddenMetricKeys() === []) {
             return $payload;
         }
 
         $keys = array_merge(
+            $share->hiddenMetricKeys(),
             $share->hide_spend ? array_merge(CreativeVisibility::COST_METRICS, CreativeVisibility::MONEY_COMPANIONS['spend']) : [],
             $share->hide_revenue ? array_merge(
                 CreativeVisibility::REVENUE_METRICS,
@@ -554,18 +564,23 @@ final class ShareService
      */
     public function sanitizeLive(array $payload, ReportShare $share): array
     {
-        if (! $share->hide_spend && ! $share->hide_revenue && ! $share->hide_campaign_names) {
+        if (! $share->hide_spend && ! $share->hide_revenue && ! $share->hide_campaign_names && $share->hiddenMetricKeys() === []) {
             return $payload;
         }
 
         /* The same one list the snapshot path reads — see `sanitize()` and the constant itself. */
         $money = HiddenMoney::keys((bool) $share->hide_spend, (bool) $share->hide_revenue);
+        $metricKeys = $share->hiddenMetricKeys();
 
-        $strip = function (array $row) use ($money, $share): array {
+        $strip = function (array $row) use ($money, $metricKeys, $share): array {
             foreach ($money as $key) {
                 if (array_key_exists($key, $row)) {
                     $row[$key] = null;
                 }
+            }
+            // REPORT-KPI-VISIBILITY-001 — a metric hidden by name is removed, not blanked.
+            foreach ($metricKeys as $key) {
+                unset($row[$key]);
             }
             if ($share->hide_campaign_names && array_key_exists('campaign_name', $row)) {
                 $row['campaign_name'] = 'حملة';
@@ -734,6 +749,6 @@ final class ShareService
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
-        return HiddenMoney::redact($payload, (bool) $share->hide_spend, (bool) $share->hide_revenue);
+        return HiddenMoney::redact($payload, (bool) $share->hide_spend, (bool) $share->hide_revenue, $metricKeys) + ($share->hiddenMetrics() === [] ? [] : ['hidden_metrics' => $share->hiddenMetrics()]);
     }
 }

@@ -100,11 +100,12 @@ final class AttentionAudience
      * evidence and leaves with it; an impact is money, so it leaves with spend.
      *
      * @param  list<array<string,mixed>>  $items
+     * @param  list<string>  $metricKeys  REPORT-KPI-VISIBILITY-001 — metrics hidden by name
      * @return list<array<string,mixed>>
      */
-    public static function redact(array $items, bool $hideSpend, bool $hideRevenue): array
+    public static function redact(array $items, bool $hideSpend, bool $hideRevenue, array $metricKeys = []): array
     {
-        if (! $hideSpend && ! $hideRevenue) {
+        if (! $hideSpend && ! $hideRevenue && $metricKeys === []) {
             return $items;
         }
 
@@ -115,7 +116,8 @@ final class AttentionAudience
             foreach ($item['kpis'] ?? [] as $kpi) {
                 $key = (string) ($kpi['key'] ?? '');
                 $hidden = ($hideSpend && in_array($key, self::SPEND_METRICS, true))
-                    || ($hideRevenue && in_array($key, self::REVENUE_METRICS, true));
+                    || ($hideRevenue && in_array($key, self::REVENUE_METRICS, true))
+                    || in_array($key, $metricKeys, true);
                 if ($hidden) {
                     if (($kpi['primary'] ?? false) === true) {
                         $keep = false;

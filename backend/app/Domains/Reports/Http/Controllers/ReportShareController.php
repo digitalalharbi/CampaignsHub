@@ -12,6 +12,7 @@ use App\Domains\Reports\Services\ShareAnalytics;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 use App\Domains\Reports\Support\ShareSections;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -95,6 +96,9 @@ final class ReportShareController extends Controller
             'columns' => ['array'],
             'columns.*' => ['array'],
             'columns.*.*' => ['string', 'max:40'],
+            // REPORT-KPI-VISIBILITY-001 — the metrics this link never shows; absent = the link follows its report.
+            'hidden_metrics' => ['array'],
+            'hidden_metrics.*' => ['string', 'max:40'],
         ]);
 
         /*
@@ -139,7 +143,7 @@ final class ReportShareController extends Controller
              */
             'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => false])->toArray(),
             'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
-        ];
+        ] + (isset($opts['hidden_metrics']) ? ['hidden_metrics' => ReportMetricVisibility::normalise($opts['hidden_metrics'])] : []);
 
         [$share, $raw] = $this->shares->create($model, $opts, $request->user()->id);
         $audit->log(action: 'report.shared_link_created', entityType: ReportShare::class, entityId: (string) $share->id);
@@ -273,6 +277,8 @@ final class ReportShareController extends Controller
             'columns' => ['array'],
             'columns.*' => ['array'],
             'columns.*.*' => ['string', 'max:40'],
+            'hidden_metrics' => ['array'],
+            'hidden_metrics.*' => ['string', 'max:40'],
         ]);
 
         $before = $link->only(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'form', 'expires_at']);
@@ -303,6 +309,10 @@ final class ReportShareController extends Controller
         if (array_key_exists('columns', $opts)) {
             // The whole choice at once: a table named is replaced, a table absent means every column — exactly as at creation.
             $settings['columns'] = ReportColumns::fromArray($opts['columns'])->toArray();
+        }
+        if (array_key_exists('hidden_metrics', $opts)) {
+            // The link now owns its list (an empty one included): it no longer follows the report.
+            $settings['hidden_metrics'] = ReportMetricVisibility::normalise($opts['hidden_metrics']);
         }
         $fill['settings'] = $settings;
 
@@ -544,6 +554,8 @@ final class ReportShareController extends Controller
             'sections' => $s->sectionVisibility()->toArray(),
             // REPORT-TABLES-OWNER-COLUMNS-001 — what the link publishes per table, so the edit dialog starts from it.
             'columns' => ReportColumns::forShare($s)->toArray(),
+            // REPORT-KPI-VISIBILITY-001 — what the link hides by name, so the edit dialog starts from it.
+            'hidden_metrics' => $s->hiddenMetrics(),
             'scope' => $s->scope,
             'allow_download' => $s->allow_download,
             'hide_spend' => $s->hide_spend,

@@ -39,6 +39,7 @@ use App\Domains\Reports\Http\Controllers\ReportAttentionController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportIdentityController;
+use App\Domains\Reports\Http\Controllers\ReportMetricTemplateController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
@@ -396,6 +397,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('agent-proposals', [ActionProposalController::class, 'store'])->middleware('project.can:campaigns.manage')->name('agent-proposals.store');
     Route::post('agent-proposals/{proposal}/approve', [ActionProposalController::class, 'approve'])->middleware('project.can:campaigns.manage')->name('agent-proposals.approve');
     Route::post('agent-proposals/{proposal}/reject', [ActionProposalController::class, 'reject'])->middleware('project.can:campaigns.manage')->name('agent-proposals.reject');
+    // REPORT-KPI-VISIBILITY-001 — the client's reusable «metrics my reports hide» template.
+    Route::get('reports/metric-template', [ReportMetricTemplateController::class, 'show'])->middleware('project.can:reports.view')->name('reports.metric-template.show');
+    Route::put('reports/metric-template', [ReportMetricTemplateController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.metric-template.update');
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
     Route::get('reports/live/options/ads', [LiveReportBuilderController::class, 'ads'])->middleware('project.can:reports.view')->name('reports.live.options.ads');
     Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.live.store')

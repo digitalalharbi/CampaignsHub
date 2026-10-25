@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { HiddenMetricsProvider } from './hiddenMetricsContext'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
@@ -197,6 +198,7 @@ export function LiveSharedReport({
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone: a grid item's `min-width`
      * is `auto`, and a chart container's min-content is wider than a 375px screen.
      */
+    <HiddenMetricsProvider hidden={payload.hidden_metrics}>
     <div className="grid gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offeredHere.length > 1 && (
         <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid gap-1 rounded-2xl border border-border bg-surface p-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
@@ -381,5 +383,6 @@ export function LiveSharedReport({
       document.body,
       )}
     </div>
+    </HiddenMetricsProvider>
   )
 }

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { hiddenMetricsOf } from '../metricVisibility'
 import { AlertTriangle } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ProviderName } from '@/components/ProviderMark'
@@ -120,6 +121,7 @@ export function ObjectiveSplit({ payload, ar, reader }: { payload: LivePayload; 
                         <Num>{asMoney(block.spend)}</Num>
                       </dd>
                     </div>
+                    {!hiddenMetricsOf(payload).has('cpa') && (
                     <div>
                       <dt className="text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</dt>
                       <dd className="tnum font-semibold text-text-primary">
@@ -150,6 +152,7 @@ export function ObjectiveSplit({ payload, ar, reader }: { payload: LivePayload; 
                             : asExactMoney((block as typeof payload.objective_performance.blended).blended_cpa)}</Num>
                       </dd>
                     </div>
+                    )}
                   </dl>
                 </div>
               ))}

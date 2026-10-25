@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { hiddenMetricsOf } from '../metricVisibility'
 import { ProviderName } from '@/components/ProviderMark'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
@@ -179,7 +180,7 @@ function PlatformBody({
   return (
     <>
       {blocks.map((block) => {
-        const keys = block.keys.filter((k) => reader.meta[k])
+        const keys = block.keys.filter((k) => reader.meta[k]).filter((k) => !hiddenMetricsOf(whole).has(k))
         if (keys.length === 0) return null
 
         return (

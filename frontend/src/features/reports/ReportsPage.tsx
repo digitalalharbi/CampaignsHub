@@ -1,4 +1,6 @@
 import { ReportIdentityCards } from './ReportIdentityCards'
+import { MetricVisibilityPicker, useStartingHidden } from './MetricVisibilityPicker'
+import { ReportMetricsEditor } from './ReportMetricsEditor'
 import { ColumnPicker } from './ColumnPicker'
 import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
@@ -8,7 +10,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, Eye, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { productName } from '@/lib/brand'
 import { ShareAnalyticsStrip } from './ShareAnalyticsStrip'
 import { ShareEditDialog } from './ShareEditDialog'
@@ -121,6 +123,7 @@ export function ReportsPage() {
    */
   const [scopeId, setScopeId] = useState<string | null>(null)
   const [sectionsId, setSectionsId] = useState<string | null>(null)
+  const [metricsId, setMetricsId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
@@ -494,6 +497,7 @@ export function ReportsPage() {
                     onShare={() => setShareId(r.id)}
                     onScope={() => setScopeId(r.id)}
                     onSections={() => setSectionsId(r.id)}
+                    onMetrics={() => setMetricsId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onTogglePdfDrilldown={(on) => drill.mutate({ id: r.id, on })}
@@ -574,6 +578,17 @@ export function ReportsPage() {
           <ScopeLostDialog ar={ar} onClose={() => setSectionsId(null)} />
         )
       )}
+      {metricsId && (
+        currentProjectId ? (
+          <ReportMetricsEditor
+            projectId={currentProjectId}
+            report={allRows.find((r) => r.id === metricsId)}
+            onClose={() => setMetricsId(null)}
+          />
+        ) : (
+          <ScopeLostDialog ar={ar} onClose={() => setMetricsId(null)} />
+        )
+      )}
       {scopeId && (
         currentProjectId ? (
           <ScopeEditor
@@ -600,6 +615,7 @@ function ReportRowView({
   onShare,
   onScope,
   onSections,
+  onMetrics,
   onRegenerate,
   onExport,
   onTogglePdfDrilldown,
@@ -612,6 +628,7 @@ function ReportRowView({
   onShare: () => void
   onScope: () => void
   onSections: () => void
+  onMetrics: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
   /** REPORT-DRILLDOWN-001 — the PDF's optional per-platform section; off by default. */
@@ -689,6 +706,7 @@ function ReportRowView({
           )}
           <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
           <IconBtn title={ar ? 'أقسام التقرير' : 'Report sections'} onClick={onSections}><ListChecks size={15} /></IconBtn>
+          <IconBtn title={ar ? 'المؤشرات الظاهرة للعميل' : 'Metrics the client sees'} onClick={onMetrics}><Eye size={15} /></IconBtn>
           <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
           <IconBtn title={ar ? 'حذف' : 'Delete'} onClick={onDelete} danger><Trash2 size={15} /></IconBtn>
         </div>
@@ -871,6 +889,10 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    */
   const [columnChoice, setColumnChoice] = useState<Record<string, string[] | null>>({})
   const chosenColumns = Object.fromEntries(Object.entries(columnChoice).filter(([, v]) => v !== null)) as Record<string, string[]>
+  /* REPORT-KPI-VISIBILITY-001 — null until the operator touches the selector: the server then starts the report from the client's template. */
+  const startingHidden = useStartingHidden(projectId)
+  const [hiddenChoice, setHiddenChoice] = useState<string[] | null>(null)
+  const hiddenMetrics = hiddenChoice ?? startingHidden ?? []
   const startingSections = levelSections(level)
   const sectionPreview = (sectionRegistry.data?.sections ?? []).map((x) => ({
     ...x,
@@ -889,6 +911,7 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
         detail_level: level,
         ...(Object.keys(sectionChoice).length === 0 ? {} : { section_settings: { sections: sectionChoice } }),
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
+        ...(hiddenChoice === null ? {} : { hidden_metrics: hiddenChoice }),
         ...(Object.keys(chosenColumns).length === 0 ? {} : { config: { columns: chosenColumns } }),
         audience: audience ?? 'client',
         period_start: from,
@@ -998,6 +1021,7 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
           wears; the company's is secondary attribution inside the report.
         */}
         <ReportIdentityCards projectId={projectId} ar={ar} />
+        <MetricVisibilityPicker ar={ar} hidden={hiddenMetrics} onChange={setHiddenChoice} projectId={projectId} />
         {/*
           REPORT-CREATION-UX-001 — WHOSE report this is, said at creation.
 

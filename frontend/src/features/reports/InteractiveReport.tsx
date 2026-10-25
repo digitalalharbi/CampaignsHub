@@ -35,6 +35,8 @@ import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import type { TimePoint } from '@/features/analytics/api'
 import { SPECS, sparkFor } from '@/features/analytics/metricCatalog'
+import { HiddenMetricsProvider } from './hiddenMetricsContext'
+import { hiddenMetricsOf, visibleColumns } from './metricVisibility'
 import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
@@ -65,6 +67,8 @@ export interface ReportSection {
 }
 
 export interface ReportData {
+  /** REPORT-KPI-VISIBILITY-001 — the metrics this report never shows; their figures are already out of the payload. */
+  hidden_metrics?: string[]
   /** WD-EVIDENCE-001 — the PDF appendix's platform screenshots, from the print payload only. */
   platform_evidence?: PrintEvidence[]
   /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention», already cut for this reader by the server. */
@@ -467,6 +471,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
   if (slides.length === 0) return <p className="py-8 text-center text-sm text-text-secondary">لا شرائح مرئية.</p>
 
   return (
+    <HiddenMetricsProvider hidden={data.hidden_metrics}>
     <div>
       {/*
         The contents, including what is not here — REPORT-ANALYTICAL-DEPTH-001. Above the mode
@@ -505,6 +510,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
         }}
       />
     </div>
+    </HiddenMetricsProvider>
   )
 }
 
@@ -1319,14 +1325,14 @@ function ComparisonSlide({ data }: { data: ReportData }) {
       <ChartCard title="ترتيب المنصات" className="lg:col-span-2">
         <DataMetricTable
           /* REPORT-TABLES-OWNER-COLUMNS-001 — the saved report's own column choice, the same cut the print and the files make. */
-          columns={cutColumns(data.report_columns?.platforms, [
+          columns={visibleColumns(cutColumns(data.report_columns?.platforms, [
             { key: 'platform', label: 'المنصة', kind: 'text' },
             { key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency },
             { key: 'conversions', label: 'النتائج', kind: 'number' },
             { key: 'cpa', label: 'CPA', kind: 'money', currency: data.currency },
             { key: 'roas', label: 'ROAS', kind: 'ratio' },
             { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
-          ], { spend: 'spend', conversions: 'results', cpa: 'cost' })}
+          ], { spend: 'spend', conversions: 'results', cpa: 'cost' }), hiddenMetricsOf(data))}
           rows={(data.platforms ?? []).map((p) => ({
             platform: (
               <span className="inline-flex items-center gap-1.5 font-semibold">
@@ -1823,7 +1829,7 @@ function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number,
   return (
     <div data-testid="report-daily-records">
       <Title sub="كل يوم في فترة التقرير">السجل اليومي</Title>
-      <DataMetricTable columns={cutColumns(data.report_columns?.days, columns, { impressions: 'impressions', clicks: 'clicks', results: 'results', spend: 'spend' })} rows={rows} />
+      <DataMetricTable columns={visibleColumns(cutColumns(data.report_columns?.days, columns, { impressions: 'impressions', clicks: 'clicks', results: 'results', spend: 'spend' }), hiddenMetricsOf(data))} rows={rows} />
     </div>
   )
 }
@@ -1931,7 +1937,7 @@ function AccountsSlide({ data }: { data: ReportData }) {
         <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">لا حسابات بأرقام في هذا النطاق.</p>
       ) : (
         <div data-testid="report-accounts-table">
-          <DataMetricTable columns={cutColumns(data.report_columns?.accounts, columns, { platform: 'platform', spend: 'spend', results: 'results', cost: 'cost' })} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
+          <DataMetricTable columns={visibleColumns(cutColumns(data.report_columns?.accounts, columns, { platform: 'platform', spend: 'spend', results: 'results', cost: 'cost' }), hiddenMetricsOf(data))} rows={table} initialSort={{ column: 3, dir: 'desc' }} />
         </div>
       )}
     </div>

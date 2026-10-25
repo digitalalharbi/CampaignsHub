@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Sections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportMetricVisibility;
 
 /**
  * The one call every surface makes to apply a report's sections — REPORT-SECTION-SURFACES-001.
@@ -161,7 +162,13 @@ final class ReportSectionSurfaces
             $payload['report_columns'] = $chosen;
         }
 
-        return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+        if (! $context->isClientFacing()) {
+            return $payload;
+        }
+
+        // REPORT-KPI-VISIBILITY-001 — the metrics hidden on this document leave every client surface that is built here: the page, the live
+        // payload, the print route and the files. Internal views (above) keep every authorised metric.
+        return self::withoutBuyingMethodology(ReportMetricVisibility::redact($payload, ReportMetricVisibility::effective($report, $share)));
     }
 
     /**
