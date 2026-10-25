@@ -397,7 +397,12 @@ export function ReportScopePicker({
         kind="accounts"
         label={t.accounts}
         required
-        items={o.accounts.map((a) => ({ id: a.id, label: a.name, sub: a.provider }))}
+        items={o.accounts.map((a) => ({
+          id: a.id,
+          label: a.name,
+          // REPORT-BOUND-ACCOUNTS-001 — a bound account with nothing yet is listed and SAYS so.
+          sub: a.state === 'unsynced' ? `${a.provider} · ${ar ? 'لم تتم مزامنته بعد' : 'not synced yet'}` : a.state === 'no_data' ? `${a.provider} · ${ar ? 'لا بيانات بعد' : 'no data yet'}` : a.provider,
+        }))}
         selected={value.account_ids ?? []}
         onChange={(next) => set('account_ids', next)}
         ar={ar}
