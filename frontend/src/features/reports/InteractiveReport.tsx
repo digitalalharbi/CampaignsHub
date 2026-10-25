@@ -554,7 +554,7 @@ function Title({ platform, children, sub }: { platform?: string; children: React
  * that, a card with a note is taller than its neighbour and the grid steps up and down across the
  * page — which is what «توازي» asks for and what a variable-height stack cannot give.
  */
-function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
+function Kpi({ label, value, exact, note, delta, invert, spark, accent, dense = false }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string; dense?: boolean }) {
   return (
     <div className="flex h-full flex-col rounded-2xl border border-border bg-surface-secondary p-3">
       <div className="flex min-h-[20px] items-center justify-between gap-2">
@@ -567,7 +567,8 @@ function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { labe
         A KPI that breaks across two lines drops the card below its neighbours and takes the row's
         alignment with it — and a number split over two lines is harder to read than a smaller one.
       */}
-      <div className="tnum mt-1 truncate text-[24px] font-extrabold leading-none tracking-tight text-text-primary" title={value}>
+      {/* REPORT-PDF-FIT-SALES-001 — a seven-card row is narrower than a six-card one: a smaller figure keeps «1.65K USD» and «لا توجد بيانات» whole instead of clipped. */}
+      <div className={`tnum mt-1 truncate font-extrabold leading-none tracking-tight text-text-primary ${dense ? 'text-[17px]' : 'text-[24px]'}`} title={value}>
         {value}
       </div>
 
@@ -889,6 +890,7 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
           <Kpi
             key={m.key}
             label={m.label}
+            dense={cards.length >= 7}
             value={readingText(m.reading)}
             exact={exactOf(m, data)}
             note={readingNote(m.reading)}
@@ -1002,6 +1004,7 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
           <Kpi
             key={m.key}
             label={m.label}
+            dense={cards.length >= 7}
             value={readingText(m.reading)}
             note={readingNote(m.reading)}
             spark={m.reading.kind === 'value' ? seriesOf(series, m.series) : undefined}
