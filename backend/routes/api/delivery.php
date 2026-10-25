@@ -21,6 +21,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->prefix('delivery
     Route::get('packs/{pack}/whatsapp', [DeliveryController::class, 'whatsapp'])->name('packs.whatsapp');
     Route::patch('packs/{pack}/recommendations/{annotation}', [DeliveryController::class, 'editRecommendation'])->name('packs.recommendations.edit');
 
+    Route::put('packs/{pack}/notes/order', [DeliveryController::class, 'reorderNotes'])->name('packs.notes.order');
+    Route::post('packs/{pack}/notes', [DeliveryController::class, 'addNote'])->name('packs.notes.add');
+    Route::patch('packs/{pack}/notes/{note}', [DeliveryController::class, 'updateNote'])->name('packs.notes.update');
+    Route::delete('packs/{pack}/notes/{note}', [DeliveryController::class, 'deleteNote'])->name('packs.notes.delete');
     Route::post('evidence', [DeliveryController::class, 'storeEvidence'])->name('evidence.store');
     Route::delete('evidence/{evidence}', [DeliveryController::class, 'deleteEvidence'])->name('evidence.delete');
     Route::get('evidence/{evidence}/file', [DeliveryController::class, 'evidenceFile'])->name('evidence.file');

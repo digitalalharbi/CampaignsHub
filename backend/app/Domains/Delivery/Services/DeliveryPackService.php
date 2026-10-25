@@ -300,7 +300,7 @@ final class DeliveryPackService
         }
 
         $steps = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)
-            ->where('type', 'recommendation')->where('status', 'approved')->orderByDesc('priority')->limit(3)->get();
+            ->where('type', 'recommendation')->where('status', 'approved')->where('audience', '!=', 'internal')->orderByRaw('position is null')->orderBy('position')->orderByDesc('priority')->limit(3)->get();
         if ($steps->isNotEmpty()) {
             $lines[] = $ar ? 'أبرز الخطوات القادمة:' : 'Next steps:';
             foreach ($steps as $step) {

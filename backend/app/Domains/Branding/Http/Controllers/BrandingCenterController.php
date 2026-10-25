@@ -200,6 +200,8 @@ final class BrandingCenterController extends Controller
     public function destroy(Request $request, BrandingAsset $brandingAsset): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('branding.manage'), 403);
+        // The same reach the upload had: an asset of a client the caller cannot reach is not theirs to delete.
+        $this->assertScopeReachable($request, (string) $brandingAsset->scope, $brandingAsset->scope_id);
 
         $this->branding->removeAsset($brandingAsset);
 

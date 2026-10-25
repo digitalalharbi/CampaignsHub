@@ -1,9 +1,10 @@
+import { AgentHistoryCard } from './AgentHistoryCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Bot, KeyRound, Send, ShieldCheck, Wrench } from 'lucide-react'
 import {
-  addAiCredential, getThread, listAgents, listAiCredentials, listThreads, sendToAgent,
+  addAiCredential, getThread, listAgents, listAiCredentials, sendToAgent,
   type AgentMessage, type AgentRole,
 } from './api'
 import { RoutinesCard } from './RoutinesCard'
@@ -69,7 +70,6 @@ export function AgentCenterPage() {
   const [draft, setDraft] = useState('')
 
   const agents = useQuery({ queryKey: ['agents', currentProjectId], queryFn: () => listAgents(currentProjectId!), enabled: Boolean(currentProjectId), retry: false })
-  const threads = useQuery({ queryKey: ['agent-threads', currentProjectId], queryFn: () => listThreads(currentProjectId!), enabled: Boolean(currentProjectId), retry: false })
   const thread = useQuery({
     queryKey: ['agent-thread', currentProjectId, threadId],
     queryFn: () => getThread(currentProjectId!, threadId!),
@@ -106,7 +106,6 @@ export function AgentCenterPage() {
   const roles = agents.data?.agents ?? []
   const current = roles.find((r) => r.key === (thread.data?.agent ?? agent))
   const busy = thread.data?.status === 'thinking' || send.isPending
-  const ownThreads = (threads.data?.threads ?? []).filter((t) => t.agent === (thread.data?.agent ?? agent))
 
   return (
     <div className="space-y-4" data-testid="agent-center">
@@ -188,22 +187,16 @@ export function AgentCenterPage() {
         </Card>
 
         <aside className="min-w-0 space-y-3">
-          <Card className="space-y-2" data-testid="agent-threads">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-bold text-text-primary">{ar ? 'المحادثات' : 'Conversations'}</p>
-              <button type="button" className="text-xs font-semibold text-brand-700 hover:underline" onClick={() => setThreadId(null)} data-testid="agent-new">{ar ? 'جديدة' : 'New'}</button>
-            </div>
-            {ownThreads.length === 0 && <p className="text-xs text-text-muted">{ar ? 'لا محادثات بعد.' : 'No conversations yet.'}</p>}
-            <ul className="space-y-1">
-              {ownThreads.map((t) => (
-                <li key={t.id}>
-                  <button type="button" onClick={() => setThreadId(t.id)} className={`w-full truncate rounded px-2 py-1 text-start text-xs ${t.id === threadId ? 'bg-brand-50 font-semibold text-brand-800' : 'text-text-secondary hover:bg-surface-secondary'}`}>
-                    {t.title ?? t.id}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <AgentHistoryCard
+            projectId={currentProjectId}
+            ar={ar}
+            roles={roles}
+            current={thread.data?.agent ?? agent}
+            activeId={threadId}
+            onOpen={setThreadId}
+            onNew={() => setThreadId(null)}
+            onGone={(ids) => { if (ids === 'all' || (threadId !== null && ids.includes(threadId))) setThreadId(null) }}
+          />
           <RoutinesCard projectId={currentProjectId} ar={ar} canManage={canManage} onOpen={(id) => setThreadId(id)} />
           {canManage && <AiKeyCard ar={ar} />}
         </aside>
