@@ -66,18 +66,19 @@ final class ReportObjectiveLens
      *
      * @param  list<string>  $objectives
      */
+    public const TEMPLATE_MEMBERS = [
+        'sales' => ['sales', 'conversions', 'purchases', 'add_to_cart'],
+        'awareness' => ['awareness', 'reach'],
+        'traffic' => ['traffic', 'landing_page_views'],
+        'engagement' => ['engagement'],
+        'video' => ['video_views'],
+        'leads' => ['leads'],
+        'app_installs' => ['app_installs'],
+    ];
+
     public static function fromScopeObjectives(array $objectives): ?self
     {
-        $groups = [
-            'sales' => ['sales', 'conversions', 'purchases', 'add_to_cart'],
-            'awareness' => ['awareness', 'reach'],
-            'traffic' => ['traffic', 'landing_page_views'],
-            'engagement' => ['engagement'],
-            'video' => ['video_views'],
-            'leads' => ['leads'],
-            'app_installs' => ['app_installs'],
-        ];
-        foreach ($groups as $template => $members) {
+        foreach (self::TEMPLATE_MEMBERS as $template => $members) {
             if (array_intersect($objectives, $members) !== []) {
                 return new self($template);
             }
