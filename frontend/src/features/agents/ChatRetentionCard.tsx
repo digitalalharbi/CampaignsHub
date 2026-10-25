@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { toApiError } from '@/lib/api/client'
+import { days } from '@/lib/counted'
 import { getChatRetention, setChatRetention } from './api'
 
 const PRESETS = [30, 60, 90, 180, 365]
@@ -30,8 +31,8 @@ export function ChatRetentionCard({ ar }: { ar: boolean }) {
       <p className="text-xs font-bold text-text-primary">{ar ? 'مدة حفظ المحادثات' : 'Conversation retention'}</p>
       <p className="text-[11px] text-text-muted">
         {ar
-          ? `تُحذف محادثات الوكلاء تلقائيًا بعد المدة التي تختارها من آخر رسالة (من ${r.min} إلى ${r.max} يومًا). المحادثات تبقى خاصة بأصحابها.`
-          : `Agent conversations are deleted automatically this long after their last message (${r.min}–${r.max} days). They stay private to their authors.`}
+          ? `تُحذف محادثات الوكلاء تلقائيًا بعد المدة التي تختارها من آخر رسالة (من ${r.min} إلى ${days(r.max, 'ar')}). المحادثات تبقى خاصة بأصحابها.`
+          : `Agent conversations are deleted automatically this long after their last message (${r.min}–${days(r.max, 'en')}). They stay private to their authors.`}
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {PRESETS.map((d) => (
