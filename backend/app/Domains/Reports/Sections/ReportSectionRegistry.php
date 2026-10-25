@@ -130,6 +130,15 @@ final class ReportSectionRegistry
                 clientDefault: false,
                 view: 'dashboard',
             ),
+            /*
+             * STORE-REPORT-SECTIONS-001 — the store's own ledger, four sections. OFF by default on a client report for the reason
+             * `site_measurement` is: they are revenue from a third source beside the platforms', and an operator who shows both is
+             * choosing to explain the difference. The store's confirmed orders are the reference; nothing here is added to an ad figure.
+             */
+            new ReportSection(key: 'store_sales', titleAr: 'المبيعات والمتجر', titleEn: 'Store & sales', payloadKeys: ['store_sales'], clientDefault: false, view: 'dashboard'),
+            new ReportSection(key: 'store_products', titleAr: 'المنتجات والفئات', titleEn: 'Products, SKUs & categories', payloadKeys: ['store_products'], clientDefault: false, view: 'dashboard'),
+            new ReportSection(key: 'store_orders', titleAr: 'الطلبات والمرتجعات والخصومات', titleEn: 'Orders, refunds & discounts', payloadKeys: ['store_orders'], clientDefault: false, view: 'dashboard'),
+            new ReportSection(key: 'store_audience', titleAr: 'المدن وشرائح العملاء', titleEn: 'Cities & customer segments', payloadKeys: ['store_audience'], clientDefault: false, view: 'dashboard'),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
@@ -260,6 +269,11 @@ final class ReportSectionRegistry
          * facts that are both «no section», and neither of which is a zero.
          */
         $this->availableWhen('site_measurement', 'has_measured_days', static fn (SectionContext $c): bool => is_array($c->value('site_measurement')));
+
+        foreach (['store_sales', 'store_products', 'store_orders', 'store_audience'] as $storeKey) {
+            // A block exists only where a store has filed orders in the window — null otherwise, and null is «no section», not a zero.
+            $this->availableWhen($storeKey, 'has_store_orders', static fn (SectionContext $c): bool => is_array($c->value($storeKey)));
+        }
 
         $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 

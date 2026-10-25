@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Commerce\Services\CommerceInsightsService;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -24,6 +25,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\BusinessStreams;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
+use App\Domains\Reports\Sections\StoreReportBlocks;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
@@ -704,6 +706,14 @@ final class LiveReportService
              * Never blended with the ad figures above — see `SiteMeasurementService`.
              */
             'site_measurement' => $this->siteMeasurement($share, $scope['project_id'], $from, $to),
+            /*
+             * STORE-REPORT-SECTIONS-001 — what the STORE's own ledger says, as four sections that show, hide and order on their own.
+             * Built once, withheld by the link's revenue flag, and absent (null) where there is no store or no order.
+             */
+            ...StoreReportBlocks::from(
+                app(CommerceInsightsService::class)->build((string) $share->tenant_id, $scope['project_id'], $from, $to),
+                (bool) $share->hide_revenue,
+            ),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.

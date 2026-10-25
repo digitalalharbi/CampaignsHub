@@ -1,3 +1,4 @@
+import { StoreSections } from './StoreSections'
 import { basisLine } from './ExecutiveSummary'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
@@ -344,6 +345,12 @@ export function DashboardView({
         client-facing link; `sectionOn` is what the operator's choice flows through.
       */}
       {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
+      {/*
+        STORE-REPORT-SECTIONS-001 — the store's own ledger, after the site measurement and before the insights, for the same reason: it is
+        context for the campaigns, never a verdict on them. Four sections, each shown/hidden on its own; off by default on a client link.
+        The same blocks the Analytics «Store sales» tab draws, so the two cannot disagree.
+      */}
+      <StoreSections payload={payload} ar={ar} on={(key) => sectionOn(payload, key)} />
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
   )

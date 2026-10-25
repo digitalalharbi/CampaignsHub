@@ -1134,6 +1134,78 @@ final class LiveReportShareTest extends TestCase
     }
 
     /** A store with one order in the link's window, so the funnel has something to state. */
+    // ── STORE-REPORT-SECTIONS-001 — the store's own ledger as four independent report sections ───────
+
+    private function enableStoreSections(): void
+    {
+        $this->report->update(['section_settings' => ['sections' => array_fill_keys(['store_sales', 'store_products', 'store_orders', 'store_audience'], true)]]);
+    }
+
+    /** A client report starts WITHOUT them: a third revenue source beside the platforms' is the operator's deliberate choice. */
+    public function test_the_store_sections_are_off_by_default_even_when_a_store_has_orders(): void
+    {
+        $this->seedStore();
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        foreach (['store_sales', 'store_products', 'store_orders', 'store_audience'] as $key) {
+            $this->assertArrayNotHasKey($key, (array) $res->json('data'), $key);
+        }
+    }
+
+    public function test_a_live_link_omits_the_four_store_sections_when_there_is_no_store(): void
+    {
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        foreach (['store_sales', 'store_products', 'store_orders', 'store_audience'] as $key) {
+            $this->assertNull($res->json("data.$key"), $key);
+        }
+    }
+
+    public function test_a_live_link_carries_the_store_sections_with_their_provenance_and_without_moving_the_ad_figures(): void
+    {
+        $before = (float) $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk()->json('data.totals.revenue');
+        $this->seedStore();
+        $this->enableStoreSections();
+
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        $this->assertSame(1, $res->json('data.store_sales.totals.orders'));
+        $this->assertSame(250.0, (float) $res->json('data.store_sales.totals.net_sales'));
+        $this->assertSame('متجر', $res->json('data.store_sales.stores.0.name'));
+        $this->assertSame('Asia/Riyadh', $res->json('data.store_sales.window.timezone'));
+        $this->assertSame('customer_city', $res->json('data.store_audience.geography.basis'));
+        $this->assertSame('not_available', $res->json('data.store_audience.geography.shipping_destination'));
+        $this->assertSame(1, $res->json('data.store_orders.totals.orders'));
+        $this->assertNotNull($res->json('data.store_products.products'));
+        // The campaigns' own revenue is untouched: nothing from the store was blended into it.
+        $this->assertSame($before, (float) $res->json('data.totals.revenue'));
+        // And the internal account id of the store never travels.
+        $this->assertStringNotContainsString((string) ExternalAccount::withoutGlobalScopes()->where('account_type', 'store')->value('id'), $res->getContent());
+    }
+
+    public function test_a_link_that_hides_revenue_hides_every_money_figure_in_every_store_section(): void
+    {
+        $this->seedStore();
+        $this->enableStoreSections();
+        [, $hidden] = app(ShareService::class)->create($this->report, [
+            'hide_revenue' => true,
+            'scope' => ['project_id' => $this->project->id, 'campaign_ids' => [$this->shared->id], 'providers' => ['meta'], 'earliest' => '2026-07-01', 'latest' => '2026-07-31'],
+        ], null);
+
+        $res = $this->getJson("/api/v1/reports/shared/{$hidden}/live")->assertOk();
+
+        $this->assertNull($res->json('data.store_sales.totals.net_sales'));
+        $this->assertNull($res->json('data.store_sales.totals.gross_sales'));
+        $this->assertNull($res->json('data.store_sales.totals.aov'));
+        $this->assertNull($res->json('data.store_sales.growth.net_sales'));
+        $this->assertNull($res->json('data.store_sales.currency'));
+        $this->assertSame(['money'], $res->json('data.store_sales.withheld'));
+        $this->assertSame(1, $res->json('data.store_sales.totals.orders'), 'a count is not money and stays');
+        $this->assertNull($res->json('data.store_orders.totals.refunds'));
+        $this->assertNull($res->json('data.store_orders.totals.discounts'));
+        $this->assertStringNotContainsString('250', json_encode([$res->json('data.store_sales'), $res->json('data.store_products'), $res->json('data.store_orders'), $res->json('data.store_audience')]), 'the hidden 250 appears nowhere in the four sections');
+    }
+
     private function seedStore(): void
     {
         $connection = app(TokenVault::class)->open(

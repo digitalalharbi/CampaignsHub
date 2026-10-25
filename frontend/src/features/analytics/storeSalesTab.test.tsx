@@ -52,8 +52,8 @@ describe('StoreSalesTab', () => {
     const kpis = await screen.findByTestId('sales-kpis')
     expect(kpis.textContent).toContain('Net sales')
     expect(kpis.textContent).toContain('560')
-    expect(kpis.textContent).toMatch(/Refunds/)
     expect(kpis.textContent).toMatch(/Average order value/)
+    expect((await screen.findByTestId('orders-kpis')).textContent).toMatch(/Refunds/)
   })
 
   it('lists best sellers, switches to the lowest, and to SKUs', async () => {
@@ -89,6 +89,7 @@ describe('StoreSalesTab', () => {
     expect(src.textContent).toContain('Demo store')
     expect(src.textContent).toContain('Asia/Riyadh')
     expect(screen.getByTestId('sales-withheld').textContent).toMatch(/1 order\(s\) left out of the money totals/)
+    expect(screen.getByTestId('store-not-blended').textContent).toMatch(/not added to the ad platforms/)
     expect(src.textContent).toMatch(/2 duplicate order\(s\) collapsed/)
   })
 

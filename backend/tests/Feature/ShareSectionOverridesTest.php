@@ -99,7 +99,7 @@ final class ShareSectionOverridesTest extends TestCase
         $rows = collect($this->actingAs($this->viewer, 'sanctum')->getJson($this->url($report, $share))->assertOk()->json('data.sections'))->keyBy('key');
 
         $this->assertSame(
-            ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation'],
+            ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'store_sales', 'store_products', 'store_orders', 'store_audience', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation'],
             $rows->keys()->all(),
         );
         $this->assertSame('hidden_by_report', $rows['trends']['state']);

@@ -1,3 +1,4 @@
+import type { AudienceBlock, OrdersBlock, ProductsBlock, SalesBlock } from '@/features/analytics/StoreSalesViews'
 import type { AdGroup, AdPlatformGroup, AdsReading, ReportAd } from './ReportAdsSection'
 import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
@@ -589,6 +590,14 @@ export interface LivePayload {
    * metrics this property does not measure at all; `withheld` names the ones the operator hid on
    * this link. Those are different, and merging them would tell a reader the site has no ecommerce.
    */
+  /**
+   * STORE-REPORT-SECTIONS-001 — the store's own ledger, four independent sections. Absent (null) where there is no store or no order;
+   * every money field is null when the link hides revenue, and `withheld` says so.
+   */
+  store_sales?: SalesBlock | null
+  store_products?: ProductsBlock | null
+  store_orders?: OrdersBlock | null
+  store_audience?: AudienceBlock | null
   site_measurement?: {
     property: { id: string; name: string; timezone: string | null }
     currency: string | null

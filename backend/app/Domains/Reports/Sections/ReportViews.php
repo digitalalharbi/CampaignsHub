@@ -40,7 +40,7 @@ final class ReportViews
      */
     public const DRAWS = [
         'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'site_measurement', 'recommendations'],
-        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
+        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'store_sales', 'store_products', 'store_orders', 'store_audience', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
         'platforms' => ['kpis', 'trends', 'platform_comparison', 'content_performance', 'account_breakdown'],
         'content' => ['kpis', 'content_performance'],
         'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables'],
