@@ -63,7 +63,7 @@ final class ReportPlatformDrilldowns
         $to = Carbon::parse((string) ($period['to'] ?? $report->period_end ?? Carbon::today()));
         $from = Carbon::parse((string) ($period['from'] ?? $report->period_start ?? $to->copy()->subDays(29)));
 
-        $scope = ReportScope::fromArray($report->scope);
+        $scope = ReportScope::fromReport($report->scope);
         $engine = $scope->applyTo($this->metrics);
         $whole = $engine->byProvider($from, $to);
 

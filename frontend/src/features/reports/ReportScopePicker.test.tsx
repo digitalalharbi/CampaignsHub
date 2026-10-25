@@ -103,7 +103,7 @@ describe('ReportScopePicker', () => {
     expect(screen.getByText('Campaigns')).toBeInTheDocument()
     // REPORT-SETUP-001 — «marketing paths» is gone; the six canonical objectives replace it.
     expect(screen.queryByText('Marketing paths')).not.toBeInTheDocument()
-    expect(screen.getByText('Objectives')).toBeInTheDocument()
+    expect(screen.getByText('Report objective (measurement template)')).toBeInTheDocument()
     expect(screen.getByText('Ad sets')).toBeInTheDocument()
     /*
      * «Content», not «Ads» — CONTENT-TERMINOLOGY-001.
@@ -259,7 +259,7 @@ describe('ReportScopePicker', () => {
     )
 
     // REPORT-SETUP-001 — the six canonical objectives are chips too, never a search box.
-    await screen.findByText('Objectives')
+    await screen.findByText('Report objective (measurement template)')
     expect(screen.queryByTestId('scope-select-Objectives')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Leads$/ })).toBeInTheDocument()
   })

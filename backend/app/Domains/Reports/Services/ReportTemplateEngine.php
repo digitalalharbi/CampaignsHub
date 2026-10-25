@@ -31,7 +31,9 @@ final class ReportTemplateEngine
          */
         // REPORT-KPI-PRESETS-001 — the Owner's presets, one per objective, and customisable per report.
         // Sales: spend · orders · sales value · cost per order · return.
-        'sales' => ['spend', 'purchases', 'revenue', 'cpa', 'roas'],
+        // REPORT-OBJECTIVE-TEMPLATE-001 — the Owner's sales funnel: spend · reach · clicks · basket · orders · sales value · return. The cost per
+        // order is a separate show/hide switch (hidden by default on a client report), not a card every sales report must carry.
+        'sales' => ['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas'],
         'awareness' => ['impressions', 'reach', 'frequency', 'cpm'],
         'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'landing_page_views'],
         // Leads on a website (the default destination): form fills on the advertiser's own page.
@@ -365,6 +367,7 @@ final class ReportTemplateEngine
      * anything else is the Owner's and is kept exactly.
      */
     private const SHIPPED_BEFORE = [
+        ['spend', 'purchases', 'revenue', 'cpa', 'roas'],
         ['spend', 'add_to_cart', 'purchases', 'revenue', 'cpa', 'roas'],
         ['impressions', 'reach', 'frequency', 'cpm', 'video_views', 'ctr'],
         ['clicks', 'landing_page_views', 'ctr', 'cpc', 'spend'],

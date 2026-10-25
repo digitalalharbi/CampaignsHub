@@ -67,7 +67,7 @@ const COPY = {
      * why the axis exists separately at all.
      */
     creatives: 'المحتويات',
-    objectives: 'الأهداف',
+    objectives: 'هدف التقرير (قالب القياس)',
     destinations: 'الوجهة',
     scope: 'النطاق',
     allCampaigns: 'كل الحملات',
@@ -105,7 +105,7 @@ const COPY = {
     adSets: 'Ad sets',
     ads: 'Ads',
     creatives: 'Content',
-    objectives: 'Objectives',
+    objectives: 'Report objective (measurement template)',
     destinations: 'Destination',
     scope: 'Scope',
     allCampaigns: 'All campaigns',
@@ -193,7 +193,8 @@ export function ReportScopePicker({
   const filters = {
     providers: value.providers,
     account_ids: value.account_ids,
-    objectives: value.objectives,
+    // Only an explicit «filter campaigns by objective» narrows the list the operator picks campaigns from.
+    objectives: value.objective_filter ? value.objectives : undefined,
     destinations: value.destinations,
   }
   const options = useQuery({
@@ -421,6 +422,29 @@ export function ReportScopePicker({
         ar={ar}
         t={t}
       />
+      {/*
+        REPORT-OBJECTIVE-TEMPLATE-001 — the chips above choose the report's measurement template (the funnel and KPIs it presents). They
+        never remove a platform or a campaign by themselves: filtering campaigns by their stored objective is this separate, explicit switch.
+      */}
+      {(value.objectives?.length ?? 0) > 0 && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs" data-testid="scope-objective-filter-row">
+          <input
+            type="checkbox"
+            data-testid="scope-objective-filter"
+            checked={value.objective_filter === true}
+            onChange={(e) => onChange({ ...value, objective_filter: e.target.checked ? true : undefined })}
+            className="mt-0.5 h-4 w-4 accent-brand-600"
+          />
+          <span>
+            <b className="block font-semibold">{ar ? 'تصفية الحملات حسب الهدف' : 'Filter campaigns by objective'}</b>
+            <span className="text-text-secondary">
+              {ar
+                ? 'اتركه مغلقًا لتشمل كل المنصات والحملات المصرّح بها. عند تفعيله تُستبعد الحملات التي هدفها المسجّل خارج الأهداف المختارة.'
+                : 'Leave it off to include every authorised platform and campaign. When on, campaigns whose stored objective is outside the chosen ones are excluded.'}
+            </span>
+          </span>
+        </label>
+      )}
 
       {(o.destinations?.length ?? 0) > 0 && (
         <Chips

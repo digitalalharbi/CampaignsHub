@@ -231,7 +231,7 @@ final class ReportController extends Controller
              * «no choice» used to mean every account the project binds — several clients' in one case.
              * Reports saved before this keep the scope they have; only creating or editing asks.
              */
-            'scope' => ($scope = ReportScope::fromArray(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
+            'scope' => ($scope = ReportScope::fromReport(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
             'created_by' => $request->user()->id,
         ]);
 

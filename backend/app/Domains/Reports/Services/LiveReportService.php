@@ -1030,6 +1030,8 @@ final class LiveReportService
             'campaign_ids' => $scope['campaign_ids'],
             'account_ids' => $share->scope['account_ids'] ?? [],
             'objectives' => $share->scope['objectives'] ?? [],
+            // A link's objectives are a ceiling the operator granted: they keep filtering (nothing widens).
+            'objective_filter' => true,
             'paths' => $share->scope['paths'] ?? [],
             'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
             'ad_ids' => $share->scope['ad_ids'] ?? [],

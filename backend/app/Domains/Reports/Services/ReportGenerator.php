@@ -77,7 +77,7 @@ final class ReportGenerator
          * An unbounded scope returns the singleton unchanged, so a report that names no scope behaves
          * exactly as it did before this existed.
          */
-        $scope = ReportScope::fromArray($report->scope);
+        $scope = ReportScope::fromReport($report->scope);
         $agg = $scope->applyTo($this->agg);
 
         // A scope may narrow the window, never widen it past the period the report was created for.
@@ -151,7 +151,8 @@ final class ReportGenerator
          */
         $lens = $report->campaign_objective
             ? new ReportObjectiveLens($report->campaign_objective)
-            : ReportObjectiveLens::infer($campaigns);
+            // The scope's objective choice is the measurement TEMPLATE (REPORT-OBJECTIVE-TEMPLATE-001), not a filter on the data.
+            : (ReportObjectiveLens::fromScopeObjectives($scope->objectives) ?? ReportObjectiveLens::infer($campaigns));
         $objective = $lens->value();
         $providerList = array_values(array_map(fn ($p) => $p['provider'], $platforms));
 
