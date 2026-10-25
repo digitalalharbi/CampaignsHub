@@ -125,6 +125,22 @@ final class SharedLinkBranding
      * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string, agency: array{name: string, logo_url: ?string}, client: ?array{name: string, logo_url: ?string}}
      */
     /** Which layer the operator chose at creation, or null when they did not choose. */
+    /**
+     * REPORT-IDENTITY-NAMES-001 — «prepared for» and «prepared by» as the operator typed them for this report.
+     *
+     * Stored beside `prefer` in `config.branding` (not as `name`/`logo_url`, which mean «this exact identity was frozen»). A blank or
+     * missing value is no override: the stored client's and company's names answer. The records themselves are never renamed.
+     *
+     * @return array{0: ?string, 1: ?string} [prepared for, prepared by]
+     */
+    public static function nameOverrides(?Report $report): array
+    {
+        $branding = $report === null ? [] : (array) (((array) ($report->config ?? []))['branding'] ?? []);
+        $clean = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? mb_substr(trim($v), 0, 120) : null;
+
+        return [$clean($branding['prepared_for_name'] ?? null), $clean($branding['prepared_by_name'] ?? null)];
+    }
+
     private function preferredLayer(?Report $report): ?string
     {
         $prefer = ($report === null ? null : ((array) ($report->config ?? []))['branding']['prefer'] ?? null);
@@ -160,6 +176,10 @@ final class SharedLinkBranding
 
         $asset = ($scope === 'client' ? $this->clientLayerAsset($report, $client, $tenantId) : null)
             ?? $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
+        // REPORT-IDENTITY-NAMES-001 — the names the operator typed for THIS report, over the stored records' names.
+        [$preparedFor, $preparedBy] = self::nameOverrides($report);
+        $agencyName = $preparedBy ?? (string) ($tenant->name ?? 'CampaignsHub');
+        $clientName = $client === null ? $preparedFor : ($preparedFor ?? (string) $client->name);
         $agencyMark = $this->markFor('agency', $client, $tenantId);
         $clientMark = $client === null ? null : $this->markFor('client', $client, $tenantId, $report);
 
@@ -170,11 +190,11 @@ final class SharedLinkBranding
              * nearest one — so the agency's is not the platform's and the client's is not the agency's.
              */
             'agency' => [
-                'name' => (string) ($tenant->name ?? 'CampaignsHub'),
+                'name' => $agencyName,
                 'logo_url' => $agencyMark === null ? null : $logoUrl('agency'),
             ],
-            'client' => $client === null ? null : [
-                'name' => (string) $client->name,
+            'client' => $clientName === null ? null : [
+                'name' => $clientName,
                 'logo_url' => $clientMark === null ? null : $logoUrl('client'),
             ],
             /*
@@ -182,7 +202,7 @@ final class SharedLinkBranding
              * column lives on `UnifiedCampaign`, and reading it here returned null on every row until
              * PHPStan named it.
              */
-            'name' => (string) (($prefer === 'agency' ? null : $client?->name) ?? $tenant->name ?? 'CampaignsHub'),
+            'name' => $prefer === 'agency' ? $agencyName : (string) ($clientName ?? $agencyName),
             'logo_url' => $asset === null ? null : $logoUrl(),
             /*
              * Where the LOGO came from — a separate question from whose NAME is shown.
@@ -203,9 +223,9 @@ final class SharedLinkBranding
              * the agency's own name reads as a bug, which is the same reason it is absent when the
              * two identities are one.
              */
-            'by' => $client === null || $tenant === null
+            'by' => $clientName === null
                 ? null
-                : (string) ($prefer === 'agency' ? $client->name : $tenant->name),
+                : ($prefer === 'agency' ? $clientName : $agencyName),
         ];
     }
 

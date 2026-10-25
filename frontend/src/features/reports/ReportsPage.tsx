@@ -1,4 +1,4 @@
-import { ReportIdentityCards } from './ReportIdentityCards'
+import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { ColumnPicker } from './ColumnPicker'
 import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
@@ -8,12 +8,14 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { productName } from '@/lib/brand'
 import { ShareAnalyticsStrip } from './ShareAnalyticsStrip'
 import { ShareEditDialog } from './ShareEditDialog'
 import {
   createReport,
+  projectReportIdentity,
+  updateReportNames,
   listReportSections,
   updateReportScope,
   getReportScope,
@@ -120,6 +122,7 @@ export function ReportsPage() {
    * and wrong, with the client holding it and no sign that anything had moved.
    */
   const [scopeId, setScopeId] = useState<string | null>(null)
+  const [namesId, setNamesId] = useState<string | null>(null)
   const [sectionsId, setSectionsId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
@@ -493,6 +496,7 @@ export function ReportsPage() {
                     onPreview={() => setPreviewId(r.id)}
                     onShare={() => setShareId(r.id)}
                     onScope={() => setScopeId(r.id)}
+                    onNames={() => setNamesId(r.id)}
                     onSections={() => setSectionsId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
@@ -574,6 +578,9 @@ export function ReportsPage() {
           <ScopeLostDialog ar={ar} onClose={() => setSectionsId(null)} />
         )
       )}
+      {namesId && currentProjectId && (
+        <NamesEditor projectId={currentProjectId} report={(list.data?.reports ?? []).find((r) => r.id === namesId)} onClose={() => setNamesId(null)} onSaved={() => { setNamesId(null); invalidate() }} />
+      )}
       {scopeId && (
         currentProjectId ? (
           <ScopeEditor
@@ -599,6 +606,7 @@ function ReportRowView({
   onPreview,
   onShare,
   onScope,
+  onNames,
   onSections,
   onRegenerate,
   onExport,
@@ -611,6 +619,8 @@ function ReportRowView({
   onPreview: () => void
   onShare: () => void
   onScope: () => void
+  /** REPORT-IDENTITY-NAMES-001 — «prepared for / by» of an existing report. */
+  onNames: () => void
   onSections: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
@@ -687,6 +697,7 @@ function ReportRowView({
               <IconBtn title={ar ? 'إرسال' : 'Send'} onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
+          <IconBtn title={ar ? 'أسماء الهوية (مقدم إلى / من)' : 'Identity names (prepared for / by)'} onClick={onNames}><Pencil size={15} /></IconBtn>
           <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
           <IconBtn title={ar ? 'أقسام التقرير' : 'Report sections'} onClick={onSections}><ListChecks size={15} /></IconBtn>
           <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
@@ -717,6 +728,47 @@ function IconBtn({ children, title, onClick, danger }: { children: React.ReactNo
  * «re-apply» what was already there, and saving that would silently widen the report back to the
  * whole project.
  */
+/** REPORT-IDENTITY-NAMES-001 — re-open an existing report and change its printed «prepared for» / «prepared by» names. */
+function NamesEditor({ projectId, report, onClose, onSaved }: { projectId: string; report: ReportRow | undefined; onClose: () => void; onSaved: () => void }) {
+  const ar = useAr()
+  const identity = useQuery({ queryKey: ['report-identity', projectId], queryFn: () => projectReportIdentity(projectId) })
+  const stored = report?.config?.branding
+  const [forName, setForName] = useState<string | null>(null)
+  const [byName, setByName] = useState<string | null>(null)
+  const defaults = { for: identity.data?.client?.name ?? '', by: identity.data?.agency?.name ?? '' }
+  const forValue = forName ?? stored?.prepared_for_name ?? defaults.for
+  const byValue = byName ?? stored?.prepared_by_name ?? defaults.by
+
+  const save = useMutation({
+    mutationFn: () => updateReportNames(projectId, report!.id, {
+      prepared_for_name: forValue.trim() === defaults.for ? null : forValue.trim(),
+      prepared_by_name: byValue.trim() === defaults.by ? null : byValue.trim(),
+    }),
+    onSuccess: onSaved,
+  })
+  const field = 'h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm font-bold text-text-primary outline-none focus:border-brand-500'
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={ar ? 'أسماء هوية التقرير' : 'Report identity names'}
+      footer={<><Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={save.isPending} disabled={report === undefined} onClick={() => save.mutate()} data-testid="names-save">{ar ? 'حفظ' : 'Save'}</Button></>}
+    >
+      <div className="space-y-3" data-testid="names-editor">
+        <label className="grid gap-1 text-xs font-semibold text-text-secondary">{ar ? 'مقدم إلى' : 'Prepared for'}
+          <input className={field} maxLength={120} value={forValue} placeholder={defaults.for} onChange={(e) => setForName(e.target.value)} data-testid="names-for" />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-text-secondary">{ar ? 'مقدم من' : 'Prepared by'}
+          <input className={field} maxLength={120} value={byValue} placeholder={defaults.by} onChange={(e) => setByName(e.target.value)} data-testid="names-by" />
+        </label>
+        <p className="text-[11px] text-text-muted">{ar ? 'يُطبَّق على المعاينة والرابط المباشر والروابط المشاركة وملف PDF. اتركه فارغًا لاستخدام الاسم المسجّل؛ لا يتغير اسم العميل أو الشركة المسجّل.' : 'Applied to the preview, the live link, shared links and the PDF. Leave empty to use the stored name; the stored client and company are never renamed.'}</p>
+        {save.isError && <p role="alert" className="text-xs text-danger">{toApiError(save.error).message}</p>}
+      </div>
+    </Modal>
+  )
+}
+
 function ScopeEditor({
   projectId,
   reportId,
@@ -830,6 +882,8 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    * default of «client»: sending a choice nobody made would freeze a decision on every report.
    */
   const [brandingIdentity, setBrandingIdentity] = useState<'client' | 'agency' | null>(null)
+  // REPORT-IDENTITY-NAMES-001 — the two printed names; null = the stored names.
+  const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
   const [audience, setAudience] = useState<string | null>('client')
   /*
    * What the report COVERS (§14.5) — chosen here, before it is generated.
@@ -889,6 +943,8 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
         detail_level: level,
         ...(Object.keys(sectionChoice).length === 0 ? {} : { section_settings: { sections: sectionChoice } }),
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
+        ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
+        ...(names.by === null || names.by.trim() === '' ? {} : { prepared_by_name: names.by.trim() }),
         ...(Object.keys(chosenColumns).length === 0 ? {} : { config: { columns: chosenColumns } }),
         audience: audience ?? 'client',
         period_start: from,
@@ -997,7 +1053,7 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
           The client's identity is the report's primary one and the only custom mark a shared link
           wears; the company's is secondary attribution inside the report.
         */}
-        <ReportIdentityCards projectId={projectId} ar={ar} />
+        <ReportIdentityCards projectId={projectId} ar={ar} names={names} onNames={setNames} />
         {/*
           REPORT-CREATION-UX-001 — WHOSE report this is, said at creation.
 

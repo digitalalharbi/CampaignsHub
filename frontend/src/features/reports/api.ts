@@ -51,7 +51,7 @@ export interface ReportRow {
   error: string | null
   exports: ReportExportRow[]
   /** REPORT-DRILLDOWN-001 — only the part of the config this list reads: the PDF's optional sections. */
-  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } } } | null
+  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } }; branding?: { prepared_for_name?: string; prepared_by_name?: string } } | null
 }
 export interface ReportsIndex {
   reports: ReportRow[]
@@ -83,6 +83,9 @@ const base = (p: string) => `/projects/${p}/reports`
 export const listReports = (p: string, params = '') => getData<ReportsIndex>(`${base(p)}${params ? `?${params}` : ''}`)
 export const getReport = (p: string, id: string) => getData<ReportDetail>(`${base(p)}/${id}`)
 export const createReport = (p: string, body: Record<string, unknown>) => postData<ReportRow>(base(p), body)
+
+/** REPORT-IDENTITY-NAMES-001 — change the two printed names of an existing report; blank returns to the stored names. */
+export const updateReportNames = (p: string, id: string, body: { prepared_for_name?: string | null; prepared_by_name?: string | null }) => patchData<ReportRow>(`${base(p)}/${id}`, body)
 
 /** REPORT-CREATION-UX-001 — the sections an audience implies, so the builder can SAY what it is about to make. */
 export interface ReportSectionChoice {

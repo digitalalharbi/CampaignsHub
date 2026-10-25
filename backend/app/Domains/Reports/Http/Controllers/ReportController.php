@@ -99,6 +99,43 @@ final class ReportController extends Controller
         return $config;
     }
 
+    /**
+     * REPORT-IDENTITY-NAMES-001 — keep the typed names in `config.branding`, beside the identity choice.
+     *
+     * Blank clears the override (the stored names answer again). Only these two keys are touched, so a name edit never disturbs a
+     * frozen identity, the preference, or anything else the report's config carries.
+     *
+     * @param  array<string, mixed>|null  $config
+     * @param  array{prepared_for_name?: ?string, prepared_by_name?: ?string}  $names  only the keys the caller sent
+     * @return array<string, mixed>|null
+     */
+    private static function withPreparedNames(?array $config, array $names): ?array
+    {
+        if ($names === []) {
+            return $config;
+        }
+        $config ??= [];
+        $branding = (array) ($config['branding'] ?? []);
+        foreach (['prepared_for_name', 'prepared_by_name'] as $key) {
+            if (! array_key_exists($key, $names)) {
+                continue;
+            }
+            $value = trim((string) ($names[$key] ?? ''));
+            if ($value === '') {
+                unset($branding[$key]);
+            } else {
+                $branding[$key] = mb_substr($value, 0, 120);
+            }
+        }
+        if ($branding === []) {
+            unset($config['branding']);
+        } else {
+            $config['branding'] = $branding;
+        }
+
+        return $config === [] ? null : $config;
+    }
+
     public function store(Request $request, AuditLogger $audit, string $project): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
@@ -133,6 +170,9 @@ final class ReportController extends Controller
              * did — so nothing that already exists changes meaning.
              */
             'branding_identity' => ['nullable', Rule::in(['client', 'agency'])],
+            // REPORT-IDENTITY-NAMES-001 — «prepared for» / «prepared by» typed for this report; blank = the stored names.
+            'prepared_for_name' => ['nullable', 'string', 'max:120'],
+            'prepared_by_name' => ['nullable', 'string', 'max:120'],
             'scope' => ['nullable', 'array'],
         ]);
 
@@ -169,8 +209,8 @@ final class ReportController extends Controller
             'currency' => ReportingCurrency::DEFAULT,
             // REPORT-TABLES-OWNER-COLUMNS-001 — `config['columns']` is cut to the known tables and keys on the way in.
             'config' => ($periodKind === 'custom')
-                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level))
-                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
+                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'] ?? null, array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level))
+                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'] ?? null, array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
             // The level's starting sections, with whatever the Owner switched explicitly laid over them.
             'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
                 ? null
@@ -229,10 +269,19 @@ final class ReportController extends Controller
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'mode' => ['sometimes', Rule::in(['live', 'snapshot'])],
             'config' => ['sometimes', 'array'],
+            // REPORT-IDENTITY-NAMES-001 — re-open and change the two names; blank returns to the stored names. Nothing else in config moves.
+            'prepared_for_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'prepared_by_name' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
+        $names = array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']));
+        unset($data['prepared_for_name'], $data['prepared_by_name']);
         if (array_key_exists('config', $data)) {
             // REPORT-TABLES-OWNER-COLUMNS-001 — the same cut on an edit as on creation.
             $data['config'] = ReportColumns::normaliseConfig(is_array($data['config']) ? $data['config'] : null);
+        }
+        if ($names !== []) {
+            $base = array_key_exists('config', $data) ? (array) $data['config'] : (array) ($model->config ?? []);
+            $data['config'] = self::withPreparedNames($base, $names);
         }
         $model->update($data);
 
