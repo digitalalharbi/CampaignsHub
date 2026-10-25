@@ -12,6 +12,7 @@ use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
+use App\Domains\Commerce\Http\Controllers\CommerceInsightsController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
@@ -239,6 +240,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * every number attached. Kept apart from `metrics/funnel`, which is the ad-only funnel over
      * `daily_metrics` and has no notion of an order.
      */
+    // COMMERCE-INSIGHTS-001 — what the store itself says: sales, products, cities, customers, coupons, carts.
+    Route::get('commerce/insights', [CommerceInsightsController::class, 'show'])->middleware('project.can:analytics.view')->name('commerce.insights');
     Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->middleware('project.can:analytics.view')->name('commerce.funnel');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
