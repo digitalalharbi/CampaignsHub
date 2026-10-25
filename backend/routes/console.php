@@ -194,6 +194,9 @@ Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
  * Prepares last ISO week's DRAFT pack for each client that opted in; sending is the Owner's decision.
  * Idempotent per project and week, so a late retry or a manual preparation cannot double it.
  */
+// AGENT-CHAT-PRIVACY-001 — conversations past their retention are deleted.
+Schedule::command('agents:purge-chat')->dailyAt('03:10')->timezone('Asia/Riyadh')->withoutOverlapping();
+
 Schedule::command('delivery:prepare-weekly')->dailyAt('06:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 
 /*

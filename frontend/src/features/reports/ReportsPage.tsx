@@ -805,7 +805,7 @@ function ScopeLostDialog({ ar, onClose }: { ar: boolean; onClose: () => void }) 
   )
 }
 
-function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
+export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
   const ar = useAr()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
