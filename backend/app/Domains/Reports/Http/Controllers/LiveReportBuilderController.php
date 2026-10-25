@@ -379,6 +379,8 @@ final class LiveReportBuilderController extends Controller
             'to' => ['required', 'date', 'after_or_equal:from'],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom. The first three anchor on `to`.
             'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
+            // REPORT-PERIOD-MODE-001 — fixed = exactly these dates, always; rolling = the window follows the reader's day. Absent: fixed for explicit dates, rolling for a daily/weekly/monthly kind.
+            'period_mode' => ['nullable', Rule::in(ReportPeriod::MODES)],
             'password' => ['nullable', 'string', 'min:4', 'max:64'],
             'expires_at' => ['nullable', 'date', 'after:now'],
             'hide_spend' => ['boolean'],
@@ -459,6 +461,9 @@ final class LiveReportBuilderController extends Controller
             $data['to'] = $window['to']->toDateString();
         }
 
+        // Absent: explicit dates are fixed; a daily/weekly/monthly KIND is «the current one», which follows the reader's day.
+        $periodMode = (string) ($data['period_mode'] ?? ($periodKind === 'custom' ? 'fixed' : 'rolling'));
+
         [$accountIds, $campaignIds, $adIds] = $this->resolveHierarchy($project, $data);
 
         abort_if($campaignIds === [], 422, 'No campaigns in the selected accounts to share.');
@@ -507,7 +512,7 @@ final class LiveReportBuilderController extends Controller
              * No `data` snapshot on purpose — this report IS the live definition, and a stale copy
              * beside it would be a second answer nobody asked for.
              */
-            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind] + ($level === null ? [] : ['detail_level' => $level->value]),
+            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'period_mode' => $periodMode] + ($level === null ? [] : ['detail_level' => $level->value]),
             /*
              * REPORT-ARCHITECTURE-001 — the level's sections are the report's OWN section settings.
              *
@@ -540,8 +545,9 @@ final class LiveReportBuilderController extends Controller
                 'providers' => $providers,
                 'metrics' => $metrics,
                 'earliest' => Carbon::parse($data['from'])->toDateString(),
-                // Open-ended forward, because «how is it going?» is a question about today.
-                'latest' => Carbon::now()->addYear()->toDateString(),
+                // Rolling: open-ended forward, because «how is it going?» is a question about today.
+                // Fixed: the saved end date — live data refreshes INSIDE the window and never widens it.
+                'latest' => $periodMode === 'fixed' ? Carbon::parse($data['to'])->toDateString() : Carbon::now()->addYear()->toDateString(),
             ],
         ], $request->user()->id);
 

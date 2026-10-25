@@ -12,6 +12,8 @@ use App\Domains\Reports\Services\ShareAnalytics;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportPeriod;
+use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ShareSections;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -443,7 +445,10 @@ final class ReportShareController extends Controller
              */
             'latest' => (string) ($opts['latest'] ?? (
                 ($opts['mode'] ?? null) === 'live' || ! empty($opts['live'])
-                    ? Carbon::now()->addYear()->toDateString()
+                    // REPORT-PERIOD-MODE-001 — a FIXED report's live link stops at its saved end date.
+                    ? (ReportPeriod::modeOfReport($model) === 'fixed' && $model->period_end !== null
+                        ? $model->period_end->toDateString()
+                        : Carbon::now()->addYear()->toDateString())
                     : ($model->period_end?->toDateString() ?? Carbon::now()->toDateString())
             )),
         ];
@@ -480,9 +485,17 @@ final class ReportShareController extends Controller
             return [];
         }
 
+        // The report's own scope bounds the ceiling: a link may be narrower than its report, never wider.
+        $scope = ReportScope::fromArray($model->scope);
+        $named = $scope->resolvedCampaignIds();
+        if ($named !== null && $named !== []) {
+            return array_values(array_map(strval(...), $named));
+        }
+
         return DB::table('daily_metrics')
             ->where('project_id', $projectId)
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->when($scope->accountIds !== [], fn ($q) => $q->whereIn('external_account_id', $scope->accountIds))
             ->whereNotNull('unified_campaign_id')
             ->when(
                 $model->period_start !== null && $model->period_end !== null,
@@ -498,9 +511,39 @@ final class ReportShareController extends Controller
             ->all();
     }
 
-    /** The platforms this report already reports on — the honest default ceiling. */
+    /**
+     * The platforms this report covers — the honest default ceiling for a link built from it.
+     *
+     * REPORT-PLATFORM-RECONCILE-001 — read from the report's SCOPE and the metrics, like `campaignsOf()`, not from the platforms its
+     * frozen payload happened to list. A saved report generated before Google Ads or ChatGPT Ads had reported kept a three-platform
+     * payload, and every link built from it inherited a three-platform ceiling while a link built in the live builder (which reads the
+     * metrics) showed them all. Two doors into the same report disagreed about what the report covers.
+     */
     private function providersOf(Report $model): array
     {
+        $scope = ReportScope::fromArray($model->scope);
+        if ($scope->providers !== []) {
+            return $scope->providers;
+        }
+
+        $projectId = (string) ($model->project_id ?? '');
+        $fromMetrics = $projectId === '' ? [] : DB::table('daily_metrics')
+            ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->when($scope->accountIds !== [], fn ($q) => $q->whereIn('external_account_id', $scope->accountIds))
+            ->when(
+                $model->period_start !== null && $model->period_end !== null,
+                fn ($q) => $q->whereBetween('metric_date', [$model->period_start->toDateString(), $model->period_end->toDateString()]),
+            )
+            ->distinct()
+            ->pluck('provider')
+            ->map(static fn ($p): string => (string) $p)
+            ->all();
+
+        if ($fromMetrics !== []) {
+            return array_values(array_unique($fromMetrics));
+        }
+
         $rows = (array) (($model->data ?? [])['platforms'] ?? []);
 
         return array_values(array_unique(array_filter(array_map(

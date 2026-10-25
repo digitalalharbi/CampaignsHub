@@ -25,7 +25,7 @@ interface Shared {
   /** The report's own language — its title follows it, not the viewer's interface. */
   locale?: 'ar' | 'en'
   /** The period the report's downloads cover — on a live link it can differ from the window on screen. */
-  period?: { from: string | null; to: string | null }
+  period?: { from: string | null; to: string | null; mode?: 'fixed' | 'rolling' }
   /** LIVEREP-001 — `live` renders the filterable dashboard; `snapshot` renders the generated document. */
   mode?: 'live' | 'snapshot'
   /**
@@ -281,7 +281,7 @@ export function PublicReport() {
                 mislabel one half of itself.
               */}
               {report.mode === 'live' ? (
-                <LiveSharedReport token={token} password={accepted} currency={report.currency} form={report.form ?? 'detailed'} />
+                <LiveSharedReport token={token} password={accepted} currency={report.currency} form={report.form ?? 'detailed'} periodMode={report.period?.mode} />
               ) : (
                 <>
                   <InteractiveReport

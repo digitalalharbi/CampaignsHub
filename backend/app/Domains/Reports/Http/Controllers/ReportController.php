@@ -116,6 +116,8 @@ final class ReportController extends Controller
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
+            // REPORT-PERIOD-MODE-001 — fixed = exactly these dates; rolling = follows the reader's day. Absent: fixed when both dates were given.
+            'period_mode' => ['nullable', Rule::in(ReportPeriod::MODES)],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom; the first three anchor on `period_end` (default today).
             'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
             'config' => ['nullable', 'array'],
@@ -135,6 +137,9 @@ final class ReportController extends Controller
         ]);
 
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+
+        $periodMode = $data['period_mode'] ?? (isset($data['period_start'], $data['period_end']) ? 'fixed' : 'rolling');
+        $data['config'] = (array) ($data['config'] ?? []) + ['period_mode' => $periodMode];
 
         $periodKind = in_array($data['period_kind'] ?? null, ReportPeriod::KINDS, true) ? (string) $data['period_kind'] : 'custom';
         if ($periodKind !== 'custom') {
