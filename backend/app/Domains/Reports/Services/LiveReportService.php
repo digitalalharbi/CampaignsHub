@@ -226,6 +226,8 @@ final class LiveReportService
             'excluded_creative_ids' => $shareList('excluded_creative_ids'),
             'objectives' => $shareList('objectives'),
             'paths' => $shareList('paths'),
+            // CREATIVE-DISPLAY-001 — read by `ReportAds`; null for a link made before the policy existed.
+            'creative_display' => $share->creativeDisplay()?->toArray(),
         ];
     }
 
@@ -1220,9 +1222,21 @@ final class LiveReportService
             $latest = min($latest, $report->period_end->toDateString());
         }
 
+        $campaignIds = array_values(array_filter((array) ($scope['campaign_ids'] ?? [])));
+        /*
+         * LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link made over ACCOUNTS follows them.
+         *
+         * Its campaign list is not a frozen copy of what existed on the day it was created: the accounts are the authorisation, and a campaign
+         * that syncs afterwards under one of them is inside the link without anyone recreating or re-sending it. An account that has none yet
+         * resolves to the fail-closed «nothing», which the page states as «no data yet» rather than as zeros.
+         */
+        if (($scope['dynamic_campaigns'] ?? false) === true && $campaignIds === []) {
+            $campaignIds = AccountCampaignCeiling::campaigns([], array_values(array_filter((array) ($scope['account_ids'] ?? []))));
+        }
+
         return [
             'project_id' => (string) ($scope['project_id'] ?? ''),
-            'campaign_ids' => array_values(array_filter((array) ($scope['campaign_ids'] ?? []))),
+            'campaign_ids' => $campaignIds,
             'providers' => array_values(array_filter((array) ($scope['providers'] ?? []))),
             'earliest' => $earliest,
             'latest' => $latest,

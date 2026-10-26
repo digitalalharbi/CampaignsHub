@@ -140,6 +140,11 @@ final class ReportShare extends Model
      * that leak by arithmetic (ROAS beside a hidden spend) are closed in one place instead of at
      * every surface that renders a figure.
      */
+    public function creativeDisplay(): ?\App\Domains\Reports\Support\CreativeDisplay
+    {
+        return \App\Domains\Reports\Support\CreativeDisplay::fromArray((array) (($this->settings ?? [])['creative_display'] ?? []) ?: null);
+    }
+
     public function creativeVisibility(): CreativeVisibility
     {
         return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));

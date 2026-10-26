@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignDestinations;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -17,6 +18,8 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\CreativeDisplay;
+use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
@@ -420,7 +423,30 @@ final class LiveReportBuilderController extends Controller
             // REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) a detailed link offers; absent is all.
             'views' => ['sometimes', 'array', 'min:1'],
             'views.*' => [Rule::in(ReportViews::VIEWS)],
+            /*
+             * CREATIVE-DISPLAY-001 — the ad section, end to end.
+             *
+             * `creatives` is the visibility map (`creatives: true` is «show the ad section to the client»), the same vocabulary the saved-report
+             * dialog sends; `creative_display` is the listing policy; the id lists are the allow- and deny-list. The builder accepted none of
+             * these, so the ad-section controls changed nothing on a link created here.
+             */
+            'creatives' => ['sometimes', 'array'],
+            'creatives.*' => ['boolean'],
+            'creative_display' => ['sometimes', 'array'],
+            'creative_display.policy' => ['sometimes', Rule::in(CreativeDisplay::POLICIES)],
+            'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
+            'creative_display.auto_refresh' => ['sometimes', 'boolean'],
+            'creative_ids' => ['sometimes', 'array', 'max:500'],
+            'creative_ids.*' => ['uuid'],
+            'excluded_creative_ids' => ['sometimes', 'array', 'max:500'],
+            'excluded_creative_ids.*' => ['uuid'],
         ]);
+
+        abort_if(
+            ($data['creative_display']['policy'] ?? null) === 'selected' && (array) ($data['creative_ids'] ?? []) === [],
+            422,
+            'Choose at least one creative, or pick another ad display policy.',
+        );
 
         /*
          * Every campaign must actually be in this project.
@@ -469,11 +495,27 @@ final class LiveReportBuilderController extends Controller
 
         [$accountIds, $campaignIds, $adIds] = $this->resolveHierarchy($project, $data);
 
-        abort_if($campaignIds === [], 422, 'No campaigns in the selected accounts to share.');
+        /*
+         * LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link is created over ACCOUNTS, and campaigns are not a precondition.
+         *
+         * `resolveHierarchy` has already refused an account this project does not bind. What is left is a link whose accounts may hold no
+         * campaign, ad or figure yet; refusing it made the Owner's workflow (connect → share → launch) impossible in its first step. Unless
+         * the operator narrowed to named campaigns or ads, the link FOLLOWS its accounts: whatever syncs under them later appears on the same
+         * URL, and nothing outside them ever does.
+         */
+        $narrowed = array_filter(array_map(
+            static fn ($a): bool => ! empty($a['campaign_ids']) || ! empty($a['ad_ids']),
+            (array) ($data['accounts'] ?? []),
+        )) !== [];
+        $dynamic = ! $narrowed;
 
         $providers = array_values(array_unique((array) ($data['providers'] ?? [])));
         if ($providers === []) {
-            $providers = DailyMetric::query()->where('project_id', $project)->whereIn('external_account_id', $accountIds)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all();
+            $providers = array_values(array_unique(array_merge(
+                DailyMetric::query()->where('project_id', $project)->whereIn('external_account_id', $accountIds)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all(),
+                // An account with nothing synced still names its platform, so a campaign launched there tomorrow is inside the link.
+                ExternalAccount::query()->whereIn('id', $accountIds)->pluck('provider')->map(strval(...))->all(),
+            )));
         }
 
         $metrics = array_values(array_intersect(
@@ -541,12 +583,16 @@ final class LiveReportBuilderController extends Controller
             'settings' => [
                 'section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? []))),
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
-            ],
+            ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
+              + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
             'scope' => [
                 'project_id' => (string) $project,
-                'campaign_ids' => $campaignIds,
+                'campaign_ids' => $dynamic ? [] : $campaignIds,
+                'dynamic_campaigns' => $dynamic,
                 'account_ids' => $accountIds,
                 'ad_ids' => $adIds,
+                'creative_ids' => array_values(array_unique((array) ($data['creative_ids'] ?? []))),
+                'excluded_creative_ids' => array_values(array_unique((array) ($data['excluded_creative_ids'] ?? []))),
                 'providers' => $providers,
                 'metrics' => $metrics,
                 'earliest' => Carbon::parse($data['from'])->toDateString(),
@@ -560,7 +606,7 @@ final class LiveReportBuilderController extends Controller
             action: 'report.live_link_created',
             entityType: ReportShare::class,
             entityId: (string) $share->id,
-            after: ['project_id' => $project, 'campaigns' => count($campaignIds), 'providers' => $providers],
+            after: ['project_id' => $project, 'campaigns' => count($campaignIds), 'accounts' => count($accountIds), 'follows_accounts' => $dynamic, 'providers' => $providers],
         );
 
         return ApiResponse::success([
