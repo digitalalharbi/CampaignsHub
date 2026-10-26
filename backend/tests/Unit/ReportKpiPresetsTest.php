@@ -21,22 +21,22 @@ final class ReportKpiPresetsTest extends TestCase
     {
         $e = $this->engine();
 
-        $this->assertSame(['impressions', 'reach', 'frequency', 'cpm'], $e->metricSet('awareness'));
-        $this->assertSame(['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'landing_page_views'], $e->metricSet('traffic'));
-        $this->assertSame(['spend', 'impressions', 'engagements', 'engagement_rate', 'cpe'], $e->metricSet('engagement'));
+        $this->assertSame(['spend', 'impressions', 'reach', 'frequency', 'cpm'], $e->metricSet('awareness'));
+        $this->assertSame(['spend', 'impressions', 'clicks', 'ctr', 'cpc'], $e->metricSet('traffic'));
+        $this->assertSame(['spend', 'impressions', 'engagements', 'engagement_rate'], $e->metricSet('engagement'));
         // The Owner's sales funnel (REPORT-OBJECTIVE-TEMPLATE-001): the cost per purchase is its own show/hide switch, not a mandatory card.
         $this->assertSame(['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas'], $e->metricSet('sales'));
-        $this->assertSame(['spend', 'installs', 'cpi', 'registrations'], $e->metricSet('app_installs'));
+        $this->assertSame(['spend', 'impressions', 'clicks', 'installs', 'cpi'], $e->metricSet('app_installs'));
+        $this->assertSame(['spend', 'impressions', 'clicks', 'leads'], $e->metricSet('leads'));
     }
 
-    public function test_leads_follow_their_destination(): void
+    /** The Owner's Leads default is one set for every destination; a cost per lead is switched on by hand (REPORT-KPI-CONTRACT-001). */
+    public function test_leads_have_one_default_whatever_the_destination(): void
     {
         $e = $this->engine();
 
-        $this->assertSame(['spend', 'impressions', 'leads', 'cpl', 'conversion_rate'], $e->metricSet('leads', 'website'));
-        $this->assertSame(['spend', 'impressions', 'leads', 'cpl', 'conversion_rate'], $e->metricSet('leads'));
-        foreach (['whatsapp', 'messenger', 'instagram_direct', 'lead_form', 'calls'] as $destination) {
-            $this->assertSame(['spend', 'impressions', 'leads', 'cpl'], $e->metricSet('leads', $destination), $destination);
+        foreach ([null, 'website', 'whatsapp', 'messenger', 'instagram_direct', 'lead_form', 'calls'] as $destination) {
+            $this->assertSame(['spend', 'impressions', 'clicks', 'leads'], $e->metricSet('leads', $destination), (string) $destination);
         }
     }
 
@@ -55,6 +55,7 @@ final class ReportKpiPresetsTest extends TestCase
 
         $this->assertTrue($e->isPreset(['leads', 'cpl', 'conversion_rate', 'ctr', 'spend']), 'an old default was kept as if chosen');
         $this->assertTrue($e->isPreset(['spend', 'impressions', 'leads', 'cpl']));
+        $this->assertTrue($e->isPreset(['impressions', 'reach', 'frequency', 'cpm']), 'the previous awareness default is still recognised as shipped');
         $this->assertFalse($e->isPreset(['spend', 'leads']), "an Owner's own selection was treated as a preset");
     }
 }

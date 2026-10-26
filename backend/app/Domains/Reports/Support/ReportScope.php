@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Reports\Services\ReportObjectiveLens;
 use Illuminate\Support\Carbon;
 
 /**
@@ -171,7 +172,7 @@ final class ReportScope
             objectives: array_values(array_intersect($list('objectives'), CampaignObjective::values())),
             destinations: array_values(array_intersect($list('destinations'), LeadDestination::values())),
             paths: array_values(array_intersect($list('paths'), MarketingPath::values())),
-            metrics: array_values(array_intersect($list('metrics'), MetricsAggregator::readKeys() + self::derivedMetricKeys())),
+            metrics: array_values(array_intersect($list('metrics'), array_merge(MetricsAggregator::readKeys(), self::derivedMetricKeys()))),
             from: $date('from'),
             to: $date('to'),
             objectiveFilter: array_key_exists('objective_filter', $input) ? filter_var($input['objective_filter'], FILTER_VALIDATE_BOOL) : $objectivesFilterByDefault,
@@ -191,7 +192,7 @@ final class ReportScope
     /** Derived KPIs a reader may choose to show, which are computed rather than stored. */
     private static function derivedMetricKeys(): array
     {
-        return ['ctr', 'cpc', 'cpm', 'cpa', 'roas', 'aov', 'conversion_rate', 'frequency', 'reach'];
+        return ['ctr', 'cpc', 'cpm', 'cpa', 'cpl', 'cpi', 'cpe', 'roas', 'aov', 'conversion_rate', 'engagement_rate', 'video_completion_rate', 'frequency', 'reach', 'conversions'];
     }
 
     /** @return array<string, mixed> the stored shape — empty axes omitted, so a stored scope reads as what it bounds */
@@ -200,6 +201,11 @@ final class ReportScope
         $out = [];
         foreach (self::AXES as $axis) {
             $value = $this->{self::property($axis)};
+            // REPORT-KPI-CONTRACT-001 — the report objective is never stored in the scope as if it were a data bound; `objectives` is kept
+            // only when the operator explicitly chose «filter campaigns by objective».
+            if ($axis === 'objectives' && ! $this->objectiveFilter) {
+                continue;
+            }
             if ($value !== []) {
                 $out[$axis] = $value;
             }
@@ -218,6 +224,17 @@ final class ReportScope
         return $out;
     }
 
+    /**
+     * REPORT-KPI-CONTRACT-001 — the measurement template this scope's objective choice names (`sales`, `leads`…), or null.
+     *
+     * The objective a report is built for belongs to the REPORT (`campaign_objective`), not to the data scope. A scope that arrives with
+     * `objectives` and no explicit filter flag carries that choice; the caller moves it to the report and the scope stores no objective.
+     */
+    public function objectiveTemplate(): ?string
+    {
+        return $this->objectiveFilter ? null : ReportObjectiveLens::fromScopeObjectives($this->objectives)?->value();
+    }
+
     public function isUnbounded(): bool
     {
         return $this->toArray() === [];
@@ -228,7 +245,7 @@ final class ReportScope
     {
         return array_values(array_filter(
             self::AXES,
-            fn (string $axis): bool => $this->{self::property($axis)} !== [],
+            fn (string $axis): bool => $this->{self::property($axis)} !== [] && ($axis !== 'objectives' || $this->objectiveFilter),
         ));
     }
 
