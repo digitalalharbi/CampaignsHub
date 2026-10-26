@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { UnlinkAccountButton } from './UnlinkAccountButton'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, RefreshCw, X } from 'lucide-react'
 import {
@@ -308,6 +309,9 @@ function AccountLine({ account, ar }: { account: AccountRow; ar: boolean }) {
             : fmtDateTime(account.last_synced_at)}
         </span>
       </p>
+      {account.assigned_project_id !== null && (
+        <UnlinkAccountButton projectId={account.assigned_project_id} projectName={account.assigned_project_name} accountId={account.id} accountName={account.name} />
+      )}
     </li>
   )
 }
