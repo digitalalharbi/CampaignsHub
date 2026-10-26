@@ -78,6 +78,11 @@ final class ReportGenerator
          * exactly as it did before this existed.
          */
         $scope = ReportScope::fromReport($report->scope);
+        // Historical reports stored the objective choice inside the scope. It is the report's measurement template, never a data bound:
+        // moved to the report, the stored scope loses it, and an explicit «filter campaigns by objective» (flagged) is left exactly as chosen.
+        if (($template = $scope->objectiveTemplate()) !== null) {
+            $report->forceFill(['campaign_objective' => $report->campaign_objective ?: $template, 'scope' => ($scope->toArray() ?: null)])->saveQuietly();
+        }
         $agg = $scope->applyTo($this->agg);
 
         // A scope may narrow the window, never widen it past the period the report was created for.
@@ -245,9 +250,13 @@ final class ReportGenerator
             'objective' => $objective,
             'platform_order' => $config['platform_order'] ?? $providerList,
             // The configured set wins; otherwise the objective's preset, narrowed by the destination.
-            'metric_set' => isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
-                ? $config['metric_set']
-                : $this->template->metricSet($objective, $leadDestination?->value),
+            // REPORT-KPI-CONTRACT-001 — the visible KPI list is an ordered ALLOWLIST: what the operator selected in the scope wins, exactly and in
+            // order; else a customised report set; else the objective's default template. The objective never filters data and never overrides a selection.
+            'metric_set' => $scope->metrics !== []
+                ? $scope->metrics
+                : (isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
+                    ? $config['metric_set']
+                    : $this->template->metricSet($objective, $leadDestination?->value)),
             'lead_destination' => $leadDestination?->value,
             'kpis' => $totals,
             'previous' => $previous,

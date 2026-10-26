@@ -76,7 +76,36 @@ final class ReportExporter
             $applied['creatives_hidden'] = $data['creatives_hidden'];
         }
 
+        // REPORT-KPI-CONTRACT-001 — a client's file shows the KPIs the operator selected, in that order (the report's visible-metric allowlist);
+        // an internal copy keeps every figure. Source fields the figures are calculated from stay in the payload; only their presentation is cut.
+        if (($report->audience ?? 'client') !== 'internal' && is_array($applied['metric_set'] ?? null) && $applied['metric_set'] !== []) {
+            $applied['kpi_allowlist'] = array_values($applied['metric_set']);
+        }
+
         return $applied;
+    }
+
+    /**
+     * The KPI rows a file lists: the allowlist in its own order for a client, everything for an internal copy.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private static function kpiRows(array $data): array
+    {
+        $kpis = array_filter((array) ($data['kpis'] ?? []), static fn ($v): bool => ! is_array($v));
+        $allow = $data['kpi_allowlist'] ?? null;
+        if (! is_array($allow)) {
+            return $kpis;
+        }
+
+        $rows = [];
+        foreach ($allow as $key) {
+            // A metric nobody reported is an EMPTY cell, never a zero.
+            $rows[(string) $key] = $kpis[$key] ?? null;
+        }
+
+        return $rows;
     }
 
     /**
@@ -104,6 +133,23 @@ final class ReportExporter
      */
     private static function chosenColumns(array $data, string $table, array $head, array $rows): array
     {
+        // The visible-metric allowlist also governs a table's metric columns (REPORT-KPI-CONTRACT-001).
+        if (is_array($data['kpi_allowlist'] ?? null)) {
+            $allow = array_map('strtolower', $data['kpi_allowlist']);
+            $metricCols = ['spend', 'revenue', 'roas', 'cpa', 'ctr', 'impressions', 'clicks', 'cpc', 'cpm'];
+            $keep = [];
+            foreach ($head as $i => $label) {
+                $word = strtolower((string) $label);
+                if ($i === 0 || ! in_array($word, $metricCols, true) || in_array($word, $allow, true)) {
+                    $keep[] = $i;
+                }
+            }
+            if (count($keep) !== count($head)) {
+                $head = array_map(static fn (int $i) => $head[$i], $keep);
+                $rows = array_map(static fn (array $row) => array_map(static fn (int $i) => $row[$i] ?? null, $keep), $rows);
+            }
+        }
+
         $chosen = $data['report_columns'][$table] ?? null;
         if (! is_array($chosen)) {
             return [$head, $rows];
@@ -328,21 +374,7 @@ final class ReportExporter
         $put(['Period', ($data['period']['from'] ?? '').' → '.($data['period']['to'] ?? ''), 'Currency', $report->currency]);
         $put([]);
         $put(['KPIs']);
-        foreach (($data['kpis'] ?? []) as $k => $v) {
-            /*
-             * A spreadsheet cell holds a scalar. `kpis` also carries ANNOTATIONS — the money-truth
-             * counts, and since AGGREGATION-TRUTH-001 the coverage blocks — and a coverage block is a
-             * nested array. `is_numeric()` is false for it, so the old fallback handed the array
-             * straight to `fputcsv`, which is «Array to string conversion» and a broken export.
-             *
-             * Skipped rather than stringified: «Array» in a customer's CSV is worse than the row being
-             * absent, and a coverage object flattened into a cell is unreadable either way. The export
-             * states the figures; the surfaces that can render coverage properly do that.
-             */
-            if (is_array($v)) {
-                continue;
-            }
-
+        foreach (self::kpiRows($data) as $k => $v) {
             $put([$k, is_numeric($v) ? $v : ($v ?? '')]);
         }
         $put([]);
@@ -552,12 +584,7 @@ final class ReportExporter
         $kpi->setTitle('KPIs');
         $kpi->fromArray(['Metric', 'Value'], null, 'A1');
         $row = 2;
-        foreach (($data['kpis'] ?? []) as $k => $v) {
-            // Same reason as the CSV above: a coverage block is a nested array, not a cell value.
-            if (is_array($v)) {
-                continue;
-            }
-
+        foreach (self::kpiRows($data) as $k => $v) {
             $kpi->setCellValue("A{$row}", $k);
             $kpi->setCellValue("B{$row}", is_numeric($v) ? $v : (string) ($v ?? ''));
             $row++;
