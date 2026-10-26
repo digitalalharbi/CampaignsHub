@@ -188,5 +188,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
          */
         Route::put('primary', [ProjectIntegrationController::class, 'setPrimary'])->middleware('project.can:integrations.manage')->name('primary');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->middleware('project.can:integrations.manage')->name('sync');
+        // INTEGRATION-UNLINK-001 — take ONE account off this project, addressed by the account (the binding id is not what an operator holds).
+        Route::post('accounts/{account}/unlink', [ProjectIntegrationController::class, 'unlinkAccount'])->middleware('project.can:integrations.manage')->name('accounts.unlink');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->middleware('project.can:integrations.manage')->name('detach');
     });

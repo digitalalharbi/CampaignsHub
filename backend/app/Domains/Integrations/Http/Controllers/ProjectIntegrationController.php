@@ -523,6 +523,53 @@ final class ProjectIntegrationController extends Controller
         );
     }
 
+    /**
+     * POST projects/{project}/integrations/accounts/{account}/unlink — take ONE account off THIS project, by the account.
+     *
+     * INTEGRATION-UNLINK-001 — the Owner linked an ad account to the wrong client (Nasl Real Estate's Snapchat account on Razzah Avenue) and
+     * found no way back once it had synced. The way back already existed as a binding id on a project page and as the «Manage accounts»
+     * wizard, neither of which an operator holding only the ACCOUNT in front of them could reach.
+     *
+     * The same deactivation both of those doors perform, so the three agree: the binding goes inactive (never deleted) and not primary,
+     * the sync sweep — which reads active bindings only — stops filing new rows under the project, and `BoundAccountVisibility` takes the
+     * account's existing rows out of THIS project's totals and reports. Nothing is erased: the history stays, and linking the account
+     * again brings it back. The provider authorisation is untouched, and so is every other project the account feeds.
+     */
+    public function unlinkAccount(Request $request, AuditLogger $audit, string $project, string $account): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        $external = ExternalAccount::query()->find($account);
+        abort_if($external === null, 404, 'Account not found.');
+
+        $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $external->tenant_id)
+            ->where('project_id', $project)
+            ->where('external_account_id', $external->getKey())
+            ->where('is_active', true)
+            ->get();
+        abort_if($bindings->isEmpty(), 404, 'This account is not linked to this project.');
+
+        foreach ($bindings as $binding) {
+            $binding->update(['is_active' => false, 'is_primary' => false]);
+        }
+
+        $kept = (int) DB::table('daily_metrics')->where('project_id', $project)->where('external_account_id', $external->getKey())->count();
+        $audit->log(
+            action: 'integration.account.unlinked',
+            entityType: ExternalAccount::class,
+            entityId: (string) $external->getKey(),
+            before: ['project' => $project, 'bindings' => $bindings->pluck('id')->all()],
+            after: ['history_rows_kept' => $kept],
+        );
+
+        return ApiResponse::success([
+            'account_id' => (string) $external->getKey(),
+            'project_id' => $project,
+            'history_rows_kept' => $kept,
+        ], 'Account removed from this project. Its history is kept and linking it again restores it.');
+    }
+
     /** Detach a binding from the project. Does NOT revoke the underlying OAuth connection. */
     public function detach(Request $request, AuditLogger $audit): JsonResponse
     {
