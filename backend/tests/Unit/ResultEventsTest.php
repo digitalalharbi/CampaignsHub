@@ -81,4 +81,38 @@ final class ResultEventsTest extends TestCase
 
         $this->assertFalse($events->configured());
     }
+
+    /** The NASEL definitions: a landing lead is the platform's Purchase event, kept on its own path by the project's naming convention. */
+    public function test_landing_leads_are_the_mapped_purchase_event_and_the_pixel_lead_beside_it_is_never_added(): void
+    {
+        $events = ResultEvents::merged(
+            ['meta' => ['landing_page' => 'purchases'], 'tiktok' => ['landing_page' => 'purchases'], 'snapchat' => ['landing_page' => 'purchases', 'lead_form' => 'leads']],
+            null,
+            ['LandingPage' => 'landing_page', 'LeadForm' => 'lead_form'],
+        );
+        $rows = [
+            // Meta reports the Purchase AND the pixel Lead for one submission: only the mapped Purchase counts.
+            $this->row('m1', 'meta', ['purchases' => 4, 'leads' => 4, 'conversions' => 4] + ['campaign_name' => 'Riwaq — LandingPage — Meta'], ['purchases' => true, 'leads' => true]),
+            // A landing-page load counted as TikTok's generic conversion is not a lead; its Complete Payment is.
+            $this->row('t1', 'tiktok', ['purchases' => 0, 'conversions' => 653] + ['campaign_name' => 'Riwaq — LandingPage — TikTok'], ['purchases' => true, 'conversions' => true]),
+            // The native-form campaign carries no landing-page lead even though it reports a Purchase.
+            $this->row('t2', 'tiktok', ['purchases' => 9, 'conversions' => 1] + ['campaign_name' => 'Riwaq — LeadForm — TikTok'], ['purchases' => true, 'conversions' => true]),
+            // Native leads are mapped for Snapchat but the platform has not reported them: absence, not zero.
+            $this->row('s1', 'snapchat', ['leads' => 0] + ['campaign_name' => 'Riwaq — LeadForm — Snap'], ['leads' => false]),
+        ];
+
+        $out = $events->leadBreakdown($rows, []);
+
+        $this->assertSame(4.0, $out['landing'], 'Meta 4 + TikTok 0; the pixel Lead, the 653 conversions and the form campaign\'s purchases are not landing leads');
+        $this->assertNull($out['native'], 'a native lead metric nobody reported is unavailable, never a zero');
+        $this->assertSame(4.0, $out['total']);
+        $this->assertSame('platform_attributed_not_unique_people', $out['basis']);
+    }
+
+    public function test_a_google_ads_platform_with_no_event_configured_contributes_nothing(): void
+    {
+        $events = ResultEvents::merged(['meta' => ['all' => 'purchases']], null);
+
+        $this->assertSame(0.0, $events->leadBreakdown([$this->row('g', 'google', ['purchases' => 50], ['purchases' => true])], [])['total'] ?? 0.0);
+    }
 }

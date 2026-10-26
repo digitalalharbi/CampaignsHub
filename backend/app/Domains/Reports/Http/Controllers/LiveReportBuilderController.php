@@ -369,6 +369,9 @@ final class LiveReportBuilderController extends Controller
         // A lead is a submission the platform REPORTED as one; the platform's generic «conversions» is not offered as anything.
         ['key' => 'leads', 'ar' => 'العملاء المحتملون', 'en' => 'Leads'],
         ['key' => 'cpl', 'ar' => 'تكلفة العميل المحتمل', 'en' => 'CPL'],
+        // LEAD-EVENTS-001 — the two verified sources, offered only where a lead event is configured for the project.
+        ['key' => 'landing_leads', 'ar' => 'عملاء صفحة الهبوط', 'en' => 'Landing-page leads'],
+        ['key' => 'native_leads', 'ar' => 'عملاء النموذج الأصلي', 'en' => 'Native-form leads'],
         ['key' => 'qualified_leads', 'ar' => 'عملاء مؤهلون', 'en' => 'Qualified leads'],
         // RESULT-EVENTS-001 — optional, and present only where a result event is configured for the project or the link.
         ['key' => 'results', 'ar' => 'النتائج', 'en' => 'Results'],
@@ -469,6 +472,7 @@ final class LiveReportBuilderController extends Controller
             'creative_display.auto_refresh' => ['sometimes', 'boolean'],
             // RESULT-EVENTS-001 — this link's own definition of «Results»: platform → path → reported metric. Replaces the project's for the platforms it names.
             'result_events' => ['sometimes', 'array'],
+            'lead_events' => ['sometimes', 'array'],
             'creative_ids' => ['sometimes', 'array', 'max:500'],
             'creative_ids.*' => ['uuid'],
             'excluded_creative_ids' => ['sometimes', 'array', 'max:500'],
@@ -618,6 +622,7 @@ final class LiveReportBuilderController extends Controller
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? [])))->configured() ? ['result_events' => $events->toArray()] : [])
+              + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? [])))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
               + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
             'scope' => [
                 'project_id' => (string) $project,

@@ -214,6 +214,16 @@ export const SPECS: Record<string, Spec> = {
     format: compact,
     hint: { ar: 'من ترك بياناته — ليس عميلًا مؤكدًا ولا عملية بيع.', en: 'People who left their details — not a confirmed customer, and not a sale.' },
   },
+  landing_leads: {
+    label: { ar: 'عملاء صفحة الهبوط', en: 'Landing-page leads' },
+    format: compact,
+    hint: { ar: 'نماذج صفحة الهبوط المكتملة كما تنسبها المنصات.', en: 'Completed landing-page forms, as the platforms attribute them.' },
+  },
+  native_leads: {
+    label: { ar: 'عملاء النموذج الأصلي', en: 'Native-form leads' },
+    format: compact,
+    hint: { ar: 'نماذج المنصة الأصلية المكتملة.', en: 'Completed native platform forms.' },
+  },
   qualified_leads: {
     label: { ar: 'المؤهلون', en: 'Qualified leads' },
     format: compact,

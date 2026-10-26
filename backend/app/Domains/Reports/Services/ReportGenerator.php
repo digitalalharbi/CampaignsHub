@@ -1111,13 +1111,13 @@ final class ReportGenerator
     private function resultsFor(Report $report, array $campaigns, array $destinations): array
     {
         $project = $report->project_id ? Project::withoutGlobalScopes()->find($report->project_id) : null;
-        $events = ResultEvents::merged(
-            (array) (((array) ($project->meta ?? []))['result_events'] ?? []) ?: null,
-            (array) (((array) ($report->config ?? []))['result_events'] ?? []) ?: null,
-        );
+        $config = (array) ($report->config ?? []);
+        $results = ResultEvents::forProject($project, 'result_events', (array) ($config['result_events'] ?? []) ?: null);
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ($config['lead_events'] ?? []) ?: null);
 
-        return $events->configured()
-            ? $events->over($campaigns, $destinations)
-            : ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
+        $none = ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
+
+        return ($results->configured() ? $results->over($campaigns, $destinations) : $none)
+            + ['leads' => $leads->configured() ? $leads->leadBreakdown($campaigns, $destinations) : $none + ['landing' => null, 'native' => null]];
     }
 }

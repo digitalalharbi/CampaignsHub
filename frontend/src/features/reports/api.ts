@@ -414,6 +414,18 @@ export interface LivePayload {
     by_platform: Record<string, { results: number; metric: string }>
     by_path: Record<string, number>
     events: Record<string, Record<string, string>>
+    /** LEAD-EVENTS-001 — verified Leads by source; the total is platform-attributed, not unique people. */
+    leads?: {
+      configured: boolean
+      total: number | null
+      landing: number | null
+      native: number | null
+      cost: number | null
+      by_platform: Record<string, { results: number; metric: string }>
+      by_path: Record<string, number>
+      events: Record<string, Record<string, string>>
+      basis?: string
+    }
   }
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
@@ -1103,6 +1115,8 @@ export const updateShareSections = (
 export type ResultEventsMap = Record<string, Record<string, string>>
 export interface ResultEventsConfig {
   result_events: ResultEventsMap
+  lead_events?: ResultEventsMap
+  campaign_paths?: Record<string, string>
   platforms: string[]
   paths: string[]
   metrics: string[]

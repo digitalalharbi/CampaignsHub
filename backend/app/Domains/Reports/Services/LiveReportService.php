@@ -241,19 +241,21 @@ final class LiveReportService
      */
     private function resultsFor(ReportShare $share, array $scope, MetricsAggregator $engine, Carbon $from, Carbon $to): array
     {
-        $project = $scope['project_id'] === '' ? new Project : (Project::withoutGlobalScopes()->find($scope['project_id']) ?? new Project);
-        $events = ResultEvents::merged(
-            (array) (((array) ($project->meta ?? []))['result_events'] ?? []) ?: null,
-            (array) (($share->settings ?? [])['result_events'] ?? []) ?: null,
-        );
-        if (! $events->configured()) {
-            return ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        $settings = (array) ($share->settings ?? []);
+        $results = ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null);
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
+
+        $none = ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
+        if (! $results->configured() && ! $leads->configured()) {
+            return $none + ['leads' => $none + ['landing' => null, 'native' => null]];
         }
 
         $rows = $engine->byCampaign($from, $to);
         $ids = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows)));
+        $destinations = app(CampaignDestinations::class)->for($ids);
 
-        return $events->over($rows, app(CampaignDestinations::class)->for($ids));
+        return ($results->configured() ? $results->over($rows, $destinations) : $none) + ['leads' => $leads->leadBreakdown($rows, $destinations)];
     }
 
     /**

@@ -117,4 +117,21 @@ final class ResultEventsApiTest extends TestCase
 
         $this->assertFalse($this->results()['configured']);
     }
+
+    public function test_lead_events_and_the_naming_convention_are_saved_for_the_project_and_split_the_live_leads(): void
+    {
+        $this->putJson("/api/v1/projects/{$this->project->id}/result-events", ['lead_events' => ['tiktok' => ['landing_page' => 'purchases']], 'campaign_paths' => ['Riwaq' => 'landing_page']])->assertOk()
+            ->assertJsonPath('data.lead_events.tiktok.landing_page', 'purchases')
+            ->assertJsonPath('data.campaign_paths.Riwaq', 'landing_page');
+        $this->putJson("/api/v1/projects/{$this->project->id}/result-events", ['campaign_paths' => ['Riwaq' => 'somewhere']])->assertStatus(422);
+        $this->putJson("/api/v1/projects/{$this->project->id}/result-events", [])->assertStatus(422);
+
+        $results = $this->results();
+
+        // Results were not configured, and the 700 optimised-for conversions are neither Results nor Leads.
+        $this->assertFalse($results['configured']);
+        $this->assertTrue($results['leads']['configured']);
+        $this->assertNull($results['leads']['total'], 'TikTok never reported a Complete Payment for this campaign, so there is no landing lead to state');
+        $this->assertNull($results['leads']['native']);
+    }
 }

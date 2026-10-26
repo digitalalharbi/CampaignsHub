@@ -39,6 +39,24 @@ describe('result cards are gated by configuration', () => {
   })
 })
 
+describe('verified lead cards', () => {
+  const leads = { configured: true, total: 4, landing: 4, native: null, cost: 5, by_platform: {}, by_path: {}, events: {} }
+  const results = { configured: false, total: null, cost: null, by_platform: {}, by_path: {}, events: {}, leads }
+
+  it('offers the landing and native breakdown only where lead events are configured', () => {
+    expect(gateResultKeys(['leads', 'landing_leads', 'native_leads'], live({ results }))).toEqual(['leads', 'landing_leads', 'native_leads'])
+    expect(gateResultKeys(['leads', 'landing_leads', 'native_leads'], live({ results: { ...results, leads: { ...leads, configured: false } } }))).toEqual(['leads'])
+  })
+
+  it('reads Leads as the verified total, the sources on their own, and an unreported source as unavailable', () => {
+    const cards = reportMetrics({ objective: 'leads', currency: 'SAR', kpis: { leads: 0 }, reported: { leads: false }, metric_set: ['leads', 'landing_leads', 'native_leads', 'cpl'], results }, false)
+    expect(cards.map((c) => c.key)).toEqual(['leads', 'landing_leads', 'native_leads', 'cpl'])
+    expect(cards[0].reading).toMatchObject({ kind: 'value' })
+    expect(cards[1].reading).toMatchObject({ kind: 'value' })
+    expect(cards[2].reading).not.toMatchObject({ kind: 'value' })
+  })
+})
+
 describe('saved report cards', () => {
   const base = { objective: 'leads', currency: 'SAR', kpis: { spend: 20, impressions: 1000, clicks: 50, conversions: 700, leads: 0 }, reported: { leads: false, conversions: true }, metric_set: ['spend', 'results', 'cost_per_result', 'leads'] }
 

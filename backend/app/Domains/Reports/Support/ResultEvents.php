@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Support;
 
 use App\Domains\Campaigns\Enums\LeadDestination;
+use App\Domains\Projects\Models\Project;
 use App\Support\AdPlatforms;
 
 /**
@@ -31,8 +32,11 @@ final class ResultEvents
     /** Reported base metrics a result may be defined as — never a ratio, never the generic `conversions` unless chosen on purpose. */
     public const METRICS = ['leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views'];
 
-    /** @param array<string, array<string, string>> $map platform → path → metric key */
-    private function __construct(private readonly array $map) {}
+    /**
+     * @param  array<string, array<string, string>>  $map  platform → path → metric key
+     * @param  array<string, string>  $patterns  a word in a campaign's name → the acquisition path it states (the project's own naming convention)
+     */
+    private function __construct(private readonly array $map, private readonly array $patterns = []) {}
 
     /** @param array<string, mixed>|null $raw */
     public static function fromArray(?array $raw): self
@@ -53,15 +57,50 @@ final class ResultEvents
         return new self($map);
     }
 
-    /** The project's mapping with a report's override laid over it, platform by platform. */
-    public static function merged(?array $project, ?array $override): self
+    /**
+     * The project's mapping with a report's override laid over it, platform by platform.
+     *
+     * @param  array<string, mixed>|null  $campaignPaths  the project's explicit «word in the name → path» convention, e.g. {"LeadForm": "lead_form"}
+     */
+    public static function merged(?array $project, ?array $override, ?array $campaignPaths = null): self
     {
         $base = self::fromArray($project)->map;
         foreach (self::fromArray($override)->map as $platform => $paths) {
             $base[$platform] = $paths;
         }
 
-        return new self($base);
+        $patterns = [];
+        foreach ((array) $campaignPaths as $word => $path) {
+            if (is_string($word) && trim($word) !== '' && in_array($path, ['lead_form', 'landing_page'], true)) {
+                $patterns[trim($word)] = (string) $path;
+            }
+        }
+
+        return new self($base, $patterns);
+    }
+
+    /**
+     * A project's mapping under `$key` (`result_events` or `lead_events`), a link's override over it, and the project's naming convention.
+     *
+     * @param  array<string, mixed>|null  $override
+     */
+    public static function forProject(?Project $project, string $key, ?array $override): self
+    {
+        $meta = $project === null ? [] : (array) $project->meta;
+
+        return self::merged((array) ($meta[$key] ?? []) ?: null, $override ?: null, (array) ($meta['campaign_paths'] ?? []) ?: null);
+    }
+
+    /** The path a campaign's NAME states under the project's own convention; null where it states none. */
+    public function pathOfName(string $name): ?string
+    {
+        foreach ($this->patterns as $word => $path) {
+            if (mb_stripos($name, $word) !== false) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     public function configured(): bool
@@ -85,6 +124,34 @@ final class ResultEvents
             LeadDestination::Website => 'landing_page',
             default => null,
         };
+    }
+
+    /**
+     * LEAD-EVENTS-001 — verified Leads, by source: completed landing-page forms and completed native platform forms, kept apart.
+     *
+     * Each platform contributes ONE mapped metric per path, so an event that duplicates another (Meta's pixel `Lead` beside its `Purchase`) is
+     * never added twice. The total is the platforms' own attributions summed — it is NOT a count of unique people, because two platforms can
+     * claim the same person and nothing here proves otherwise.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, LeadDestination>  $destinations
+     * @return array{configured: bool, total: float|null, landing: float|null, native: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string}>, by_path: array<string, float>, events: array<string, array<string, string>>, basis: string}
+     */
+    public function leadBreakdown(array $rows, array $destinations): array
+    {
+        $o = $this->over($rows, $destinations);
+
+        return [
+            'configured' => $o['configured'],
+            'total' => $o['total'],
+            'landing' => $o['by_path']['landing_page'] ?? null,
+            'native' => $o['by_path']['lead_form'] ?? null,
+            'cost' => $o['cost'],
+            'by_platform' => $o['by_platform'],
+            'by_path' => $o['by_path'],
+            'events' => $o['events'],
+            'basis' => 'platform_attributed_not_unique_people',
+        ];
     }
 
     /** @return array<string, array<string, string>> */
@@ -112,7 +179,8 @@ final class ResultEvents
 
         foreach ($rows as $row) {
             $provider = AdPlatforms::canonical((string) ($row['provider'] ?? ''));
-            $path = self::pathOf($destinations[(string) ($row['campaign_id'] ?? '')] ?? null);
+            // A stated destination outranks the name; a name states a path only under the project's own, explicit convention.
+            $path = self::pathOf($destinations[(string) ($row['campaign_id'] ?? '')] ?? null) ?? $this->pathOfName((string) ($row['campaign_name'] ?? ''));
             $metric = $this->metricFor($provider, $path);
             if ($metric === null || ($row['reported'][$metric] ?? false) !== true) {
                 continue;

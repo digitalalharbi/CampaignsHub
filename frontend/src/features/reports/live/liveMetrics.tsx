@@ -161,13 +161,13 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
     cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => asExactMoney(v))) },
     cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
-    // LEAD-EVIDENCE-001 — a lead is a submission a platform REPORTED. Where none did, the card says so; it never prints a measured zero,
-    // and never borrows the platform's optimised-for `conversions` (an event of any kind) as leads.
-    // RESULT-EVENTS-001 — the configured Result (never the platform's generic conversions); «غير متاح» while it is configured but unreported.
-    results: { ar: 'النتائج', en: 'Results', format: (_t, p, _m, count) => (p.results?.configured && p.results.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results?.configured ? p.results.total : null)) },
-    cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (_t, p) => (p.results?.configured && p.results.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(p.results?.configured && p.results.cost != null ? asExactMoney(p.results.cost) : '—')) },
-    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
-    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
+    // LEAD-EVIDENCE-001 / LEAD-EVENTS-001 — a lead is a submission a platform REPORTED as one. Where lead events are configured for the project,
+    // Leads is the verified landing-page forms plus the verified native forms (each on its own below); otherwise it is the platform's `leads`
+    // metric, and «غير متاح» where none was sent. It never borrows the platform's optimised-for `conversions`, and never prints a measured zero.
+    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.results?.leads?.configured ? (p.results.leads.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.total)) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
+    landing_leads: { ar: 'عملاء صفحة الهبوط', en: 'Landing-page leads', format: (_t, p, _m, count) => (p.results?.leads?.landing == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing)) },
+    native_leads: { ar: 'عملاء النموذج الأصلي', en: 'Native-form leads', format: (_t, p, _m, count) => (p.results?.leads?.native == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.native)) },
+    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.results?.leads?.configured ? (p.results.leads.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.leads.cost))) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
     installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
     cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => asExactMoney(v))) },
     engagements: { ar: 'التفاعلات', en: 'Engagements', format: (t, _p, _m, count) => count(t.engagements) },
@@ -228,6 +228,7 @@ export function gateResultKeys(keys: string[], payload: LivePayload | null | und
 
   return keys.filter((key) => {
     if (key === 'results' || key === 'cost_per_result') return configured
+    if (key === 'landing_leads' || key === 'native_leads') return payload?.results?.leads?.configured === true
     // A payload that does not say what was reported (an older one) is left exactly as it was.
     if ((key === 'conversions' || key === 'cpa') && !chosen && payload?.reported !== undefined) return payload.reported.purchases === true
 
