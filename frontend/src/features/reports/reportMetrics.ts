@@ -126,7 +126,12 @@ export function reportLabel(
   objective: string | undefined,
   destination: string | null | undefined,
   ar: boolean,
+  reported?: Record<string, boolean>,
 ): string | null {
+  // LEAD-EVIDENCE-001 — `conversions` / `cpa` are named Leads / cost per lead only where the platform ALSO reported leads. A platform that
+  // sent only its optimised-for `conversion` (any event: a page view, a click-through, a form open) has results, not verified leads.
+  if (objective === 'leads' && reported?.leads === false && (key === 'conversions' || key === 'cpa') && !isMessagingDestination(destination)) return null
+
   const entry = objective === 'leads' && isMessagingDestination(destination)
     ? MESSAGING_LABEL[key]
     : OBJECTIVE_LABEL[objective ?? '']?.[key]
@@ -195,7 +200,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
         key,
         label: substituted
           ? (ar ? DIRECT_LABEL[key].ar : DIRECT_LABEL[key].en)
-          : reportLabel(key, objective, data.lead_destination, ar) ?? (ar ? spec.label.ar : spec.label.en),
+          : reportLabel(key, objective, data.lead_destination, ar, data.reported) ?? (ar ? spec.label.ar : spec.label.en),
         // A substituted figure is a derived ratio of a NARROWER scope than `reported` describes, so
         // it is read straight: `reported` would answer a question about the wrong denominator.
         reading: substituted

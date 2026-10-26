@@ -508,6 +508,14 @@ final class LiveReportService
             'conversions_basis' => $engine->conversionsBasis($from, $to),
             // REPORT-RESULT-KIND-001 — what ONE result is called for the campaigns in scope.
             'result_kind' => $this->resultKind($scope, $applied['campaigns']),
+            /*
+             * LEAD-EVIDENCE-001 — which base metrics any connected platform actually SENT for this window.
+             *
+             * The totals coalesce to 0, and a client link must not read «Leads 0» for a platform that never
+             * reported a lead event (TikTok reports its optimised-for `conversion`, not leads). The page asks
+             * this map before it prints a count it cannot stand behind.
+             */
+            'reported' => $engine->reportedKeys($from, $to),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.
