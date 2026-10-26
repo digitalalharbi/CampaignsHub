@@ -16,7 +16,6 @@ import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
-import { toApiError } from '@/lib/api/client'
 import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
@@ -791,9 +790,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           <p data-testid="live-link-summary" className="text-xs text-text-secondary">{summary}</p>
 
           {create.isError && (
-            <p className="text-xs text-danger" data-testid="live-link-error">
-              {/* The server's own reason, in its words — a generic «check the campaigns» hid the real cause of every refusal. */}
-              {toApiError(create.error).message || (ar ? 'تعذّر إنشاء الرابط.' : 'Could not create the link.')}
+            <p className="text-xs text-danger">
+              {ar ? 'تعذّر إنشاء الرابط. تأكد من وجود حملات في هذا المشروع.' : 'Could not create the link. Check this project has campaigns.'}
             </p>
           )}
 
