@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { ProjectsEstate } from './ProjectsEstate'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -110,6 +111,12 @@ export function IntegrationsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* INTEGRATION-ESTATE-001 — client first: what feeds each project, with linking and removing on the row. */}
+      <ProjectsEstate
+        connectable={hub.data?.connectable ?? []}
+        onLink={(projectId, provider) => setFlow({ mode: 'connect', provider, connection: null, projectId })}
+      />
+
       <ConnectionHub
         onConnect={() => setPicking(true)}
         onOpen={(connection, tab) => setDrawer({ id: connection.id, tab: tab ?? 'overview' })}
