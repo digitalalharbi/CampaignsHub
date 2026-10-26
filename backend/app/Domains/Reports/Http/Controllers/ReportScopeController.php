@@ -21,6 +21,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
+use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
@@ -514,8 +515,13 @@ final class ReportScopeController extends Controller
         ReportScopeHierarchy::verifyFlat($project, (array) $request->input('scope', []));
         $scope = $this->validated($request, $project);
 
+        // REPORT-KPI-CONTRACT-001 — the objective the editor sent is the report's measurement TEMPLATE: it moves to the report and the
+        // stored scope keeps no objective unless «filter campaigns by objective» was explicitly switched on.
+        $template = $scope->objectiveTemplate();
+
         $model->forceFill([
             'scope' => $scope->isUnbounded() ? null : $scope->toArray(),
+            'campaign_objective' => $template ?? $model->campaign_objective,
             'status' => 'processing',
             'error' => null,
         ])->save();
@@ -576,8 +582,17 @@ final class ReportScopeController extends Controller
         $model = Report::query()->where('project_id', $project)->findOrFail($report);
         $scope = ReportScope::fromReport($model->scope);
 
+        // The editor's objective chips read `objectives`; for a report whose objective lives on the report (and not in its scope) they are
+        // filled from it for DISPLAY only — saving moves them straight back to the report, so no data bound is stored.
+        $shown = $scope->toArray();
+        $objective = (string) ($model->campaign_objective ?? '');
+        if (! $scope->objectiveFilter && $objective !== '' && isset(ReportObjectiveLens::TEMPLATE_MEMBERS[$objective])) {
+            $shown['objectives'] = ReportObjectiveLens::TEMPLATE_MEMBERS[$objective];
+        }
+
         return ApiResponse::success([
-            'scope' => $scope->toArray(),
+            'scope' => $shown,
+            'objective' => $objective === '' ? null : $objective,
             'explain' => $scope->explain(),
             'bound_axes' => $scope->boundAxes(),
             /*

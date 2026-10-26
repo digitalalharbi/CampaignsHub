@@ -197,7 +197,7 @@ final class ReportController extends Controller
             'form' => $level?->form() ?? $data['form'] ?? 'detailed',
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
-            'campaign_objective' => $data['campaign_objective'] ?? null,
+            'campaign_objective' => $data['campaign_objective'] ?? ReportScope::fromReport((array) ($data['scope'] ?? []))->objectiveTemplate(),
             'status' => 'processing',
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),

@@ -259,15 +259,17 @@ final class ReportPlatformsAndFixedPeriodTest extends TestCase
         $this->assertSame(['meta'], array_column($strict, 'provider'));
     }
 
-    public function test_an_existing_scope_with_objectives_and_no_flag_stops_dropping_platforms_and_keeps_its_objectives(): void
+    public function test_an_existing_scope_with_objectives_and_no_flag_stops_dropping_platforms_and_moves_its_objective_to_the_report(): void
     {
         $this->seedFourObjectives();
         $report = $this->objectiveReport(['objectives' => ['sales', 'conversions'], 'account_ids' => []]);
 
         app(ReportGenerator::class)->generate($report);
 
-        $this->assertSame(['sales', 'conversions'], $report->fresh()->scope['objectives'], 'campaign objective classifications and the stored scope are not rewritten');
-        $this->assertArrayNotHasKey('objective_filter', $report->fresh()->scope);
+        // REPORT-KPI-CONTRACT-001 — the objective moves to the report (as its template); campaign classifications are never touched.
+        $this->assertArrayNotHasKey('objectives', (array) $report->fresh()->scope);
+        $this->assertSame('sales', $report->fresh()->campaign_objective);
+        $this->assertArrayNotHasKey('objective_filter', (array) $report->fresh()->scope);
     }
 
     public function test_a_link_built_from_a_saved_report_covers_the_platforms_in_the_metrics_not_the_frozen_payload(): void

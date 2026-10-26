@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
-use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Support\AdPlatforms;
 
 /**
@@ -34,12 +33,14 @@ final class ReportTemplateEngine
         // REPORT-OBJECTIVE-TEMPLATE-001 — the Owner's sales funnel: spend · reach · clicks · basket · orders · sales value · return. The cost per
         // order is a separate show/hide switch (hidden by default on a client report), not a card every sales report must carry.
         'sales' => ['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas'],
-        'awareness' => ['impressions', 'reach', 'frequency', 'cpm'],
-        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'landing_page_views'],
+        // REPORT-KPI-CONTRACT-001 — the Owner's defaults per report objective. They are a PRESENTATION template only: they never filter data,
+        // and a manually chosen metric list always overrides them. Optional metrics (cpl, ctr…) are switched on by hand.
+        'awareness' => ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
+        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
         // Leads on a website (the default destination): form fills on the advertiser's own page.
-        'leads' => ['spend', 'impressions', 'leads', 'cpl', 'conversion_rate'],
-        'app_installs' => ['spend', 'installs', 'cpi', 'registrations'],
-        'engagement' => ['spend', 'impressions', 'engagements', 'engagement_rate', 'cpe'],
+        'leads' => ['spend', 'impressions', 'clicks', 'leads'],
+        'app_installs' => ['spend', 'impressions', 'clicks', 'installs', 'cpi'],
+        'engagement' => ['spend', 'impressions', 'engagements', 'engagement_rate'],
         'video' => ['spend', 'impressions', 'video_views', 'video_completion_rate', 'cpm'],
         /*
          * Several objectives in one scope — operational figures only (§14.6).
@@ -367,8 +368,13 @@ final class ReportTemplateEngine
      * anything else is the Owner's and is kept exactly.
      */
     private const SHIPPED_BEFORE = [
+        ['spend', 'impressions', 'engagements', 'engagement_rate', 'cpe'],
         ['spend', 'purchases', 'revenue', 'cpa', 'roas'],
         ['spend', 'add_to_cart', 'purchases', 'revenue', 'cpa', 'roas'],
+        ['impressions', 'reach', 'frequency', 'cpm'],
+        ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'landing_page_views'],
+        ['spend', 'impressions', 'leads', 'cpl', 'conversion_rate'],
+        ['spend', 'installs', 'cpi', 'registrations'],
         ['impressions', 'reach', 'frequency', 'cpm', 'video_views', 'ctr'],
         ['clicks', 'landing_page_views', 'ctr', 'cpc', 'spend'],
         ['leads', 'cpl', 'conversion_rate', 'ctr', 'spend'],
@@ -394,13 +400,7 @@ final class ReportTemplateEngine
          * A message, a form on the ad and a call have no conversion rate worth a primary slot, and a
          * message is never called a «lead» in the figure's name. Website keeps the base lead set.
          */
-        if ($objective === 'leads' && $destination !== null) {
-            $d = LeadDestination::tryFrom($destination);
-
-            if ($d !== null && $d !== LeadDestination::Website && $d !== LeadDestination::Mixed) {
-                return ['spend', 'impressions', 'leads', 'cpl'];
-            }
-        }
+        // The Owner's Leads default is the same for every destination (spend, impressions, clicks, leads); a cost per lead is switched on by hand.
 
         return self::METRIC_SETS[array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom'];
     }
