@@ -62,6 +62,7 @@ export function LiveSharedReport({
   password,
   currency,
   form = 'detailed',
+  periodMode,
 }: {
   token: string
   password?: string
@@ -71,6 +72,11 @@ export function LiveSharedReport({
    * nothing else; a detailed link opens on the dashboard and offers every mode (`live/modes.ts`).
    */
   form?: 'executive_summary' | 'detailed'
+  /**
+   * REPORT-PERIOD-MODE-001 — `fixed` is exactly the saved dates: no 7/30/90-day presets, and nothing is asked of the server but the link.
+   * Absent or `rolling` is the window that follows the reader's day, which is what every link made before the mode did.
+   */
+  periodMode?: 'fixed' | 'rolling'
 }) {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -98,7 +104,9 @@ export function LiveSharedReport({
     })
   }, [setSearch, form])
 
-  const [days, setDays] = useState(30)
+  const fixed = periodMode === 'fixed'
+  const [rollingDays, setDays] = useState(30)
+  const days = fixed ? null : rollingDays
   /*
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by. The chips
    * belong to the summary and the dashboard; the platform and content modes choose one platform
@@ -226,7 +234,7 @@ export function LiveSharedReport({
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
-          {(payload.period.kind ?? 'custom') !== 'custom' && (
+          {!fixed && (payload.period.kind ?? 'custom') !== 'custom' && (
             <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
               {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
               {/* REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is the agency's view unless the Owner switched it on. */}
@@ -234,14 +242,19 @@ export function LiveSharedReport({
               {payload.period.partial ? (ar ? ' · الفترة لم تكتمل' : ' · in progress') : ''}
             </span>
           )}
-          {(payload.period.kind ?? 'custom') === 'custom' && RANGES.map((r) => (
+          {fixed && (
+            <span data-testid="live-period-fixed" className="tnum rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
+              {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
+            </span>
+          )}
+          {!fixed && (payload.period.kind ?? 'custom') === 'custom' && RANGES.map((r) => (
             <button
               key={r.days}
               type="button"
               data-testid={`live-range-${r.days}`}
               onClick={() => setDays(r.days)}
               className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
-                days === r.days
+                rollingDays === r.days
                   ? 'bg-brand-600 text-white'
                   : 'border border-border text-text-secondary hover:bg-surface-hover'
               }`}

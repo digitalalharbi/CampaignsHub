@@ -59,6 +59,35 @@ final class ReportObjectiveLens
     }
 
     /**
+     * REPORT-OBJECTIVE-TEMPLATE-001 — the measurement template a scope's objective choice names, or null when it names none.
+     *
+     * Picking «Sales» in a report's scope chooses the sales FUNNEL and KPIs; it is not a campaign filter. Several stored objectives collapse to
+     * the one template they belong to (sales, conversions, purchases and add-to-cart are the sales funnel).
+     *
+     * @param  list<string>  $objectives
+     */
+    public const TEMPLATE_MEMBERS = [
+        'sales' => ['sales', 'conversions', 'purchases', 'add_to_cart'],
+        'awareness' => ['awareness', 'reach'],
+        'traffic' => ['traffic', 'landing_page_views'],
+        'engagement' => ['engagement'],
+        'video' => ['video_views'],
+        'leads' => ['leads'],
+        'app_installs' => ['app_installs'],
+    ];
+
+    public static function fromScopeObjectives(array $objectives): ?self
+    {
+        foreach (self::TEMPLATE_MEMBERS as $template => $members) {
+            if (array_intersect($objectives, $members) !== []) {
+                return new self($template);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The report objective for a scope, from the campaigns' own declarations.
      *
      * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`

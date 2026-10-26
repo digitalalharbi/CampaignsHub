@@ -77,7 +77,12 @@ final class ReportGenerator
          * An unbounded scope returns the singleton unchanged, so a report that names no scope behaves
          * exactly as it did before this existed.
          */
-        $scope = ReportScope::fromArray($report->scope);
+        $scope = ReportScope::fromReport($report->scope);
+        // Historical reports stored the objective choice inside the scope. It is the report's measurement template, never a data bound:
+        // moved to the report, the stored scope loses it, and an explicit «filter campaigns by objective» (flagged) is left exactly as chosen.
+        if (($template = $scope->objectiveTemplate()) !== null) {
+            $report->forceFill(['campaign_objective' => $report->campaign_objective ?: $template, 'scope' => ($scope->toArray() ?: null)])->saveQuietly();
+        }
         $agg = $scope->applyTo($this->agg);
 
         // A scope may narrow the window, never widen it past the period the report was created for.
@@ -151,7 +156,8 @@ final class ReportGenerator
          */
         $lens = $report->campaign_objective
             ? new ReportObjectiveLens($report->campaign_objective)
-            : ReportObjectiveLens::infer($campaigns);
+            // The scope's objective choice is the measurement TEMPLATE (REPORT-OBJECTIVE-TEMPLATE-001), not a filter on the data.
+            : (ReportObjectiveLens::fromScopeObjectives($scope->objectives) ?? ReportObjectiveLens::infer($campaigns));
         $objective = $lens->value();
         $providerList = array_values(array_map(fn ($p) => $p['provider'], $platforms));
 
@@ -188,6 +194,21 @@ final class ReportGenerator
              */
             $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form);
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
+        } else {
+            /*
+             * REPORT-PLATFORM-RECONCILE-001 — the layout is authored once, but the platforms are not.
+             *
+             * `platform_order` and the per-platform slides were written the FIRST time a report was generated and then kept, so a
+             * platform that started reporting afterwards (Google Ads, ChatGPT Ads) had data in the totals and no slide, no place in
+             * the order and no row in anything keyed on it: the saved report showed the platforms it had met on day one while the
+             * live link, which reads the metrics every time, showed them all. Each generation reconciles the layout with the
+             * platforms the data actually holds — the operator's order and hidden slides are kept, the missing ones are added.
+             */
+            $reconciled = $this->template->reconcilePlatforms((array) $config, $providerList, (string) $report->form);
+            if ($reconciled !== $config) {
+                $config = $reconciled;
+                $report->forceFill(['config' => $config])->saveQuietly();
+            }
         }
 
         $topCreatives = $this->ranking->rank($objective, $campaigns);
@@ -229,9 +250,13 @@ final class ReportGenerator
             'objective' => $objective,
             'platform_order' => $config['platform_order'] ?? $providerList,
             // The configured set wins; otherwise the objective's preset, narrowed by the destination.
-            'metric_set' => isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
-                ? $config['metric_set']
-                : $this->template->metricSet($objective, $leadDestination?->value),
+            // REPORT-KPI-CONTRACT-001 — the visible KPI list is an ordered ALLOWLIST: what the operator selected in the scope wins, exactly and in
+            // order; else a customised report set; else the objective's default template. The objective never filters data and never overrides a selection.
+            'metric_set' => $scope->metrics !== []
+                ? $scope->metrics
+                : (isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
+                    ? $config['metric_set']
+                    : $this->template->metricSet($objective, $leadDestination?->value)),
             'lead_destination' => $leadDestination?->value,
             'kpis' => $totals,
             'previous' => $previous,

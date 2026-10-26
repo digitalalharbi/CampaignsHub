@@ -400,6 +400,8 @@ export interface StoreFunnelPayload {
 }
 
 export interface LivePayload {
+  /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
+  reported?: Record<string, boolean>
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
@@ -669,9 +671,12 @@ export interface LivePayload {
  */
 export async function fetchLiveShared(
   token: string,
-  opts: { from: string; to: string; providers: string[]; campaigns: string[]; password?: string },
+  opts: { from?: string; to?: string; providers: string[]; campaigns: string[]; password?: string },
 ) {
-  const qs = new URLSearchParams({ from: opts.from, to: opts.to })
+  // A FIXED report sends no window: the server answers with exactly the saved dates (REPORT-PERIOD-MODE-001).
+  const qs = new URLSearchParams()
+  if (opts.from) qs.set('from', opts.from)
+  if (opts.to) qs.set('to', opts.to)
   opts.providers.forEach((p) => qs.append('providers[]', p))
   opts.campaigns.forEach((c) => qs.append('campaigns[]', c))
 
@@ -836,6 +841,11 @@ export interface ReportScopeShape {
   ad_ids?: string[]
   creative_ids?: string[]
   objectives?: string[]
+  /**
+   * REPORT-OBJECTIVE-TEMPLATE-001 — true only when the operator chose «filter campaigns by this objective». Without it `objectives` is the
+   * report's measurement template (which funnel and KPIs it presents) and every authorised platform with data is included.
+   */
+  objective_filter?: boolean
   /** LEAD-DESTINATION-001 — lead_form · website · whatsapp · messenger · instagram_direct · calls · mixed. */
   destinations?: string[]
   paths?: string[]
@@ -871,7 +881,7 @@ export interface ScopeOptions {
     last_active_on?: string | null
   }>
   providers: string[]
-  accounts: Array<{ id: string; name: string; provider: string }>
+  accounts: Array<{ id: string; name: string; provider: string; state?: 'data' | 'no_data' | 'unsynced' }>
   ad_sets: Array<{ id: string; name: string; provider: string; campaign_id: string }>
   ads: Array<{ id: string; name: string; provider: string; campaign_id: string }>
   creatives: Array<{ id: string; name: string; provider: string; format: string | null; campaign_id: string }>

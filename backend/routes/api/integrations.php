@@ -136,6 +136,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      * a project or it is not, and that answer lives in `ProjectIntegrationBinding` — a second way to
      * say who owns an account is the exact defect this programme spent three PRs removing.
      */
+    Route::get('estate', [AccountInventoryController::class, 'estate'])->name('estate');
     Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
     Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
     // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
@@ -188,5 +189,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
          */
         Route::put('primary', [ProjectIntegrationController::class, 'setPrimary'])->middleware('project.can:integrations.manage')->name('primary');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->middleware('project.can:integrations.manage')->name('sync');
+        // INTEGRATION-UNLINK-001 — take ONE account off this project, addressed by the account (the binding id is not what an operator holds).
+        Route::post('accounts/{account}/unlink', [ProjectIntegrationController::class, 'unlinkAccount'])->middleware('project.can:integrations.manage')->name('accounts.unlink');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->middleware('project.can:integrations.manage')->name('detach');
     });

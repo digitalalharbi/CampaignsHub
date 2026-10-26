@@ -83,6 +83,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [metrics, setMetrics] = useState<string[]>([])
   // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
+  /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
+  const [periodMode, setPeriodMode] = useState<'fixed' | 'rolling'>('fixed')
   const [from, setFrom] = useState(isoDaysAgo(30))
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
 
@@ -233,6 +235,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         from,
         to,
         period_kind: periodKind,
+        period_mode: periodMode,
         form,
         detail_level: level,
         hide_spend: hideSpend,
@@ -630,6 +633,28 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               {periodKind === 'weekly' && (ar ? 'الأسبوع (الاثنين–الأحد) يُقارَن بالأسبوع السابق.' : 'The Monday–Sunday week, compared with the previous week.')}
               {periodKind === 'monthly' && (ar ? 'الشهر الميلادي يُقارَن بالشهر السابق.' : 'The calendar month, compared with the previous month.')}
               {periodKind === 'custom' && (ar ? 'نطاق تحدده، يُقارَن بفترة بنفس الطول قبله.' : 'A range you choose, compared with the same length before it.')}
+            </p>
+          </div>
+          <div className="grid gap-2" data-testid="live-link-period-mode">
+            <span className="text-xs font-bold text-text-muted">{ar ? 'سلوك الفترة' : 'Period behaviour'}</span>
+            <div role="group" className="grid grid-cols-2 gap-1">
+              {([['fixed', 'فترة ثابتة', 'Fixed dates'], ['rolling', 'فترة متحركة', 'Rolling']] as const).map(([key, labelAr, labelEn]) => (
+                <button
+                  key={key}
+                  type="button"
+                  data-testid={`live-link-period-mode-${key}`}
+                  aria-pressed={periodMode === key}
+                  onClick={() => setPeriodMode(key)}
+                  className={`rounded-xl border px-2 py-1.5 text-sm font-semibold ${periodMode === key ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary'}`}
+                >
+                  {ar ? labelAr : labelEn}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-text-muted">
+              {periodMode === 'fixed'
+                ? (ar ? 'تبقى التواريخ المحفوظة كما هي عند كل فتح للرابط؛ تتحدّث الأرقام داخل هذه الفترة فقط.' : 'The saved dates never move; the figures refresh inside them only.')
+                : (ar ? 'تتبع الفترة يوم القارئ، ويمكنه اختيار آخر 7 أو 30 أو 90 يومًا.' : 'The window follows the reader’s day, and they may pick the last 7, 30 or 90 days.')}
             </p>
           </div>
           {periodKind === 'custom' && (

@@ -42,6 +42,6 @@ final class ReportScopeTemplate extends Model
     /** The stored shape as the object every surface reads. */
     public function toScope(): ReportScope
     {
-        return ReportScope::fromArray($this->scope);
+        return ReportScope::fromReport($this->scope);
     }
 }

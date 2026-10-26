@@ -122,6 +122,37 @@ final class AdPlatforms
         'openai_advertising' => 'openai_ads',
     ];
 
+    /**
+     * Every spelling of the given platforms that a stored row may carry.
+     *
+     * Connectors store their own key (`google_ads`) while pickers, campaign rows and report scopes speak the canonical one
+     * (`google`), so a filter on the canonical key silently matched none of the platform's rows — the platform was «connected» and
+     * absent from the report. A filter therefore matches the key AND every alias that canonicalises to the same platform.
+     *
+     * @param  iterable<string>  $keys
+     * @return list<string>
+     */
+    public static function variants(iterable $keys): array
+    {
+        $out = [];
+        foreach ($keys as $key) {
+            $raw = strtolower(trim((string) $key));
+            if ($raw === '') {
+                continue;
+            }
+            $canonical = self::canonical($raw);
+            $out[] = $raw;
+            $out[] = $canonical;
+            foreach (self::ALIASES as $alias => $target) {
+                if ($target === $canonical) {
+                    $out[] = $alias;
+                }
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
     /** The canonical key for any spelling of a platform. */
     public static function canonical(?string $key): string
     {

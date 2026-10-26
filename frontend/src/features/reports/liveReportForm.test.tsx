@@ -407,3 +407,39 @@ describe('a live link and the form it was shared as', () => {
   })
 
 })
+
+/**
+ * REPORT-PERIOD-MODE-001 — a FIXED report is exactly its saved dates.
+ *
+ * Production: a weekly report built with explicit start and end dates offered «7 / 30 / 90 days» and, once one was pressed, left its
+ * saved week. The fixed page offers no rolling presets and asks the server for no window at all; a rolling page keeps its presets and
+ * keeps asking for one.
+ */
+describe('the period of a live report', () => {
+  beforeEach(() => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: { ...PAYLOAD, period: { ...PAYLOAD.period, mode: 'fixed', kind: 'custom' } } } } as never)
+  })
+  afterEach(() => vi.clearAllMocks())
+
+  it('shows the saved range and no rolling presets, and asks the server for no window', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" periodMode="fixed" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    expect(screen.getByTestId('live-period-fixed')).toHaveTextContent('2026-08-01 → 2026-08-26')
+    for (const days of [7, 30, 90]) expect(screen.queryByTestId(`live-range-${days}`)).not.toBeInTheDocument()
+
+    const asked = vi.mocked(fetchLiveShared).mock.calls[0][1]
+    expect(asked.from).toBeUndefined()
+    expect(asked.to).toBeUndefined()
+  })
+
+  it('keeps the presets, and the window it asks for, on a rolling report', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: { ...PAYLOAD, period: { ...PAYLOAD.period, mode: 'rolling', kind: 'custom' } } } } as never)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" periodMode="rolling" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    for (const days of [7, 30, 90]) expect(screen.getByTestId(`live-range-${days}`)).toBeInTheDocument()
+    expect(screen.queryByTestId('live-period-fixed')).not.toBeInTheDocument()
+    expect(vi.mocked(fetchLiveShared).mock.calls[0][1].from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})

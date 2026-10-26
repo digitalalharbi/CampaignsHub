@@ -1,4 +1,5 @@
 import type { FormatIntelligencePayload } from '@/features/content/api'
+import { kpiRowClass } from './kpiRow'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
 import { sectionShown, withDailyRecordsSlides, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
@@ -553,7 +554,20 @@ function Title({ platform, children, sub }: { platform?: string; children: React
  * that, a card with a note is taller than its neighbour and the grid steps up and down across the
  * page — which is what «توازي» asks for and what a variable-height stack cannot give.
  */
-function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
+/**
+ * REPORT-KPI-CONTRACT-001 — a table's metric columns follow the report's visible-KPI selection.
+ *
+ * The platform ranking printed CPA beside a Sales selection that does not include it. Only metric columns with a KPI of their own are cut
+ * (spend, revenue, ROAS, CPA, CTR…); the name column, the results count and the share are not KPI cards and stay.
+ */
+function onlySelected<T extends { key: string }>(metricSet: readonly string[] | undefined, columns: T[]): T[] {
+  if (!metricSet || metricSet.length === 0) return columns
+  const governed = new Set(['spend', 'revenue', 'roas', 'cpa', 'ctr', 'cpc', 'cpm', 'impressions', 'clicks'])
+
+  return columns.filter((c, i) => i === 0 || !governed.has(c.key) || metricSet.includes(c.key))
+}
+
+function Kpi({ label, value, exact, note, delta, invert, spark, accent, dense = false }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string; dense?: boolean }) {
   return (
     <div className="flex h-full flex-col rounded-2xl border border-border bg-surface-secondary p-3">
       <div className="flex min-h-[20px] items-center justify-between gap-2">
@@ -566,7 +580,8 @@ function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { labe
         A KPI that breaks across two lines drops the card below its neighbours and takes the row's
         alignment with it — and a number split over two lines is harder to read than a smaller one.
       */}
-      <div className="tnum mt-1 truncate text-[24px] font-extrabold leading-none tracking-tight text-text-primary" title={value}>
+      {/* REPORT-PDF-FIT-SALES-001 — a seven-card row is narrower than a six-card one: a smaller figure keeps «1.65K USD» and «لا توجد بيانات» whole instead of clipped. */}
+      <div className={`tnum mt-1 truncate font-extrabold leading-none tracking-tight text-text-primary ${dense ? 'text-[17px]' : 'text-[24px]'}`} title={value}>
         {value}
       </div>
 
@@ -878,11 +893,17 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         pins its sparkline to the bottom, so the six lines share one baseline instead of floating at
         six different heights.
       */}
-      <div className="grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 xl:grid-cols-6">
+      {/*
+        REPORT-OBJECTIVE-TEMPLATE-001 — the sales funnel is seven cards (spend · impressions · clicks · add to cart · purchases · revenue · ROAS).
+        Six columns made the seventh a second row of one, which grew this slide past the print fit floor (0.811 < 0.85) and failed every PDF;
+        a row that matches the card count keeps it one row.
+      */}
+      <div className={`grid grid-cols-2 items-stretch gap-3 ${cards.length >= 7 ? 'md:grid-cols-4' : 'md:grid-cols-3'} ${kpiRowClass(cards.length, 'xl')}`}>
         {cards.map((m) => (
           <Kpi
             key={m.key}
             label={m.label}
+            dense={cards.length >= 7}
             value={readingText(m.reading)}
             exact={exactOf(m, data)}
             note={readingNote(m.reading)}
@@ -990,11 +1011,13 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
   return (
     <div>
       <Title platform={platform} sub={`أداء ${plat(platform)} خلال الفترة`}>أداء {plat(platform)}</Title>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {/* REPORT-OBJECTIVE-TEMPLATE-001 — seven funnel cards stay one row, or each platform page overflows the print fit floor (0.72–0.79 < 0.85 on real data). */}
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${kpiRowClass(cards.length, 'lg')}`}>
         {cards.map((m) => (
           <Kpi
             key={m.key}
             label={m.label}
+            dense={cards.length >= 7}
             value={readingText(m.reading)}
             note={readingNote(m.reading)}
             spark={m.reading.kind === 'value' ? seriesOf(series, m.series) : undefined}
@@ -1319,14 +1342,14 @@ function ComparisonSlide({ data }: { data: ReportData }) {
       <ChartCard title="ترتيب المنصات" className="lg:col-span-2">
         <DataMetricTable
           /* REPORT-TABLES-OWNER-COLUMNS-001 — the saved report's own column choice, the same cut the print and the files make. */
-          columns={cutColumns(data.report_columns?.platforms, [
+          columns={onlySelected(data.metric_set, cutColumns(data.report_columns?.platforms, [
             { key: 'platform', label: 'المنصة', kind: 'text' },
             { key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency },
             { key: 'conversions', label: 'النتائج', kind: 'number' },
             { key: 'cpa', label: 'CPA', kind: 'money', currency: data.currency },
             { key: 'roas', label: 'ROAS', kind: 'ratio' },
             { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
-          ], { spend: 'spend', conversions: 'results', cpa: 'cost' })}
+          ], { spend: 'spend', conversions: 'results', cpa: 'cost' }))}
           rows={(data.platforms ?? []).map((p) => ({
             platform: (
               <span className="inline-flex items-center gap-1.5 font-semibold">

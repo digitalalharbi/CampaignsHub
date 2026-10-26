@@ -153,6 +153,8 @@ final class ReportController extends Controller
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
+            // REPORT-PERIOD-MODE-001 — fixed = exactly these dates; rolling = follows the reader's day. Absent: fixed when both dates were given.
+            'period_mode' => ['nullable', Rule::in(ReportPeriod::MODES)],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom; the first three anchor on `period_end` (default today).
             'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
             'config' => ['nullable', 'array'],
@@ -176,6 +178,9 @@ final class ReportController extends Controller
 
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
 
+        $periodMode = $data['period_mode'] ?? (isset($data['period_start'], $data['period_end']) ? 'fixed' : 'rolling');
+        $data['config'] = (array) ($data['config'] ?? []) + ['period_mode' => $periodMode];
+
         $periodKind = in_array($data['period_kind'] ?? null, ReportPeriod::KINDS, true) ? (string) $data['period_kind'] : 'custom';
         if ($periodKind !== 'custom') {
             $window = ReportPeriod::resolve($periodKind, Carbon::parse($data['period_start'] ?? Carbon::today()), Carbon::parse($data['period_end'] ?? Carbon::today()));
@@ -192,7 +197,7 @@ final class ReportController extends Controller
             'form' => $level?->form() ?? $data['form'] ?? 'detailed',
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
-            'campaign_objective' => $data['campaign_objective'] ?? null,
+            'campaign_objective' => $data['campaign_objective'] ?? ReportScope::fromReport((array) ($data['scope'] ?? []))->objectiveTemplate(),
             'status' => 'processing',
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),
@@ -226,7 +231,7 @@ final class ReportController extends Controller
              * «no choice» used to mean every account the project binds — several clients' in one case.
              * Reports saved before this keep the scope they have; only creating or editing asks.
              */
-            'scope' => ($scope = ReportScope::fromArray(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
+            'scope' => ($scope = ReportScope::fromReport(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
             'created_by' => $request->user()->id,
         ]);
 
