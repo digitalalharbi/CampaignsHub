@@ -161,8 +161,10 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
     cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => asExactMoney(v))) },
     cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
-    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, _p, _m, count) => count(t.leads) },
-    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v))) },
+    // LEAD-EVIDENCE-001 — a lead is a submission a platform REPORTED. Where none did, the card says so; it never prints a measured zero,
+    // and never borrows the platform's optimised-for `conversions` (an event of any kind) as leads.
+    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
+    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
     installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
     cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => asExactMoney(v))) },
     engagements: { ar: 'التفاعلات', en: 'Engagements', format: (t, _p, _m, count) => count(t.engagements) },

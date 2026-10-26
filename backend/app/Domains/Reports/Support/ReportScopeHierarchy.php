@@ -55,7 +55,18 @@ final class ReportScopeHierarchy
             $byAccount[(string) $row->external_account_id][] = (string) $row->unified_campaign_id;
         }
 
+        /*
+         * REPORT-BOUND-ACCOUNTS-001 — an account the project BINDS is an account of the project.
+         *
+         * Whether campaigns or figures have arrived yet is a fact about the sync, not about
+         * ownership. A freshly bound Google or Meta account has neither, and refusing it here made
+         * the report unable to name it. It stays chosen, with no campaigns behind it yet.
+         */
+        $bound = array_flip(BoundAccountVisibility::activeAccountIds($project));
         foreach ($accountIds as $account) {
+            if (! isset($byAccount[$account]) && isset($bound[$account])) {
+                $byAccount[$account] = [];
+            }
             abort_unless(isset($byAccount[$account]), 422, 'An ad account is not part of this project.');
             $byAccount[$account] = array_values(array_unique($byAccount[$account]));
         }

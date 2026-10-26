@@ -400,6 +400,8 @@ export interface StoreFunnelPayload {
 }
 
 export interface LivePayload {
+  /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
+  reported?: Record<string, boolean>
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
@@ -879,7 +881,7 @@ export interface ScopeOptions {
     last_active_on?: string | null
   }>
   providers: string[]
-  accounts: Array<{ id: string; name: string; provider: string }>
+  accounts: Array<{ id: string; name: string; provider: string; state?: 'data' | 'no_data' | 'unsynced' }>
   ad_sets: Array<{ id: string; name: string; provider: string; campaign_id: string }>
   ads: Array<{ id: string; name: string; provider: string; campaign_id: string }>
   creatives: Array<{ id: string; name: string; provider: string; format: string | null; campaign_id: string }>

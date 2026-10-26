@@ -108,8 +108,8 @@ final class ReportObjectiveLayoutTest extends TestCase
         $data = $this->generate();
 
         $this->assertSame('awareness', $data['objective']);
-        // REPORT-KPI-PRESETS-001 — awareness: impressions · reach · frequency · CPM.
-        $this->assertSame(['impressions', 'reach', 'frequency', 'cpm'], $data['metric_set']);
+        // REPORT-KPI-CONTRACT-001 — awareness: spend · impressions · reach · frequency · CPM.
+        $this->assertSame(['spend', 'impressions', 'reach', 'frequency', 'cpm'], $data['metric_set']);
     }
 
     /**
