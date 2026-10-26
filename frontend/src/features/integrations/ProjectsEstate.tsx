@@ -4,6 +4,7 @@ import { ChevronDown, ChevronLeft, Plus } from 'lucide-react'
 import { Skeleton } from '@/components/ui/States'
 import { ProviderMark } from '@/components/ProviderMark'
 import { fmtDateTime } from '@/lib/datetime'
+import { accounts } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { AccountsPanel } from './AccountsPanel'
 import { fetchEstate, type ConnectableProvider, type EstateProject } from './api'
@@ -88,7 +89,7 @@ function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, o
             {project.providers.map((p) => <ProviderMark key={p} provider={p} size={18} />)}
           </span>
           <span className="tnum text-xs text-text-secondary">
-            {ar ? `${project.accounts} حساب` : `${project.accounts} account${project.accounts === 1 ? '' : 's'}`}
+            {accounts(project.accounts, ar ? 'ar' : 'en')}
           </span>
           <span className="text-[11px] text-text-muted">
             {project.last_synced_at === null ? (ar ? 'لم تتم مزامنة بعد' : 'Not synced yet') : `${ar ? 'آخر مزامنة' : 'Last sync'} ${fmtDateTime(project.last_synced_at)}`}
