@@ -921,6 +921,11 @@ function AccountPicker({ ar, accounts, selected, query, onQuery, onToggle, onAll
             <label key={a.id} className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={selected.includes(a.id)} onChange={() => onToggle(a.id)} data-testid={`live-builder-account-${a.id}`} className="h-3.5 w-3.5 shrink-0 accent-brand-600" />
               <span className="min-w-0 flex-1 truncate">{a.name}</span>
+              {a.state === 'unsynced' || a.state === 'no_data' ? (
+                <span data-testid={`account-state-${a.state}`} className="shrink-0 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
+                  {a.state === 'unsynced' ? (ar ? 'لم تتم مزامنته' : 'not synced yet') : (ar ? 'لا بيانات بعد' : 'no data yet')}
+                </span>
+              ) : null}
               <span className="shrink-0 text-text-muted"><PlatformMark platform={a.provider} size={12} /></span>
             </label>
           ))}

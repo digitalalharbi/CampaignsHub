@@ -210,6 +210,8 @@ export interface AdAccountRef {
   /** The provider's own name for the account, or its id when the provider gave no name. */
   name: string
   provider: string
+  /** REPORT-BOUND-ACCOUNTS-001 — what has arrived for a bound account: figures, a sync with none, or no sync yet. */
+  state?: 'data' | 'no_data' | 'unsynced'
 }
 
 export const liveBuilderOptions = (p: string, period?: { from: string; to: string }) =>

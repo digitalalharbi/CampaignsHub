@@ -161,6 +161,9 @@ final class LiveReportBuilderController extends Controller
             ->orderBy('provider')
             ->pluck('provider')
             ->all();
+        // A bound account that has not synced yet still names its platform (REPORT-BOUND-ACCOUNTS-001).
+        $providers = array_values(array_unique(array_merge($providers, array_map(static fn (array $a): string => (string) $a['provider'], $accounts['all']))));
+        sort($providers);
 
         return ApiResponse::success([
             'campaigns' => $campaigns,
@@ -280,6 +283,25 @@ final class LiveReportBuilderController extends Controller
 
             $byCampaign[(string) $row->campaign_id][$account['id']] = $account;
             $all[$account['id']] = $account;
+        }
+
+        /*
+         * REPORT-BOUND-ACCOUNTS-001 — and every account the project BINDS, whatever has or has not arrived.
+         *
+         * The two reads above find an account only through a campaign or a figure, so an authorised Meta, Google or ChatGPT Ads account
+         * that had not synced anything was missing from the Live link builder exactly as it was from the report builder. A link is made over
+         * accounts; `state` says what has arrived so the picker can label the empty ones instead of hiding them.
+         */
+        $withFigures = array_fill_keys(array_keys($all), true);
+        $boundIds = BoundAccountVisibility::activeAccountIds($project);
+        $bound = $boundIds === [] ? [] : ExternalAccount::query()->whereIn('id', $boundIds)->get(['id', 'name', 'external_id', 'provider', 'last_synced_at']);
+        foreach ($bound as $row) {
+            $id = (string) $row->getKey();
+            $all[$id] = ($all[$id] ?? [
+                'id' => $id,
+                'name' => trim((string) $row->name) !== '' ? (string) $row->name : (string) $row->external_id,
+                'provider' => AdPlatforms::canonical((string) $row->provider),
+            ]) + ['state' => isset($withFigures[$id]) ? 'data' : ($row->last_synced_at === null ? 'unsynced' : 'no_data')];
         }
 
         return [

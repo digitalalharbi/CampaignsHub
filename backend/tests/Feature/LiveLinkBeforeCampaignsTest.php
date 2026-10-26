@@ -126,6 +126,17 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertEquals(40.0, $payload['totals']['spend'], 'the later campaign is inside the link; the other account is not');
     }
 
+    public function test_the_live_builder_offers_a_bound_account_with_nothing_synced_and_labels_it(): void
+    {
+        $options = $this->getJson("/api/v1/projects/{$this->project->id}/reports/live/options")->assertOk()->json('data');
+
+        $offered = collect($options['ad_accounts'])->keyBy('id');
+        $this->assertTrue($offered->has((string) $this->account->id), 'the bound account was hidden from the Live link builder');
+        $this->assertSame('no_data', $offered[(string) $this->account->id]['state']);
+        $this->assertFalse($offered->has((string) $this->stranger->id), 'an account the project does not bind was offered');
+        $this->assertContains('tiktok', $options['providers']);
+    }
+
     public function test_an_account_the_project_does_not_bind_is_still_refused(): void
     {
         $this->createLink(['account_ids' => [(string) $this->stranger->id]])->assertStatus(422);
