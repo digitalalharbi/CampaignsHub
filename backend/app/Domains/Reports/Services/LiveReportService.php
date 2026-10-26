@@ -198,7 +198,7 @@ final class LiveReportService
      *
      * @param  array<string, mixed>  $applied
      * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
-     * @return array<string, list<string>>
+     * @return array<string, mixed>
      */
     private function contentFilters(ReportShare $share, array $applied, array $scope): array
     {

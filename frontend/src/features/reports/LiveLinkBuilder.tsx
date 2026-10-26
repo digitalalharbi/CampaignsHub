@@ -16,6 +16,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
+import { toApiError } from '@/lib/api/client'
+import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -221,9 +223,17 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   // REPORT-IDENTITY-NAMES-001 — the printed names; null = the stored names.
   const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
 
+  /*
+   * CREATIVE-DISPLAY-001 — the ad section, chosen here and SENT. The builder never carried it, so the controls an operator reached for
+   * on the saved-report dialog did nothing on a link made from here. The defaults are the Owner's: the section shown, the ads listed by
+   * period activity, refreshed automatically, zero-activity ads left out.
+   */
+  const [creatives, setCreatives] = useState<CreativeSharing>(() => ({ ...emptyCreativeSharing(), permissions: { creatives: true } }))
+
   const create = useMutation({
     mutationFn: () =>
       createLiveLink(projectId, {
+        ...creativeSharingBody(creatives),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
         ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
@@ -775,12 +785,15 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <input type="checkbox" data-testid="live-link-allow-download" checked={allowDownload} onChange={(e) => setAllowDownload(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
 
+          <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
+
           {/* What the link will show, in words, before it is created — see ViewCustomiser for the same idea. */}
           <p data-testid="live-link-summary" className="text-xs text-text-secondary">{summary}</p>
 
           {create.isError && (
-            <p className="text-xs text-danger">
-              {ar ? 'تعذّر إنشاء الرابط. تأكد من وجود حملات في هذا المشروع.' : 'Could not create the link. Check this project has campaigns.'}
+            <p className="text-xs text-danger" data-testid="live-link-error">
+              {/* The server's own reason, in its words — a generic «check the campaigns» hid the real cause of every refusal. */}
+              {toApiError(create.error).message || (ar ? 'تعذّر إنشاء الرابط.' : 'Could not create the link.')}
             </p>
           )}
 

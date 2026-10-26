@@ -315,6 +315,21 @@ export function LiveSharedReport({
         </p>
       )}
 
+      {/*
+        LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link opened before anything has run. The accounts are connected and the link is live: the figures
+        appear here on their own when the first campaign syncs. A page of zeros would say the campaigns ran and produced nothing.
+      */}
+      {payload.no_data_yet === true && (
+        <section data-testid="live-no-data-yet" className="rounded-2xl border border-border bg-surface px-5 py-6 text-center">
+          <h2 className="text-base font-bold text-text-primary">{ar ? 'التقرير جاهز وبانتظار أول بيانات' : 'Your report is ready and waiting for its first data'}</h2>
+          <p className="mx-auto mt-1 max-w-xl text-sm text-text-secondary">
+            {ar
+              ? 'هذا الرابط جاهز ومتصل. ستظهر الإعلانات والنتائج والأرقام هنا تلقائيًا بمجرد وصول أول بيانات، دون الحاجة إلى رابط جديد.'
+              : 'This link is live and connected. Ads, results and figures will appear here automatically as soon as the first data arrives — no new link needed.'}
+          </p>
+        </section>
+      )}
+
       {/* Dimmed, not blanked, while refreshing: blanking would make every filter change feel like a page load. */}
       <div className={refreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
         {mode === 'summary' && <SummaryView payload={payload} {...common} />}

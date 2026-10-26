@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareAnalytics;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
@@ -132,7 +133,7 @@ final class ReportShareController extends Controller
         // value object closes that combination once rather than at every surface that renders it.
         $opts['settings'] = [
             'creatives' => CreativeVisibility::fromArray($opts['creatives'] ?? [])->toArray(),
-        ] + (isset($opts['creative_display']) ? ['creative_display' => (\App\Domains\Reports\Support\CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new \App\Domains\Reports\Support\CreativeDisplay)->toArray()] : []) + [
+        ] + (isset($opts['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new CreativeDisplay)->toArray()] : []) + [
             /*
              * Which optional sections this link may open — ATTRIB-VIS-001.
              *
