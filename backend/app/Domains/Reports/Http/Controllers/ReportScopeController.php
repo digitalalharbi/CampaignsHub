@@ -219,21 +219,36 @@ final class ReportScopeController extends Controller
             ->whereNotNull('unified_campaign_id')
             ->whereNotNull('external_account_id')
             ->distinct()->pluck('external_account_id')->all();
+        /*
+         * REPORT-BOUND-ACCOUNTS-001 — and the accounts the project BINDS, whether or not anything has arrived.
+         *
+         * «Figures OR campaigns» still left an authorised account invisible until its first sync
+         * brought a campaign: NASEL was bound to TikTok, Meta, Google and ChatGPT Ads, and the picker
+         * offered TikTok alone because only it had campaigns. The binding is the ownership record; the
+         * picker lists every active one and says, per account, what has arrived (`state`).
+         */
+        $metricAccountIds = array_map('strval', $accountIds);
+        $boundAccountIds = BoundAccountVisibility::activeAccountIds($project);
         $accountIds = array_values(array_unique(array_merge(
-            array_map('strval', $accountIds),
+            $metricAccountIds,
             array_map('strval', $structureAccountIds),
+            $boundAccountIds,
         )));
 
         $accounts = $accountIds === [] ? [] : ExternalAccount::query()
             ->whereIn('id', $accountIds)
             ->when($fProviders !== [], fn ($q) => $q->whereIn('provider', $fProviders))
             ->orderBy('name')
-            ->get(['id', 'name', 'provider', 'external_id'])
+            ->get(['id', 'name', 'provider', 'external_id', 'last_synced_at'])
             ->map(fn (ExternalAccount $a): array => [
                 'id' => (string) $a->getKey(),
                 'name' => $a->name ?: $a->external_id,
                 'provider' => $a->provider,
+                // data = figures exist; no_data = synced, none for this period yet; unsynced = never synced.
+                'state' => in_array((string) $a->getKey(), $metricAccountIds, true) ? 'data' : ($a->last_synced_at === null ? 'unsynced' : 'no_data'),
             ])->all();
+        $providers = array_values(array_unique(array_merge($providers, array_map(static fn (array $a): string => (string) $a['provider'], $accounts))));
+        sort($providers);
 
         /*
          * REPORT-SCOPE-HIERARCHY-001 — an account with figures and no account row is still an account.
@@ -257,7 +272,7 @@ final class ReportScopeController extends Controller
                 if ($fProviders !== [] && ! in_array(strtolower($provider), $fProviders, true)) {
                     continue;
                 }
-                $accounts[] = ['id' => $id, 'name' => $id, 'provider' => $provider];
+                $accounts[] = ['id' => $id, 'name' => $id, 'provider' => $provider, 'state' => 'data'];
             }
         }
 
@@ -775,9 +790,9 @@ final class ReportScopeController extends Controller
             'objective_filter' => $submitted->objectiveFilter,
             'project_ids' => $submitted->projectIds === [] ? [] : [$project],
             'providers' => $submitted->providers,
-            'account_ids' => $keep($submitted->accountIds, DailyMetric::query()
+            'account_ids' => $keep($submitted->accountIds, array_values(array_unique(array_merge(DailyMetric::query()
                 ->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->whereNotNull('external_account_id')
-                ->distinct()->pluck('external_account_id')->map(fn ($id): string => (string) $id)->all()),
+                ->distinct()->pluck('external_account_id')->map(fn ($id): string => (string) $id)->all(), BoundAccountVisibility::activeAccountIds($project))))),
             'campaign_ids' => $keep($submitted->campaignIds, $campaignIds),
             'ad_set_ids' => $keep($submitted->adSetIds, ExternalAdSet::query()
                 ->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all()),
