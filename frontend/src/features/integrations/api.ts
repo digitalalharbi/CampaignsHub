@@ -517,6 +517,15 @@ export interface AccountsQuery {
   per_page?: number
 }
 
+/**
+ * INTEGRATION-UNLINK-001 — take ONE account off the project it feeds, by the account.
+ *
+ * The same deactivation «Manage accounts» performs: the history is kept, new data stops being filed under the project, and linking the
+ * account again restores it. The provider authorisation is untouched.
+ */
+export const unlinkAccount = (projectId: string, accountId: string) =>
+  postData<{ account_id: string; project_id: string; history_rows_kept: number }>(`/projects/${projectId}/integrations/accounts/${accountId}/unlink`, {})
+
 export function listAccounts(query: AccountsQuery = {}): Promise<AccountsPage> {
   const params = new URLSearchParams()
   Object.entries(query).forEach(([key, value]) => {
