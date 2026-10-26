@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { UnlinkAccountButton } from './UnlinkAccountButton'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { CalendarClock, EyeOff, ScrollText, Search, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
@@ -271,6 +272,11 @@ export function AccountsPanel({ project, heading }: {
                   <p className="mt-1 flex items-center gap-1 text-[11px] text-warning">
                     <EyeOff size={12} /> {c.unnamed_note}
                   </p>
+                )}
+
+                {/* INTEGRATION-UNLINK-001 — the way back for an account linked to the wrong client, on the account's own row. */}
+                {account.is_linked && account.assigned_project_id !== null && (
+                  <UnlinkAccountButton projectId={account.assigned_project_id} projectName={account.assigned_project_name} accountId={account.id} accountName={account.name} />
                 )}
               </div>
 
