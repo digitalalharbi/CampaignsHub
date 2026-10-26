@@ -163,6 +163,9 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
     // LEAD-EVIDENCE-001 — a lead is a submission a platform REPORTED. Where none did, the card says so; it never prints a measured zero,
     // and never borrows the platform's optimised-for `conversions` (an event of any kind) as leads.
+    // RESULT-EVENTS-001 — the configured Result (never the platform's generic conversions); «غير متاح» while it is configured but unreported.
+    results: { ar: 'النتائج', en: 'Results', format: (_t, p, _m, count) => (p.results?.configured && p.results.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results?.configured ? p.results.total : null)) },
+    cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (_t, p) => (p.results?.configured && p.results.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(p.results?.configured && p.results.cost != null ? asExactMoney(p.results.cost) : '—')) },
     leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
     cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
     installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
@@ -191,10 +194,10 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     revealed,
     count,
     /* Which cards this report shows — decided by what it is ABOUT, not by a fixed list (`clientKpis.ts`). */
-    keys: (payload: LivePayload | null | undefined) => clientKpiKeys(
+    keys: (payload: LivePayload | null | undefined) => gateResultKeys(clientKpiKeys(
       { metrics: payload?.metrics, objective_performance: payload?.objective_performance, totals: payload?.totals },
       new Set(Object.keys(METRIC_META)),
-    ),
+    ), payload),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [currency, ar])
 }
@@ -209,6 +212,27 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
  */
 export function metricLabel(meta: MetricMeta, _key: string, _payload: LivePayload | null | undefined, ar: boolean): string {
   return ar ? meta.ar : meta.en
+}
+
+/**
+ * RESULT-EVENTS-001 — which result cards a client report may draw.
+ *
+ * `results` / `cost_per_result` exist only where a result event is configured. And where the operator chose no KPIs, the platform's raw
+ * `conversions` / `cpa` are not offered as a default at all unless the platform also reported purchases — a conversion with no purchase
+ * behind it is whatever event the campaign was optimised for (a page load, a form open), not an order and not a lead. An operator's explicit
+ * choice of them (a link made before Results were configurable) is still honoured.
+ */
+export function gateResultKeys(keys: string[], payload: LivePayload | null | undefined): string[] {
+  const configured = payload?.results?.configured === true
+  const chosen = (payload?.metrics?.length ?? 0) > 0
+
+  return keys.filter((key) => {
+    if (key === 'results' || key === 'cost_per_result') return configured
+    // A payload that does not say what was reported (an older one) is left exactly as it was.
+    if ((key === 'conversions' || key === 'cpa') && !chosen && payload?.reported !== undefined) return payload.reported.purchases === true
+
+    return true
+  })
 }
 
 /** What kind of result the card counts — context for a tooltip, never a replacement name. */
