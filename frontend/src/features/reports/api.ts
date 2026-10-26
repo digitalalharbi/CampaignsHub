@@ -400,6 +400,8 @@ export interface StoreFunnelPayload {
 }
 
 export interface LivePayload {
+  /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
+  reported?: Record<string, boolean>
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
