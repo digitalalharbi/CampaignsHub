@@ -21,6 +21,7 @@ const PATHS: Array<['all' | 'lead_form' | 'landing_page', string, string]> = [
 
 const METRIC_LABEL: Record<string, [string, string]> = {
   leads: ['عملاء محتملون مُبلَّغ عنهم', 'Reported leads'],
+  form_leads: ['نماذج المنصة الأصلية المُرسلة', 'Native form submissions'],
   qualified_leads: ['عملاء مؤهلون', 'Qualified leads'],
   conversions: ['تحويلات المنصة (الحدث المُحسَّن له)', 'Platform conversions (optimised-for event)'],
   registrations: ['تسجيلات', 'Registrations'],
@@ -29,6 +30,11 @@ const METRIC_LABEL: Record<string, [string, string]> = {
   checkout: ['بدء الدفع', 'Checkout'],
   installs: ['تثبيتات', 'Installs'],
   landing_page_views: ['زيارات الصفحة', 'Landing page views'],
+}
+
+/** RESULT-EVENTS-001 — the map a link is created with: only the platforms it covers, each with exactly the choice made for it. */
+export function pickSelected(events: ResultEventsMap, platforms: string[]): ResultEventsMap {
+  return Object.fromEntries(Object.entries(events).filter(([p]) => platforms.includes(p)))
 }
 
 export function ResultEventsPanel({
@@ -45,15 +51,24 @@ export function ResultEventsPanel({
   const ar = useUi((s) => s.locale) === 'ar'
   const qc = useQueryClient()
   const config = useQuery({ queryKey: ['result-events', projectId], queryFn: () => fetchResultEvents(projectId) })
-  const [seeded, setSeeded] = useState(false)
+  const [seeded, setSeeded] = useState<string[]>([])
 
-  // The link starts from the project's own mapping; changing a row overrides it for this link only.
+  /*
+   * The link starts from the project's own mapping, platform by platform; changing a row overrides it for this link only.
+   *
+   * Seeded per PLATFORM, not once: a platform that joins after an account switch takes the project default, and a platform the operator
+   * already set — or one that left and came back — keeps exactly what they chose. Nothing here ever drops a platform's choice; the builder
+   * sends only the platforms the link covers (`pickSelected`).
+   */
   useEffect(() => {
-    if (!seeded && config.data) {
-      setSeeded(true)
-      if (Object.keys(value).length === 0 && Object.keys(config.data.result_events).length > 0) onChange(config.data.result_events)
-    }
-  }, [config.data, seeded, value, onChange])
+    if (!config.data) return
+    const fresh = providers.filter((p) => !seeded.includes(p))
+    if (fresh.length === 0) return
+    setSeeded((prev) => [...prev, ...fresh])
+    const defaults = config.data.result_events ?? {}
+    const additions = Object.fromEntries(fresh.filter((p) => value[p] === undefined && defaults[p] !== undefined).map((p) => [p, defaults[p]]))
+    if (Object.keys(additions).length > 0) onChange({ ...value, ...additions })
+  }, [config.data, providers, seeded, value, onChange])
 
   const save = useMutation({
     mutationFn: () => saveResultEvents(projectId, value),

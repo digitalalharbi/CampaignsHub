@@ -16,6 +16,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -190,6 +191,56 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         ]);
 
         return $campaign;
+    }
+
+    public function test_result_events_are_validated_and_stored_only_for_the_links_platforms(): void
+    {
+        $this->createLink(['result_events' => ['tiktok' => ['lead_form' => 'onsite_form']]])->assertStatus(422)->assertJsonValidationErrors('result_events');
+        $this->createLink(['result_events' => ['tiktok' => ['website' => 'purchases']]])->assertStatus(422);
+
+        $created = $this->createLink(['result_events' => ['tiktok' => ['native_form' => 'form_leads', 'landing_page' => 'purchases'], 'meta' => ['lead_form' => 'form_leads']]])
+            ->assertCreated()->json('data');
+        $token = $created['token'];
+        $share = ReportShare::withoutGlobalScopes()->findOrFail($created['share_id']);
+
+        // The link covers TikTok only: Meta's choice is not stored, and the native_form alias lands under the existing lead_form key.
+        $this->assertSame(['tiktok' => ['lead_form' => 'form_leads', 'landing_page' => 'purchases']], $share->settings['result_events']);
+        $this->assertTrue($this->live($token)->assertOk()->json('data.results.configured'));
+    }
+
+    /** NASEL 2026-10-28 — the existing client URL is corrected in place, audited, reversible, and nothing else about it changes. */
+    public function test_an_existing_links_result_events_change_in_place_and_revert_from_the_audit(): void
+    {
+        $this->project->forceFill(['meta' => ['campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
+        $campaign = $this->campaign($this->account, 'Riwaq — LeadForm', 7.16);
+        DailyMetric::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $this->account->id,
+            'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $campaign->id, 'provider' => 'tiktok', 'metric_key' => 'form_leads',
+            'metric_date' => Carbon::now()->subDay()->toDateString(), 'value' => 3,
+        ]);
+
+        // The link as it was sent: the native path mapped to the generic `leads`, which TikTok never reports.
+        $created = $this->createLink(['metrics' => ['spend', 'impressions', 'clicks', 'results'], 'result_events' => ['tiktok' => ['lead_form' => 'leads']]])->assertCreated()->json('data');
+        $this->assertNull($this->live($created['token'])->json('data.results.total'), 'unreported is not zero');
+        $scopeBefore = ReportShare::withoutGlobalScopes()->findOrFail($created['share_id'])->scope;
+
+        $url = "/api/v1/projects/{$this->project->id}/reports/{$created['report_id']}/shares/{$created['share_id']}/result-events";
+        $saved = $this->putJson($url, ['result_events' => ['tiktok' => ['lead_form' => 'form_leads']]])->assertOk()->json('data');
+
+        $payload = $this->live($created['token'])->assertOk()->json('data');
+        $this->assertEquals(3.0, $payload['results']['total']);
+        $this->assertEqualsWithDelta(7.16 / 3, $payload['results']['by_platform']['tiktok']['cost'], 0.0001, 'the cost is the same event over its own eligible spend');
+        $this->assertSame($scopeBefore, ReportShare::withoutGlobalScopes()->findOrFail($created['share_id'])->scope, 'the link\'s scope never moves');
+        $this->assertDatabaseHas('audit_logs', ['id' => $saved['audit_id'], 'action' => 'report.shared_link_result_events_changed']);
+
+        // A platform the link does not cover is refused; the reversal is the audited «before».
+        $this->putJson($url, ['result_events' => ['meta' => ['lead_form' => 'form_leads']]])->assertStatus(422);
+        $this->putJson($url, ['result_events' => $saved['before']['result_events']])->assertOk();
+        $this->assertNull($this->live($created['token'])->json('data.results.total'));
+
+        // Another project's route cannot reach this link.
+        $other = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->project->client_workspace_id, 'name' => 'Other', 'status' => 'active']);
+        $this->putJson("/api/v1/projects/{$other->id}/reports/{$created['report_id']}/shares/{$created['share_id']}/result-events", ['result_events' => ['tiktok' => ['lead_form' => 'form_leads']]])->assertNotFound();
     }
 
     public function test_an_account_the_project_does_not_bind_is_still_refused(): void

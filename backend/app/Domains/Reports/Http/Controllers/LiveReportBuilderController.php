@@ -474,8 +474,17 @@ final class LiveReportBuilderController extends Controller
             'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
             'creative_display.auto_refresh' => ['sometimes', 'boolean'],
             // RESULT-EVENTS-001 — this link's own definition of «Results»: platform → path → reported metric. Replaces the project's for the platforms it names.
-            'result_events' => ['sometimes', 'array'],
-            'lead_events' => ['sometimes', 'array'],
+            // RESULT-EVENTS-001 — a serialized map is validated, not silently trimmed: an unknown platform, path or metric is a 422.
+            'result_events' => ['sometimes', 'array', static function (string $attribute, mixed $value, \Closure $fail): void {
+                foreach (ResultEvents::problems($value) as $problem) {
+                    $fail("{$attribute}: {$problem}");
+                }
+            }],
+            'lead_events' => ['sometimes', 'array', static function (string $attribute, mixed $value, \Closure $fail): void {
+                foreach (ResultEvents::problems($value) as $problem) {
+                    $fail("{$attribute}: {$problem}");
+                }
+            }],
             // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
             // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign; off unless the operator switches it on.
             'campaign_breakdown' => ['sometimes', 'boolean'],
@@ -631,10 +640,10 @@ final class LiveReportBuilderController extends Controller
                 'section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? []))),
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
-              + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? [])))->configured() ? ['result_events' => $events->toArray()] : [])
+              + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? []))->onlyFor($providers))->configured() ? ['result_events' => $events->toArray()] : [])
               + ((bool) ($data['campaign_breakdown'] ?? false) ? ['campaign_breakdown' => true] : [])
               + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])
-              + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? [])))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
+              + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? []))->onlyFor($providers))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
               + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
             'scope' => [
                 'project_id' => (string) $project,

@@ -16,7 +16,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
-import { ResultEventsPanel } from './ResultEventsPanel'
+import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
 import { fetchResultEvents, type ResultEventsMap } from './api'
 import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
@@ -275,7 +275,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     mutationFn: () =>
       createLiveLink(projectId, {
         ...creativeSharingBody(creatives),
-        ...(Object.keys(resultEvents).length > 0 ? { result_events: resultEvents } : {}),
+        ...(Object.keys(pickSelected(resultEvents, selectedPlatforms)).length > 0 ? { result_events: pickSelected(resultEvents, selectedPlatforms) } : {}),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
         ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),

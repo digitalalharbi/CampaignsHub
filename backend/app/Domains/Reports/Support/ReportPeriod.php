@@ -97,6 +97,9 @@ final class ReportPeriod
 
     private static function weekly(Carbon $anchor, Carbon $today): array
     {
+        // A rolling link's ceiling runs a year ahead; anchoring on it made «this month» October NEXT year, cut at today — a
+        // window that ends before it starts (NASEL 2026-10-28: 2027-10-01 → 2026-10-28, every figure 0). The anchor is never after today.
+        $anchor = $anchor->copy()->min($today);
         $start = $anchor->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
         $end = $start->copy()->addDays(6)->min($today->copy()->startOfDay());
         $length = (int) $start->diffInDays($end) + 1;
@@ -112,6 +115,9 @@ final class ReportPeriod
 
     private static function monthly(Carbon $anchor, Carbon $today): array
     {
+        // A rolling link's ceiling runs a year ahead; anchoring on it made «this month» October NEXT year, cut at today — a
+        // window that ends before it starts (NASEL 2026-10-28: 2027-10-01 → 2026-10-28, every figure 0). The anchor is never after today.
+        $anchor = $anchor->copy()->min($today);
         $start = $anchor->copy()->startOfMonth()->startOfDay();
         $full = $start->copy()->endOfMonth()->startOfDay();
         $end = $full->copy()->min($today->copy()->startOfDay());

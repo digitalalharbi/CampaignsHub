@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { gateResultKeys } from './live/liveMetrics'
 import { reportMetrics } from './reportMetrics'
-import { ResultEventsPanel } from './ResultEventsPanel'
+import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
 import type { LivePayload, ResultEventsMap } from './api'
 import { renderWithProviders } from '@/test/utils'
 
@@ -96,5 +96,40 @@ describe('result events panel', () => {
 
     fireEvent.change(screen.getByTestId('result-event-tiktok-lead_form'), { target: { value: '' } })
     expect(latest).toEqual({})
+  })
+})
+
+/** RESULT-EVENTS-001 — the panel keeps every platform's choice across account switches and seeds new platforms from the project default. */
+describe('result event choices survive account switches', () => {
+  function Harness({ initial }: { initial: string[] }) {
+    const [providers, setProviders] = useState(initial)
+    const [value, setValue] = useState<ResultEventsMap>({})
+
+    return (
+      <>
+        <button type="button" onClick={() => setProviders(['tiktok'])}>only-tiktok</button>
+        <button type="button" onClick={() => setProviders(['tiktok', 'meta'])}>both</button>
+        <output data-testid="value">{JSON.stringify(value)}</output>
+        <output data-testid="sent">{JSON.stringify(pickSelected(value, providers))}</output>
+        <ResultEventsPanel projectId="p-1" providers={providers} value={value} onChange={setValue} />
+      </>
+    )
+  }
+
+  it('keeps the TikTok choice when Meta leaves and returns, and sends only the selected platforms', async () => {
+    const { fetchResultEvents } = await import('./api')
+    vi.mocked(fetchResultEvents).mockResolvedValueOnce({ result_events: { meta: { lead_form: 'form_leads' } }, platforms: ['tiktok', 'meta'], paths: ['all', 'lead_form', 'landing_page'], metrics: ['form_leads', 'purchases'] } as never)
+    renderWithProviders(<Harness initial={['tiktok', 'meta']} />)
+
+    // Meta is seeded from the project default; TikTok has none until the operator chooses.
+    await waitFor(() => expect(screen.getByTestId('value')).toHaveTextContent('"meta":{"lead_form":"form_leads"}'))
+    fireEvent.change(await screen.findByTestId('result-event-tiktok-lead_form'), { target: { value: 'form_leads' } })
+
+    fireEvent.click(screen.getByText('only-tiktok'))
+    expect(screen.getByTestId('sent')).toHaveTextContent('{"tiktok":{"lead_form":"form_leads"}}')
+    fireEvent.click(screen.getByText('both'))
+
+    expect(JSON.parse(screen.getByTestId('value').textContent ?? '{}')).toEqual({ meta: { lead_form: 'form_leads' }, tiktok: { lead_form: 'form_leads' } })
+    expect((screen.getByTestId('result-event-tiktok-lead_form') as HTMLSelectElement).value).toBe('form_leads')
   })
 })

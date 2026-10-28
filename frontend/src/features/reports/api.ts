@@ -427,7 +427,7 @@ export interface LivePayload {
     configured: boolean
     total: number | null
     cost: number | null
-    by_platform: Record<string, { results: number; metric: string }>
+    by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
     by_path: Record<string, number>
     events: Record<string, Record<string, string>>
     /** LEAD-EVENTS-001 — verified Leads by source; the total is platform-attributed, not unique people. */
@@ -437,7 +437,7 @@ export interface LivePayload {
       landing: number | null
       native: number | null
       cost: number | null
-      by_platform: Record<string, { results: number; metric: string }>
+      by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
       by_path: Record<string, number>
       events: Record<string, Record<string, string>>
       basis?: string

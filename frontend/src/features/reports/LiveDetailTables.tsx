@@ -210,6 +210,22 @@ export function LivePlatformComparison({
   const costPer = (row: Record<string, unknown>) =>
     readCostPer(row as MoneyTotals, 'cpa', 'conversions', currency, ar)
 
+  /*
+   * RESULT-EVENTS-001 — where Results are configured, both columns read the SAME configured event and that event's eligible spend
+   * (`results.by_platform`), never the platform's generic `conversions` / `cpa`. NASEL showed the contradiction: TikTok's card read 0
+   * Results while this column printed 1,113 conversions at 0.09. A platform with no configured or reported event reads «غير متاح»,
+   * and zero results have no cost.
+   */
+  const configuredResults = payload.results?.configured === true
+  const notAvailable = ar ? 'غير متاح' : 'Not available'
+  const eventOf = (row: Record<string, unknown>) => payload.results?.by_platform?.[canonicalPlatform(String(row.provider ?? ''))]
+  const resultCount = (row: Record<string, unknown>): number | null =>
+    configuredResults ? (eventOf(row)?.results ?? null) : numberOf(row, 'conversions')
+  const resultText = (row: Record<string, unknown>) => (configuredResults && resultCount(row) === null ? notAvailable : compact(resultCount(row)))
+  const costValue = (row: Record<string, unknown>): number | null => (configuredResults ? (eventOf(row)?.cost ?? null) : costPer(row).amount)
+  const costText = (row: Record<string, unknown>) =>
+    configuredResults ? (eventOf(row)?.cost == null ? notAvailable : moneyExact(eventOf(row)?.cost, currency)) : formatMoneyReading(costPer(row), moneyExact)
+
   const built = {
     rows: rows.map((row) => [
       <span key="name" className="inline-flex items-center gap-1.5 font-semibold">
@@ -241,8 +257,8 @@ export function LivePlatformComparison({
         )}
       </span>,
       <span key="spend" dir="ltr">{spendOf(row).text}</span>,
-      <span key="results" dir="ltr">{compact(numberOf(row, 'conversions'))}</span>,
-      <span key="cost" dir="ltr">{formatMoneyReading(costPer(row), moneyExact)}</span>,
+      <span key="results" dir="ltr">{resultText(row)}</span>,
+      <span key="cost" dir="ltr">{costText(row)}</span>,
       <span key="impressions" dir="ltr">{compact(numberOf(row, 'impressions'))}</span>,
       <span key="clicks" dir="ltr">{compact(numberOf(row, 'clicks'))}</span>,
       <span key="ctr" dir="ltr">{percent(numberOf(row, 'ctr'), 2)}</span>,
@@ -250,8 +266,8 @@ export function LivePlatformComparison({
     values: rows.map((row): SortValues => [
       String(row.provider ?? ''),
       spendValue(row),
-      numberOf(row, 'conversions'),
-      costPer(row).amount,
+      resultCount(row),
+      costValue(row),
       numberOf(row, 'impressions'),
       numberOf(row, 'clicks'),
       numberOf(row, 'ctr'),
@@ -259,7 +275,7 @@ export function LivePlatformComparison({
     exact: rows.map((row) => [
       null,
       spendOf(row).exact,
-      full(numberOf(row, 'conversions')),
+      full(resultCount(row)),
       null,
       full(numberOf(row, 'impressions')),
       full(numberOf(row, 'clicks')),
