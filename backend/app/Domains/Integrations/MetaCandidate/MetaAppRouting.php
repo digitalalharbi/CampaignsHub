@@ -30,6 +30,29 @@ final class MetaAppRouting
     {
         $row = ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->first();
 
-        return $row !== null && $row->enabled === true ? MetaCredentialProfile::Saas : MetaCredentialProfile::Live;
+        return $row !== null && $row->enabled === true && self::saasEligibility()['eligible'] ? MetaCredentialProfile::Saas : MetaCredentialProfile::Live;
+    }
+
+    /**
+     * Whether the SaaS app may issue a customer connection at all — the ONE rule every path asks: its credentials are complete and its
+     * latest test round trip passed with exactly the credentials configured now.
+     *
+     * @return array{eligible: bool, reason: string|null}
+     */
+    public static function saasEligibility(): array
+    {
+        $credentials = app(MetaSaasCredentials::class);
+        if (! $credentials->isConfigured()) {
+            return ['eligible' => false, 'reason' => 'not_configured'];
+        }
+        $run = MetaCandidateConnection::latestRun(MetaCredentialProfile::Saas);
+        if ($run === null || $run->status !== 'succeeded') {
+            return ['eligible' => false, 'reason' => 'no_successful_test'];
+        }
+        if (! hash_equals((string) $run->credential_fingerprint, (string) $credentials->fingerprint())) {
+            return ['eligible' => false, 'reason' => 'credentials_changed_since_test'];
+        }
+
+        return ['eligible' => true, 'reason' => null];
     }
 }
