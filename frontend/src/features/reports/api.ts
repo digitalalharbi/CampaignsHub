@@ -210,6 +210,8 @@ export interface AdAccountRef {
   /** The provider's own name for the account, or its id when the provider gave no name. */
   name: string
   provider: string
+  /** REPORT-BOUND-ACCOUNTS-001 — what has arrived for a bound account: figures, a sync with none, or no sync yet. */
+  state?: 'data' | 'no_data' | 'unsynced'
 }
 
 export const liveBuilderOptions = (p: string, period?: { from: string; to: string }) =>
@@ -402,6 +404,8 @@ export interface StoreFunnelPayload {
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
+  /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
+  no_data_yet?: boolean
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */

@@ -198,7 +198,7 @@ final class LiveReportService
      *
      * @param  array<string, mixed>  $applied
      * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
-     * @return array<string, list<string>>
+     * @return array<string, mixed>
      */
     private function contentFilters(ReportShare $share, array $applied, array $scope): array
     {
@@ -226,6 +226,8 @@ final class LiveReportService
             'excluded_creative_ids' => $shareList('excluded_creative_ids'),
             'objectives' => $shareList('objectives'),
             'paths' => $shareList('paths'),
+            // CREATIVE-DISPLAY-001 — read by `ReportAds`; null for a link made before the policy existed.
+            'creative_display' => $share->creativeDisplay()?->toArray(),
         ];
     }
 
@@ -516,6 +518,8 @@ final class LiveReportService
              * this map before it prints a count it cannot stand behind.
              */
             'reported' => $engine->reportedKeys($from, $to),
+            // LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has arrived for this window: the page says so instead of printing zeros.
+            'no_data_yet' => ! $engine->hasRows($from, $to),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.
@@ -1228,9 +1232,21 @@ final class LiveReportService
             $latest = min($latest, $report->period_end->toDateString());
         }
 
+        $campaignIds = array_values(array_filter((array) ($scope['campaign_ids'] ?? [])));
+        /*
+         * LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link made over ACCOUNTS follows them.
+         *
+         * Its campaign list is not a frozen copy of what existed on the day it was created: the accounts are the authorisation, and a campaign
+         * that syncs afterwards under one of them is inside the link without anyone recreating or re-sending it. An account that has none yet
+         * resolves to the fail-closed «nothing», which the page states as «no data yet» rather than as zeros.
+         */
+        if (($scope['dynamic_campaigns'] ?? false) === true && $campaignIds === []) {
+            $campaignIds = AccountCampaignCeiling::campaigns([], array_values(array_filter((array) ($scope['account_ids'] ?? []))));
+        }
+
         return [
             'project_id' => (string) ($scope['project_id'] ?? ''),
-            'campaign_ids' => array_values(array_filter((array) ($scope['campaign_ids'] ?? []))),
+            'campaign_ids' => $campaignIds,
             'providers' => array_values(array_filter((array) ($scope['providers'] ?? []))),
             'earliest' => $earliest,
             'latest' => $latest,

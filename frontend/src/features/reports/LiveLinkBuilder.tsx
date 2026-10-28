@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
+import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -221,9 +222,17 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   // REPORT-IDENTITY-NAMES-001 — the printed names; null = the stored names.
   const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
 
+  /*
+   * CREATIVE-DISPLAY-001 — the ad section, chosen here and SENT. The builder never carried it, so the controls an operator reached for
+   * on the saved-report dialog did nothing on a link made from here. The defaults are the Owner's: the section shown, the ads listed by
+   * period activity, refreshed automatically, zero-activity ads left out.
+   */
+  const [creatives, setCreatives] = useState<CreativeSharing>(() => ({ ...emptyCreativeSharing(), permissions: { creatives: true } }))
+
   const create = useMutation({
     mutationFn: () =>
       createLiveLink(projectId, {
+        ...creativeSharingBody(creatives),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
         ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
@@ -779,6 +788,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <input type="checkbox" data-testid="live-link-allow-download" checked={allowDownload} onChange={(e) => setAllowDownload(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
 
+          <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
+
           {/* What the link will show, in words, before it is created — see ViewCustomiser for the same idea. */}
           <p data-testid="live-link-summary" className="text-xs text-text-secondary">{summary}</p>
 
@@ -924,6 +935,11 @@ function AccountPicker({ ar, accounts, selected, query, onQuery, onToggle, onAll
             <label key={a.id} className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={selected.includes(a.id)} onChange={() => onToggle(a.id)} data-testid={`live-builder-account-${a.id}`} className="h-3.5 w-3.5 shrink-0 accent-brand-600" />
               <span className="min-w-0 flex-1 truncate">{a.name}</span>
+              {a.state === 'unsynced' || a.state === 'no_data' ? (
+                <span data-testid={`account-state-${a.state}`} className="shrink-0 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
+                  {a.state === 'unsynced' ? (ar ? 'لم تتم مزامنته' : 'not synced yet') : (ar ? 'لا بيانات بعد' : 'no data yet')}
+                </span>
+              ) : null}
               <span className="shrink-0 text-text-muted"><PlatformMark platform={a.provider} size={12} /></span>
             </label>
           ))}

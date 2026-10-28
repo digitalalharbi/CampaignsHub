@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareAnalytics;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
@@ -91,6 +92,11 @@ final class ReportShareController extends Controller
             // The visibility switches. Absent means OFF — see CreativeVisibility.
             'creatives' => ['array'],
             'creatives.*' => ['boolean'],
+            // CREATIVE-DISPLAY-001 — activity | all | selected, and whether a zero-activity creative is listed.
+            'creative_display' => ['sometimes', 'array'],
+            'creative_display.policy' => ['sometimes', 'in:activity,all,selected'],
+            'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
+            'creative_display.auto_refresh' => ['sometimes', 'boolean'],
             'sections' => ['array'],
             'sections.*' => ['boolean'],
             // REPORT-TABLES-OWNER-COLUMNS-001 — the columns each table publishes; unknown keys are cut, absent means all.
@@ -127,6 +133,7 @@ final class ReportShareController extends Controller
         // value object closes that combination once rather than at every surface that renders it.
         $opts['settings'] = [
             'creatives' => CreativeVisibility::fromArray($opts['creatives'] ?? [])->toArray(),
+        ] + (isset($opts['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new CreativeDisplay)->toArray()] : []) + [
             /*
              * Which optional sections this link may open — ATTRIB-VIS-001.
              *

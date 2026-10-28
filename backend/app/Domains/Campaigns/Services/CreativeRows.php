@@ -102,6 +102,50 @@ final class CreativeRows
     }
 
     /**
+     * CREATIVE-DISPLAY-001 — keep the creatives with REAL activity inside [from, to].
+     *
+     * Real is a positive spend, impression, click, result, revenue or video view at the creative's own grain, or at the grain of an ad that
+     * carries it (not every platform reports per creative), or a `last_active_at` the platform stamped inside the window. A row of zeros is
+     * a platform saying «nothing happened», and it does not make a creative active. Paused and archived creatives qualify when they delivered
+     * inside the window; creatives whose only figures sit in an older period do not.
+     */
+    public function applyPeriodActivity(mixed $query, Carbon $from, Carbon $to): void
+    {
+        $query->where(function ($outer) use ($from, $to): void {
+            $outer
+                ->whereExists(function ($sub) use ($from, $to): void {
+                    $sub->selectRaw('1')
+                        ->from('creative_daily_metrics')
+                        ->whereColumn('creative_daily_metrics.creative_id', 'external_creatives.id')
+                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                        ->where(function ($any): void {
+                            foreach (['spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views'] as $column) {
+                                $any->orWhere($column, '>', 0);
+                            }
+                        });
+                })
+                ->orWhereExists(function ($sub) use ($from, $to): void {
+                    $sub->selectRaw('1')
+                        ->from('external_ads')
+                        ->whereColumn('external_ads.creative_id', 'external_creatives.id')
+                        ->whereExists(function ($inner) use ($from, $to): void {
+                            $inner->selectRaw('1')
+                                ->from('entity_daily_metrics')
+                                ->where('entity_type', 'ad')
+                                ->whereColumn('entity_daily_metrics.entity_id', 'external_ads.id')
+                                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                                ->where(function ($any): void {
+                                    foreach (['spend', 'impressions', 'clicks', 'conversions', 'leads', 'purchases', 'revenue', 'video_views'] as $column) {
+                                        $any->orWhere($column, '>', 0);
+                                    }
+                                });
+                        });
+                })
+                ->orWhereBetween('external_creatives.last_active_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()]);
+        });
+    }
+
+    /**
      * The filters, from a plain array rather than a request.
      *
      * An array because the client's report supplies filters that have already been intersected with

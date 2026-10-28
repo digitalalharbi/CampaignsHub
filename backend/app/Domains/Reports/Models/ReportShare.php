@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Models;
 
 use App\Domains\Reports\Sections\ReportViews;
+use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
@@ -140,6 +141,11 @@ final class ReportShare extends Model
      * that leak by arithmetic (ROAS beside a hidden spend) are closed in one place instead of at
      * every surface that renders a figure.
      */
+    public function creativeDisplay(): ?CreativeDisplay
+    {
+        return CreativeDisplay::fromArray((array) (($this->settings ?? [])['creative_display'] ?? []) ?: null);
+    }
+
     public function creativeVisibility(): CreativeVisibility
     {
         return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));

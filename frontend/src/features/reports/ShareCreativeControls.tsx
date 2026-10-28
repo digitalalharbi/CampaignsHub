@@ -35,6 +35,8 @@ export interface CreativeSharing {
   excludedIds: string[]
   /** Group allow-list, UNIONED with `creativeIds` — «this one, plus everything in that group». */
   groupIds: string[]
+  /** CREATIVE-DISPLAY-001 — which creatives the link LISTS: those active in the period (default), all in scope, or the ones named. */
+  display: { policy: 'activity' | 'all' | 'selected'; includeZeroActivity: boolean }
 }
 
 export const emptyCreativeSharing = (): CreativeSharing => ({
@@ -42,6 +44,7 @@ export const emptyCreativeSharing = (): CreativeSharing => ({
   creativeIds: [],
   excludedIds: [],
   groupIds: [],
+  display: { policy: 'activity', includeZeroActivity: false },
 })
 
 /** The switches, grouped the way an operator thinks about them rather than alphabetically. */
@@ -178,6 +181,47 @@ export function ShareCreativeControls({
 
           {on('creatives') && (
             <>
+              {/*
+                CREATIVE-DISPLAY-001 — which ads the link LISTS. Dynamic by default: an ad that delivers inside the report period appears
+                on this same link the day it syncs, with no new link to send; an ad with nothing in the period, or active only in an
+                older one, does not.
+              */}
+              <div className="grid gap-2 rounded-xl border border-border p-3" data-testid="creative-display">
+                <span className="text-xs font-bold text-text-muted">{ar ? 'أي إعلانات تظهر في الرابط؟' : 'Which ads does the link list?'}</span>
+                {([
+                  ['activity', ar ? 'الإعلانات التي لها نشاط في فترة التقرير (الافتراضي)' : 'Ads with activity in the report period (default)', ar ? 'تظهر الإعلانات الجديدة تلقائيًا بعد المزامنة، ويشمل ذلك الإعلانات المتوقفة التي عملت ضمن الفترة.' : 'New ads appear automatically after sync, paused ones included if they delivered inside the period.'],
+                  ['all', ar ? 'كل إعلانات النطاق' : 'All ads in scope', ar ? 'يشمل الإعلانات دون نشاط في الفترة.' : 'Includes ads with no activity in the period.'],
+                  ['selected', ar ? 'إعلانات أحددها بنفسي' : 'Only ads I select', ar ? 'اختر الإعلانات من القائمة أدناه.' : 'Pick the ads from the list below.'],
+                ] as const).map(([policy, label, note]) => (
+                  <label key={policy} className="flex cursor-pointer items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="creative-display-policy"
+                      data-testid={`creative-policy-${policy}`}
+                      checked={value.display.policy === policy}
+                      onChange={() => onChange({ ...value, display: { ...value.display, policy } })}
+                      className="mt-1 h-4 w-4 accent-brand-600"
+                    />
+                    <span>
+                      <span className="block">{label}</span>
+                      <span className="block text-[11px] text-text-muted">{note}</span>
+                    </span>
+                  </label>
+                ))}
+                {value.display.policy === 'activity' && (
+                  <label className="flex cursor-pointer items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      data-testid="creative-include-zero"
+                      checked={value.display.includeZeroActivity}
+                      onChange={(e) => onChange({ ...value, display: { ...value.display, includeZeroActivity: e.target.checked } })}
+                      className="h-4 w-4 accent-brand-600"
+                    />
+                    {ar ? 'إظهار الإعلانات التي لا نشاط لها في الفترة أيضًا' : 'Also list ads with no activity in the period'}
+                  </label>
+                )}
+              </div>
+
               {/* The ceiling first: it decides what exists, before anything decides what is shown. */}
               <div className="grid gap-2 rounded-xl border border-border p-3">
                 <span className="text-xs font-bold text-text-muted">
@@ -294,6 +338,10 @@ export function ShareCreativeControls({
 export function creativeSharingBody(value: CreativeSharing): Record<string, unknown> {
   return {
     creatives: value.permissions,
+    // CREATIVE-DISPLAY-001 — sent only while the ad section is on; `auto_refresh` is always on for a live link.
+    ...(value.permissions.creatives === true
+      ? { creative_display: { policy: value.display.policy, include_zero_activity: value.display.includeZeroActivity, auto_refresh: true } }
+      : {}),
     ...(value.creativeIds.length ? { creative_ids: value.creativeIds } : {}),
     ...(value.excludedIds.length ? { excluded_creative_ids: value.excludedIds } : {}),
     ...(value.groupIds.length ? { creative_group_ids: value.groupIds } : {}),

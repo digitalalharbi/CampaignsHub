@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH, untranslatedChrome } from './helpers'
+import { AUTH, seededProject, selectProject, untranslatedChrome } from './helpers'
 
 /**
  * `/app` is the advertiser's portal, and it speaks the reader's language (APP-100).
@@ -117,6 +117,12 @@ test.describe('the advertiser portal', () => {
       objective's own metrics, so the claim this case makes — that labels re-render in the reader's
       language rather than freezing in whichever one loaded first — is asserted where it still holds.
     */
+    /*
+     * The PROJECT is chosen too. The sales campaign is seeded in «Growth — Acquisition»; with no project pinned the app opens on
+     * whichever project the list puts first, and deep into a long run (after other cases have touched «Growth — Retention») that was
+     * Retention — a sales scope with no rows, so the strip read «empty-scope» and no ROAS card existed to re-label.
+     */
+    await selectProject(page, await seededProject(page.request, 'Growth — Acquisition'))
     await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible()
 
