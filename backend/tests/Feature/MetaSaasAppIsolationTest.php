@@ -19,6 +19,7 @@ use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -301,6 +302,18 @@ final class MetaSaasAppIsolationTest extends TestCase
         $this->assertSame(1.0, (float) DB::table('daily_metrics')->where('external_account_id', $twin->id)->count());
         $this->assertSame((string) $otherConnection->id, (string) $foreign->refresh()->provider_connection_id);
         $this->assertSame('act_1', $foreign->external_id);
+
+        // The retired twin never counts twice and never reappears: its figures are invisible to every reader, the inventory does not list
+        // it, and a rediscovery of act_1 through the SaaS connection lands on the MOVED row, not on the twin.
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $visible = DailyMetric::query()->where('project_id', $project->id)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->sum('value');
+        $this->assertEquals(100.0, (float) $visible, 'only the moved account\'s 100 counts; the twin\'s 7 is not added');
+        $listed = collect($this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/accounts')->assertOk()->json('data.accounts'))->pluck('id')->all();
+        $this->assertContains((string) $account->id, $listed);
+        $this->assertNotContains((string) $twin->id, $listed, 'a superseded twin is not listed as an account');
+        $rediscovered = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $saas->id)->where('external_id', 'act_1')->where('account_type', 'ad_account')->first();
+        $this->assertSame((string) $account->id, (string) $rediscovered?->id, 'a rediscovery updates the moved row, never the twin');
 
         // Another tenant's account can never be moved from here.
         $this->actingAs($this->owner, 'sanctum')

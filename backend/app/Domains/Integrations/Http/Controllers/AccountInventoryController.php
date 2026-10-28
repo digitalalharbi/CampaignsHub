@@ -171,7 +171,9 @@ final class AccountInventoryController extends Controller
 
         $base = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereIn('account_type', self::MANAGED_TYPES);
+            ->whereIn('account_type', self::MANAGED_TYPES)
+            // META-SAAS-APP-001 — a row retired by a move between Meta apps is history, not an account anybody manages.
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'));
 
         $summary = $this->summarise($tenantId);
 
@@ -463,7 +465,9 @@ final class AccountInventoryController extends Controller
 
         $base = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereIn('account_type', self::MANAGED_TYPES);
+            ->whereIn('account_type', self::MANAGED_TYPES)
+            // META-SAAS-APP-001 — a row retired by a move between Meta apps is history, not an account anybody manages.
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'));
 
         $total = (clone $base)->count();
         $linked = (clone $base)->whereIn('id', $linkedIds)->count();
