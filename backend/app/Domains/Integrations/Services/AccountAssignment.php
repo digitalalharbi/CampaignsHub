@@ -114,6 +114,12 @@ final class AccountAssignment
      */
     public function isActivelyAssigned(ExternalAccount $account): bool
     {
+        // META-SAAS-APP-001 — a twin retired by a connection move is never synced again, even if a binding is later
+        // pointed at it: its account now lives on the moved row, and a second fetch would count the same spend twice.
+        if ($account->status === 'superseded') {
+            return false;
+        }
+
         $projectId = $this->projectIdFor($account);
 
         if ($projectId === null) {

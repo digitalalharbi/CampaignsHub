@@ -19,8 +19,12 @@ use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -314,6 +318,18 @@ final class MetaSaasAppIsolationTest extends TestCase
         $this->assertNotContains((string) $twin->id, $listed, 'a superseded twin is not listed as an account');
         $rediscovered = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $saas->id)->where('external_id', 'act_1')->where('account_type', 'ad_account')->first();
         $this->assertSame((string) $account->id, (string) $rediscovered?->id, 'a rediscovery updates the moved row, never the twin');
+
+        // The retired twin is never synced again — not even if somebody later points an active binding at it.
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'project_id' => $project->id,
+            'external_account_id' => $twin->id, 'provider' => 'meta', 'purpose' => 'reporting', 'is_active' => true, 'is_primary' => false,
+        ]);
+        $this->assertFalse(app(AccountAssignment::class)->isActivelyAssigned($twin->refresh()), 'a superseded twin is never authorised to sync');
+        Http::fake();
+        (new SyncAccountMetricsJob((string) $twin->id, '2026-10-01', '2026-10-27'))
+            ->handle(app(AccountMetricsSyncer::class), app(TenantContext::class), app(AccountAssignment::class));
+        $this->assertSame(0, MetricSyncRun::withoutGlobalScopes()->where('external_account_id', $twin->id)->count(), 'the job did not even open a run');
+        Http::assertNothingSent();
 
         // Another tenant's account can never be moved from here.
         $this->actingAs($this->owner, 'sanctum')
