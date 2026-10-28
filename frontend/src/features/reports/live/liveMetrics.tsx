@@ -165,6 +165,9 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     // Leads is the verified landing-page forms plus the verified native forms (each on its own below); otherwise it is the platform's `leads`
     // metric, and «غير متاح» where none was sent. It never borrows the platform's optimised-for `conversions`, and never prints a measured zero.
     leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.results?.leads?.configured ? (p.results.leads.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.total)) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
+    // The funnel steps the platforms report for a landing form: InitiateCheckout is a form start, a landing page view is a visit.
+    form_starts: { ar: 'بدء تعبئة النموذج', en: 'Form starts', format: (t, p, _m, count) => (p.reported?.checkout === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.checkout)) },
+    page_views: { ar: 'زيارات الصفحة', en: 'Page views', format: (t, p, _m, count) => (p.reported?.landing_page_views === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.landing_page_views)) },
     landing_leads: { ar: 'عملاء صفحة الهبوط', en: 'Landing-page leads', format: (_t, p, _m, count) => (p.results?.leads?.landing == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing)) },
     native_leads: { ar: 'عملاء النموذج الأصلي', en: 'Native-form leads', format: (_t, p, _m, count) => (p.results?.leads?.native == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.native)) },
     cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.results?.leads?.configured ? (p.results.leads.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.leads.cost))) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
@@ -210,8 +213,11 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
  * never what the card is called — otherwise one campaign's messages, leads and results become three
  * names for one number. `result_kind` stays on the payload for calculation, diagnostics and context.
  */
-export function metricLabel(meta: MetricMeta, _key: string, _payload: LivePayload | null | undefined, ar: boolean): string {
-  return ar ? meta.ar : meta.en
+export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload | null | undefined, ar: boolean): string {
+  // The operator's own name for this card on this link, when they gave one.
+  const custom = payload?.kpi_labels?.[key]
+
+  return custom !== undefined && custom.trim() !== '' ? custom : ar ? meta.ar : meta.en
 }
 
 /**
@@ -228,7 +234,7 @@ export function gateResultKeys(keys: string[], payload: LivePayload | null | und
 
   return keys.filter((key) => {
     if (key === 'results' || key === 'cost_per_result') return configured
-    if (key === 'landing_leads' || key === 'native_leads') return payload?.results?.leads?.configured === true
+    if (key === 'landing_leads' || key === 'native_leads' || key === 'form_starts' || key === 'page_views') return payload?.results?.leads?.configured === true
     // A payload that does not say what was reported (an older one) is left exactly as it was.
     if ((key === 'conversions' || key === 'cpa') && !chosen && payload?.reported !== undefined) return payload.reported.purchases === true
 

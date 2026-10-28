@@ -372,6 +372,9 @@ final class LiveReportBuilderController extends Controller
         // LEAD-EVENTS-001 — the two verified sources, offered only where a lead event is configured for the project.
         ['key' => 'landing_leads', 'ar' => 'عملاء صفحة الهبوط', 'en' => 'Landing-page leads'],
         ['key' => 'native_leads', 'ar' => 'عملاء النموذج الأصلي', 'en' => 'Native-form leads'],
+        // NASEL — the funnel's visit and form-start steps, read from the metrics the platforms report for them (InitiateCheckout, landing page view).
+        ['key' => 'form_starts', 'ar' => 'بدء تعبئة النموذج', 'en' => 'Form starts'],
+        ['key' => 'page_views', 'ar' => 'زيارات الصفحة', 'en' => 'Page views'],
         ['key' => 'qualified_leads', 'ar' => 'عملاء مؤهلون', 'en' => 'Qualified leads'],
         // RESULT-EVENTS-001 — optional, and present only where a result event is configured for the project or the link.
         ['key' => 'results', 'ar' => 'النتائج', 'en' => 'Results'],
@@ -473,6 +476,9 @@ final class LiveReportBuilderController extends Controller
             // RESULT-EVENTS-001 — this link's own definition of «Results»: platform → path → reported metric. Replaces the project's for the platforms it names.
             'result_events' => ['sometimes', 'array'],
             'lead_events' => ['sometimes', 'array'],
+            // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
+            'kpi_labels' => ['sometimes', 'array', 'max:30'],
+            'kpi_labels.*' => ['nullable', 'string', 'max:60'],
             'creative_ids' => ['sometimes', 'array', 'max:500'],
             'creative_ids.*' => ['uuid'],
             'excluded_creative_ids' => ['sometimes', 'array', 'max:500'],
@@ -622,6 +628,7 @@ final class LiveReportBuilderController extends Controller
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? [])))->configured() ? ['result_events' => $events->toArray()] : [])
+              + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])
               + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? [])))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
               + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
             'scope' => [

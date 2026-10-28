@@ -406,6 +406,8 @@ export interface LivePayload {
   reported?: Record<string, boolean>
   /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
   no_data_yet?: boolean
+  /** The operator's own names for KPI cards on this link. */
+  kpi_labels?: Record<string, string>
   /** RESULT-EVENTS-001 — Results as configured for the project / this link; `configured: false` means none are drawn. */
   results?: {
     configured: boolean

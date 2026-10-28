@@ -555,6 +555,8 @@ final class LiveReportService
              * `conversions` is never promoted to either.
              */
             'results' => $results,
+            // The operator's own names for KPI cards on this link (empty when none were set).
+            'kpi_labels' => (object) array_filter((array) (($share->settings ?? [])['kpi_labels'] ?? []), static fn ($v): bool => is_string($v) && $v !== ''),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.

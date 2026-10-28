@@ -1,7 +1,7 @@
 import { CompositionTree, VIEW_KEYS, viewsBody, type ViewKey } from './CompositionTree'
 import { ColumnPicker } from './ColumnPicker'
 import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey, levelSections } from './reportSetupCatalog'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { PlatformMark } from '@/components/brand/PlatformMark'
@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { ResultEventsPanel } from './ResultEventsPanel'
-import type { ResultEventsMap } from './api'
+import { fetchResultEvents, type ResultEventsMap } from './api'
 import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
@@ -84,6 +84,19 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [adQuery, setAdQuery] = useState('')
   const [providers, setProviders] = useState<string[]>([])
   const [metrics, setMetrics] = useState<string[]>([])
+  /*
+   * NASEL-style projects: when the project defines its verified lead events, a new link opens on the owner's four primary KPIs —
+   * Spend, Impressions, Clicks, Native Leads — in that order. Untouched until the operator chooses something else.
+   */
+  const events = useQuery({ queryKey: ['result-events', projectId], queryFn: () => fetchResultEvents(projectId) })
+  const [metricsTouched, setMetricsTouched] = useState(false)
+  useEffect(() => {
+    if (!metricsTouched && events.data && Object.keys(events.data.lead_events ?? {}).length > 0) {
+      setMetrics((prev) => (prev.length === 0 ? ['spend', 'impressions', 'clicks', 'native_leads'] : prev))
+    }
+  }, [events.data, metricsTouched])
+  // The operator's own names for the cards they chose; blank = the catalogue name.
+  const [kpiLabels, setKpiLabels] = useState<Record<string, string>>({})
   // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
   /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
@@ -251,6 +264,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
         metrics,
+        ...(Object.values(kpiLabels).some((v) => v.trim() !== '') ? { kpi_labels: kpiLabels } : {}),
         from,
         to,
         period_kind: periodKind,
@@ -683,11 +697,36 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <span className="text-xs font-bold text-text-muted">{ar ? 'المؤشرات المعروضة للعميل' : 'Metrics the client sees'}</span>
             <div className="flex flex-wrap gap-1.5">
               {options.data!.metrics.map((m) => (
-                <button key={m.key} type="button" data-testid={`metric-${m.key}`} onClick={() => toggle(setMetrics, m.key)} className={chip(metrics.includes(m.key))}>
+                <button key={m.key} type="button" data-testid={`metric-${m.key}`} onClick={() => { setMetricsTouched(true); toggle(setMetrics, m.key) }} className={chip(metrics.includes(m.key))}>
                   {ar ? m.ar : m.en}
                 </button>
               ))}
             </div>
+            {/* The chosen set, in the order the client reads it: move, rename. Nothing outside it is shown. */}
+            {metrics.length > 0 && (
+              <ol className="grid gap-1" data-testid="metric-order">
+                {metrics.map((key, i) => {
+                  const m = options.data!.metrics.find((x) => x.key === key)
+                  const move = (to: number) => { setMetricsTouched(true); setMetrics((prev) => { const next = [...prev]; const [item] = next.splice(i, 1); next.splice(to, 0, item); return next }) }
+                  return (
+                    <li key={key} className="flex items-center gap-2 rounded-lg bg-surface-secondary px-2 py-1 text-xs">
+                      <span className="w-6 text-text-muted">{i + 1}</span>
+                      <span className="w-32 shrink-0 truncate">{m ? (ar ? m.ar : m.en) : key}</span>
+                      <input
+                        data-testid={`metric-label-${key}`}
+                        value={kpiLabels[key] ?? ''}
+                        onChange={(e) => setKpiLabels((prev) => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={ar ? 'اسم مخصص (اختياري)' : 'Custom name (optional)'}
+                        maxLength={60}
+                        className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1"
+                      />
+                      <button type="button" data-testid={`metric-up-${key}`} disabled={i === 0} onClick={() => move(i - 1)} className="rounded border border-border px-1.5 disabled:opacity-30" aria-label={ar ? 'أعلى' : 'Move up'}>↑</button>
+                      <button type="button" data-testid={`metric-down-${key}`} disabled={i === metrics.length - 1} onClick={() => move(i + 1)} className="rounded border border-border px-1.5 disabled:opacity-30" aria-label={ar ? 'أسفل' : 'Move down'}>↓</button>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">

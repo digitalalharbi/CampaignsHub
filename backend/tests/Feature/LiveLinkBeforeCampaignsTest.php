@@ -137,6 +137,17 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertContains('tiktok', $options['providers']);
     }
 
+    public function test_the_operators_own_kpi_names_reach_the_client_link_and_unknown_keys_are_dropped(): void
+    {
+        $token = $this->createLink([
+            'metrics' => ['spend', 'impressions', 'clicks', 'form_starts'],
+            'kpi_labels' => ['form_starts' => '  بدأوا التعبئة  ', 'not_a_metric' => 'x', 'clicks' => ''],
+        ])->assertCreated()->json('data.token');
+
+        $labels = $this->live($token)->assertOk()->json('data.kpi_labels');
+        $this->assertSame(['form_starts' => 'بدأوا التعبئة'], $labels);
+    }
+
     public function test_an_account_the_project_does_not_bind_is_still_refused(): void
     {
         $this->createLink(['account_ids' => [(string) $this->stranger->id]])->assertStatus(422);
