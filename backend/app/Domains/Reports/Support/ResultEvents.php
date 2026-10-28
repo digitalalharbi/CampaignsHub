@@ -30,7 +30,7 @@ final class ResultEvents
     public const PATHS = ['lead_form', 'landing_page', 'all'];
 
     /** Reported base metrics a result may be defined as — never a ratio, never the generic `conversions` unless chosen on purpose. */
-    public const METRICS = ['leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views'];
+    public const METRICS = ['leads', 'form_leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views'];
 
     /**
      * @param  array<string, array<string, string>>  $map  platform → path → metric key

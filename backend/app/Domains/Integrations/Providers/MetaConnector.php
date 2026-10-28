@@ -84,6 +84,12 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         'add_to_cart' => ['add_to_cart', 'omni_add_to_cart', 'offsite_conversion.fb_pixel_add_to_cart'],
         'checkout' => ['initiate_checkout', 'omni_initiated_checkout', 'offsite_conversion.fb_pixel_initiate_checkout'],
         'landing_page_views' => ['landing_page_view'],
+        /*
+         * NASEL — leads from Meta's OWN instant forms («All On-Facebook Leads»), kept apart from `leads` (the messaging result) and from
+         * the pixel's `lead` / `offsite_conversion.fb_pixel_lead`, which is a website event. Measured in Production on 2026-10-28: the
+         * NASEL lead-form campaign's rows carried `onsite_conversion.lead_grouped` and the connector dropped it.
+         */
+        'form_leads' => ['onsite_conversion.lead_grouped'],
         // Meta, unlike Snapchat and TikTok, DOES publish a single engagement total for the ad, so
         // this one is read rather than left null. `page_engagement` is deliberately not added to it:
         // it overlaps with post engagement and adding the two would invent interactions.
@@ -806,7 +812,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
             'leads' => $messaging,
         ];
 
-        foreach (['add_to_cart', 'checkout', 'landing_page_views', 'engagements'] as $canonical) {
+        foreach (['add_to_cart', 'checkout', 'landing_page_views', 'engagements', 'form_leads'] as $canonical) {
             $mapped[$canonical] = $this->pick($actions, self::ACTIONS[$canonical]);
         }
 
@@ -939,7 +945,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         }
 
         $summed = [];
-        $additive = ['spend', 'impressions', 'clicks', 'conversions', 'leads', 'revenue', 'video_views', 'video_completions', 'purchases', 'add_to_cart', 'checkout', 'landing_page_views', 'engagements'];
+        $additive = ['spend', 'impressions', 'clicks', 'conversions', 'leads', 'revenue', 'video_views', 'video_completions', 'purchases', 'add_to_cart', 'checkout', 'landing_page_views', 'engagements', 'form_leads'];
 
         foreach ($reported as $row) {
             $creative = $creativeOfAd[(string) ($row['ad_id'] ?? '')] ?? null;

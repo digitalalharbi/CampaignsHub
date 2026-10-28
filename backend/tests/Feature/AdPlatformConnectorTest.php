@@ -1027,6 +1027,40 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertArrayNotHasKey('revenue', $row);
     }
 
+    public function test_meta_carries_instant_form_leads_apart_from_messaging_and_the_pixels_website_lead(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-10-27', 'spend' => '12.73',
+                'impressions' => '664', 'clicks' => '18',
+                'actions' => [
+                    ['action_type' => 'onsite_conversion.lead_grouped', 'value' => '3'],
+                    // The website pixel's lead is a landing-page event, never a native form submission.
+                    ['action_type' => 'offsite_conversion.fb_pixel_lead', 'value' => '5'],
+                    ['action_type' => 'lead', 'value' => '8'],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-10-27', '2026-10-28')->records[0];
+
+        $this->assertSame(3.0, $row['form_leads']);
+        $this->assertArrayNotHasKey('leads', $row, 'an instant-form or pixel lead was filed as the messaging result');
+    }
+
+    public function test_a_row_without_instant_form_leads_does_not_report_a_zero(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [['campaign_id' => 'c1', 'date_start' => '2026-10-27', 'spend' => '5.00', 'impressions' => '100', 'clicks' => '2', 'actions' => [['action_type' => 'link_click', 'value' => '2']]]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-10-27', '2026-10-28')->records[0];
+
+        $this->assertArrayNotHasKey('form_leads', $row, 'absent is not zero');
+    }
+
     public function test_a_purchase_stays_the_conversion_when_a_row_also_has_messaging(): void
     {
         $this->configure('meta');
