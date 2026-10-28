@@ -20,8 +20,14 @@ use Illuminate\Support\Carbon;
  * As with the provider console, nothing here returns a stored value to an interface. `summary()` carries
  * presence, source and a four-character hint.
  */
-final class MetaCandidateCredentials
+class MetaCandidateCredentials
 {
+    /** META-SAAS-APP-001 — which app's store this is; the SaaS app reuses the same store under its own row and env keys. */
+    public function profile(): MetaCredentialProfile
+    {
+        return MetaCredentialProfile::Candidate;
+    }
+
     /** client_id = App ID, client_secret = App Secret, config_id = FLfB Configuration ID. */
     public const KEYS = ['client_id', 'client_secret', 'config_id'];
 
@@ -60,7 +66,7 @@ final class MetaCandidateCredentials
 
         $env = array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) config('ad_platforms.meta_candidate.scopes', '')),
+            explode(',', (string) config($this->profile()->configRoot().'.scopes', '')),
         ), static fn (string $s) => $s !== ''));
 
         return $env !== [] ? $env : self::DEFAULT_SCOPES;
@@ -169,7 +175,7 @@ final class MetaCandidateCredentials
         $values = $this->values();
 
         return [
-            'profile' => MetaCredentialProfile::Candidate->value,
+            'profile' => $this->profile()->value,
             'configured' => $this->isConfigured(),
             'missing' => $this->missing(),
             'effective_scopes' => $this->scopes(),
@@ -200,7 +206,7 @@ final class MetaCandidateCredentials
     private function row(): ?ProviderConfiguration
     {
         if (! $this->loaded) {
-            $this->row = ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Candidate->storageKey())->first();
+            $this->row = ProviderConfiguration::query()->where('provider', $this->profile()->storageKey())->first();
             $this->loaded = true;
         }
 
@@ -210,7 +216,7 @@ final class MetaCandidateCredentials
     private function rowOrNew(): ProviderConfiguration
     {
         return $this->row() ?? new ProviderConfiguration([
-            'provider' => MetaCredentialProfile::Candidate->storageKey(),
+            'provider' => $this->profile()->storageKey(),
             'environment' => 'production',
             // Not a provider anybody may connect through; `enabled` is simply not consulted for it.
             'enabled' => false,
@@ -223,7 +229,7 @@ final class MetaCandidateCredentials
         $out = [];
 
         foreach (self::KEYS as $key) {
-            $value = config("ad_platforms.meta_candidate.{$key}");
+            $value = config($this->profile()->configRoot().".{$key}");
             $out[$key] = is_string($value) && trim($value) !== '' ? trim($value) : null;
         }
 

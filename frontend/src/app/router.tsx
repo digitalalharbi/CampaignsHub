@@ -98,7 +98,7 @@ import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
 import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
 import { CurrencyRatesPage } from '@/features/admin/CurrencyRatesPage'
 import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
-import { MetaCandidatePage } from '@/features/admin/MetaCandidatePage'
+import { MetaCandidatePage, MetaSaasPage } from '@/features/admin/MetaCandidatePage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
 import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
 import { ProviderReviewPage } from '@/features/admin/ProviderReviewPage'
@@ -546,6 +546,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // META-CANDIDATE-001 — the one isolated Candidate Meta app and its round-trip checklist.
             // The Candidate OAuth callback returns here with `?outcome=`.
             { path: 'settings/integrations/meta-candidate', element: <MetaCandidatePage /> },
+            { path: 'settings/integrations/meta-saas', element: <MetaSaasPage /> },
             // LEGAL-001 — the operator's own legal identity, as printed on the public policies.
             { path: 'settings/platform', element: <PlatformLegalPage /> },
             /*

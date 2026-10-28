@@ -340,7 +340,10 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
 
     protected function credentials(): PlatformCredentials
     {
-        return PlatformCredentials::for($this->platform());
+        // META-SAAS-APP-001 — a bound connection is called with the app that issued its token.
+        return $this->connection !== null
+            ? PlatformCredentials::forConnection($this->connection)
+            : PlatformCredentials::for($this->platform());
     }
 
     /**
