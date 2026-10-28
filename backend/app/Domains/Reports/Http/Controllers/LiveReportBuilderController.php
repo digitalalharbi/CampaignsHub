@@ -367,11 +367,11 @@ final class LiveReportBuilderController extends Controller
         ['key' => 'cpm', 'ar' => 'تكلفة الألف ظهور', 'en' => 'CPM'],
         ['key' => 'reach', 'ar' => 'الوصول', 'en' => 'Reach'],
         // A lead is a submission the platform REPORTED as one; the platform's generic «conversions» is not offered as anything.
-        ['key' => 'leads', 'ar' => 'العملاء المحتملون', 'en' => 'Leads'],
+        ['key' => 'leads', 'ar' => 'العملاء المحتملون (حسب المنصة)', 'en' => 'Leads (as the platform reports)'],
         ['key' => 'cpl', 'ar' => 'تكلفة العميل المحتمل', 'en' => 'CPL'],
         // LEAD-EVENTS-001 — the two verified sources, offered only where a lead event is configured for the project.
         ['key' => 'landing_leads', 'ar' => 'عملاء صفحة الهبوط', 'en' => 'Landing-page leads'],
-        ['key' => 'native_leads', 'ar' => 'عملاء النموذج الأصلي', 'en' => 'Native-form leads'],
+        ['key' => 'native_leads', 'ar' => 'العملاء المحتملون (نماذج موثّقة)', 'en' => 'Leads (verified native forms)'],
         // NASEL — the funnel's visit and form-start steps, read from the metrics the platforms report for them (InitiateCheckout, landing page view).
         ['key' => 'form_starts', 'ar' => 'بدء تعبئة النموذج', 'en' => 'Form starts'],
         ['key' => 'page_views', 'ar' => 'زيارات الصفحة', 'en' => 'Page views'],

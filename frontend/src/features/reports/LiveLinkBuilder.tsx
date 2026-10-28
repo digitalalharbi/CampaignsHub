@@ -66,6 +66,16 @@ const isoDaysAgo = (days: number) => {
  */
 const SUMMARY_WITHHOLDS: readonly string[] = ['funnel']
 
+/** NASEL-OBJECTIVE-TEMPLATE-001 — the four cards each report objective opens on; keys from the builder's own metric catalogue. */
+const OBJECTIVE_KPI_TEMPLATES: Record<string, string[]> = {
+  leads: ['spend', 'impressions', 'clicks', 'native_leads'],
+  traffic: ['spend', 'impressions', 'clicks', 'ctr'],
+  awareness: ['spend', 'impressions', 'reach', 'cpm'],
+  engagement: ['spend', 'impressions', 'clicks', 'ctr'],
+  sales: ['spend', 'purchases', 'revenue', 'roas'],
+  app: ['spend', 'impressions', 'clicks', 'cpc'],
+}
+
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -90,13 +100,14 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    */
   const events = useQuery({ queryKey: ['result-events', projectId], queryFn: () => fetchResultEvents(projectId) })
   const [metricsTouched, setMetricsTouched] = useState(false)
+  // The operator's own names for the cards they chose; blank = the catalogue name.
+  const [kpiLabels, setKpiLabels] = useState<Record<string, string>>({})
   useEffect(() => {
     if (!metricsTouched && events.data && Object.keys(events.data.lead_events ?? {}).length > 0) {
       setMetrics((prev) => (prev.length === 0 ? ['spend', 'impressions', 'clicks', 'native_leads'] : prev))
+      setKpiLabels((prev) => (prev.native_leads ? prev : { ...prev, native_leads: 'العملاء المحتملون' }))
     }
   }, [events.data, metricsTouched])
-  // The operator's own names for the cards they chose; blank = the catalogue name.
-  const [kpiLabels, setKpiLabels] = useState<Record<string, string>>({})
   // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
   /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
@@ -152,13 +163,18 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    */
   const [campaignQuery, setCampaignQuery] = useState('')
 
-  // REPORT-SETUP-001 — Objective and Destination narrow the campaign list like the platform and account do.
+  /*
+   * NASEL-OBJECTIVE-TEMPLATE-001 — the report's objective is a KPI TEMPLATE: choosing «العملاء المحتملون» sets the client's cards, it
+   * never removes a campaign. Narrowing the list by campaign objective is a separate, explicit switch that starts off.
+   * Destination still narrows the list like the platform and account do (REPORT-SETUP-001).
+   */
   const [campaignObjective, setCampaignObjective] = useState<string | null>(null)
+  const [filterByObjective, setFilterByObjective] = useState(false)
   const [campaignDestination, setCampaignDestination] = useState<string | null>(null)
 
   const visibleCampaigns = useMemo(() => {
     const needle = campaignQuery.trim().toLocaleLowerCase()
-    const members = CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null
+    const members = filterByObjective ? (CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null) : null
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
@@ -171,7 +187,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, campaignDestination, campaignQuery])
+  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, filterByObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -487,10 +503,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             */}
             <div className="flex flex-wrap items-center gap-2">
               <select
-                aria-label={ar ? 'الهدف' : 'Objective'}
+                aria-label={ar ? 'هدف التقرير (قالب المؤشرات)' : 'Report objective (KPI template)'}
                 data-testid="live-builder-campaign-objective"
                 value={campaignObjective ?? ''}
-                onChange={(e) => setCampaignObjective(e.target.value === '' ? null : e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value === '' ? null : e.target.value
+                  setCampaignObjective(id)
+                  const template = id === null ? undefined : OBJECTIVE_KPI_TEMPLATES[id]
+                  if (template !== undefined) {
+                    setMetricsTouched(true)
+                    setMetrics(template)
+                    // The Owner's name for the verified count on a Leads report; an operator's own name is kept.
+                    if (id === 'leads') setKpiLabels((prev) => (prev.native_leads ? prev : { ...prev, native_leads: 'العملاء المحتملون' }))
+                  }
+                }}
                 className="min-w-0 flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
               >
                 <option value="">{ar ? 'كل الأهداف' : 'All objectives'}</option>
@@ -498,6 +524,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <option key={o.id} value={o.id}>{ar ? o.ar : o.en}</option>
                 ))}
               </select>
+              {campaignObjective !== null && (
+                <label className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <input type="checkbox" data-testid="live-builder-filter-by-objective" checked={filterByObjective} onChange={(e) => setFilterByObjective(e.target.checked)} className="h-3.5 w-3.5 accent-brand-600" />
+                  {ar ? 'تصفية الحملات حسب هذا الهدف' : 'Also filter campaigns by this objective'}
+                </label>
+              )}
               {(options.data?.campaigns ?? []).some((c) => c.destination) && (
                 <select
                   aria-label={ar ? 'الوجهة' : 'Destination'}
