@@ -246,7 +246,9 @@ final class ImportExternalStructure
                     // TIKTOK-MEDIA-001 — the file's own dimensions and length, only when the connector sent them.
                     'width' => is_int($creative['width'] ?? null) ? $creative['width'] : null,
                     'height' => is_int($creative['height'] ?? null) ? $creative['height'] : null,
-                    'duration_seconds' => is_numeric($creative['duration_seconds'] ?? null) ? (float) $creative['duration_seconds'] : null,
+                    // The column is whole seconds; TikTok states a clip's length as 9.734. Writing the float failed the WHOLE structure
+                    // sync in Production (`invalid input syntax for type integer`), so no new campaign or creative arrived.
+                    'duration_seconds' => is_numeric($creative['duration_seconds'] ?? null) ? (int) round((float) $creative['duration_seconds']) : null,
                 ], static fn ($v) => $v !== null),
                 /*
                  * CONTENT-NOTHING-TO-DRAW-WHY-001 — the body the platform sent, kept.
