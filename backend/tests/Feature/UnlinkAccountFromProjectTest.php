@@ -169,4 +169,23 @@ final class UnlinkAccountFromProjectTest extends TestCase
         $this->assertContains($this->unlink($this->razzah, $this->nasel, $spy)->status(), [403, 404]);
         $this->assertTrue((bool) ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $this->razzah->id)->where('external_account_id', $this->nasel->id)->value('is_active'));
     }
+
+    /** INTEGRATION-ESTATE-001 — the project-first view lists what feeds each project, and a removed account leaves it. */
+    public function test_the_estate_lists_each_project_with_its_feeders_and_a_removed_account_leaves_it(): void
+    {
+        $this->bind($this->other, $this->razzahOwn);
+        $this->razzahOwn->forceFill(['last_synced_at' => Carbon::parse('2026-10-25 10:00:00')])->save();
+
+        $rows = collect($this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/estate')->assertOk()->json('data.projects'))->keyBy('project_name');
+        $this->assertSame(2, $rows['razzahavenu']['accounts']);
+        $this->assertSame(['snapchat'], $rows['razzahavenu']['providers']);
+        $this->assertSame(1, $rows['henka']['accounts']);
+        $this->assertNotNull($rows['razzahavenu']['last_synced_at']);
+
+        $this->unlink($this->razzah, $this->nasel)->assertOk();
+
+        $after = collect($this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/estate')->json('data.projects'))->keyBy('project_name');
+        $this->assertSame(1, $after['razzahavenu']['accounts'], 'the removed account no longer feeds the project');
+        $this->assertSame(1, $after['henka']['accounts'], 'another project is untouched');
+    }
 }

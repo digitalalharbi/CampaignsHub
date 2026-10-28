@@ -27,6 +27,7 @@ export function UnlinkAccountButton({ projectId, projectName, accountId, account
       setAsking(false)
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['connection-hub'] }),
+        qc.invalidateQueries({ queryKey: ['integration-estate'] }),
         qc.invalidateQueries({ queryKey: ['integration-accounts'] }),
         qc.invalidateQueries({ queryKey: ['connection-hierarchy'] }),
       ])

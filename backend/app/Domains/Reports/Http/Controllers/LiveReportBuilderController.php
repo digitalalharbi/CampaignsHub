@@ -473,6 +473,23 @@ final class LiveReportBuilderController extends Controller
             'creative_ids.*' => ['uuid'],
             'excluded_creative_ids' => ['sometimes', 'array', 'max:500'],
             'excluded_creative_ids.*' => ['uuid'],
+            /*
+             * CREATIVE-DISPLAY-001 — the ad section, end to end.
+             *
+             * `creatives` is the visibility map (`creatives: true` is «show the ad section to the client»), the same vocabulary the saved-report
+             * dialog sends; `creative_display` is the listing policy; the id lists are the allow- and deny-list. The builder accepted none of
+             * these, so the ad-section controls changed nothing on a link created here.
+             */
+            'creatives' => ['sometimes', 'array'],
+            'creatives.*' => ['boolean'],
+            'creative_display' => ['sometimes', 'array'],
+            'creative_display.policy' => ['sometimes', Rule::in(CreativeDisplay::POLICIES)],
+            'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
+            'creative_display.auto_refresh' => ['sometimes', 'boolean'],
+            'creative_ids' => ['sometimes', 'array', 'max:500'],
+            'creative_ids.*' => ['uuid'],
+            'excluded_creative_ids' => ['sometimes', 'array', 'max:500'],
+            'excluded_creative_ids.*' => ['uuid'],
         ]);
 
         abort_if(
@@ -618,6 +635,8 @@ final class LiveReportBuilderController extends Controller
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? [])))->configured() ? ['result_events' => $events->toArray()] : [])
+              + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
+            ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
             'scope' => [
                 'project_id' => (string) $project,

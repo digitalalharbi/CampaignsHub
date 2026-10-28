@@ -14,7 +14,7 @@ import { renderWithProviders } from '@/test/utils'
  */
 
 const hub = vi.hoisted(() => ({ data: { connections: [], connectable: [] } as Hub }))
-const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; projectId?: string | null }> }))
+const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; projectId?: string | null; workspaceId?: string | null }> }))
 
 vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api')>()
@@ -27,8 +27,8 @@ vi.mock('./api', async (importOriginal) => {
       meta: { total: 0, per_page: 50, current_page: 1, last_page: 1 },
     }),
     getAccountLogs: () => Promise.resolve({ runs: [] }),
-    startPlatformOAuth: (provider: string, _ws?: string | null, projectId?: string | null) => {
-      started.calls.push({ provider, projectId })
+    startPlatformOAuth: (provider: string, workspaceId?: string | null, projectId?: string | null) => {
+      started.calls.push({ provider, projectId, workspaceId })
       return Promise.resolve({ authorization_url: `https://platform.test/${provider}` })
     },
   }
@@ -37,7 +37,7 @@ vi.mock('./api', async (importOriginal) => {
 vi.mock('@/features/projects/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listClientWorkspaces: () => Promise.resolve([]),
-  listProjects: () => Promise.resolve([{ id: 'p-1', name: 'Razah' }]),
+  listProjects: () => Promise.resolve([{ id: 'p-1', name: 'Razah', client_workspace_id: 'ws-1' }]),
 }))
 
 function connection(over: Partial<HubConnection> = {}): HubConnection {
@@ -244,7 +244,7 @@ describe('the connection flow', () => {
     fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
     fireEvent.click(screen.getByTestId('flow-authorise'))
 
-    await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1' }]))
+    await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
   })
 
   /** Three stages named before the reader leaves, so «how much more of this is there» has an answer. */

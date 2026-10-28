@@ -553,6 +553,8 @@ final class LiveReportService
              * `conversions` is never promoted to either.
              */
             'results' => $results,
+            // LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has arrived for this window: the page says so instead of printing zeros.
+            'no_data_yet' => ! $engine->hasRows($from, $to),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.

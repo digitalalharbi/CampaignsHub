@@ -415,6 +415,8 @@ export interface LivePayload {
     by_path: Record<string, number>
     events: Record<string, Record<string, string>>
   }
+  /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
+  no_data_yet?: boolean
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
