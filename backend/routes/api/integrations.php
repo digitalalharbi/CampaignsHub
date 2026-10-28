@@ -9,6 +9,7 @@ use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
+use App\Domains\Integrations\Http\Controllers\MetaConnectionMigrationController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
@@ -140,6 +141,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
     Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
     // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
+    // META-SAAS-APP-001 — read an existing Meta account through another Meta app's connection, explicitly and reversibly.
+    Route::post('accounts/{account}/move-to-connection', [MetaConnectionMigrationController::class, 'move'])
+        ->middleware('throttle:20,1')->name('accounts.move-to-connection');
     Route::post('accounts/{account}/backfill', [AccountInventoryController::class, 'backfill'])
         ->middleware('throttle:20,1')->name('accounts.backfill');
 });

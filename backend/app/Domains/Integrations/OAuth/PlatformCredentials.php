@@ -8,6 +8,8 @@ use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
+use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Support\AdPlatforms;
 use InvalidArgumentException;
 
@@ -69,16 +71,29 @@ final class PlatformCredentials
             throw new InvalidArgumentException("No platform configuration for 'meta'.");
         }
 
-        $candidate = app(MetaCandidateCredentials::class);
+        $candidate = $profile === MetaCredentialProfile::Saas ? app(MetaSaasCredentials::class) : app(MetaCandidateCredentials::class);
 
         return new self('meta', [
-            'label' => 'Meta Marketing API (Candidate app)',
+            'label' => $profile === MetaCredentialProfile::Saas ? 'Meta Marketing API (SaaS app)' : 'Meta Marketing API (Candidate app)',
             'authorize_url' => $config['authorize_url'],
             'token_url' => $config['token_url'],
             'api_base' => $config['api_base'],
             ...$candidate->values(),
             'scopes' => $candidate->scopes(),
-        ], MetaCredentialProfile::Candidate);
+        ], $profile);
+    }
+
+    /**
+     * META-SAAS-APP-001 — the credentials a stored connection must ALWAYS use: the app that issued its token.
+     *
+     * A Meta token is app-scoped. Refreshing, syncing or proving a SaaS-app token with the Live app's secret fails at best and, with
+     * `appsecret_proof`, is refused outright; the reverse is equally wrong. Every non-Meta provider has one app.
+     */
+    public static function forConnection(ProviderConnection $connection): self
+    {
+        return $connection->provider === 'meta'
+            ? self::forMeta(MetaCredentialProfile::ofConnection($connection->app_profile ?? null))
+            : self::for($connection->provider);
     }
 
     /**
@@ -185,7 +200,7 @@ final class PlatformCredentials
     public function requires(): array
     {
         // The candidate is FLfB-only: without a Configuration ID it has no dialog to open.
-        if ($this->profile === MetaCredentialProfile::Candidate) {
+        if ($this->profile !== MetaCredentialProfile::Live) {
             return MetaCandidateCredentials::KEYS;
         }
 

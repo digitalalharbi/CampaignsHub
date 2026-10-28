@@ -744,7 +744,7 @@ export interface MetaCandidateStep {
 
 export interface MetaCandidateRun {
   id: string
-  profile: 'candidate'
+  profile: 'candidate' | 'saas'
   status: 'started' | 'succeeded' | 'failed'
   app_id_hint: string | null
   started_at: string | null
@@ -757,7 +757,7 @@ export interface MetaCandidateRun {
 
 export interface MetaCandidateState {
   credentials: {
-    profile: 'candidate'
+    profile: 'candidate' | 'saas'
     configured: boolean
     missing: string[]
     effective_scopes: string[]
@@ -768,7 +768,19 @@ export interface MetaCandidateState {
   latest_run: MetaCandidateRun | null
   /** Present once promotion exists server-side. `reason` names why it is refused. */
   promotion?: { eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean }
+  /** META-SAAS-APP-001 — the SaaS app only: which app NEW connections use, and whether the SaaS app may be chosen yet. */
+  routing?: { default_for_new_connections: 'live' | 'saas'; eligible: boolean; reason: string | null }
+  connections_by_app?: { live: number; saas: number }
 }
+
+/* META-SAAS-APP-001 — the third, independent Meta app: same shape, its own endpoints, no promote/rollback. */
+const META_SAAS = '/admin/settings/integrations/meta-saas'
+export const fetchMetaSaas = (): Promise<MetaCandidateState> => getData(META_SAAS)
+export const saveMetaSaas = (body: { client_id?: string; client_secret?: string; config_id?: string; scopes?: string[] }): Promise<MetaCandidateState & { fields_changed: string[] }> => putData(META_SAAS, body)
+export const forgetMetaSaasCredential = (key: string): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/credentials/${key}`)
+export const startMetaSaasTest = (): Promise<{ run: MetaCandidateRun; authorization_url: string; expires_in_minutes: number }> => postData(`${META_SAAS}/test`, {})
+/** Which Meta app NEW customer connections use. Existing connections never change app. */
+export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandidateState> => putData(`${META_SAAS}/routing`, { default: target, confirm: true })
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {
   return getData('/admin/settings/integrations/meta-candidate')
