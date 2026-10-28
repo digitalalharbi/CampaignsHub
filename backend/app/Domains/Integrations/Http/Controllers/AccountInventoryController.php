@@ -86,6 +86,61 @@ final class AccountInventoryController extends Controller
     ) {}
 
     /**
+     * GET /estate — PROJECT-first: what each client's project is fed by, in one glance.
+     *
+     * INTEGRATION-ESTATE-001 — the hub answered «what is this authorisation» and the inventory «what can we see». The question an operator
+     * asks when something is wrong is «what is Razzah Avenue connected to, is it syncing, and how do I take something off it». One row per
+     * project that holds at least one linked account: the platforms, how many accounts, the newest successful sync and how many accounts
+     * need attention. Linking and removing happen on the row; the per-account detail is the same panel the inventory uses, scoped.
+     *
+     * Read from ACTIVE bindings only — the single ownership record — so a removed account is never listed as a feeder.
+     */
+    public function estate(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.view'), 403);
+
+        $tenantId = (string) $this->tenant->tenantId();
+        $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->get(['project_id', 'external_account_id']);
+
+        $accounts = ExternalAccount::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $bindings->pluck('external_account_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        $projects = Project::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $bindings->pluck('project_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        $rows = [];
+        foreach ($bindings->groupBy('project_id') as $projectId => $group) {
+            $project = $projects[$projectId] ?? null;
+            if ($project === null) {
+                continue;
+            }
+            $own = $group->map(static fn ($b) => $accounts[$b->external_account_id] ?? null)->filter()->values();
+            $health = $own->map(fn (ExternalAccount $a): string => $this->health->for($a));
+            $rows[] = [
+                'project_id' => (string) $projectId,
+                'project_name' => (string) $project->name,
+                'providers' => $own->pluck('provider')->unique()->sort()->values()->all(),
+                'accounts' => $own->count(),
+                'last_synced_at' => $own->map(static fn (ExternalAccount $a) => $a->last_synced_at)->filter()->max()?->toIso8601String(),
+                // «Needs attention» is anything the health service names as a problem; an account never synced is not a fault, so it is not counted.
+                'needs_attention' => $health->filter(static fn (string $h): bool => in_array($h, AccountHealth::NEEDS_ATTENTION, true))->count(),
+            ];
+        }
+        usort($rows, static fn (array $a, array $b): int => strcasecmp($a['project_name'], $b['project_name']));
+
+        return ApiResponse::success(['projects' => $rows], 'Projects and what feeds them.');
+    }
+
+    /**
      * GET /integrations/accounts — every source this tenant reaches.
      *
      * Filters are additive and all optional: `provider`, `link` (linked|unlinked), `connection`,
