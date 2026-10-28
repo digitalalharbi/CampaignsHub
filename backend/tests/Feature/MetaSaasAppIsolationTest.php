@@ -6,10 +6,12 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
@@ -17,6 +19,8 @@ use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -24,7 +28,9 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -240,5 +246,64 @@ final class MetaSaasAppIsolationTest extends TestCase
 
         $as->postJson("/api/v1/accounts/{$account->id}/move-to-connection", ['connection_id' => $live->id, 'confirm' => true])->assertOk();
         $this->assertSame((string) $live->id, (string) $account->refresh()->provider_connection_id);
+    }
+
+    /** Nothing a move touches can lose history: no figure, no binding, no other customer's row — not even through the discovery twin. */
+    public function test_a_move_deletes_no_metric_no_binding_and_no_other_customers_row(): void
+    {
+        $this->configureSaas();
+        $live = $this->liveConnection();
+        $saas = app(TokenVault::class)->open(
+            tenantId: (string) $this->tenant->id, provider: 'meta', tokens: new OAuthTokens('S', null, Carbon::now()->addDays(50)),
+            connectionName: 'SaaS', appProfile: MetaCredentialProfile::Saas,
+        );
+        $make = fn (ProviderConnection $c, string $externalId, ?string $tenantId = null): ExternalAccount => ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId ?? $this->tenant->id, 'provider_connection_id' => $c->id, 'provider' => 'meta', 'account_type' => 'ad_account',
+            'external_id' => $externalId, 'name' => $externalId, 'currency' => 'USD', 'status' => 'active',
+        ]);
+        $account = $make($live, 'act_1');
+        $twin = $make($saas, 'act_1');
+
+        $workspace = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active']);
+        $project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'name' => 'NASEL', 'status' => 'active']);
+        // The moved account's history: an active binding, an earlier deactivated one, and figures.
+        foreach ([[true, 'reporting'], [false, 'tracking']] as [$active, $purpose]) {
+            ProjectIntegrationBinding::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'project_id' => $project->id,
+                'external_account_id' => $account->id, 'provider' => 'meta', 'purpose' => $purpose, 'is_active' => $active, 'is_primary' => $active,
+            ]);
+        }
+        $metric = fn (ExternalAccount $a, float $v) => DailyMetric::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(), 'tenant_id' => $a->tenant_id, 'project_id' => $project->id, 'external_account_id' => $a->id,
+            'external_campaign_id' => (string) Str::uuid(), 'provider' => 'meta', 'metric_key' => 'spend', 'metric_date' => '2026-10-20', 'value' => $v,
+        ]);
+        $metric($account, 100.0);
+        // A twin that holds figures although it was never bound and never synced (seeded or legacy history) — the worst case for a cleanup.
+        $metric($twin, 7.0);
+
+        // Another customer's account with the same provider id, on another tenant: untouchable.
+        $otherTenant = Tenant::create(['name' => 'Other', 'slug' => 'other-'.uniqid(), 'status' => 'active']);
+        $otherConnection = app(TokenVault::class)->open(tenantId: (string) $otherTenant->id, provider: 'meta', tokens: new OAuthTokens('O', null, Carbon::now()->addDays(50)), connectionName: 'Other');
+        $foreign = $make($otherConnection, 'act_1', (string) $otherTenant->id);
+
+        $metricsBefore = DB::table('daily_metrics')->count();
+        $bindingsBefore = DB::table('project_integration_bindings')->count();
+        $accountsBefore = DB::table('external_accounts')->count();
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/accounts/{$account->id}/move-to-connection", ['connection_id' => $saas->id, 'confirm' => true])->assertOk();
+
+        $this->assertSame($metricsBefore, DB::table('daily_metrics')->count(), 'no figure was deleted');
+        $this->assertSame($bindingsBefore, DB::table('project_integration_bindings')->count(), 'no binding was deleted');
+        $this->assertSame($accountsBefore, DB::table('external_accounts')->count(), 'no account row was deleted — the twin is retired, not removed');
+        $this->assertSame(2, DB::table('project_integration_bindings')->where('external_account_id', $account->id)->count());
+        $this->assertSame('superseded', $twin->refresh()->status);
+        $this->assertSame(1.0, (float) DB::table('daily_metrics')->where('external_account_id', $twin->id)->count());
+        $this->assertSame((string) $otherConnection->id, (string) $foreign->refresh()->provider_connection_id);
+        $this->assertSame('act_1', $foreign->external_id);
+
+        // Another tenant's account can never be moved from here.
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/accounts/{$foreign->id}/move-to-connection", ['connection_id' => $saas->id, 'confirm' => true])->assertNotFound();
     }
 }

@@ -56,9 +56,8 @@ final class MetaConnectionMigrationController extends Controller
         abort_unless($returning || $twin !== null, 422, 'The target app has not discovered this ad account. Connect through it and let discovery finish first.');
 
         /*
-         * The twin row is only a discovery record, and is folded only while it is exactly that: no project has ever bound it and no sync
-         * has ever run for it. Figures are filed only for a BOUND account (the sweep reads active bindings), so «never bound, never
-         * synced» is the whole proof that it holds nothing — no figure table is read here, and none needs to be.
+         * The twin row is only a discovery record, and is retired only while it is exactly that: no project has ever bound it and no sync
+         * has ever run for it. It is never deleted either way, so no figure, binding or reference can be lost through it.
          */
         if ($twin !== null) {
             $used = ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $twin->getKey())->exists()
@@ -67,7 +66,17 @@ final class MetaConnectionMigrationController extends Controller
         }
 
         DB::transaction(function () use ($row, $from, $to, $twin, $metadata, $request): void {
-            $twin?->delete();
+            /*
+             * Nothing is ever deleted. The discovery twin is RETIRED instead: its key is set aside so the moved row can take its place under
+             * the target connection, and the row itself — with anything that ever referenced it — stays exactly where it is.
+             */
+            if ($twin !== null) {
+                $twin->forceFill([
+                    'external_id' => $twin->external_id.'#superseded-'.substr((string) $twin->getKey(), 0, 8),
+                    'status' => 'superseded',
+                    'metadata' => array_merge((array) ($twin->metadata ?? []), ['superseded_by_account_id' => (string) $row->getKey(), 'superseded_at' => now()->toIso8601String()]),
+                ])->save();
+            }
             $row->forceFill([
                 'provider_connection_id' => $to->getKey(),
                 'metadata' => array_merge($metadata, [
