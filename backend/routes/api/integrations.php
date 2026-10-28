@@ -136,6 +136,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      * a project or it is not, and that answer lives in `ProjectIntegrationBinding` — a second way to
      * say who owns an account is the exact defect this programme spent three PRs removing.
      */
+    Route::get('estate', [AccountInventoryController::class, 'estate'])->name('estate');
     Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
     Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
     // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
