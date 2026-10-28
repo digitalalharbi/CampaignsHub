@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
-import { Skeleton } from '@/components/ui/States'
+import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
@@ -403,9 +403,13 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
       ) : options.isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : options.isError ? (
-        <p className="py-8 text-center text-sm text-danger">
-          {ar ? 'تعذّر تحميل خيارات المشروع.' : 'Could not load this project’s options.'}
-        </p>
+        /* LIVE-LINK-ERRORS-001 — the status decides the wording (expired session, no permission, server fault, offline) and Retry asks again. */
+        <ErrorState
+          title={ar ? 'تعذّر تحميل خيارات المشروع.' : 'Could not load this project’s options.'}
+          error={options.error}
+          onRetry={() => { void options.refetch() }}
+          ar={ar}
+        />
       ) : (
         <div className="grid gap-4">
           {/*
@@ -883,9 +887,19 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           <p data-testid="live-link-summary" className="text-xs text-text-secondary">{summary}</p>
 
           {create.isError && (
-            <p className="text-xs text-danger">
-              {ar ? 'تعذّر إنشاء الرابط. تأكد من وجود حملات في هذا المشروع.' : 'Could not create the link. Check this project has campaigns.'}
-            </p>
+            /*
+              LIVE-LINK-ERRORS-001 — say what actually failed. The old line blamed «no campaigns» for EVERYTHING — an expired session, a
+              missing permission, a plan limit, a server fault, a dropped connection — so the owner was sent looking for campaigns that
+              were there. The server's own message and the status are shown, and Retry is offered where asking again can help.
+            */
+            <div data-testid="live-link-create-error">
+              <ErrorState
+                title={ar ? 'تعذّر إنشاء الرابط.' : 'Could not create the link.'}
+                error={create.error}
+                onRetry={() => create.mutate()}
+                ar={ar}
+              />
+            </div>
           )}
 
           <Button data-testid="live-link-create" loading={create.isPending} disabled={name.trim() === '' || selectedAccounts.length === 0} onClick={() => create.mutate()}>

@@ -374,7 +374,16 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
 
   const start = useMutation({
-    mutationFn: () => startPlatformOAuth(providerKey, null, destination),
+    /*
+     * INTEGRATION-OWN-LOGIN-001 — a connection started FROM a client's project is that client's own.
+     *
+     * It was started with no workspace at all, which files the authorisation at the AGENCY level: one login that sees every client's
+     * accounts (321 of them on the live Snapchat connection) and may serve any project. Choosing among them for one client is how another
+     * client's account («Nasel») ended up on Razzah Avenue. With the project's client workspace on the state, the login is this client's
+     * own — its own consent, its own credential — and the account step offers only what that login can see, which the assignment fence
+     * already keeps off every other client's projects.
+     */
+    mutationFn: () => startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination),
     onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
   })
 

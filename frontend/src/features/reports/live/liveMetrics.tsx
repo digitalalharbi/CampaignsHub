@@ -245,6 +245,28 @@ export function gateResultKeys(keys: string[], payload: LivePayload | null | und
   })
 }
 
+/**
+ * RESULT-EVENTS-001 — which result cards a client report may draw.
+ *
+ * `results` / `cost_per_result` exist only where a result event is configured. And where the operator chose no KPIs, the platform's raw
+ * `conversions` / `cpa` are not offered as a default at all unless the platform also reported purchases — a conversion with no purchase
+ * behind it is whatever event the campaign was optimised for (a page load, a form open), not an order and not a lead. An operator's explicit
+ * choice of them (a link made before Results were configurable) is still honoured.
+ */
+export function gateResultKeys(keys: string[], payload: LivePayload | null | undefined): string[] {
+  const configured = payload?.results?.configured === true
+  const chosen = (payload?.metrics?.length ?? 0) > 0
+
+  return keys.filter((key) => {
+    if (key === 'results' || key === 'cost_per_result') return configured
+    if (key === 'landing_leads' || key === 'native_leads') return payload?.results?.leads?.configured === true
+    // A payload that does not say what was reported (an older one) is left exactly as it was.
+    if ((key === 'conversions' || key === 'cpa') && !chosen && payload?.reported !== undefined) return payload.reported.purchases === true
+
+    return true
+  })
+}
+
 /** What kind of result the card counts — context for a tooltip, never a replacement name. */
 export function resultContext(payload: LivePayload | null | undefined, ar: boolean): string | undefined {
   const kind = payload?.result_kind

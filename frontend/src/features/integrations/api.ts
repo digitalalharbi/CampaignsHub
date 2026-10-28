@@ -526,6 +526,17 @@ export interface AccountsQuery {
 export const unlinkAccount = (projectId: string, accountId: string) =>
   postData<{ account_id: string; project_id: string; history_rows_kept: number }>(`/projects/${projectId}/integrations/accounts/${accountId}/unlink`, {})
 
+/** INTEGRATION-ESTATE-001 — project-first: what feeds each project, in one glance. */
+export interface EstateProject {
+  project_id: string
+  project_name: string
+  providers: string[]
+  accounts: number
+  last_synced_at: string | null
+  needs_attention: number
+}
+export const fetchEstate = () => getData<{ projects: EstateProject[] }>('/estate')
+
 export function listAccounts(query: AccountsQuery = {}): Promise<AccountsPage> {
   const params = new URLSearchParams()
   Object.entries(query).forEach(([key, value]) => {
