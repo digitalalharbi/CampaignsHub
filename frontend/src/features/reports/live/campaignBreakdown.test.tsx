@@ -45,17 +45,20 @@ describe('NASEL client link', () => {
   it('lists every campaign whatever its objective, with the link\'s KPI names, and never a zero for an unreported lead', () => {
     render(<LiveCampaignBreakdown payload={payload} currency="USD" ar />)
     const table = screen.getByTestId('live-campaign-breakdown')
-    const rows = within(table).getAllByTestId('live-campaign-row')
+    const names = within(table).getAllByTestId('live-campaign-row')
+    // MetricTable sorts nothing until asked, so the rows keep the server's order; each row is read whole.
+    const rows = names.map((n) => n.closest('tr') as HTMLElement)
 
     expect(rows).toHaveLength(3)
     expect(table).toHaveTextContent('العملاء (نموذج المنصة)')
     // Awaiting metrics is said, not left as a blank row or a row of zeros.
-    expect(rows[2]).toHaveAttribute('data-state', 'no_data')
+    expect(names[2]).toHaveAttribute('data-state', 'no_data')
     expect(within(rows[2]).getByTestId('live-campaign-state')).toHaveTextContent('بانتظار البيانات')
     expect(rows[2]).not.toHaveTextContent(/\b0\b/)
     expect(rows[0]).toHaveTextContent('Riwaq — LandingPage')
     expect(rows[0]).toHaveTextContent('غير متاح')
-    expect(rows[0]).toHaveTextContent('9.18 USD')
+    expect(rows[0]).toHaveTextContent(/9\.18/)
+    expect(rows[0]).toHaveTextContent(/USD/)
     expect(rows[1]).toHaveTextContent('Riwaq — LeadForm')
   })
 

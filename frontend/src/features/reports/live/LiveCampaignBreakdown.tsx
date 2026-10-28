@@ -1,13 +1,15 @@
 import { campaignStatusLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
-import { Num } from '@/components/ui/Num'
-import type { LivePayload } from '../api'
+import { compact, moneyExact } from '@/features/analytics/format'
+import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
+import type { LiveCampaignRow, LivePayload } from '../api'
 
 /**
  * NASEL-CAMPAIGN-BREAKDOWN-001 — the client-safe campaign table a link carries only when its settings switch it on.
  *
- * Every campaign with figures in the window, whatever its objective: the objective is a column, never a filter. The four columns are
- * the primary KPIs (under the link's own names where it renamed them); a figure the platform did not report reads «غير متاح», and a
- * spend the link hides is a column that does not exist rather than a column of blanks.
+ * Every campaign in the link's scope, whatever its objective: the objective is a column, never a filter. The four figures are the
+ * primary KPIs (under the link's own names where it renamed them); a figure the platform did not report reads «غير متاح», a campaign
+ * still awaiting metrics says so beside its status, and a spend the link hides is a column that does not exist rather than a column
+ * of blanks. Drawn through `MetricTable`, so figures are centred and sortable like every other client table.
  */
 export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: LivePayload; currency: string; ar: boolean }) {
   const rows = payload.campaign_rows ?? []
@@ -17,51 +19,54 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
   const label = (key: string, fallbackAr: string, fallbackEn: string) => payload.kpi_labels?.[key] || (ar ? fallbackAr : fallbackEn)
   const showSpend = rows.some((r) => r.spend !== null)
   const na = ar ? 'غير متاح' : 'Not available'
-  const n = (v: number | null) => (v === null ? na : v.toLocaleString('en-US', { maximumFractionDigits: 2 }))
   const STATE: Record<string, [string, string]> = {
     zero: ['لم تسجّل نشاطًا', 'No activity'],
     no_data: ['بانتظار البيانات', 'Awaiting data'],
     disconnected: ['الحساب غير متصل', 'Account disconnected'],
   }
   const stateText = (s?: string) => (s && STATE[s] ? (ar ? STATE[s][0] : STATE[s][1]) : null)
-  const money = (v: number | null) => (v === null ? na : `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`)
+  const count = (v: number | null) => (v === null ? na : compact(v))
+
+  const head = [
+    ar ? 'الحملة' : 'Campaign',
+    ar ? 'المنصة' : 'Platform',
+    ar ? 'الحالة' : 'Status',
+    ar ? 'الهدف' : 'Objective',
+    ...(showSpend ? [label('spend', 'الإنفاق', 'Spend')] : []),
+    label('impressions', 'الظهور', 'Impressions'),
+    label('clicks', 'النقرات', 'Clicks'),
+    label('native_leads', 'عملاء النموذج الأصلي', 'Native-form leads'),
+  ]
+
+  const cells = (r: LiveCampaignRow) => [
+    <span key="name" data-testid="live-campaign-row" data-state={r.data_state ?? 'reported'} className="font-medium text-text-primary" title={r.name}>{r.name}</span>,
+    <span key="platform">{providerLabel(r.platform, locale)}</span>,
+    <span key="status">
+      {r.status ? campaignStatusLabel(r.status, locale) : '—'}
+      {stateText(r.data_state) && <span data-testid="live-campaign-state" className="ms-1 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] text-text-muted">{stateText(r.data_state)}</span>}
+    </span>,
+    <span key="objective">{r.objective ? objectiveLabel(r.objective, locale) : '—'}</span>,
+    ...(showSpend ? [<span key="spend" dir="ltr">{r.spend === null ? na : moneyExact(r.spend, currency)}</span>] : []),
+    <span key="impressions" dir="ltr">{count(r.impressions)}</span>,
+    <span key="clicks" dir="ltr">{count(r.clicks)}</span>,
+    <span key="native" dir="ltr">{count(r.native_leads)}</span>,
+  ]
+
+  const values = rows.map((r): SortValues => [
+    r.name,
+    r.platform,
+    r.status ?? '',
+    r.objective ?? '',
+    ...(showSpend ? [r.spend] : []),
+    r.impressions,
+    r.clicks,
+    r.native_leads,
+  ])
 
   return (
     <section data-testid="live-campaign-breakdown" className="rounded-2xl border border-border bg-surface p-4">
       <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? `الحملات (${rows.length})` : `Campaigns (${rows.length})`}</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="border-b border-border text-start text-xs text-text-muted">
-              <th className="px-2 py-2 text-start font-semibold">{ar ? 'الحملة' : 'Campaign'}</th>
-              <th className="px-2 py-2 text-start font-semibold">{ar ? 'المنصة' : 'Platform'}</th>
-              <th className="px-2 py-2 text-start font-semibold">{ar ? 'الحالة' : 'Status'}</th>
-              <th className="px-2 py-2 text-start font-semibold">{ar ? 'الهدف' : 'Objective'}</th>
-              {showSpend && <th className="px-2 py-2 text-end font-semibold">{label('spend', 'الإنفاق', 'Spend')}</th>}
-              <th className="px-2 py-2 text-end font-semibold">{label('impressions', 'الظهور', 'Impressions')}</th>
-              <th className="px-2 py-2 text-end font-semibold">{label('clicks', 'النقرات', 'Clicks')}</th>
-              <th className="px-2 py-2 text-end font-semibold">{label('native_leads', 'عملاء النموذج الأصلي', 'Native-form leads')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} data-testid="live-campaign-row" data-state={r.data_state ?? 'reported'} className="border-b border-border/60 last:border-0">
-                <td className="max-w-[18rem] truncate px-2 py-2 font-medium text-text-primary" title={r.name}>{r.name}</td>
-                <td className="px-2 py-2">{providerLabel(r.platform, locale)}</td>
-                <td className="px-2 py-2">
-                  {r.status ? campaignStatusLabel(r.status, locale) : '—'}
-                  {stateText(r.data_state) && <span data-testid="live-campaign-state" className="ms-1 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] text-text-muted">{stateText(r.data_state)}</span>}
-                </td>
-                <td className="px-2 py-2">{r.objective ? objectiveLabel(r.objective, locale) : '—'}</td>
-                {showSpend && <td className="tnum px-2 py-2 text-end"><Num>{money(r.spend)}</Num></td>}
-                <td className="tnum px-2 py-2 text-end"><Num>{n(r.impressions)}</Num></td>
-                <td className="tnum px-2 py-2 text-end"><Num>{n(r.clicks)}</Num></td>
-                <td className="tnum px-2 py-2 text-end"><Num>{n(r.native_leads)}</Num></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <MetricTable head={head} rows={rows.map(cells)} values={values} />
     </section>
   )
 }
