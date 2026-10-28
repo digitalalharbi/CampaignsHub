@@ -82,6 +82,16 @@ final class MetaSaasAppIsolationTest extends TestCase
         app(MetaSaasCredentials::class)->forgetCache();
     }
 
+    /** A passed SaaS test round trip with the credentials configured now — what makes the SaaS app eligible for customer connections. */
+    private function passSaasTest(): void
+    {
+        $run = new MetaCandidateConnection;
+        $run->forceFill([
+            'profile' => 'saas', 'started_by' => $this->platformOwner->id, 'status' => 'succeeded',
+            'credential_fingerprint' => app(MetaSaasCredentials::class)->fingerprint(), 'started_at' => now(),
+        ])->save();
+    }
+
     /** @return array<string,string> */
     private function query(string $url): array
     {
@@ -116,6 +126,13 @@ final class MetaSaasAppIsolationTest extends TestCase
         $live = $this->liveConnection();
         $liveToken = app(TokenVault::class)->stored($live)->accessToken;
         $this->configureSaas();
+
+        // Named by an operator, the SaaS app is still refused until its test passed with these credentials.
+        $this->actingAs($this->owner, 'sanctum')->postJson('/api/v1/integrations/meta/oauth/start', ['app_profile' => 'saas'])
+            ->assertStatus(422)->assertJsonPath('meta.status', 'not_eligible');
+        $this->getJson('/api/v1/integrations/meta/apps')->assertOk()->assertJsonPath('data.apps.1.available', false)->assertJsonPath('data.default', 'live');
+        $this->passSaasTest();
+        $this->getJson('/api/v1/integrations/meta/apps')->assertOk()->assertJsonPath('data.apps.1.available', true);
 
         $url = $this->actingAs($this->owner, 'sanctum')->postJson('/api/v1/integrations/meta/oauth/start', ['app_profile' => 'saas'])
             ->assertOk()->assertJsonPath('data.app_profile', 'saas')->json('data.authorization_url');

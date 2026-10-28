@@ -125,18 +125,7 @@ final class MetaSaasAppController extends Controller
     /** @return array{eligible: bool, reason: string|null} */
     private function eligibility(): array
     {
-        if (! $this->credentials->isConfigured()) {
-            return ['eligible' => false, 'reason' => 'not_configured'];
-        }
-        $run = MetaCandidateConnection::latestRun(MetaCredentialProfile::Saas);
-        if ($run === null || $run->status !== 'succeeded') {
-            return ['eligible' => false, 'reason' => 'no_successful_test'];
-        }
-        if (! hash_equals((string) $run->credential_fingerprint, (string) $this->credentials->fingerprint())) {
-            return ['eligible' => false, 'reason' => 'credentials_changed_since_test'];
-        }
-
-        return ['eligible' => true, 'reason' => null];
+        return MetaAppRouting::saasEligibility();
     }
 
     /** @return array<string, mixed> */

@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Http\Controllers\Controller;
@@ -54,10 +55,14 @@ final class MetaConnectionMigrationController extends Controller
             ->first();
         abort_unless($returning || $twin !== null, 422, 'The target app has not discovered this ad account. Connect through it and let discovery finish first.');
 
-        // The twin row is only a discovery record; one that a project already uses or that holds figures is never deleted.
+        /*
+         * The twin row is only a discovery record, and is folded only while it is exactly that: no project has ever bound it and no sync
+         * has ever run for it. Figures are filed only for a BOUND account (the sweep reads active bindings), so «never bound, never
+         * synced» is the whole proof that it holds nothing — no figure table is read here, and none needs to be.
+         */
         if ($twin !== null) {
-            $used = DB::table('project_integration_bindings')->where('external_account_id', $twin->getKey())->exists()
-                || DB::table('daily_metrics')->where('external_account_id', $twin->getKey())->exists();
+            $used = ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $twin->getKey())->exists()
+                || $twin->last_synced_at !== null;
             abort_if($used, 409, 'The target connection already uses this account in a project; unlink it there first.');
         }
 

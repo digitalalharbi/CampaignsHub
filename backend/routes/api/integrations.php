@@ -75,6 +75,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         // a 302, because the caller is an SPA doing `fetch` and a cross-origin redirect would be
         // swallowed. Which platforms those are is the catalogue's answer (`ProviderAuth`), not a
         // number written here.
+        // META-SAAS-APP-001 — which Meta app a new connection may use (declared before `{provider}` routes; GET, so no overlap).
+        Route::get('meta/apps', [AdPlatformOAuthController::class, 'metaApps'])->name('meta.apps');
         Route::post('{provider}/oauth/start', [AdPlatformOAuthController::class, 'start'])->name('oauth.start');
 
         /*
