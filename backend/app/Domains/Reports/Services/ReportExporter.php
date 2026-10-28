@@ -106,8 +106,21 @@ final class ReportExporter
             $kpis['cost_per_result'] = $results['cost'] ?? null;
         }
 
+        // LEAD-EVENTS-001 — where lead events are configured, Leads / CPL are the verified landing + native submissions, each source on its own.
+        $leads = (array) (($data['results'] ?? [])['leads'] ?? []);
+        $leadsConfigured = ($leads['configured'] ?? false) === true;
+        if ($leadsConfigured) {
+            $kpis['leads'] = $leads['total'] ?? null;
+            $kpis['cpl'] = $leads['cost'] ?? null;
+            $kpis['landing_leads'] = $leads['landing'] ?? null;
+            $kpis['native_leads'] = $leads['native'] ?? null;
+        }
+
         $rows = [];
         foreach ($allow as $key) {
+            if (($key === 'landing_leads' || $key === 'native_leads') && ! $leadsConfigured) {
+                continue;
+            }
             // RESULT-EVENTS-001 — Results exist in a file only where a result event is configured; otherwise they are not a column at all.
             if (($key === 'results' || $key === 'cost_per_result') && ! $configured) {
                 continue;

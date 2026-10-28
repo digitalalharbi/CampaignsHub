@@ -58,7 +58,7 @@ type Input = {
   /** LEAD-DESTINATION-001 — where a lead report's results happen; null when unstated or not a lead report. */
   lead_destination?: string | null
   /** RESULT-EVENTS-001 — Results as configured; `configured: false` means the report draws no Results at all. */
-  results?: { configured: boolean; total: number | null; cost: number | null } | null
+  results?: { configured: boolean; total: number | null; cost: number | null; leads?: { configured: boolean; total: number | null; landing: number | null; native: number | null; cost: number | null } } | null
 }
 
 /**
@@ -191,15 +191,23 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
   const configured = data.results?.configured === true
   // RESULT-EVENTS-001 — Results and Cost per Result are drawn only where a result event is configured; a platform's generic conversion
   // is never promoted to either, whatever objective the report was written under.
+  const leadEvents = data.results?.leads?.configured === true
   const keys = (data.metric_set?.length ? data.metric_set : layoutFor(objective).primary)
     .filter((key) => configured || (key !== 'results' && key !== 'cost_per_result'))
+    .filter((key) => leadEvents || (key !== 'landing_leads' && key !== 'native_leads'))
   const direct = data.objective_performance?.direct
-  const kpis = configured
-    ? { ...(data.kpis ?? {}), results: data.results?.total ?? null, cost_per_result: data.results?.cost ?? null }
-    : (data.kpis ?? {})
-  const reported = configured
-    ? { ...(data.reported ?? {}), results: data.results?.total != null, cost_per_result: data.results?.cost != null }
-    : data.reported
+  const lead = data.results?.leads
+  // LEAD-EVENTS-001 — where lead events are configured, Leads / CPL are the verified landing + native submissions, each source on its own.
+  const kpis: Record<string, number | null> = {
+    ...(data.kpis ?? {}),
+    ...(configured ? { results: data.results?.total ?? null, cost_per_result: data.results?.cost ?? null } : {}),
+    ...(leadEvents ? { leads: lead?.total ?? null, cpl: lead?.cost ?? null, landing_leads: lead?.landing ?? null, native_leads: lead?.native ?? null } : {}),
+  }
+  const reported: Record<string, boolean> = {
+    ...(data.reported ?? {}),
+    ...(configured ? { results: data.results?.total != null, cost_per_result: data.results?.cost != null } : {}),
+    ...(leadEvents ? { leads: lead?.total != null, landing_leads: lead?.landing != null, native_leads: lead?.native != null } : {}),
+  }
 
   return keys
     .filter((key) => SPECS[key])
