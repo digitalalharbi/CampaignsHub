@@ -17,7 +17,7 @@ async function openBuilder(page: Page) {
   await page.getByRole('button', { name: /تقرير رابط|Link Report/ }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible({ timeout: 10000 })
-  await dialog.locator('input[type="text"], input:not([type])').first().fill(`E2E live ${Date.now()}`)
+  await dialog.getByTestId('live-link-name').fill(`E2E live ${Date.now()}`)
   const account = dialog.getByTestId('live-builder-accounts').getByRole('checkbox').first()
   await expect(async () => {
     if (!(await account.isChecked())) await account.click()
