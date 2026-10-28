@@ -477,6 +477,8 @@ final class LiveReportBuilderController extends Controller
             'result_events' => ['sometimes', 'array'],
             'lead_events' => ['sometimes', 'array'],
             // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
+            // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign; off unless the operator switches it on.
+            'campaign_breakdown' => ['sometimes', 'boolean'],
             'kpi_labels' => ['sometimes', 'array', 'max:30'],
             'kpi_labels.*' => ['nullable', 'string', 'max:60'],
             'creative_ids' => ['sometimes', 'array', 'max:500'],
@@ -620,7 +622,9 @@ final class LiveReportBuilderController extends Controller
             'expires_at' => $data['expires_at'] ?? null,
             'allow_download' => $data['allow_download'] ?? false,
             // CLIENT-REPORT-FRAMING-001 — a client link hides spend unless the owner chose to show it.
-            'hide_spend' => $data['hide_spend'] ?? true,
+            // CLIENT-REPORT-FRAMING-001 keeps spend off a link by default — unless the operator chose Spend as one of its KPIs, which is
+            // the Owner saying «show it» (NASEL: Spend is the first primary KPI). An explicit hide_spend still wins either way.
+            'hide_spend' => $data['hide_spend'] ?? ! in_array('spend', $metrics, true),
             'hide_revenue' => $data['hide_revenue'] ?? false,
             'form' => $data['form'] ?? null,
             'settings' => [
@@ -628,6 +632,7 @@ final class LiveReportBuilderController extends Controller
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? [])))->configured() ? ['result_events' => $events->toArray()] : [])
+              + ((bool) ($data['campaign_breakdown'] ?? false) ? ['campaign_breakdown' => true] : [])
               + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])
               + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? [])))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
               + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),

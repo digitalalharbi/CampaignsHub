@@ -234,6 +234,49 @@ final class LiveReportService
     }
 
     /**
+     * NASEL-CAMPAIGN-BREAKDOWN-001 — one client-safe row per campaign that has figures in the window, across every scoped account and
+     * whatever its objective.
+     *
+     * The objective is a column, never a filter. Native and landing-page leads come from the SAME `lead_events` derivation as the
+     * headline, one campaign at a time, so the rows add up to the card; an unreported metric is null («غير متاح»), never zero. Spend
+     * is null where the link hides it, and the label falls back to the platform and a position where it hides campaign names.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @return list<array<string, mixed>>
+     */
+    private function campaignBreakdown(ReportShare $share, array $scope, MetricsAggregator $engine, Carbon $from, Carbon $to): array
+    {
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ((($share->settings ?? [])['lead_events'] ?? [])) ?: null);
+        $rows = $engine->byCampaign($from, $to);
+        $ids = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows)));
+        $destinations = app(CampaignDestinations::class)->for($ids);
+
+        usort($rows, static fn (array $a, array $b): int => [(float) ($b['spend'] ?? 0), (float) ($b['impressions'] ?? 0)] <=> [(float) ($a['spend'] ?? 0), (float) ($a['impressions'] ?? 0)]);
+
+        $out = [];
+        foreach ($rows as $i => $row) {
+            $provider = AdPlatforms::canonical((string) ($row['provider'] ?? ''));
+            $reported = (array) ($row['reported'] ?? []);
+            $lead = $leads->configured() ? $leads->leadBreakdown([$row], $destinations) : null;
+            $name = trim((string) (($row['client_display_name'] ?? '') ?: ($row['campaign_name'] ?? '')));
+            $out[] = [
+                'name' => $share->hide_campaign_names || $name === '' ? AdPlatforms::name($provider).' — '.($i + 1) : $name,
+                'platform' => $provider,
+                'status' => $row['status'] ?? null,
+                'objective' => $row['objective'] ?? null,
+                'spend' => $share->hide_spend ? null : (isset($row['spend']) ? round((float) $row['spend'], 2) : null),
+                'impressions' => ($reported['impressions'] ?? true) === false ? null : (int) ($row['impressions'] ?? 0),
+                'clicks' => ($reported['clicks'] ?? true) === false ? null : (int) ($row['clicks'] ?? 0),
+                'native_leads' => $lead['native'] ?? null,
+                'landing_leads' => $lead['landing'] ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * RESULT-EVENTS-001 — Results as the project (and, over it, this link) defined them.
      *
      * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
@@ -582,8 +625,14 @@ final class LiveReportService
              *
              * The operator's own screens do not come through this service: `MetricsController` still
              * serves the full campaign → ad set → ad hierarchy to anybody who signs in.
+             *
+             * NASEL-CAMPAIGN-BREAKDOWN-001 — the Owner's explicit exception: a link whose settings switch `campaign_breakdown` on carries a
+             * CLIENT-SAFE row per campaign (display name, platform, status, objective, the four primary KPIs) and nothing else — no id, no
+             * ad set, no audience — in `campaign_rows`. Off on every link built before it, so those pages are unchanged.
              */
             'campaigns' => [],
+            // Its own key, outside the section registry's `campaigns` (detailed tables): the switch on the link is the whole permission.
+            'campaign_rows' => (($share->settings ?? [])['campaign_breakdown'] ?? false) === true ? $this->campaignBreakdown($share, $scope, $engine, $from, $to) : [],
             /*
              * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
              *

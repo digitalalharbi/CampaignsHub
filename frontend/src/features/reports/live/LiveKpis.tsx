@@ -3,7 +3,7 @@ import { liveSpark } from './liveSpark'
 import { KpiCard, TrendPill } from '@/features/analytics/components'
 import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
-import { cardHasFigure, gateResultKeys, metricLabel, type useLiveMetricReader } from './liveMetrics'
+import { cardHasFigure, gateResultKeys, metricLabel, MONEY_KEYS, spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -34,6 +34,17 @@ export function kpiKeysFor(payload: LivePayload, reader: Reader): string[] {
  * what each cost.
  */
 export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: string[]): string[] {
+  /*
+   * NASEL-KPI-ORDER-001 — KPIs the operator CHOSE are drawn in the order they chose, and none drops out for having no figure: it
+   * reads «غير متاح» (see `kpiText`). The only card that leaves is a money card on a link that hides spend — the link's own choice.
+   */
+  if ((payload.metrics?.length ?? 0) > 0) {
+    const moneyHidden = spendHiddenByLink(payload)
+
+    return keys
+      .filter((k, i, all) => all.indexOf(k) === i)
+      .filter((k) => reader.meta[k] && !(moneyHidden && MONEY_KEYS.has(k)))
+  }
   const t = payload.totals
   // One underlying result is one card: `leads` carrying the same count as the result is that result.
   const sameAsResult = (k: string) => k === 'leads' && t.leads !== null && t.leads !== undefined && t.leads === t.conversions
@@ -55,6 +66,13 @@ export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: strin
  * The headline: four figures that dominate, then the rest compact. Numbers first; the period
  * comparison is the pill beside each, not a sentence under it.
  */
+/** A chosen KPI with no figure says so — «غير متاح» — instead of an empty card or an invented zero. */
+export function kpiText(text: string, ar: boolean): string {
+  const trimmed = text.trim()
+
+  return trimmed === '' || trimmed === '—' ? (ar ? 'غير متاح' : 'Not available') : text
+}
+
 export function LiveKpiBoard({
   payload,
   reader,
@@ -89,7 +107,7 @@ export function LiveKpiBoard({
             <KpiCard
               key={key}
               label={metricLabel(meta, key, payload, ar)}
-              value={read.text}
+              value={kpiText(read.text, ar)}
               exact={read.exact ?? undefined}
               delta={d[key]}
               invertGood={meta.invertGood}
@@ -110,7 +128,7 @@ export function LiveKpiBoard({
                 <dt className="truncate text-[11px] font-semibold text-text-muted">{metricLabel(meta, key, payload, ar)}</dt>
                 <dd className="mt-0.5 flex flex-wrap items-center justify-between gap-1">
                   <span className="tnum text-base font-extrabold text-text-primary" title={read.exact ?? undefined}>
-                    <Num>{read.text}</Num>
+                    <Num>{kpiText(read.text, ar)}</Num>
                   </span>
                   {d[key] !== undefined && d[key] !== null && <TrendPill delta={d[key]} invertGood={meta.invertGood} />}
                 </dd>

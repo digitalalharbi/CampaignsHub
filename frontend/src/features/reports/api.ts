@@ -401,6 +401,18 @@ export interface StoreFunnelPayload {
   }
 }
 
+export interface LiveCampaignRow {
+  name: string
+  platform: string
+  status: string | null
+  objective: string | null
+  spend: number | null
+  impressions: number | null
+  clicks: number | null
+  native_leads: number | null
+  landing_leads: number | null
+}
+
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
@@ -476,6 +488,11 @@ export interface LivePayload {
    * The operator's own drill-down reads `EntityPayload` below, which keeps the whole hierarchy.
    */
   campaigns: []
+  /**
+   * NASEL-CAMPAIGN-BREAKDOWN-001 — empty unless the link switches `campaign_breakdown` on, and then only client-safe fields: no id,
+   * no ad set, no audience. A null figure was not reported.
+   */
+  campaign_rows?: LiveCampaignRow[]
   /**
    * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
    *

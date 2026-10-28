@@ -18,6 +18,7 @@ import { LiveDetailTables, LivePlatformComparison } from '../LiveDetailTables'
 import { ReportAdsSection, type ReportAd } from '../ReportAdsSection'
 import { ObjectiveAnalyticsSection } from '../ObjectiveAnalyticsSection'
 import { asContent, ContentTile } from './LiveContent'
+import { LiveCampaignBreakdown } from './LiveCampaignBreakdown'
 import { kpiKeysFor, LiveKpiBoard, LiveScopeCounts } from './LiveKpis'
 import { ExecutiveSummary } from './ExecutiveSummary'
 import {
@@ -200,6 +201,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent 
       {sectionOn(payload, 'platform_comparison') && (
         <LivePlatformComparison payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
       )}
+      <LiveCampaignBreakdown payload={payload} currency={currency} ar={ar} />
       {sectionOn(payload, 'objective_breakdown') && (payload.objective_analytics
         ? <ObjectiveAnalyticsSection section={payload.objective_analytics} currency={currency} ar={ar} showContent={false} />
         : <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />)}
@@ -275,6 +277,7 @@ export function DashboardView({
           )}
         </div>
       )}
+      <LiveCampaignBreakdown payload={payload} currency={currency} ar={ar} />
       {/*
         REPORT-OBJECTIVE-ANALYTICS-001 — the objective section supersedes the per-path leaders: the same
         «strongest and weakest inside an objective», per family rather than per money path, above a

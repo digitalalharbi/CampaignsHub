@@ -148,6 +148,32 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertSame(['form_starts' => 'بدأوا التعبئة'], $labels);
     }
 
+    public function test_the_campaign_breakdown_lists_every_objective_client_safe_and_spend_follows_the_kpi_choice(): void
+    {
+        $this->campaign($this->account, 'Riwaq — LeadForm', 7.16);
+        $traffic = $this->campaign($this->account, 'Riwaq — LandingPage', 9.18);
+        $traffic->forceFill(['objective' => 'traffic'])->save();
+        $this->campaign($this->stranger, 'Another client', 999.0);
+
+        // Spend chosen as a KPI and no explicit hide_spend: spend shows.
+        $token = $this->createLink(['metrics' => ['spend', 'impressions', 'clicks', 'native_leads'], 'campaign_breakdown' => true])->assertCreated()->json('data.token');
+        $payload = $this->live($token)->assertOk()->json('data');
+
+        $this->assertSame(['spend', 'impressions', 'clicks', 'native_leads'], $payload['metrics'], 'the chosen KPI order persists');
+        $this->assertEquals(16.34, $payload['totals']['spend']);
+        $rows = collect($payload['campaign_rows']);
+        $this->assertSame(['Riwaq — LandingPage', 'Riwaq — LeadForm'], $rows->pluck('name')->all(), 'both objectives, the other account never');
+        $this->assertSame(['traffic', 'leads'], $rows->pluck('objective')->all());
+        $this->assertSame(['name', 'platform', 'status', 'objective', 'spend', 'impressions', 'clicks', 'native_leads', 'landing_leads'], array_keys($rows->first()), 'no id or targeting field reaches the client');
+        $this->assertNull($rows->first()['native_leads'], 'no lead event configured is «not available», never zero');
+
+        // Without the switch the key stays empty; without Spend among the KPIs spend stays hidden by default.
+        $plain = $this->createLink(['metrics' => ['impressions', 'clicks']])->assertCreated()->json('data.token');
+        $payload = $this->live($plain)->assertOk()->json('data');
+        $this->assertSame([], $payload['campaign_rows']);
+        $this->assertNull($payload['totals']['spend']);
+    }
+
     public function test_an_account_the_project_does_not_bind_is_still_refused(): void
     {
         $this->createLink(['account_ids' => [(string) $this->stranger->id]])->assertStatus(422);

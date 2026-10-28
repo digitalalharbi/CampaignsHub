@@ -210,8 +210,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const form = formOf(level)
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
-  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it.
-  const [hideSpend, setHideSpend] = useState(true)
+  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it — and
+  // choosing Spend as a KPI is that choice (NASEL opens on Spend first). Null follows the KPI list until the box is touched.
+  const [hideSpendChoice, setHideSpend] = useState<boolean | null>(null)
+  const hideSpend = hideSpendChoice ?? !metrics.includes('spend')
+  // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign: name, platform, status, objective and the primary KPIs; no ids.
+  const [campaignBreakdown, setCampaignBreakdown] = useState(true)
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
   /*
@@ -272,6 +276,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         form,
         detail_level: level,
         hide_spend: hideSpend,
+        campaign_breakdown: campaignBreakdown,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
@@ -816,6 +821,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
             <span>{ar ? 'إخفاء الإنفاق عن العميل' : 'Hide spend from the client'}</span>
             <input type="checkbox" data-testid="live-link-hide-spend" checked={hideSpend} onChange={(e) => setHideSpend(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+            <span>{ar ? 'عرض تفصيل الحملات للعميل' : 'Show the campaign breakdown to the client'}</span>
+            <input type="checkbox" data-testid="live-link-campaign-breakdown" checked={campaignBreakdown} onChange={(e) => setCampaignBreakdown(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
 
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">

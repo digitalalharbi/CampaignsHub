@@ -232,6 +232,9 @@ export function gateResultKeys(keys: string[], payload: LivePayload | null | und
   const configured = payload?.results?.configured === true
   const chosen = (payload?.metrics?.length ?? 0) > 0
 
+  // NASEL-KPI-ORDER-001 — a KPI the operator CHOSE is never gated away: unconfigured or unreported, its card reads «غير متاح».
+  if (chosen) return keys
+
   return keys.filter((key) => {
     if (key === 'results' || key === 'cost_per_result') return configured
     if (key === 'landing_leads' || key === 'native_leads' || key === 'form_starts' || key === 'page_views') return payload?.results?.leads?.configured === true
@@ -250,7 +253,7 @@ export function resultContext(payload: LivePayload | null | undefined, ar: boole
 }
 
 /** Money and cost-per keys: a null here is a figure the link hides or the platform did not give. */
-const MONEY_KEYS = new Set(['spend', 'revenue', 'roas', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'aov'])
+export const MONEY_KEYS = new Set(['spend', 'revenue', 'roas', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'aov'])
 
 /**
  * Whether a card has anything to say. A card whose reading is «—» is a hole in the grid: a spend the
