@@ -147,6 +147,15 @@ final class AdPlatformOAuthController extends Controller
         $metaProfile = MetaCredentialProfile::Live;
         if ($creds->platform === 'meta') {
             $metaProfile = MetaAppRouting::forNewConnection($validated['app_profile'] ?? null);
+            // The SaaS app issues a customer connection only after it passed its test with the credentials configured now — asked by name or not.
+            if ($metaProfile === MetaCredentialProfile::Saas && ! ($eligibility = MetaAppRouting::saasEligibility())['eligible']) {
+                return ApiResponse::error(
+                    message: 'The SaaS Meta app is not available for new connections yet.',
+                    errors: ['app_profile' => [$eligibility['reason']]],
+                    meta: ['status' => 'not_eligible', 'provider' => 'meta', 'app_profile' => 'saas'],
+                    status: 422,
+                );
+            }
             $creds = PlatformCredentials::forMeta($metaProfile);
             if (! $creds->isConfigured()) {
                 return ApiResponse::error(
@@ -198,6 +207,23 @@ final class AdPlatformOAuthController extends Controller
      * Always ends in a redirect to the SPA, never a JSON body: a human is looking at this, and a page
      * of JSON is how an integration that actually worked gets reported as broken.
      */
+    /**
+     * META-SAAS-APP-001 — which Meta apps a NEW connection may be issued by, for the connect screen. Names no credential.
+     */
+    public function metaApps(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+        $eligibility = MetaAppRouting::saasEligibility();
+
+        return ApiResponse::success([
+            'default' => MetaAppRouting::default()->value,
+            'apps' => [
+                ['key' => MetaCredentialProfile::Live->value, 'available' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->isConfigured()],
+                ['key' => MetaCredentialProfile::Saas->value, 'available' => $eligibility['eligible']],
+            ],
+        ], 'Meta apps for new connections.');
+    }
+
     public function callback(Request $request, string $provider, TenantContext $tenant, AuditLogger $audit): RedirectResponse
     {
         $creds = $this->credentialsOr404($provider);
@@ -232,6 +258,9 @@ final class AdPlatformOAuthController extends Controller
             // The app the record names — Live or the SaaS app — and the token is exchanged, stored and later refreshed with THAT app.
             $issuedBy = MetaCredentialProfile::from((string) $record['profile']);
             $creds = PlatformCredentials::forMeta($issuedBy);
+            if (! $creds->isConfigured()) {
+                return $this->back('meta', 'failed', 'The Meta app this authorisation was started with is no longer configured.');
+            }
         } else {
             // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
             // (OAuth 1.0a reports a refusal as `denied=<request token>`.)
