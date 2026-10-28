@@ -154,6 +154,9 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $traffic = $this->campaign($this->account, 'Riwaq — LandingPage', 9.18);
         $traffic->forceFill(['objective' => 'traffic'])->save();
         $this->campaign($this->stranger, 'Another client', 999.0);
+        // Structure synced, no figures yet — under the link's account, and under an account the project does not bind.
+        $awaiting = $this->structureOnly($this->account, 'Riwaq — New flight');
+        $this->structureOnly($this->stranger, 'Stranger structure');
 
         // Spend chosen as a KPI and no explicit hide_spend: spend shows.
         $token = $this->createLink(['metrics' => ['spend', 'impressions', 'clicks', 'native_leads'], 'campaign_breakdown' => true])->assertCreated()->json('data.token');
@@ -162,16 +165,31 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertSame(['spend', 'impressions', 'clicks', 'native_leads'], $payload['metrics'], 'the chosen KPI order persists');
         $this->assertEquals(16.34, $payload['totals']['spend']);
         $rows = collect($payload['campaign_rows']);
-        $this->assertSame(['Riwaq — LandingPage', 'Riwaq — LeadForm'], $rows->pluck('name')->all(), 'both objectives, the other account never');
-        $this->assertSame(['traffic', 'leads'], $rows->pluck('objective')->all());
-        $this->assertSame(['name', 'platform', 'status', 'objective', 'spend', 'impressions', 'clicks', 'native_leads', 'landing_leads'], array_keys($rows->first()), 'no id or targeting field reaches the client');
+        $this->assertSame(['Riwaq — LandingPage', 'Riwaq — LeadForm', 'Riwaq — New flight'], $rows->pluck('name')->all(), 'every objective and the campaign awaiting metrics; the other account never');
+        $this->assertSame(['traffic', 'leads', 'awareness'], $rows->pluck('objective')->all());
+        $this->assertSame(['reported', 'reported', 'no_data'], $rows->pluck('data_state')->all());
+        $this->assertSame(['name', 'platform', 'status', 'objective', 'data_state', 'spend', 'impressions', 'clicks', 'native_leads', 'landing_leads'], array_keys($rows->first()), 'no id or targeting field reaches the client');
         $this->assertNull($rows->first()['native_leads'], 'no lead event configured is «not available», never zero');
+        $this->assertNull($rows->last()['impressions'], 'a campaign awaiting metrics reads «not available», never zero');
+        $this->assertEquals(16.34, $payload['totals']['spend'], 'the waiting campaign adds nothing to the totals');
+        $this->assertStringNotContainsString((string) $awaiting->id, (string) json_encode($payload['campaign_rows']), 'no campaign id reaches the client');
 
         // Without the switch the key stays empty; without Spend among the KPIs spend stays hidden by default.
         $plain = $this->createLink(['metrics' => ['impressions', 'clicks']])->assertCreated()->json('data.token');
         $payload = $this->live($plain)->assertOk()->json('data');
         $this->assertSame([], $payload['campaign_rows']);
         $this->assertNull($payload['totals']['spend']);
+    }
+
+    private function structureOnly(ExternalAccount $account, string $name): UnifiedCampaign
+    {
+        $campaign = UnifiedCampaign::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => $name, 'status' => 'active', 'objective' => 'awareness']);
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id, 'provider' => 'tiktok',
+            'external_id' => 'ec-'.Str::random(6), 'name' => $name, 'status' => 'active', 'unified_campaign_id' => $campaign->id,
+        ]);
+
+        return $campaign;
     }
 
     public function test_an_account_the_project_does_not_bind_is_still_refused(): void

@@ -19,6 +19,7 @@ const payload = {
   campaign_rows: [
     { name: 'Riwaq — LandingPage', platform: 'tiktok', status: 'active', objective: 'traffic', spend: 9.18, impressions: 40000, clicks: 1346, native_leads: null, landing_leads: 700 },
     { name: 'Riwaq — LeadForm', platform: 'tiktok', status: 'paused', objective: 'leads', spend: 7.16, impressions: 12000, clicks: 72, native_leads: 1, landing_leads: null },
+    { name: 'Riwaq — New flight', platform: 'snapchat', status: 'active', objective: 'awareness', data_state: 'no_data', spend: null, impressions: null, clicks: null, native_leads: null, landing_leads: null },
   ],
 } as unknown as LivePayload
 
@@ -46,8 +47,12 @@ describe('NASEL client link', () => {
     const table = screen.getByTestId('live-campaign-breakdown')
     const rows = within(table).getAllByTestId('live-campaign-row')
 
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(3)
     expect(table).toHaveTextContent('العملاء (نموذج المنصة)')
+    // Awaiting metrics is said, not left as a blank row or a row of zeros.
+    expect(rows[2]).toHaveAttribute('data-state', 'no_data')
+    expect(within(rows[2]).getByTestId('live-campaign-state')).toHaveTextContent('بانتظار البيانات')
+    expect(rows[2]).not.toHaveTextContent(/\b0\b/)
     expect(rows[0]).toHaveTextContent('Riwaq — LandingPage')
     expect(rows[0]).toHaveTextContent('غير متاح')
     expect(rows[0]).toHaveTextContent('9.18 USD')

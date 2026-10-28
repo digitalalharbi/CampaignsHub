@@ -406,6 +406,8 @@ export interface LiveCampaignRow {
   platform: string
   status: string | null
   objective: string | null
+  /** reported · zero (rows that measured nothing) · no_data (nothing in the window yet) · disconnected (its account's connection is not connected) */
+  data_state?: 'reported' | 'zero' | 'no_data' | 'disconnected'
   spend: number | null
   impressions: number | null
   clicks: number | null

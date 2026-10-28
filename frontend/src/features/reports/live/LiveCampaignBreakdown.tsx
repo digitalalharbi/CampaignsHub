@@ -18,6 +18,12 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
   const showSpend = rows.some((r) => r.spend !== null)
   const na = ar ? 'غير متاح' : 'Not available'
   const n = (v: number | null) => (v === null ? na : v.toLocaleString('en-US', { maximumFractionDigits: 2 }))
+  const STATE: Record<string, [string, string]> = {
+    zero: ['لم تسجّل نشاطًا', 'No activity'],
+    no_data: ['بانتظار البيانات', 'Awaiting data'],
+    disconnected: ['الحساب غير متصل', 'Account disconnected'],
+  }
+  const stateText = (s?: string) => (s && STATE[s] ? (ar ? STATE[s][0] : STATE[s][1]) : null)
   const money = (v: number | null) => (v === null ? na : `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`)
 
   return (
@@ -39,10 +45,13 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} data-testid="live-campaign-row" className="border-b border-border/60 last:border-0">
+              <tr key={i} data-testid="live-campaign-row" data-state={r.data_state ?? 'reported'} className="border-b border-border/60 last:border-0">
                 <td className="max-w-[18rem] truncate px-2 py-2 font-medium text-text-primary" title={r.name}>{r.name}</td>
                 <td className="px-2 py-2">{providerLabel(r.platform, locale)}</td>
-                <td className="px-2 py-2">{r.status ? campaignStatusLabel(r.status, locale) : '—'}</td>
+                <td className="px-2 py-2">
+                  {r.status ? campaignStatusLabel(r.status, locale) : '—'}
+                  {stateText(r.data_state) && <span data-testid="live-campaign-state" className="ms-1 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] text-text-muted">{stateText(r.data_state)}</span>}
+                </td>
                 <td className="px-2 py-2">{r.objective ? objectiveLabel(r.objective, locale) : '—'}</td>
                 {showSpend && <td className="tnum px-2 py-2 text-end"><Num>{money(r.spend)}</Num></td>}
                 <td className="tnum px-2 py-2 text-end"><Num>{n(r.impressions)}</Num></td>
