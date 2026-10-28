@@ -76,7 +76,7 @@ final class BoundAccountVisibility
             $project = "{$table}.project_id";
 
             $q->whereExists(fn (Builder $b) => self::activeBinding($b, $account, $project))
-                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhereNotExists(fn (Builder $b) => self::anyBinding($b, $account)));
+                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhere(fn ($u) => $u->whereNotExists(fn (Builder $b) => self::anyBinding($b, $account))->whereNotExists(fn (Builder $b) => self::superseded($b, $account))));
         });
     }
 
@@ -96,7 +96,7 @@ final class BoundAccountVisibility
             $account = "(select c.external_account_id from external_campaigns c where c.id = {$campaignColumn})";
 
             $q->whereExists(fn (Builder $b) => self::activeBinding($b, $account, $projectColumn))
-                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhereNotExists(fn (Builder $b) => self::anyBinding($b, $account)))
+                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhere(fn ($u) => $u->whereNotExists(fn (Builder $b) => self::anyBinding($b, $account))->whereNotExists(fn (Builder $b) => self::superseded($b, $account))))
                 /*
                  * A row that hangs off no campaign at all — an estimated demo creative, a row whose
                  * campaign was removed — resolves to no account, and no account is not a deselected
@@ -122,7 +122,7 @@ final class BoundAccountVisibility
             $project = "{$table}.project_id";
 
             $q->whereExists(fn (Builder $b) => self::activeBinding($b, $account, $project))
-                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhereNotExists(fn (Builder $b) => self::anyBinding($b, $account)));
+                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhere(fn ($u) => $u->whereNotExists(fn (Builder $b) => self::anyBinding($b, $account))->whereNotExists(fn (Builder $b) => self::superseded($b, $account))));
         });
     }
 
@@ -146,6 +146,18 @@ final class BoundAccountVisibility
             ->whereRaw("bav.external_account_id = {$accountExpression}")
             ->whereRaw("bav.project_id = {$projectExpression}")
             ->where('bav.is_active', true);
+    }
+
+    /**
+     * META-SAAS-APP-001 — an account row retired by a move between Meta apps. Its own rows never show: the account they belong to is now
+     * read through the row it was folded into, and showing both would count one account twice.
+     */
+    private static function superseded(Builder $b, string $accountExpression): void
+    {
+        $b->selectRaw('1')
+            ->from('external_accounts as bav_sup')
+            ->whereRaw("bav_sup.id = {$accountExpression}")
+            ->where('bav_sup.status', 'superseded');
     }
 
     private static function anyBinding(Builder $b, string $accountExpression): void
