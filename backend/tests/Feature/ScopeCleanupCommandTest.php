@@ -152,6 +152,63 @@ final class ScopeCleanupCommandTest extends TestCase
         $this->assertSame(1, DB::table('external_campaigns')->where('external_account_id', $this->selected->id)->where('project_id', $this->project->id)->count());
     }
 
+    /**
+     * The NASEL shape (2026-10-28): the account was re-bound, its CAMPAIGNS were adopted by the new project, and the figures synced
+     * before the re-bind stayed under the old one. The plan counted them and the apply used to move none of them.
+     */
+    public function test_reassign_moves_figures_whose_campaign_already_lives_in_the_target_and_relinks_them(): void
+    {
+        $unified = $this->adoptCampaignInto($this->elsewhere, $this->otherProject);
+
+        $dry = Artisan::call('integrations:scope-cleanup', ['--project' => $this->project->id, '--account' => $this->elsewhere->id, '--action' => 'reassign']);
+        $out = Artisan::output();
+        $this->assertSame(0, $dry, $out);
+        $this->assertStringContainsString('evidence — the account\'s bindings', $out);
+        $this->assertMatchesRegularExpression('/2026-08-30  rows\s+3  spend\s+10\.00/', $out);
+        $this->assertStringContainsString('filed in TARGET', $out);
+        $this->assertStringContainsString('source project reads', $out);
+
+        $code = Artisan::call('integrations:scope-cleanup', ['--project' => $this->project->id, '--account' => $this->elsewhere->id, '--action' => 'reassign', '--apply' => true]);
+        $this->assertSame(0, $code, Artisan::output());
+
+        $this->assertSame(0, $this->rowsOf($this->elsewhere, $this->project->id), 'figures stayed in the project the account left');
+        $this->assertSame(6, DB::table('daily_metrics')->where('external_account_id', $this->elsewhere->id)->where('project_id', $this->otherProject->id)->where('unified_campaign_id', $unified)->count());
+        $this->assertSame(2, DB::table('entity_daily_metrics')->where('external_account_id', $this->elsewhere->id)->where('project_id', $this->otherProject->id)->count());
+        $this->assertSame(2, DB::table('creative_daily_metrics')->where('campaign_id', $unified)->where('project_id', $this->otherProject->id)->count());
+        $this->assertSame(1, UnifiedCampaign::withoutGlobalScopes()->where('project_id', $this->otherProject->id)->count(), 'no second unified campaign was adopted for a campaign already there');
+    }
+
+    public function test_a_reassign_is_undone_exactly_by_its_audit_entry(): void
+    {
+        $this->adoptCampaignInto($this->elsewhere, $this->otherProject);
+        $before = $this->digestOfAccountRows($this->elsewhere);
+        $creativeFigures = DB::table('creative_daily_metrics')->orderBy('id')->get(['id', 'project_id', 'campaign_id'])->toJson();
+
+        Artisan::call('integrations:scope-cleanup', ['--project' => $this->project->id, '--account' => $this->elsewhere->id, '--action' => 'reassign', '--apply' => true]);
+        $audit = DB::table('audit_logs')->where('action', 'integration.scope_cleanup.reassign')->value('id');
+        $this->assertNotNull($audit);
+        $this->assertNotSame($before, $this->digestOfAccountRows($this->elsewhere));
+
+        $code = Artisan::call('integrations:scope-cleanup', ['--revert' => $audit]);
+        $this->assertSame(0, $code, Artisan::output());
+        $this->assertSame($before, $this->digestOfAccountRows($this->elsewhere), 'the revert did not restore every row exactly');
+        $this->assertSame($creativeFigures, DB::table('creative_daily_metrics')->orderBy('id')->get(['id', 'project_id', 'campaign_id'])->toJson());
+    }
+
+    public function test_an_apply_that_would_move_fewer_rows_than_its_plan_writes_nothing(): void
+    {
+        // The campaign sits in a THIRD project: its figures cannot be re-linked to the target, so the plan cannot be kept.
+        $third = $this->project('Third');
+        DB::table('external_campaigns')->where('external_account_id', $this->elsewhere->id)->update(['project_id' => $third->id]);
+        $before = $this->digestOfEveryTable();
+
+        $code = Artisan::call('integrations:scope-cleanup', ['--project' => $this->project->id, '--account' => $this->elsewhere->id, '--action' => 'reassign', '--apply' => true]);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('ROLLED BACK', Artisan::output());
+        $this->assertSame($before, $this->digestOfEveryTable(), 'a partial move was written');
+    }
+
     public function test_reassign_refuses_an_account_with_no_provenance(): void
     {
         $code = Artisan::call('integrations:scope-cleanup', ['--project' => $this->project->id, '--account' => $this->foreign->id, '--action' => 'reassign', '--apply' => true]);
@@ -210,6 +267,17 @@ final class ScopeCleanupCommandTest extends TestCase
         }
 
         return $out;
+    }
+
+    /** The account's campaign filed in `$project` with a unified campaign there — what a re-bind's adoption leaves. */
+    private function adoptCampaignInto(ExternalAccount $account, Project $project): string
+    {
+        $unified = (string) UnifiedCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'client_workspace_id' => $this->workspace->id, 'name' => 'Adopted '.$account->external_id, 'status' => 'active',
+        ])->getKey();
+        DB::table('external_campaigns')->where('external_account_id', $account->id)->update(['project_id' => $project->id, 'unified_campaign_id' => $unified]);
+
+        return $unified;
     }
 
     private function project(string $name): Project

@@ -40,6 +40,7 @@ use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * LIVEREP-001 — the figures behind a live shared link, recomputed on every request.
@@ -231,6 +232,105 @@ final class LiveReportService
             // CREATIVE-DISPLAY-001 — read by `ReportAds`; null for a link made before the policy existed.
             'creative_display' => $share->creativeDisplay()?->toArray(),
         ];
+    }
+
+    /**
+     * NASEL-CAMPAIGN-BREAKDOWN-001 — one client-safe row per campaign in the link's scope, whatever its objective, figures or not.
+     *
+     * The objective is a column, never a filter. Every campaign the ceiling authorises is listed — one that has not reported in the
+     * window is a row too, so «awaiting metrics» is visible instead of silently absent. `data_state` says which of four things a row is:
+     * `reported`, `zero` (rows that measured nothing), `no_data` (no row in the window) or `disconnected` (its account's connection is not
+     * connected); `status` carries active / paused. Native and landing-page leads come from the SAME `lead_events` derivation as the
+     * headline, one campaign at a time; an unreported metric is null («غير متاح»), never zero. Spend is null where the link hides it,
+     * and the label falls back to the platform and a position where the link hides campaign names. No id leaves this method.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @param  list<string>  $narrowed  the campaigns the reader narrowed to, inside the ceiling; empty = the whole ceiling
+     * @return list<array<string, mixed>>
+     */
+    private function campaignBreakdown(ReportShare $share, array $scope, MetricsAggregator $engine, Carbon $from, Carbon $to, array $narrowed = []): array
+    {
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ((($share->settings ?? [])['lead_events'] ?? [])) ?: null);
+        $rows = $engine->byCampaign($from, $to);
+        $inScope = $narrowed !== [] ? $narrowed : $scope['campaign_ids'];
+        /*
+         * A link that follows its accounts also lists the campaigns whose STRUCTURE has synced and whose figures have not: «awaiting
+         * metrics» is a row, not an absence. Only under the link's own accounts, and only while each is still actively bound to this
+         * project — the same authorisation the figures need, never a wider one.
+         */
+        $accountIds = array_values(array_filter((array) (($share->scope ?? [])['account_ids'] ?? [])));
+        if ($narrowed === [] && (($share->scope ?? [])['dynamic_campaigns'] ?? false) === true && $accountIds !== [] && $scope['project_id'] !== '') {
+            $structural = DB::table('external_campaigns')
+                ->join('project_integration_bindings as b', fn ($j) => $j->on('b.external_account_id', '=', 'external_campaigns.external_account_id')
+                    ->where('b.project_id', $scope['project_id'])->where('b.is_active', true))
+                ->where('external_campaigns.project_id', $scope['project_id'])
+                ->whereIn('external_campaigns.external_account_id', $accountIds)
+                ->whereNotNull('external_campaigns.unified_campaign_id')
+                ->distinct()
+                ->pluck('external_campaigns.unified_campaign_id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all();
+            $inScope = array_values(array_unique(array_merge(array_diff($inScope, [ReportScope::IMPOSSIBLE]), $structural)));
+        }
+        $ids = array_values(array_unique(array_merge($inScope, array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows))));
+        $destinations = app(CampaignDestinations::class)->for($ids);
+
+        // Each scoped campaign's identity, platform and whether every account feeding it is still connected — read once.
+        $meta = [];
+        if ($ids !== []) {
+            foreach (DB::table('unified_campaigns')
+                ->leftJoin('external_campaigns', 'external_campaigns.unified_campaign_id', '=', 'unified_campaigns.id')
+                ->leftJoin('external_accounts', 'external_accounts.id', '=', 'external_campaigns.external_account_id')
+                ->leftJoin('provider_connections', 'provider_connections.id', '=', 'external_accounts.provider_connection_id')
+                ->whereIn('unified_campaigns.id', $ids)
+                ->when($scope['project_id'] !== '', fn ($q) => $q->where('unified_campaigns.project_id', $scope['project_id']))
+                ->get(['unified_campaigns.id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.status', 'unified_campaigns.objective', 'external_campaigns.provider', 'provider_connections.status as connection_status']) as $c) {
+                $id = (string) $c->id;
+                $meta[$id] ??= ['name' => (string) $c->name, 'client_display_name' => $c->client_display_name, 'status' => $c->status, 'objective' => $c->objective, 'provider' => $c->provider, 'connected' => null];
+                $meta[$id]['provider'] ??= $c->provider;
+                if ($c->connection_status !== null) {
+                    $meta[$id]['connected'] = ($meta[$id]['connected'] ?? true) && $c->connection_status === 'connected';
+                }
+            }
+        }
+
+        $byId = [];
+        foreach ($rows as $row) {
+            $byId[(string) ($row['campaign_id'] ?? '')] = $row;
+        }
+        foreach ($inScope as $id) {
+            if (! isset($byId[$id]) && isset($meta[$id])) {
+                $byId[$id] = ['campaign_id' => $id, 'campaign_name' => $meta[$id]['name'], 'client_display_name' => $meta[$id]['client_display_name'], 'status' => $meta[$id]['status'], 'objective' => $meta[$id]['objective'], 'provider' => $meta[$id]['provider'], 'no_rows' => true];
+            }
+        }
+        $all = array_values($byId);
+        // Reported campaigns by spend, then reach; the ones awaiting metrics after them.
+        usort($all, static fn (array $a, array $b): int => [isset($a['no_rows']) ? 1 : 0, -(float) ($a['spend'] ?? 0), -(float) ($a['impressions'] ?? 0)] <=> [isset($b['no_rows']) ? 1 : 0, -(float) ($b['spend'] ?? 0), -(float) ($b['impressions'] ?? 0)]);
+
+        $out = [];
+        foreach ($all as $i => $row) {
+            $id = (string) ($row['campaign_id'] ?? '');
+            $provider = AdPlatforms::canonical((string) ($row['provider'] ?? ''));
+            $noRows = isset($row['no_rows']);
+            $lead = $leads->configured() && ! $noRows ? $leads->leadBreakdown([$row], $destinations) : null;
+            $name = trim((string) (($row['client_display_name'] ?? '') ?: ($row['campaign_name'] ?? '')));
+            $measuredNothing = ! $noRows && (float) ($row['spend'] ?? 0) == 0.0 && (int) ($row['impressions'] ?? 0) === 0 && (int) ($row['clicks'] ?? 0) === 0;
+            $out[] = [
+                'name' => $share->hide_campaign_names || $name === '' ? AdPlatforms::name($provider).' — '.($i + 1) : $name,
+                'platform' => $provider,
+                'status' => $row['status'] ?? null,
+                'objective' => $row['objective'] ?? null,
+                'data_state' => ($meta[$id]['connected'] ?? true) === false ? 'disconnected' : ($noRows ? 'no_data' : ($measuredNothing ? 'zero' : 'reported')),
+                'spend' => $share->hide_spend || $noRows ? null : (isset($row['spend']) ? round((float) $row['spend'], 2) : null),
+                'impressions' => $noRows ? null : (int) ($row['impressions'] ?? 0),
+                'clicks' => $noRows ? null : (int) ($row['clicks'] ?? 0),
+                'native_leads' => $lead['native'] ?? null,
+                'landing_leads' => $lead['landing'] ?? null,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -555,6 +655,8 @@ final class LiveReportService
              * `conversions` is never promoted to either.
              */
             'results' => $results,
+            // The operator's own names for KPI cards on this link (empty when none were set).
+            'kpi_labels' => (object) array_filter((array) (($share->settings ?? [])['kpi_labels'] ?? []), static fn ($v): bool => is_string($v) && $v !== ''),
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.
@@ -580,8 +682,14 @@ final class LiveReportService
              *
              * The operator's own screens do not come through this service: `MetricsController` still
              * serves the full campaign → ad set → ad hierarchy to anybody who signs in.
+             *
+             * NASEL-CAMPAIGN-BREAKDOWN-001 — the Owner's explicit exception: a link whose settings switch `campaign_breakdown` on carries a
+             * CLIENT-SAFE row per campaign (display name, platform, status, objective, the four primary KPIs) and nothing else — no id, no
+             * ad set, no audience — in `campaign_rows`. Off on every link built before it, so those pages are unchanged.
              */
             'campaigns' => [],
+            // Its own key, outside the section registry's `campaigns` (detailed tables): the switch on the link is the whole permission.
+            'campaign_rows' => (($share->settings ?? [])['campaign_breakdown'] ?? false) === true ? $this->campaignBreakdown($share, $scope, $engine, $from, $to, $applied['campaigns']) : [],
             /*
              * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
              *

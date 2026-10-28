@@ -401,17 +401,33 @@ export interface StoreFunnelPayload {
   }
 }
 
+export interface LiveCampaignRow {
+  name: string
+  platform: string
+  status: string | null
+  objective: string | null
+  /** reported · zero (rows that measured nothing) · no_data (nothing in the window yet) · disconnected (its account's connection is not connected) */
+  data_state?: 'reported' | 'zero' | 'no_data' | 'disconnected'
+  spend: number | null
+  impressions: number | null
+  clicks: number | null
+  native_leads: number | null
+  landing_leads: number | null
+}
+
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
   /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
   no_data_yet?: boolean
+  /** The operator's own names for KPI cards on this link. */
+  kpi_labels?: Record<string, string>
   /** RESULT-EVENTS-001 — Results as configured for the project / this link; `configured: false` means none are drawn. */
   results?: {
     configured: boolean
     total: number | null
     cost: number | null
-    by_platform: Record<string, { results: number; metric: string }>
+    by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
     by_path: Record<string, number>
     events: Record<string, Record<string, string>>
     /** LEAD-EVENTS-001 — verified Leads by source; the total is platform-attributed, not unique people. */
@@ -421,7 +437,7 @@ export interface LivePayload {
       landing: number | null
       native: number | null
       cost: number | null
-      by_platform: Record<string, { results: number; metric: string }>
+      by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
       by_path: Record<string, number>
       events: Record<string, Record<string, string>>
       basis?: string
@@ -474,6 +490,11 @@ export interface LivePayload {
    * The operator's own drill-down reads `EntityPayload` below, which keeps the whole hierarchy.
    */
   campaigns: []
+  /**
+   * NASEL-CAMPAIGN-BREAKDOWN-001 — empty unless the link switches `campaign_breakdown` on, and then only client-safe fields: no id,
+   * no ad set, no audience. A null figure was not reported.
+   */
+  campaign_rows?: LiveCampaignRow[]
   /**
    * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
    *

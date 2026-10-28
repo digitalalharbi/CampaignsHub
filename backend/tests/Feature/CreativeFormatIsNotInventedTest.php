@@ -190,6 +190,13 @@ final class CreativeFormatIsNotInventedTest extends TestCase
         $this->assertSame('composite', $creative->format);
     }
 
+    public function test_a_fractional_clip_length_is_stored_as_whole_seconds_instead_of_failing_the_sync(): void
+    {
+        $creative = $this->import(['external_id' => 'cr-9', 'name' => 'A clip', 'format' => 'video', 'duration_seconds' => 9.734]);
+
+        $this->assertSame(10, $creative->refresh()->duration_seconds);
+    }
+
     /**
      * Driven through the private writer by reflection, deliberately.
      *

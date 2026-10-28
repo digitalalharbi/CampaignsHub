@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Console\Command;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +55,8 @@ final class ScopeCleanupCommand extends Command
         {--grain=all : all | structure | figures | commerce | runs}
         {--from= : Earliest month for the dated grains, YYYY-MM}
         {--to= : Latest month for the dated grains, YYYY-MM}
-        {--apply : Actually write. Without this the command only prints the plan.}';
+        {--apply : Actually write. Without this the command only prints the plan.}
+        {--revert= : Undo ONE earlier reassign, by its audit entry id: every moved row gets back the project and links it had.}';
 
     protected $description = 'Remove or reassign one non-selected account\'s rows inside one project — dry run unless --apply.';
 
@@ -74,8 +76,24 @@ final class ScopeCleanupCommand extends Command
         'commerce_abandoned_carts' => 'abandoned_at',
     ];
 
+    /**
+     * The column each table links its campaign by — what a reassign rewrites besides `project_id`, and what a revert restores.
+     */
+    private const LINK_COLUMN = [
+        'external_campaigns' => 'unified_campaign_id',
+        'external_ad_sets' => 'unified_campaign_id',
+        'external_ads' => 'unified_campaign_id',
+        'external_creatives' => 'campaign_id',
+        'daily_metrics' => 'unified_campaign_id',
+        'creative_daily_metrics' => 'campaign_id',
+    ];
+
     public function handle(AuditLogger $audit): int
     {
+        if ($this->stringOption('revert') !== null) {
+            return $this->revert((string) $this->stringOption('revert'), $audit);
+        }
+
         $project = $this->required('project');
         $account = $this->required('account');
         $action = (string) $this->option('action');
@@ -170,6 +188,8 @@ final class ScopeCleanupCommand extends Command
             return self::SUCCESS;
         }
 
+        $this->evidence($project, $account, $target);
+
         if (! $apply) {
             $this->line('');
             $this->line('  Nothing was changed. Re-run with --apply to carry out exactly this plan.');
@@ -179,16 +199,44 @@ final class ScopeCleanupCommand extends Command
 
         // ── apply, in one transaction, exactly the plan ────────────────────────────────────────────
 
-        $done = DB::transaction(fn (): array => $action === 'remove'
-            ? $this->remove($project, $account)
-            : $this->reassign($project, $account, (string) $target));
+        $planned = [];
+        foreach ($plan as [$table, , $count]) {
+            $planned[$table] = ($planned[$table] ?? 0) + $count;
+        }
+        // Every row the plan names, with the project and link it has NOW — the audit keeps it, so the move can be undone exactly.
+        $snapshot = $action === 'reassign' ? $this->snapshot($project, $account) : [];
 
-        $audit->log(
+        try {
+            $done = DB::transaction(function () use ($action, $project, $account, $target, $planned): array {
+                $done = $action === 'remove'
+                    ? $this->remove($project, $account)
+                    : $this->reassign($project, $account, (string) $target);
+
+                // The plan is the promise: a table that moved a different number of rows than it showed rolls the whole move back.
+                foreach ($planned as $table => $count) {
+                    if (($done[$table] ?? 0) !== $count) {
+                        throw new \RuntimeException(sprintf('%s: planned %d, would have changed %d — nothing was written.', $table, $count, $done[$table] ?? 0));
+                    }
+                }
+
+                return $done;
+            });
+        } catch (\RuntimeException $e) {
+            $this->error('  ROLLED BACK: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $entry = $audit->log(
             action: 'integration.scope_cleanup.'.$action,
             entityType: 'external_account',
             entityId: $account,
+            before: $snapshot === [] ? null : ['rows' => $snapshot],
             after: ['project' => $project, 'target' => $target, 'grain' => (string) $this->option('grain'), 'from' => $this->stringOption('from'), 'to' => $this->stringOption('to'), 'rows' => $done],
         );
+        if ($action === 'reassign') {
+            $this->line(sprintf('  audit %s — undo with --revert=%s', $entry->getKey(), $entry->getKey()));
+        }
 
         $this->line('');
         $this->line('  done — rows '.$action.'d, by table');
@@ -280,6 +328,32 @@ final class ScopeCleanupCommand extends Command
             }
         }
 
+        /*
+         * Rows still filed under the project whose CAMPAIGN already lives in the target — the shape a re-bind leaves behind: the
+         * campaigns were adopted by the account's new project, the figures synced before it stayed. The loop above only walks campaigns
+         * still in the source project, so without this the plan counted these rows and the apply silently left them where they were.
+         * Each is moved and re-linked to the unified campaign its own campaign has in the target.
+         */
+        $window = $this->windowSql('t.metric_date');
+        $strays = [
+            'creative_daily_metrics' => ['SET project_id = ?, campaign_id = ec.unified_campaign_id FROM external_creatives cr JOIN external_campaigns ec ON ec.id = cr.external_campaign_id WHERE cr.id = t.creative_id', true],
+            'daily_metrics' => ['SET project_id = ?, unified_campaign_id = ec.unified_campaign_id FROM external_campaigns ec WHERE ec.id = t.external_campaign_id AND t.external_account_id = ec.external_account_id', true],
+            'entity_daily_metrics' => ['SET project_id = ? FROM external_campaigns ec WHERE ec.id = t.external_campaign_id AND (t.external_account_id = ec.external_account_id OR t.external_account_id IS NULL)', true],
+            'external_creatives' => ['SET project_id = ?, campaign_id = ec.unified_campaign_id FROM external_campaigns ec WHERE ec.id = t.external_campaign_id', false],
+            'external_ad_sets' => ['SET project_id = ?, unified_campaign_id = ec.unified_campaign_id FROM external_campaigns ec WHERE ec.id = t.external_campaign_id', false],
+            'external_ads' => ['SET project_id = ?, unified_campaign_id = ec.unified_campaign_id FROM external_campaigns ec WHERE ec.id = t.external_campaign_id', false],
+        ];
+        foreach ($strays as $table => [$set, $dated]) {
+            if (! in_array($table, $this->tables(), true)) {
+                continue;
+            }
+            [$windowSql, $windowBindings] = $dated ? $window : ['', []];
+            $done[$table] += DB::update(
+                "UPDATE {$table} AS t {$set} AND ec.external_account_id = ? AND ec.project_id = ? AND t.project_id = ?{$windowSql}",
+                [$target, $account, $target, $project, ...$windowBindings],
+            );
+        }
+
         foreach ([...self::COMMERCE, ...self::RUNS] as $table) {
             if (in_array($table, $this->tables(), true)) {
                 $done[$table] += $this->rowsOf($table, $project, $account)
@@ -344,6 +418,147 @@ final class ScopeCleanupCommand extends Command
         if ($to !== null && preg_match('/^\d{4}-\d{2}$/', $to) === 1) {
             $q->whereRaw("{$column} < (?::date + interval '1 month')", [$to.'-01']);
         }
+    }
+
+    /** The month window as raw SQL, for the joined UPDATEs that the query builder cannot express. @return array{0: string, 1: list<string>} */
+    private function windowSql(string $column): array
+    {
+        $sql = '';
+        $bindings = [];
+        $from = $this->stringOption('from');
+        $to = $this->stringOption('to');
+        if ($from !== null && preg_match('/^\d{4}-\d{2}$/', $from) === 1) {
+            $sql .= " AND {$column} >= ?::date";
+            $bindings[] = $from.'-01';
+        }
+        if ($to !== null && preg_match('/^\d{4}-\d{2}$/', $to) === 1) {
+            $sql .= " AND {$column} < (?::date + interval '1 month')";
+            $bindings[] = $to.'-01';
+        }
+
+        return [$sql, $bindings];
+    }
+
+    /**
+     * What a person needs before deciding: whose history this is, which days and campaigns, what the source project reads of it
+     * today, and the figures themselves. Printed on every run, dry or not; it reads and never writes.
+     */
+    private function evidence(string $project, string $account, ?string $target): void
+    {
+        $name = static fn (?string $id): string => $id === null ? '—' : (string) (DB::table('projects')->where('id', $id)->value('name') ?? '(deleted)');
+
+        $this->line('');
+        $this->line('  evidence — the account\'s bindings, oldest first');
+        foreach (DB::table('project_integration_bindings')->where('external_account_id', $account)->orderBy('created_at')->get(['project_id', 'purpose', 'is_active', 'created_at', 'updated_at']) as $b) {
+            $this->line(sprintf('    %-36s %-24s %-11s %-8s bound %s · last change %s', $b->project_id, mb_substr($name((string) $b->project_id), 0, 24), (string) $b->purpose, $b->is_active ? 'ACTIVE' : 'inactive', (string) $b->created_at, (string) $b->updated_at));
+        }
+        $this->line(sprintf('    source %s «%s» → target %s «%s»', $project, $name($project), $target ?? '—', $name($target)));
+
+        $this->line('');
+        $this->line('  evidence — dated range per table');
+        foreach (self::DATE_COLUMN as $table => $column) {
+            if (! in_array($table, $this->tables(), true)) {
+                continue;
+            }
+            $r = $this->rowsOf($table, $project, $account)->tap(fn ($q) => $this->monthWindow($q, 't.'.$column))
+                ->selectRaw("MIN(t.{$column}) AS first, MAX(t.{$column}) AS last, COUNT(*) AS n")->first();
+            if ((int) ($r->n ?? 0) > 0) {
+                $this->line(sprintf('    %-28s %s → %s  (%d rows)', $table, (string) $r->first, (string) $r->last, (int) $r->n));
+            }
+        }
+
+        if (in_array('daily_metrics', $this->tables(), true)) {
+            $this->line('');
+            $this->line('  evidence — daily_metrics by day (spend · impressions · clicks, as stored)');
+            $days = $this->rowsOf('daily_metrics', $project, $account)->tap(fn ($q) => $this->monthWindow($q, 't.metric_date'))
+                ->selectRaw("t.metric_date AS day, COUNT(*) AS n, SUM(t.value) FILTER (WHERE t.metric_key = 'spend') AS spend, SUM(t.value) FILTER (WHERE t.metric_key = 'impressions') AS impressions, SUM(t.value) FILTER (WHERE t.metric_key = 'clicks') AS clicks")
+                ->groupBy('t.metric_date')->orderBy('t.metric_date')->get();
+            foreach ($days as $d) {
+                $this->line(sprintf('    %s  rows %4d  spend %10.2f  impressions %9d  clicks %7d', (string) $d->day, (int) $d->n, (float) $d->spend, (int) $d->impressions, (int) $d->clicks));
+            }
+
+            $this->line('');
+            $this->line('  evidence — campaigns those rows belong to (provider id · name · where the campaign is filed now)');
+            $campaigns = $this->rowsOf('daily_metrics', $project, $account)->tap(fn ($q) => $this->monthWindow($q, 't.metric_date'))
+                ->join('external_campaigns as ec', 'ec.id', '=', 't.external_campaign_id')
+                ->selectRaw("ec.external_id, ec.name, ec.project_id, COUNT(*) AS n, SUM(t.value) FILTER (WHERE t.metric_key = 'spend') AS spend")
+                ->groupBy('ec.external_id', 'ec.name', 'ec.project_id')->orderByDesc('spend')->get();
+            foreach ($campaigns as $c) {
+                $this->line(sprintf('    %-36s %-30s filed in %s  rows %4d  spend %10.2f', (string) $c->external_id, mb_substr((string) $c->name, 0, 30), $c->project_id === $project ? 'SOURCE' : ($c->project_id === $target ? 'TARGET' : 'ELSEWHERE '.$c->project_id), (int) $c->n, (float) $c->spend));
+            }
+        }
+
+        // What the source project's reports read of these rows today — the foreign impact of moving them.
+        $readable = DB::table('daily_metrics')->where('project_id', $project)->where('external_account_id', $account)
+            ->tap(fn ($q) => $this->monthWindow($q, 'daily_metrics.metric_date'))
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->count();
+        $this->line('');
+        $this->line(sprintf('  evidence — source project reads %d of these daily_metrics rows today (0 = moving them changes none of its reports)', $readable));
+    }
+
+    /** @return array<string, list<array<string, mixed>>> */
+    private function snapshot(string $project, string $account): array
+    {
+        $out = [];
+        foreach ($this->tables() as $table) {
+            $columns = ['t.id', 't.project_id'];
+            if (isset(self::LINK_COLUMN[$table])) {
+                $columns[] = 't.'.self::LINK_COLUMN[$table].' as link';
+            }
+            if ($table === 'external_campaigns') {
+                $columns[] = 't.client_workspace_id';
+            }
+            $rows = $this->rowsOf($table, $project, $account)
+                ->when(isset(self::DATE_COLUMN[$table]), fn ($q) => $this->monthWindow($q, 't.'.self::DATE_COLUMN[$table]))
+                ->get($columns)->map(static fn ($r): array => (array) $r)->all();
+            if ($rows !== []) {
+                $out[$table] = $rows;
+            }
+        }
+
+        return $out;
+    }
+
+    /** Undo one reassign from its audit entry: every row it moved gets back exactly the project and link it had. */
+    private function revert(string $auditId, AuditLogger $audit): int
+    {
+        $entry = DB::table('audit_logs')->where('id', $auditId)->where('action', 'integration.scope_cleanup.reassign')->first();
+        $rows = $entry === null ? null : (json_decode((string) $entry->before, true)['rows'] ?? null);
+        if (! is_array($rows)) {
+            $this->error('  REFUSED: no reassign with a recorded snapshot under that audit id.');
+
+            return self::FAILURE;
+        }
+
+        $done = DB::transaction(function () use ($rows): array {
+            $done = [];
+            foreach ($rows as $table => $list) {
+                if (! in_array($table, [...self::STRUCTURE, ...self::FIGURES, ...self::COMMERCE, ...self::RUNS], true)) {
+                    continue;
+                }
+                $done[$table] = 0;
+                foreach ((array) $list as $row) {
+                    $set = ['project_id' => $row['project_id']];
+                    if (array_key_exists('link', $row) && isset(self::LINK_COLUMN[$table])) {
+                        $set[self::LINK_COLUMN[$table]] = $row['link'];
+                    }
+                    if (array_key_exists('client_workspace_id', $row)) {
+                        $set['client_workspace_id'] = $row['client_workspace_id'];
+                    }
+                    $done[$table] += DB::table($table)->where('id', $row['id'])->update($set);
+                }
+            }
+
+            return $done;
+        });
+
+        $audit->log(action: 'integration.scope_cleanup.revert', entityType: 'external_account', entityId: (string) $entry->entity_id, after: ['reverted' => $auditId, 'rows' => $done]);
+        $this->line('  reverted — rows restored, by table');
+        foreach ($done as $table => $count) {
+            $this->line(sprintf('    %-28s %8d', $table, $count));
+        }
+
+        return self::SUCCESS;
     }
 
     private function availableName(string $project, string $name): string

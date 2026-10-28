@@ -1,7 +1,7 @@
 import { CompositionTree, VIEW_KEYS, viewsBody, type ViewKey } from './CompositionTree'
 import { ColumnPicker } from './ColumnPicker'
 import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey, levelSections } from './reportSetupCatalog'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { PlatformMark } from '@/components/brand/PlatformMark'
@@ -16,8 +16,8 @@ import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
-import { ResultEventsPanel } from './ResultEventsPanel'
-import type { ResultEventsMap } from './api'
+import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
+import { fetchResultEvents, type ResultEventsMap } from './api'
 import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
@@ -66,6 +66,16 @@ const isoDaysAgo = (days: number) => {
  */
 const SUMMARY_WITHHOLDS: readonly string[] = ['funnel']
 
+/** NASEL-OBJECTIVE-TEMPLATE-001 — the four cards each report objective opens on; keys from the builder's own metric catalogue. */
+const OBJECTIVE_KPI_TEMPLATES: Record<string, string[]> = {
+  leads: ['spend', 'impressions', 'clicks', 'native_leads'],
+  traffic: ['spend', 'impressions', 'clicks', 'ctr'],
+  awareness: ['spend', 'impressions', 'reach', 'cpm'],
+  engagement: ['spend', 'impressions', 'clicks', 'ctr'],
+  sales: ['spend', 'purchases', 'revenue', 'roas'],
+  app: ['spend', 'impressions', 'clicks', 'cpc'],
+}
+
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -84,6 +94,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [adQuery, setAdQuery] = useState('')
   const [providers, setProviders] = useState<string[]>([])
   const [metrics, setMetrics] = useState<string[]>([])
+  /*
+   * NASEL-style projects: when the project defines its verified lead events, a new link opens on the owner's four primary KPIs —
+   * Spend, Impressions, Clicks, Native Leads — in that order. Untouched until the operator chooses something else.
+   */
+  const events = useQuery({ queryKey: ['result-events', projectId], queryFn: () => fetchResultEvents(projectId) })
+  const [metricsTouched, setMetricsTouched] = useState(false)
+  // The operator's own names for the cards they chose; blank = the catalogue name.
+  const [kpiLabels, setKpiLabels] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!metricsTouched && events.data && Object.keys(events.data.lead_events ?? {}).length > 0) {
+      setMetrics((prev) => (prev.length === 0 ? ['spend', 'impressions', 'clicks', 'native_leads'] : prev))
+      setKpiLabels((prev) => (prev.native_leads ? prev : { ...prev, native_leads: 'العملاء المحتملون' }))
+    }
+  }, [events.data, metricsTouched])
   // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
   /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
@@ -139,13 +163,18 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    */
   const [campaignQuery, setCampaignQuery] = useState('')
 
-  // REPORT-SETUP-001 — Objective and Destination narrow the campaign list like the platform and account do.
+  /*
+   * NASEL-OBJECTIVE-TEMPLATE-001 — the report's objective is a KPI TEMPLATE: choosing «العملاء المحتملون» sets the client's cards, it
+   * never removes a campaign. Narrowing the list by campaign objective is a separate, explicit switch that starts off.
+   * Destination still narrows the list like the platform and account do (REPORT-SETUP-001).
+   */
   const [campaignObjective, setCampaignObjective] = useState<string | null>(null)
+  const [filterByObjective, setFilterByObjective] = useState(false)
   const [campaignDestination, setCampaignDestination] = useState<string | null>(null)
 
   const visibleCampaigns = useMemo(() => {
     const needle = campaignQuery.trim().toLocaleLowerCase()
-    const members = CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null
+    const members = filterByObjective ? (CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null) : null
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
@@ -158,7 +187,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, campaignDestination, campaignQuery])
+  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, filterByObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -197,8 +226,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const form = formOf(level)
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
-  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it.
-  const [hideSpend, setHideSpend] = useState(true)
+  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it — and
+  // choosing Spend as a KPI is that choice (NASEL opens on Spend first). Null follows the KPI list until the box is touched.
+  const [hideSpendChoice, setHideSpend] = useState<boolean | null>(null)
+  const hideSpend = hideSpendChoice ?? !metrics.includes('spend')
+  // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign: name, platform, status, objective and the primary KPIs; no ids.
+  const [campaignBreakdown, setCampaignBreakdown] = useState(true)
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
   /*
@@ -242,7 +275,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     mutationFn: () =>
       createLiveLink(projectId, {
         ...creativeSharingBody(creatives),
-        ...(Object.keys(resultEvents).length > 0 ? { result_events: resultEvents } : {}),
+        ...(Object.keys(pickSelected(resultEvents, selectedPlatforms)).length > 0 ? { result_events: pickSelected(resultEvents, selectedPlatforms) } : {}),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
         ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
@@ -251,6 +284,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
         metrics,
+        ...(Object.values(kpiLabels).some((v) => v.trim() !== '') ? { kpi_labels: kpiLabels } : {}),
         from,
         to,
         period_kind: periodKind,
@@ -258,6 +292,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         form,
         detail_level: level,
         hide_spend: hideSpend,
+        campaign_breakdown: campaignBreakdown,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
@@ -472,10 +507,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             */}
             <div className="flex flex-wrap items-center gap-2">
               <select
-                aria-label={ar ? 'الهدف' : 'Objective'}
+                aria-label={ar ? 'هدف التقرير (قالب المؤشرات)' : 'Report objective (KPI template)'}
                 data-testid="live-builder-campaign-objective"
                 value={campaignObjective ?? ''}
-                onChange={(e) => setCampaignObjective(e.target.value === '' ? null : e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value === '' ? null : e.target.value
+                  setCampaignObjective(id)
+                  const template = id === null ? undefined : OBJECTIVE_KPI_TEMPLATES[id]
+                  if (template !== undefined) {
+                    setMetricsTouched(true)
+                    setMetrics(template)
+                    // The Owner's name for the verified count on a Leads report; an operator's own name is kept.
+                    if (id === 'leads') setKpiLabels((prev) => (prev.native_leads ? prev : { ...prev, native_leads: 'العملاء المحتملون' }))
+                  }
+                }}
                 className="min-w-0 flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
               >
                 <option value="">{ar ? 'كل الأهداف' : 'All objectives'}</option>
@@ -483,6 +528,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <option key={o.id} value={o.id}>{ar ? o.ar : o.en}</option>
                 ))}
               </select>
+              {campaignObjective !== null && (
+                <label className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <input type="checkbox" data-testid="live-builder-filter-by-objective" checked={filterByObjective} onChange={(e) => setFilterByObjective(e.target.checked)} className="h-3.5 w-3.5 accent-brand-600" />
+                  {ar ? 'تصفية الحملات حسب هذا الهدف' : 'Also filter campaigns by this objective'}
+                </label>
+              )}
               {(options.data?.campaigns ?? []).some((c) => c.destination) && (
                 <select
                   aria-label={ar ? 'الوجهة' : 'Destination'}
@@ -687,11 +738,36 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <span className="text-xs font-bold text-text-muted">{ar ? 'المؤشرات المعروضة للعميل' : 'Metrics the client sees'}</span>
             <div className="flex flex-wrap gap-1.5">
               {options.data!.metrics.map((m) => (
-                <button key={m.key} type="button" data-testid={`metric-${m.key}`} onClick={() => toggle(setMetrics, m.key)} className={chip(metrics.includes(m.key))}>
+                <button key={m.key} type="button" data-testid={`metric-${m.key}`} onClick={() => { setMetricsTouched(true); toggle(setMetrics, m.key) }} className={chip(metrics.includes(m.key))}>
                   {ar ? m.ar : m.en}
                 </button>
               ))}
             </div>
+            {/* The chosen set, in the order the client reads it: move, rename. Nothing outside it is shown. */}
+            {metrics.length > 0 && (
+              <ol className="grid gap-1" data-testid="metric-order">
+                {metrics.map((key, i) => {
+                  const m = options.data!.metrics.find((x) => x.key === key)
+                  const move = (to: number) => { setMetricsTouched(true); setMetrics((prev) => { const next = [...prev]; const [item] = next.splice(i, 1); next.splice(to, 0, item); return next }) }
+                  return (
+                    <li key={key} className="flex items-center gap-2 rounded-lg bg-surface-secondary px-2 py-1 text-xs">
+                      <span className="w-6 text-text-muted">{i + 1}</span>
+                      <span className="w-32 shrink-0 truncate">{m ? (ar ? m.ar : m.en) : key}</span>
+                      <input
+                        data-testid={`metric-label-${key}`}
+                        value={kpiLabels[key] ?? ''}
+                        onChange={(e) => setKpiLabels((prev) => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={ar ? 'اسم مخصص (اختياري)' : 'Custom name (optional)'}
+                        maxLength={60}
+                        className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1"
+                      />
+                      <button type="button" data-testid={`metric-up-${key}`} disabled={i === 0} onClick={() => move(i - 1)} className="rounded border border-border px-1.5 disabled:opacity-30" aria-label={ar ? 'أعلى' : 'Move up'}>↑</button>
+                      <button type="button" data-testid={`metric-down-${key}`} disabled={i === metrics.length - 1} onClick={() => move(i + 1)} className="rounded border border-border px-1.5 disabled:opacity-30" aria-label={ar ? 'أسفل' : 'Move down'}>↓</button>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
@@ -781,6 +857,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
             <span>{ar ? 'إخفاء الإنفاق عن العميل' : 'Hide spend from the client'}</span>
             <input type="checkbox" data-testid="live-link-hide-spend" checked={hideSpend} onChange={(e) => setHideSpend(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+            <span>{ar ? 'عرض تفصيل الحملات للعميل' : 'Show the campaign breakdown to the client'}</span>
+            <input type="checkbox" data-testid="live-link-campaign-breakdown" checked={campaignBreakdown} onChange={(e) => setCampaignBreakdown(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
 
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">

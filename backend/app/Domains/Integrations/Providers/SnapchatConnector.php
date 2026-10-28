@@ -1123,6 +1123,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         'purchases' => 'conversion_purchases',
         'conversions' => 'conversion_purchases',
         'revenue' => 'conversion_purchases_value',
+        // NASEL — «native_leads»: Snapchatters who hit Submit on a Lead Form attachment (Measurement, Additional Metrics; read 2026-10-28).
+        // Carried at the campaign grain as `form_leads`, the on-platform form count every connector shares; never `conversion_sign_ups`.
+        'form_leads' => 'native_leads',
     ];
 
     /**

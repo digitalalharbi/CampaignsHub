@@ -30,7 +30,10 @@ final class ResultEvents
     public const PATHS = ['lead_form', 'landing_page', 'all'];
 
     /** Reported base metrics a result may be defined as — never a ratio, never the generic `conversions` unless chosen on purpose. */
-    public const METRICS = ['leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views'];
+    /** `native_form` is accepted as another name for `lead_form` and stored as `lead_form`, so existing configurations keep their key. */
+    private const ALIASES = ['native_form' => 'lead_form'];
+
+    public const METRICS = ['leads', 'form_leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views'];
 
     /**
      * @param  array<string, array<string, string>>  $map  platform → path → metric key
@@ -48,6 +51,7 @@ final class ResultEvents
                 continue;
             }
             foreach ($paths as $path => $metric) {
+                $path = self::ALIASES[$path] ?? $path;
                 if (in_array($path, self::PATHS, true) && is_string($metric) && in_array($metric, self::METRICS, true)) {
                     $map[$key][(string) $path] = $metric;
                 }
@@ -55,6 +59,55 @@ final class ResultEvents
         }
 
         return new self($map);
+    }
+
+    /**
+     * What is wrong with a serialized map, in words; empty when every platform, path and metric is one this product knows.
+     *
+     * `fromArray` silently drops what it does not know — right for reading stored settings, wrong for a request: an operator who chose
+     * «native_form → form_leads» for a platform we do not support must hear so, not find the choice quietly missing on the client's page.
+     *
+     * @return list<string>
+     */
+    public static function problems(mixed $raw): array
+    {
+        if ($raw === null) {
+            return [];
+        }
+        if (! is_array($raw)) {
+            return ['must be a map of platform → path → metric'];
+        }
+        $out = [];
+        foreach ($raw as $platform => $paths) {
+            if (! in_array(AdPlatforms::canonical((string) $platform), AdPlatforms::ORDER, true)) {
+                $out[] = "unknown platform «{$platform}»";
+
+                continue;
+            }
+            if (! is_array($paths)) {
+                $out[] = "«{$platform}» must map paths to metrics";
+
+                continue;
+            }
+            foreach ($paths as $path => $metric) {
+                if (! in_array(self::ALIASES[$path] ?? $path, self::PATHS, true)) {
+                    $out[] = "unknown path «{$path}» for «{$platform}»";
+                }
+                if (! is_string($metric) || ! in_array($metric, self::METRICS, true)) {
+                    $out[] = 'unknown metric «'.(is_scalar($metric) ? (string) $metric : gettype($metric))."» for «{$platform}»";
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** Only the platforms named — a link's events never configure a platform the link does not cover. @param list<string> $platforms */
+    public function onlyFor(array $platforms): self
+    {
+        $keep = array_map(static fn (string $p): string => AdPlatforms::canonical($p), $platforms);
+
+        return new self(array_intersect_key($this->map, array_flip($keep)), $this->patterns);
     }
 
     /**
@@ -71,6 +124,7 @@ final class ResultEvents
 
         $patterns = [];
         foreach ((array) $campaignPaths as $word => $path) {
+            $path = is_string($path) ? (self::ALIASES[$path] ?? $path) : $path;
             if (is_string($word) && trim($word) !== '' && in_array($path, ['lead_form', 'landing_page'], true)) {
                 $patterns[trim($word)] = (string) $path;
             }
@@ -135,7 +189,7 @@ final class ResultEvents
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, LeadDestination>  $destinations
-     * @return array{configured: bool, total: float|null, landing: float|null, native: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string}>, by_path: array<string, float>, events: array<string, array<string, string>>, basis: string}
+     * @return array{configured: bool, total: float|null, landing: float|null, native: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string, spend: float, cost: float|null}>, by_path: array<string, float>, events: array<string, array<string, string>>, basis: string}
      */
     public function leadBreakdown(array $rows, array $destinations): array
     {
@@ -166,7 +220,7 @@ final class ResultEvents
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, LeadDestination>  $destinations  campaign id → destination
-     * @return array{configured: bool, total: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string}>, by_path: array<string, float>, events: array<string, array<string, string>>}
+     * @return array{configured: bool, total: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string, spend: float, cost: float|null}>, by_path: array<string, float>, events: array<string, array<string, string>>}
      */
     public function over(array $rows, array $destinations): array
     {
@@ -192,7 +246,17 @@ final class ResultEvents
             $withheld = $withheld || (int) ($row['spend_withheld_rows'] ?? 0) > 0;
             $byPlatform[$provider]['metric'] = $metric;
             $byPlatform[$provider]['results'] = ($byPlatform[$provider]['results'] ?? 0.0) + $value;
+            // The platform's ELIGIBLE spend: only rows whose configured event was reported, so its cost is the same event over the same money.
+            $byPlatform[$provider]['spend'] = ($byPlatform[$provider]['spend'] ?? 0.0) + (float) ($row['spend'] ?? 0);
+            $byPlatform[$provider]['withheld'] = ($byPlatform[$provider]['withheld'] ?? false) || (int) ($row['spend_withheld_rows'] ?? 0) > 0;
             $byPath[$path ?? 'all'] = ($byPath[$path ?? 'all'] ?? 0.0) + $value;
+        }
+
+        foreach ($byPlatform as $provider => $p) {
+            // Zero results never produce a cost, and a cost over withheld money is absent rather than smaller.
+            $byPlatform[$provider]['cost'] = $p['results'] > 0 && ! $p['withheld'] ? round($p['spend'] / $p['results'], 4) : null;
+            $byPlatform[$provider]['spend'] = round($p['spend'], 2);
+            unset($byPlatform[$provider]['withheld']);
         }
 
         return [

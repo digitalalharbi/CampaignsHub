@@ -115,4 +115,34 @@ final class ResultEventsTest extends TestCase
 
         $this->assertSame(0.0, $events->leadBreakdown([$this->row('g', 'google', ['purchases' => 50], ['purchases' => true])], [])['total'] ?? 0.0);
     }
+
+    /** NASEL 2026-10-28 — TikTok LandingPage: 0 configured Results beside 1,113 optimisation events printed a cost of 0.09. */
+    public function test_zero_results_never_produce_a_cost_and_each_platform_costs_its_own_event_over_its_own_eligible_spend(): void
+    {
+        $events = ResultEvents::merged(['tiktok' => ['landing_page' => 'purchases', 'lead_form' => 'form_leads'], 'meta' => ['lead_form' => 'form_leads']], null, ['LandingPage' => 'landing_page', 'LeadForm' => 'lead_form']);
+        $rows = [
+            ['campaign_id' => 't1', 'campaign_name' => 'Riwaq LandingPage', 'provider' => 'tiktok', 'spend' => 102.97, 'spend_withheld_rows' => 0, 'purchases' => 0, 'conversions' => 1113, 'reported' => ['purchases' => true, 'conversions' => true]],
+            ['campaign_id' => 't2', 'campaign_name' => 'Riwaq LeadForm', 'provider' => 'tiktok', 'spend' => 7.16, 'spend_withheld_rows' => 0, 'form_leads' => 1, 'reported' => ['form_leads' => true]],
+            // A campaign whose configured event was not reported spends nothing toward the cost.
+            ['campaign_id' => 't3', 'campaign_name' => 'Riwaq LandingPage 2', 'provider' => 'tiktok', 'spend' => 50.0, 'spend_withheld_rows' => 0, 'conversions' => 9, 'reported' => ['conversions' => true]],
+            ['campaign_id' => 'm1', 'campaign_name' => 'Riwaq LeadForm', 'provider' => 'meta', 'spend' => 134.21, 'spend_withheld_rows' => 0, 'form_leads' => 0, 'leads' => 2, 'reported' => ['form_leads' => true, 'leads' => true]],
+        ];
+
+        $out = $events->over($rows, []);
+
+        $this->assertSame(1.0, $out['by_platform']['tiktok']['results']);
+        $this->assertSame(110.13, $out['by_platform']['tiktok']['spend'], 'eligible spend: the two campaigns whose configured event was reported');
+        $this->assertSame(110.13, $out['by_platform']['tiktok']['cost']);
+        $this->assertSame(0.0, $out['by_platform']['meta']['results'], 'messaging leads are not native form leads');
+        $this->assertNull($out['by_platform']['meta']['cost'], 'zero results have no cost');
+        $this->assertSame(['landing_page' => 0.0, 'lead_form' => 1.0], $out['by_path']);
+    }
+
+    public function test_native_form_is_accepted_as_the_lead_form_path_and_stored_under_its_existing_key(): void
+    {
+        $events = ResultEvents::merged(['snapchat' => ['native_form' => 'form_leads']], null, ['LeadForm' => 'native_form']);
+
+        $this->assertSame(['snapchat' => ['lead_form' => 'form_leads']], $events->toArray());
+        $this->assertSame('lead_form', $events->pathOfName('Riwaq — LeadForm'));
+    }
 }

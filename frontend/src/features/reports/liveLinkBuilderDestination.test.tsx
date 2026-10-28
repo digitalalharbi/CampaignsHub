@@ -51,11 +51,15 @@ describe('the Link Report builder objective and destination filters', () => {
     await screen.findByTestId('live-builder-campaigns')
   }
 
-  it('narrows by objective, then by destination, down to the exact campaign', async () => {
+  // NASEL-OBJECTIVE-TEMPLATE-001 — the objective alone is a KPI template; only the explicit switch narrows the list.
+  it('keeps every campaign when the objective is chosen, and narrows only through the explicit objective filter', async () => {
     await open()
     expect(shown()).toHaveLength(3)
 
     fireEvent.change(screen.getByTestId('live-builder-campaign-objective'), { target: { value: 'leads' } })
+    expect(shown(), 'choosing Leads removed campaigns').toHaveLength(3)
+
+    fireEvent.click(screen.getByTestId('live-builder-filter-by-objective'))
     expect(shown().join('|')).toContain('HENKA')
     expect(shown()).toHaveLength(1)
 
@@ -75,6 +79,7 @@ describe('the Link Report builder objective and destination filters', () => {
     await open()
 
     fireEvent.change(screen.getByTestId('live-builder-campaign-objective'), { target: { value: 'leads' } })
+    fireEvent.click(screen.getByTestId('live-builder-filter-by-objective'))
     fireEvent.click(within(screen.getByTestId('live-builder-campaigns')).getAllByRole('checkbox')[0])
     fireEvent.change(screen.getByTestId('live-link-name'), { target: { value: 'تقرير هنكا' } })
     fireEvent.click(screen.getByTestId('live-link-create'))
@@ -84,5 +89,9 @@ describe('the Link Report builder objective and destination filters', () => {
     expect(body.account_ids).toEqual(['a-hanka'])
     expect(body.accounts).toEqual({ 'a-hanka': { campaign_ids: ['c-1'] } })
     expect(body.name).toBe('تقرير هنكا')
+    // The Leads template: the Owner's four cards in order, the verified count under the Owner's name, spend shown because it was chosen.
+    expect(body.metrics).toEqual(['spend', 'impressions', 'clicks', 'native_leads'])
+    expect(body.kpi_labels).toEqual({ native_leads: 'العملاء المحتملون' })
+    expect(body.hide_spend).toBe(false)
   })
 })

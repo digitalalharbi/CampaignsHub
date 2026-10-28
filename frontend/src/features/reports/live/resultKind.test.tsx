@@ -53,7 +53,8 @@ describe('live KPI board', () => {
     expect(metricLabel(meta, 'cpa', base, true)).toBe('تكلفة النتيجة')
   })
 
-  it('reads a messaging report as impressions, results, then clicks', () => {
+  // NASEL-KPI-ORDER-001 — a chosen set reads in the order chosen (spend, impressions, clicks, results, cost here).
+  it('reads a messaging report in the operator\'s chosen order: impressions, clicks, then results', () => {
     const payload = {
       ...base,
       totals: { ...base.totals, spend: 100, cpa: 0.5 },
@@ -63,8 +64,8 @@ describe('live KPI board', () => {
     const labels = Array.from(document.body.querySelectorAll('span, dt')).map((n) => n.textContent)
     const at = (l: string) => labels.indexOf(l)
 
-    expect(at('الظهور')).toBeLessThan(at('النتائج'))
-    expect(at('النتائج')).toBeLessThan(at('النقرات'))
+    expect(at('الظهور')).toBeLessThan(at('النقرات'))
+    expect(at('النقرات')).toBeLessThan(at('النتائج'))
   })
 
   it('a dash is not a figure, and a real zero is', () => {
@@ -91,6 +92,7 @@ describe('live KPI board', () => {
   it('spend enabled and available leads the row: spend, impressions, results, cost per result', () => {
     const payload = {
       ...base,
+      metrics: ['spend', 'impressions', 'conversions', 'cpa'],
       totals: { ...base.totals, spend: 2640.18, cpa: 4.56, leads: 579, conversions: 579 },
       result_kind: messaging,
     } as unknown as LivePayload
@@ -120,7 +122,7 @@ describe('live KPI board', () => {
     expect(cards.join('|')).not.toMatch(/الإنفاق/)
   })
 
-  it('a missing cost reflows the row and is never replaced by another metric', () => {
+  it('a chosen cost with no figure reads «غير متاح» in its own slot — never a zero, never another metric', () => {
     const payload = {
       ...base,
       metrics: ['spend', 'impressions', 'conversions', 'cpa'],
@@ -130,7 +132,9 @@ describe('live KPI board', () => {
     render(<Board payload={payload} />)
     const cards = Array.from(screen.getByTestId('live-kpis').children).map((c) => c.textContent ?? '')
 
-    expect(cards).toHaveLength(3)
-    expect(cards.join('|')).not.toMatch(/تكلفة|النقرات/)
+    expect(cards).toHaveLength(4)
+    expect(cards[3]).toMatch(/تكلفة النتيجة/)
+    expect(cards[3]).toMatch(/غير متاح/)
+    expect(cards.join('|')).not.toMatch(/النقرات/)
   })
 })

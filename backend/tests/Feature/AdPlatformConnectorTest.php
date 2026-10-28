@@ -476,6 +476,57 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * NASEL — native Instant Form leads, sanitised from the shape of the Riwaq LeadForm/LandingPage report (2026-10-25 → 28): the
+     * lead-form campaign submits on TikTok's own form (`onsite_form`), the landing-page campaign has website form events (`form`) and
+     * a thousand optimisation events (`conversion`). Only the first is a native lead.
+     */
+    public function test_tiktok_native_form_leads_are_the_instant_form_count_and_never_the_website_form_or_conversions(): void
+    {
+        $this->configure('tiktok');
+        Http::fake(['business-api.tiktok.com/*' => Http::response([
+            'code' => 0,
+            'data' => [
+                'list' => [
+                    ['dimensions' => ['campaign_id' => 'lead-form', 'stat_time_day' => '2026-10-26 00:00:00'],
+                        'metrics' => ['spend' => '7.16', 'impressions' => '3100', 'clicks' => '72', 'onsite_form' => '1', 'conversion' => '1']],
+                    ['dimensions' => ['campaign_id' => 'landing', 'stat_time_day' => '2026-10-26 00:00:00'],
+                        'metrics' => ['spend' => '9.18', 'impressions' => '43939', 'clicks' => '1346', 'form' => '35', 'conversion' => '700', 'complete_payment' => '0', 'onsite_form' => null]],
+                ],
+                'page_info' => ['page' => 1, 'total_page' => 1],
+            ],
+        ])]);
+
+        $rows = collect($this->bound('tiktok')->syncInsights('adv-1', '2026-10-26', '2026-10-27')->records)->keyBy('campaign_id');
+
+        $this->assertSame(1.0, $rows['lead-form']['form_leads']);
+        $this->assertArrayNotHasKey('form_leads', $rows['landing'], 'a null native count is absent, never zero — and the website form is not a native lead');
+        $this->assertSame(0.0, $rows['landing']['purchases'], 'a reported zero purchase stays a measured zero');
+        $this->assertSame(700.0, $rows['landing']['conversions'], 'optimisation events are carried as conversions only');
+    }
+
+    public function test_snapchat_native_leads_are_carried_at_the_campaign_grain_and_never_from_sign_ups(): void
+    {
+        $this->configure('snapchat');
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'timeseries_stats' => [[
+                'timeseries_stat' => [
+                    'id' => 'camp-1',
+                    'timeseries' => [[
+                        'start_time' => '2026-10-26T00:00:00.000-00:00',
+                        'stats' => ['spend' => 50_000_000, 'impressions' => 3855, 'swipes' => 173, 'native_leads' => 4, 'conversion_sign_ups' => 9, 'conversion_purchases' => 0],
+                    ]],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('snapchat')->syncInsights('act-1', '2026-10-26', '2026-10-27')->records[0];
+
+        $this->assertSame(4.0, $row['form_leads']);
+        $this->assertArrayNotHasKey('leads', $row, 'native leads are not filed under the generic leads key');
+        $this->assertSame(0.0, $row['purchases']);
+    }
+
+    /**
      * TIKTOK-METRIC-REFUSAL-001 — one metric TikTok refuses must not cost the whole daily report.
      *
      * Production, 2026-10-12: «Invalid metric fields: ['add_to_cart'] · code 40002» — TikTok refuses
@@ -1025,6 +1076,40 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame(16.0, $row['conversions']);
         $this->assertArrayNotHasKey('purchases', $row, 'a messaging buy was given purchases');
         $this->assertArrayNotHasKey('revenue', $row);
+    }
+
+    public function test_meta_carries_instant_form_leads_apart_from_messaging_and_the_pixels_website_lead(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-10-27', 'spend' => '12.73',
+                'impressions' => '664', 'clicks' => '18',
+                'actions' => [
+                    ['action_type' => 'onsite_conversion.lead_grouped', 'value' => '3'],
+                    // The website pixel's lead is a landing-page event, never a native form submission.
+                    ['action_type' => 'offsite_conversion.fb_pixel_lead', 'value' => '5'],
+                    ['action_type' => 'lead', 'value' => '8'],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-10-27', '2026-10-28')->records[0];
+
+        $this->assertSame(3.0, $row['form_leads']);
+        $this->assertArrayNotHasKey('leads', $row, 'an instant-form or pixel lead was filed as the messaging result');
+    }
+
+    public function test_a_row_without_instant_form_leads_does_not_report_a_zero(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [['campaign_id' => 'c1', 'date_start' => '2026-10-27', 'spend' => '5.00', 'impressions' => '100', 'clicks' => '2', 'actions' => [['action_type' => 'link_click', 'value' => '2']]]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-10-27', '2026-10-28')->records[0];
+
+        $this->assertArrayNotHasKey('form_leads', $row, 'absent is not zero');
     }
 
     public function test_a_purchase_stays_the_conversion_when_a_row_also_has_messaging(): void
