@@ -234,6 +234,22 @@ export const SPECS: Record<string, Spec> = {
       en: 'The sum of what each platform reported for the event its campaign optimised for — not a count of unique orders.',
     },
   },
+  /*
+   * RESULT-EVENTS-001 — the configured Result and what it cost. Present only where someone chose which reported metric IS the result for
+   * the project (or the report); never the platform's generic `conversions`.
+   */
+  results: {
+    label: { ar: 'النتائج', en: 'Results' },
+    format: compact,
+    hint: { ar: 'الحدث الذي اخترته ليُحسب نتيجة لهذا المشروع.', en: 'The event you chose to count as a result for this project.' },
+  },
+  cost_per_result: {
+    label: { ar: 'تكلفة النتيجة', en: 'Cost per result' },
+    format: moneyExact,
+    derived: true,
+    invertGood: true,
+    hint: { ar: 'الإنفاق ÷ النتائج المحددة.', en: 'Spend ÷ the configured results.' },
+  },
   conversion_rate: {
     label: { ar: 'معدل التحويل', en: 'Conversion rate' },
     format: pct2,

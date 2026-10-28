@@ -406,6 +406,15 @@ export interface LivePayload {
   reported?: Record<string, boolean>
   /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
   no_data_yet?: boolean
+  /** RESULT-EVENTS-001 — Results as configured for the project / this link; `configured: false` means none are drawn. */
+  results?: {
+    configured: boolean
+    total: number | null
+    cost: number | null
+    by_platform: Record<string, { results: number; metric: string }>
+    by_path: Record<string, number>
+    events: Record<string, Record<string, string>>
+  }
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
@@ -1089,3 +1098,15 @@ export const updateShareSections = (
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
   views?: string[] | null,
 ) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }) })
+
+/** RESULT-EVENTS-001 — which reported metric is a project's «Result», per platform and acquisition path. */
+export type ResultEventsMap = Record<string, Record<string, string>>
+export interface ResultEventsConfig {
+  result_events: ResultEventsMap
+  platforms: string[]
+  paths: string[]
+  metrics: string[]
+}
+export const fetchResultEvents = (projectId: string) => getData<ResultEventsConfig>(`/projects/${projectId}/result-events`)
+export const saveResultEvents = (projectId: string, resultEvents: ResultEventsMap) =>
+  putData<ResultEventsConfig>(`/projects/${projectId}/result-events`, { result_events: resultEvents })

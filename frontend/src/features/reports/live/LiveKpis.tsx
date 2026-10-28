@@ -3,7 +3,7 @@ import { liveSpark } from './liveSpark'
 import { KpiCard, TrendPill } from '@/features/analytics/components'
 import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
-import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
+import { cardHasFigure, gateResultKeys, metricLabel, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -37,8 +37,8 @@ export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: strin
   const t = payload.totals
   // One underlying result is one card: `leads` carrying the same count as the result is that result.
   const sameAsResult = (k: string) => k === 'leads' && t.leads !== null && t.leads !== undefined && t.leads === t.conversions
-  const known = keys
-    .filter((k, i) => keys.indexOf(k) === i)
+  const known = gateResultKeys(keys, payload)
+    .filter((k, i, all) => all.indexOf(k) === i)
     .filter((k) => reader.meta[k] && !sameAsResult(k))
     .filter((k) => cardHasFigure(k, reader.meta[k].format(t, payload, reader.asMoney, reader.count).text, payload))
 

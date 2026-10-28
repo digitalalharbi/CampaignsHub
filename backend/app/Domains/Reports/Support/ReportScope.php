@@ -192,7 +192,7 @@ final class ReportScope
     /** Derived KPIs a reader may choose to show, which are computed rather than stored. */
     private static function derivedMetricKeys(): array
     {
-        return ['ctr', 'cpc', 'cpm', 'cpa', 'cpl', 'cpi', 'cpe', 'roas', 'aov', 'conversion_rate', 'engagement_rate', 'video_completion_rate', 'frequency', 'reach', 'conversions'];
+        return ['ctr', 'cpc', 'cpm', 'cpa', 'cpl', 'cpi', 'cpe', 'roas', 'aov', 'conversion_rate', 'engagement_rate', 'video_completion_rate', 'frequency', 'reach', 'conversions', 'results', 'cost_per_result'];
     }
 
     /** @return array<string, mixed> the stored shape — empty axes omitted, so a stored scope reads as what it bounds */

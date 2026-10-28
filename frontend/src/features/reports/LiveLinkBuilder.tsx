@@ -16,6 +16,8 @@ import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
+import { ResultEventsPanel } from './ResultEventsPanel'
+import type { ResultEventsMap } from './api'
 import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
@@ -229,10 +231,18 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    */
   const [creatives, setCreatives] = useState<CreativeSharing>(() => ({ ...emptyCreativeSharing(), permissions: { creatives: true } }))
 
+  /* RESULT-EVENTS-001 — this link's definition of «Results»; empty = none, and then no Results are drawn. */
+  const [resultEvents, setResultEvents] = useState<ResultEventsMap>({})
+  const selectedPlatforms = useMemo(
+    () => [...new Set(adAccounts.filter((a) => selectedAccounts.includes(a.id)).map((a) => a.provider))],
+    [adAccounts, selectedAccounts],
+  )
+
   const create = useMutation({
     mutationFn: () =>
       createLiveLink(projectId, {
         ...creativeSharingBody(creatives),
+        ...(Object.keys(resultEvents).length > 0 ? { result_events: resultEvents } : {}),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
         ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
@@ -787,6 +797,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <span>{ar ? 'السماح للعميل بتنزيل التقرير' : 'Let the client download the report'}</span>
             <input type="checkbox" data-testid="live-link-allow-download" checked={allowDownload} onChange={(e) => setAllowDownload(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
+
+          <ResultEventsPanel projectId={projectId} providers={selectedPlatforms} value={resultEvents} onChange={setResultEvents} />
 
           <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
 

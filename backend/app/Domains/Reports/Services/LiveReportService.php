@@ -17,6 +17,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
@@ -35,6 +36,7 @@ use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
+use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -229,6 +231,29 @@ final class LiveReportService
             // CREATIVE-DISPLAY-001 — read by `ReportAds`; null for a link made before the policy existed.
             'creative_display' => $share->creativeDisplay()?->toArray(),
         ];
+    }
+
+    /**
+     * RESULT-EVENTS-001 — Results as the project (and, over it, this link) defined them.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @return array<string, mixed>
+     */
+    private function resultsFor(ReportShare $share, array $scope, MetricsAggregator $engine, Carbon $from, Carbon $to): array
+    {
+        $project = $scope['project_id'] === '' ? new Project : (Project::withoutGlobalScopes()->find($scope['project_id']) ?? new Project);
+        $events = ResultEvents::merged(
+            (array) (((array) ($project->meta ?? []))['result_events'] ?? []) ?: null,
+            (array) (($share->settings ?? [])['result_events'] ?? []) ?: null,
+        );
+        if (! $events->configured()) {
+            return ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
+        }
+
+        $rows = $engine->byCampaign($from, $to);
+        $ids = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows)));
+
+        return $events->over($rows, app(CampaignDestinations::class)->for($ids));
     }
 
     /**
@@ -481,6 +506,8 @@ final class LiveReportService
          */
         $comparison = $this->comparison($totals, $previous);
 
+        $results = $this->resultsFor($share, $scope, $engine, $from, $to);
+
         $payload = [
             'period' => [
                 'from' => $from->toDateString(),
@@ -520,6 +547,12 @@ final class LiveReportService
             'reported' => $engine->reportedKeys($from, $to),
             // LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has arrived for this window: the page says so instead of printing zeros.
             'no_data_yet' => ! $engine->hasRows($from, $to),
+            /*
+             * RESULT-EVENTS-001 — «Results» exists only where somebody configured which reported metric IS the result.
+             * `configured: false` means the page draws no Results and no Cost per Result at all; a platform's generic
+             * `conversions` is never promoted to either.
+             */
+            'results' => $results,
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.

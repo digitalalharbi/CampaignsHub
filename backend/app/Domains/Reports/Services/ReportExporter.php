@@ -99,8 +99,19 @@ final class ReportExporter
             return $kpis;
         }
 
+        $results = (array) ($data['results'] ?? []);
+        $configured = ($results['configured'] ?? false) === true;
+        if ($configured) {
+            $kpis['results'] = $results['total'] ?? null;
+            $kpis['cost_per_result'] = $results['cost'] ?? null;
+        }
+
         $rows = [];
         foreach ($allow as $key) {
+            // RESULT-EVENTS-001 — Results exist in a file only where a result event is configured; otherwise they are not a column at all.
+            if (($key === 'results' || $key === 'cost_per_result') && ! $configured) {
+                continue;
+            }
             // A metric nobody reported is an EMPTY cell, never a zero.
             $rows[(string) $key] = $kpis[$key] ?? null;
         }
@@ -136,7 +147,8 @@ final class ReportExporter
         // The visible-metric allowlist also governs a table's metric columns (REPORT-KPI-CONTRACT-001).
         if (is_array($data['kpi_allowlist'] ?? null)) {
             $allow = array_map('strtolower', $data['kpi_allowlist']);
-            $metricCols = ['spend', 'revenue', 'roas', 'cpa', 'ctr', 'impressions', 'clicks', 'cpc', 'cpm'];
+            // RESULT-EVENTS-001 — `conversions` is the platform's optimised-for event, so it is a column the operator must have CHOSEN, not one a table keeps by default.
+            $metricCols = ['spend', 'revenue', 'roas', 'cpa', 'ctr', 'impressions', 'clicks', 'cpc', 'cpm', 'conversions'];
             $keep = [];
             foreach ($head as $i => $label) {
                 $word = strtolower((string) $label);

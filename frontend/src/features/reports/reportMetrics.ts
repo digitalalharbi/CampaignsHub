@@ -57,6 +57,8 @@ type Input = {
   metric_set?: string[]
   /** LEAD-DESTINATION-001 — where a lead report's results happen; null when unstated or not a lead report. */
   lead_destination?: string | null
+  /** RESULT-EVENTS-001 — Results as configured; `configured: false` means the report draws no Results at all. */
+  results?: { configured: boolean; total: number | null; cost: number | null } | null
 }
 
 /**
@@ -186,15 +188,25 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
    * and a client link re-rendered a month later must show the report they were sent. `layoutFor` is
    * the fallback for snapshots written before the set was stored.
    */
-  const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective).primary
+  const configured = data.results?.configured === true
+  // RESULT-EVENTS-001 — Results and Cost per Result are drawn only where a result event is configured; a platform's generic conversion
+  // is never promoted to either, whatever objective the report was written under.
+  const keys = (data.metric_set?.length ? data.metric_set : layoutFor(objective).primary)
+    .filter((key) => configured || (key !== 'results' && key !== 'cost_per_result'))
   const direct = data.objective_performance?.direct
+  const kpis = configured
+    ? { ...(data.kpis ?? {}), results: data.results?.total ?? null, cost_per_result: data.results?.cost ?? null }
+    : (data.kpis ?? {})
+  const reported = configured
+    ? { ...(data.reported ?? {}), results: data.results?.total != null, cost_per_result: data.results?.cost != null }
+    : data.reported
 
   return keys
     .filter((key) => SPECS[key])
     .map((key) => {
       const spec = SPECS[key]
       const substituted = direct && (key === 'cpa' || key === 'roas')
-      const value = substituted ? direct[key as 'cpa' | 'roas'] : (data.kpis ?? {})[key]
+      const value = substituted ? direct[key as 'cpa' | 'roas'] : kpis[key]
 
       return {
         key,
@@ -208,7 +220,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
               ? { kind: 'no_data' }
               // MONEY-USD-001 — the report's own currency, not the formatter's default.
               : { kind: 'value', text: spec.format(value, data.currency ?? null) })
-          : readMetric(key, spec, data.kpis ?? {}, data.reported, data.currency ?? null),
+          : readMetric(key, spec, kpis, reported, data.currency ?? null),
         // The period-over-period change belongs to the blended figure it was computed from. Showing
         // it beside a Direct value would attach one scope's movement to another scope's number.
         delta: substituted ? undefined : (data.delta?.[key] ?? null),

@@ -12,6 +12,7 @@ use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Models\Report;
@@ -25,6 +26,7 @@ use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
+use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -258,6 +260,8 @@ final class ReportGenerator
                     ? $config['metric_set']
                     : $this->template->metricSet($objective, $leadDestination?->value)),
             'lead_destination' => $leadDestination?->value,
+            // RESULT-EVENTS-001 — Results exist only where a result event is configured (project, over-ridden by this report); never inferred.
+            'results' => $this->resultsFor($report, $campaigns, $destinations),
             'kpis' => $totals,
             'previous' => $previous,
             'delta' => $delta,
@@ -1097,5 +1101,23 @@ final class ReportGenerator
         }
 
         return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $campaigns
+     * @param  array<string, LeadDestination>  $destinations
+     * @return array<string, mixed>
+     */
+    private function resultsFor(Report $report, array $campaigns, array $destinations): array
+    {
+        $project = $report->project_id ? Project::withoutGlobalScopes()->find($report->project_id) : null;
+        $events = ResultEvents::merged(
+            (array) (((array) ($project->meta ?? []))['result_events'] ?? []) ?: null,
+            (array) (((array) ($report->config ?? []))['result_events'] ?? []) ?: null,
+        );
+
+        return $events->configured()
+            ? $events->over($campaigns, $destinations)
+            : ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
     }
 }
