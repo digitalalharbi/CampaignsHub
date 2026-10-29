@@ -66,6 +66,10 @@ export interface ReportSection {
 }
 
 export interface ReportData {
+  /** RESULT-EVENTS-001 — a link's file: its defined Results (resolver), their label, and the KPIs the link shows. */
+  results?: { configured: boolean; total: number | null; cost: number | null; by_platform?: Record<string, { results?: number | null; cost?: number | null }>; leads?: { configured: boolean; total: number | null; landing: number | null; native: number | null; cost: number | null } } | null
+  results_label?: string | null
+  kpi_allowlist?: string[]
   /** WD-EVIDENCE-001 — the PDF appendix's platform screenshots, from the print payload only. */
   platform_evidence?: PrintEvidence[]
   /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention», already cut for this reader by the server. */

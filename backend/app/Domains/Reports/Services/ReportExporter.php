@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
 use App\Domains\Reports\Support\ReportIdentity;
+use App\Support\AdPlatforms;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -94,6 +95,10 @@ final class ReportExporter
     private static function kpiRows(array $data): array
     {
         $kpis = array_filter((array) ($data['kpis'] ?? []), static fn ($v): bool => ! is_array($v));
+        // RESULT-EVENTS-001 — Results exist in a file only where the link defines them, whichever path lists the KPIs.
+        if ((((array) ($data['results'] ?? []))['configured'] ?? false) !== true) {
+            unset($kpis['results'], $kpis['cost_per_result']);
+        }
         $allow = $data['kpi_allowlist'] ?? null;
         if (! is_array($allow)) {
             return $kpis;
@@ -192,6 +197,34 @@ final class ReportExporter
             array_map(static fn (int $i) => $head[$i], $keep),
             array_map(static fn (array $row) => array_map(static fn (int $i) => $row[$i] ?? null, $keep), $rows),
         ];
+    }
+
+    /**
+     * RESULT-EVENTS-001 — the platform table's Results: the DEFINED event per platform and its cost, from the resolver, under the link's
+     * own name; absent where the link defines none. The platform's generic `conversions` keeps its own name and its own column.
+     *
+     * @param  array<string,mixed>  $data
+     * @param  list<string>  $head
+     * @param  list<array<int,mixed>>  $rows
+     * @return array{0: list<string>, 1: list<array<int,mixed>>}
+     */
+    private static function withDefinedResults(array $data, array $head, array $rows): array
+    {
+        $results = (array) ($data['results'] ?? []);
+        if (($results['configured'] ?? false) !== true) {
+            return [$head, $rows];
+        }
+        $label = is_string($data['results_label'] ?? null) && trim($data['results_label']) !== '' ? trim($data['results_label']) : 'Results';
+        $byPlatform = (array) ($results['by_platform'] ?? []);
+        $platforms = array_values((array) ($data['platforms'] ?? []));
+        $money = ! (bool) ($data['results_spend_hidden'] ?? false);
+        $head = [...$head, $label, ...($money ? ["Cost per {$label}"] : [])];
+        foreach ($rows as $i => $row) {
+            $event = (array) ($byPlatform[AdPlatforms::canonical((string) ($platforms[$i]['provider'] ?? ''))] ?? []);
+            $rows[$i] = [...$row, $event['results'] ?? null, ...($money ? [$event['cost'] ?? null] : [])];
+        }
+
+        return [$head, $rows];
     }
 
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
@@ -403,10 +436,10 @@ final class ReportExporter
             $put([$k, is_numeric($v) ? $v : ($v ?? '')]);
         }
         $put([]);
-        [$platHead, $platRows] = self::chosenColumns($data, 'platforms', ['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share'], array_map(
+        [$platHead, $platRows] = self::withDefinedResults($data, ...self::chosenColumns($data, 'platforms', ['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share'], array_map(
             static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? ''],
             array_values((array) ($data['platforms'] ?? [])),
-        ));
+        )));
         $put($platHead);
         foreach ($platRows as $row) {
             $put($row);
@@ -617,10 +650,10 @@ final class ReportExporter
 
         $ps = $book->createSheet();
         $ps->setTitle('Platforms');
-        [$platHead, $platRows] = self::chosenColumns($data, 'platforms', ['Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA', 'CTR', 'Share'], array_map(
+        [$platHead, $platRows] = self::withDefinedResults($data, ...self::chosenColumns($data, 'platforms', ['Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA', 'CTR', 'Share'], array_map(
             static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? null, $p['revenue'] ?? null, $p['conversions'] ?? null, $p['roas'] ?? null, $p['cpa'] ?? null, $p['ctr'] ?? null, $p['spend_share'] ?? null],
             array_values((array) ($data['platforms'] ?? [])),
-        ));
+        )));
         $ps->fromArray($platHead, null, 'A1');
         $row = 2;
         foreach ($platRows as $platRow) {
@@ -817,7 +850,8 @@ final class ReportExporter
     }
 
     /** The daily ledger's columns — the Tables view's, in the same order. */
-    private const DAILY_HEAD = ['Date', 'Impressions', 'Clicks', 'Results', 'Spend'];
+    // RESULT-EVENTS-001 — no «Results» column: the resolver has no daily figure, and the platform's generic conversion is not one.
+    private const DAILY_HEAD = ['Date', 'Impressions', 'Clicks', 'Spend'];
 
     /**
      * Shown AND stated: a client file carries the ledger only when the resolved list names it, so a
@@ -841,7 +875,7 @@ final class ReportExporter
     private static function dailyRows(array $data): array
     {
         return array_values(array_map(
-            static fn ($t): array => [$t['date'] ?? '', $t['impressions'] ?? null, $t['clicks'] ?? null, $t['conversions'] ?? null, $t['spend'] ?? null],
+            static fn ($t): array => [$t['date'] ?? '', $t['impressions'] ?? null, $t['clicks'] ?? null, $t['spend'] ?? null],
             array_filter((array) ($data['timeseries'] ?? []), 'is_array'),
         ));
     }
