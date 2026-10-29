@@ -262,3 +262,5 @@ Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) ap
 - **Download document (`ShareService::downloadDocument`):** it carried the saved copy's Results, not the link's events, «none» or label.
 
 All are fixed on fix/nasel-exports-contract. The fix is IMPLEMENTED_NOT_VERIFIED until a NASEL link with downloads allowed is exported in Production.
+
+**Correction (2026-10-29).** An earlier note read the NASEL links as deleted. The evidence was the public 404 («invalid, expired or revoked») plus an empty report list seen from an advertiser@ session that has no access to NASEL. Neither proves deletion. The links' state and ownership are BLOCKED_OPERATIONAL_EVIDENCE until an agency session reads them.

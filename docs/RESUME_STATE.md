@@ -9,7 +9,7 @@
 - revenue auto-hide
 - delete dialog with bulk delete
 
-**Production proof is BLOCKED.** The Owner deleted the NASEL links Dk7… and brSe9…, and NASEL now lists no reports. The Chrome session is signed in as advertiser@campaignshub.io, which cannot see NASEL. Next: the agency session, then two test links (Results «none»; Results defined with a label), browser check on desktop and mobile.
+**Production proof: BLOCKED_OPERATIONAL_EVIDENCE.** The public endpoint answers 404 «invalid, expired or revoked» for Dk7… and brSe9…. That says the links are not publicly active; it is NOT proof of deletion. The only browser session available is advertiser@campaignshub.io, which has no access to the NASEL project, so its empty report list proves nothing about NASEL. No replacement links are created without the Owner's authorisation. Next: an agency session, then read the links' state and ownership from it.
 
 **Branch fix/nasel-exports-contract:** files follow the link's Results contract (matrix NASEL-EXPORTS-RESULTS-CONTRACT-001).
 
