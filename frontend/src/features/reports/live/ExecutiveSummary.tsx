@@ -483,7 +483,10 @@ function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; 
     ['page-views', ar ? 'زيارات الصفحة' : 'Page visits', n(funnel ? funnel.page_views : count(payload.totals?.landing_page_views))],
     ['form-starts', ar ? 'بدء تعبئة النموذج' : 'Form starts', n(funnel?.form_starts)],
     ['contacts', ar ? 'ضغطات واتساب/اتصال/إيميل' : 'WhatsApp / call / email taps', n(funnel?.contacts)],
-    ['landing', landingLabel(payload, ar), n(leads.landing)],
+    ['landing', `${landingLabel(payload, ar)} ${ar ? '(منسوبة للمنصات)' : '(platform-attributed)'}`, n(leads.landing)],
+    // NASEL 2026-10-29 — submissions the website itself stored: no source for them is connected, so the card says so rather than borrowing
+    // the platforms' attributed count, which can claim one submission on several platforms.
+    ['confirmed', ar ? 'نماذج مؤكدة من الموقع' : 'Confirmed website leads', ar ? 'غير مربوط' : 'Not linked'],
     ['completion-rate', ar ? 'معدل الإكمال' : 'Completion rate', rate(funnel?.completion_rate)],
     ['interest', ar ? 'إجمالي الاهتمام' : 'Total interest', n(leads.total)],
     ...(spendShown
@@ -510,6 +513,11 @@ function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; 
         {ar
           ? 'أحداث صفحة الهبوط من مسار صفحة الهبوط وحده، كما تنسبها كل منصة — ليست عددًا فريدًا للأشخاص أو للنماذج المؤكدة.'
           : 'Landing-page events from the landing-page path only, as each platform attributes them — not a count of unique people or confirmed submissions.'}
+      </p>
+      <p className="text-[11px] text-text-muted" data-testid="exec-lead-confirmed-source">
+        {ar
+          ? 'النماذج المؤكدة تتطلب ربط سجل الطلبات المحفوظة في الموقع بمعرّف lead_id ثابت يصدره الخادم؛ هذا المصدر غير مربوط بعد.'
+          : 'Confirmed leads need the website’s stored requests, linked by a server-issued lead_id; that source is not linked yet.'}
       </p>
     </section>
   )
