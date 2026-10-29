@@ -33,6 +33,7 @@ import {
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
+import { resultWords } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -440,8 +441,9 @@ export function PlatformsView({
                   <Num>{row ? rowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
                 </span>
                 <span className="tnum truncate text-xs text-text-secondary">
-                  <Num>{row?.conversions === null || row?.conversions === undefined ? '—' : Number(row.conversions).toLocaleString('en-US')}</Num>
-                  {' '}{ar ? 'نتيجة' : 'results'}
+                  {/* Owner 2026-10-29 — the platform's clicks, never its generic conversion (TikTok's 1,126 were page views). */}
+                  <Num>{row?.clicks === null || row?.clicks === undefined ? '—' : Number(row.clicks).toLocaleString('en-US')}</Num>
+                  {' '}{ar ? 'نقرة' : 'clicks'}
                 </span>
                 {share !== null && (
                   <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? 'حصة الإنفاق' : 'Share of spend'}>
@@ -498,7 +500,13 @@ function PlatformDetail({
   const ar = locale === 'ar'
   const { spendChartable } = useSpendCharting(payload, currency)
   const spendShare = totalSpend > 0 && wholeRow ? Number(wholeRow.spend ?? 0) / totalSpend : null
-  const resultShare = totalResults > 0 && wholeRow ? Number(wholeRow.conversions ?? 0) / totalResults : null
+  // NASEL 2026-10-29 — the platform's share of the resolver's result (native leads), or none; never of generic conversions.
+  const words = resultWords(payload, ar)
+  const nativeTotal = payload.results?.leads?.native ?? null
+  const nativeHere = payload.results?.leads?.native_by_platform?.[platform] ?? null
+  const resultShare = words.series?.key === 'form_leads'
+    ? (nativeTotal !== null && nativeTotal > 0 && nativeHere !== null ? nativeHere / nativeTotal : null)
+    : words.legacy && totalResults > 0 && wholeRow ? Number(wholeRow.conversions ?? 0) / totalResults : null
   const name = providerLabel(platform, locale)
 
   return (
@@ -518,11 +526,11 @@ function PlatformDetail({
               data={payload.timeseries ?? []}
               currency={currency}
               height={220}
-              rightAxisFor="conversions"
+              rightAxisFor={words.series?.key ?? 'clicks'}
               series={[
                 ...(spendChartable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: platformColor(platform), kind: 'money' as const }] : []),
                 ...(spendChartable ? [] : [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }]),
-                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
+                ...(words.series ? [{ key: words.series.key, name: words.series.name, color: 'var(--purple)', kind: 'num' as const }] : []),
               ]}
             />
           </div>
@@ -531,12 +539,14 @@ function PlatformDetail({
         <ChartCard title={ar ? `حصة ${name} من الإجمالي` : `${name}’s share of the total`}>
           <div data-testid="live-platform-shares" className="flex flex-wrap items-center justify-around gap-4 py-2">
             {spendShare !== null && <ProgressRing value={spendShare} sublabel={ar ? 'من الإنفاق' : 'of spend'} size={116} />}
-            {resultShare !== null && <ProgressRing value={resultShare} sublabel={ar ? 'من النتائج' : 'of results'} size={116} tone="success" />}
+            {resultShare !== null && <ProgressRing value={resultShare} sublabel={ar ? `من ${words.series?.name ?? words.result}` : `of ${words.series?.name ?? words.result}`} size={116} tone="success" />}
             {spendShare === null && resultShare === null && <span className="text-sm text-text-muted">—</span>}
           </div>
           {wholeRow && (
             <p className="tnum mt-2 text-center text-xs text-text-secondary">
-              {ar ? 'تكلفة النتيجة' : 'Cost per result'}: <Num>{formatMoneyReading(readCostPer(wholeRow as unknown as MoneyTotals, 'cpa', 'conversions', currency, ar), (v) => reader.asExactMoney(v))}</Num>
+              {words.cost}: <Num>{words.legacy || words.off
+                ? formatMoneyReading(words.off ? readCostPer(wholeRow as unknown as MoneyTotals, 'cpc', 'clicks', currency, ar) : readCostPer(wholeRow as unknown as MoneyTotals, 'cpa', 'conversions', currency, ar), (v) => reader.asExactMoney(v))
+                : (() => { const c = payload.results?.by_platform?.[platform]?.cost; return c === null || c === undefined ? (ar ? 'غير متاح' : 'Not available') : reader.asExactMoney(c) })()}</Num>
             </p>
           )}
         </ChartCard>

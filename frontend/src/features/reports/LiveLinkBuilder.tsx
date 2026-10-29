@@ -81,6 +81,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  // NASEL 2026-10-29 — the report's own word for «Results» («الاهتمام»); blank = «النتائج».
+  const [resultsLabel, setResultsLabel] = useState('')
   /*
    * REPORT-SCOPE-HIERARCHY-001 — the hierarchy is chosen top-down: ad accounts first, then (optionally)
    * campaigns inside them, then (optionally) ads inside those. Nothing selected at a level means ALL of
@@ -275,7 +277,9 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     mutationFn: () =>
       createLiveLink(projectId, {
         ...creativeSharingBody(creatives),
-        ...(Object.keys(pickSelected(resultEvents, selectedPlatforms)).length > 0 ? { result_events: pickSelected(resultEvents, selectedPlatforms) } : {}),
+        // Every path on «none» is a choice: the link has no Results, and the project default does not fill them back in.
+        ...(Object.keys(pickSelected(resultEvents, selectedPlatforms)).length > 0 ? { result_events: pickSelected(resultEvents, selectedPlatforms) } : { results_off: true }),
+        ...(resultsLabel.trim() === '' ? {} : { results_label: resultsLabel.trim() }),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
         ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
@@ -880,6 +884,19 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           </label>
 
           <ResultEventsPanel projectId={projectId} providers={selectedPlatforms} value={resultEvents} onChange={setResultEvents} />
+
+          <label className="grid gap-1 text-xs text-text-secondary">
+            {ar ? 'مسمّى النتائج' : 'Results label'}
+            <input
+              data-testid="live-link-results-label"
+              value={resultsLabel}
+              maxLength={40}
+              placeholder={ar ? 'النتائج' : 'Results'}
+              onChange={(e) => setResultsLabel(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
+            />
+            <span className="text-[11px] text-text-muted">{ar ? 'يحل محل «النتائج» و«تكلفة النتيجة» في كل التقرير، مثل «الاهتمام» و«تكلفة الاهتمام».' : 'Replaces «Results» and «Cost per result» across the report, e.g. «Interest» and «Cost per interest».'}</span>
+          </label>
 
           <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
 

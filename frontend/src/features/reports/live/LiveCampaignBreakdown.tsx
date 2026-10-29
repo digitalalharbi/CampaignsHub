@@ -2,6 +2,7 @@ import { campaignStatusLabel, objectiveLabel, providerLabel } from '@/features/c
 import { compact, moneyExact } from '@/features/analytics/format'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import type { LiveCampaignRow, LivePayload } from '../api'
+import { landingLabel } from './leadResults'
 
 /**
  * NASEL-CAMPAIGN-BREAKDOWN-001 — the client-safe campaign table a link carries only when its settings switch it on.
@@ -18,6 +19,8 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
   const locale = ar ? 'ar' : 'en'
   const label = (key: string, fallbackAr: string, fallbackEn: string) => payload.kpi_labels?.[key] || (ar ? fallbackAr : fallbackEn)
   const showSpend = rows.some((r) => r.spend !== null)
+  // NASEL 2026-10-29 — landing-page completions beside native leads, from the same resolver, when the link maps a landing event.
+  const showLanding = Object.values(payload.results?.leads?.events ?? {}).some((paths) => typeof paths.landing_page === 'string')
   const na = ar ? 'غير متاح' : 'Not available'
   const STATE: Record<string, [string, string]> = {
     zero: ['لم تسجّل نشاطًا', 'No activity'],
@@ -36,6 +39,7 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
     label('impressions', 'الظهور', 'Impressions'),
     label('clicks', 'النقرات', 'Clicks'),
     label('native_leads', 'عملاء النموذج الأصلي', 'Native-form leads'),
+    ...(showLanding ? [landingLabel(payload, ar)] : []),
   ]
 
   const cells = (r: LiveCampaignRow) => [
@@ -50,6 +54,7 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
     <span key="impressions" dir="ltr">{count(r.impressions)}</span>,
     <span key="clicks" dir="ltr">{count(r.clicks)}</span>,
     <span key="native" dir="ltr">{count(r.native_leads)}</span>,
+    ...(showLanding ? [<span key="landing" dir="ltr">{count(r.landing_leads)}</span>] : []),
   ]
 
   const values = rows.map((r): SortValues => [
@@ -61,6 +66,7 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
     r.impressions,
     r.clicks,
     r.native_leads,
+    ...(showLanding ? [r.landing_leads] : []),
   ])
 
   return (

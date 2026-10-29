@@ -4,7 +4,7 @@ import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/feature
 import { formatMoneyReading, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from '../api'
 import { clientKpiKeys } from '../clientKpis'
-import { landingLabel, purchaseIsLandingProxy } from './leadResults'
+import { landingLabel, purchaseIsLandingProxy, resultWords } from './leadResults'
 
 /**
  * How every figure on a live client link is read — one definition, shared by every mode.
@@ -130,7 +130,8 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     impressions: { ar: 'الظهور', en: 'Impressions', format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
-    conversions: { ar: 'النتائج', en: 'Results', format: (t, _p, _m, count) => count(t.conversions) },
+    // Owner 2026-10-29 — Results set to «none»: the card stands for clicks («النقرات»).
+    conversions: { ar: 'النتائج', en: 'Results', format: (t, p, _m, count) => count(p.results_off ? t.clicks : t.conversions) },
     /*
      * RESULT-STAGE-TRUTH-001 — read the STAGE, not the section that happens to draw it.
      *
@@ -149,7 +150,10 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
-    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => asExactMoney(v))) },
+    // NASEL 2026-10-29 — Results and their cost as the link DEFINED them (`results`), never the platform's generic conversion.
+    results: { ar: 'النتائج', en: 'Results', format: (t, p, _m, count) => (p.results_off ? count(t.clicks) : p.results?.configured !== true || p.results.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.total)) },
+    cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p) => (p.results_off ? plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) : p.results?.configured !== true || p.results.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.cost))) },
+    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p) => plain(formatMoneyReading(p.results_off ? readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar) : readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => asExactMoney(v))) },
     /*
      * The rest of what a marketing path is judged on — ANALYTICS-OBJECTIVE-SYSTEM-001.
      *
@@ -221,6 +225,9 @@ export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload 
   if (custom !== undefined && custom.trim() !== '') return custom
   // NASEL 2026-10-29 — where the landing-page result IS the purchase event, it stands in for a form completion and is not called «Purchases».
   if (payload && (key === 'purchases' || key === 'landing_leads') && purchaseIsLandingProxy(payload)) return landingLabel(payload, ar)
+  // The report's own word for Results («الاهتمام»), or «النقرات» where Results are «none», on every card named after them.
+  if (payload && (key === 'results' || key === 'conversions') && (payload.results_off || payload.results_label)) return resultWords(payload, ar).result
+  if (payload && (key === 'cost_per_result' || key === 'cpa') && (payload.results_off || payload.results_label)) return resultWords(payload, ar).cost
 
   return ar ? meta.ar : meta.en
 }

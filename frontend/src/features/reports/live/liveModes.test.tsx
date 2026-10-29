@@ -449,7 +449,8 @@ describe('the report levels are different products', () => {
    * daily ledger appears only when its own component is in the section list.
    */
   it('offers only the main sections the server names, and the ledger only when daily records are on', async () => {
-    serve('detailed', { report_views: ['summary', 'tables'], report_sections: ['kpis', 'platform_comparison', 'content_performance', 'account_breakdown'] })
+    // The platform table belongs to «الجداول التفصيلية» (Owner 2026-10-29): it is listed by that component's key.
+    serve('detailed', { report_views: ['summary', 'tables'], report_sections: ['kpis', 'platform_comparison', 'detailed_tables', 'content_performance', 'account_breakdown'] })
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     await screen.findByTestId('live-mode-summary')

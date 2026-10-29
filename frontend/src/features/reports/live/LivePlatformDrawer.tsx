@@ -12,6 +12,7 @@ import type { ReportAd } from '../ReportAdsSection'
 import { fetchLivePlatform, type LivePayload, type LivePlatformPayload, type LiveShare } from '../api'
 import { ContentTile } from './LiveContent'
 import type { useLiveMetricReader } from './liveMetrics'
+import { resultWords } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -208,12 +209,14 @@ function PlatformBody({
           {data.shares.spend && (
             <ShareBar testid="live-platform-share-spend" label={ar ? 'من الإنفاق' : 'of spend'} share={data.shares.spend} color={color} />
           )}
+          {(data.shares.outcome.metric !== 'conversions' || resultWords(whole, ar).shown) && (
           <ShareBar
             testid="live-platform-share-outcome"
             label={ar ? `من ${OUTCOME_LABEL[data.shares.outcome.metric]?.ar ?? 'النتائج'}` : `of ${OUTCOME_LABEL[data.shares.outcome.metric]?.en ?? 'results'}`}
             share={data.shares.outcome}
             color="var(--success)"
           />
+          )}
         </div>
       </section>
 
@@ -226,11 +229,11 @@ function PlatformBody({
               data={data.timeseries}
               currency={currency}
               height={200}
-              rightAxisFor="conversions"
+              rightAxisFor={resultWords(whole, ar).series?.key ?? 'clicks'}
               series={[
                 ...(spendDrawable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color, kind: 'money' as const }] : []),
                 ...(spendDrawable ? [] : [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }]),
-                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
+                ...(resultWords(whole, ar).series ? [{ key: resultWords(whole, ar).series!.key, name: resultWords(whole, ar).series!.name, color: 'var(--purple)', kind: 'num' as const }] : []),
               ]}
             />
           )}

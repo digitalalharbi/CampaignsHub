@@ -10,6 +10,7 @@ import { ratio } from '@/features/analytics/format'
 import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
+import { resultWords } from './leadResults'
 
 /*
  * The sections a live link composes its modes from — lifted out of the single long page so each mode
@@ -179,7 +180,7 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
   const noSpend = spendHiddenByLink(payload)
   const split = sectionShown(payload, 'platform_comparison') && !noSpend
   if (!trend && !split) return null
-  const resultName = ar ? 'النتائج' : 'Results'
+  const words = resultWords(payload, ar)
 
   return (
     <>
@@ -191,13 +192,14 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
               currency={currency}
               height={220}
               /* Results on their own axis: on the spend axis a few hundred orders draw as a flat line at zero. */
-              rightAxisFor="conversions"
+              rightAxisFor={words.series?.key ?? 'clicks'}
               series={[
                 // The spend line is drawn only when spend is in the report currency; otherwise it would
                 // label a withheld/partial figure with a currency it is not in.
                 ...(spendChartable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' as const }] : []),
                 { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const },
-                { key: 'conversions', name: resultName, color: 'var(--purple)', kind: 'num' as const },
+                // NASEL 2026-10-29 — the daily result is the resolver's own (native submissions), never the platform's generic conversion.
+                ...(words.series ? [{ key: words.series.key, name: words.series.name, color: 'var(--purple)', kind: 'num' as const }] : []),
               ]}
             />
             {!spendChartable && !noSpend && (

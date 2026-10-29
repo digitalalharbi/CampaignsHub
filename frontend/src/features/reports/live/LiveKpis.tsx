@@ -5,6 +5,7 @@ import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
 import { cardHasFigure, gateResultKeys, metricLabel, MONEY_KEYS, spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
+import { revenueReported } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -44,6 +45,8 @@ export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: strin
     return keys
       .filter((k, i, all) => all.indexOf(k) === i)
       .filter((k) => reader.meta[k] && !(moneyHidden && MONEY_KEYS.has(k)))
+      // NASEL 2026-10-29 — every platform reported zero revenue: revenue and ROAS leave even a chosen row, as if «hide revenue» were on.
+      .filter((k) => revenueReported(payload) || (k !== 'revenue' && k !== 'roas'))
   }
   const t = payload.totals
   // One underlying result is one card: `leads` carrying the same count as the result is that result.

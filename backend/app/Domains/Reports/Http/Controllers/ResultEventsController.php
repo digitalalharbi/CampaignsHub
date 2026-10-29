@@ -104,8 +104,10 @@ final class ResultEventsController extends Controller
             'kpi_labels' => ['sometimes', 'nullable', 'array', 'max:30'],
             'kpi_labels.*' => ['nullable', 'string', 'max:60'],
             'campaign_breakdown' => ['sometimes', 'boolean'],
+            'results_label' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'results_off' => ['sometimes', 'boolean'],
         ]);
-        abort_if(array_intersect(['result_events', 'lead_events', 'metrics', 'kpi_labels', 'campaign_breakdown'], array_keys($request->all())) === [], 422, 'Nothing to save.');
+        abort_if(array_intersect(['result_events', 'lead_events', 'metrics', 'kpi_labels', 'campaign_breakdown', 'results_label', 'results_off'], array_keys($request->all())) === [], 422, 'Nothing to save.');
         $presentation = ['metrics', 'kpi_labels', 'campaign_breakdown'];
 
         $model = Report::query()->where('project_id', $project)->findOrFail($report);
@@ -114,7 +116,7 @@ final class ResultEventsController extends Controller
 
         $settings = (array) ($link->settings ?? []);
         $scope = (array) ($link->scope ?? []);
-        $read = static fn (array $settings, array $scope): array => array_intersect_key($settings, array_flip(['result_events', 'lead_events', 'kpi_labels', 'campaign_breakdown']))
+        $read = static fn (array $settings, array $scope): array => array_intersect_key($settings, array_flip(['result_events', 'lead_events', 'kpi_labels', 'campaign_breakdown', 'results_label', 'results_off']))
             + (array_key_exists('metrics', $scope) ? ['metrics' => $scope['metrics']] : []);
         $before = $read($settings, $scope);
         foreach (['result_events', 'lead_events'] as $key) {
@@ -153,6 +155,21 @@ final class ResultEventsController extends Controller
                 $settings['campaign_breakdown'] = true;
             } else {
                 unset($settings['campaign_breakdown']);
+            }
+        }
+        if ($request->has('results_off')) {
+            if ($request->boolean('results_off')) {
+                $settings['results_off'] = true;
+            } else {
+                unset($settings['results_off']);
+            }
+        }
+        if ($request->exists('results_label')) {
+            $label = trim((string) $request->input('results_label'));
+            if ($label === '') {
+                unset($settings['results_label']);
+            } else {
+                $settings['results_label'] = $label;
             }
         }
         $link->settings = $settings;

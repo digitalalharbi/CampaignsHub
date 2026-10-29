@@ -422,6 +422,10 @@ export interface LivePayload {
   no_data_yet?: boolean
   /** The operator's own names for KPI cards on this link. */
   kpi_labels?: Record<string, string>
+  /** NASEL 2026-10-29 — the link's own word for «Results»; null = «النتائج». */
+  results_label?: string | null
+  /** Every Results path set to «none»: clicks stand wherever Results would. */
+  results_off?: boolean
   /** RESULT-EVENTS-001 — Results as configured for the project / this link; `configured: false` means none are drawn. */
   results?: {
     configured: boolean
@@ -449,6 +453,7 @@ export interface LivePayload {
         completion_rate: number | null
         spend: number | null
         cost_per_completion: number | null
+        coverage?: Record<string, string[]>
         basis: string
       }
       cost: number | null

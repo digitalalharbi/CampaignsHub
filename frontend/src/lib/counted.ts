@@ -150,3 +150,8 @@ export function minutes(n: number, locale: Locale): string {
     ? countedAr(n, { one: 'دقيقة', two: 'دقيقتان', few: 'دقائق', many: 'دقيقة' })
     : countedEn(n, 'minute', 'minutes')
 }
+
+/** «3 تقارير» · «1 report» — the reports list's bulk delete (NASEL 2026-10-29). */
+export function reports(n: number, locale: Locale): string {
+  return locale === 'ar' ? countedAr(n, { one: 'تقرير', two: 'تقريران', few: 'تقارير', many: 'تقريرًا' }) : countedEn(n, 'report', 'reports')
+}
