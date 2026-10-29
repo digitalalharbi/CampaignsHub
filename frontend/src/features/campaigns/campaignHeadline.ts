@@ -67,6 +67,15 @@ function reading(key: string, row: Record<string, unknown>, ar: boolean, currenc
   }
 }
 
+/** CAMPAIGN-INTELLIGENCE-HUB — the objective's own result key and cost key, the ones the row's headline and efficiency read. */
+export function campaignResultKey(objective: string | null): string | undefined {
+  return headlineKeys(objective)[0]
+}
+
+export function campaignCostKey(objective: string | null): string | undefined {
+  return headlineKeys(objective).find((k) => SPECS[k]?.invertGood === true)
+}
+
 export function campaignHeadline(
   objective: string | null,
   row: Record<string, unknown> | undefined,
