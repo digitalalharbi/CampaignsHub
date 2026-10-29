@@ -97,9 +97,11 @@ const money = (n: number | null | undefined, currency: string) => moneyExact(n, 
 const dateFmt = (s?: string) =>
   s ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(s)) : '—'
 
+// RESULT-EVENTS-001 — the platform's generic conversion and its cost carry their own names; «Results» is the link's defined event only.
 const KPI_LABELS: Record<string, string> = {
   spend: 'Spend', revenue: 'Revenue', results: 'Results', roas: 'ROAS',
-  cpa: 'Cost per Result', ctr: 'CTR', impressions: 'Impressions', clicks: 'Clicks',
+  cpa: 'Cost per platform conversion', conversions: 'Platform conversions', ctr: 'CTR', impressions: 'Impressions', clicks: 'Clicks',
+  cost_per_result: 'Cost per result',
 }
 
 /**
@@ -269,21 +271,30 @@ export function PrintDocument({
   }, [currency])
 
   const kpis = data.kpis ?? {}
+  // RESULT-EVENTS-001 — Results exist in the file only where the link defines them, under its own name; the file lists only the KPIs the
+  // link shows (the same allowlist the CSV and XLSX use), so a figure the link hides is not printed.
+  const resultsDefined = (data.results as { configured?: boolean } | undefined)?.configured === true
+  const resultsLabel = typeof data.results_label === 'string' && data.results_label.trim() !== '' ? data.results_label.trim() : 'Results'
+  const allow = Array.isArray(data.kpi_allowlist) ? (data.kpi_allowlist as string[]) : null
   const kpiRows = Object.entries(kpis)
     .filter(([, v]) => v != null)
+    .filter(([k]) => resultsDefined || (k !== 'results' && k !== 'cost_per_result'))
+    .filter(([k]) => allow === null || allow.includes(k))
     .map(([k, v]) => [
-      KPI_LABELS[k] ?? k,
-      k === 'spend' || k === 'revenue' || k === 'cpa' ? money(v as number, currency)
+      k === 'results' ? resultsLabel : k === 'cost_per_result' ? `Cost per ${resultsLabel}` : KPI_LABELS[k] ?? k,
+      k === 'spend' || k === 'revenue' || k === 'cpa' || k === 'cost_per_result' ? money(v as number, currency)
         : k === 'roas' ? `${nfmt(v as number, { maximumFractionDigits: 2 })}×`
         : k === 'ctr' ? `${nfmt(v as number, { maximumFractionDigits: 2 })}%`
         : nfmt(v as number),
     ] as [string, string])
 
+  // The platform's DEFINED result from the resolver; no Results column at all where the link defines none (never generic conversions).
+  const definedFor = (p: Row) => (data.results as { by_platform?: Record<string, { results?: number | null }> } | undefined)?.by_platform?.[String(p.provider ?? p.platform ?? '').toLowerCase()]?.results
   const platformRows = (data.platforms ?? []).map((p: Row) => [
     platformCell(p.platform ?? p.name ?? '—'),
     money(Number(p.spend ?? 0), currency),
     money(Number(p.revenue ?? 0), currency),
-    nfmt(Number(p.results ?? 0)),
+    ...(resultsDefined ? [definedFor(p) === null || definedFor(p) === undefined ? '—' : nfmt(Number(definedFor(p)))] : []),
     `${nfmt(Number(p.roas ?? 0), { maximumFractionDigits: 2 })}×`,
   ])
 
@@ -645,7 +656,7 @@ export function PrintDocument({
       {prints.platforms && (
         <section className="doc-section">
           <h2>{heading('platforms', 'Platform Performance')}</h2>
-          <Table {...selectColumns(data.report_columns?.platforms, ['', 'spend', '', 'results', ''], ['Platform', 'Spend', 'Revenue', 'Results', 'ROAS'], platformRows)} />
+          <Table {...selectColumns(data.report_columns?.platforms, resultsDefined ? ['', 'spend', '', 'results', ''] : ['', 'spend', '', ''], resultsDefined ? ['Platform', 'Spend', 'Revenue', resultsLabel, 'ROAS'] : ['Platform', 'Spend', 'Revenue', 'ROAS'], platformRows)} />
         </section>
       )}
       <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
@@ -666,13 +677,12 @@ export function PrintDocument({
         <section className="doc-section" data-testid="print-accounts">
           <h2>Ad Accounts</h2>
           <Table
-            head={['Ad account', 'Platform', 'Spend', 'Results', 'Cost per result']}
+            // An account has no defined Results of its own: no Results column, and never the account's generic conversions under that name.
+            head={['Ad account', 'Platform', 'Spend']}
             rows={((data as { accounts?: Array<Record<string, unknown>> }).accounts ?? []).map((a) => [
               String(a.account_name ?? 'Unnamed account'),
               platformCell(a.provider),
               moneyExact(typeof a.spend === 'number' ? a.spend : null, currency),
-              typeof a.conversions === 'number' ? a.conversions.toLocaleString('en-US') : '—',
-              moneyExact(typeof a.cpa === 'number' ? a.cpa : null, currency),
             ])}
           />
         </section>
@@ -747,7 +757,7 @@ export function PrintDocument({
           <table className="doc-table doc-ads">
             <thead>
               {/* No «Campaign» column — CLIENT-REPORT-ENTITY-BOUNDARY-001. */}
-              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Spend</th><th>Results</th></tr>
+              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Spend</th></tr>
             </thead>
             <tbody>
               {adRows.map((ad, i) => (
@@ -778,7 +788,6 @@ export function PrintDocument({
                   <td>{ad.name}</td>
                   <td>{platformCell(ad.provider)}</td>
                   <td>{ad.spend}</td>
-                  <td>{ad.results}</td>
                 </tr>
               ))}
             </tbody>
@@ -874,9 +883,10 @@ export function PrintDocument({
             <Table
               {...selectColumns(
                 data.report_columns?.content,
-                ['', 'platform', 'spend', 'impressions', 'clicks', 'results'],
-                ['Creative', 'Platform', 'Spend', 'Impressions', 'Clicks', 'Results'],
-                rosterRows.map((r) => [r.name, platformCell(r.provider), r.spend, r.impressions, r.clicks, r.results]),
+                // A content's generic conversion is not its Result; the file prints none per content (the page reads its verified one).
+                ['', 'platform', 'spend', 'impressions', 'clicks'],
+                ['Creative', 'Platform', 'Spend', 'Impressions', 'Clicks'],
+                rosterRows.map((r) => [r.name, platformCell(r.provider), r.spend, r.impressions, r.clicks]),
               )}
             />
           )}

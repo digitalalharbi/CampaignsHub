@@ -250,3 +250,15 @@ On a new monthly-rolling detailed NASEL link the Owner found the following. Root
 Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) applying the same section and Results rules remain open.
 
 **Correction (Owner, same day, before #875 merged).** «None» means Results and Cost per Result are disabled entirely. It does not mean renamed to clicks/CPC, and clicks are a result only when chosen as the event. The first #875 draft substituted clicks; that draft was stopped before merge and rewritten to the contract (matrix NASEL-RESULTS-NONE-001, NASEL-PLATFORM-CARDS-RESULT-001). Links that never defined Results are held to the same contract: their generic conversions are not shown as «النتائج». A chosen `conversions` card is named «تحويلات المنصة».
+
+### NASEL 2026-10-29 — exports used generic conversions as «Results» and ignored the link's Results
+
+- **PDF (`PrintDocument`):**
+  - It printed «Results» from generic conversions on the platform, account and ad tables, and «Cost per Result» from generic CPA.
+  - It listed every saved KPI, including ones the link hides.
+- **CSV / XLSX (`ReportExporter`):**
+  - The daily ledger's «Results» column was generic conversions.
+  - Without a KPI allowlist the saved Results were listed whatever the link said.
+- **Download document (`ShareService::downloadDocument`):** it carried the saved copy's Results, not the link's events, «none» or label.
+
+All are fixed on fix/nasel-exports-contract. The fix is IMPLEMENTED_NOT_VERIFIED until a NASEL link with downloads allowed is exported in Production.

@@ -1,3 +1,25 @@
+# CURRENT STATE — 2026-10-29 (late) — Results contract deployed; exports on fix/nasel-exports-contract
+
+**Deployed:** #875 at `9515c939`:
+- section switches
+- KPI Results cards
+- the Results contract: «none» or undefined = Results disabled everywhere, never clicks; a chosen generic conversion is named «تحويلات المنصة»
+- Results label and clicks option
+- landing coverage note
+- revenue auto-hide
+- delete dialog with bulk delete
+
+**Production proof is BLOCKED.** The Owner deleted the NASEL links Dk7… and brSe9…, and NASEL now lists no reports. The Chrome session is signed in as advertiser@campaignshub.io, which cannot see NASEL. Next: the agency session, then two test links (Results «none»; Results defined with a label), browser check on desktop and mobile.
+
+**Branch fix/nasel-exports-contract:** files follow the link's Results contract (matrix NASEL-EXPORTS-RESULTS-CONTRACT-001).
+
+**Snapchat cross-project impact report (read-only)**, dry run 40867774062 on 2026-10-29:
+- 477 rows: 192 daily, 112 entity, 96 creative-daily, 53 creatives, 24 runs
+- dates 2026-10-19 → 26; non-zero only on 10-25 (97.31) and 10-26 (149.07)
+- both campaigns already filed in NASEL; the source project reads 0 of these rows
+- rollback via `--revert`
+- AWAITING OWNER APPROVAL. Do not apply.
+
 # CURRENT STATE — 2026-10-29 (evening) — NASEL report controls
 
 **Deployed:** #874 at `7aaf4535`: content and tables Results come from the resolver, plus landing evidence and docs.

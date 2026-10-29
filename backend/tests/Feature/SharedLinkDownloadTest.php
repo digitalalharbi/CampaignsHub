@@ -171,6 +171,33 @@ final class SharedLinkDownloadTest extends TestCase
     }
 
     /** A link whose owner disabled downloads does not serve one, whatever format is asked for. */
+    /**
+     * RESULT-EVENTS-001 (Owner 2026-10-29) — the FILE follows the link's Results contract, not the saved copy's.
+     *
+     * The saved document says Results are configured and carries a Results KPI; this link defines none (its project has no result
+     * events, and the link says «none»). The downloaded CSV and XLSX therefore carry no Results and no cost per result, and the ledger has
+     * no «Results» column.
+     */
+    public function test_the_file_follows_the_links_results_contract_not_the_saved_copy(): void
+    {
+        $this->report->forceFill([
+            'period_start' => now()->subDays(29)->toDateString(),
+            'period_end' => now()->toDateString(),
+            'data' => array_merge((array) $this->report->data, [
+                'kpis' => ['spend' => 1000, 'revenue' => 4000, 'roas' => 4.0, 'impressions' => 50000, 'clicks' => 900, 'results' => 42, 'cost_per_result' => 23.8],
+                'results' => ['configured' => true, 'total' => 42, 'cost' => 23.8, 'by_platform' => [], 'by_path' => [], 'events' => []],
+            ]),
+        ])->save();
+        app(TenantContext::class)->setTenantId($this->report->tenant_id);
+        [, $token] = app(ShareService::class)->create($this->report, ['allow_download' => true, 'settings' => ['results_off' => true]], null);
+        app(TenantContext::class)->forget();
+
+        $csv = $this->get("/api/v1/reports/shared/{$token}/download/csv")->assertOk()->streamedContent();
+
+        $this->assertDoesNotMatchRegularExpression('/^results,|^cost_per_result,/m', $csv, 'a link with no Results prints none in its file');
+        $this->assertStringNotContainsString('42', $csv);
+    }
+
     public function test_a_link_with_downloads_disabled_refuses(): void
     {
         [, $raw] = app(ShareService::class)->create($this->report, ['allow_download' => false], null);
