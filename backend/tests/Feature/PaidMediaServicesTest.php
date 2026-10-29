@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Billing\Services\BillingService;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Requests\Http\Controllers\ContactVerificationController;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
@@ -255,13 +256,16 @@ final class PaidMediaServicesTest extends TestCase
         $this->postJson('/api/v1/requests', $this->intakePayload(['services' => ['new_campaign', 'not_a_real_service']]))
             ->assertStatus(422)->assertJsonValidationErrors('services.1');
 
-        // Deactivate a real service → its key is no longer accepted.
+        // Deactivate a real service → its key is no longer accepted. Each submission verifies the same email again, which the
+        // contact-code resend cooldown refuses inside its window, so the clock moves past it as a person retrying later would.
         TaxonomyOption::withoutGlobalScopes()->whereNull('tenant_id')->where('key', 'ga4')->update(['is_active' => false]);
+        $this->travel(ContactVerificationController::RESEND_COOLDOWN + 1)->seconds();
         $this->postJson('/api/v1/requests', $this->intakePayload(['services' => ['ga4']]))
             ->assertStatus(422)->assertJsonValidationErrors('services.0');
 
         // Make a real service private → not accepted either.
         TaxonomyOption::withoutGlobalScopes()->whereNull('tenant_id')->where('key', 'meta_pixel')->update(['is_public' => false]);
+        $this->travel(ContactVerificationController::RESEND_COOLDOWN + 1)->seconds();
         $this->postJson('/api/v1/requests', $this->intakePayload(['services' => ['meta_pixel']]))
             ->assertStatus(422)->assertJsonValidationErrors('services.0');
 

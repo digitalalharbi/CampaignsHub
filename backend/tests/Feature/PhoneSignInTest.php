@@ -62,6 +62,9 @@ final class PhoneSignInTest extends TestCase
     private function codeFor(string $typed): array
     {
         $res = $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/start', ['phone' => $typed])->assertOk();
+        // The code is bound to the browser session that asked for it (`ownerKey`), so the verify that follows carries that
+        // session's cookie, as the browser does (a JSON request sends cookies only with credentials).
+        $this->withCredentials()->withCookie((string) config('session.cookie'), (string) $res->getCookie((string) config('session.cookie'))?->getValue());
 
         return [
             'id' => (string) $res->json('data.verification_id'),
@@ -208,7 +211,10 @@ final class PhoneSignInTest extends TestCase
         ['id' => $id, 'code' => $code] = $this->codeFor('0501234567');
 
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/verify', ['verification_id' => $id, 'code' => $code])->assertOk();
-        $this->withHeaders($this->spa)->post('/api/v1/auth/logout');
+        $out = $this->withHeaders($this->spa)->postJson('/api/v1/auth/logout');
+        // Like a browser, keep the cookie the sign-out handed back; the one pinned before belongs to a session that no longer exists.
+        $cookie = (string) config('session.cookie');
+        $this->withCookie($cookie, (string) $out->getCookie($cookie)?->getValue());
 
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/verify', ['verification_id' => $id, 'code' => $code])
             ->assertStatus(422);
@@ -223,5 +229,18 @@ final class PhoneSignInTest extends TestCase
         ['id' => $id] = $this->codeFor('050 123 4567');
 
         $this->assertSame('+966501234567', ContactVerification::query()->findOrFail($id)->destination);
+    }
+
+    /** A code asked for in one browser session cannot be redeemed from another, even with the right code. */
+    public function test_a_code_cannot_be_redeemed_from_another_browser_session(): void
+    {
+        $this->userWithPhone();
+        $res = $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/start', ['phone' => '0501234567'])->assertOk();
+
+        $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/verify', [
+            'verification_id' => (string) $res->json('data.verification_id'), 'code' => (string) $res->json('data.dev_code'),
+        ])->assertStatus(422);
+
+        $this->assertGuest('web');
     }
 }

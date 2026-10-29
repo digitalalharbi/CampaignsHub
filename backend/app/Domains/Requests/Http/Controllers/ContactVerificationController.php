@@ -20,7 +20,7 @@ use Illuminate\Validation\Rule;
  */
 final class ContactVerificationController
 {
-    private const RESEND_COOLDOWN = 60;
+    public const RESEND_COOLDOWN = 60;
 
     public function __construct(
         private readonly ContactVerificationService $service,
