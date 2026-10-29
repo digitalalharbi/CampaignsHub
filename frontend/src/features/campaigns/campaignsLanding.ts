@@ -63,6 +63,30 @@ export interface LandingAnswer {
    * small spend is a small sample, not waste. Null when no group could be compared. An unreported result is never read as zero.
    */
   inefficient: number | null
+  /**
+   * The evidence behind the two counts, one entry per group that could be compared — so the reader sees WHY a campaign was
+   * flagged (its cost against the group's median, or a reported zero against the spend floor), how large the sample was and which
+   * outcome it was compared on. The surface adds the period and currency, which this module does not hold.
+   */
+  comparisons: LandingComparison[]
+}
+
+/** One compared group and what it flagged — the explanation of a count, never a verdict of waste. */
+export interface LandingComparison {
+  objective: string | null
+  outcome: string
+  outcomeLabel: { ar?: string; en?: string } | null
+  /** Campaigns in the group that cleared the results floor — the sample the median is read from. */
+  peers: number
+  /** The peers' median cost per result, in the reporting currency. */
+  usualCost: number
+  /** At or below this cost per result reads as an opportunity. */
+  opportunityAtMost: number
+  /** At or above this cost per result reads as costlier than the peers. */
+  costlierAtLeast: number
+  /** A reported zero is flagged only once spend reaches this. */
+  zeroSpendFloor: number
+  flagged: Array<{ id: string; name: string | null; kind: 'opportunity' | 'costlier' | 'zero'; cost: number | null; spend: number; results: number }>
 }
 
 /**
@@ -119,7 +143,7 @@ const resultAndSpend = (objective: string | null, row: Record<string, unknown> |
 const HOT_PACE = 1.2
 
 export function landingAnswer(
-  campaigns: { id: string; objective: string | null }[],
+  campaigns: { id: string; objective: string | null; name?: string | null }[],
   metricsByCampaign: Map<string, Record<string, unknown>>,
   budgets: BudgetRow[] | undefined,
   /*
@@ -165,32 +189,63 @@ export function landingAnswer(
    * form's with a website lead's, or a partial-currency spend with a whole one.
    */
   const { minPeers, minResults, opportunityRatio, inefficientRatio } = LANDING_COMPARISON
-  const groups = new Map<string, { peers: Array<{ id: string; cost: number }>; zeros: Array<{ id: string; spend: number }> }>()
+  type Peer = { id: string; name: string | null; cost: number; spend: number; results: number }
+  type Zero = { id: string; name: string | null; spend: number }
+  const groups = new Map<string, { objective: string | null; outcome: string; label: LandingComparison['outcomeLabel']; peers: Peer[]; zeros: Zero[] }>()
   for (const c of campaigns) {
     const row = metricsByCampaign.get(c.id)
     const group = comparisonGroup(c.objective, row)
     const figures = resultAndSpend(c.objective, row)
-    if (group === null || figures === null) continue
-    const entry = groups.get(group) ?? { peers: [], zeros: [] }
-    if (figures.result >= minResults) entry.peers.push({ id: c.id, cost: figures.spend / figures.result })
-    else if (figures.result === 0) entry.zeros.push({ id: c.id, spend: figures.spend })
+    if (group === null || figures === null || row === undefined) continue
+    const entry = groups.get(group) ?? {
+      objective: c.objective,
+      outcome: String(row.outcome),
+      label: (row.outcome_label as LandingComparison['outcomeLabel']) ?? null,
+      peers: [],
+      zeros: [],
+    }
+    const name = c.name ?? null
+    if (figures.result >= minResults) entry.peers.push({ id: c.id, name, cost: figures.spend / figures.result, spend: figures.spend, results: figures.result })
+    else if (figures.result === 0) entry.zeros.push({ id: c.id, name, spend: figures.spend })
     // Between zero and the floor: too few results to say anything either way.
     groups.set(group, entry)
   }
-  let compared = false
   let opportunity = 0
   const inefficientIds = new Set<string>()
-  for (const { peers, zeros } of groups.values()) {
-    if (peers.length < minPeers) continue
-    compared = true
-    const usual = median(peers.map((p) => p.cost))
-    for (const p of peers) {
-      if (p.cost <= usual * opportunityRatio) opportunity++
-      if (p.cost >= usual * inefficientRatio) inefficientIds.add(p.id)
+  const comparisons: LandingComparison[] = []
+  for (const g of groups.values()) {
+    if (g.peers.length < minPeers) continue
+    const usual = median(g.peers.map((p) => p.cost))
+    const comparison: LandingComparison = {
+      objective: g.objective,
+      outcome: g.outcome,
+      outcomeLabel: g.label,
+      peers: g.peers.length,
+      usualCost: usual,
+      opportunityAtMost: usual * opportunityRatio,
+      costlierAtLeast: usual * inefficientRatio,
+      zeroSpendFloor: usual * minResults,
+      flagged: [],
     }
-    // A reported zero is waste only once the spend would have bought the floor's worth of results at the usual price.
-    for (const z of zeros) if (z.spend >= usual * minResults) inefficientIds.add(z.id)
+    for (const p of g.peers) {
+      if (p.cost <= comparison.opportunityAtMost) {
+        opportunity++
+        comparison.flagged.push({ id: p.id, name: p.name, kind: 'opportunity', cost: p.cost, spend: p.spend, results: p.results })
+      }
+      if (p.cost >= comparison.costlierAtLeast) {
+        inefficientIds.add(p.id)
+        comparison.flagged.push({ id: p.id, name: p.name, kind: 'costlier', cost: p.cost, spend: p.spend, results: p.results })
+      }
+    }
+    // A reported zero is flagged only once the spend would have bought the floor's worth of results at the usual price.
+    for (const z of g.zeros) {
+      if (z.spend < comparison.zeroSpendFloor) continue
+      inefficientIds.add(z.id)
+      comparison.flagged.push({ id: z.id, name: z.name, kind: 'zero', cost: null, spend: z.spend, results: 0 })
+    }
+    comparisons.push(comparison)
   }
+  const compared = comparisons.length > 0
 
   return {
     needsAttention,
@@ -199,5 +254,6 @@ export function landingAnswer(
     overpacing: paceable.length === 0 ? null : paceable.filter((b) => (b.pace ?? 0) > HOT_PACE).length,
     opportunity: compared ? opportunity : null,
     inefficient: compared ? inefficientIds.size : null,
+    comparisons,
   }
 }

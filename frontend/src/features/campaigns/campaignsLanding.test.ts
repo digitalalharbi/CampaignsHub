@@ -92,7 +92,7 @@ describe('what the campaigns workspace answers before the list', () => {
   it('answers an empty project without inventing anything', () => {
     const a = landingAnswer([], new Map(), undefined, new Set())
 
-    expect(a).toEqual({ needsAttention: 0, healthy: 0, unexamined: 0, overpacing: null, opportunity: null, inefficient: null })
+    expect(a).toEqual({ needsAttention: 0, healthy: 0, unexamined: 0, overpacing: null, opportunity: null, inefficient: null, comparisons: [] })
   })
 })
 

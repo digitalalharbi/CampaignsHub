@@ -35,6 +35,7 @@ import { movers } from './campaignMovers'
 import { objectiveMix } from './objectiveMix'
 import { campaignState } from './campaignState'
 import { landingAnswer } from './campaignsLanding'
+import { LandingComparisonChip } from './LandingComparisonChip'
 
 /** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
 const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
@@ -639,7 +640,7 @@ export function CampaignsPage() {
    */
   const landing = useMemo(
     () => landingAnswer(
-      visibleCampaigns.map((c) => ({ id: c.id, objective: c.objective })),
+      visibleCampaigns.map((c) => ({ id: c.id, objective: c.objective, name: c.name })),
       metricsByCampaign as Map<string, Record<string, unknown>>,
       budget.data,
       attentionIds,
@@ -1216,7 +1217,7 @@ export function CampaignsPage() {
               and «nothing could be examined» are separate answers, and a pacing question nobody
               could measure is not answered «no».
             */}
-            <LandingAnswer answer={landing} ar={ar} />
+            <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />
               {/*
                 CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
                 Inactive is one click away with its count beside it: a campaign silently missing from a
@@ -1719,7 +1720,7 @@ const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
  * is said in words, because «0 overspending» and «nothing could be paced» are different answers and
  * a zero is read as the first.
  */
-function LandingAnswer({ answer, ar }: { answer: ReturnType<typeof landingAnswer>; ar: boolean }) {
+function LandingAnswer({ answer, ar, range, currency }: { answer: ReturnType<typeof landingAnswer>; ar: boolean; range: { from: string; to: string }; currency: string | null }) {
   const nothing = answer.needsAttention === 0 && answer.healthy === 0 && answer.unexamined === 0
 
   if (nothing) return null
@@ -1756,16 +1757,16 @@ function LandingAnswer({ answer, ar }: { answer: ReturnType<typeof landingAnswer
           {ar ? `${answer.overpacing} تصرف أسرع من الخطة` : `${answer.overpacing} spending ahead of plan`}
         </span>
       ) : null}
-      {/* Against each objective's own peers; a count is shown only where a comparison could be made at all. */}
+      {/*
+        Against each comparison group's own peers; a count is shown only where a comparison could be made at all. Both are
+        EXPLANATORY: they open onto the reason, the sample, the reference figure, the period, the currency and the outcome
+        compared — and never call spend waste.
+      */}
       {answer.opportunity !== null && answer.opportunity > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-success" data-testid="landing-opportunity">
-          {ar ? `${answer.opportunity} أكفأ من نظيراتها — فرصة للتوسع` : `${answer.opportunity} more efficient than their peers — room to scale`}
-        </span>
+        <LandingComparisonChip kind="opportunity" count={answer.opportunity} answer={answer} ar={ar} range={range} currency={currency} />
       )}
       {answer.inefficient !== null && answer.inefficient > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-danger" data-testid="landing-inefficient">
-          {ar ? `${answer.inefficient} ميزانية غير فعّالة` : `${answer.inefficient} inefficient budgets`}
-        </span>
+        <LandingComparisonChip kind="review" count={answer.inefficient} answer={answer} ar={ar} range={range} currency={currency} />
       )}
     </div>
   )
