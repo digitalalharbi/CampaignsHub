@@ -4,6 +4,7 @@ import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/feature
 import { formatMoneyReading, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from '../api'
 import { clientKpiKeys } from '../clientKpis'
+import { landingLabel, purchaseIsLandingProxy } from './leadResults'
 
 /**
  * How every figure on a live client link is read — one definition, shared by every mode.
@@ -166,8 +167,9 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     // metric, and «غير متاح» where none was sent. It never borrows the platform's optimised-for `conversions`, and never prints a measured zero.
     leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.results?.leads?.configured ? (p.results.leads.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.total)) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
     // The funnel steps the platforms report for a landing form: InitiateCheckout is a form start, a landing page view is a visit.
-    form_starts: { ar: 'بدء تعبئة النموذج', en: 'Form starts', format: (t, p, _m, count) => (p.reported?.checkout === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.checkout)) },
-    page_views: { ar: 'زيارات الصفحة', en: 'Page views', format: (t, p, _m, count) => (p.reported?.landing_page_views === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.landing_page_views)) },
+    // NASEL 2026-10-29 — with verified leads configured, the landing-page funnel (landing campaigns only) is the one reading of these two.
+    form_starts: { ar: 'بدء تعبئة النموذج', en: 'Form starts', format: (t, p, _m, count) => (p.results?.leads?.landing_funnel ? (p.results.leads.landing_funnel.form_starts == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing_funnel.form_starts)) : p.reported?.checkout === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.checkout)) },
+    page_views: { ar: 'زيارات الصفحة', en: 'Page views', format: (t, p, _m, count) => (p.results?.leads?.landing_funnel ? (p.results.leads.landing_funnel.page_views == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing_funnel.page_views)) : p.reported?.landing_page_views === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.landing_page_views)) },
     landing_leads: { ar: 'عملاء صفحة الهبوط', en: 'Landing-page leads', format: (_t, p, _m, count) => (p.results?.leads?.landing == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing)) },
     native_leads: { ar: 'عملاء النموذج الأصلي', en: 'Native-form leads', format: (_t, p, _m, count) => (p.results?.leads?.native == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.native)) },
     cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.results?.leads?.configured ? (p.results.leads.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.leads.cost))) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
@@ -216,8 +218,11 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
 export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload | null | undefined, ar: boolean): string {
   // The operator's own name for this card on this link, when they gave one.
   const custom = payload?.kpi_labels?.[key]
+  if (custom !== undefined && custom.trim() !== '') return custom
+  // NASEL 2026-10-29 — where the landing-page result IS the purchase event, it stands in for a form completion and is not called «Purchases».
+  if (payload && (key === 'purchases' || key === 'landing_leads') && purchaseIsLandingProxy(payload)) return landingLabel(payload, ar)
 
-  return custom !== undefined && custom.trim() !== '' ? custom : ar ? meta.ar : meta.en
+  return ar ? meta.ar : meta.en
 }
 
 /**
