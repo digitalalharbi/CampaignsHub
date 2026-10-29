@@ -1,3 +1,35 @@
+# CURRENT STATE — 2026-10-29 (night) — #876 deployed; live-file defect found in Production; queue #878 → #881 → #880
+
+**Deployed:** #876 at `f9737930` (run 40898730692, health 200, bundle `index-Bj_dCVkO.js`). Files follow the link's Results contract. The first WebKit attempt hit the known «WebKit encountered an internal error» crash (999 passed); the rerun passed.
+
+**Production check of #876: FAILED → #881.**
+- Session: agency@campaignshub.io, signed in by the Owner in Chrome.
+- The NASEL live report `a2065cf6` exported to an empty CSV: « → » period, no KPI rows, platform header with revenue / conversions / ROAS / CPA.
+- Cause: live reports store no `data` snapshot, and every file path read that snapshot.
+- #881 (`fix/live-report-files`) renders files from the page's builder, in memory. It also carries a fix for a flaky `SharedLinkDownloadTest` substring assertion («42» matched the file's timestamp).
+
+**NASEL links, read from the agency session:**
+- One report, `a2065cf6`, with link `5392753f`: active, downloads off.
+- Reports behind Dk7… and brSe9… are absent from the list.
+- Deletion was unaudited, so cause and actor are unknown.
+- #880 (`fix/report-delete-audit`) audits deletions from now on.
+
+**Queue (one lander at a time):**
+- **#878** campaigns opportunity / higher-cost chips: comparable groups, data floor, explanatory evidence. One WebKit failure (`cross-product-consistency` › «/agency/settings never rendered») is unrelated to the diff; the job was rerun.
+- **#881**, then **#880**.
+
+**#877 Twilio OTP: NOT merged; no production OTP; no SMS sent.**
+- #879 (into #877's branch) fixes the first-send cooldown and the six-box OTP E2E. Its E2E now pass on all three browsers; backend failures went from 109 to 13.
+- The 13 left are #877's own: the session-bound `ownerKey` (12) and intake requiring `email_verification_id` (1). Both are written up in #879 for the contributor.
+- Credentials: Twilio vars are not wired into the deploy workflows; Saudi sender ID registration and Geo Permissions are operational. A Saudi handset test needs Owner approval.
+
+**Snapchat 477 rows:** dry run only (run 40867774062). No `--apply` or `--revert` without explicit Owner approval.
+
+**After the queue lands:**
+1. Re-export the NASEL CSV and compare with its page.
+2. Open `/agency/campaigns` (or `/app/campaigns`) and check the explanatory chips.
+3. Then the next non-VERIFIED requirement.
+
 # CURRENT STATE — 2026-10-29 (late) — Results contract deployed; exports on fix/nasel-exports-contract
 
 **Deployed:** #875 at `9515c939`:
