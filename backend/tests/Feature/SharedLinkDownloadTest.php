@@ -195,7 +195,9 @@ final class SharedLinkDownloadTest extends TestCase
         $csv = $this->get("/api/v1/reports/shared/{$token}/download/csv")->assertOk()->streamedContent();
 
         $this->assertDoesNotMatchRegularExpression('/^results,|^cost_per_result,/m', $csv, 'a link with no Results prints none in its file');
-        $this->assertStringNotContainsString('42', $csv);
+        // The saved Results figure appears in no cell. Matched as a whole cell: the file also carries a reference code and a
+        // creation timestamp, and a bare «42» substring failed this test whenever the clock or the code happened to contain it.
+        $this->assertDoesNotMatchRegularExpression('/(^|,)42(\\.0+)?(,|$)/m', $csv, 'the saved Results figure reached the file');
     }
 
     public function test_a_link_with_downloads_disabled_refuses(): void
