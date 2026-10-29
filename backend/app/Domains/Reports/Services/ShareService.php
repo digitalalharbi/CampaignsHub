@@ -226,6 +226,8 @@ final class ShareService
      */
     public function downloadDocument(Report $report, ReportShare $share): array
     {
+        // LIVE-FILE-PARITY-001 — a live link's file is the page's payload, not the empty stored copy.
+        $report = app(LiveReportService::class)->materialise($report, $share);
         $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh($report->data ?? []), $share);
 
         /*

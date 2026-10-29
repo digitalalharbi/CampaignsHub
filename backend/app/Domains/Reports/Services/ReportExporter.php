@@ -60,6 +60,8 @@ final class ReportExporter
      */
     public function exportData(Report $report, ?ReportShare $share = null): array
     {
+        // LIVE-FILE-PARITY-001 — a live report has no stored snapshot; its file reads the page's builder instead.
+        $report = app(LiveReportService::class)->materialise($report, $share);
         // No format may render until the snapshot passes the data-consistency gate.
         $this->gate->ensureReady($this->stored($report, $share));
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
@@ -429,7 +431,8 @@ final class ReportExporter
         $fh = fopen('php://temp', 'r+');
         $put = fn (array $row) => fputcsv($fh, $row, ',', '"', '');
         $put(["Report: {$report->name}", $report->type]);
-        $put(['Period', ($data['period']['from'] ?? '').' → '.($data['period']['to'] ?? ''), 'Currency', $report->currency]);
+        // The currency the figures are IN — a live report's figures come from the page, which names its own.
+        $put(['Period', ($data['period']['from'] ?? '').' → '.($data['period']['to'] ?? ''), 'Currency', (string) ($data['currency'] ?? $report->currency)]);
         $put([]);
         $put(['KPIs']);
         foreach (self::kpiRows($data) as $k => $v) {
@@ -981,9 +984,10 @@ final class ReportExporter
             $rows[] = ['Data source / مصدر البيانات', (string) $report->data_source];
             $rows[] = ['Attribution window / نافذة الإسناد', (string) ($report->attribution_window ?? '—')];
         }
-        $rows[] = ['Currency / العملة', (string) $report->currency];
+        $rows[] = ['Currency / العملة', (string) ($data['currency'] ?? $report->currency)];
         $rows[] = ['Timezone / المنطقة الزمنية', (string) $report->timezone];
-        $rows[] = ['Report mode / وضع التقرير', ($report->config['mode'] ?? 'snapshot') === 'live' ? 'Live' : 'Snapshot'];
+        $live = ($data['mode'] ?? null) === 'live' || ($report->config['mode'] ?? 'snapshot') === 'live' || (($report->config['live'] ?? false) === true);
+        $rows[] = ['Report mode / وضع التقرير', $live ? 'Live' : 'Snapshot'];
         $rows[] = ['Generated at / تاريخ الإنشاء', (string) (optional($report->generated_at)->toDateTimeString() ?? now()->toDateTimeString())];
         $rows[] = ['File created / إنشاء الملف', now()->toDateTimeString()];
 
@@ -1004,7 +1008,9 @@ final class ReportExporter
             return $report;
         }
 
-        return Report::withoutGlobalScopes()->find($report->getKey()) ?? $report;
+        $fresh = Report::withoutGlobalScopes()->find($report->getKey());
+
+        return $fresh === null ? $report : app(LiveReportService::class)->materialise($fresh, $share);
     }
 
     private function pdf(Report $report, array $data, ?ReportShare $share = null): string
