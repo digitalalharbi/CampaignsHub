@@ -50,20 +50,10 @@ final class RegistrationVerificationService
      */
     public function send(RegistrationRequest $request, string $channel): array
     {
-        if ($channel === 'mobile') {
-            $recent = RegistrationVerification::query()
-                ->where('registration_request_id', $request->getKey())
-                ->where('channel', 'mobile')
-                ->whereNull('consumed_at')
-                ->latest('created_at')
-                ->first();
-
-            if ($recent !== null && $recent->created_at->gt(Carbon::now()->subSeconds(self::RESEND_COOLDOWN_SECONDS))) {
-                $remaining = self::RESEND_COOLDOWN_SECONDS - (int) $recent->created_at->diffInSeconds(Carbon::now());
-                throw ValidationException::withMessages([
-                    'channel' => [__('auth.resend_cooldown', ['seconds' => max(1, $remaining)])],
-                ]);
-            }
+        if ($channel === 'mobile' && ($remaining = $request->mobileResendAfter(self::RESEND_COOLDOWN_SECONDS)) > 0) {
+            throw ValidationException::withMessages([
+                'channel' => [__('auth.resend_cooldown', ['seconds' => $remaining])],
+            ]);
         }
 
         // One live challenge per channel: leaving the previous one usable would mean a resend widens
@@ -108,7 +98,7 @@ final class RegistrationVerificationService
             'dev_link' => $dev && $channel === 'email' ? $path : null,
             'dev_code' => $dev && $channel === 'mobile' && ! $usingTwilio ? $secret : null,
             'expires_at' => $expiresAt->toIso8601String(),
-            'resend_after' => $channel === 'mobile' ? self::RESEND_COOLDOWN_SECONDS : 0,
+            'resend_after' => $channel === 'mobile' && $usingTwilio ? self::RESEND_COOLDOWN_SECONDS : 0,
         ];
     }
 

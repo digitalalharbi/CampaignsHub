@@ -131,7 +131,15 @@ final class RegistrationRequest extends Model
         ];
     }
 
-    private function mobileResendAfter(): int
+    /**
+     * Seconds before another mobile code may be requested — 0 when none is owed.
+     *
+     * The cooldown protects the SMS provider (cost, carrier filtering, Fraud Guard), so it applies only to a challenge that was
+     * actually handed to one. A `local` challenge sent nothing anywhere — no provider is configured — and blocking its re-issue
+     * blocked the only way a non-production applicant gets the code at all (the first challenge is issued automatically when the
+     * email is confirmed).
+     */
+    public function mobileResendAfter(int $cooldownSeconds = 60): int
     {
         $latest = RegistrationVerification::query()
             ->where('registration_request_id', $this->getKey())
@@ -140,11 +148,11 @@ final class RegistrationRequest extends Model
             ->latest('created_at')
             ->first();
 
-        if ($latest === null) {
+        if ($latest === null || $latest->provider !== 'twilio_verify') {
             return 0;
         }
 
-        return max(0, 60 - (int) $latest->created_at->diffInSeconds(now()));
+        return max(0, $cooldownSeconds - (int) $latest->created_at->diffInSeconds(now()));
     }
 
     private function mobileDeliveryStatus(): ?string
