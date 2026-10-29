@@ -439,6 +439,18 @@ export interface LivePayload {
       /** NASEL 2026-10-29 — `native` and `landing` per platform, from the same resolver, so platform cards add up to them. */
       native_by_platform?: Record<string, number>
       landing_by_platform?: Record<string, number>
+      /** NASEL 2026-10-29 — the landing-page funnel over landing-path campaigns only; null = not reported. Platform-attributed, not unique submissions. */
+      landing_funnel?: {
+        campaigns: number
+        page_views: number | null
+        form_starts: number | null
+        contacts: number | null
+        completions: number | null
+        completion_rate: number | null
+        spend: number | null
+        cost_per_completion: number | null
+        basis: string
+      }
       cost: number | null
       by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
       by_path: Record<string, number>

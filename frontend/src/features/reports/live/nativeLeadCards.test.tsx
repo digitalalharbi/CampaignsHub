@@ -46,6 +46,7 @@ const payload = {
       configured: true, total: 96, native: 94, landing: 2, cost: 7.0077,
       native_by_platform: { meta: 39, tiktok: 11, snapchat: 44 },
       landing_by_platform: { meta: 1, tiktok: 0, snapchat: 1 },
+      landing_funnel: { campaigns: 3, page_views: 43, form_starts: 120, contacts: null, completions: 2, completion_rate: 0.0167, spend: 296.8, cost_per_completion: 148.4, basis: 'platform_attributed_not_unique_submissions' },
       by_platform: {}, by_path: { lead_form: 94, landing_page: 2 }, events: { meta: ev, tiktok: ev, snapchat: ev },
     },
   },
@@ -93,6 +94,27 @@ describe('NASEL native lead cards — one resolver for the summary', () => {
     expect(within(summary).getByTestId('exec-lead-page-views')).toHaveTextContent('43')
     expect(within(summary).getByTestId('exec-lead-spend')).toHaveTextContent('672.75')
     expect(within(summary).getByTestId('exec-lead-cost')).toHaveTextContent('7.01')
+  })
+
+  it('shows the landing-page funnel from landing campaigns only, and an unreported step as not available', async () => {
+    render()
+    const summary = await screen.findByTestId('exec-lead-summary')
+
+    expect(within(summary).getByTestId('exec-lead-form-starts')).toHaveTextContent('120')
+    expect(within(summary).getByTestId('exec-lead-completion-rate')).toHaveTextContent('1.7%')
+    expect(within(summary).getByTestId('exec-lead-landing-cost')).toHaveTextContent('148.40')
+    // Contact taps are not ingested from any source: absent, never a zero.
+    expect(within(summary).getByTestId('exec-lead-contacts')).toHaveTextContent('غير متاح')
+    expect(screen.getByTestId('exec-lead-basis')).toHaveTextContent('ليست عددًا فريدًا')
+  })
+
+  it('never shows clicks in place of leads on the platform cards', async () => {
+    render()
+    const cards = await screen.findByTestId('exec-platform-cards')
+
+    // TikTok had 5,492 clicks and 11 native leads: the card's figure is the leads; clicks are not a stand-in.
+    expect(within(within(cards).getByTestId('exec-platform-card-tiktok')).getByText(/^\d+$/)).toHaveTextContent(/^11$/)
+    expect(cards).not.toHaveTextContent('النقرات')
   })
 
   it('names the purchase event used for landing-page forms as form completions, not purchases', async () => {
