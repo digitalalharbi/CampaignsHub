@@ -1,3 +1,22 @@
+# CURRENT STATE — 2026-10-29 (late night) — #881, #878, #880 deployed; Production proof waits on an Owner sign-in; #871 CI rerun
+
+**Deployed (serial lander, each health 200):**
+- #881 at `100e45d1` (run 40924194281, bundle `index-Bj_dCVkO.js`). Live-report files are built from the page's builder.
+- #878 at `6d900f23` (run 40924269959, bundle `index-DoWgiNqs.js`). The served bundle contains `landing-comparison-evidence`.
+- #880 at `bc422bf9` (run 40935643681). Report deletions write `report.deleted`.
+
+**Production proof: BLOCKED_OPERATIONAL_EVIDENCE.** The agency session has expired in both Chrome and the in-app browser (`/api/v1/auth/me` → 401). Claude does not sign in for the Owner. Once the Owner signs in to agency@campaignshub.io in Chrome:
+1. Export `a2065cf6` as CSV, XLSX and PDF (`POST …/reports/a2065cf6…/export`; refresh `/sanctum/csrf-cookie` first) and compare each with the live page: period, currency, KPIs, Results.
+2. Open `/agency/campaigns` and check the chips' evidence panel.
+3. Confirm a `report.deleted` audit row only when a deletion really happens. No test deletion runs on NASEL data.
+
+None of #881, #878 or #880 is VERIFIED until those checks are done.
+
+**META-SAAS-APP-001 / #871** (`feat/meta-saas-app` at `8b2ab861`, not merged):
+- backend, frontend, image, chromium and webkit passed.
+- firefox failed one unrelated spec: `launch.spec.ts:13`, where a rail click stayed on `/app/dashboard`. The diff is backend and docs only. Rerun requested.
+- Status: code IMPLEMENTED_NOT_VERIFIED; real round trip BLOCKED_EXTERNAL_CREDENTIALS; Business Verification and App Review BLOCKED_OPERATIONAL_EVIDENCE. See `docs/META_SAAS_APP_REVIEW.md`.
+
 # CURRENT STATE — 2026-10-29 (night) — #876 deployed; live-file defect found in Production; queue #878 → #881 → #880
 
 **Deployed:** #876 at `f9737930` (run 40898730692, health 200, bundle `index-Bj_dCVkO.js`). Files follow the link's Results contract. The first WebKit attempt hit the known «WebKit encountered an internal error» crash (999 passed); the rerun passed.
