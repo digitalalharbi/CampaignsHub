@@ -1756,6 +1756,17 @@ function LandingAnswer({ answer, ar }: { answer: ReturnType<typeof landingAnswer
           {ar ? `${answer.overpacing} تصرف أسرع من الخطة` : `${answer.overpacing} spending ahead of plan`}
         </span>
       ) : null}
+      {/* Against each objective's own peers; a count is shown only where a comparison could be made at all. */}
+      {answer.opportunity !== null && answer.opportunity > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-success" data-testid="landing-opportunity">
+          {ar ? `${answer.opportunity} أكفأ من نظيراتها — فرصة للتوسع` : `${answer.opportunity} more efficient than their peers — room to scale`}
+        </span>
+      )}
+      {answer.inefficient !== null && answer.inefficient > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-danger" data-testid="landing-inefficient">
+          {ar ? `${answer.inefficient} ميزانية غير فعّالة` : `${answer.inefficient} inefficient budgets`}
+        </span>
+      )}
     </div>
   )
 }

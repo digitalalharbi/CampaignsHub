@@ -1,6 +1,7 @@
 import type { BudgetRow } from '@/features/analytics/api'
 
 import { campaignState } from './campaignState'
+import { campaignCostKey, campaignResultKey } from './campaignHeadline'
 
 /**
  * CAMPAIGN-INTELLIGENCE-HUB — what the workspace answers before the reader scrolls.
@@ -48,6 +49,46 @@ export interface LandingAnswer {
    * «no budget is overspending».
    */
   overpacing: number | null
+  /**
+   * CAMPAIGN-INTELLIGENCE-HUB — where the opportunity is: campaigns whose OWN cost per result is clearly better than their peers'
+   * (same objective, the objective's own cost metric, at least {@link MIN_PEERS} campaigns with a measured cost). Null when no objective
+   * had enough measured peers to compare — «nothing to compare» is not «no opportunity».
+   */
+  opportunity: number | null
+  /**
+   * Which budget is inefficient: money spent where the objective's result was REPORTED as zero, or a cost per result at least twice the
+   * peers' median. Null when nothing could be judged either way. An unreported result is never read as zero here.
+   */
+  inefficient: number | null
+}
+
+/** Peers needed before a cost is called better or worse than «usual» — fewer than this is not a comparison. */
+const MIN_PEERS = 3
+/** «Clearly better»: at most three quarters of the peers' median cost per result. */
+const OPPORTUNITY_RATIO = 0.75
+/** «Inefficient»: at least twice the peers' median cost per result. */
+const INEFFICIENT_RATIO = 2
+
+const median = (values: number[]): number => {
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+
+/** A figure the row REPORTED (never a coalesced zero), as a number; null otherwise. */
+const reportedNumber = (row: Record<string, unknown> | undefined, key: string | undefined): number | null => {
+  if (!row || !key) return null
+  const reported = (row.reported as Record<string, boolean> | undefined)?.[key]
+  const value = row[key]
+  return reported === true && typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** The objective's cost per result for one row: its own spend over its own reported result, or nothing. */
+const costPerResult = (objective: string | null, row: Record<string, unknown> | undefined): number | null => {
+  const result = reportedNumber(row, campaignResultKey(objective))
+  const spend = typeof row?.spend === 'number' ? row.spend : null
+  if (campaignCostKey(objective) === undefined || result === null || result <= 0 || spend === null || spend <= 0) return null
+  return spend / result
 }
 
 /** A campaign pacing above this much of its plan for the elapsed period is running hot. */
@@ -95,10 +136,45 @@ export function landingAnswer(
    */
   const paceable = (budgets ?? []).filter((b) => b.pacing_basis === 'comparable' && b.pace !== null)
 
+  /*
+   * Opportunity and inefficiency, against each objective's OWN peers: a lead's cost is never compared with an order's.
+   */
+  const costs = new Map<string, Array<{ id: string; cost: number }>>()
+  for (const c of campaigns) {
+    const cost = costPerResult(c.objective, metricsByCampaign.get(c.id))
+    if (cost === null) continue
+    const family = c.objective ?? ''
+    costs.set(family, [...(costs.get(family) ?? []), { id: c.id, cost }])
+  }
+  let compared = false
+  let opportunity = 0
+  const inefficientIds = new Set<string>()
+  for (const peers of costs.values()) {
+    if (peers.length < MIN_PEERS) continue
+    compared = true
+    const usual = median(peers.map((p) => p.cost))
+    for (const p of peers) {
+      if (p.cost <= usual * OPPORTUNITY_RATIO) opportunity++
+      if (p.cost >= usual * INEFFICIENT_RATIO) inefficientIds.add(p.id)
+    }
+  }
+  // Spend with a result the platform REPORTED as zero — judged without peers, because nothing bought is not a comparison.
+  let judgedZero = false
+  for (const c of campaigns) {
+    const row = metricsByCampaign.get(c.id)
+    const result = reportedNumber(row, campaignResultKey(c.objective))
+    const spend = typeof row?.spend === 'number' ? row.spend : null
+    if (result === null || spend === null || spend <= 0) continue
+    judgedZero = true
+    if (result === 0) inefficientIds.add(c.id)
+  }
+
   return {
     needsAttention,
     healthy,
     unexamined,
     overpacing: paceable.length === 0 ? null : paceable.filter((b) => (b.pace ?? 0) > HOT_PACE).length,
+    opportunity: compared ? opportunity : null,
+    inefficient: compared || judgedZero ? inefficientIds.size : null,
   }
 }

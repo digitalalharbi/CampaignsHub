@@ -92,7 +92,7 @@ describe('what the campaigns workspace answers before the list', () => {
   it('answers an empty project without inventing anything', () => {
     const a = landingAnswer([], new Map(), undefined, new Set())
 
-    expect(a).toEqual({ needsAttention: 0, healthy: 0, unexamined: 0, overpacing: null })
+    expect(a).toEqual({ needsAttention: 0, healthy: 0, unexamined: 0, overpacing: null, opportunity: null, inefficient: null })
   })
 })
 
@@ -169,5 +169,52 @@ describe('the phrase «needs attention» has one owner', () => {
 
     expect(a.healthy).toBe(0)
     expect(a.unexamined).toBe(1)
+  })
+})
+
+/**
+ * CAMPAIGN-INTELLIGENCE-HUB — «where is the opportunity, which budget is inefficient», against each objective's OWN peers and only from
+ * results the platform reported. Every expected count is derived from the rows below, never typed as a literal.
+ */
+describe('opportunity and inefficient budget', () => {
+  const leadRow = (spend: number, leads: number | null) => ({ reported: { spend: true, leads: leads !== null }, spend, leads: leads ?? 0, clicks: 100, impressions: 10000 })
+  const rows = {
+    cheap: leadRow(100, 20), // 5 per lead
+    usual1: leadRow(100, 10), // 10
+    usual2: leadRow(100, 9), // ~11.1
+    dear: leadRow(300, 10), // 30
+    zero: leadRow(200, 0), // spent, reported zero leads
+    unreported: leadRow(200, null), // spent, leads never reported
+  }
+  const campaigns = Object.keys(rows).map((id) => ({ id, objective: 'leads' }))
+  const metrics = new Map(Object.entries(rows) as Array<[string, Record<string, unknown>]>)
+  const costs = Object.values(rows).filter((r) => r.reported.leads && r.leads > 0).map((r) => r.spend / r.leads).sort((a, b) => a - b)
+  const median = costs.length % 2 === 0 ? (costs[costs.length / 2 - 1] + costs[costs.length / 2]) / 2 : costs[Math.floor(costs.length / 2)]
+
+  it('counts a campaign clearly cheaper than its peers as the opportunity, and one at twice their cost or with a reported zero as inefficient', () => {
+    const a = landingAnswer(campaigns, metrics, undefined, new Set())
+
+    expect(a.opportunity).toBe(costs.filter((c) => c <= median * 0.75).length)
+    const inefficient = costs.filter((c) => c >= median * 2).length + 1 // + the reported zero
+    expect(a.inefficient).toBe(inefficient)
+  })
+
+  it('never reads an unreported result as a zero', () => {
+    const only = landingAnswer([{ id: 'unreported', objective: 'leads' }], new Map([['unreported', rows.unreported]]), undefined, new Set())
+
+    expect(only.inefficient).toBeNull()
+  })
+
+  it('compares nothing with fewer than three measured peers, and says so with null rather than zero', () => {
+    const two = landingAnswer([{ id: 'cheap', objective: 'leads' }, { id: 'dear', objective: 'leads' }], new Map([['cheap', rows.cheap], ['dear', rows.dear]]), undefined, new Set())
+
+    expect(two.opportunity).toBeNull()
+  })
+
+  it('never compares a lead\'s cost with an order\'s', () => {
+    const mixed = [{ id: 'cheap', objective: 'leads' }, { id: 'usual1', objective: 'sales' }, { id: 'dear', objective: 'awareness' }]
+    const a = landingAnswer(mixed, metrics, undefined, new Set())
+
+    expect(a.opportunity).toBeNull()
   })
 })
