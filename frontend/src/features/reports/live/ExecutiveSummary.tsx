@@ -463,39 +463,55 @@ function PlatformComparison({
 /* ─────────────────────────────── Lead summary ─────────────────────────────── */
 
 /**
- * NASEL 2026-10-29 — the small cards under the report: native leads, landing-page completions, their sum («total interest»), page visits,
- * spend and the cost per result. Every figure is the server's (`results.leads`, `totals`), so the sum here is the same sum the platform cards
- * add up to plus the landing completions — never a second calculation. Spend and its cost appear only where the link shows spend.
+ * NASEL 2026-10-29 — the small cards under the report: native leads, then the landing-page funnel (visits, form starts, contact taps,
+ * completions, completion rate), their sum («total interest»), and spend with its costs. Every figure is the server's one resolver
+ * (`results.leads`, its `landing_funnel` over landing campaigns only), so nothing here is a second calculation; a step no platform reports
+ * reads «غير متاح». Spend and its costs appear only where the link shows spend.
  */
 function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; reader: Reader; ar: boolean; currency: string }) {
   const leads = payload.results?.leads
   const native = nativeLeads(payload)
   if (!leads || !native) return null
+  const funnel = leads.landing_funnel
   const na = ar ? 'غير متاح' : 'Not available'
   const n = (v: number | null | undefined) => (v === null || v === undefined ? na : num(Number(v)))
+  const moneyOrNa = (v: number | null | undefined) => (v === null || v === undefined ? na : moneyExact(Number(v), currency))
+  const rate = (v: number | null | undefined) => (v === null || v === undefined ? na : `${(Number(v) * 100).toFixed(1)}%`)
   const spendShown = reader.keys(payload).includes('spend') && payload.totals?.spend !== null && payload.totals?.spend !== undefined
   const items: Array<[string, string, string]> = [
     ['native', ar ? NATIVE_LEADS_LABEL.ar : NATIVE_LEADS_LABEL.en, n(native.total)],
+    ['page-views', ar ? 'زيارات الصفحة' : 'Page visits', n(funnel ? funnel.page_views : count(payload.totals?.landing_page_views))],
+    ['form-starts', ar ? 'بدء تعبئة النموذج' : 'Form starts', n(funnel?.form_starts)],
+    ['contacts', ar ? 'ضغطات واتساب/اتصال/إيميل' : 'WhatsApp / call / email taps', n(funnel?.contacts)],
     ['landing', landingLabel(payload, ar), n(leads.landing)],
+    ['completion-rate', ar ? 'معدل الإكمال' : 'Completion rate', rate(funnel?.completion_rate)],
     ['interest', ar ? 'إجمالي الاهتمام' : 'Total interest', n(leads.total)],
-    ['page-views', ar ? 'زيارات الصفحة' : 'Page visits', n(count(payload.totals?.landing_page_views))],
     ...(spendShown
       ? ([
           ['spend', ar ? 'الإنفاق' : 'Spend', moneyExact(Number(payload.totals.spend), currency)],
-          ['cost', ar ? 'تكلفة النتيجة' : 'Cost per result', leads.cost === null || leads.cost === undefined ? na : moneyExact(leads.cost, currency)],
+          ['cost', ar ? 'تكلفة النتيجة' : 'Cost per result', moneyOrNa(leads.cost)],
+          ['landing-cost', ar ? 'تكلفة إتمام نموذج الصفحة' : 'Cost per landing completion', moneyOrNa(funnel?.cost_per_completion)],
         ] as Array<[string, string, string]>)
       : []),
   ]
 
   return (
-    <dl className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-surface p-3 sm:grid-cols-3 lg:grid-cols-6" data-testid="exec-lead-summary">
-      {items.map(([key, label, value]) => (
-        <div key={key} className="min-w-0" data-testid={`exec-lead-${key}`}>
-          <dt className="truncate text-[11px] text-text-muted">{label}</dt>
-          <dd className="tnum text-sm font-bold text-text-primary"><Num>{value}</Num></dd>
-        </div>
-      ))}
-    </dl>
+    <section className="flex flex-col gap-1" aria-label={ar ? 'العملاء المحتملون وأحداث صفحة الهبوط' : 'Leads and landing-page events'}>
+      <dl className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-surface p-3 sm:grid-cols-3 lg:grid-cols-5" data-testid="exec-lead-summary">
+        {items.map(([key, label, value]) => (
+          <div key={key} className="min-w-0" data-testid={`exec-lead-${key}`}>
+            <dt className="truncate text-[11px] text-text-muted">{label}</dt>
+            <dd className="tnum text-sm font-bold text-text-primary"><Num>{value}</Num></dd>
+          </div>
+        ))}
+      </dl>
+      {/* What the counts are and are not: platform attributions, never unique people or deduplicated submissions. */}
+      <p className="text-[11px] text-text-muted" data-testid="exec-lead-basis">
+        {ar
+          ? 'أحداث صفحة الهبوط من مسار صفحة الهبوط وحده، كما تنسبها كل منصة — ليست عددًا فريدًا للأشخاص أو للنماذج المؤكدة.'
+          : 'Landing-page events from the landing-page path only, as each platform attributes them — not a count of unique people or confirmed submissions.'}
+      </p>
+    </section>
   )
 }
 

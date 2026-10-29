@@ -162,6 +162,36 @@ final class ResultEventsTest extends TestCase
         $this->assertSame(96.0, $out['total'], 'total interest = native + landing completions; the pixel Lead and generic conversions are not in it');
     }
 
+    /** NASEL 2026-10-29 — the landing-page funnel reads landing campaigns only; a native form campaign's checkout or pixel events never enter it. */
+    public function test_the_landing_funnel_counts_landing_campaigns_only_and_keeps_unreported_steps_absent(): void
+    {
+        $ev = ['lead_form' => 'form_leads', 'landing_page' => 'purchases'];
+        $events = ResultEvents::merged(['meta' => $ev, 'tiktok' => $ev, 'snapchat' => $ev], null, ['LeadForm' => 'lead_form', 'LandingPage' => 'landing_page']);
+        $rows = [
+            $this->row('m1', 'meta', ['form_leads' => 39, 'checkout' => 1, 'campaign_name' => 'Riwaq — LeadForm — Meta'], ['form_leads' => true, 'checkout' => true]),
+            $this->row('m2', 'meta', ['purchases' => 1, 'checkout' => 3, 'landing_page_views' => 13, 'leads' => 2, 'campaign_name' => 'Riwaq — LandingPage — Meta'], ['purchases' => true, 'checkout' => true, 'landing_page_views' => true, 'leads' => true]),
+            $this->row('t2', 'tiktok', ['purchases' => 0, 'checkout' => 117, 'conversions' => 1110, 'campaign_name' => 'Riwaq — LandingPage — TikTok'], ['purchases' => true, 'checkout' => true, 'conversions' => true]),
+            // Snapchat's start event was never established: its checkout is not a form start.
+            $this->row('s2', 'snapchat', ['purchases' => 1, 'checkout' => 53, 'landing_page_views' => 30, 'campaign_name' => 'Riwaq — LandingPage — Snap'], ['purchases' => true, 'checkout' => true, 'landing_page_views' => true]),
+        ];
+
+        $funnel = $events->leadBreakdown($rows, [])['landing_funnel'];
+
+        $this->assertSame(3, $funnel['campaigns']);
+        $this->assertSame(43.0, $funnel['page_views']);
+        $this->assertSame(120.0, $funnel['form_starts'], 'Meta 3 + TikTok 117; the LeadForm campaign\'s checkout and Snapchat\'s are not landing form starts');
+        $this->assertSame(2.0, $funnel['completions']);
+        $this->assertSame(round(2 / 120, 4), $funnel['completion_rate']);
+        $this->assertSame(30.0, $funnel['spend'], 'the three landing campaigns\' spend only');
+        $this->assertSame(15.0, $funnel['cost_per_completion']);
+        $this->assertNull($funnel['contacts'], 'contact clicks are not ingested — absent, never zero');
+
+        $none = $events->leadBreakdown([$this->row('m1', 'meta', ['form_leads' => 3, 'campaign_name' => 'Riwaq — LeadForm — Meta'], ['form_leads' => true])], [])['landing_funnel'];
+        $this->assertSame(0, $none['campaigns']);
+        $this->assertNull($none['completions']);
+        $this->assertNull($none['cost_per_completion']);
+    }
+
     public function test_native_form_is_accepted_as_the_lead_form_path_and_stored_under_its_existing_key(): void
     {
         $events = ResultEvents::merged(['snapchat' => ['native_form' => 'form_leads']], null, ['LeadForm' => 'native_form']);
