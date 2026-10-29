@@ -41,6 +41,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * LIVEREP-001 — the figures behind a live shared link, recomputed on every request.
@@ -374,6 +375,57 @@ final class LiveReportService
         // Each content row gets its share-bound handle before the boundary removes the ids.
         foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
             $built[$list] = ContentCopy::rows(ContentKey::attach($built[$list] ?? [], $share), $share->creativeVisibility());
+        }
+
+        /*
+         * NASEL 2026-10-29 — a content's «Results» under the project's verified events, read while the campaign name is still on the row
+         * (the boundary removes it). The tile printed the platform's generic `conversions`: «0» on a Snapchat lead-form ad that had 27 native
+         * leads, and a landing-page load count on TikTok.
+         */
+        $leads = ResultEvents::forProject($scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']), 'lead_events', (array) (($share->settings ?? [])['lead_events'] ?? []) ?: null);
+        if ($leads->configured()) {
+            // A content row names its creative, not its campaign: the campaign's name (the project's path convention) is looked up once.
+            $ids = [];
+            $collect = static function (array $rows) use (&$collect, &$ids): void {
+                foreach ($rows as $row) {
+                    if (isset($row['groups']) && is_array($row['groups'])) {
+                        $collect($row['groups']);
+                    }
+                    if (isset($row['ads']) && is_array($row['ads']) && ! isset($row['provider'])) {
+                        $collect($row['ads']);
+                    }
+                    if (isset($row['id'], $row['provider'])) {
+                        $ids[] = (string) $row['id'];
+                        $ids[] = (string) ($row['campaign_id'] ?? '');
+                    }
+                }
+            };
+            foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+                $collect($built[$list] ?? []);
+            }
+            $ids = array_values(array_unique(array_filter($ids, static fn (string $id): bool => Str::isUuid($id))));
+            $campaignOf = ExternalCreative::withoutGlobalScopes()->whereIn('id', $ids)->pluck('campaign_id', 'id')->all();
+            $nameOf = UnifiedCampaign::withoutGlobalScopes()->whereIn('id', array_values(array_unique(array_filter([...array_map('strval', $campaignOf), ...$ids], static fn (string $id): bool => Str::isUuid($id)))))->pluck('name', 'id')->all();
+            $mark = static function (array $rows) use (&$mark, $leads, $campaignOf, $nameOf): array {
+                return array_map(static function (array $row) use ($mark, $leads, $campaignOf, $nameOf): array {
+                    if (isset($row['groups']) && is_array($row['groups'])) {
+                        $row['groups'] = $mark($row['groups']);
+                    }
+                    if (isset($row['ads']) && is_array($row['ads']) && ! isset($row['provider'])) {
+                        $row['ads'] = $mark($row['ads']);
+                    }
+                    if (isset($row['id'], $row['provider'])) {
+                        $campaignId = (string) ($row['campaign_id'] ?? ($campaignOf[(string) $row['id']] ?? ''));
+                        $campaign = (string) ($nameOf[$campaignId] ?? ($row['campaign_name'] ?? ''));
+                        $row['verified_result'] = $leads->contentResult(['campaign_name' => $campaign] + $row);
+                    }
+
+                    return $row;
+                }, $rows);
+            };
+            foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+                $built[$list] = $mark($built[$list] ?? []);
+            }
         }
 
         return [

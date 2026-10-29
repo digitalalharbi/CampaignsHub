@@ -171,25 +171,48 @@ final class ResultEventsTest extends TestCase
             $this->row('m1', 'meta', ['form_leads' => 39, 'checkout' => 1, 'campaign_name' => 'Riwaq — LeadForm — Meta'], ['form_leads' => true, 'checkout' => true]),
             $this->row('m2', 'meta', ['purchases' => 1, 'checkout' => 3, 'landing_page_views' => 13, 'leads' => 2, 'campaign_name' => 'Riwaq — LandingPage — Meta'], ['purchases' => true, 'checkout' => true, 'landing_page_views' => true, 'leads' => true]),
             $this->row('t2', 'tiktok', ['purchases' => 0, 'checkout' => 117, 'conversions' => 1110, 'campaign_name' => 'Riwaq — LandingPage — TikTok'], ['purchases' => true, 'checkout' => true, 'conversions' => true]),
-            // Snapchat's start event was never established: its checkout is not a form start.
+            // Snapchat receives the same form_start as START_CHECKOUT; X receives none, so its checkout would not count.
+            $this->row('x2', 'x', ['purchases' => 0, 'checkout' => 9, 'campaign_name' => 'Riwaq — LandingPage — X'], ['purchases' => true, 'checkout' => true]),
             $this->row('s2', 'snapchat', ['purchases' => 1, 'checkout' => 53, 'landing_page_views' => 30, 'campaign_name' => 'Riwaq — LandingPage — Snap'], ['purchases' => true, 'checkout' => true, 'landing_page_views' => true]),
         ];
 
         $funnel = $events->leadBreakdown($rows, [])['landing_funnel'];
 
-        $this->assertSame(3, $funnel['campaigns']);
+        $this->assertSame(4, $funnel['campaigns']);
         $this->assertSame(43.0, $funnel['page_views']);
-        $this->assertSame(120.0, $funnel['form_starts'], 'Meta 3 + TikTok 117; the LeadForm campaign\'s checkout and Snapchat\'s are not landing form starts');
+        $this->assertSame(173.0, $funnel['form_starts'], 'Meta 3 + TikTok 117 + Snapchat 53; the LeadForm campaign\'s checkout and X\'s are not landing form starts');
         $this->assertSame(2.0, $funnel['completions']);
-        $this->assertSame(round(2 / 120, 4), $funnel['completion_rate']);
-        $this->assertSame(30.0, $funnel['spend'], 'the three landing campaigns\' spend only');
-        $this->assertSame(15.0, $funnel['cost_per_completion']);
+        $this->assertSame(round(2 / 173, 4), $funnel['completion_rate']);
+        $this->assertSame(40.0, $funnel['spend'], 'the four landing campaigns\' spend only');
+        $this->assertSame(20.0, $funnel['cost_per_completion']);
         $this->assertNull($funnel['contacts'], 'contact clicks are not ingested — absent, never zero');
 
         $none = $events->leadBreakdown([$this->row('m1', 'meta', ['form_leads' => 3, 'campaign_name' => 'Riwaq — LeadForm — Meta'], ['form_leads' => true])], [])['landing_funnel'];
         $this->assertSame(0, $none['campaigns']);
         $this->assertNull($none['completions']);
         $this->assertNull($none['cost_per_completion']);
+    }
+
+    /** NASEL 2026-10-29 — a content tile printed generic `conversions`: 0 on a Snapchat lead-form ad with 27 native leads. */
+    public function test_a_content_result_is_the_configured_event_at_ad_grain_never_generic_conversions(): void
+    {
+        $ev = ['lead_form' => 'form_leads', 'landing_page' => 'purchases'];
+        $events = ResultEvents::merged(['meta' => $ev, 'tiktok' => $ev, 'snapchat' => $ev], null, ['LeadForm' => 'lead_form', 'LandingPage' => 'landing_page']);
+
+        // Snapchat reads native submissions into `leads` at ad grain.
+        $snap = $events->contentResult(['provider' => 'snapchat', 'campaign_name' => 'Riwaq — LeadForm', 'conversions' => 0, 'leads' => 27]);
+        $this->assertSame(['metric' => 'form_leads', 'path' => 'lead_form', 'value' => 27.0], $snap);
+
+        // Meta stores no ad-level native submission: not available, and its pixel `leads` is not borrowed.
+        $meta = $events->contentResult(['provider' => 'meta', 'campaign_name' => 'Riwaq — LeadForm', 'leads' => 2, 'metrics' => ['leads' => 2, 'conversions' => 3, 'reported' => ['leads' => true, 'form_leads' => false]]]);
+        $this->assertNull($meta['value']);
+
+        // A landing ad's result is its configured completion event; 1,110 generic conversions are not it.
+        $tiktok = $events->contentResult(['provider' => 'tiktok', 'campaign_name' => 'Riwaq — LandingPage', 'metrics' => ['conversions' => 1110, 'purchases' => 0, 'reported' => ['purchases' => true, 'conversions' => true]]]);
+        $this->assertSame(0.0, $tiktok['value']);
+
+        // A campaign outside the naming convention has no configured result at all.
+        $this->assertNull($events->contentResult(['provider' => 'snapchat', 'campaign_name' => '22 ad 1', 'conversions' => 5]));
     }
 
     public function test_native_form_is_accepted_as_the_lead_form_path_and_stored_under_its_existing_key(): void

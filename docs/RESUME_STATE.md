@@ -1,3 +1,36 @@
+# CURRENT STATE — 2026-10-29 — NASEL Live client reports (supersedes the checkpoints below where they disagree)
+
+**Deployed:**
+- #872 `89e6ccd0`: in-place KPI, label and campaign-table edit of an existing link.
+- #873 `b2e5f6ec`: platforms summary reads native leads from the one resolver, plus the landing-page funnel over landing campaigns only.
+- Both deploys reported health 200.
+
+**Production configuration (audited):**
+- NASEL project a8dcd0a4: lead_events and result_events are meta, tiktok, snapchat lead_form → form_leads and landing_page → purchases, plus x landing_page → purchases. campaign_paths are LeadForm and LandingPage.
+- The three links carry the same events and the KPIs spend, impressions, clicks, native_leads: 17vj… share 7db3351e (audit e678d48d), 8uv6… share a8009682 (24252f3e), i2PMJ… share 6a80831d (9007afa7).
+
+**Production figures, 2026-10-29 11:00:**
+- Native leads: Meta 39, TikTok 13, Snapchat 48 = 100.
+- Landing completions (platform-attributed Purchase): 2. Total 102.
+- Landing funnel: visits 43, form starts 127, rate 1.6%, cost per completion 149.19 USD.
+- These match the provider probes and the Riwaq Leads Tracker sheet.
+
+**Follow-up PR (branch fix/nasel-landing-evidence):**
+- Snapchat START_CHECKOUT is counted as a form start (container evidence).
+- A confirmed-website-leads card reads «غير مربوط» and names its source.
+- Content tiles and the Tables view take Results from the resolver (`verified_result`, `results.by_platform`) and never from generic conversions.
+- Matrix, owner defects and docs/NASEL_RIWAQ_TRACKING_HANDOFF.md are updated.
+
+**Blocked:**
+- nasel.co / GTM-TL4KFDMG changes (server lead_id, idempotency, single Meta event id, GA4 single init): BLOCKED_EXTERNAL_CREDENTIALS.
+- Contact events: BLOCKED_OPERATIONAL_EVIDENCE.
+- Snapchat 10-25/26 cross-project rows: awaiting Owner approval. Do not apply.
+
+**Next:**
+- Land the follow-up PR, then re-read Content and Tables on /r/17vj… in the browser.
+- Meta #871 restack.
+- A confirmed-lead intake (lead_id, time, UTM only, no PII) on the Forms hub, when the site can send one.
+
 # CURRENT STATE — 2026-10-28 — NASEL Live client report (supersedes the checkpoints below where they disagree)
 
 **Release queue (one lander, `ch-scripts/land.sh`):** #867 `a15fdd6f` deployed (run 40742467737, health 200). #868 merged; #869 → #870 follow; Meta SaaS app #871 waits behind them (backup of its superseded-sync guard: `backup/2026-10-28/meta-saas-superseded-sync`, `564a6de1`).

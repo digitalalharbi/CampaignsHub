@@ -213,10 +213,12 @@ final class ResultEvents
     }
 
     /**
-     * The Owner's landing-page events per platform (NASEL 2026-10-29): which platforms report a form START as InitiateCheckout. Snapchat and
-     * X are not in it — their start event was never established — so their landing campaigns contribute visits and completions only.
+     * Which platforms receive a form START, read from the landing page's own tag container (nasel.co/riwaq, GTM-TL4KFDMG, 2026-10-29): one
+     * `form_start` dataLayer event — the first focus inside the lead form — is sent as InitiateCheckout to Meta and TikTok and as
+     * START_CHECKOUT to Snapchat; all three report it as `checkout`. X receives no start event, so its landing campaigns add visits and
+     * completions only.
      */
-    private const FORM_START_PLATFORMS = ['meta', 'tiktok'];
+    private const FORM_START_PLATFORMS = ['meta', 'tiktok', 'snapchat'];
 
     /**
      * NASEL 2026-10-29 — the landing-page funnel, over ONLY the campaigns this resolver puts on the `landing_page` path: visits, form starts
@@ -271,6 +273,38 @@ final class ResultEvents
             'cost_per_completion' => $completions !== null && $completions > 0 && ! $withheld ? round($spend / $completions, 4) : null,
             'basis' => 'platform_attributed_not_unique_submissions',
         ];
+    }
+
+    /**
+     * The metric a platform reports a native form submission under at AD grain, where it differs from the campaign grain's `form_leads`:
+     * Snapchat's ad-level stats read `native_leads` into `leads` (SnapchatConnector::ENTITY_METRICS). Meta and TikTok store no ad-level
+     * native submission, so a lead-form ad on them has no per-ad result rather than a borrowed one.
+     */
+    private const AD_GRAIN_ALIAS = ['snapchat' => ['form_leads' => 'leads']];
+
+    /**
+     * NASEL 2026-10-29 — one content row's result under this mapping: the configured event for its platform and path, read at ad grain,
+     * never the platform's generic `conversions`. `value` is null when the platform reported no such figure for the ad («not available»);
+     * the whole answer is null when nothing is configured for the row's platform and path.
+     *
+     * @param  array<string, mixed>  $row  a ranked (flat) or presented (`metrics`-nested) content row carrying `provider` and `campaign_name`
+     * @return array{metric: string, path: string|null, value: float|null}|null
+     */
+    public function contentResult(array $row): ?array
+    {
+        $provider = AdPlatforms::canonical((string) ($row['provider'] ?? ''));
+        $path = $this->pathOfName((string) ($row['campaign_name'] ?? ''));
+        $metric = $this->metricFor($provider, $path);
+        if ($metric === null) {
+            return null;
+        }
+        $figures = is_array($row['metrics'] ?? null) ? $row['metrics'] : $row;
+        $key = self::AD_GRAIN_ALIAS[$provider][$metric] ?? $metric;
+        $reported = (array) ($figures['reported'] ?? []);
+        $value = $figures[$key] ?? null;
+        $stated = array_key_exists($key, $reported) ? $reported[$key] === true : $value !== null;
+
+        return ['metric' => $metric, 'path' => $path, 'value' => $stated && $value !== null ? (float) $value : null];
     }
 
     /** @return array<string, array<string, string>> */

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import { LiveSharedReport } from '../LiveSharedReport'
+import { ContentTile } from './LiveContent'
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -50,6 +51,18 @@ const payload = {
       by_platform: {}, by_path: { lead_form: 94, landing_page: 2 }, events: { meta: ev, tiktok: ev, snapchat: ev },
     },
   },
+}
+
+const tablesPayload = {
+  ...payload,
+  detail_level: 'detailed',
+  platforms: payload.platforms.map((p) => ({ ...p, conversions: p.provider === 'tiktok' ? 1124 : 2, cpa: 0.2 })),
+  accounts: [{ account_id: 'a1', provider: 'tiktok', account_name: 'Nasl', spend: 246, impressions: 77_124, clicks: 5492, conversions: 1124, cpa: 0.22 }],
+  ads_roster: [
+    { name: 'C11 LeadForm', provider: 'snapchat', content_key: 'k1', format: 'image', verified_result: { metric: 'form_leads', path: 'lead_form', value: 27 }, metrics: { spend: 55, impressions: 4000, clicks: 90, conversions: 0 } },
+    { name: 'C11 LandingPage', provider: 'tiktok', content_key: 'k2', format: 'image', verified_result: { metric: 'purchases', path: 'landing_page', value: 0 }, metrics: { spend: 93, impressions: 24_544, clicks: 575, conversions: 1110 } },
+  ],
+  results: { ...payload.results, by_platform: { meta: { results: 40, metric: 'purchases', spend: 196.66, cost: 4.9165 }, tiktok: { results: 13, metric: 'form_leads', spend: 246.19, cost: 18.94 }, snapchat: { results: 49, metric: 'form_leads', spend: 229.89, cost: 4.69 } } },
 }
 
 const render = () => {
@@ -123,5 +136,33 @@ describe('NASEL native lead cards — one resolver for the summary', () => {
 
     expect(within(summary).getByTestId('exec-lead-landing')).toHaveTextContent('إتمامات نموذج الصفحة')
     expect(screen.getByTestId('live-mode-summary')).not.toHaveTextContent('المشتريات')
+  })
+
+  it('the tables read Results from the resolver: per-platform configured results, content verified results, never generic conversions', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({ status: 200, envelope: { data: tablesPayload } } as never)
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" form="detailed" />, { route: '/r/tok?view=tables', locale: 'en' })
+
+    const tables = await screen.findByTestId('live-mode-tables')
+    const platforms = within(tables).getByTestId('tables-platforms')
+    expect(platforms).toHaveTextContent('13')
+    expect(platforms).not.toHaveTextContent('1,124')
+    expect(platforms).not.toHaveTextContent('1.1K')
+    const content = within(tables).getByTestId('tables-content')
+    expect(content).toHaveTextContent('27')
+    expect(content).not.toHaveTextContent('1.1K')
+    // An account has no figure of its own in the resolver: a dash, not its 1,124 generic conversions.
+    expect(within(tables).getByTestId('tables-accounts')).not.toHaveTextContent('1.1K')
+  })
+
+  it('a content tile prints its verified result, «not available» where the platform has none per ad, and never conversions', () => {
+    const base = { provider: 'snapchat', content_key: 'k', spend: 55, impressions: 4000, clicks: 90, ctr: 0.02, conversions: 0 }
+    renderWithProviders(<div>
+      <ContentTile content={{ ...base, name: 'Snap LeadForm', verified_result: { metric: 'form_leads', path: 'lead_form', value: 27 } }} locale="en" currency="USD" resultsOnly />
+      <ContentTile content={{ ...base, name: 'Meta LeadForm', provider: 'meta', conversions: 3, verified_result: { metric: 'form_leads', path: 'lead_form', value: null } }} locale="en" currency="USD" resultsOnly />
+    </div>)
+
+    const tiles = screen.getAllByText(/Results/).map((el) => el.closest('article, button, div[class]')?.textContent ?? '')
+    expect(tiles.join(' ')).toContain('27')
+    expect(screen.getByText('Not available')).toBeInTheDocument()
   })
 })

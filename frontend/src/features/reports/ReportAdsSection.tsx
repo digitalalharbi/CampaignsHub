@@ -41,6 +41,8 @@ export type ReportAd = {
   id?: string
   /** The share-bound handle the content drilldown opens this ad by — never an internal id. */
   content_key?: string
+  /** NASEL 2026-10-29 — the content's result under the project's verified events; present (possibly null) only when they are configured. */
+  verified_result?: { metric: string; path: string | null; value: number | null } | null
   name?: string | null
   provider?: string | null
   objective?: string | null
@@ -644,6 +646,21 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
    * card's shape, and a click-through rate is a traffic measure. It stays on every ad that reports
    * no result, which is the only kind of ad it was ever the right third figure for.
    */
+  /*
+   * NASEL 2026-10-29 — where the project defines its verified events the server states this content's result itself
+   * (`verified_result`: the configured event for its platform and path, at ad grain). It is the only «Results» then: the platform's
+   * generic `conversions` and its cost are not printed beside it, and a platform with no per-ad figure reads «غير متاح», not 0.
+   */
+  const verified = ad.verified_result
+  if (verified !== undefined) {
+    out.push({ label: ar ? 'النتائج' : 'Results', value: verified?.value === null || verified?.value === undefined ? (ar ? 'غير متاح' : 'Not available') : (n(verified.value) ?? '—') })
+    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    const impressions = n(ad.impressions)
+    if (opts.resultsOnly && impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
+
+    return out.slice(0, 3)
+  }
+
   const conversionState = ad.metrics ? metricState(ad.metrics as CreativeMetrics, 'conversions') : null
   const countIsStated = ad.conversions !== null && ad.conversions !== undefined
 

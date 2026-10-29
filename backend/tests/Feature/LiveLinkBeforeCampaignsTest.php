@@ -329,6 +329,24 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         }
     }
 
+    /** NASEL 2026-10-29 — content states its verified result (or that there is none per ad), never generic conversions; no campaign name leaks. */
+    public function test_content_rows_carry_their_verified_result_past_the_client_boundary(): void
+    {
+        $this->project->forceFill(['meta' => ['lead_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
+        $this->campaign($this->account, 'Riwaq — LeadForm', 10.0);
+        $this->creative($this->account, 'C11 story', Carbon::now()->subDay()->toDateString());
+
+        $token = $this->createLink(['creatives' => ['creatives' => true]])->assertCreated()->json('data.token');
+        $payload = $this->live($token)->assertOk()->json('data');
+
+        $row = collect($payload['ads_roster'])->firstWhere('name', 'C11 story');
+        $this->assertNotNull($row);
+        $this->assertArrayHasKey('verified_result', $row);
+        $this->assertSame('form_leads', $row['verified_result']['metric']);
+        $this->assertNull($row['verified_result']['value'], 'TikTok stores no ad-level native submission: not available, not 0');
+        $this->assertStringNotContainsString('Riwaq — LeadForm', json_encode($payload['ads_roster'], JSON_UNESCAPED_UNICODE), 'the campaign name stays off the client link');
+    }
+
     public function test_including_zero_activity_lists_every_creative_in_scope(): void
     {
         $this->campaign($this->account, 'Host', 10.0);
