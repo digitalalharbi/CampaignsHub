@@ -1,3 +1,25 @@
+# CURRENT STATE — 2026-10-29 (late) — Results contract deployed; exports on fix/nasel-exports-contract
+
+**Deployed:** #875 at `9515c939`:
+- section switches
+- KPI Results cards
+- the Results contract: «none» or undefined = Results disabled everywhere, never clicks; a chosen generic conversion is named «تحويلات المنصة»
+- Results label and clicks option
+- landing coverage note
+- revenue auto-hide
+- delete dialog with bulk delete
+
+**Production proof: BLOCKED_OPERATIONAL_EVIDENCE.** The public endpoint answers 404 «invalid, expired or revoked» for Dk7… and brSe9…. That says the links are not publicly active; it is NOT proof of deletion. The only browser session available is advertiser@campaignshub.io, which has no access to the NASEL project, so its empty report list proves nothing about NASEL. No replacement links are created without the Owner's authorisation. Next: an agency session, then read the links' state and ownership from it.
+
+**Branch fix/nasel-exports-contract:** files follow the link's Results contract (matrix NASEL-EXPORTS-RESULTS-CONTRACT-001).
+
+**Snapchat cross-project impact report (read-only)**, dry run 40867774062 on 2026-10-29:
+- 477 rows: 192 daily, 112 entity, 96 creative-daily, 53 creatives, 24 runs
+- dates 2026-10-19 → 26; non-zero only on 10-25 (97.31) and 10-26 (149.07)
+- both campaigns already filed in NASEL; the source project reads 0 of these rows
+- rollback via `--revert`
+- AWAITING OWNER APPROVAL. Do not apply.
+
 # CURRENT STATE — 2026-10-29 (evening) — NASEL report controls
 
 **Deployed:** #874 at `7aaf4535`: content and tables Results come from the resolver, plus landing evidence and docs.

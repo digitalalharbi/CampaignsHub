@@ -163,7 +163,8 @@ final class ReportColumnsExportTest extends TestCase
         @unlink($tmp);
 
         $this->assertSame(['Platform', 'CPA', 'CTR'], array_values(array_filter($book->getSheetByName('Platforms')->toArray()[0])));
-        $this->assertSame(['Date', 'Results'], array_values(array_filter($book->getSheetByName('Daily Records')->toArray()[0])));
+        // RESULT-EVENTS-001 — the ledger has no «Results» column: the resolver has no daily figure and generic conversions are not one.
+        $this->assertSame(['Date'], array_values(array_filter($book->getSheetByName('Daily Records')->toArray()[0])));
     }
 
     public function test_a_link_with_no_choice_exports_every_column_as_before(): void
@@ -173,7 +174,7 @@ final class ReportColumnsExportTest extends TestCase
         $csv = app(ReportExporter::class)->render($share->report()->withoutGlobalScopes()->first(), 'csv', $share);
 
         $this->assertSame(['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share'], $this->csvBlock($csv, 'Platforms')[0]);
-        $this->assertSame(['Daily Records', 'Impressions', 'Clicks', 'Results', 'Spend'], $this->csvBlock($csv, 'Daily Records')[0]);
+        $this->assertSame(['Daily Records', 'Impressions', 'Clicks', 'Spend'], $this->csvBlock($csv, 'Daily Records')[0]);
     }
 
     public function test_the_print_route_and_the_shared_link_carry_the_choice_for_the_pdf_and_the_page(): void

@@ -98,6 +98,10 @@ final class ReportPrintController extends Controller
         }
         // REPORT-SECTION-SURFACES-001 — the PDF carries exactly the sections the page does.
         $body = app(ReportSectionSurfaces::class)->apply($body, $report, $share, 'print', audience: (string) $audience);
+        // REPORT-KPI-CONTRACT-001 — the PDF lists the KPIs the link shows, the same allowlist the CSV and XLSX read: nothing hidden is printed.
+        if ($audience !== 'internal' && is_array($body['metric_set'] ?? null) && $body['metric_set'] !== []) {
+            $body['kpi_allowlist'] = array_values($body['metric_set']);
+        }
 
         /*
          * REPORT-DRILLDOWN-001 — the optional platform drill-down section, present only when the operator

@@ -30,7 +30,7 @@ const ad = (availability: string | null) => ({
   preview: { state: 'available', kind: 'image', image_url: 'https://cdn.example/a.jpg' },
 })
 
-function printed(availability: string | null) {
+function adTable(availability: string | null): HTMLTableElement {
   renderWithProviders(
     <PrintDocument
       data={{
@@ -45,24 +45,18 @@ function printed(availability: string | null) {
     { locale: 'en' },
   )
 
-  /* The «Results» cell is the last column of the ad table — read IT, not the whole row: the row
-     also carries «38.36 SAR», and a loose match on «0» finds the one inside the price. */
-  const cells = screen.getByText('Story ad').closest('tr')?.querySelectorAll('td') ?? []
-
-  return (cells[cells.length - 1]?.textContent ?? '').trim()
+  return screen.getByText('Story ad').closest('table') as HTMLTableElement
 }
 
 describe('a result in the forwarded document', () => {
-  it('prints a dash where the account’s measurement is unverified', () => {
-    expect(printed('measurement_unverified'), 'the PDF printed a measured zero the card shows as a dash').toBe('—')
-  })
+  /**
+   * RESULT-EVENTS-001 (Owner 2026-10-29) — an ad's generic conversion is not its Result. Whatever the measurement says about it (a
+   * dash, a confirmed zero, no figures at all), the PDF's ad table prints no «Results» column built from it.
+   */
+  it.each(['measurement_unverified', 'real_zero_confirmed', null])('prints no Results column from an ad\'s generic conversions (%s)', (availability) => {
+    const table = adTable(availability)
 
-  it('prints the zero where the account’s own history confirms it', () => {
-    expect(printed('real_zero_confirmed')).toBe('0')
-  })
-
-  /** A row with no figures bag at all keeps the old reading — nothing regresses by being silent. */
-  it('falls back to the flat column where the row carries no figures', () => {
-    expect(printed(null)).toBe('0')
+    expect(Array.from(table.querySelectorAll('th')).map((th) => th.textContent)).not.toContain('Results')
+    expect(screen.getByText('Story ad').closest('tr')?.querySelectorAll('td').length).toBe(4)
   })
 })
