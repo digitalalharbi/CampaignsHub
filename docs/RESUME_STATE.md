@@ -7,8 +7,20 @@
 - Routing stays Live. No credentials in chat; Live and Candidate are not used for testing.
 - Details: `docs/META_SAAS_APP_REVIEW.md`, section 2026-10-30.
 
+**#871 merged and deployed** at `5c79c079` (run 40973609502):
+- Local backend: 5733 passed. CI fully green on `500345da`.
+- Production: `/data-deletion/meta` answers 401 to a bad signature instead of 503. `/meta-saas` answers 503 because no secret is entered, as designed. The bundle carries the readiness list.
+- Routing stays Live.
+
+**#877/#879 (Twilio OTP, not merged):** the 13 backend failures plus 2 more in `PhoneConfirmationTest` were test defects, now fixed on #879 (`5c029c4a`, `f3b2dd04`):
+- The tests did not carry the session cookie that the OTP's `ownerKey` binds to.
+- One test re-verified an email inside the 60 s cooldown.
+- A new test proves a code cannot be redeemed from another session.
+- No auth logic changed. The contributor was told on #879.
+- #877 stays unmerged until full CI; no production OTP or real SMS.
+
 **Queue, in order:**
-1. #871: full backend suite, then CI, isolation review, merge, deploy. Then check Production: `/data-deletion/meta` answers 401 to a bad signature instead of 503, and the readiness page renders.
+1. Done: #871 (see above).
 2. Production proof for #881, #878 and #880 once the Owner signs in to the agency session (see below).
 3. **AUTH-LOGIN-UX-002** (secondary; starts only after 1–2 are closed or blocked). It extends `LOGIN-CARD-001` and `LOGIN-OTP-001`, so it adds no duplicate rows. Scope:
    - premium login card, at most 440px wide, keeping the dark/green identity;
