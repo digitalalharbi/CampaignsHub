@@ -189,7 +189,7 @@ final class ResultEvents
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, LeadDestination>  $destinations
-     * @return array{configured: bool, total: float|null, landing: float|null, native: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string, spend: float, cost: float|null}>, by_path: array<string, float>, events: array<string, array<string, string>>, basis: string}
+     * @return array{configured: bool, total: float|null, landing: float|null, native: float|null, native_by_platform: array<string, float>, landing_by_platform: array<string, float>, cost: float|null, by_platform: array<string, array{results: float, metric: string, spend: float, cost: float|null}>, by_path: array<string, float>, events: array<string, array<string, string>>, basis: string}
      */
     public function leadBreakdown(array $rows, array $destinations): array
     {
@@ -200,6 +200,9 @@ final class ResultEvents
             'total' => $o['total'],
             'landing' => $o['by_path']['landing_page'] ?? null,
             'native' => $o['by_path']['lead_form'] ?? null,
+            // NASEL 2026-10-29 — the same figures per platform and path, so a platform card can show native leads alone and add up to `native`.
+            'native_by_platform' => array_map(static fn (array $paths): float => $paths['lead_form'], array_filter($o['by_platform_path'], static fn (array $paths): bool => isset($paths['lead_form']))),
+            'landing_by_platform' => array_map(static fn (array $paths): float => $paths['landing_page'], array_filter($o['by_platform_path'], static fn (array $paths): bool => isset($paths['landing_page']))),
             'cost' => $o['cost'],
             'by_platform' => $o['by_platform'],
             'by_path' => $o['by_path'],
@@ -220,7 +223,7 @@ final class ResultEvents
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, LeadDestination>  $destinations  campaign id → destination
-     * @return array{configured: bool, total: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string, spend: float, cost: float|null}>, by_path: array<string, float>, events: array<string, array<string, string>>}
+     * @return array{configured: bool, total: float|null, cost: float|null, by_platform: array<string, array{results: float, metric: string, spend: float, cost: float|null}>, by_path: array<string, float>, by_platform_path: array<string, array<string, float>>, events: array<string, array<string, string>>}
      */
     public function over(array $rows, array $destinations): array
     {
@@ -230,6 +233,7 @@ final class ResultEvents
         $withheld = false;
         $byPlatform = [];
         $byPath = [];
+        $byPlatformPath = [];
 
         foreach ($rows as $row) {
             $provider = AdPlatforms::canonical((string) ($row['provider'] ?? ''));
@@ -250,6 +254,7 @@ final class ResultEvents
             $byPlatform[$provider]['spend'] = ($byPlatform[$provider]['spend'] ?? 0.0) + (float) ($row['spend'] ?? 0);
             $byPlatform[$provider]['withheld'] = ($byPlatform[$provider]['withheld'] ?? false) || (int) ($row['spend_withheld_rows'] ?? 0) > 0;
             $byPath[$path ?? 'all'] = ($byPath[$path ?? 'all'] ?? 0.0) + $value;
+            $byPlatformPath[$provider][$path ?? 'all'] = ($byPlatformPath[$provider][$path ?? 'all'] ?? 0.0) + $value;
         }
 
         foreach ($byPlatform as $provider => $p) {
@@ -267,6 +272,7 @@ final class ResultEvents
             'cost' => $any && $total > 0 && ! $withheld ? round($spend / $total, 4) : null,
             'by_platform' => $byPlatform,
             'by_path' => $byPath,
+            'by_platform_path' => $byPlatformPath,
             'events' => $this->map,
         ];
     }

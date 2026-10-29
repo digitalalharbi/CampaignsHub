@@ -436,6 +436,9 @@ export interface LivePayload {
       total: number | null
       landing: number | null
       native: number | null
+      /** NASEL 2026-10-29 — `native` and `landing` per platform, from the same resolver, so platform cards add up to them. */
+      native_by_platform?: Record<string, number>
+      landing_by_platform?: Record<string, number>
       cost: number | null
       by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
       by_path: Record<string, number>

@@ -4,6 +4,7 @@ import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/feature
 import { formatMoneyReading, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from '../api'
 import { clientKpiKeys } from '../clientKpis'
+import { landingLabel, purchaseIsLandingProxy } from './leadResults'
 
 /**
  * How every figure on a live client link is read — one definition, shared by every mode.
@@ -216,8 +217,11 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
 export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload | null | undefined, ar: boolean): string {
   // The operator's own name for this card on this link, when they gave one.
   const custom = payload?.kpi_labels?.[key]
+  if (custom !== undefined && custom.trim() !== '') return custom
+  // NASEL 2026-10-29 — where the landing-page result IS the purchase event, it stands in for a form completion and is not called «Purchases».
+  if (payload && (key === 'purchases' || key === 'landing_leads') && purchaseIsLandingProxy(payload)) return landingLabel(payload, ar)
 
-  return custom !== undefined && custom.trim() !== '' ? custom : ar ? meta.ar : meta.en
+  return ar ? meta.ar : meta.en
 }
 
 /**
