@@ -215,6 +215,16 @@ final class ResultEventsTest extends TestCase
         $this->assertNull($events->contentResult(['provider' => 'snapchat', 'campaign_name' => '22 ad 1', 'conversions' => 5]));
     }
 
+    /** Owner 2026-10-29 — clicks may be chosen as the landing path's result, and they are read like any other reported metric. */
+    public function test_clicks_can_be_the_result_of_a_path(): void
+    {
+        $this->assertSame([], ResultEvents::problems(['tiktok' => ['landing_page' => 'clicks']]));
+        $events = ResultEvents::merged(['tiktok' => ['landing_page' => 'clicks']], null, ['LandingPage' => 'landing_page']);
+        $out = $events->over([$this->row('t1', 'tiktok', ['clicks' => 5525, 'conversions' => 1126, 'campaign_name' => 'Riwaq — LandingPage'], ['clicks' => true, 'conversions' => true])], []);
+
+        $this->assertSame(5525.0, $out['total']);
+    }
+
     public function test_native_form_is_accepted_as_the_lead_form_path_and_stored_under_its_existing_key(): void
     {
         $events = ResultEvents::merged(['snapchat' => ['native_form' => 'form_leads']], null, ['LeadForm' => 'native_form']);

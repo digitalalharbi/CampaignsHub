@@ -162,6 +162,7 @@ export function LiveContentDetail({
   const shown = state.kind === 'ready' ? asContent(state.data.content) : content
   const reported = state.kind === 'ready' ? state.data.trend.filter((p) => p.reported) : []
   const spendDrawable = reported.length > 0 && reported.every((p) => typeof p.spend === 'number')
+  const genericResults = shown.verified_result === undefined && shown.conversions !== undefined
 
   return (
     <ReportAdDetail ad={shown} currency={currency} locale={locale} onClose={onClose}>
@@ -185,11 +186,12 @@ export function LiveContentDetail({
             data={state.data.trend}
             currency={currency}
             height={200}
-            rightAxisFor="conversions"
+            rightAxisFor={genericResults ? 'conversions' : 'clicks'}
             series={[
               ...(spendDrawable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' as const }] : []),
-              ...(spendDrawable ? [] : [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }]),
-              { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
+              ...(spendDrawable && genericResults ? [] : [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }]),
+              // NASEL 2026-10-29 — a content whose link defines verified Results, or none, has no generic «Results» line.
+              ...(genericResults ? [{ key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const }] : []),
             ]}
           />
         )}

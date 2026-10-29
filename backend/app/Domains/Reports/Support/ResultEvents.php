@@ -33,7 +33,8 @@ final class ResultEvents
     /** `native_form` is accepted as another name for `lead_form` and stored as `lead_form`, so existing configurations keep their key. */
     private const ALIASES = ['native_form' => 'lead_form'];
 
-    public const METRICS = ['leads', 'form_leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views'];
+    /** `clicks` (NASEL 2026-10-29): an operator may call a landing-page click the result where no completion event is measured. */
+    public const METRICS = ['leads', 'form_leads', 'qualified_leads', 'conversions', 'registrations', 'purchases', 'add_to_cart', 'checkout', 'installs', 'landing_page_views', 'clicks'];
 
     /**
      * @param  array<string, array<string, string>>  $map  platform → path → metric key
@@ -229,11 +230,12 @@ final class ResultEvents
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, LeadDestination>  $destinations
-     * @return array{campaigns: int, page_views: float|null, form_starts: float|null, contacts: null, completions: float|null, completion_rate: float|null, spend: float|null, cost_per_completion: float|null, basis: string}
+     * @return array{campaigns: int, page_views: float|null, form_starts: float|null, contacts: null, completions: float|null, completion_rate: float|null, spend: float|null, cost_per_completion: float|null, coverage: array<string, list<string>>, basis: string}
      */
     public function landingFunnel(array $rows, array $destinations): array
     {
         $sum = ['page_views' => null, 'form_starts' => null, 'completions' => null];
+        $coverage = ['page_views' => [], 'form_starts' => [], 'completions' => []];
         $spend = 0.0;
         $withheld = false;
         $campaigns = 0;
@@ -256,6 +258,7 @@ final class ResultEvents
             foreach ($parts as $key => $value) {
                 if ($value !== null) {
                     $sum[$key] = ($sum[$key] ?? 0.0) + $value;
+                    $coverage[$key][$provider] = true;
                 }
             }
         }
@@ -271,6 +274,8 @@ final class ResultEvents
             'completion_rate' => $completions !== null && $sum['form_starts'] !== null && $sum['form_starts'] > 0 ? round($completions / $sum['form_starts'], 4) : null,
             'spend' => $campaigns > 0 && ! $withheld ? round($spend, 2) : null,
             'cost_per_completion' => $completions !== null && $completions > 0 && ! $withheld ? round($spend / $completions, 4) : null,
+            // Which platforms each step is counted from: a visit reported by one platform and a form start by three are not one funnel.
+            'coverage' => array_map(static fn (array $platforms): array => array_keys($platforms), $coverage),
             'basis' => 'platform_attributed_not_unique_submissions',
         ];
     }

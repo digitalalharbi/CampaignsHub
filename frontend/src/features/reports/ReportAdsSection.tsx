@@ -42,7 +42,9 @@ export type ReportAd = {
   /** The share-bound handle the content drilldown opens this ad by — never an internal id. */
   content_key?: string
   /** NASEL 2026-10-29 — the content's result under the project's verified events; present (possibly null) only when they are configured. */
-  verified_result?: { metric: string; path: string | null; value: number | null } | null
+  verified_result?: { metric: string; path: string | null; value: number | null; label?: string | null } | null
+  /** Owner 2026-10-29 — the link's Results are «none»: the card leads with clicks where the result would have stood. */
+  result_basis?: 'clicks'
   name?: string | null
   provider?: string | null
   objective?: string | null
@@ -653,7 +655,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
    */
   const verified = ad.verified_result
   if (verified !== undefined) {
-    out.push({ label: ar ? 'النتائج' : 'Results', value: verified?.value === null || verified?.value === undefined ? (ar ? 'غير متاح' : 'Not available') : (n(verified.value) ?? '—') })
+    out.push({ label: verified?.label ?? (ar ? 'النتائج' : 'Results'), value: verified?.value === null || verified?.value === undefined ? (ar ? 'غير متاح' : 'Not available') : (n(verified.value) ?? '—') })
     if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     const impressions = n(ad.impressions)
     if (opts.resultsOnly && impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
@@ -696,8 +698,10 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
     out.push({ label: ar ? 'تكلفة النتيجة' : 'CPA', value: cash(ad.cpa, 2) ?? '—' })
   }
 
-  /* Delivery, for an ad with no result to show — never instead of one. */
+  /* Delivery, for an ad with no result to show — never instead of one. Owner 2026-10-29: its clicks lead, as the result would have. */
   if (!countIsStated) {
+    const clicks = n(ad.clicks)
+    if (ad.result_basis === 'clicks' && clicks !== null) out.push({ label: ar ? 'النقرات' : 'Clicks', value: clicks })
     if (ad.ctr !== null && ad.ctr !== undefined) {
       out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     } else {

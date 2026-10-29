@@ -494,6 +494,9 @@ final class LiveReportBuilderController extends Controller
             // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
             // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign; off unless the operator switches it on.
             'campaign_breakdown' => ['sometimes', 'boolean'],
+            // NASEL 2026-10-29 — the report's own word for «Results» («الاهتمام»), and an explicit «no Results» that the project default cannot override.
+            'results_label' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'results_off' => ['sometimes', 'boolean'],
             'kpi_labels' => ['sometimes', 'array', 'max:30'],
             'kpi_labels.*' => ['nullable', 'string', 'max:60'],
             'creative_ids' => ['sometimes', 'array', 'max:500'],
@@ -648,6 +651,8 @@ final class LiveReportBuilderController extends Controller
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? []))->onlyFor($providers))->configured() ? ['result_events' => $events->toArray()] : [])
               + ((bool) ($data['campaign_breakdown'] ?? false) ? ['campaign_breakdown' => true] : [])
+              + ((bool) ($data['results_off'] ?? false) ? ['results_off' => true] : [])
+              + (trim((string) ($data['results_label'] ?? '')) !== '' ? ['results_label' => trim((string) $data['results_label'])] : [])
               + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])
               + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? []))->onlyFor($providers))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
               + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
