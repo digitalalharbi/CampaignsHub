@@ -193,6 +193,28 @@ final class ResultEventsTest extends TestCase
         $this->assertNull($none['cost_per_completion']);
     }
 
+    /** NASEL 2026-10-29 — a content tile printed generic `conversions`: 0 on a Snapchat lead-form ad with 27 native leads. */
+    public function test_a_content_result_is_the_configured_event_at_ad_grain_never_generic_conversions(): void
+    {
+        $ev = ['lead_form' => 'form_leads', 'landing_page' => 'purchases'];
+        $events = ResultEvents::merged(['meta' => $ev, 'tiktok' => $ev, 'snapchat' => $ev], null, ['LeadForm' => 'lead_form', 'LandingPage' => 'landing_page']);
+
+        // Snapchat reads native submissions into `leads` at ad grain.
+        $snap = $events->contentResult(['provider' => 'snapchat', 'campaign_name' => 'Riwaq — LeadForm', 'conversions' => 0, 'leads' => 27]);
+        $this->assertSame(['metric' => 'form_leads', 'path' => 'lead_form', 'value' => 27.0], $snap);
+
+        // Meta stores no ad-level native submission: not available, and its pixel `leads` is not borrowed.
+        $meta = $events->contentResult(['provider' => 'meta', 'campaign_name' => 'Riwaq — LeadForm', 'leads' => 2, 'metrics' => ['leads' => 2, 'conversions' => 3, 'reported' => ['leads' => true, 'form_leads' => false]]]);
+        $this->assertNull($meta['value']);
+
+        // A landing ad's result is its configured completion event; 1,110 generic conversions are not it.
+        $tiktok = $events->contentResult(['provider' => 'tiktok', 'campaign_name' => 'Riwaq — LandingPage', 'metrics' => ['conversions' => 1110, 'purchases' => 0, 'reported' => ['purchases' => true, 'conversions' => true]]]);
+        $this->assertSame(0.0, $tiktok['value']);
+
+        // A campaign outside the naming convention has no configured result at all.
+        $this->assertNull($events->contentResult(['provider' => 'snapchat', 'campaign_name' => '22 ad 1', 'conversions' => 5]));
+    }
+
     public function test_native_form_is_accepted_as_the_lead_form_path_and_stored_under_its_existing_key(): void
     {
         $events = ResultEvents::merged(['snapchat' => ['native_form' => 'form_leads']], null, ['LeadForm' => 'native_form']);

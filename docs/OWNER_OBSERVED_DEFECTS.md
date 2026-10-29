@@ -208,3 +208,18 @@ Owner screenshot of a live link: every content row read «—» for results, imp
 Production acceptance, 2026-10-20 (deployed b6976954, Owner's Hanka report /r/iVFz1QlsUaCRTZdlRkeilR), recorded separately for the two parts:
 - **Content table: VERIFIED on Production.** The Tables view's «All content that ran» lists 15 rows with real results, impressions, clicks, spend and cost (for example 57 results, 21.1K impressions, 328 clicks, 86 USD, 1.51 USD); no row is all dashes. Rows that genuinely carry no result (no leads reported) still show «—», nothing is filled in.
 - **Content preview: VERIFIED on Production in the in-app Chromium at 375px and 1280px; real iOS Safari is BLOCKED_OPERATIONAL_EVIDENCE.** Seven Meta creatives (four vertical ratios up to 1152x2048, one square) opened showing the whole frame at the file's own ratio with object-fit contain and no horizontal overflow. No physical iPhone or Safari was available to the session, so the Safari claim is not made.
+
+### NASEL 2026-10-29 — the client reports showed 2 leads where the platforms had about 80–100
+
+Owner: the new link /r/17vj0xDY38wcf2a1DT3FlF showed 2 leads; the Owner counted about 80 across Meta, TikTok and Snapchat.
+
+- **Root cause 1 (configuration):** both links' `settings.result_events` mapped the native-form path to `leads`, the platform/pixel Lead event (Meta 2). The project had no `lead_events` and no `campaign_paths`, so no campaign resolved a path and Native Leads read null. Corrected in Production through the audited endpoints: project lead_events/result_events (meta, tiktok, snapchat: lead_form → form_leads, landing_page → purchases; x: landing_page → purchases), campaign_paths LeadForm/LandingPage, and each link's events in place.
+- **Root cause 2 (code, #872 89e6ccd0):** an existing link's KPI cards could not be corrected without a new URL. `ResultEventsController::updateShare` now also edits metrics, kpi_labels and campaign_breakdown, audited and reversible. All three links now show Spend, Impressions, Clicks and «العملاء المحتملون الأصليون».
+- **Root cause 3 (code, #873 b2e5f6ec):** the platforms summary chose its figure from the link's KPI list (`headlineKeys`), not from the resolver: 2 / 0 / 0 / 2, then clicks. It now reads native leads per platform from `ResultEvents` and adds up to the total.
+- **Provider and sheet reconciliation:** read-only probes 2026-10-29 matched stored native submissions exactly (Meta 39, TikTok 11, Snapchat 44 at probe time). The Riwaq Leads Tracker sheet rows match: Meta 39 after one test lead; Snapchat 45 at read time; TikTok 13 after one test lead, one duplicate and one August lead. Production at 11:00 reads Meta 39, TikTok 13, Snapchat 48 = **100** native leads, plus 2 platform-attributed landing completions.
+
+Status:
+- Native lead cards: **VERIFIED** on Production in the browser.
+- Content and Tables Results: the follow-up PR, IMPLEMENTED_NOT_VERIFIED.
+- Landing conversion tracking end to end: **BLOCKED_EXTERNAL_CREDENTIALS**, because the nasel.co source and the GTM container are not accessible. See docs/NASEL_RIWAQ_TRACKING_HANDOFF.md.
+- Snapchat 2026-10-25/26: spend, impressions and the 10-26 purchases sit in another project. Native leads for those days are in NASEL, so Snapchat cost per result is understated. The cross-project reassignment needs the Owner's separate approval (SCOPE-REASSIGN-INTEGRITY-001).
