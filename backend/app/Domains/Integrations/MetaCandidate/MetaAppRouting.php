@@ -10,7 +10,8 @@ use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 /**
  * META-SAAS-APP-001 — which Meta app a NEW customer connection is issued by.
  *
- * Live unless a platform admin chose the SaaS app (the `enabled` flag on the `meta.saas` row) after a successful test. An operator may
+ * Live unless a platform admin chose the SaaS app (the `enabled` flag on the `meta.saas` row) after a successful test AND the Owner
+ * recorded that Meta approved it (`review_confirmed_at`). An operator may
  * also name an app for one connection. Nothing here touches an EXISTING connection: each stays with the app that issued its token.
  */
 final class MetaAppRouting
@@ -30,7 +31,8 @@ final class MetaAppRouting
     {
         $row = ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->first();
 
-        return $row !== null && $row->enabled === true && self::saasEligibility()['eligible'] ? MetaCredentialProfile::Saas : MetaCredentialProfile::Live;
+        return $row !== null && $row->enabled === true && $row->review_confirmed_at !== null && self::saasEligibility()['eligible']
+            ? MetaCredentialProfile::Saas : MetaCredentialProfile::Live;
     }
 
     /**

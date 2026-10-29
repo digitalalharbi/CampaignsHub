@@ -771,7 +771,15 @@ export interface MetaCandidateState {
   /** META-SAAS-APP-001 — the SaaS app only: which app NEW connections use, and whether the SaaS app may be chosen yet. */
   routing?: { default_for_new_connections: 'live' | 'saas'; eligible: boolean; reason: string | null }
   connections_by_app?: { live: number; saas: number }
+  /** META-SAAS-APP-001 — the SaaS app only: each readiness item and the status the server read from its own evidence. */
+  readiness?: MetaSaasReadinessItem[]
 }
+
+export type MetaSaasReadinessStatus = 'ready' | 'not_verified' | 'needs_credentials' | 'owner_action'
+export type MetaSaasReadinessKey =
+  | 'legal_pages' | 'redirect_uri' | 'deletion_callback' | 'credentials' | 'meta_dashboard' | 'oauth_round_trip'
+  | 'account_discovery' | 'sync_and_reports' | 'business_verification' | 'app_review' | 'new_connections'
+export interface MetaSaasReadinessItem { key: MetaSaasReadinessKey; status: MetaSaasReadinessStatus; detail: Record<string, unknown> }
 
 /* META-SAAS-APP-001 — the third, independent Meta app: same shape, its own endpoints, no promote/rollback. */
 const META_SAAS = '/admin/settings/integrations/meta-saas'
@@ -781,6 +789,8 @@ export const forgetMetaSaasCredential = (key: string): Promise<MetaCandidateStat
 export const startMetaSaasTest = (): Promise<{ run: MetaCandidateRun; authorization_url: string; expires_in_minutes: number }> => postData(`${META_SAAS}/test`, {})
 /** Which Meta app NEW customer connections use. Existing connections never change app. */
 export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandidateState> => putData(`${META_SAAS}/routing`, { default: target, confirm: true })
+export const confirmMetaSaasReview = (): Promise<MetaCandidateState> => putData(`${META_SAAS}/review`, { business_verified: true, advanced_access_granted: true })
+export const withdrawMetaSaasReview = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/review`)
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {
   return getData('/admin/settings/integrations/meta-candidate')

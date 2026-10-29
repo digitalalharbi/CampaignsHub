@@ -44,7 +44,8 @@ use Tests\TestCase;
  *  - its credentials live in their own row and never borrow or overwrite a Live or Candidate value;
  *  - a customer connection it issues is a SEPARATE connection, bound to it for life: the Live connection's tokens are untouched, and the
  *    SaaS token is refreshed and used with the SaaS app's own App ID and secret;
- *  - new connections use it only after an admin chose so, which needs a passed test with the current credentials;
+ *  - new connections use it only after an admin chose so, which needs a passed test with the current credentials and the Owner's
+ *    record that Meta approved the app;
  *  - an existing account moves to it only explicitly, keeps its row (bindings, history) and the old connection stays connected.
  */
 final class MetaSaasAppIsolationTest extends TestCase
@@ -201,6 +202,11 @@ final class MetaSaasAppIsolationTest extends TestCase
         // A succeeded Candidate run never counts for the SaaS app.
         $this->assertSame('saas', MetaCandidateConnection::latestRun(MetaCredentialProfile::Saas)?->profile);
         $this->assertNull(MetaCandidateConnection::latestRun(MetaCredentialProfile::Candidate));
+
+        // A passed test proves the app for its own app roles only; customers wait for the Owner's record that Meta approved it.
+        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true])->assertStatus(409)
+            ->assertJsonPath('errors.routing.0', 'app_review_not_confirmed');
+        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/review', ['business_verified' => true, 'advanced_access_granted' => true])->assertOk();
 
         $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true])->assertOk()
             ->assertJsonPath('data.routing.default_for_new_connections', 'saas');

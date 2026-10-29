@@ -27,6 +27,7 @@ final class ProviderConfiguration extends Model
         'provider', 'environment', 'credentials', 'scopes', 'enabled',
         'last_tested_at', 'last_test_status', 'last_test_message',
         'last_rotated_at', 'configured_at', 'configured_by',
+        'review_confirmed_at', 'review_confirmed_by',
     ];
 
     protected $casts = [
@@ -36,6 +37,7 @@ final class ProviderConfiguration extends Model
         'last_tested_at' => 'datetime',
         'last_rotated_at' => 'datetime',
         'configured_at' => 'datetime',
+        'review_confirmed_at' => 'datetime',
     ];
 
     protected $hidden = ['credentials'];

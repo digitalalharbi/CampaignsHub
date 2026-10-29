@@ -11,7 +11,7 @@ vi.mock('./api', async (orig) => {
 
 import { fetchMetaCandidate, fetchMetaSaas, promoteMetaCandidate, setMetaSaasRouting } from './api'
 
-const state = (routing: NonNullable<MetaCandidateState['routing']>): MetaCandidateState => ({
+const state = (routing: NonNullable<MetaCandidateState['routing']>, readiness?: MetaCandidateState['readiness']): MetaCandidateState => ({
   credentials: {
     profile: 'saas', configured: true, missing: [], effective_scopes: ['ads_read'], redirect_uri: 'https://api.example.test/api/v1/oauth/ads/meta/callback',
     values: [
@@ -24,6 +24,7 @@ const state = (routing: NonNullable<MetaCandidateState['routing']>): MetaCandida
   latest_run: null,
   routing,
   connections_by_app: { live: 4, saas: 0 },
+  readiness,
 })
 
 /** META-SAAS-APP-001 — the third app's page: its own endpoints, a routing choice for NEW connections, and no promote. */
@@ -41,8 +42,20 @@ describe('SaaS Meta app page', () => {
     expect(promoteMetaCandidate).not.toHaveBeenCalled()
   })
 
-  it('switches NEW connections to the SaaS app once eligible', async () => {
-    vi.mocked(fetchMetaSaas).mockResolvedValue(state({ default_for_new_connections: 'live', eligible: true, reason: null }))
+  it('keeps the switch closed while Meta\'s approval is not recorded, even with a passed test', async () => {
+    vi.mocked(fetchMetaSaas).mockResolvedValue(state({ default_for_new_connections: 'live', eligible: true, reason: null }, [
+      { key: 'app_review', status: 'owner_action', detail: { confirmed_at: null, confirmed_by: null } },
+    ]))
+    renderWithProviders(<MetaSaasPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('meta-saas-use-saas')).toBeDisabled()
+    expect(screen.getByTestId('meta-saas-routing-reason')).toHaveTextContent('Advanced Access have not been recorded yet')
+  })
+
+  it('switches NEW connections to the SaaS app once eligible and approved', async () => {
+    vi.mocked(fetchMetaSaas).mockResolvedValue(state({ default_for_new_connections: 'live', eligible: true, reason: null }, [
+      { key: 'app_review', status: 'ready', detail: { confirmed_at: '2026-10-30T09:00:00+00:00', confirmed_by: 1 } },
+    ]))
     vi.mocked(setMetaSaasRouting).mockResolvedValue(state({ default_for_new_connections: 'saas', eligible: true, reason: null }))
     renderWithProviders(<MetaSaasPage />, { locale: 'en' })
 

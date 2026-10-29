@@ -169,6 +169,8 @@ Route::middleware(['auth:sanctum', 'platform'])
             Route::delete('/credentials/{key}', [MetaSaasAppController::class, 'forget'])->name('credentials.forget');
             Route::post('/test', [MetaSaasAppController::class, 'start'])->middleware('throttle:10,1')->name('test');
             Route::put('/routing', [MetaSaasAppController::class, 'routing'])->middleware('throttle:10,1')->name('routing');
+            Route::put('/review', [MetaSaasAppController::class, 'confirmReview'])->middleware('throttle:10,1')->name('review.confirm');
+            Route::delete('/review', [MetaSaasAppController::class, 'withdrawReview'])->middleware('throttle:10,1')->name('review.withdraw');
         });
 
         Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {

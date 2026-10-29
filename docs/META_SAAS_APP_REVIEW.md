@@ -88,3 +88,53 @@ All 8 tests pass, 111 assertions.
 | Real OAuth round trip with the SaaS app | BLOCKED_EXTERNAL_CREDENTIALS (items 1–5) |
 | Discovery and sync on a real test ad account | BLOCKED_EXTERNAL_CREDENTIALS (item 6) |
 | Business Verification, Advanced Access, App Review | BLOCKED_OPERATIONAL_EVIDENCE (items 7–8, Owner-side Meta processes) |
+
+## 2026-10-30 — readiness screen, Meta-approval guard, Live deletion-callback defect
+
+### Production facts (checked 2026-10-30 on main `bc422bf9`, without signing in)
+
+- `https://campaignshub.io/privacy`, `/terms` and `/data-deletion` all return 200.
+- `GET https://api.campaignshub.io/api/v1/oauth/ads/meta/callback` with no state returns 302, to `/app/integrations?provider=meta&outcome=invalid_state`. The route is live and refuses a request with no state.
+- `POST /api/v1/webhooks/data-deletion/meta` returned **503 «unconfigured»**. **Defect:** the Live secret was read from `services.meta_ads.app_secret` and `ad_platforms.meta.client_secret`, keys that no config file defines. Every Live deletion callback Meta sent was refused.
+  - **Fixed in #871:** the secret is now read through `PlatformCredentials::forMeta(Live)`, which checks the stored provider settings first and the environment second.
+  - The tests used to set the phantom key. They now set the real one. A new test proves a secret stored in the provider settings verifies, and failed before the fix.
+- `POST /api/v1/webhooks/data-deletion/meta-saas` returns 503 on main. The `meta-saas` route arrives with #871, and with no SaaS secret it refuses by design.
+
+### Readiness screen — `/admin/settings/integrations/meta-saas`
+
+The server computes this list (`MetaSaasReadiness`) from evidence it holds. The page only displays it.
+
+| Item | Becomes «ready» when |
+|---|---|
+| Legal pages | Always: they are published routes (Production check above) |
+| Redirect URI | Always: the callback route exists. Meta registering it is proven by the round trip |
+| SaaS deletion callback | Meta really called `/meta-saas` with a valid signature (a `DataRequest` with `source_provider = meta-saas`). With the secret entered but no call yet, it shows «not verified» |
+| Credentials | App ID, App Secret and Configuration ID are all present |
+| Meta dashboard settings | A test round trip passed with the current credentials |
+| OAuth round trip | Same. Rotating a credential sends it back to «not verified» |
+| Ad-account discovery | The passing round trip discovered at least one account |
+| Sync and reports | An account on a SaaS-app connection has really synced (`last_synced_at`) |
+| Business Verification, App Review | The Owner recorded Meta's approval (who and when, audited). Withdrawing the record returns new connections to Live |
+| New connections | The Owner chose the SaaS app for new connections |
+
+Statuses are `ready`, `not_verified`, `needs_credentials` and `owner_action`.
+
+### Guard: no production customer reaches the SaaS app before Meta approves it
+
+A passed test proves the app only for its own app roles (Development mode). New connections can be routed to the SaaS app only when all three hold:
+
+- the credentials are complete;
+- a passed test with exactly those credentials;
+- the Owner's recorded confirmation that Meta granted Business Verification and `ads_read` Advanced Access.
+
+`MetaAppRouting::default()` checks the confirmation too, so a stale `enabled` flag cannot route customers. Routing stays **Live** on Production, and nothing here switches it.
+
+### Status (2026-10-30)
+
+| Item | Status |
+|---|---|
+| Code (#871): app isolation, routing guard, readiness, SaaS and Live deletion callbacks | IMPLEMENTED_NOT_VERIFIED: automated suites pass; not yet exercised by Meta |
+| Live deletion-callback defect | IMPLEMENTED_NOT_VERIFIED until #871 deploys and the endpoint answers 401 to a bad signature instead of 503 |
+| Real OAuth round trip, discovery | BLOCKED_EXTERNAL_CREDENTIALS (items 1–6) |
+| Sync and reports on a real SaaS connection | BLOCKED_EXTERNAL_CREDENTIALS (needs a passing round trip and a bound test account) |
+| Business Verification, Advanced Access, App Review | BLOCKED_OPERATIONAL_EVIDENCE (items 7–8) |

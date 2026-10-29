@@ -6,6 +6,8 @@ namespace App\Domains\Legal\Http\Controllers;
 
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
+use App\Domains\Integrations\OAuth\MetaCredentialProfile;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Services\DeletionBlockers;
 use App\Domains\Legal\Services\DeletionVerification;
@@ -16,7 +18,6 @@ use App\Support\ApiResponse;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Validation\Rule;
 
 /**
@@ -341,7 +342,10 @@ final class DataDeletionController extends Controller
     private function appSecretFor(string $provider): ?string
     {
         return match ($provider) {
-            'meta' => Config::get('services.meta_ads.app_secret') ?: Config::get('ad_platforms.meta.client_secret'),
+            // The Live App Secret where the platform keeps it: the stored provider settings, then the environment. The two keys read
+            // here before (`services.meta_ads.app_secret`, `ad_platforms.meta.client_secret`) exist in no config file, so Production
+            // answered 503 to every Live deletion callback.
+            'meta' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_secret'),
             'meta-saas' => app(MetaSaasCredentials::class)->value('client_secret'),
             default => null,
         };

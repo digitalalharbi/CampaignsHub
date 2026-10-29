@@ -9,6 +9,7 @@ use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
 use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
+use App\Domains\Integrations\MetaCandidate\MetaSaasReadiness;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
@@ -29,6 +30,7 @@ final class MetaSaasAppController extends Controller
         private readonly MetaSaasCredentials $credentials,
         private readonly MetaCandidateRoundTrip $roundTrip,
         private readonly AuditLogger $audit,
+        private readonly MetaSaasReadiness $readiness,
     ) {}
 
     public function show(): JsonResponse
@@ -111,6 +113,10 @@ final class MetaSaasAppController extends Controller
             if (! $eligibility['eligible']) {
                 return ApiResponse::error(message: 'The SaaS app cannot take new connections yet.', errors: ['routing' => [$eligibility['reason']]], status: 409);
             }
+            // A passed test only proves the app works for its own app roles. Customers can authorise it only once Meta approved it.
+            if ($this->saasRow()?->review_confirmed_at === null) {
+                return ApiResponse::error(message: 'Meta has not been confirmed to have approved the SaaS app.', errors: ['routing' => ['app_review_not_confirmed']], status: 409);
+            }
         }
 
         $row = ProviderConfiguration::query()->firstOrNew(['provider' => MetaCredentialProfile::Saas->storageKey()], ['environment' => 'production']);
@@ -120,6 +126,47 @@ final class MetaSaasAppController extends Controller
         $this->audit->log(action: 'platform.integration.meta_saas.routing_changed', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: ['default_for_new_connections' => $data['default']]);
 
         return ApiResponse::success($this->payload(), 'New Meta connections now use the '.($data['default'] === 'saas' ? 'SaaS' : 'Live').' app.');
+    }
+
+    /**
+     * The Owner's statement that Meta verified the business and granted `ads_read` Advanced Access after App Review. Meta exposes
+     * neither to the app, so it is recorded with who said it and when, and withdrawing it sends new connections back to Live.
+     */
+    public function confirmReview(Request $request): JsonResponse
+    {
+        $request->validate([
+            'business_verified' => ['required', 'accepted'],
+            'advanced_access_granted' => ['required', 'accepted'],
+        ]);
+
+        $row = ProviderConfiguration::query()->firstOrNew(['provider' => MetaCredentialProfile::Saas->storageKey()], ['environment' => 'production', 'enabled' => false]);
+        $row->review_confirmed_at = now();
+        $row->review_confirmed_by = $request->user()?->getKey();
+        $row->save();
+
+        $this->audit->log(action: 'platform.integration.meta_saas.review_confirmed', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: ['business_verified' => true, 'advanced_access_granted' => true]);
+
+        return ApiResponse::success($this->payload(), 'Meta approval recorded.');
+    }
+
+    public function withdrawReview(): JsonResponse
+    {
+        $row = $this->saasRow();
+        if ($row !== null) {
+            $row->review_confirmed_at = null;
+            $row->review_confirmed_by = null;
+            $row->enabled = false;
+            $row->save();
+        }
+
+        $this->audit->log(action: 'platform.integration.meta_saas.review_withdrawn', entityType: ProviderConfiguration::class, entityId: 'meta.saas');
+
+        return ApiResponse::success($this->payload(), 'Meta approval withdrawn; new connections use the Live app.');
+    }
+
+    private function saasRow(): ?ProviderConfiguration
+    {
+        return ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->first();
     }
 
     /** @return array{eligible: bool, reason: string|null} */
@@ -143,6 +190,7 @@ final class MetaSaasAppController extends Controller
             ],
             // How many existing connections each app holds — read-only, and nothing here moves them.
             'connections_by_app' => ['live' => (int) ($connections['live'] ?? 0), 'saas' => (int) ($connections['saas'] ?? 0)],
+            'readiness' => $this->readiness->items(),
         ];
     }
 }
