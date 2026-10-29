@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Services\DeletionVerification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -255,6 +256,41 @@ final class DataDeletionFlowTest extends TestCase
 
         $this->assertSame(1, DataRequest::count());
         $this->assertSame($first->json('confirmation_code'), $second->json('confirmation_code'));
+    }
+
+    /**
+     * META-SAAS-APP-001 — the SaaS app's deletion callback is verified with the SaaS app's own secret, never the Live one.
+     *
+     * Meta signs a callback with the secret of the app the person used. Verified against the Live secret, every SaaS-app
+     * deletion was refused — and App Review needs this URL to work.
+     */
+    public function test_the_saas_apps_callback_is_verified_with_its_own_secret_and_never_the_live_one(): void
+    {
+        Config::set('services.meta_ads.app_secret', 'live-secret');
+        app(MetaSaasCredentials::class)->save(['client_id' => '111', 'client_secret' => 'saas-secret', 'config_id' => '222']);
+
+        // Signed by the Live app: not a SaaS-app callback.
+        $this->postJson('/api/v1/webhooks/data-deletion/meta-saas', ['signed_request' => $this->sign(['user_id' => '777'], 'live-secret')])
+            ->assertStatus(401);
+        // Signed by the SaaS app but posted to the Live URL: refused there too.
+        $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '777'], 'saas-secret')])
+            ->assertStatus(401);
+        $this->assertSame(0, DataRequest::count());
+
+        $this->postJson('/api/v1/webhooks/data-deletion/meta-saas', ['signed_request' => $this->sign(['user_id' => '777'], 'saas-secret')])
+            ->assertOk()
+            ->assertJsonStructure(['url', 'confirmation_code']);
+        $this->assertSame('meta-saas', DataRequest::sole()->source_provider);
+    }
+
+    /** With no SaaS secret stored, its callback refuses rather than trusting an unsigned body. */
+    public function test_the_saas_callback_refuses_when_the_saas_app_is_not_configured(): void
+    {
+        Config::set('services.meta_ads.app_secret', 'live-secret');
+
+        $this->postJson('/api/v1/webhooks/data-deletion/meta-saas', ['signed_request' => $this->sign(['user_id' => '777'], 'live-secret')])
+            ->assertStatus(503);
+        $this->assertSame(0, DataRequest::count());
     }
 
     private function sign(array $payload, string $secret): string
