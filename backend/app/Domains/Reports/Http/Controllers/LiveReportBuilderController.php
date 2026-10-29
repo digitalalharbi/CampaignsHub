@@ -358,6 +358,12 @@ final class LiveReportBuilderController extends Controller
      * CLIENT. `cpm` and `frequency` are real and useful to an operator and would be noise on a page
      * whose job is to answer «is my money working?».
      */
+    /** The KPI keys a client link may show — the same catalogue the builder offers. @return list<string> */
+    public static function metricKeys(): array
+    {
+        return array_column(self::METRICS, 'key');
+    }
+
     private const METRICS = [
         ['key' => 'spend', 'ar' => 'الإنفاق', 'en' => 'Spend'],
         ['key' => 'impressions', 'ar' => 'الظهور', 'en' => 'Impressions'],
