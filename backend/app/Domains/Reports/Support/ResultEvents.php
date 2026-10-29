@@ -213,10 +213,12 @@ final class ResultEvents
     }
 
     /**
-     * The Owner's landing-page events per platform (NASEL 2026-10-29): which platforms report a form START as InitiateCheckout. Snapchat and
-     * X are not in it — their start event was never established — so their landing campaigns contribute visits and completions only.
+     * Which platforms receive a form START, read from the landing page's own tag container (nasel.co/riwaq, GTM-TL4KFDMG, 2026-10-29): one
+     * `form_start` dataLayer event — the first focus inside the lead form — is sent as InitiateCheckout to Meta and TikTok and as
+     * START_CHECKOUT to Snapchat; all three report it as `checkout`. X receives no start event, so its landing campaigns add visits and
+     * completions only.
      */
-    private const FORM_START_PLATFORMS = ['meta', 'tiktok'];
+    private const FORM_START_PLATFORMS = ['meta', 'tiktok', 'snapchat'];
 
     /**
      * NASEL 2026-10-29 — the landing-page funnel, over ONLY the campaigns this resolver puts on the `landing_page` path: visits, form starts
