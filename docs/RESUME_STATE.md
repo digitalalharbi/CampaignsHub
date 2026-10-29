@@ -5,8 +5,8 @@
 **Branch fix/nasel-report-controls, the Owner's 10 points** (see owner defects «a new link ignored its own settings»):
 - section switches
 - KPI Results cards
-- explicit Results «none» → clicks
-- Platforms cards → clicks
+- explicit Results «none» = Results disabled, never clicks (Owner correction)
+- Platforms cards = the defined result, or nothing
 - Results label and clicks option
 - landing coverage note, campaign landing column, revenue auto-hide
 - delete dialog with bulk delete

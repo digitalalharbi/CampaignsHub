@@ -211,7 +211,7 @@ export function LivePlatformComparison({
    * collapsing to «—» the moment a rate is missing.
    */
   const costPer = (row: Record<string, unknown>) =>
-    words.off ? readCostPer(row as MoneyTotals, 'cpc', 'clicks', currency, ar) : readCostPer(row as MoneyTotals, 'cpa', 'conversions', currency, ar)
+    readCostPer(row as MoneyTotals, 'cpa', 'conversions', currency, ar)
 
   /*
    * RESULT-EVENTS-001 — where Results are configured, both columns read the SAME configured event and that event's eligible spend
@@ -296,8 +296,8 @@ export function LivePlatformComparison({
   const chosen = Array.isArray(payload.columns) ? undefined : payload.columns?.platforms
   const keep = (noSpend ? [0, 2, 4, 5, 6] : [0, 1, 2, 3, 4, 5, 6])
     .filter((i) => i === 0 || chosen === undefined || chosen.includes(COLUMN_KEYS[i]))
-    // Without Results their column would only repeat the clicks column beside it; the cost column becomes the cost per click.
-    .filter((i) => !words.off || i !== 2)
+    // RESULT-EVENTS-001 — without a defined event there is no Results column and no cost per result: not generic conversions, not clicks.
+    .filter((i) => words.shown || (i !== 2 && i !== 3))
   const pick = <T,>(cells: T[]): T[] => keep.map((i) => cells[i])
 
   return (

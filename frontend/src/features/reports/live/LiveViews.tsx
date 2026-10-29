@@ -7,7 +7,7 @@ import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { rowMoney } from '@/features/analytics/format'
 import { canonicalPlatform } from '@/lib/platforms'
-import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
+import { type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
 import type { LivePayload } from '../api'
@@ -407,6 +407,7 @@ export function PlatformsView({
   const wholeRows = whole.platforms ?? []
   const totalSpend = wholeRows.reduce((a, p) => a + Number(p.spend ?? 0), 0)
   const totalResults = wholeRows.reduce((a, p) => a + Number(p.conversions ?? 0), 0)
+  const words = resultWords(whole, ar)
 
   if (platforms.length === 0) {
     return (
@@ -441,9 +442,13 @@ export function PlatformsView({
                   <Num>{row ? rowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
                 </span>
                 <span className="tnum truncate text-xs text-text-secondary">
-                  {/* Owner 2026-10-29 — the platform's clicks, never its generic conversion (TikTok's 1,126 were page views). */}
-                  <Num>{row?.clicks === null || row?.clicks === undefined ? '—' : Number(row.clicks).toLocaleString('en-US')}</Num>
-                  {' '}{ar ? 'نقرة' : 'clicks'}
+                  {/* RESULT-EVENTS-001 — the platform's DEFINED result under the link's own name; never its generic conversion (TikTok's 1,126 were page views). */}
+                  {words.shown && (
+                    <>
+                      <Num>{(() => { const v = whole.results?.by_platform?.[p]?.results; return v === null || v === undefined ? (ar ? 'غير متاح' : 'Not available') : Number(v).toLocaleString('en-US') })()}</Num>
+                      {' '}{words.result}
+                    </>
+                  )}
                 </span>
                 {share !== null && (
                   <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? 'حصة الإنفاق' : 'Share of spend'}>
@@ -483,7 +488,7 @@ function PlatformDetail({
   payload,
   wholeRow,
   totalSpend,
-  totalResults,
+  totalResults: _totalResults,
   reader,
   currency,
   locale,
@@ -506,7 +511,7 @@ function PlatformDetail({
   const nativeHere = payload.results?.leads?.native_by_platform?.[platform] ?? null
   const resultShare = words.series?.key === 'form_leads'
     ? (nativeTotal !== null && nativeTotal > 0 && nativeHere !== null ? nativeHere / nativeTotal : null)
-    : words.legacy && totalResults > 0 && wholeRow ? Number(wholeRow.conversions ?? 0) / totalResults : null
+    : null
   const name = providerLabel(platform, locale)
 
   return (
@@ -542,11 +547,9 @@ function PlatformDetail({
             {resultShare !== null && <ProgressRing value={resultShare} sublabel={ar ? `من ${words.series?.name ?? words.result}` : `of ${words.series?.name ?? words.result}`} size={116} tone="success" />}
             {spendShare === null && resultShare === null && <span className="text-sm text-text-muted">—</span>}
           </div>
-          {wholeRow && (
+          {wholeRow && words.shown && (
             <p className="tnum mt-2 text-center text-xs text-text-secondary">
-              {words.cost}: <Num>{words.legacy || words.off
-                ? formatMoneyReading(words.off ? readCostPer(wholeRow as unknown as MoneyTotals, 'cpc', 'clicks', currency, ar) : readCostPer(wholeRow as unknown as MoneyTotals, 'cpa', 'conversions', currency, ar), (v) => reader.asExactMoney(v))
-                : (() => { const c = payload.results?.by_platform?.[platform]?.cost; return c === null || c === undefined ? (ar ? 'غير متاح' : 'Not available') : reader.asExactMoney(c) })()}</Num>
+              {words.cost}: <Num>{(() => { const c = payload.results?.by_platform?.[platform]?.cost; return c === null || c === undefined ? (ar ? 'غير متاح' : 'Not available') : reader.asExactMoney(c) })()}</Num>
             </p>
           )}
         </ChartCard>

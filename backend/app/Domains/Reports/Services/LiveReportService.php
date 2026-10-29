@@ -385,9 +385,8 @@ final class LiveReportService
          */
         $settings = (array) ($share->settings ?? []);
         $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
-        // Results exist only where configured; an EXPLICIT «none» (results_off) also turns every result into clicks (Owner 2026-10-29).
-        $resultsOff = ($settings['results_off'] ?? false) === true;
-        $resultsConfigured = ! $resultsOff && ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null)->configured();
+        // RESULT-EVENTS-001 — Results exist only where an event is defined; an explicit «none» (results_off) is never filled from the project.
+        $resultsConfigured = ($settings['results_off'] ?? false) !== true && ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null)->configured();
         $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
         if ($leads->configured() && $resultsConfigured) {
             // A content row names its creative, not its campaign: the campaign's name (the project's path convention) is looked up once.
@@ -438,10 +437,11 @@ final class LiveReportService
         }
 
         /*
-         * NASEL 2026-10-29 — a link without Results says nothing about results: the platform's generic conversion and its cost leave the
-         * content rows, and the content is ranked by clicks, which the page names as the basis («مرتّبة على النقرات»).
+         * NASEL 2026-10-29 — a link without defined Results says nothing about results: each content row is marked `result_defined: false`
+         * so no surface prints its generic conversion, cost or return as a result (the figures stay, so every surface still reconciles), and
+         * the content is ordered by clicks, which the page names as the basis.
          */
-        if ($resultsOff) {
+        if (! $resultsConfigured) {
             $strip = static function (array $rows) use (&$strip): array {
                 return array_map(static function (array $row) use ($strip): array {
                     foreach (['groups', 'ads'] as $nested) {
@@ -449,13 +449,8 @@ final class LiveReportService
                             $row[$nested] = $strip($row[$nested]);
                         }
                     }
-                    unset($row['conversions'], $row['cpa'], $row['roas'], $row['orders']);
-                    // The card leads with clicks where the result would have stood.
                     if (isset($row['provider'])) {
-                        $row['result_basis'] = 'clicks';
-                    }
-                    if (is_array($row['metrics'] ?? null)) {
-                        unset($row['metrics']['conversions'], $row['metrics']['cpa'], $row['metrics']['roas'], $row['metrics']['orders']);
+                        $row['result_defined'] = false;
                     }
 
                     return $row;

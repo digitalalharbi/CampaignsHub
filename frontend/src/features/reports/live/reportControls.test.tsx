@@ -75,31 +75,50 @@ describe('NASEL report controls reach the page', () => {
     expect(text).toContain('تكلفة الليد')
     expect(text.indexOf('الإنفاق')).toBeLessThan(text.indexOf('إجمالي الليدز'))
     expect(text.indexOf('إجمالي الليدز')).toBeLessThan(text.indexOf('تكلفة الليد'))
-    expect(text).toContain('102')
+    expect(text).toContain(String(base.results.total))
   })
 
-  it('Results «none»: no «النتائج» or «نتيجة» anywhere — clicks stand in, matching the platforms', async () => {
-    serve({ results_off: true, results: { ...base.results, configured: false, total: null, cost: null, by_platform: {} }, metrics: ['spend', 'impressions', 'clicks', 'conversions', 'cpa'], report_views: ['summary', 'platforms', 'tables'], report_sections: ALL })
+  it('Results «none»: Results and Cost per Result are disabled everywhere — no word, no column, no card, and nothing renamed in their place', async () => {
+    const off = { results_off: true, results: { ...base.results, configured: false, total: null, cost: null, by_platform: {} } }
+    serve({ ...off, metrics: ['spend', 'impressions', 'clicks', 'results', 'cost_per_result'], report_views: ['summary', 'platforms', 'tables'], report_sections: ALL })
     open('tables')
     const tables = await screen.findByTestId('live-mode-tables')
     expect(tables.textContent).not.toMatch(/النتائج|نتيجة/)
-    expect(within(tables).getByTestId('tables-platforms')).toHaveTextContent('تكلفة النقرة')
+    // «none» is not «clicks»: no cost-per-click column stands in for the cost per result.
+    expect(within(tables).getByTestId('tables-platforms').textContent).not.toMatch(/تكلفة النقرة/)
 
     fireEvent.click(screen.getByTestId('live-mode-tab-summary'))
     const summary = await screen.findByTestId('live-mode-summary')
-    expect(summary.textContent).not.toMatch(/النتائج|نتيجة/)
-    expect(within(summary).getByTestId('live-kpis')).toHaveTextContent('6.29K')
+    expect(summary.textContent).not.toMatch(/النتائج|نتيجة|تكلفة النقرة/)
+    // Clicks appear once, as the clicks KPI the operator chose — not a second time as «Results».
+    const row = within(summary).getByTestId('live-kpis').textContent ?? ''
+    expect(row.split('النقرات').length - 1).toBe(1)
+
+    fireEvent.click(screen.getByTestId('live-mode-tab-platforms'))
+    const card = await screen.findByTestId('live-platform-card-tiktok')
+    expect(card.textContent).not.toMatch(/نتيجة|النتائج|نقرة/)
   })
 
-  it('the Platforms tab cards state each platform\'s clicks, never its generic conversions', async () => {
-    serve({ metrics: ['spend', 'clicks'], report_views: ['summary', 'platforms'], report_sections: ALL })
+  it('Results defined as clicks read the platforms\' clicks — shown once, never twice beside the clicks card', async () => {
+    const clicksEv = { landing_page: 'clicks', lead_form: 'clicks' }
+    const byPlatform = Object.fromEntries(base.platforms.map((p) => [p.provider, { results: p.clicks, metric: 'clicks', spend: p.spend, cost: p.spend / p.clicks }]))
+    const total = base.platforms.reduce((sum, p) => sum + p.clicks, 0)
+    serve({ results: { ...base.results, configured: true, total, cost: base.totals.spend / total, by_platform: byPlatform, events: { meta: clicksEv, tiktok: clicksEv, snapchat: clicksEv } }, metrics: ['spend', 'clicks', 'results', 'cpc', 'cost_per_result'], report_views: ['summary', 'platforms'], report_sections: ALL })
+    open('summary', 'executive_summary')
+    const row = (await screen.findByTestId('live-kpis')).textContent ?? ''
+    expect(row.split('النقرات').length - 1).toBe(1)
+    expect(row).not.toMatch(/النتائج|تكلفة النتيجة/)
+  })
+
+  it('the Platforms tab cards state each platform\'s DEFINED result under the link\'s own name, never its generic conversions', async () => {
+    serve({ results_label: 'الاهتمام', metrics: ['spend', 'clicks'], report_views: ['summary', 'platforms'], report_sections: ALL })
     open('platforms')
-    const card = await screen.findByTestId('live-platform-card-tiktok')
-    expect(card).toHaveTextContent('5,525')
-    expect(card).toHaveTextContent('نقرة')
-    expect(card).not.toHaveTextContent('1,126')
-    expect(screen.getByTestId('live-platform-card-meta')).toHaveTextContent('400')
-    expect(screen.getByTestId('live-platform-card-snapchat')).toHaveTextContent('363')
+    for (const p of base.platforms) {
+      const card = await screen.findByTestId(`live-platform-card-${p.provider}`)
+      const defined = base.results.by_platform[p.provider as keyof typeof base.results.by_platform].results
+      expect(card).toHaveTextContent(`${defined.toLocaleString('en-US')} الاهتمام`)
+      expect(card.textContent).not.toContain(p.conversions.toLocaleString('en-US') + ' ')
+    }
   })
 
   it('a Results label renames Results and their cost across the tables', async () => {

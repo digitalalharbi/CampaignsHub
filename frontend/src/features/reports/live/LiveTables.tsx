@@ -91,10 +91,9 @@ export function TablesView({
   const configured = payload.results?.configured === true
   const byPlatform = (p: Row) => payload.results?.by_platform?.[String(p.provider ?? '')]
   const resultsCol = <T,>(read: (item: T) => number | null | undefined): Col<T> => ({ key: 'results', head: results, cell: (x) => compact(read(x) ?? null), value: (x) => read(x) ?? null })
-  // Configured: the resolver. «None»: no column (the clicks column says it). Never defined: the platform's own result, as before.
-  const configuredResults = <T,>(field: (item: T) => Row, verified: (item: T) => number | null | undefined): Col<T> | null =>
-    configured ? resultsCol<T>(verified) : words.off ? null : metricCol<T>('results', results, 'conversions', field)
-  const costCol = <T,>(read: (item: T) => Row): Col<T> | null => (money && words.legacy ? { key: 'cost', head: cost, cell: (x) => costCell(num(read(x), 'cpa')), value: (x) => num(read(x), 'cpa') } : null)
+  // RESULT-EVENTS-001 — Results columns exist only where an event is defined, and then read the resolver; nothing else stands in for them.
+  const configuredResults = <T,>(_field: (item: T) => Row, verified: (item: T) => number | null | undefined): Col<T> | null =>
+    configured ? resultsCol<T>(verified) : null
 
   const dayTable = build<Row>('days', [
     { key: 'day', head: ar ? 'اليوم' : 'Day', cell: (d) => String(d.date ?? ''), value: (d) => String(d.date ?? '') },
@@ -107,20 +106,13 @@ export function TablesView({
   const platTable = build<Row>('platforms', [
     { key: 'name', head: ar ? 'المنصة' : 'Platform', cell: (p) => <ProviderName provider={String(p.provider ?? '')} locale={locale} size={16} />, value: (p) => String(p.provider ?? '') },
     configuredResults<Row>((p) => p, (p) => byPlatform(p)?.results ?? null),
-    ...(words.legacy ? [{ key: 'results', head: ar ? 'تغيّر النتائج' : 'Results vs previous', cell: (p: Row) => delta(movement(p, 'conversions')), value: (p: Row) => movement(p, 'conversions') }] : []),
 
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (p) => p),
     { key: 'impressions', head: ar ? 'تغيّر الظهور' : 'Impressions vs previous', cell: (p) => delta(movement(p, 'impressions')), value: (p) => movement(p, 'impressions') },
     { key: 'ctr', head: ar ? 'نسبة النقر' : 'CTR', cell: (p) => percent(num(p, 'ctr'), 2), value: (p) => num(p, 'ctr') },
     spendCol<Row>((p) => p),
     // With Results, their cost from the resolver; without, the cost per click (named «تكلفة النقرة» by `resultWords`).
-    money
-      ? (configured
-        ? { key: 'cost', head: cost, cell: (p: Row) => costCell(byPlatform(p)?.cost ?? null), value: (p: Row) => byPlatform(p)?.cost ?? null }
-        : words.off
-          ? { key: 'cost', head: cost, cell: (p: Row) => costCell(num(p, 'cpc')), value: (p: Row) => num(p, 'cpc') }
-          : { key: 'cost', head: cost, cell: (p: Row) => costCell(num(p, 'cpa')), value: (p: Row) => num(p, 'cpa') })
-      : null,
+    money && configured ? { key: 'cost', head: cost, cell: (p: Row) => costCell(byPlatform(p)?.cost ?? null), value: (p: Row) => byPlatform(p)?.cost ?? null } : null,
   ], platforms)
 
   const accTable = build<Row>('accounts', [
@@ -131,10 +123,14 @@ export function TablesView({
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (a) => a),
     metricCol('clicks', ar ? 'النقرات' : 'Clicks', 'clicks', (a) => a),
     spendCol<Row>((a) => a),
-    costCol<Row>((a) => a),
   ], accounts)
 
   const conRow = (c: ReportAd) => c as unknown as Row
+  const contentCost = (c: ReportAd): number | null => {
+    const value = c.verified_result?.value ?? null
+    const spent = num(conRow(c), 'spend')
+    return value !== null && value > 0 && spent !== null ? spent / value : null
+  }
   const conTable = build<ReportAd>('content', [
     { key: 'name', head: ar ? 'المحتوى' : 'Content', cell: (c) => <button key="n" type="button" className="max-w-[16rem] truncate text-start font-semibold text-brand-600 hover:underline" onClick={() => onOpenContent(c)}>{c.name ?? '—'}</button>, value: (c) => String(c.name ?? '') },
     { key: 'platform', head: ar ? 'المنصة' : 'Platform', cell: (c) => <ProviderName provider={String(c.provider ?? '')} locale={locale} size={16} />, value: (c) => String(c.provider ?? '') },
@@ -142,7 +138,10 @@ export function TablesView({
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', conRow),
     metricCol('clicks', ar ? 'النقرات' : 'Clicks', 'clicks', conRow),
     spendCol<ReportAd>(conRow),
-    costCol<ReportAd>(conRow),
+    // A content's cost per result: its own spend over its own defined result — the same event, never generic conversions.
+    money && configured
+      ? { key: 'cost', head: cost, cell: (c: ReportAd) => costCell(contentCost(c)), value: (c: ReportAd) => contentCost(c) }
+      : null,
   ], roster)
 
   const Block = ({ title, testid, empty, children }: { title: string; testid: string; empty: boolean; children: React.ReactNode }) => (

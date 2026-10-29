@@ -248,3 +248,5 @@ On a new monthly-rolling detailed NASEL link the Owner found the following. Root
 - **Description.** Already in `og:description` and `twitter:description` in Production. Showing it in the page header is pending (Phase 2 header).
 
 Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) applying the same section and Results rules remain open.
+
+**Correction (Owner, same day, before #875 merged).** «None» means Results and Cost per Result are disabled entirely. It does not mean renamed to clicks/CPC, and clicks are a result only when chosen as the event. The first #875 draft substituted clicks; that draft was stopped before merge and rewritten to the contract (matrix NASEL-RESULTS-NONE-001, NASEL-PLATFORM-CARDS-RESULT-001). Links that never defined Results are held to the same contract: their generic conversions are not shown as «النتائج». A chosen `conversions` card is named «تحويلات المنصة».

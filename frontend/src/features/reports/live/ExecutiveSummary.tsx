@@ -16,7 +16,7 @@ import { ContentTile } from './LiveContent'
 import { liveSpark } from './liveSpark'
 import { ComparisonWithheld, kpiKeysFor, visibleKpiKeys } from './LiveKpis'
 import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
-import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads, revenueReported } from './leadResults'
+import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads, resultWords, revenueReported } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -52,7 +52,7 @@ const SPEND_DERIVED = new Set(['spend', 'roas', 'cpa', 'cpm', 'cpc', 'cpl', 'cpi
 
 export function headlineKeys(payload: LivePayload, reader: Reader): { result: string; cost: string } {
   // NASEL 2026-10-29 — a link without Results never heads its summary with the platform's generic conversion.
-  const keys = reader.keys(payload).filter((k) => k !== 'conversions' || payload.results_off !== true)
+  const keys = reader.keys(payload).filter((k) => k !== 'conversions' || payload.results?.configured === true)
   const totals = payload.totals ?? {}
   // The objective's own result first, in RESULT_KEYS' priority — a reach figure never outranks an order.
   const result = RESULT_KEYS.find((k) => keys.includes(k) && totals[k] !== null && totals[k] !== undefined && Number(totals[k]) > 0)
@@ -83,6 +83,12 @@ export function resultSource(payload: LivePayload, reader: Reader, result: strin
   const native = nativeLeads(payload)
   if (native) {
     return { key: 'form_leads', name: ar ? NATIVE_LEADS_LABEL.ar : NATIVE_LEADS_LABEL.en, of: (p) => native.of(String(p.provider ?? '')), total: native.total }
+  }
+
+  // RESULT-EVENTS-001 — Results defined on an event: the resolver's per-platform results under the link's own name.
+  if (payload.results?.configured === true) {
+    const words = resultWords(payload, ar)
+    return { key: 'results', name: words.result, of: (p) => payload.results?.by_platform?.[canonicalPlatform(String(p.provider ?? ''))]?.results ?? null, total: payload.results.total ?? null }
   }
 
   return { key: result, name: metricName(reader, result, ar, payload), of: (p) => count(p[result]), total: count(payload.totals?.[result]) }
@@ -312,8 +318,9 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
 
 function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: LivePayload; reader: Reader; ar: boolean; currency: string; source: ResultSource; wide: boolean }) {
   const result = source.key
+  // The defined Results have no daily figure of their own (only native submissions do): the trend then draws delivery, not an empty line.
   const options = [
-    { key: result, name: source.key === 'form_leads' ? source.name : metricName(reader, result, ar, payload), color: 'var(--purple)', kind: 'num' as const },
+    ...(result === 'results' ? [] : [{ key: result, name: source.key === 'form_leads' ? source.name : metricName(reader, result, ar, payload), color: 'var(--purple)', kind: 'num' as const }]),
     ...(result !== 'clicks' ? [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }] : []),
     ...(result !== 'impressions' ? [{ key: 'impressions', name: ar ? 'الظهور' : 'Impressions', color: 'var(--brand-600)', kind: 'num' as const }] : []),
   ]

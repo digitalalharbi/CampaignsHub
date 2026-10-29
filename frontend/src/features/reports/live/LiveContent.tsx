@@ -162,7 +162,8 @@ export function LiveContentDetail({
   const shown = state.kind === 'ready' ? asContent(state.data.content) : content
   const reported = state.kind === 'ready' ? state.data.trend.filter((p) => p.reported) : []
   const spendDrawable = reported.length > 0 && reported.every((p) => typeof p.spend === 'number')
-  const genericResults = shown.verified_result === undefined && shown.conversions !== undefined
+  // RESULT-EVENTS-001 — a content's daily line is never the platform's generic conversion under «Results».
+  const genericResults = false
 
   return (
     <ReportAdDetail ad={shown} currency={currency} locale={locale} onClose={onClose}>

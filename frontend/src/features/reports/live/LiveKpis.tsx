@@ -5,7 +5,7 @@ import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
 import { cardHasFigure, gateResultKeys, metricLabel, MONEY_KEYS, spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
-import { revenueReported } from './leadResults'
+import { resultsAreClicks, revenueReported } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -47,6 +47,10 @@ export function visibleKpiKeys(payload: LivePayload, reader: Reader, keys: strin
       .filter((k) => reader.meta[k] && !(moneyHidden && MONEY_KEYS.has(k)))
       // NASEL 2026-10-29 — every platform reported zero revenue: revenue and ROAS leave even a chosen row, as if «hide revenue» were on.
       .filter((k) => revenueReported(payload) || (k !== 'revenue' && k !== 'roas'))
+      // RESULT-EVENTS-001 — Results and their cost exist only where an event is defined; «none» removes them, it does not rename anything.
+      .filter((k) => payload.results?.configured === true || (k !== 'results' && k !== 'cost_per_result'))
+      // Results defined AS clicks beside the clicks card are one figure twice — and their cost the CPC twice: shown once each.
+      .filter((k, _i, all) => !resultsAreClicks(payload) || !((k === 'results' && all.includes('clicks')) || (k === 'cost_per_result' && all.includes('cpc'))))
   }
   const t = payload.totals
   // One underlying result is one card: `leads` carrying the same count as the result is that result.

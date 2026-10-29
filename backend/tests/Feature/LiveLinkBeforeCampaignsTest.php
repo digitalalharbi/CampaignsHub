@@ -363,7 +363,7 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertSame('clicks', $payload['ads_basis']['metric']);
         foreach ($payload['ads_roster'] as $row) {
             $this->assertArrayNotHasKey('verified_result', $row);
-            $this->assertArrayNotHasKey('conversions', (array) ($row['metrics'] ?? []), 'no generic conversion left to print as «Results»');
+            $this->assertFalse($row['result_defined'], 'no surface prints the generic conversion as «Results»');
         }
     }
 
