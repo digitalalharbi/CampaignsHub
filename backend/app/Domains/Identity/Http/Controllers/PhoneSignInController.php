@@ -49,6 +49,8 @@ final class PhoneSignInController extends Controller
     /** The verification purpose, kept distinct so a portal code cannot be replayed here. */
     private const PURPOSE = 'phone_sign_in';
 
+    private const RESEND_COOLDOWN = 60;
+
     public function __construct(private readonly ContactVerificationService $verification) {}
 
     /** POST /auth/phone/start — send a one-time code to a mobile number. */
@@ -72,11 +74,19 @@ final class PhoneSignInController extends Controller
          * to a stranger's phone once — which the throttle bounds — against telling everybody which of
          * their contacts is a customer.
          */
-        $result = $this->verification->start('sms', $e164, self::PURPOSE);
+        $result = $this->verification->start(
+            'sms',
+            $e164,
+            self::PURPOSE,
+            cooldownSeconds: self::RESEND_COOLDOWN,
+            invalidatePrevious: true,
+            ownerKey: $this->ownerKey($request),
+        );
 
         return ApiResponse::success([
             'verification_id' => $result['id'],
             'delivery_status' => $result['delivery_status'],
+            'resend_after' => self::RESEND_COOLDOWN,
             // Non-production only; hard-gated inside the verification service.
             'dev_code' => $result['dev_code'],
         ], __('auth.code_sent'));
@@ -98,7 +108,11 @@ final class PhoneSignInController extends Controller
             'remember' => ['sometimes', 'boolean'],
         ]);
 
-        $verification = $this->verification->verify($data['verification_id'], (string) $data['code']);
+        $verification = $this->verification->verify(
+            $data['verification_id'],
+            (string) $data['code'],
+            $this->ownerKey($request),
+        );
 
         // A code minted for the client portal is not a platform credential, whatever it verifies.
         abort_unless($verification->purpose === self::PURPOSE, 422);
@@ -169,5 +183,11 @@ final class PhoneSignInController extends Controller
             || (! $user->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($user));
 
         abort_if($suspended, 403, __('auth.unavailable'));
+    }
+
+    /** Bind an anonymous challenge to the browser session that initiated it. */
+    private function ownerKey(Request $request): string
+    {
+        return 'phone-sign-in:'.$request->session()->getId();
     }
 }

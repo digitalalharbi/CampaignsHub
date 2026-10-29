@@ -58,6 +58,7 @@ final class ProductionReadiness
         $this->checkPayments($production);
         $this->checkRecurringBilling($production);
         $this->checkMail();
+        $this->checkTwilioVerify();
         $this->checkAdPlatforms();
         $this->checkExchangeRates();
 
@@ -261,6 +262,42 @@ final class ProductionReadiness
     {
         if (in_array(Config::get('mail.default'), ['log', 'array'], true)) {
             $this->warn('mail.default', 'No mail provider is configured, so nothing is delivered. The product already reports this honestly and never records a message as sent.', 'Supply SMTP or API credentials when they exist — READY_FOR_CREDENTIALS until then.');
+        }
+    }
+
+    private function checkTwilioVerify(): void
+    {
+        $keys = ['account_sid', 'auth_token', 'verify_service_sid'];
+        $present = array_values(array_filter(
+            $keys,
+            fn (string $key): bool => trim((string) Config::get("services.twilio.{$key}")) !== '',
+        ));
+
+        if ($present === []) {
+            $this->warn(
+                'services.twilio',
+                'Twilio Verify has no credentials, so production SMS verification cannot be delivered.',
+                'Supply TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and the existing TWILIO_VERIFY_SERVICE_SID in the secret store.',
+            );
+
+            return;
+        }
+
+        if (count($present) !== count($keys)) {
+            $missing = array_values(array_diff($keys, $present));
+            $this->fail(
+                'services.twilio',
+                'Twilio Verify is only partially configured (missing: '.implode(', ', $missing).').',
+                'Supply the complete credential set or remove the partial configuration.',
+            );
+        }
+
+        if (Config::get('services.twilio.verify_channel') !== 'sms') {
+            $this->fail(
+                'services.twilio.verify_channel',
+                'TWILIO_VERIFY_CHANNEL is not sms, but the product presents these challenges as SMS.',
+                'Set TWILIO_VERIFY_CHANNEL=sms.',
+            );
         }
     }
 

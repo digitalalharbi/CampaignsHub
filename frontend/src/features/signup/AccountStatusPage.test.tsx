@@ -233,9 +233,9 @@ describe('AccountStatusPage', () => {
 
     renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
 
-    fireEvent.change(await screen.findByLabelText(/code we sent/i), { target: { value: '123456' } })
-    fireEvent.click(screen.getByRole('button', { name: /Confirm code/i }))
-
+    fireEvent.paste(await screen.findByTestId('registration-otp-0'), {
+      clipboardData: { getData: () => '123456' },
+    })
     await waitFor(() => expect(verifyRegistrationMobile).toHaveBeenCalledWith('reg-1', '123456'))
   })
 
