@@ -86,7 +86,7 @@ describe('result events panel', () => {
 
     expect(screen.getByTestId('result-event-tiktok-lead_form')).toHaveValue('')
 
-    await waitFor(() => expect(screen.getAllByRole('option', { name: 'Reported leads' }).length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByRole('option', { name: 'Platform/pixel Lead event (unverified)' }).length).toBeGreaterThan(0))
     fireEvent.change(screen.getByTestId('result-event-tiktok-lead_form'), { target: { value: 'leads' } })
     expect(latest).toEqual({ tiktok: { lead_form: 'leads' } })
     expect(saveResultEvents).not.toHaveBeenCalled()

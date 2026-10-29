@@ -81,7 +81,6 @@ final class ResultEventsController extends Controller
         return ApiResponse::success($this->shape($model->refresh()), 'Result events saved.');
     }
 
-    /** @return array<string, mixed> */
     /**
      * NASEL 2026-10-28 — one EXISTING link's result and lead events, changed in place so the client keeps the same URL.
      *
@@ -89,21 +88,35 @@ final class ResultEventsController extends Controller
      * expiry, so nothing a client can see is widened. A platform the link does not cover is refused rather than stored. The audit entry
      * keeps the previous value; sending that value back is the reversal. Sending `null` for a key removes the link's override, so the
      * project's own mapping applies again.
+     *
+     * NASEL 2026-10-29 — and its PRESENTATION: the KPI cards in their order (`metrics`), their names (`kpi_labels`) and the campaign table
+     * (`campaign_breakdown`). Both live links had been built with the pixel «leads» card, and the only way to correct one was a new URL.
+     * These choose how the link's own figures are shown; the money switches (`hide_spend`, `hide_revenue`) stay where they are.
      */
     public function updateShare(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
     {
+        $keys = LiveReportBuilderController::metricKeys();
         $request->validate([
             'result_events' => ['nullable', 'array'],
             'lead_events' => ['nullable', 'array'],
+            'metrics' => ['sometimes', 'array', 'min:1', 'max:12'],
+            'metrics.*' => ['string', 'distinct', Rule::in($keys)],
+            'kpi_labels' => ['sometimes', 'nullable', 'array', 'max:30'],
+            'kpi_labels.*' => ['nullable', 'string', 'max:60'],
+            'campaign_breakdown' => ['sometimes', 'boolean'],
         ]);
-        abort_if(! $request->exists('result_events') && ! $request->exists('lead_events'), 422, 'Nothing to save.');
+        abort_if(array_intersect(['result_events', 'lead_events', 'metrics', 'kpi_labels', 'campaign_breakdown'], array_keys($request->all())) === [], 422, 'Nothing to save.');
+        $presentation = ['metrics', 'kpi_labels', 'campaign_breakdown'];
 
         $model = Report::query()->where('project_id', $project)->findOrFail($report);
         $link = ReportShare::query()->where('report_id', $model->getKey())->findOrFail($share);
         $covered = array_values(array_filter((array) (($link->scope ?? [])['providers'] ?? [])));
 
         $settings = (array) ($link->settings ?? []);
-        $before = array_intersect_key($settings, array_flip(['result_events', 'lead_events']));
+        $scope = (array) ($link->scope ?? []);
+        $read = static fn (array $settings, array $scope): array => array_intersect_key($settings, array_flip(['result_events', 'lead_events', 'kpi_labels', 'campaign_breakdown']))
+            + (array_key_exists('metrics', $scope) ? ['metrics' => $scope['metrics']] : []);
+        $before = $read($settings, $scope);
         foreach (['result_events', 'lead_events'] as $key) {
             if (! $request->exists($key)) {
                 continue;
@@ -123,10 +136,35 @@ final class ResultEventsController extends Controller
                 $settings[$key] = $events->toArray();
             }
         }
+        if ($request->has('metrics')) {
+            $scope['metrics'] = array_values((array) $request->input('metrics'));
+        }
+        if ($request->exists('kpi_labels')) {
+            // Names only for cards the link shows; a blank name means the catalogue's own.
+            $labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) $request->input('kpi_labels'), array_flip($keys))), static fn (string $v): bool => $v !== '');
+            if ($labels === []) {
+                unset($settings['kpi_labels']);
+            } else {
+                $settings['kpi_labels'] = $labels;
+            }
+        }
+        if ($request->has('campaign_breakdown')) {
+            if ($request->boolean('campaign_breakdown')) {
+                $settings['campaign_breakdown'] = true;
+            } else {
+                unset($settings['campaign_breakdown']);
+            }
+        }
         $link->settings = $settings;
+        $link->scope = $scope;
         $link->save();
+        if ($request->has('metrics') && $model->type === 'live') {
+            // The report row records the same card list, so the two never disagree for a later reader.
+            $model->config = ['metrics' => $scope['metrics']] + (array) ($model->config ?? []);
+            $model->save();
+        }
 
-        $after = array_intersect_key($settings, array_flip(['result_events', 'lead_events']));
+        $after = $read($settings, $scope);
         $entry = $audit->log(action: 'report.shared_link_result_events_changed', entityType: ReportShare::class, entityId: (string) $link->getKey(), before: $before, after: $after);
 
         return ApiResponse::success([
@@ -138,6 +176,7 @@ final class ResultEventsController extends Controller
         ], 'Link result events saved.');
     }
 
+    /** @return array<string, mixed> */
     private function shape(Project $project): array
     {
         return [

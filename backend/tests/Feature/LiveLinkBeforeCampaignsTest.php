@@ -16,6 +16,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
@@ -241,6 +242,38 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         // Another project's route cannot reach this link.
         $other = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->project->client_workspace_id, 'name' => 'Other', 'status' => 'active']);
         $this->putJson("/api/v1/projects/{$other->id}/reports/{$created['report_id']}/shares/{$created['share_id']}/result-events", ['result_events' => ['tiktok' => ['lead_form' => 'form_leads']]])->assertNotFound();
+    }
+
+    /** NASEL 2026-10-29 — a link built with the pixel «leads» card gets the four primary KPIs in place; scope and money switches stay put. */
+    public function test_an_existing_links_kpis_labels_and_campaign_table_change_in_place_and_revert(): void
+    {
+        $this->campaign($this->account, 'Riwaq — LeadForm', 7.16);
+        $created = $this->createLink(['metrics' => ['spend', 'impressions', 'clicks', 'leads', 'cpl']])->assertCreated()->json('data');
+        $before = ReportShare::withoutGlobalScopes()->findOrFail($created['share_id']);
+        $url = "/api/v1/projects/{$this->project->id}/reports/{$created['report_id']}/shares/{$created['share_id']}/result-events";
+
+        $saved = $this->putJson($url, [
+            'metrics' => ['spend', 'impressions', 'clicks', 'native_leads'],
+            'kpi_labels' => ['native_leads' => 'العملاء المحتملون', 'not_a_card' => 'x'],
+            'campaign_breakdown' => true,
+        ])->assertOk()->json('data');
+
+        $payload = $this->live($created['token'])->assertOk()->json('data');
+        $this->assertSame(['spend', 'impressions', 'clicks', 'native_leads'], $payload['metrics'], 'the cards in the chosen order, pixel leads gone');
+        $this->assertSame(['native_leads' => 'العملاء المحتملون'], $payload['kpi_labels']);
+        $this->assertNotEmpty($payload['campaign_rows']);
+        $after = ReportShare::withoutGlobalScopes()->findOrFail($created['share_id']);
+        $this->assertSame(array_diff_key($before->scope, ['metrics' => 1]), array_diff_key($after->scope, ['metrics' => 1]), 'only the card list moves inside the scope');
+        $this->assertSame($before->hide_spend, $after->hide_spend);
+        $this->assertSame(['spend', 'impressions', 'clicks', 'native_leads'], Report::withoutGlobalScopes()->findOrFail($created['report_id'])->config['metrics']);
+        $this->assertDatabaseHas('audit_logs', ['id' => $saved['audit_id'], 'action' => 'report.shared_link_result_events_changed']);
+
+        // A card outside the catalogue is refused; the audited «before» restores the link.
+        $this->putJson($url, ['metrics' => ['spend', 'roas_magic']])->assertStatus(422);
+        $this->putJson($url, ['metrics' => $saved['before']['metrics'], 'kpi_labels' => null, 'campaign_breakdown' => false])->assertOk();
+        $restored = $this->live($created['token'])->assertOk()->json('data');
+        $this->assertSame(['spend', 'impressions', 'clicks', 'leads', 'cpl'], $restored['metrics']);
+        $this->assertSame([], $restored['campaign_rows']);
     }
 
     public function test_an_account_the_project_does_not_bind_is_still_refused(): void

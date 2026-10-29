@@ -20,7 +20,8 @@ const PATHS: Array<['all' | 'lead_form' | 'landing_page', string, string]> = [
 ]
 
 const METRIC_LABEL: Record<string, [string, string]> = {
-  leads: ['عملاء محتملون مُبلَّغ عنهم', 'Reported leads'],
+  // NASEL 2026-10-29 — named for what it is: the platform's Lead event (Meta's pixel Lead among them), never the verified native form.
+  leads: ['حدث Lead من المنصة/البكسل (غير موثّق)', 'Platform/pixel Lead event (unverified)'],
   form_leads: ['نماذج المنصة الأصلية المُرسلة', 'Native form submissions'],
   qualified_leads: ['عملاء مؤهلون', 'Qualified leads'],
   conversions: ['تحويلات المنصة (الحدث المُحسَّن له)', 'Platform conversions (optimised-for event)'],
