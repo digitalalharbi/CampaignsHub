@@ -1,3 +1,27 @@
+# CURRENT STATE — 2026-10-30 — META-SAAS-APP-001 at maximum readiness on #871; AUTH-LOGIN-UX-002 queued
+
+**#871 (`feat/meta-saas-app`, `500345da`), rebased on main `bc422bf9`:**
+- A readiness list on `/admin/settings/integrations/meta-saas` (ready / not_verified / needs_credentials / owner_action), computed from evidence the server holds.
+- Routing new connections to the SaaS app needs the Owner's recorded Meta approval.
+- Production defect fixed: the Live deletion callback answered 503 because it read config keys that do not exist.
+- Routing stays Live. No credentials in chat; Live and Candidate are not used for testing.
+- Details: `docs/META_SAAS_APP_REVIEW.md`, section 2026-10-30.
+
+**Queue, in order:**
+1. #871: full backend suite, then CI, isolation review, merge, deploy. Then check Production: `/data-deletion/meta` answers 401 to a bad signature instead of 503, and the readiness page renders.
+2. Production proof for #881, #878 and #880 once the Owner signs in to the agency session (see below).
+3. **AUTH-LOGIN-UX-002** (secondary; starts only after 1–2 are closed or blocked). It extends `LOGIN-CARD-001` and `LOGIN-OTP-001`, so it adds no duplicate rows. Scope:
+   - premium login card, at most 440px wide, keeping the dark/green identity;
+   - every sign-in method stacked vertically at full width;
+   - the button reads «المتابعة برمز عبر البريد الإلكتروني»;
+   - the verify screen uses «تحقق من بريدك الإلكتروني» / «رمز التحقق» / «تأكيد الرمز والمتابعة» / «إعادة إرسال الرمز» / «استخدام بريد إلكتروني آخر»;
+   - remove the «حماية حسابك» card, keeping password recovery, «تذكرني» and sign-up;
+   - responsive layout, RTL/LTR, light and dark themes, loading, error and expired-code states;
+   - verify the backend Email OTP for real (send, verify, resend, expiry) and show no sign-in method that is not ready;
+   - no change to auth logic and no break to Google OAuth;
+   - then a11y, Playwright, CI, PR, deploy and a Production check.
+4. The remaining non-VERIFIED requirements.
+
 # CURRENT STATE — 2026-10-29 (late night) — #881, #878, #880 deployed; Production proof waits on an Owner sign-in; #871 CI rerun
 
 **Deployed (serial lander, each health 200):**
