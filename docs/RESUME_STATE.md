@@ -14,7 +14,7 @@ None of #881, #878 or #880 is VERIFIED until those checks are done.
 
 **META-SAAS-APP-001 / #871** (`feat/meta-saas-app` at `8b2ab861`, not merged):
 - backend, frontend, image, chromium and webkit passed.
-- firefox failed one unrelated spec: `launch.spec.ts:13`, where a rail click stayed on `/app/dashboard`. The diff is backend and docs only. Rerun requested.
+- firefox first failed one unrelated spec: `launch.spec.ts:13`, where a rail click stayed on `/app/dashboard`. The diff is backend and docs only. The rerun passed (run 40923447073), so CI is fully green on `8b2ab861`.
 - Status: code IMPLEMENTED_NOT_VERIFIED; real round trip BLOCKED_EXTERNAL_CREDENTIALS; Business Verification and App Review BLOCKED_OPERATIONAL_EVIDENCE. See `docs/META_SAAS_APP_REVIEW.md`.
 
 # CURRENT STATE — 2026-10-29 (night) — #876 deployed; live-file defect found in Production; queue #878 → #881 → #880
