@@ -557,6 +557,27 @@ final class LiveReportService
      * @param  string  $currency  the report's own currency; every figure here is already normalised to it
      * @return array<string, mixed>
      */
+    /**
+     * RESULT-EVENTS-001 (Owner 2026-10-29) — a link's Results for one of its FILES: its own events, its «none», its label, read by the
+     * page's resolver over the window the file covers (the saved report's dates, exactly). Only the Results are computed — the file's
+     * other figures stay the saved report's — and the context is the share's own, as on the page.
+     *
+     * @return array{results: array<string, mixed>, results_label: string|null}
+     */
+    public function resultsForFile(ReportShare $share, Carbon $from, Carbon $to): array
+    {
+        $scope = $this->ceiling($share);
+        $this->tenants->setTenantId((string) $share->tenant_id);
+        $this->projects->setProjectId($scope['project_id'] === '' ? ReportScope::IMPOSSIBLE : $scope['project_id']);
+        $engine = $this->scopedEngine($share, $scope, $scope['providers']);
+        $label = ($share->settings ?? [])['results_label'] ?? null;
+
+        return [
+            'results' => $this->resultsFor($share, $scope, $engine, $from, $to),
+            'results_label' => is_string($label) && trim($label) !== '' ? trim($label) : null,
+        ];
+    }
+
     public function build(ReportShare $share, array $requested, ?string $currency = ReportingCurrency::DEFAULT): array
     {
         $scope = $this->ceiling($share);
