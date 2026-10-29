@@ -171,19 +171,20 @@ final class ResultEventsTest extends TestCase
             $this->row('m1', 'meta', ['form_leads' => 39, 'checkout' => 1, 'campaign_name' => 'Riwaq — LeadForm — Meta'], ['form_leads' => true, 'checkout' => true]),
             $this->row('m2', 'meta', ['purchases' => 1, 'checkout' => 3, 'landing_page_views' => 13, 'leads' => 2, 'campaign_name' => 'Riwaq — LandingPage — Meta'], ['purchases' => true, 'checkout' => true, 'landing_page_views' => true, 'leads' => true]),
             $this->row('t2', 'tiktok', ['purchases' => 0, 'checkout' => 117, 'conversions' => 1110, 'campaign_name' => 'Riwaq — LandingPage — TikTok'], ['purchases' => true, 'checkout' => true, 'conversions' => true]),
-            // Snapchat's start event was never established: its checkout is not a form start.
+            // Snapchat receives the same form_start as START_CHECKOUT; X receives none, so its checkout would not count.
+            $this->row('x2', 'x', ['purchases' => 0, 'checkout' => 9, 'campaign_name' => 'Riwaq — LandingPage — X'], ['purchases' => true, 'checkout' => true]),
             $this->row('s2', 'snapchat', ['purchases' => 1, 'checkout' => 53, 'landing_page_views' => 30, 'campaign_name' => 'Riwaq — LandingPage — Snap'], ['purchases' => true, 'checkout' => true, 'landing_page_views' => true]),
         ];
 
         $funnel = $events->leadBreakdown($rows, [])['landing_funnel'];
 
-        $this->assertSame(3, $funnel['campaigns']);
+        $this->assertSame(4, $funnel['campaigns']);
         $this->assertSame(43.0, $funnel['page_views']);
-        $this->assertSame(120.0, $funnel['form_starts'], 'Meta 3 + TikTok 117; the LeadForm campaign\'s checkout and Snapchat\'s are not landing form starts');
+        $this->assertSame(173.0, $funnel['form_starts'], 'Meta 3 + TikTok 117 + Snapchat 53; the LeadForm campaign\'s checkout and X\'s are not landing form starts');
         $this->assertSame(2.0, $funnel['completions']);
-        $this->assertSame(round(2 / 120, 4), $funnel['completion_rate']);
-        $this->assertSame(30.0, $funnel['spend'], 'the three landing campaigns\' spend only');
-        $this->assertSame(15.0, $funnel['cost_per_completion']);
+        $this->assertSame(round(2 / 173, 4), $funnel['completion_rate']);
+        $this->assertSame(40.0, $funnel['spend'], 'the four landing campaigns\' spend only');
+        $this->assertSame(20.0, $funnel['cost_per_completion']);
         $this->assertNull($funnel['contacts'], 'contact clicks are not ingested — absent, never zero');
 
         $none = $events->leadBreakdown([$this->row('m1', 'meta', ['form_leads' => 3, 'campaign_name' => 'Riwaq — LeadForm — Meta'], ['form_leads' => true])], [])['landing_funnel'];
