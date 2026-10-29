@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Legal\Http\Controllers;
 
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Services\DeletionBlockers;
 use App\Domains\Legal\Services\DeletionVerification;
@@ -328,11 +329,20 @@ final class DataDeletionController extends Controller
      *
      * Read from the provider's own configured credential — the same secret that signs its webhooks —
      * so there is nothing extra for an operator to set up and no second place for it to go stale.
+     *
+     * META-SAAS-APP-001 — each Meta app signs its own callbacks with its own secret, and its user ids are scoped to that app.
+     *
+     * The SaaS app is a separate Meta app: Meta posts ITS deletion callbacks signed with the SaaS App Secret, so verifying them
+     * against the Live secret refused every one — and App Review requires a working Data Deletion Callback URL. The SaaS app's
+     * callback is `/webhooks/data-deletion/meta-saas`, verified only against the SaaS app's own stored secret; requests stay
+     * keyed by that provider, because the same person has a different app-scoped id in each app. The Candidate app issues no
+     * customer connections and has no callback.
      */
     private function appSecretFor(string $provider): ?string
     {
         return match ($provider) {
             'meta' => Config::get('services.meta_ads.app_secret') ?: Config::get('ad_platforms.meta.client_secret'),
+            'meta-saas' => app(MetaSaasCredentials::class)->value('client_secret'),
             default => null,
         };
     }

@@ -335,4 +335,105 @@ final class MetaSaasAppIsolationTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')
             ->postJson("/api/v1/accounts/{$foreign->id}/move-to-connection", ['connection_id' => $saas->id, 'confirm' => true])->assertNotFound();
     }
+
+    /**
+     * The whole SaaS journey, end to end with Meta faked: login → consent → callback → token → discovery → binding → sync → the
+     * figures a report reads → reconnect → disconnect — every Meta call with the SaaS app's token, the Live connection untouched
+     * throughout, and another customer seeing none of it.
+     */
+    public function test_the_saas_connection_journey_from_login_to_disconnect_stays_on_its_own_app_and_tenant(): void
+    {
+        $live = $this->liveConnection();
+        $liveToken = app(TokenVault::class)->stored($live)->accessToken;
+        $this->configureSaas();
+        $this->passSaasTest();
+        $as = $this->actingAs($this->owner, 'sanctum');
+
+        // One fake for the whole journey — a second Http::fake() only appends stubs and the first match keeps winning.
+        $issued = 'SAAS-TOKEN-1';
+        Http::fake(function (HttpRequest $r) use (&$issued) {
+            return match (true) {
+                str_contains($r->url(), 'oauth/access_token') => Http::response(['access_token' => $issued, 'expires_in' => 5184000]),
+                str_contains($r->url(), 'me/adaccounts') => Http::response(['data' => [
+                    ['id' => 'act_900', 'account_id' => '900', 'name' => 'SaaS test account', 'currency' => 'SAR', 'account_status' => 1],
+                ]]),
+                default => Http::response(['data' => []]),
+            };
+        });
+        $login = function (string $token) use ($as, &$issued): void {
+            $issued = $token;
+            $url = (string) $as->postJson('/api/v1/integrations/meta/oauth/start', ['app_profile' => 'saas'])->assertOk()->json('data.authorization_url');
+            $this->get('/api/v1/oauth/ads/meta/callback?'.http_build_query(['state' => $this->query($url)['state'], 'code' => 'c-'.$token]))->assertRedirect();
+        };
+
+        // Login → consent → callback → token → discovery.
+        $login('SAAS-TOKEN-1');
+        $saas = ProviderConnection::withoutGlobalScopes()->where('provider', 'meta')->where('app_profile', 'saas')->sole();
+        $account = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $saas->id)->where('external_id', 'like', '%900')->sole();
+        $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $live->id)->count(), 'nothing was discovered onto Live');
+
+        // Binding → sync: every Graph call carries the SaaS token (and, when signed, the SaaS app's proof), never the Live one.
+        $workspace = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active']);
+        $project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'name' => 'SaaS client', 'status' => 'active']);
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'project_id' => $project->id,
+            'external_account_id' => $account->id, 'provider' => 'meta', 'purpose' => 'reporting', 'is_active' => true, 'is_primary' => true,
+        ]);
+        $before = count(Http::recorded());
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        (new SyncAccountMetricsJob((string) $account->id, '2026-10-01', '2026-10-27'))
+            ->handle(app(AccountMetricsSyncer::class), app(TenantContext::class), app(AccountAssignment::class));
+        $this->assertSame(1, MetricSyncRun::withoutGlobalScopes()->where('external_account_id', $account->id)->count(), 'the sync ran');
+        $graph = collect(Http::recorded())->slice($before)->map(fn ($pair) => $pair[0])->filter(fn (HttpRequest $r) => str_contains($r->url(), 'graph.facebook.com'));
+        $this->assertNotEmpty($graph, 'the sync called Meta');
+        foreach ($graph as $r) {
+            $sent = urldecode($r->url().' '.$r->body().' '.json_encode($r->headers()));
+            $this->assertStringNotContainsString($liveToken, $sent, 'a SaaS sync used the Live token');
+            $this->assertStringNotContainsString(self::LIVE_SECRET, $sent);
+            $this->assertStringContainsString('SAAS-TOKEN-1', $sent, 'a SaaS sync call did not carry the SaaS token');
+            parse_str((string) parse_url($r->url(), PHP_URL_QUERY), $q);
+            if (isset($q['appsecret_proof'])) {
+                $this->assertSame(hash_hmac('sha256', 'SAAS-TOKEN-1', self::SAAS_SECRET), $q['appsecret_proof']);
+            }
+        }
+
+        // The figures a report reads: the bound SaaS account's, and only through the project's visibility rule.
+        DailyMetric::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'external_account_id' => $account->id,
+            'external_campaign_id' => (string) Str::uuid(), 'provider' => 'meta', 'metric_key' => 'spend', 'metric_date' => '2026-10-20', 'value' => 250.0,
+        ]);
+        $visible = DailyMetric::query()->where('project_id', $project->id)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->sum('value');
+        $this->assertEquals(250.0, (float) $visible);
+
+        // Reconnect: the same SaaS connection takes the new token; no third connection; Live untouched.
+        $login('SAAS-TOKEN-2');
+        $this->assertSame(2, ProviderConnection::withoutGlobalScopes()->where('provider', 'meta')->count(), 'a reconnect opened no new connection');
+        $this->assertSame('SAAS-TOKEN-2', app(TokenVault::class)->stored($saas->refresh())->accessToken);
+        $this->assertSame($liveToken, app(TokenVault::class)->stored($live->refresh())->accessToken);
+        $this->assertSame((string) $saas->id, (string) $account->refresh()->provider_connection_id, 'the account stayed on its row and connection');
+
+        // Another customer sees none of it and cannot act on it.
+        $otherTenant = Tenant::create(['name' => 'Other', 'slug' => 'other-'.uniqid(), 'status' => 'active']);
+        $otherRole = Role::create(['tenant_id' => $otherTenant->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
+        $otherRole->givePermissionTo(...Permission::pluck('key')->all());
+        $stranger = User::create(['name' => 'S', 'email' => 's@other.test', 'password' => 'secret123']);
+        $this->grantMembership($stranger, $otherTenant);
+        $stranger->assignRole($otherRole);
+        app(TenantContext::class)->setTenantId($otherTenant->id);
+        $theirs = $this->actingAs($stranger, 'sanctum');
+        $this->assertNotContains((string) $account->id, collect($theirs->getJson('/api/v1/accounts')->assertOk()->json('data.accounts'))->pluck('id')->all());
+        $this->assertNotContains((string) $saas->id, collect($theirs->getJson('/api/v1/connections')->assertOk()->json('data'))->pluck('id')->all());
+        $theirs->postJson("/api/v1/connections/{$saas->id}/revoke")->assertNotFound();
+        $this->assertSame('connected', $saas->refresh()->status);
+
+        // Disconnect the SaaS connection: Live stays connected with its token; no account row and no figure is lost.
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $metrics = DB::table('daily_metrics')->count();
+        $this->actingAs($this->owner, 'sanctum')->postJson("/api/v1/connections/{$saas->id}/revoke")->assertOk();
+        $this->assertNotSame('connected', $saas->refresh()->status);
+        $this->assertSame('connected', $live->refresh()->status);
+        $this->assertSame($liveToken, app(TokenVault::class)->stored($live)->accessToken);
+        $this->assertNotNull(ExternalAccount::withoutGlobalScopes()->find($account->id));
+        $this->assertSame($metrics, DB::table('daily_metrics')->count());
+    }
 }
