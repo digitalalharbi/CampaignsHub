@@ -114,13 +114,20 @@ export async function startPlatformOAuth(
    * already in hand instead of asking for one as a fourth step after the fact.
    */
   projectId?: string | null,
+  /** META-SAAS-APP-001 — which Meta app issues this connection; absent = the platform's choice for new connections. */
+  appProfile?: 'live' | 'saas' | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`, {
     ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
     ...(projectId ? { project_id: projectId } : {}),
+    ...(appProfile ? { app_profile: appProfile } : {}),
   })
 }
+
+/** META-SAAS-APP-001 — which Meta apps a new connection may be issued by (no credential is named). */
+export interface MetaApps { default: 'live' | 'saas'; apps: Array<{ key: 'live' | 'saas'; available: boolean }> }
+export const fetchMetaApps = () => getData<MetaApps>('/integrations/meta/apps')
 
 /**
  * INTEG-APIKEY-001 — connect a provider the advertiser holds their own key for.

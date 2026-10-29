@@ -8,6 +8,7 @@ use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
 use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
+use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
@@ -156,6 +157,20 @@ Route::middleware(['auth:sanctum', 'platform'])
             // Prepared, never automatic: both need an explicit `confirm`, both are audited.
             Route::post('/promote', [MetaCandidateAppController::class, 'promote'])->middleware('throttle:5,1')->name('promote');
             Route::post('/rollback', [MetaCandidateAppController::class, 'rollback'])->middleware('throttle:5,1')->name('rollback');
+        });
+
+        /*
+         * META-SAAS-APP-001 — the THIRD, independent Meta app: credentials (write-only), its own test, and the choice of app for NEW
+         * connections. No promote/rollback: it never replaces Live.
+         */
+        Route::prefix('/settings/integrations/meta-saas')->name('meta-saas.')->group(function (): void {
+            Route::get('/', [MetaSaasAppController::class, 'show'])->name('show');
+            Route::put('/', [MetaSaasAppController::class, 'update'])->name('update');
+            Route::delete('/credentials/{key}', [MetaSaasAppController::class, 'forget'])->name('credentials.forget');
+            Route::post('/test', [MetaSaasAppController::class, 'start'])->middleware('throttle:10,1')->name('test');
+            Route::put('/routing', [MetaSaasAppController::class, 'routing'])->middleware('throttle:10,1')->name('routing');
+            Route::put('/review', [MetaSaasAppController::class, 'confirmReview'])->middleware('throttle:10,1')->name('review.confirm');
+            Route::delete('/review', [MetaSaasAppController::class, 'withdrawReview'])->middleware('throttle:10,1')->name('review.withdraw');
         });
 
         Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {
