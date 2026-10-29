@@ -165,4 +165,15 @@ describe('NASEL native lead cards — one resolver for the summary', () => {
     expect(tiles.join(' ')).toContain('27')
     expect(screen.getByText('Not available')).toBeInTheDocument()
   })
+
+  it('a content tile on a link without defined Results prints no result — not its generic conversions, cost or return', () => {
+    const generic = { provider: 'tiktok', content_key: 'k', name: 'LandingPage C11', spend: 93, impressions: 24_544, clicks: 575, ctr: 0.0234, conversions: 1110, cpa: 0.08, roas: 0, result_defined: false }
+    renderWithProviders(<div>
+      <ContentTile content={generic} locale="en" currency="USD" />
+      <ContentTile content={{ ...generic, content_key: 'k2' }} locale="en" currency="USD" resultsOnly />
+    </div>)
+
+    expect(screen.queryByText(/Results|CPA|ROAS/)).toBeNull()
+    expect(document.body.textContent).not.toContain(generic.conversions.toLocaleString('en-US'))
+  })
 })

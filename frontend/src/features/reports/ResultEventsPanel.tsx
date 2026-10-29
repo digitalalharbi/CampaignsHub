@@ -31,6 +31,7 @@ const METRIC_LABEL: Record<string, [string, string]> = {
   checkout: ['بدء الدفع', 'Checkout'],
   installs: ['تثبيتات', 'Installs'],
   landing_page_views: ['زيارات الصفحة', 'Landing page views'],
+  clicks: ['النقرات', 'Clicks'],
 }
 
 /** RESULT-EVENTS-001 — the map a link is created with: only the platforms it covers, each with exactly the choice made for it. */

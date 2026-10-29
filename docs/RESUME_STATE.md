@@ -1,3 +1,28 @@
+# CURRENT STATE — 2026-10-29 (evening) — NASEL report controls
+
+**Deployed:** #874 at `7aaf4535`: content and tables Results come from the resolver, plus landing evidence and docs.
+
+**Branch fix/nasel-report-controls, the Owner's 10 points** (see owner defects «a new link ignored its own settings»):
+- section switches
+- KPI Results cards
+- explicit Results «none» = Results disabled, never clicks (Owner correction)
+- Platforms cards = the defined result, or nothing
+- Results label and clicks option
+- landing coverage note, campaign landing column, revenue auto-hide
+- delete dialog with bulk delete
+
+**Test link:** /r/Dk7ibxCC1O90rADKDAypSM (report 9c7ed2b5, share 3c872f48):
+- monthly rolling, all five NASEL accounts
+- KPIs: spend, impressions, clicks, CTR, CPC, native leads
+- off: funnel, detailed tables, account breakdown
+- revenue hidden, download off
+
+**Owner link:** /r/brSe9FErgwKjnx5RnmSf1i (P5SAK-UPPYG). Expected Platforms cards: TikTok 5,525, Meta 400, Snapchat 363.
+
+**Next:**
+- Exports (PDF / XLSX / CSV) under the same section and Results rules.
+- Phase 2 link UX program (Owner message 2026-10-29): presets, live preview, steps, campaign filtering, sharing, edit-in-place UI, slug, OG image, analytics, trash, client viewer.
+
 # CURRENT STATE — 2026-10-29 — NASEL Live client reports (supersedes the checkpoints below where they disagree)
 
 **Deployed:**

@@ -45,7 +45,12 @@ function payloadFor(providers: string[]) {
     ads: rows.map((r) => ad(`Best on ${r.provider}`, r.provider, `key-best-${r.provider}`, r.spend)),
     ads_weakest: rows.map((r) => ad(`Weak on ${r.provider}`, r.provider, `key-weak-${r.provider}`, 5)),
     ads_groups: [],
-    ads_roster: rows.map((r) => roster(`Roster ${r.provider}`, r.provider, `key-roster-${r.provider}`, r.spend)),
+    ads_roster: rows.map((r) => ({ ...roster(`Roster ${r.provider}`, r.provider, `key-roster-${r.provider}`, r.spend), verified_result: { metric: 'purchases', path: null, value: 12 } })),
+    // RESULT-EVENTS-001 — these reports DEFINE their Results (purchases), so every Results figure below is the resolver's, from the rows.
+    results: {
+      configured: true, total: conversions, cost: conversions > 0 ? spend / conversions : null, by_path: {}, events: { meta: { all: 'purchases' }, snapchat: { all: 'purchases' } },
+      by_platform: Object.fromEntries(rows.map((r) => [r.provider, { results: r.conversions, metric: 'purchases', spend: r.spend, cost: r.cpa }])),
+    },
     creatives_in_scope: rows.length,
     budget: [{ provider: 'meta', budget: 2000, budget_currency: 'SAR', spent: 700, spent_currency: 'SAR', remaining: 1300, consumed_pct: 35, pace: 1, pacing_basis: 'comparable' }],
     objective_leaders: { paths: [{
@@ -449,7 +454,8 @@ describe('the report levels are different products', () => {
    * daily ledger appears only when its own component is in the section list.
    */
   it('offers only the main sections the server names, and the ledger only when daily records are on', async () => {
-    serve('detailed', { report_views: ['summary', 'tables'], report_sections: ['kpis', 'platform_comparison', 'content_performance', 'account_breakdown'] })
+    // The platform table belongs to «الجداول التفصيلية» (Owner 2026-10-29): it is listed by that component's key.
+    serve('detailed', { report_views: ['summary', 'tables'], report_sections: ['kpis', 'platform_comparison', 'detailed_tables', 'content_performance', 'account_breakdown'] })
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=dashboard' })
 
     await screen.findByTestId('live-mode-summary')

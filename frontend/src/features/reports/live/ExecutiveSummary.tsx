@@ -16,7 +16,7 @@ import { ContentTile } from './LiveContent'
 import { liveSpark } from './liveSpark'
 import { ComparisonWithheld, kpiKeysFor, visibleKpiKeys } from './LiveKpis'
 import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
-import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads } from './leadResults'
+import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads, resultWords, revenueReported } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -51,7 +51,8 @@ const BOARD_KEYS = ['revenue', 'purchases', 'leads', 'installs', 'landing_page_v
 const SPEND_DERIVED = new Set(['spend', 'roas', 'cpa', 'cpm', 'cpc', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'budget', 'profit', 'mer', 'blended_roas'])
 
 export function headlineKeys(payload: LivePayload, reader: Reader): { result: string; cost: string } {
-  const keys = reader.keys(payload)
+  // NASEL 2026-10-29 — a link without Results never heads its summary with the platform's generic conversion.
+  const keys = reader.keys(payload).filter((k) => k !== 'conversions' || payload.results?.configured === true)
   const totals = payload.totals ?? {}
   // The objective's own result first, in RESULT_KEYS' priority — a reach figure never outranks an order.
   const result = RESULT_KEYS.find((k) => keys.includes(k) && totals[k] !== null && totals[k] !== undefined && Number(totals[k]) > 0)
@@ -82,6 +83,12 @@ export function resultSource(payload: LivePayload, reader: Reader, result: strin
   const native = nativeLeads(payload)
   if (native) {
     return { key: 'form_leads', name: ar ? NATIVE_LEADS_LABEL.ar : NATIVE_LEADS_LABEL.en, of: (p) => native.of(String(p.provider ?? '')), total: native.total }
+  }
+
+  // RESULT-EVENTS-001 — Results defined on an event: the resolver's per-platform results under the link's own name.
+  if (payload.results?.configured === true) {
+    const words = resultWords(payload, ar)
+    return { key: 'results', name: words.result, of: (p) => payload.results?.by_platform?.[canonicalPlatform(String(p.provider ?? ''))]?.results ?? null, total: payload.results.total ?? null }
   }
 
   return { key: result, name: metricName(reader, result, ar, payload), of: (p) => count(p[result]), total: count(payload.totals?.[result]) }
@@ -167,7 +174,8 @@ export function ExecutiveSummary({
         </div>
       ) : null}
 
-      {nativeLeads(payload) && <LeadSummary payload={payload} reader={reader} ar={ar} currency={currency} />}
+      {/* NASEL 2026-10-29 — the lead strip is the conversion path's: «مسار التحويل» off hides it. */}
+      {nativeLeads(payload) && sectionOn('funnel') && <LeadSummary payload={payload} reader={reader} ar={ar} currency={currency} />}
 
       {sectionOn('recommendations') && <OptimisationSteps payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
@@ -210,7 +218,7 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
             {rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{rate}</Num></span>}
           </span>
           {share !== null && (
-            <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? 'الحصة من النتائج' : 'Share of results'}>
+            <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
               <span className="block h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: color }} />
             </span>
           )}
@@ -258,8 +266,11 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
   const chosenInSetup = (payload.metrics?.length ?? 0) > 0
   const selected = visibleKpiKeys(payload, reader, kpiKeysFor(payload, reader)).filter((k) => chosenInSetup || !SPEND_DERIVED.has(k))
   const extras = resultBoardKeys(payload, reader, result).filter((k) => !selected.includes(k) && !(k === 'leads' && t.leads !== null && t.leads !== undefined && t.leads === t.conversions))
-    // Verified leads configured: the platform's pixel «Lead» is never offered beside them as if it were the same figure.
-    .filter((k) => !(k === 'leads' && nativeLeads(payload) !== null))
+    // Verified leads configured: the platform's pixel «Lead» is never offered beside them as if it were the same figure, and the funnel steps
+    // (checkout = the form start, the basket) belong to the lead strip's landing funnel, not to a second all-campaign count beside it.
+    .filter((k) => !(nativeLeads(payload) !== null && (k === 'leads' || k === 'checkout' || k === 'add_to_cart')))
+    // NASEL 2026-10-29 — no revenue reported anywhere (a lead purchase carries value 0): no revenue and no ROAS card.
+    .filter((k) => revenueReported(payload) || (k !== 'revenue' && k !== 'roas'))
   const keys = [...selected, ...extras].slice(0, 8)
   const card = (key: string) => {
     const meta = reader.meta[key]
@@ -307,8 +318,9 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
 
 function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: LivePayload; reader: Reader; ar: boolean; currency: string; source: ResultSource; wide: boolean }) {
   const result = source.key
+  // The defined Results have no daily figure of their own (only native submissions do): the trend then draws delivery, not an empty line.
   const options = [
-    { key: result, name: source.key === 'form_leads' ? source.name : metricName(reader, result, ar, payload), color: 'var(--purple)', kind: 'num' as const },
+    ...(result === 'results' ? [] : [{ key: result, name: source.key === 'form_leads' ? source.name : metricName(reader, result, ar, payload), color: 'var(--purple)', kind: 'num' as const }]),
     ...(result !== 'clicks' ? [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }] : []),
     ...(result !== 'impressions' ? [{ key: 'impressions', name: ar ? 'الظهور' : 'Impressions', color: 'var(--brand-600)', kind: 'num' as const }] : []),
   ]
@@ -319,7 +331,7 @@ function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: 
 
   return (
     <div className={wide ? 'lg:col-span-12' : 'lg:col-span-8'}>
-      <ChartCard title={ar ? 'النتائج خلال الفترة' : 'Results over the period'}>
+      <ChartCard title={ar ? `${options[0].name} خلال الفترة` : `${options[0].name} over the period`}>
         <div className="mb-2 flex flex-wrap gap-1.5" data-testid="exec-trend-toggles">
           {options.map((o) => (
             <button
@@ -468,6 +480,18 @@ function PlatformComparison({
  * (`results.leads`, its `landing_funnel` over landing campaigns only), so nothing here is a second calculation; a step no platform reports
  * reads «غير متاح». Spend and its costs appear only where the link shows spend.
  */
+/** NASEL 2026-10-29 — when the funnel's steps are counted from different platforms, say so: 127 starts from three and 43 visits from one is not a funnel. */
+function coverageNote(coverage: Record<string, string[]> | undefined, ar: boolean): string | null {
+  if (!coverage) return null
+  const steps: Array<[string, string, string]> = [['page_views', 'زيارات الصفحة', 'Page visits'], ['form_starts', 'بدء التعبئة', 'Form starts'], ['completions', 'الإتمامات', 'Completions']]
+  const present = steps.filter(([key]) => (coverage[key] ?? []).length > 0)
+  const sets = new Set(present.map(([key]) => [...(coverage[key] ?? [])].sort().join(',')))
+  if (sets.size <= 1) return null
+  const names = (key: string) => (coverage[key] ?? []).map((p) => providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')).join(ar ? '، ' : ', ')
+
+  return (ar ? 'تختلف تغطية الخطوات بين المنصات: ' : 'Steps are counted from different platforms: ') + present.map(([key, a, e]) => `${ar ? a : e} — ${names(key)}`).join(ar ? ' · ' : ' · ')
+}
+
 function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; reader: Reader; ar: boolean; currency: string }) {
   const leads = payload.results?.leads
   const native = nativeLeads(payload)
@@ -492,7 +516,8 @@ function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; 
     ...(spendShown
       ? ([
           ['spend', ar ? 'الإنفاق' : 'Spend', moneyExact(Number(payload.totals.spend), currency)],
-          ['cost', ar ? 'تكلفة النتيجة' : 'Cost per result', moneyOrNa(leads.cost)],
+          // The cost of the interest above (native + landing), named after it — not «تكلفة النتيجة», which belongs to the link's Results.
+    ['cost', ar ? 'تكلفة الاهتمام' : 'Cost per interest', moneyOrNa(leads.cost)],
           ['landing-cost', ar ? 'تكلفة إتمام نموذج الصفحة' : 'Cost per landing completion', moneyOrNa(funnel?.cost_per_completion)],
         ] as Array<[string, string, string]>)
       : []),
@@ -514,6 +539,7 @@ function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; 
           ? 'أحداث صفحة الهبوط من مسار صفحة الهبوط وحده، كما تنسبها كل منصة — ليست عددًا فريدًا للأشخاص أو للنماذج المؤكدة.'
           : 'Landing-page events from the landing-page path only, as each platform attributes them — not a count of unique people or confirmed submissions.'}
       </p>
+      {coverageNote(funnel?.coverage, ar) && <p className="text-[11px] text-warning" data-testid="exec-lead-coverage">{coverageNote(funnel?.coverage, ar)}</p>}
       <p className="text-[11px] text-text-muted" data-testid="exec-lead-confirmed-source">
         {ar
           ? 'النماذج المؤكدة تتطلب ربط سجل الطلبات المحفوظة في الموقع بمعرّف lead_id ثابت يصدره الخادم؛ هذا المصدر غير مربوط بعد.'

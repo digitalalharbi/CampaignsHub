@@ -33,9 +33,21 @@ const payload = (platforms: Array<Record<string, unknown>>) => ({
   applied: {}, is_demo: false, form: 'detailed',
 }) as unknown as LivePayload
 
-const render = (platforms: Array<Record<string, unknown>>) => {
+/**
+ * RESULT-EVENTS-001 — Results (and their cost) exist only where the link DEFINES them; then each platform's figures are the resolver's
+ * (`results.by_platform`). Built here from the rows' own counts and the cost the aggregator published, so no figure is invented by the test.
+ */
+const withResults = (p: LivePayload, platforms: Array<Record<string, unknown>>) => ({
+  ...p,
+  results: {
+    configured: true, total: null, cost: null, by_path: {}, events: {},
+    by_platform: Object.fromEntries(platforms.map((row) => [String(row.provider), { results: Number(row.conversions ?? 0), metric: 'purchases', spend: Number(row.spend ?? 0), cost: (row.cpa ?? null) as number | null }])),
+  },
+}) as unknown as LivePayload
+
+const render = (platforms: Array<Record<string, unknown>>, defined = true) => {
   renderWithProviders(
-    <LivePlatformComparison payload={payload(platforms)} currency="SAR" locale="en" />,
+    <LivePlatformComparison payload={defined ? withResults(payload(platforms), platforms) : payload(platforms)} currency="SAR" locale="en" />,
     { locale: 'en' },
   )
 
@@ -126,29 +138,18 @@ describe('the platform comparison table', () => {
     if (text.includes('4,128.93')) expect(text).toContain('USD')
     expect(text).not.toMatch(/4,128\.93 SAR/)
 
-    /*
-     * The cost cell is «—», and asserting that is the whole point.
-     *
-     * «No Infinity and no NaN» was this test's only claim at first, and a browser-side division
-     * satisfied it: a null spend reads as 0, so the cell printed «0» — a withheld amount rendered as
-     * FREE, which is a worse answer than either of the two it was watching for. The contract's
-     * answer to a spend it cannot convert is a refusal, so the refusal is what is pinned.
-     */
-    /*
-     * The cost cell states the figure in USD — the currency the spend was RECORDED in.
-     *
-     * «—» was the expectation written here first, and it was wrong about the contract: a spend that
-     * is complete and merely unconverted is a real amount, and `readCostPer` derives from it and
-     * labels it with its own currency rather than refusing. Refusing is reserved for a numerator
-     * that is partial or spans currencies — a figure that cannot be stated at all.
-     *
-     * What must never happen is the injected defect: a browser-side division reading the null
-     * converted spend as zero and printing «0», a withheld amount rendered as free.
-     */
+    // The resolver withholds a cost over withheld money: the cell says so, and never prints an amount under this report's currency.
     const cost = cellUnder(table, 'Cost per result')
-    expect(cost, 'a withheld spend was divided as if it were zero').toContain('USD')
+    expect(cost).toMatch(/Not available/)
     expect(cost).not.toContain('SAR')
-    expect(cost).toContain('41.29')
+  })
+
+  it('has no Results or cost-per-result column where the link defines no Results — not generic conversions, not clicks', () => {
+    const table = render([{ provider: 'meta', spend: 1000, conversions: 40, cpa: 31.5, clicks: 900 }], false)
+    const headers = table.getAllByRole('columnheader').map((h: HTMLElement) => h.textContent ?? '')
+
+    expect(headers.join('|')).not.toMatch(/Results|Cost per result|Cost per click/)
+    expect(table.getByRole('table').textContent).not.toContain('31.5')
   })
 
   it('says the window is empty rather than drawing a table with no rows', () => {
@@ -180,7 +181,8 @@ describe('the platform comparison table', () => {
 
   /* REPORT-TABLES-OWNER-COLUMNS-001 */
   it('shows exactly the columns the Owner chose, always keeping the platform name', () => {
-    const p = { ...payload([{ provider: 'meta', spend: 400, conversions: 4, clicks: 9 }]), columns: { platforms: ['clicks', 'results'] } } as unknown as LivePayload
+    const rows = [{ provider: 'meta', spend: 400, conversions: 4, clicks: 9 }]
+    const p = { ...withResults(payload(rows), rows), columns: { platforms: ['clicks', 'results'] } } as unknown as LivePayload
     renderWithProviders(<LivePlatformComparison payload={p} currency="SAR" locale="en" />, { locale: 'en' })
     const table = within(screen.getByTestId('live-platform-comparison'))
 
@@ -189,7 +191,8 @@ describe('the platform comparison table', () => {
   })
 
   it('treats the server’s empty list as «no restriction» and shows every column', () => {
-    const p = { ...payload([{ provider: 'meta', spend: 400, conversions: 4 }]), columns: [] } as unknown as LivePayload
+    const rows = [{ provider: 'meta', spend: 400, conversions: 4 }]
+    const p = { ...withResults(payload(rows), rows), columns: [] } as unknown as LivePayload
     renderWithProviders(<LivePlatformComparison payload={p} currency="SAR" locale="en" />, { locale: 'en' })
     const table = within(screen.getByTestId('live-platform-comparison'))
 

@@ -65,6 +65,7 @@ import { useProject } from '@/stores/project'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
+import { reports as countedReports } from '@/lib/counted'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -114,6 +115,10 @@ export function ReportsPage() {
   const [search, setSearch] = useState('')
   const [builderOpen, setBuilderOpen] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  // NASEL 2026-10-29 — deletion is confirmed in a dialog that names the reports and says their links stop; several at once, one confirmation.
+  const [picked, setPicked] = useState<string[]>([])
+  const [confirmDelete, setConfirmDelete] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [deleting, setDeleting] = useState(false)
   /*
    * Editing the scope of a report that already exists (§14.5).
    *
@@ -468,10 +473,71 @@ export function ReportsPage() {
               <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
             </div>
 
+          {picked.length > 0 && (
+            <div className="mb-2 hidden items-center justify-between gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm sm:flex" data-testid="reports-bulk-bar">
+              <span>{ar ? `المحدد: ${countedReports(picked.length, 'ar')}` : `Selected: ${countedReports(picked.length, 'en')}`}</span>
+              <Button
+                type="button"
+                variant="danger"
+                data-testid="reports-bulk-delete"
+                onClick={() => setConfirmDelete(rows.filter((r) => picked.includes(r.id)).map((r) => ({ id: r.id, name: r.name })))}
+              >
+                {ar ? 'حذف المحدد' : 'Delete selected'}
+              </Button>
+            </div>
+          )}
+
+          <Modal
+            open={confirmDelete !== null}
+            onClose={() => (deleting ? undefined : setConfirmDelete(null))}
+            title={confirmDelete && confirmDelete.length > 1 ? (ar ? `حذف ${countedReports(confirmDelete.length, 'ar')}` : `Delete ${countedReports(confirmDelete.length, 'en')}`) : (ar ? 'حذف التقرير' : 'Delete report')}
+            footer={(
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" disabled={deleting} onClick={() => setConfirmDelete(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  data-testid="reports-delete-confirm"
+                  loading={deleting}
+                  onClick={async () => {
+                    if (!confirmDelete) return
+                    setDeleting(true)
+                    try {
+                      for (const item of confirmDelete) await del.mutateAsync(item.id)
+                      setPicked((cur) => cur.filter((id) => !confirmDelete.some((c) => c.id === id)))
+                      setConfirmDelete(null)
+                    } finally {
+                      setDeleting(false)
+                    }
+                  }}
+                >
+                  {ar ? 'حذف' : 'Delete'}
+                </Button>
+              </div>
+            )}
+          >
+            <div data-testid="reports-delete-dialog" className="flex flex-col gap-2 text-sm text-text-secondary">
+              <ul className="list-disc ps-5 font-semibold text-text-primary">
+                {(confirmDelete ?? []).map((item) => <li key={item.id}>{item.name}</li>)}
+              </ul>
+              <p>{ar ? 'سيتوقف رابط العميل لكل تقرير منها فورًا، ولن يفتح بعد ذلك.' : 'Each report’s client link stops working immediately and will not open again.'}</p>
+            </div>
+          </Modal>
+
           <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted">
+                  <th data-col="actions" className="w-8 p-3 text-start">
+                    <input
+                      type="checkbox"
+                      aria-label={ar ? 'تحديد كل التقارير' : 'Select every report'}
+                      data-testid="reports-pick-all"
+                      checked={rows.length > 0 && rows.every((r) => picked.includes(r.id))}
+                      onChange={(e) => setPicked(e.target.checked ? rows.map((r) => r.id) : [])}
+                      className="h-4 w-4 accent-brand-600"
+                    />
+                  </th>
                   <th className="p-3 text-start font-semibold">{ar ? 'التقرير' : 'Report'}</th>
                   <th className="p-3 text-start font-semibold">{ar ? 'الفترة' : 'Period'}</th>
                   <th className="p-3 text-start font-semibold">{ar ? 'الحالة' : 'Status'}</th>
@@ -505,7 +571,9 @@ export function ReportsPage() {
                       const emails = window.prompt(ar ? 'البريد الإلكتروني للمستلمين (مفصولة بفواصل):' : 'Recipient emails (comma separated):')
                       if (emails) send.mutate({ id: r.id, emails: emails.split(',').map((e) => e.trim()).filter(Boolean) })
                     }}
-                    onDelete={() => window.confirm(ar ? `حذف «${r.name}»؟` : `Delete “${r.name}”?`) && del.mutate(r.id)}
+                    picked={picked.includes(r.id)}
+                    onPick={(on) => setPicked((cur) => (on ? [...cur, r.id] : cur.filter((id) => id !== r.id)))}
+                    onDelete={() => setConfirmDelete([{ id: r.id, name: r.name }])}
                   />
                 ))}
               </tbody>
@@ -613,7 +681,11 @@ function ReportRowView({
   onTogglePdfDrilldown,
   onSend,
   onDelete,
+  picked,
+  onPick,
 }: {
+  picked: boolean
+  onPick: (on: boolean) => void
   report: ReportRow
   typeLabel: string
   onPreview: () => void
@@ -632,6 +704,9 @@ function ReportRowView({
   const ar = useAr()
   return (
     <tr className="border-b border-border last:border-0 hover:bg-surface-secondary">
+      <td className="w-8 p-3">
+        <input type="checkbox" aria-label={ar ? `تحديد «${report.name}»` : `Select “${report.name}”`} data-testid="reports-pick" checked={picked} onChange={(e) => onPick(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+      </td>
       <td className="p-3">
         <button onClick={onPreview} className="text-start font-semibold text-text-primary hover:text-brand-600">
           {report.name}

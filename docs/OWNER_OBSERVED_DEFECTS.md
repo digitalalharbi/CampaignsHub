@@ -223,3 +223,30 @@ Status:
 - Content and Tables Results: the follow-up PR, IMPLEMENTED_NOT_VERIFIED.
 - Landing conversion tracking end to end: **BLOCKED_EXTERNAL_CREDENTIALS**, because the nasel.co source and the GTM container are not accessible. See docs/NASEL_RIWAQ_TRACKING_HANDOFF.md.
 - Snapchat 2026-10-25/26: spend, impressions and the 10-26 purchases sit in another project. Native leads for those days are in NASEL, so Snapchat cost per result is understated. The cross-project reassignment needs the Owner's separate approval (SCOPE-REASSIGN-INTEGRITY-001).
+
+### NASEL 2026-10-29 (later) — a new link ignored its own settings
+
+On a new monthly-rolling detailed NASEL link the Owner found the following. Root causes and fixes are on the branch fix/nasel-report-controls.
+
+- **Conversion path off, lead strip still shown.** The strip was not tied to `funnel`.
+- **Detailed tables off, platform table still shown.** The table was gated on `platform_comparison`.
+- **Results and Cost per result chosen but absent.** The KPI reader had no definition for them.
+- **Results on «none» everywhere, «النتائج 0» still shown.**
+  - The builder sent nothing for «none», so the project default filled it.
+  - Content printed generic conversions.
+  - Now `results_off` is explicit, and clicks stand in everywhere with «تكلفة النقرة».
+- **Platform cards on the Platforms tab showed «1,126 نتيجة» for TikTok.** These were page views. They now show clicks.
+- **No Results label and no clicks option.** Both have been added.
+- **Landing completions: 2 in the summary, 5 in the content table.**
+  - The 5 was content's generic conversions, fixed by #874 (`verified_result`).
+  - The remaining 2 vs 3 is the Snapchat 10-25/26 cross-project split, which is Owner approval pending.
+- **Form starts above visits, and checkout beside them.**
+  - Visits come from Snapchat only.
+  - The strip now states the per-step coverage, and the duplicate checkout card is gone.
+- **Revenue and ROAS shown on zero revenue.** They are now hidden automatically.
+- **Delete without confirmation.** There is now a dialog with the name and «the link stops», plus bulk delete.
+- **Description.** Already in `og:description` and `twitter:description` in Production. Showing it in the page header is pending (Phase 2 header).
+
+Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) applying the same section and Results rules remain open.
+
+**Correction (Owner, same day, before #875 merged).** «None» means Results and Cost per Result are disabled entirely. It does not mean renamed to clicks/CPC, and clicks are a result only when chosen as the event. The first #875 draft substituted clicks; that draft was stopped before merge and rewritten to the contract (matrix NASEL-RESULTS-NONE-001, NASEL-PLATFORM-CARDS-RESULT-001). Links that never defined Results are held to the same contract: their generic conversions are not shown as «النتائج». A chosen `conversions` card is named «تحويلات المنصة».

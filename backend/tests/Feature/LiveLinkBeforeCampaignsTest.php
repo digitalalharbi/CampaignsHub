@@ -332,7 +332,7 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
     /** NASEL 2026-10-29 — content states its verified result (or that there is none per ad), never generic conversions; no campaign name leaks. */
     public function test_content_rows_carry_their_verified_result_past_the_client_boundary(): void
     {
-        $this->project->forceFill(['meta' => ['lead_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
+        $this->project->forceFill(['meta' => ['lead_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'result_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
         $this->campaign($this->account, 'Riwaq — LeadForm', 10.0);
         $this->creative($this->account, 'C11 story', Carbon::now()->subDay()->toDateString());
 
@@ -345,6 +345,26 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertSame('form_leads', $row['verified_result']['metric']);
         $this->assertNull($row['verified_result']['value'], 'TikTok stores no ad-level native submission: not available, not 0');
         $this->assertStringNotContainsString('Riwaq — LeadForm', json_encode($payload['ads_roster'], JSON_UNESCAPED_UNICODE), 'the campaign name stays off the client link');
+    }
+
+    /** NASEL 2026-10-29 — a link with every Results path on «none»: no Results anywhere, content ranked by clicks, the project default cannot revive them. */
+    public function test_a_link_without_results_says_nothing_about_results_and_ranks_content_by_clicks(): void
+    {
+        $this->project->forceFill(['meta' => ['lead_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'result_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
+        $this->campaign($this->account, 'Riwaq — LeadForm', 10.0);
+        $this->creative($this->account, 'C11 story', Carbon::now()->subDay()->toDateString());
+
+        $token = $this->createLink(['creatives' => ['creatives' => true], 'results_off' => true, 'results_label' => 'الاهتمام'])->assertCreated()->json('data.token');
+        $payload = $this->live($token)->assertOk()->json('data');
+
+        $this->assertFalse($payload['results']['configured'], 'the project default does not override the link\'s «none»');
+        $this->assertTrue($payload['results']['leads']['configured'], 'native leads are a separate definition and stay');
+        $this->assertSame('الاهتمام', $payload['results_label']);
+        $this->assertSame('clicks', $payload['ads_basis']['metric']);
+        foreach ($payload['ads_roster'] as $row) {
+            $this->assertArrayNotHasKey('verified_result', $row);
+            $this->assertFalse($row['result_defined'], 'no surface prints the generic conversion as «Results»');
+        }
     }
 
     public function test_including_zero_activity_lists_every_creative_in_scope(): void

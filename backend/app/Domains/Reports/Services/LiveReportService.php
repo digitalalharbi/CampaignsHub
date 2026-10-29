@@ -344,7 +344,8 @@ final class LiveReportService
     {
         $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
         $settings = (array) ($share->settings ?? []);
-        $results = ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null);
+        // NASEL 2026-10-29 — a link that says «no Results» has none, whatever the project's default: the word never appears on it.
+        $results = ($settings['results_off'] ?? false) === true ? ResultEvents::fromArray(null) : ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null);
         $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
 
         $none = ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
@@ -382,8 +383,12 @@ final class LiveReportService
          * (the boundary removes it). The tile printed the platform's generic `conversions`: «0» on a Snapchat lead-form ad that had 27 native
          * leads, and a landing-page load count on TikTok.
          */
-        $leads = ResultEvents::forProject($scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']), 'lead_events', (array) (($share->settings ?? [])['lead_events'] ?? []) ?: null);
-        if ($leads->configured()) {
+        $settings = (array) ($share->settings ?? []);
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        // RESULT-EVENTS-001 — Results exist only where an event is defined; an explicit «none» (results_off) is never filled from the project.
+        $resultsConfigured = ($settings['results_off'] ?? false) !== true && ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null)->configured();
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
+        if ($leads->configured() && $resultsConfigured) {
             // A content row names its creative, not its campaign: the campaign's name (the project's path convention) is looked up once.
             $ids = [];
             $collect = static function (array $rows) use (&$collect, &$ids): void {
@@ -406,8 +411,9 @@ final class LiveReportService
             $ids = array_values(array_unique(array_filter($ids, static fn (string $id): bool => Str::isUuid($id))));
             $campaignOf = ExternalCreative::withoutGlobalScopes()->whereIn('id', $ids)->pluck('campaign_id', 'id')->all();
             $nameOf = UnifiedCampaign::withoutGlobalScopes()->whereIn('id', array_values(array_unique(array_filter([...array_map('strval', $campaignOf), ...$ids], static fn (string $id): bool => Str::isUuid($id)))))->pluck('name', 'id')->all();
-            $mark = static function (array $rows) use (&$mark, $leads, $campaignOf, $nameOf): array {
-                return array_map(static function (array $row) use ($mark, $leads, $campaignOf, $nameOf): array {
+            $resultsLabel = is_string($settings['results_label'] ?? null) && trim($settings['results_label']) !== '' ? trim($settings['results_label']) : null;
+            $mark = static function (array $rows) use (&$mark, $leads, $campaignOf, $nameOf, $resultsLabel): array {
+                return array_map(static function (array $row) use ($mark, $leads, $campaignOf, $nameOf, $resultsLabel): array {
                     if (isset($row['groups']) && is_array($row['groups'])) {
                         $row['groups'] = $mark($row['groups']);
                     }
@@ -417,7 +423,9 @@ final class LiveReportService
                     if (isset($row['id'], $row['provider'])) {
                         $campaignId = (string) ($row['campaign_id'] ?? ($campaignOf[(string) $row['id']] ?? ''));
                         $campaign = (string) ($nameOf[$campaignId] ?? ($row['campaign_name'] ?? ''));
-                        $row['verified_result'] = $leads->contentResult(['campaign_name' => $campaign] + $row);
+                        $verified = $leads->contentResult(['campaign_name' => $campaign] + $row);
+                        // The card's name is the link's own word for Results, when it has one.
+                        $row['verified_result'] = $verified === null ? null : $verified + ['label' => $resultsLabel];
                     }
 
                     return $row;
@@ -426,6 +434,35 @@ final class LiveReportService
             foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
                 $built[$list] = $mark($built[$list] ?? []);
             }
+        }
+
+        /*
+         * NASEL 2026-10-29 — a link without defined Results says nothing about results: each content row is marked `result_defined: false`
+         * so no surface prints its generic conversion, cost or return as a result (the figures stay, so every surface still reconciles), and
+         * the content is ordered by clicks, which the page names as the basis.
+         */
+        if (! $resultsConfigured) {
+            $strip = static function (array $rows) use (&$strip): array {
+                return array_map(static function (array $row) use ($strip): array {
+                    foreach (['groups', 'ads'] as $nested) {
+                        if (isset($row[$nested]) && is_array($row[$nested]) && ! isset($row['provider'])) {
+                            $row[$nested] = $strip($row[$nested]);
+                        }
+                    }
+                    if (isset($row['provider'])) {
+                        $row['result_defined'] = false;
+                    }
+
+                    return $row;
+                }, $rows);
+            };
+            foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+                $built[$list] = $strip($built[$list] ?? []);
+            }
+            $clicks = static fn (array $row): float => (float) ($row['clicks'] ?? ($row['metrics']['clicks'] ?? 0));
+            usort($built['ads'], static fn (array $a, array $b): int => $clicks($b) <=> $clicks($a));
+            usort($built['worst'], static fn (array $a, array $b): int => $clicks($a) <=> $clicks($b));
+            $built['basis'] = ['family' => 'clicks', 'metric' => 'clicks', 'label_ar' => 'النقرات', 'label_en' => 'Clicks', 'family_label_ar' => 'النقرات', 'family_label_en' => 'clicks'];
         }
 
         return [
@@ -709,6 +746,10 @@ final class LiveReportService
             'results' => $results,
             // The operator's own names for KPI cards on this link (empty when none were set).
             'kpi_labels' => (object) array_filter((array) (($share->settings ?? [])['kpi_labels'] ?? []), static fn ($v): bool => is_string($v) && $v !== ''),
+            // NASEL 2026-10-29 — the report's own word for «Results», used for every result and cost-per-result label on the page and in its exports.
+            'results_label' => is_string($label = ($share->settings ?? [])['results_label'] ?? null) && trim($label) !== '' ? trim($label) : null,
+            // Owner 2026-10-29 — every Results path on «none»: the page reads clicks wherever it would have said «النتائج».
+            'results_off' => (($share->settings ?? [])['results_off'] ?? false) === true,
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.

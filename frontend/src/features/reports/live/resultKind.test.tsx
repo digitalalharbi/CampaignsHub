@@ -19,6 +19,22 @@ const base = {
   sections: { kpis: true },
 } as unknown as LivePayload
 
+/**
+ * RESULT-EVENTS-001 — «النتائج» and «تكلفة النتيجة» are the cards of an event the link DEFINED. The board tests below are about how those
+ * cards are named and ordered, so their payloads define Results from the same totals (the count and the cost the aggregator published).
+ */
+function defined(p: LivePayload): LivePayload {
+  const t = p.totals as Record<string, number | null>
+  return {
+    ...p,
+    metrics: (p.metrics ?? []).map((k) => (k === 'conversions' ? 'results' : k === 'cpa' ? 'cost_per_result' : k)),
+    results: {
+      configured: true, total: t.conversions ?? null, cost: t.cpa ?? null, by_path: {}, events: { meta: { all: 'purchases' } },
+      by_platform: Object.fromEntries((p.platforms ?? []).map((row) => [String(row.provider), { results: Number(row.conversions ?? 0), metric: 'purchases', spend: Number(row.spend ?? 0), cost: null }])),
+    },
+  } as unknown as LivePayload
+}
+
 function Board({ payload }: { payload: LivePayload }) {
   const reader = useLiveMetricReader('USD', true)
 
@@ -38,7 +54,7 @@ describe('live KPI board', () => {
 
   it('keeps the result card «النتائج» for a messaging campaign — the type is context, not a name', () => {
     const payload = { ...base, result_kind: { kind: 'messaging', result: { ar: 'الرسائل', en: 'Messages' }, cost: { ar: 'تكلفة الرسالة', en: 'Cost per message' } } } as LivePayload
-    render(<Board payload={payload} />)
+    render(<Board payload={defined(payload)} />)
     const board = screen.getByTestId('live-kpis')
 
     expect(within(board).getByText('النتائج')).toBeInTheDocument()
@@ -60,7 +76,7 @@ describe('live KPI board', () => {
       totals: { ...base.totals, spend: 100, cpa: 0.5 },
       result_kind: { kind: 'messaging', result: { ar: 'الرسائل', en: 'Messages' }, cost: { ar: 'تكلفة الرسالة', en: 'Cost per message' } },
     } as unknown as LivePayload
-    render(<Board payload={payload} />)
+    render(<Board payload={defined(payload)} />)
     const labels = Array.from(document.body.querySelectorAll('span, dt')).map((n) => n.textContent)
     const at = (l: string) => labels.indexOf(l)
 
@@ -79,7 +95,7 @@ describe('live KPI board', () => {
       platforms: [{ provider: 'meta', spend: null, conversions: 213, impressions: 134000, clicks: 1740, ctr: 0.013 }],
       result_kind: { kind: 'messaging', result: { ar: 'الرسائل', en: 'Messages' }, cost: { ar: 'تكلفة الرسالة', en: 'Cost per message' } },
     } as unknown as LivePayload
-    const { container } = render(<LivePlatformComparison payload={payload} currency="USD" locale="ar" />)
+    const { container } = render(<LivePlatformComparison payload={defined(payload)} currency="USD" locale="ar" />)
     const heads = Array.from(container.querySelectorAll('th')).map((n) => n.textContent ?? '')
 
     expect(heads.join('|')).not.toMatch(/الإنفاق|تكلفة/)
@@ -96,7 +112,7 @@ describe('live KPI board', () => {
       totals: { ...base.totals, spend: 2640.18, cpa: 4.56, leads: 579, conversions: 579 },
       result_kind: messaging,
     } as unknown as LivePayload
-    render(<Board payload={payload} />)
+    render(<Board payload={defined(payload)} />)
     const cards = Array.from(screen.getByTestId('live-kpis').children).map((c) => c.textContent ?? '')
 
     expect(cards).toHaveLength(4)
@@ -129,7 +145,7 @@ describe('live KPI board', () => {
       totals: { ...base.totals, spend: 2640.18, cpa: null },
       result_kind: messaging,
     } as unknown as LivePayload
-    render(<Board payload={payload} />)
+    render(<Board payload={defined(payload)} />)
     const cards = Array.from(screen.getByTestId('live-kpis').children).map((c) => c.textContent ?? '')
 
     expect(cards).toHaveLength(4)

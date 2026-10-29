@@ -32,7 +32,7 @@ const payload = {
   totals: { spend: 1000, conversions: 40, revenue: 4000, impressions: 90000, clicks: 700 },
   deltas: { spend: 0.1, conversions: -0.2 },
   timeseries: [{ date: '2026-08-01', spend: 100, conversions: 4 }],
-  platforms: [{ provider: 'meta', spend: 600, conversions: 24 }],
+  platforms: [{ provider: 'meta', spend: 600, conversions: 24, impressions: 90000, clicks: 700 }],
   campaigns: [{ campaign_name: 'Eid', spend: 600, conversions: 24, objective: 'sales' }],
   ad_sets: [],
   funnel: [{ key: 'impressions', label: 'Impressions', value: 90000, reported: true }],
