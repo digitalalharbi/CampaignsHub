@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { BudgetRow } from '@/features/analytics/api'
 
-import { landingAnswer } from './campaignsLanding'
+import { LANDING_COMPARISON, landingAnswer } from './campaignsLanding'
 import { attentionFlags } from './campaignInsights'
 import type { UnifiedCampaign } from './types'
 
@@ -173,48 +173,110 @@ describe('the phrase «needs attention» has one owner', () => {
 })
 
 /**
- * CAMPAIGN-INTELLIGENCE-HUB — «where is the opportunity, which budget is inefficient», against each objective's OWN peers and only from
- * results the platform reported. Every expected count is derived from the rows below, never typed as a literal.
+ * CAMPAIGN-INTELLIGENCE-HUB — «where is the opportunity, which budget is inefficient», inside comparison groups only (objective ×
+ * the platform's outcome × reporting currency, one window) and only from results the platform reported. Every expected count is
+ * derived from the rows below and from `LANDING_COMPARISON`, never typed as a literal.
  */
 describe('opportunity and inefficient budget', () => {
-  const leadRow = (spend: number, leads: number | null) => ({ reported: { spend: true, leads: leads !== null }, spend, leads: leads ?? 0, clicks: 100, impressions: 10000 })
-  const rows = {
-    cheap: leadRow(100, 20), // 5 per lead
-    usual1: leadRow(100, 10), // 10
-    usual2: leadRow(100, 9), // ~11.1
-    dear: leadRow(300, 10), // 30
-    zero: leadRow(200, 0), // spent, reported zero leads
-    unreported: leadRow(200, null), // spent, leads never reported
+  const { minPeers, minResults, opportunityRatio, inefficientRatio } = LANDING_COMPARISON
+  const FORM = 'native_lead_form'
+  const leadRow = (spend: number, leads: number | null, extra: Record<string, unknown> = {}) => ({
+    reported: { spend: true, leads: leads !== null }, spend, leads: leads ?? 0, clicks: 100, impressions: 10000, outcome: FORM, ...extra,
+  })
+  // Every measured peer clears the results floor; costs spread so each side of the median has a clear case.
+  const peerRows = {
+    cheap: leadRow(minResults * 50, minResults * 10), // 5 per lead
+    usual1: leadRow(minResults * 100, minResults * 10), // 10
+    usual2: leadRow(minResults * 100, minResults * 9), // ~11.1
+    dear: leadRow(minResults * 300, minResults * 10), // 30
   }
-  const campaigns = Object.keys(rows).map((id) => ({ id, objective: 'leads' }))
-  const metrics = new Map(Object.entries(rows) as Array<[string, Record<string, unknown>]>)
-  const costs = Object.values(rows).filter((r) => r.reported.leads && r.leads > 0).map((r) => r.spend / r.leads).sort((a, b) => a - b)
-  const median = costs.length % 2 === 0 ? (costs[costs.length / 2 - 1] + costs[costs.length / 2]) / 2 : costs[Math.floor(costs.length / 2)]
+  const peerCosts = Object.values(peerRows).map((r) => r.spend / r.leads).sort((a, b) => a - b)
+  const usual = peerCosts.length % 2 === 0
+    ? (peerCosts[peerCosts.length / 2 - 1] + peerCosts[peerCosts.length / 2]) / 2
+    : peerCosts[Math.floor(peerCosts.length / 2)]
+  const rows = {
+    ...peerRows,
+    zero: leadRow(Math.ceil(usual * minResults), 0), // spent the floor's worth at the usual price, reported zero leads
+    unreported: leadRow(usual * minResults * 2, null), // spent, leads never reported
+  }
+  const asCampaigns = (ids: string[], objective = 'leads') => ids.map((id) => ({ id, objective }))
+  const metricsOf = (r: Record<string, Record<string, unknown>>) => new Map(Object.entries(r))
+  const peerIds = Object.keys(peerRows)
+  // Exactly the minimum: perturbing one of these leaves too few peers, so a null can only come from the perturbation.
+  const trio = peerIds.slice(0, minPeers)
 
-  it('counts a campaign clearly cheaper than its peers as the opportunity, and one at twice their cost or with a reported zero as inefficient', () => {
-    const a = landingAnswer(campaigns, metrics, undefined, new Set())
+  it('compares the minimum of peers when nothing is perturbed — the control for the cases below', () => {
+    expect(landingAnswer(asCampaigns(trio), metricsOf(peerRows), undefined, new Set()).opportunity).not.toBeNull()
+  })
 
-    expect(a.opportunity).toBe(costs.filter((c) => c <= median * 0.75).length)
-    const inefficient = costs.filter((c) => c >= median * 2).length + 1 // + the reported zero
-    expect(a.inefficient).toBe(inefficient)
+  it('counts a campaign clearly cheaper than its peers as the opportunity, and one at twice their cost or with a reported zero on real spend as inefficient', () => {
+    const a = landingAnswer(asCampaigns(Object.keys(rows)), metricsOf(rows), undefined, new Set())
+
+    expect(a.opportunity).toBe(peerCosts.filter((c) => c <= usual * opportunityRatio).length)
+    expect(a.inefficient).toBe(peerCosts.filter((c) => c >= usual * inefficientRatio).length + 1) // + the reported zero
   })
 
   it('never reads an unreported result as a zero', () => {
-    const only = landingAnswer([{ id: 'unreported', objective: 'leads' }], new Map([['unreported', rows.unreported]]), undefined, new Set())
+    const a = landingAnswer(asCampaigns([...peerIds, 'unreported']), metricsOf({ ...peerRows, unreported: rows.unreported }), undefined, new Set())
+    const without = landingAnswer(asCampaigns(peerIds), metricsOf(peerRows), undefined, new Set())
 
-    expect(only.inefficient).toBeNull()
+    expect(a.inefficient).toBe(without.inefficient)
   })
 
-  it('compares nothing with fewer than three measured peers, and says so with null rather than zero', () => {
-    const two = landingAnswer([{ id: 'cheap', objective: 'leads' }, { id: 'dear', objective: 'leads' }], new Map([['cheap', rows.cheap], ['dear', rows.dear]]), undefined, new Set())
+  it('compares nothing with fewer than the minimum of measured peers, and says so with null rather than zero', () => {
+    const few = peerIds.slice(0, minPeers - 1)
+    const a = landingAnswer(asCampaigns(few), metricsOf(peerRows), undefined, new Set())
 
-    expect(two.opportunity).toBeNull()
+    expect(a.opportunity).toBeNull()
+    expect(a.inefficient).toBeNull()
   })
 
   it('never compares a lead\'s cost with an order\'s', () => {
     const mixed = [{ id: 'cheap', objective: 'leads' }, { id: 'usual1', objective: 'sales' }, { id: 'dear', objective: 'awareness' }]
-    const a = landingAnswer(mixed, metrics, undefined, new Set())
+    const a = landingAnswer(mixed, metricsOf(peerRows), undefined, new Set())
 
     expect(a.opportunity).toBeNull()
+  })
+
+  it('never compares a native form\'s lead with a website lead — the outcome is the event and the path', () => {
+    const split = { ...peerRows, usual2: { ...peerRows.usual2, outcome: 'website_lead' } }
+    const a = landingAnswer(asCampaigns(trio), metricsOf(split), undefined, new Set())
+
+    expect(a.opportunity).toBeNull()
+  })
+
+  it('leaves out a campaign whose outcome the platform did not state', () => {
+    const unknown = { ...peerRows, usual2: { ...peerRows.usual2, outcome: 'unknown' } }
+    const a = landingAnswer(asCampaigns(trio), metricsOf(unknown), undefined, new Set())
+
+    expect(a.opportunity).toBeNull()
+  })
+
+  it('leaves out a campaign whose spend is partly withheld from the reporting currency', () => {
+    const partial = { ...peerRows, usual2: { ...peerRows.usual2, spend_withheld_rows: 1 } }
+    const a = landingAnswer(asCampaigns(trio), metricsOf(partial), undefined, new Set())
+
+    expect(a.opportunity).toBeNull()
+  })
+
+  it('does not count a cost from fewer results than the floor as a peer', () => {
+    const thin = { ...peerRows, usual2: leadRow(minResults - 1, minResults - 1) }
+    const a = landingAnswer(asCampaigns(trio), metricsOf(thin), undefined, new Set())
+
+    expect(a.opportunity).toBeNull()
+  })
+
+  it('does not call a reported zero waste on a spend too small to have bought the floor\'s worth of results', () => {
+    const small = { ...peerRows, zero: leadRow(usual * (minResults - 1), 0) }
+    const a = landingAnswer(asCampaigns([...peerIds, 'zero']), metricsOf(small), undefined, new Set())
+    const without = landingAnswer(asCampaigns(peerIds), metricsOf(peerRows), undefined, new Set())
+
+    expect(a.inefficient).toBe(without.inefficient)
+  })
+
+  it('does not judge a reported zero with no comparison group to price it against', () => {
+    const a = landingAnswer(asCampaigns(['zero']), metricsOf({ zero: rows.zero }), undefined, new Set())
+
+    expect(a.inefficient).toBeNull()
   })
 })

@@ -50,24 +50,48 @@ export interface LandingAnswer {
    */
   overpacing: number | null
   /**
-   * CAMPAIGN-INTELLIGENCE-HUB — where the opportunity is: campaigns whose OWN cost per result is clearly better than their peers'
-   * (same objective, the objective's own cost metric, at least {@link MIN_PEERS} campaigns with a measured cost). Null when no objective
-   * had enough measured peers to compare — «nothing to compare» is not «no opportunity».
+   * CAMPAIGN-INTELLIGENCE-HUB — where the opportunity is: campaigns whose OWN cost per result is clearly better than their peers'.
+   * A peer is a campaign in the same {@link comparisonGroup} — same objective, same outcome the platform optimised for (the event AND
+   * the path: a native form's lead is not a website lead), spend wholly in the reporting currency, one window — with at least
+   * {@link LANDING_COMPARISON}.minResults reported results. Null when no group had {@link LANDING_COMPARISON}.minPeers such peers —
+   * «nothing to compare» is not «no opportunity».
    */
   opportunity: number | null
   /**
-   * Which budget is inefficient: money spent where the objective's result was REPORTED as zero, or a cost per result at least twice the
-   * peers' median. Null when nothing could be judged either way. An unreported result is never read as zero here.
+   * Which budget is inefficient, inside the same groups: a cost per result at least twice the peers' median, or a result the platform
+   * REPORTED as zero against spend that would have bought {@link LANDING_COMPARISON}.minResults at the peers' usual price — a zero on a
+   * small spend is a small sample, not waste. Null when no group could be compared. An unreported result is never read as zero.
    */
   inefficient: number | null
 }
 
-/** Peers needed before a cost is called better or worse than «usual» — fewer than this is not a comparison. */
-const MIN_PEERS = 3
-/** «Clearly better»: at most three quarters of the peers' median cost per result. */
-const OPPORTUNITY_RATIO = 0.75
-/** «Inefficient»: at least twice the peers' median cost per result. */
-const INEFFICIENT_RATIO = 2
+/**
+ * The comparison's floors and ratios, exported so the tests derive their expectations from them rather than retyping them.
+ *
+ * - minPeers: campaigns needed in one group before a cost is called better or worse than «usual».
+ * - minResults: reported results a campaign needs before its cost per result is a measurement rather than noise — and the spend a
+ *   reported zero must reach (at the peers' usual price) before it is called inefficient.
+ * - opportunityRatio: «clearly better» — at most three quarters of the peers' median.
+ * - inefficientRatio: «inefficient» — at least twice the peers' median.
+ */
+export const LANDING_COMPARISON = { minPeers: 3, minResults: 10, opportunityRatio: 0.75, inefficientRatio: 2 } as const
+
+/**
+ * Which campaigns may be compared with which — null when this one may not be compared at all.
+ *
+ * - `outcome` is the server's `CampaignOutcome`: the event and the path in one value (native form, website lead, messaging…), and
+ *   `comparableWith()` there refuses `unknown` against everything, including another unknown. Same here.
+ * - Any spend row withheld from the reporting currency leaves the campaign's spend partial, so its cost per result is not in the
+ *   currency its peers' are.
+ * - The window is the same by construction: every row comes from the one `byCampaign` request for the page's range.
+ */
+const comparisonGroup = (objective: string | null, row: Record<string, unknown> | undefined): string | null => {
+  if (!row || campaignCostKey(objective) === undefined) return null
+  const outcome = typeof row.outcome === 'string' ? row.outcome : 'unknown'
+  if (outcome === 'unknown') return null
+  if (Number(row.spend_withheld_rows ?? 0) > 0) return null
+  return `${objective ?? ''}|${outcome}`
+}
 
 const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b)
@@ -83,12 +107,12 @@ const reportedNumber = (row: Record<string, unknown> | undefined, key: string | 
   return reported === true && typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-/** The objective's cost per result for one row: its own spend over its own reported result, or nothing. */
-const costPerResult = (objective: string | null, row: Record<string, unknown> | undefined): number | null => {
+/** The objective's reported result and the row's spend, or nothing when either is missing. */
+const resultAndSpend = (objective: string | null, row: Record<string, unknown> | undefined): { result: number; spend: number } | null => {
   const result = reportedNumber(row, campaignResultKey(objective))
-  const spend = typeof row?.spend === 'number' ? row.spend : null
-  if (campaignCostKey(objective) === undefined || result === null || result <= 0 || spend === null || spend <= 0) return null
-  return spend / result
+  const spend = typeof row?.spend === 'number' && Number.isFinite(row.spend) ? row.spend : null
+  if (result === null || spend === null || spend <= 0) return null
+  return { result, spend }
 }
 
 /** A campaign pacing above this much of its plan for the elapsed period is running hot. */
@@ -137,36 +161,35 @@ export function landingAnswer(
   const paceable = (budgets ?? []).filter((b) => b.pacing_basis === 'comparable' && b.pace !== null)
 
   /*
-   * Opportunity and inefficiency, against each objective's OWN peers: a lead's cost is never compared with an order's.
+   * Opportunity and inefficiency, inside each comparison group only: a lead's cost is never compared with an order's, a native
+   * form's with a website lead's, or a partial-currency spend with a whole one.
    */
-  const costs = new Map<string, Array<{ id: string; cost: number }>>()
+  const { minPeers, minResults, opportunityRatio, inefficientRatio } = LANDING_COMPARISON
+  const groups = new Map<string, { peers: Array<{ id: string; cost: number }>; zeros: Array<{ id: string; spend: number }> }>()
   for (const c of campaigns) {
-    const cost = costPerResult(c.objective, metricsByCampaign.get(c.id))
-    if (cost === null) continue
-    const family = c.objective ?? ''
-    costs.set(family, [...(costs.get(family) ?? []), { id: c.id, cost }])
+    const row = metricsByCampaign.get(c.id)
+    const group = comparisonGroup(c.objective, row)
+    const figures = resultAndSpend(c.objective, row)
+    if (group === null || figures === null) continue
+    const entry = groups.get(group) ?? { peers: [], zeros: [] }
+    if (figures.result >= minResults) entry.peers.push({ id: c.id, cost: figures.spend / figures.result })
+    else if (figures.result === 0) entry.zeros.push({ id: c.id, spend: figures.spend })
+    // Between zero and the floor: too few results to say anything either way.
+    groups.set(group, entry)
   }
   let compared = false
   let opportunity = 0
   const inefficientIds = new Set<string>()
-  for (const peers of costs.values()) {
-    if (peers.length < MIN_PEERS) continue
+  for (const { peers, zeros } of groups.values()) {
+    if (peers.length < minPeers) continue
     compared = true
     const usual = median(peers.map((p) => p.cost))
     for (const p of peers) {
-      if (p.cost <= usual * OPPORTUNITY_RATIO) opportunity++
-      if (p.cost >= usual * INEFFICIENT_RATIO) inefficientIds.add(p.id)
+      if (p.cost <= usual * opportunityRatio) opportunity++
+      if (p.cost >= usual * inefficientRatio) inefficientIds.add(p.id)
     }
-  }
-  // Spend with a result the platform REPORTED as zero — judged without peers, because nothing bought is not a comparison.
-  let judgedZero = false
-  for (const c of campaigns) {
-    const row = metricsByCampaign.get(c.id)
-    const result = reportedNumber(row, campaignResultKey(c.objective))
-    const spend = typeof row?.spend === 'number' ? row.spend : null
-    if (result === null || spend === null || spend <= 0) continue
-    judgedZero = true
-    if (result === 0) inefficientIds.add(c.id)
+    // A reported zero is waste only once the spend would have bought the floor's worth of results at the usual price.
+    for (const z of zeros) if (z.spend >= usual * minResults) inefficientIds.add(z.id)
   }
 
   return {
@@ -175,6 +198,6 @@ export function landingAnswer(
     unexamined,
     overpacing: paceable.length === 0 ? null : paceable.filter((b) => (b.pace ?? 0) > HOT_PACE).length,
     opportunity: compared ? opportunity : null,
-    inefficient: compared || judgedZero ? inefficientIds.size : null,
+    inefficient: compared ? inefficientIds.size : null,
   }
 }
