@@ -10,6 +10,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -131,6 +132,7 @@ final class PhoneConfirmationTest extends TestCase
 
         $start = $this->withHeaders($this->spa)
             ->postJson('/api/v1/auth/phone/start', ['phone' => '0501234567'])->assertOk();
+        $this->sameBrowser($start);
 
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/verify', [
             'verification_id' => (string) $start->json('data.verification_id'),
@@ -154,6 +156,7 @@ final class PhoneConfirmationTest extends TestCase
 
         $start = $this->withHeaders($this->spa)
             ->postJson('/api/v1/auth/phone/start', ['phone' => '0509999999'])->assertOk();
+        $this->sameBrowser($start);
 
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/verify', [
             'verification_id' => (string) $start->json('data.verification_id'),
@@ -283,5 +286,12 @@ final class PhoneConfirmationTest extends TestCase
         $this->postJson('/api/v1/me/phone/start', ['phone' => '0501234567'])->assertUnauthorized();
         $this->postJson('/api/v1/me/phone/confirm', ['verification_id' => 'x', 'code' => '000000'])->assertUnauthorized();
         $this->deleteJson('/api/v1/me/phone')->assertUnauthorized();
+    }
+
+    /** The sign-in code is bound to the browser session that asked for it; verify from that session, as the browser does. */
+    private function sameBrowser(TestResponse $start): void
+    {
+        $cookie = (string) config('session.cookie');
+        $this->withCredentials()->withCookie($cookie, (string) $start->getCookie($cookie)?->getValue());
     }
 }
