@@ -171,6 +171,8 @@ final class MetaSaasModesTest extends TestCase
         $this->admin()->putJson(self::BASE.'/routing', self::PRIMARY)->assertOk()
             ->assertJsonPath('data.modes.current', 'saas_primary')
             ->assertJsonPath('data.modes.primary.preview.existing_live_connections', 1)
+            ->assertJsonPath('data.modes.primary.preview.existing_live_connected', 1)
+            ->assertJsonPath('data.modes.primary.preview.existing_live_ad_accounts', ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $this->customerLive->id)->count())
             ->assertJsonPath('data.modes.primary.preview.existing_connections_moved', 0);
         $this->assertSame(MetaCredentialProfile::Saas, MetaAppRouting::default());
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\MetaCandidate;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
@@ -66,8 +67,17 @@ final class MetaSaasModes
         $live = (clone $active)->where(fn ($q) => $q->whereNull('app_profile')->orWhere('app_profile', MetaCredentialProfile::Live->value));
         $saas = (clone $active)->where('app_profile', MetaCredentialProfile::Saas->value);
 
+        // The Live side's health, read so a test of the new app can be shown to have left it exactly as it was (counts and dates only).
+        $liveIds = (clone $live)->pluck('id');
+        $liveAccounts = ExternalAccount::withoutGlobalScopes()->whereIn('provider_connection_id', $liveIds)
+            ->where('account_type', 'ad_account')->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'));
+
         return [
             'existing_live_connections' => (clone $live)->count(),
+            'existing_live_connected' => (clone $live)->where('status', 'connected')->count(),
+            'existing_live_ad_accounts' => (clone $liveAccounts)->count(),
+            'live_ad_accounts_synced_24h' => (clone $liveAccounts)->where('last_synced_at', '>=', now()->subDay())->count(),
+            'live_oldest_last_successful_sync_at' => (clone $live)->min('last_successful_sync_at'),
             'existing_live_tenants' => (clone $live)->distinct()->count('tenant_id'),
             'existing_saas_connections' => (clone $saas)->count(),
             // Fixed by design and stated so the preview cannot be read otherwise.

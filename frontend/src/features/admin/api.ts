@@ -789,7 +789,10 @@ export interface MetaSaasModesState {
   primary: {
     enabled: boolean; eligible: boolean
     preconditions: Array<{ key: string; met: boolean }>
-    preview: { existing_live_connections: number; existing_live_tenants: number; existing_saas_connections: number; existing_connections_moved: number }
+    preview: {
+      existing_live_connections: number; existing_live_tenants: number; existing_saas_connections: number; existing_connections_moved: number
+      existing_live_connected?: number; existing_live_ad_accounts?: number; live_ad_accounts_synced_24h?: number; live_oldest_last_successful_sync_at?: string | null
+    }
   }
 }
 

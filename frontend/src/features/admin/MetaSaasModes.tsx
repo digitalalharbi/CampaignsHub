@@ -31,6 +31,7 @@ const COPY = {
       meta_approval_recorded: 'تسجيل موافقة ميتا (Business Verification وAdvanced Access)',
       live_still_configured: 'تطبيق Live ما زال مُعدًّا لتستمر مزامنة اتصالاته',
     } as Record<string, string>,
+    liveHealth: 'صحة Live الحالية', liveAccounts: 'حسابات إعلانية على Live', synced24h: 'زُامنت خلال 24 ساعة', oldestSync: 'أقدم مزامنة ناجحة',
     preview: 'معاينة الأثر', liveConnections: 'اتصالات Live قائمة', liveTenants: 'مساحات عمل', saasConnections: 'اتصالات SaaS قائمة', moved: 'اتصالات ستُنقل',
     approve: 'أوافق، بصفتي المالك، على أن يستخدم كل ربط جديد تطبيق المنصة (SaaS).',
     acknowledge: 'أفهم أن الاتصالات القائمة لا تُنقل وتبقى مع التطبيق الذي أصدر رموزها.',
@@ -55,6 +56,7 @@ const COPY = {
       meta_approval_recorded: 'Meta’s approval recorded (Business Verification and Advanced Access)',
       live_still_configured: 'The Live app is still configured, so its connections keep syncing',
     } as Record<string, string>,
+    liveHealth: 'Current Live health', liveAccounts: 'ad accounts on Live', synced24h: 'synced in the last 24 h', oldestSync: 'oldest successful sync',
     preview: 'Impact preview', liveConnections: 'existing Live connections', liveTenants: 'workspaces', saasConnections: 'existing SaaS connections', moved: 'connections moved',
     approve: 'As the Owner, I approve that every new connection uses the platform (SaaS) app.',
     acknowledge: 'I understand existing connections are not moved and stay with the app that issued their tokens.',
@@ -108,6 +110,13 @@ export function MetaSaasModes({ modes, ar }: { modes: MetaSaasModesState; ar: bo
         <div><dt className="text-text-muted">{c.liveTenants}</dt><dd className="tnum font-semibold text-text-primary"><Num>{p.existing_live_tenants}</Num></dd></div>
         <div><dt className="text-text-muted">{c.saasConnections}</dt><dd className="tnum font-semibold text-text-primary"><Num>{p.existing_saas_connections}</Num></dd></div>
         <div><dt className="text-text-muted">{c.moved}</dt><dd className="tnum font-semibold text-text-primary" data-testid="meta-saas-preview-moved"><Num>{p.existing_connections_moved}</Num></dd></div>
+      </dl>
+
+      <p className="mt-4 text-xs font-semibold text-text-secondary">{c.liveHealth}</p>
+      <dl className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3" data-testid="meta-saas-live-health">
+        <div><dt className="text-text-muted">{c.liveAccounts}</dt><dd className="tnum font-semibold text-text-primary"><Num>{p.existing_live_ad_accounts ?? 0}</Num></dd></div>
+        <div><dt className="text-text-muted">{c.synced24h}</dt><dd className="tnum font-semibold text-text-primary"><Num>{p.live_ad_accounts_synced_24h ?? 0}</Num></dd></div>
+        <div><dt className="text-text-muted">{c.oldestSync}</dt><dd className="font-semibold text-text-primary"><bdi dir="ltr">{p.live_oldest_last_successful_sync_at ? p.live_oldest_last_successful_sync_at.slice(0, 16).replace('T', ' ') : '—'}</bdi></dd></div>
       </dl>
 
       {primary.enabled ? (
