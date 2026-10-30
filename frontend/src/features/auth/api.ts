@@ -79,6 +79,8 @@ export async function emailCodeStart(email: string): Promise<{
   verification_id: string
   delivery_status: string
   resend_after: number
+  /** AUTH-LOGIN-UX-002 — how long the code lives; the page says when it has expired. */
+  expires_in_minutes?: number
   dev_code: string | null
 }> {
   await ensureCsrfCookie()
@@ -186,6 +188,10 @@ export interface OAuthProvider {
   /** False when the provider has no credentials configured: do not advertise an unusable action. */
   available: boolean
 }
+
+/** AUTH-LOGIN-UX-002 — which ways in the page may offer right now (a way that cannot work is not shown). */
+export interface SignInMethods { password: { available: boolean }; email_code: { available: boolean } }
+export const fetchSignInMethods = (): Promise<SignInMethods> => getData<SignInMethods>('/auth/methods')
 
 export async function fetchOAuthProviders(): Promise<OAuthProvider[]> {
   const { providers } = await getData<{ providers: OAuthProvider[] }>('/auth/oauth/providers')
