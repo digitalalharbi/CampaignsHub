@@ -271,6 +271,7 @@ All are fixed on fix/nasel-exports-contract. The fix is IMPLEMENTED_NOT_VERIFIED
 - The reports behind /r/Dk7… (report `9c7ed2b5`) and /r/brSe9… are **not in the project's report list**.
 - Report deletion is a hard delete that removes the report's links and, until #880, wrote **no audit row**. So whether they were deleted, by whom and when cannot be established from any authorised source. Recorded as absent, cause unattributed. Nothing was recreated.
 - #880 audits every future report deletion (actor, period, each link's id, mode, revocation, views, creator — never a token).
+- **2026-10-30, Production (read-only, admin audit):** the first real deletion after #880 deployed (2026-10-29 22:04 UTC, tenant «Mohammed Alharbi») wrote `report.deleted`. It records the actor, the report's name, type, project and period, and its one link (id, mode, created_at/by, expires_at, revoked_at, view_count), with no token field. No row exists for deletions before the deploy (no retroactive attribution). **#880: VERIFIED.**
 
 ### NASEL 2026-10-29 (Production, after #876) — a live report's files were empty
 
