@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
@@ -204,7 +205,8 @@ final class MetaSaasAppIsolationTest extends TestCase
         $this->configureSaas();
         $admin = $this->actingAs($this->platformOwner, 'sanctum');
 
-        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true])->assertStatus(409);
+        $primary = ['default' => 'saas', 'confirm' => true, 'approve_primary' => true, 'acknowledge_existing_unchanged' => true];
+        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', $primary)->assertStatus(409);
 
         $run = new MetaCandidateConnection;
         $run->forceFill([
@@ -216,12 +218,14 @@ final class MetaSaasAppIsolationTest extends TestCase
         $this->assertNull(MetaCandidateConnection::latestRun(MetaCredentialProfile::Candidate));
 
         // A passed test proves the app for its own app roles only; customers wait for the Owner's record that Meta approved it.
-        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true])->assertStatus(409)
-            ->assertJsonPath('errors.routing.0', 'app_review_not_confirmed');
+        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', $primary)->assertStatus(409)
+            ->assertJsonPath('errors.routing', ['test_journey_complete', 'meta_approval_recorded']);
         $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/review', ['business_verified' => true, 'advanced_access_granted' => true])->assertOk();
 
-        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true])->assertOk()
-            ->assertJsonPath('data.routing.default_for_new_connections', 'saas');
+        // Primary's own gate (a real journey in the test workspace, the Owner's named approval) is MetaSaasModesTest's; here the
+        // routing row is set as that endpoint sets it once every precondition holds, to test what new connections then do.
+        ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->update(['enabled' => true]);
+        $this->assertSame(MetaCredentialProfile::Saas, MetaAppRouting::default());
 
         $start = $this->actingAs($this->owner, 'sanctum')->postJson('/api/v1/integrations/meta/oauth/start')->assertOk();
         $this->assertSame('saas', $start->json('data.app_profile'));

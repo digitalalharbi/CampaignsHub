@@ -19,17 +19,23 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
  * from when the connection was created. A connection with no recorded issuer predates the column and has only ever been refreshed by
  * the Live app in force since then, so it counts as issued by the CURRENT app — refusing on «unknown» is the safe side.
  *
- * Counted: Meta connections on the Live profile (`app_profile` NULL or `live`) that are not revoked, issued by the current Live App ID
- * or by nobody on record, unless the target IS that App ID. SaaS and Candidate connections have their own apps and never count.
+ * Counted, per profile: that profile's Meta connections (Live: `app_profile` NULL or `live`; SaaS: `saas`) that are not revoked,
+ * issued by its current App ID or by nobody on record, unless the target IS that App ID. Another profile's connections have their own
+ * app and never count. Every path that can change a profile's App ID asks this: promote, rollback, the Live provider console (update,
+ * rotate, clear) and the SaaS app's own settings.
  */
 final class MetaAppSwitchGuard
 {
     public const REASON = 'connections_issued_by_current_app';
 
-    /** @return array{safe: bool, reason: string|null, affected: int, unverified: int, current_app_hint: string|null, target_app_hint: string|null} */
-    public function check(?string $targetAppId): array
+    /**
+     * @param  MetaCredentialProfile  $profile  whose identity would change: Live (promote, rollback, the provider console) or Saas
+     *                                          (its own settings page). Only that profile's connections can be stranded by it.
+     * @return array{safe: bool, reason: string|null, affected: int, unverified: int, current_app_hint: string|null, target_app_hint: string|null}
+     */
+    public function check(?string $targetAppId, MetaCredentialProfile $profile = MetaCredentialProfile::Live): array
     {
-        $current = PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_id');
+        $current = PlatformCredentials::forMeta($profile)->get('client_id');
         $target = $targetAppId === '' ? null : $targetAppId;
         $hints = ['current_app_hint' => self::hint($current), 'target_app_hint' => self::hint($target)];
 
@@ -39,7 +45,11 @@ final class MetaAppSwitchGuard
 
         $dependent = ProviderConnection::withoutGlobalScopes()
             ->where('provider', 'meta')
-            ->where(fn ($q) => $q->whereNull('app_profile')->orWhere('app_profile', MetaCredentialProfile::Live->value))
+            ->when(
+                $profile === MetaCredentialProfile::Live,
+                fn ($q) => $q->where(fn ($w) => $w->whereNull('app_profile')->orWhere('app_profile', MetaCredentialProfile::Live->value)),
+                fn ($q) => $q->where('app_profile', $profile->value),
+            )
             ->where('status', '!=', 'revoked')
             ->where(fn ($q) => $q->whereNull('issuing_app_id')->when($current !== null, fn ($w) => $w->orWhere('issuing_app_id', $current)))
             ->when($target !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('issuing_app_id')->orWhere('issuing_app_id', '!=', $target)));
