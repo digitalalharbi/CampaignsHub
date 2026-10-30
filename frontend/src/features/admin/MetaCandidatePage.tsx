@@ -5,7 +5,7 @@ import { CheckCircle2, Circle, Loader2, PlayCircle, Trash2, XCircle } from 'luci
 import {
   fetchMetaCandidate, fetchMetaSaas, forgetMetaCandidateCredential, forgetMetaSaasCredential, promoteMetaCandidate, rollbackMetaLive, saveMetaCandidate,
   saveMetaSaas, setMetaSaasRouting, startMetaCandidateTest, startMetaSaasTest,
-  type MetaCandidateRun, type MetaCandidateState, type MetaCandidateStep, type MetaCandidateStepKey,
+  type MetaAppSwitchGuard, type MetaCandidateRun, type MetaCandidateState, type MetaCandidateStep, type MetaCandidateStepKey,
 } from './api'
 import { MetaSaasReadiness } from './MetaSaasReadiness'
 import { Button } from '@/components/ui/Button'
@@ -54,6 +54,13 @@ const COPY = {
       credentials_changed_since_round_trip: 'تغيّرت البيانات بعد آخر اختبار ناجح — أعد الاختبار.',
       candidate_already_live: 'المرشّح هو التطبيق الحالي بالفعل.',
     } as Record<string, string>,
+    guard: {
+      blocked: 'محظور حمايةً للاتصالات الحالية',
+      reason: (n: number) => `${n} اتصال ميتا فعّال يحمل رمزًا أصدره التطبيق الحالي. تغيير التطبيق سيوقف مزامنته حتى يُعاد ربطه. لا يُنقل ولا يُفصل أي اتصال.`,
+      unverified: (n: number) => `منها ${n} بلا تطبيق مُصدِر مسجّل، وتُحسب على التطبيق الحالي احتياطًا.`,
+      apps: 'التطبيق', current: 'الحالي', target: 'بعد العملية',
+      acknowledge: 'أفهم أن هذا يغيّر التطبيق الذي تُجدَّد وتُستدعى به كل اتصالات ميتا الحالية، وأنه لا اتصال يعتمد على التطبيق الحالي.',
+    },
     outcome: { succeeded: 'عاد الاختبار من ميتا بنجاح.', failed: 'عاد الاختبار من ميتا بفشل — التفاصيل أدناه.', invalid_state: 'رابط التفويض منتهٍ أو استُخدم من قبل.' } as Record<string, string>,
   },
   en: {
@@ -85,6 +92,13 @@ const COPY = {
       credentials_changed_since_round_trip: 'The credentials changed after the last passing test — run it again.',
       candidate_already_live: 'The candidate is already the Live app.',
     } as Record<string, string>,
+    guard: {
+      blocked: 'Blocked to protect existing connections',
+      reason: (n: number) => `${n} active Meta connection(s) hold a token the current app issued. Switching the app would stop them syncing until they reconnect. No connection is moved or disconnected.`,
+      unverified: (n: number) => `${n} of them have no recorded issuing app and are counted as the current app's to be safe.`,
+      apps: 'App', current: 'current', target: 'after',
+      acknowledge: 'I understand this changes the app every existing Meta connection is refreshed and called with, and that no connection depends on the current app.',
+    },
     outcome: { succeeded: 'The test came back from Meta and passed.', failed: 'The test came back from Meta and failed — details below.', invalid_state: 'The authorisation link expired or was already used.' } as Record<string, string>,
   },
 }
@@ -302,6 +316,12 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
   const promote = useMutation({ mutationFn: () => promoteMetaCandidate(narrows && narrowConfirmed), onSuccess })
   const rollback = useMutation({ mutationFn: rollbackMetaLive, onSuccess })
   const error = promote.error ?? rollback.error
+  // META-APP-SWITCH-GUARD-001 — the server refuses a stranding switch too; the page says why before anyone presses.
+  const [acknowledged, setAcknowledged] = useState(false)
+  const promoteBlocked = promotion.promote_guard?.safe === false
+  const rollbackBlocked = promotion.rollback_guard?.safe === false
+  const canPromote = promotion.eligible && !promoteBlocked
+  const canRollback = promotion.rollback_available && !rollbackBlocked
 
   return (
     <section data-testid="meta-candidate-promotion" className="rounded-2xl border border-border bg-surface p-5">
@@ -324,11 +344,19 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           <span>{c.narrowScopes} <span dir="ltr" className="font-mono">{dropped.join(', ')}</span></span>
         </label>
       )}
+      {promotion.eligible && promotion.promote_guard && !promotion.promote_guard.safe && <SwitchBlocked testId="meta-candidate-promote-blocked" guard={promotion.promote_guard} copy={c} />}
+      {promotion.rollback_available && promotion.rollback_guard && !promotion.rollback_guard.safe && <SwitchBlocked testId="meta-candidate-rollback-blocked" guard={promotion.rollback_guard} copy={c} />}
+      {(canPromote || canRollback) && (
+        <label className="mt-3 flex items-start gap-2 text-xs text-text-primary">
+          <input type="checkbox" data-testid="meta-candidate-acknowledge-switch" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
+          <span>{c.guard.acknowledge}</span>
+        </label>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           data-testid="meta-candidate-promote"
           variant="danger"
-          disabled={!promotion.eligible || (narrows && !narrowConfirmed)}
+          disabled={!canPromote || !acknowledged || (narrows && !narrowConfirmed)}
           loading={promote.isPending}
           onClick={() => { if (window.confirm(c.confirmPromote)) promote.mutate() }}
         >
@@ -337,7 +365,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
         <Button
           data-testid="meta-candidate-rollback"
           variant="secondary"
-          disabled={!promotion.rollback_available}
+          disabled={!canRollback || !acknowledged}
           loading={rollback.isPending}
           onClick={() => { if (window.confirm(c.confirmRollback)) rollback.mutate() }}
         >
@@ -346,6 +374,20 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
       </div>
       {error && <p className="mt-2 text-xs text-danger">{toApiError(error).message}</p>}
     </section>
+  )
+}
+
+/** Why a switch of the Live app is refused: how many connections it would strand, and which apps — hints, never IDs or secrets. */
+function SwitchBlocked({ guard, copy: c, testId }: { guard: MetaAppSwitchGuard; copy: Copy; testId: string }) {
+  return (
+    <div data-testid={testId} role="status" className="mt-3 rounded-xl border border-border bg-[var(--warning-background)] px-4 py-3 text-xs text-text-primary">
+      <p className="font-semibold text-warning">{c.guard.blocked}</p>
+      <p className="mt-1">{c.guard.reason(guard.affected)}</p>
+      {guard.unverified > 0 && <p className="mt-1 text-text-secondary">{c.guard.unverified(guard.unverified)}</p>}
+      <p className="mt-1 text-text-secondary">
+        {c.guard.apps}: <bdi dir="ltr">••••{guard.current_app_hint ?? '—'}</bdi> ({c.guard.current}) → <bdi dir="ltr">••••{guard.target_app_hint ?? '—'}</bdi> ({c.guard.target})
+      </p>
+    </div>
   )
 }
 
