@@ -1,3 +1,13 @@
+# CURRENT STATE — 2026-10-31 — #894 and #895 deployed; Moyasar waits on rotated keys
+
+- **#895** deployed at `b02e73c3`. The payment webhook now refuses forged events: on Production, an empty body twice gives 401 and 401 (it was 200, then 500); a wrong token gives 401; an unknown gateway gives 404; health 200. PAY-WEBHOOK-REFUSAL-001 is VERIFIED.
+- **Moyasar** is BLOCKED_EXTERNAL_CREDENTIALS. production:check: SUBSCRIPTION_PROVIDER sandbox; the three MOYASAR_* variables are missing. The Owner rotates the exposed keys and edits the env file; Claude then re-runs the deploy and the check. Claude never enters payment keys.
+- **#894** (docs, META-SESSION-190-001 VERIFIED) deployed at `9eab6f46`.
+- **Still waiting on the Owner:**
+  - reconnect the «Project 1» Meta connection;
+  - an admin sign-in, for the SaaS report test;
+  - Meta Developers: business_management, Basic settings, Business Verification.
+
 # CURRENT STATE — 2026-10-30 (late) — #892 and #893 deployed; Meta 190 connection now asks for reconnection
 
 - **#892** deployed at `31919faa` (run 41089272925): the deletion callback matches the user id exactly (fail-first). Production: forged and unsigned callbacks return 401. A genuinely signed call can only come from Meta (no secret is used outside the server), so the fix's live path is proven by tests plus deploy, not by a real Meta call.
