@@ -26,6 +26,17 @@ describe('SaaS test workspace', () => {
     await waitFor(() => expect(createMetaSaasTestWorkspace).toHaveBeenCalledWith(EMAIL))
   })
 
+  it('shows the one-time set-password link from the creation response', async () => {
+    const LINK = 'https://campaignshub.test/reset-password?token=one-time&email=x'
+    vi.mocked(createMetaSaasTestWorkspace).mockResolvedValue({ set_password_link: LINK } as never)
+    const { rerender } = renderWithProviders(<MetaSaasTestWorkspace state={none} ar={false} />, { locale: 'en' })
+    fireEvent.change(screen.getByTestId('meta-saas-test-workspace-email'), { target: { value: EMAIL } })
+    fireEvent.click(screen.getByTestId('meta-saas-test-workspace-create'))
+    await waitFor(() => expect(createMetaSaasTestWorkspace).toHaveBeenCalled())
+    rerender(<MetaSaasTestWorkspace state={{ exists: true, active: true, tenant_id: 't', login_email: EMAIL, steps: {} }} ar={false} />)
+    expect(await screen.findByTestId('meta-saas-test-workspace-link')).toHaveTextContent(LINK)
+  })
+
   it.each([['ar', true], ['en', false]] as const)('ticks only the journey steps the server read from rows (%s)', (_l, ar) => {
     const steps = { oauth: true, discovery: true, binding: false, sync: false }
     renderWithProviders(<MetaSaasTestWorkspace state={{ exists: true, active: true, tenant_id: 't', login_email: EMAIL, steps }} ar={ar} />, { locale: ar ? 'ar' : 'en' })

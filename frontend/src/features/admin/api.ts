@@ -823,7 +823,8 @@ export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandida
   ? { default: target, confirm: true, approve_primary: true, acknowledge_existing_unchanged: true }
   : { default: target, confirm: true })
 export const confirmMetaSaasReview = (): Promise<MetaCandidateState> => putData(`${META_SAAS}/review`, { business_verified: true, advanced_access_granted: true })
-export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState> => postData(`${META_SAAS}/test-workspace`, { email })
+/** The set-password link is in this response only, to be shown once to the admin who created the workspace. */
+export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState & { set_password_link?: string | null; mail_delivery?: string | null }> => postData(`${META_SAAS}/test-workspace`, { email })
 export const closeMetaSaasTestWorkspace = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/test-workspace`)
 export const withdrawMetaSaasReview = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/review`)
 

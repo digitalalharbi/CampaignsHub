@@ -93,6 +93,22 @@ final class MetaSaasTestWorkspaceTest extends TestCase
             ->assertStatus(409)->assertJsonPath('errors.email.0', 'test_workspace_exists');
     }
 
+    /** With the mail transport failing, the creating admin still gets a working single-use link — once, and never again. */
+    public function test_the_set_password_link_is_shown_once_and_lets_the_owner_set_a_password(): void
+    {
+        $res = $this->actingAs($this->admin, 'sanctum')->postJson(self::BASE.'/test-workspace', ['email' => self::EMAIL])->assertCreated();
+        $link = (string) $res->json('data.set_password_link');
+        $this->assertStringContainsString('/reset-password?token=', $link);
+        $this->assertStringNotContainsString($link, $this->actingAs($this->admin, 'sanctum')->getJson(self::BASE)->getContent(), 'shown once only');
+
+        parse_str((string) parse_url($link, PHP_URL_QUERY), $q);
+        $password = 'Chosen-by-the-owner-'.bin2hex(random_bytes(4));
+        $this->postJson('/api/v1/auth/reset-password', ['email' => $q['email'], 'token' => $q['token'], 'password' => $password, 'password_confirmation' => $password])->assertOk();
+        $this->assertTrue(Hash::check($password, (string) $this->owner()->fresh()->password));
+        // Single use.
+        $this->postJson('/api/v1/auth/reset-password', ['email' => $q['email'], 'token' => $q['token'], 'password' => $password.'x', 'password_confirmation' => $password.'x'])->assertStatus(422);
+    }
+
     public function test_an_existing_account_cannot_become_the_test_login(): void
     {
         $this->actingAs($this->admin, 'sanctum')->postJson(self::BASE.'/test-workspace', ['email' => $this->admin->email])

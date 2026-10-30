@@ -39,7 +39,8 @@ use InvalidArgumentException;
  * (`MetaAppRouting::saasEligibilityFor`). Every customer tenant keeps connecting through Live, so testing the new app cannot open a
  * second connection beside a customer's, re-discover their accounts or touch their sync.
  *
- * The user gets an unusable random password and a reset link by email, so no password is ever chosen here, shown or sent through chat.
+ * The user gets an unusable random password and a single-use set-password link (emailed, and shown once to the creating admin), so
+ * no password is ever chosen here, shown or sent through chat.
  */
 final class MetaSaasTestWorkspace
 {
@@ -70,7 +71,7 @@ final class MetaSaasTestWorkspace
         return Tenant::query()->where('slug', self::SLUG)->first();
     }
 
-    /** @return array{tenant: Tenant, user: User} */
+    /** @return array{tenant: Tenant, user: User, set_password_link: string|null, delivery: string|null} */
     public function provision(string $email, ?int $actorId): array
     {
         $email = Str::lower(trim($email));
@@ -119,10 +120,11 @@ final class MetaSaasTestWorkspace
             $this->context->setTenantId($previous);
         }
 
-        // The Owner sets the password from their own inbox; nothing here knows it.
-        $this->resets->request($email);
+        // The Owner sets the password from a single-use link — emailed, and handed back once for the admin page because the mail
+        // transport may be failing. Nothing here knows the password.
+        $issued = $this->resets->issueForOperator($email);
 
-        return ['tenant' => $tenant->refresh(), 'user' => $user];
+        return ['tenant' => $tenant->refresh(), 'user' => $user, 'set_password_link' => $issued['link'] ?? null, 'delivery' => $issued['delivery'] ?? null];
     }
 
     /** Close the workspace to the SaaS app (it keeps its data); the next test needs it re-opened by an admin. */

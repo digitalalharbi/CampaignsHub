@@ -97,6 +97,36 @@ final class PasswordResetService
     }
 
     /**
+     * META-SAAS-APP-001 — a set-password link for an account a platform admin just provisioned, emailed AND handed back.
+     *
+     * The mail is attempted as for any reset, but the link is also returned so the admin page can show it ONCE to the operator who
+     * created the account: Production's mail transport can be failing (MAIL-HEALTH-001), and a test login nobody can reach blocks
+     * the test. It is the same single-use, expiring token as a reset; it is never logged, stored in plain text or shown again.
+     *
+     * @return array{link: string, delivery: string}|null null when no account matches
+     */
+    public function issueForOperator(string $email): ?array
+    {
+        $email = Str::lower(trim($email));
+        $user = User::where('email', $email)->first();
+        if ($user === null) {
+            return null;
+        }
+
+        $secret = $this->issue($email, 'password_reset', self::TTL_MINUTES);
+        $link = $this->link($email, $secret);
+        $delivery = $this->mailer->send(
+            recipient: $email,
+            mail: new CredentialMail(purpose: CredentialMail::PASSWORD_RESET, lang: 'ar', url: $link, expiresInMinutes: self::TTL_MINUTES),
+            kind: 'password_reset',
+            template: 'mail.credential',
+            userId: (int) $user->getKey(),
+        );
+
+        return ['link' => $link, 'delivery' => $delivery];
+    }
+
+    /**
      * The first message a new team member receives: choose a password and sign in.
      *
      * `TeamController::invite` provisions the account with a random 24-character password and, until

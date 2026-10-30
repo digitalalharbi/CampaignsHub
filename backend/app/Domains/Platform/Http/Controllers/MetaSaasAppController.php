@@ -209,7 +209,13 @@ final class MetaSaasAppController extends Controller
 
         $this->audit->log(action: 'platform.integration.meta_saas.test_workspace_created', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: ['tenant_id' => (string) $created['tenant']->id]);
 
-        return ApiResponse::success($this->payload(), 'Test workspace created; a password link was emailed.', status: 201);
+        // The link is in THIS response only — the page shows it once to the admin who created the workspace; it is never stored or
+        // returned again (the payload never carries it).
+        return ApiResponse::success(
+            [...$this->payload(), 'set_password_link' => $created['set_password_link'], 'mail_delivery' => $created['delivery']],
+            'Test workspace created.',
+            status: 201,
+        );
     }
 
     /** Close the test workspace to the SaaS app. Its data stays; nothing is deleted. */
