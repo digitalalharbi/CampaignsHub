@@ -110,6 +110,18 @@ final class MetaSaasReadinessTest extends TestCase
         $this->assertSame('not_verified', $this->statuses()['account_discovery']);
     }
 
+    public function test_the_deletion_callback_url_is_on_the_public_api_origin_not_the_requests_scheme_and_host(): void
+    {
+        // Production showed `http://campaignshub.io/...`: `route()` followed the proxied request, and Meta refuses a non-https URL.
+        config(['ad_platforms.redirect_base' => 'https://api.example.test']);
+
+        $items = $this->actingAs($this->admin, 'sanctum')->getJson('http://campaignshub.test/api/v1/admin/settings/integrations/meta-saas')
+            ->assertOk()->json('data.readiness');
+        $detail = array_column($items, 'detail', 'key')['deletion_callback'];
+
+        $this->assertSame('https://api.example.test/api/v1/webhooks/data-deletion/meta-saas', $detail['callback_url']);
+    }
+
     public function test_the_deletion_callback_is_ready_only_once_meta_really_called_it(): void
     {
         $this->configure();

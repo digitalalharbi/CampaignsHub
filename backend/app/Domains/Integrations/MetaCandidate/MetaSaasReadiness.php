@@ -58,7 +58,10 @@ final class MetaSaasReadiness
                 'redirect_uri' => ProviderCatalogue::get('meta')->redirectUri(),
             ]],
             ['key' => 'deletion_callback', 'status' => $callbackSeen ? 'ready' : ($hasSecret ? 'not_verified' : 'needs_credentials'), 'detail' => [
-                'callback_url' => route('api.v1.data-deletion.callback', ['provider' => 'meta-saas']),
+                // The public API origin, as the redirect URI uses: `route()` follows the proxied request (http, the SPA host),
+                // and Meta refuses a non-https callback.
+                'callback_url' => rtrim((string) config('ad_platforms.redirect_base', config('app.url')), '/')
+                    .route('api.v1.data-deletion.callback', ['provider' => 'meta-saas'], false),
                 'verified_with' => 'saas_app_secret',
                 'received_from_meta' => $callbackSeen,
             ]],
