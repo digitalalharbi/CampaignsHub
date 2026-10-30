@@ -1,3 +1,15 @@
+# CURRENT STATE — 2026-10-30 (day) — Meta switch guard; SaaS app = NEW independent app (Owner correction)
+
+**Owner correction (binding):**
+- The Meta SaaS app is a NEW app, independent of Live and Candidate. Its goal is Meta's official approval for public use.
+- Replacing the current apps is a separate future phase (approval, migration plan, no interruption).
+- Forbidden: changing Live or Candidate, moving connections, promote/rollback.
+- Not VERIFIED until a real round trip from the new Meta app and Meta's approval.
+
+**In flight:** `fix/meta-switch-guard` (META-APP-SWITCH-GUARD-001). Promote and rollback refuse to strand connections the current Live app issued. Full backend suite: 5742 passed.
+
+**Next (Owner, 2026-10-30):** an isolated SaaS test workspace inside CampaignsHub. Before Meta's approval, the SaaS app is usable only in designated test workspaces, never in a customer workspace. Then the full journey: OAuth → discovery → binding → sync → campaigns → metrics → reports → reconnect/disconnect.
+
 # CURRENT STATE — 2026-10-30 — META-SAAS-APP-001 at maximum readiness on #871; AUTH-LOGIN-UX-002 queued
 
 **#871 (`feat/meta-saas-app`, `500345da`), rebased on main `bc422bf9`:**
