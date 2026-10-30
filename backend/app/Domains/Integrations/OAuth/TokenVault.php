@@ -189,6 +189,14 @@ final class TokenVault
             ], static fn ($v) => $v !== null))->save();
 
             /*
+             * META-SESSION-190-001 — a new consent is what an `error` connection was waiting for, so it is connected again. Only `error`:
+             * a disconnected or revoked row keeps the status somebody chose for it.
+             */
+            if ($existing->status === 'error') {
+                $existing->forceFill(['status' => 'connected', 'last_error' => null])->save();
+            }
+
+            /*
              * A NEW authorisation clears a remembered insights refusal — META-INSIGHTS-GRANT-001.
              *
              * Separate from the `array_filter` above because null is the value being written, and
