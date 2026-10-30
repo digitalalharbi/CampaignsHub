@@ -57,6 +57,9 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Campaigns/Console/RefreshCreativeCoversCommand.php' => 'caches media files for every creative that lacks one; reads media URLs, never a figure, for no viewer',
         'Domains/Campaigns/Jobs/CacheCreativeCoverJob.php' => 'fetches one creative\'s media file off the request path; reads its media URL, never a figure, for no viewer',
         'Console/Commands/DemoRemoveCommand.php' => 'removes seeded rows',
+        // META-SAAS-APP-001 — the admin's evidence that the SaaS test workspace's OWN accounts received a metric row; an existence
+        // check scoped to that workspace's connection, never a figure, for no project viewer.
+        'Domains/Integrations/MetaCandidate/MetaSaasTestWorkspace.php' => 'existence check on the test workspace\'s own accounts; reads no figure',
         // Models, relations and policies — not readers of a project's figures.
         'Domains/Campaigns/Models/ExternalAd.php' => 'relation',
         'Domains/Campaigns/Models/CreativeGroup.php' => 'relation',
