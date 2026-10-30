@@ -82,7 +82,7 @@ final class MetaCandidatePromotionTest extends TestCase
 
     public function test_promotion_is_refused_without_a_successful_round_trip(): void
     {
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'acknowledge_app_switch' => true])
             ->assertStatus(409)->assertJsonPath('errors.promotion.0', 'latest_round_trip_not_succeeded');
 
         // A failed run does not license it either.
@@ -91,7 +91,7 @@ final class MetaCandidatePromotionTest extends TestCase
         parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
         $this->get("/api/v1/oauth/ads/meta/callback?code=abc&state={$q['state']}");
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertStatus(409);
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'acknowledge_app_switch' => true])->assertStatus(409);
         $this->assertSame('live-app-111111', $this->live()->get('client_id'));
     }
 
@@ -101,7 +101,7 @@ final class MetaCandidatePromotionTest extends TestCase
         config()->set('ad_platforms.meta_candidate.client_secret', 'rotated-after-the-test-XXXX');
         app(MetaCandidateCredentials::class)->forgetCache();
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'acknowledge_app_switch' => true])
             ->assertStatus(409)->assertJsonPath('errors.promotion.0', 'credentials_changed_since_round_trip');
     }
 
@@ -110,8 +110,8 @@ final class MetaCandidatePromotionTest extends TestCase
         $this->passRoundTrip();
         $tenantUser = User::create(['name' => 'T', 'email' => 't@agency.test', 'password' => 'secret123']);
 
-        $this->actingAs($tenantUser, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertForbidden();
-        $this->actingAs($tenantUser, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true])->assertForbidden();
+        $this->actingAs($tenantUser, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'acknowledge_app_switch' => true])->assertForbidden();
+        $this->actingAs($tenantUser, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true, 'acknowledge_app_switch' => true])->assertForbidden();
         $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote')->assertStatus(422);
 
         $this->assertSame('live-app-111111', $this->live()->get('client_id'));
@@ -121,11 +121,14 @@ final class MetaCandidatePromotionTest extends TestCase
     {
         $tenant = Tenant::create(['name' => 'A', 'slug' => 'a-'.uniqid(), 'status' => 'active']);
         $connection = $this->liveConnection($tenant);
+        // META-APP-SWITCH-GUARD-001 — a token the CANDIDATE app issued is not stranded by promoting that app, so the switch may proceed;
+        // one the current Live app issued would refuse it (MetaAppSwitchGuardTest).
+        $connection->forceFill(['issuing_app_id' => 'cand-app-222222'])->save();
         $before = [ProviderConnection::withoutGlobalScopes()->get()->toArray(), IntegrationCredential::withoutGlobalScopes()->get()->map->revealPayload()->all()];
 
         $this->passRoundTrip();
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true, 'acknowledge_app_switch' => true])
             ->assertOk()
             ->assertJsonPath('data.promotion.rollback_available', true)
             ->assertJsonPath('data.promotion.reason', 'candidate_already_live');
@@ -153,9 +156,9 @@ final class MetaCandidatePromotionTest extends TestCase
     public function test_rollback_restores_the_previous_live_app_exactly_and_only_once(): void
     {
         $this->passRoundTrip();
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true, 'acknowledge_app_switch' => true])->assertOk();
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true])
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true, 'acknowledge_app_switch' => true])
             ->assertOk()->assertJsonPath('data.promotion.rollback_available', false);
 
         $live = $this->live();
@@ -167,7 +170,7 @@ final class MetaCandidatePromotionTest extends TestCase
         $this->assertFalse(ProviderConfiguration::query()->where('provider', 'meta')->exists());
         $this->assertFalse(ProviderConfiguration::query()->where('provider', 'meta.previous_live')->exists());
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true])->assertStatus(409);
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true, 'acknowledge_app_switch' => true])->assertStatus(409);
         $this->assertDatabaseHas('audit_logs', ['action' => 'platform.integration.meta.rolled_back']);
     }
 
@@ -179,11 +182,11 @@ final class MetaCandidatePromotionTest extends TestCase
         $settings->forgetCache();
 
         $this->passRoundTrip();
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true, 'acknowledge_app_switch' => true])->assertOk();
         $this->assertSame('verify-me', $this->live()->get('webhook_verify_token'), 'Promotion leaves the webhook fields.');
         $this->assertNull(ProviderConfiguration::query()->where('provider', 'meta')->value('last_test_status'));
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true, 'acknowledge_app_switch' => true])->assertOk();
 
         $live = $this->live();
         $this->assertSame('stored-live-4444', $live->get('client_id'));
@@ -202,7 +205,7 @@ final class MetaCandidatePromotionTest extends TestCase
         $this->actingAs($this->platformOwner, 'sanctum')->getJson(self::BASE)
             ->assertJsonPath('data.promotion.dropped_scopes', ['ads_management', 'business_management']);
 
-        foreach ([['confirm' => true], ['confirm' => true, 'confirm_narrow_scopes' => false]] as $body) {
+        foreach ([['confirm' => true, 'acknowledge_app_switch' => true], ['confirm' => true, 'confirm_narrow_scopes' => false, 'acknowledge_app_switch' => true]] as $body) {
             $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', $body)
                 ->assertStatus(409)
                 ->assertJsonPath('errors.promotion.0', 'scopes_would_narrow')
@@ -219,7 +222,7 @@ final class MetaCandidatePromotionTest extends TestCase
         $this->passRoundTrip();
 
         $this->actingAs($this->platformOwner, 'sanctum')
-            ->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
+            ->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true, 'acknowledge_app_switch' => true])->assertOk();
 
         $after = json_decode((string) DB::table('audit_logs')->where('action', 'platform.integration.meta.promoted')->value('after'), true);
         $this->assertSame(['ads_management', 'business_management'], $after['dropped_scopes']);
@@ -233,7 +236,7 @@ final class MetaCandidatePromotionTest extends TestCase
         app(MetaCandidateCredentials::class)->forgetCache();
         $this->passRoundTrip();
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'acknowledge_app_switch' => true])->assertOk();
 
         $after = json_decode((string) DB::table('audit_logs')->where('action', 'platform.integration.meta.promoted')->value('after'), true);
         $this->assertSame([], $after['dropped_scopes']);
@@ -244,12 +247,12 @@ final class MetaCandidatePromotionTest extends TestCase
     public function test_a_second_promotion_of_the_same_candidate_is_refused(): void
     {
         $this->passRoundTrip();
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true, 'acknowledge_app_switch' => true])->assertOk();
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'acknowledge_app_switch' => true])
             ->assertStatus(409)->assertJsonPath('errors.promotion.0', 'candidate_already_live');
         // The rollback point still names the ORIGINAL Live app.
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true, 'acknowledge_app_switch' => true])->assertOk();
         $this->assertSame('live-app-111111', $this->live()->get('client_id'));
     }
 }

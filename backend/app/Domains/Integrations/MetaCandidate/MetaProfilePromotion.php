@@ -81,6 +81,28 @@ final class MetaProfilePromotion
         return array_values(array_diff($this->settings->scopes('meta'), $this->candidate->scopes()));
     }
 
+    /**
+     * The App ID Live would have after a rollback: the stored value kept in the slot, else the environment's — exactly what
+     * `rollback()` restores. Null when there is no rollback point.
+     */
+    public function rollbackTarget(): ?string
+    {
+        $slot = ProviderConfiguration::query()->where('provider', self::PREVIOUS_LIVE)->first();
+        if ($slot === null) {
+            return null;
+        }
+        $stored = ($slot->credentials ?? [])['values']['client_id'] ?? null;
+        $env = config('ad_platforms.platforms.meta.client_id');
+
+        return is_string($stored) && $stored !== '' ? $stored : (is_string($env) && $env !== '' ? $env : null);
+    }
+
+    /** The App ID Live would have after a promotion. */
+    public function promotionTarget(): ?string
+    {
+        return $this->candidate->value('client_id');
+    }
+
     public function rollbackAvailable(): bool
     {
         return ProviderConfiguration::query()->where('provider', self::PREVIOUS_LIVE)->exists();

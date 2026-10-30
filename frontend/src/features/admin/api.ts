@@ -767,7 +767,12 @@ export interface MetaCandidateState {
   }
   latest_run: MetaCandidateRun | null
   /** Present once promotion exists server-side. `reason` names why it is refused. */
-  promotion?: { eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean }
+  promotion?: {
+    eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean
+    /** META-APP-SWITCH-GUARD-001 — whether switching Live to that app would strand connections the current app issued. */
+    promote_guard?: MetaAppSwitchGuard
+    rollback_guard?: MetaAppSwitchGuard | null
+  }
   /** META-SAAS-APP-001 — the SaaS app only: which app NEW connections use, and whether the SaaS app may be chosen yet. */
   routing?: { default_for_new_connections: 'live' | 'saas'; eligible: boolean; reason: string | null }
   connections_by_app?: { live: number; saas: number }
@@ -783,6 +788,10 @@ export interface MetaSaasReadinessItem { key: MetaSaasReadinessKey; status: Meta
 
 /* META-SAAS-APP-001 — the third, independent Meta app: same shape, its own endpoints, no promote/rollback. */
 const META_SAAS = '/admin/settings/integrations/meta-saas'
+export interface MetaAppSwitchGuard {
+  safe: boolean; reason: string | null; affected: number; unverified: number; current_app_hint: string | null; target_app_hint: string | null
+}
+
 export const fetchMetaSaas = (): Promise<MetaCandidateState> => getData(META_SAAS)
 export const saveMetaSaas = (body: { client_id?: string; client_secret?: string; config_id?: string; scopes?: string[] }): Promise<MetaCandidateState & { fields_changed: string[] }> => putData(META_SAAS, body)
 export const forgetMetaSaasCredential = (key: string): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/credentials/${key}`)
@@ -816,12 +825,14 @@ export function promoteMetaCandidate(confirmNarrowScopes = false): Promise<MetaC
     confirm: true,
     // A separate, named confirmation: Live would stop requesting `dropped_scopes`.
     confirm_narrow_scopes: confirmNarrowScopes,
+    // META-APP-SWITCH-GUARD-001 — sent only after the operator ticked the acknowledgement on the page.
+    acknowledge_app_switch: true,
   })
 }
 
 /** One step back to the previous Live Meta app. */
 export function rollbackMetaLive(): Promise<MetaCandidateState> {
-  return postData('/admin/settings/integrations/meta-candidate/rollback', { confirm: true })
+  return postData('/admin/settings/integrations/meta-candidate/rollback', { confirm: true, acknowledge_app_switch: true })
 }
 
 // ---- Email operations (MAIL-014) -----------------------------------------------------------------

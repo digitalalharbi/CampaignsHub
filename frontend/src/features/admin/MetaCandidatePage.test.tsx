@@ -120,7 +120,11 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true)
     renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByTestId('meta-candidate-promote'))
+    // META-APP-SWITCH-GUARD-001 — nothing switches until the named acknowledgement is ticked.
+    expect(await screen.findByTestId('meta-candidate-promote')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('meta-candidate-acknowledge-switch'))
+
+    fireEvent.click(screen.getByTestId('meta-candidate-promote'))
     expect(promoteMetaCandidate).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByTestId('meta-candidate-promote'))
@@ -147,9 +151,33 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
     expect(box.closest('label')).toHaveTextContent('ads_management, business_management')
 
     fireEvent.click(box)
+    fireEvent.click(screen.getByTestId('meta-candidate-acknowledge-switch'))
     fireEvent.click(promote)
     await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(true))
     confirm.mockRestore()
+  })
+
+  /*
+   * META-APP-SWITCH-GUARD-001 — a rollback that would strand connections is blocked with its reason and count, and no
+   * acknowledgement re-enables it. Counts come from the server's guard; nothing here is a typed number.
+   */
+  it.each([['en'], ['ar']] as const)('blocks a stranding rollback with the reason and the number of connections (%s)', async (locale) => {
+    const guard = { safe: false, reason: 'connections_issued_by_current_app', affected: 2, unverified: 1, current_app_hint: 'AAAA', target_app_hint: 'BBBB' }
+    vi.mocked(fetchMetaCandidate).mockResolvedValue({
+      ...state(),
+      promotion: { eligible: false, reason: 'candidate_already_live', rollback_available: true, rollback_guard: guard },
+    })
+    renderWithProviders(<MetaCandidatePage />, { locale })
+
+    const blocked = await screen.findByTestId('meta-candidate-rollback-blocked')
+    expect(blocked).toHaveTextContent(String(guard.affected))
+    expect(blocked).toHaveTextContent(String(guard.unverified))
+    expect(blocked).toHaveTextContent(guard.current_app_hint)
+    expect(blocked).toHaveTextContent(guard.target_app_hint)
+    expect(screen.getByTestId('meta-candidate-rollback')).toBeDisabled()
+    expect(screen.queryByTestId('meta-candidate-acknowledge-switch')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('meta-candidate-rollback'))
+    expect(rollbackMetaLive).not.toHaveBeenCalled()
   })
 
   it('saves only the fields that were typed', async () => {
