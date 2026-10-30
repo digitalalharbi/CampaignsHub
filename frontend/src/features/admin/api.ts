@@ -778,11 +778,18 @@ export interface MetaCandidateState {
   connections_by_app?: { live: number; saas: number }
   /** META-SAAS-APP-001 — the SaaS app only: each readiness item and the status the server read from its own evidence. */
   readiness?: MetaSaasReadinessItem[]
+  /** META-SAAS-APP-001 — the isolated test workspace and its journey, each step read from real rows. */
+  test_workspace?: MetaSaasTestWorkspaceState
+}
+
+export type MetaSaasJourneyStep = 'oauth' | 'discovery' | 'binding' | 'sync' | 'metrics' | 'reports' | 'disconnect'
+export interface MetaSaasTestWorkspaceState {
+  exists: boolean; active: boolean; tenant_id: string | null; login_email: string | null; steps: Partial<Record<MetaSaasJourneyStep, boolean>>
 }
 
 export type MetaSaasReadinessStatus = 'ready' | 'not_verified' | 'needs_credentials' | 'owner_action'
 export type MetaSaasReadinessKey =
-  | 'legal_pages' | 'redirect_uri' | 'deletion_callback' | 'credentials' | 'meta_dashboard' | 'oauth_round_trip'
+  | 'legal_pages' | 'redirect_uri' | 'deletion_callback' | 'credentials' | 'test_workspace' | 'meta_dashboard' | 'oauth_round_trip'
   | 'account_discovery' | 'sync_and_reports' | 'business_verification' | 'app_review' | 'new_connections'
 export interface MetaSaasReadinessItem { key: MetaSaasReadinessKey; status: MetaSaasReadinessStatus; detail: Record<string, unknown> }
 
@@ -799,6 +806,8 @@ export const startMetaSaasTest = (): Promise<{ run: MetaCandidateRun; authorizat
 /** Which Meta app NEW customer connections use. Existing connections never change app. */
 export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandidateState> => putData(`${META_SAAS}/routing`, { default: target, confirm: true })
 export const confirmMetaSaasReview = (): Promise<MetaCandidateState> => putData(`${META_SAAS}/review`, { business_verified: true, advanced_access_granted: true })
+export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState> => postData(`${META_SAAS}/test-workspace`, { email })
+export const closeMetaSaasTestWorkspace = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/test-workspace`)
 export const withdrawMetaSaasReview = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/review`)
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {

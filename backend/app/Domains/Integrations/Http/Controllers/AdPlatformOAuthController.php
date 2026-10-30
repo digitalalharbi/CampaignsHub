@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
+use App\Domains\Integrations\MetaCandidate\MetaSaasTestWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
@@ -147,8 +148,13 @@ final class AdPlatformOAuthController extends Controller
         $metaProfile = MetaCredentialProfile::Live;
         if ($creds->platform === 'meta') {
             $metaProfile = MetaAppRouting::forNewConnection($validated['app_profile'] ?? null);
+            // The SaaS test workspace connects through the new app ONLY: a Live connection there would mix the two apps' evidence.
+            if (MetaSaasTestWorkspace::isTestTenant($tenant->tenantId())) {
+                $metaProfile = MetaCredentialProfile::Saas;
+            }
             // The SaaS app issues a customer connection only after it passed its test with the credentials configured now — asked by name or not.
-            if ($metaProfile === MetaCredentialProfile::Saas && ! ($eligibility = MetaAppRouting::saasEligibility())['eligible']) {
+            // Before Meta's approval is recorded, only the designated test workspace may use it (`saasEligibilityFor`).
+            if ($metaProfile === MetaCredentialProfile::Saas && ! ($eligibility = MetaAppRouting::saasEligibilityFor($tenant->tenantId()))['eligible']) {
                 return ApiResponse::error(
                     message: 'The SaaS Meta app is not available for new connections yet.',
                     errors: ['app_profile' => [$eligibility['reason']]],
@@ -213,13 +219,17 @@ final class AdPlatformOAuthController extends Controller
     public function metaApps(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.connect'), 403);
-        $eligibility = MetaAppRouting::saasEligibility();
+        $tenantId = app(TenantContext::class)->tenantId();
+        $eligibility = MetaAppRouting::saasEligibilityFor($tenantId);
+        $testWorkspace = MetaSaasTestWorkspace::isTestTenant($tenantId);
 
         return ApiResponse::success([
-            'default' => MetaAppRouting::default()->value,
+            'default' => $testWorkspace ? MetaCredentialProfile::Saas->value : MetaAppRouting::default()->value,
+            'test_workspace' => $testWorkspace,
             'apps' => [
-                ['key' => MetaCredentialProfile::Live->value, 'available' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->isConfigured()],
-                ['key' => MetaCredentialProfile::Saas->value, 'available' => $eligibility['eligible']],
+                // The test workspace is SaaS-only.
+                ['key' => MetaCredentialProfile::Live->value, 'available' => ! $testWorkspace && PlatformCredentials::forMeta(MetaCredentialProfile::Live)->isConfigured()],
+                ['key' => MetaCredentialProfile::Saas->value, 'available' => $eligibility['eligible'], 'reason' => $eligibility['reason']],
             ],
         ], 'Meta apps for new connections.');
     }

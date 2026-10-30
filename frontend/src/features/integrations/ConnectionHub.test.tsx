@@ -15,7 +15,7 @@ import { renderWithProviders } from '@/test/utils'
 
 const hub = vi.hoisted(() => ({ data: { connections: [], connectable: [] } as Hub }))
 const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; projectId?: string | null; workspaceId?: string | null; appProfile?: string }> }))
-const metaApps = vi.hoisted(() => ({ saas: false }))
+const metaApps = vi.hoisted(() => ({ saas: false, testWorkspace: false }))
 
 vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api')>()
@@ -28,7 +28,9 @@ vi.mock('./api', async (importOriginal) => {
       meta: { total: 0, per_page: 50, current_page: 1, last_page: 1 },
     }),
     getAccountLogs: () => Promise.resolve({ runs: [] }),
-    fetchMetaApps: () => Promise.resolve({ default: 'live', apps: [{ key: 'live', available: true }, { key: 'saas', available: metaApps.saas }] }),
+    fetchMetaApps: () => Promise.resolve(metaApps.testWorkspace
+      ? { default: 'saas', test_workspace: true, apps: [{ key: 'live', available: false }, { key: 'saas', available: metaApps.saas, reason: metaApps.saas ? null : 'not_configured' }] }
+      : { default: 'live', apps: [{ key: 'live', available: true }, { key: 'saas', available: metaApps.saas }] }),
     startPlatformOAuth: (provider: string, workspaceId?: string | null, projectId?: string | null, appProfile?: string | null) => {
       started.calls.push({ provider, projectId, workspaceId, ...(appProfile && appProfile !== 'live' ? { appProfile } : {}) })
       return Promise.resolve({ authorization_url: `https://platform.test/${provider}` })
@@ -272,6 +274,30 @@ describe('the connection flow', () => {
     fireEvent.click(await screen.findByTestId('provider-pick-meta'))
     await screen.findByTestId('flow-authorise')
     expect(screen.queryByTestId('flow-meta-app')).not.toBeInTheDocument()
+  })
+
+  /** META-SAAS-APP-001 — the isolated test workspace connects through the SaaS app only, and says so when that app is not ready. */
+  it('offers only the SaaS app in the test workspace, and explains when it is not ready', async () => {
+    metaApps.testWorkspace = true
+    renderWithProviders(<IntegrationsPage />)
+    fireEvent.click(await screen.findByTestId('hub-connect-empty'))
+    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    expect(await screen.findByTestId('flow-meta-saas-not-ready')).toBeInTheDocument()
+    expect(screen.queryByTestId('flow-meta-app-live')).not.toBeInTheDocument()
+    metaApps.testWorkspace = false
+  })
+
+  it('in a ready test workspace the only choice is the SaaS app', async () => {
+    metaApps.testWorkspace = true
+    metaApps.saas = true
+    renderWithProviders(<IntegrationsPage />)
+    fireEvent.click(await screen.findByTestId('hub-connect-empty'))
+    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    expect(await screen.findByTestId('flow-meta-app-saas')).toBeChecked()
+    expect(screen.queryByTestId('flow-meta-app-live')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('flow-meta-saas-not-ready')).not.toBeInTheDocument()
+    metaApps.testWorkspace = false
+    metaApps.saas = false
   })
 
   /** Three stages named before the reader leaves, so «how much more of this is there» has an answer. */
