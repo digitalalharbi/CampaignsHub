@@ -1,3 +1,12 @@
+# CURRENT STATE — 2026-10-30 (evening) — Meta SaaS real round trip and test connection; #889 deployed
+
+- **#889** (https data-deletion callback) deployed at `ec176e58` (run 41056283746). The readiness page now shows `https://api.campaignshub.io/api/v1/webhooks/data-deletion/meta-saas`; unsigned and bad-signature POSTs return 401.
+- **Meta SaaS (App ID ••••8530):** the secret was rotated (••••d56e); the admin round trip passed; granted scopes are ads_management, ads_read and public_profile; 1 account was discovered.
+- **Test workspace:** created by the Owner; the SaaS connection is bound and synced. Journey: oauth, discovery, binding and sync are true; metrics, reports and disconnect are not yet.
+- **Live unchanged:** 2 connections, 52 accounts, 3 synced in 24h, oldest sync 2026-10-25 20:01, 0 moved. Primary is locked, and new connections still go to Live.
+- **Next:** metrics need an ad account with delivery (or proof that zero is correct); a report in the test workspace (test-user session); disconnect last. Meta: Business Verification, App Review, Advanced Access (Owner).
+- **Open question:** only 3 of 52 Live accounts synced in the last 24h, and the oldest is 2026-10-25. Investigate whether that is unbound accounts or stalled sync.
+
 # CURRENT STATE — 2026-10-30 (afternoon) — #884, #886, #885 and #887 deployed; SaaS test GO for the Owner
 
 - **#884** (test workspace) at `cc46fbdb`, then **#886** (modes) and **#885** (records), deployed together at `d8143a8f` (run 41008742683; the bundle contains the modes screen). **#887** (AUTH-LOGIN-UX-002) deployed at `36ec24bd` (run 41022698292).
