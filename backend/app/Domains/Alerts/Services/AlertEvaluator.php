@@ -638,9 +638,26 @@ final class AlertEvaluator
         $days = (int) ($rule->threshold['days'] ?? 7);
         $cutoff = $now->copy()->addDays($days);
 
-        return ProviderConnection::query()
+        /*
+         * META-SESSION-190-001 — a connection whose token the provider already refused (`error`) needs the same act as one about to
+         * expire, sooner. It is named first and only once: an `error` row is not also reported as expiring.
+         */
+        $refused = ProviderConnection::query()
+            ->where('status', 'error')
+            ->get()
+            ->map(fn (ProviderConnection $c) => [
+                'entity_type' => ProviderConnection::class,
+                'entity_id' => (string) $c->id,
+                'project_id' => null,
+                'title' => 'Connection needs reconnecting',
+                'message' => 'The '.$c->provider.' connection was refused by the provider and has stopped syncing. Reconnect it to resume.',
+                'context' => ['provider' => $c->provider, 'error' => $c->last_error],
+            ]);
+
+        $expiring = ProviderConnection::query()
             ->whereNotNull('token_expires_at')
             ->where('token_expires_at', '<=', $cutoff)
+            ->where('status', '!=', 'error')
             ->get()
             ->map(fn (ProviderConnection $c) => [
                 'entity_type' => ProviderConnection::class,
@@ -649,7 +666,9 @@ final class AlertEvaluator
                 'title' => 'Connection token expiring',
                 'message' => 'The '.$c->provider.' connection token expires '.optional($c->token_expires_at)->toDateString().'. Reconnect to avoid a sync gap.',
                 'context' => ['provider' => $c->provider, 'expires_at' => optional($c->token_expires_at)->toIso8601String()],
-            ])->all();
+            ]);
+
+        return $refused->concat($expiring)->values()->all();
     }
 
     /** @return list<array<string,mixed>> */
