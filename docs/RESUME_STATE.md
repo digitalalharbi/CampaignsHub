@@ -1,3 +1,11 @@
+# CURRENT STATE — 2026-10-30 (night) — App Review readiness; deletion-callback idempotency fix
+
+- **#891** (permission traceability) deployed at `d0a3bb1d` (run 41076495275).
+- **business_management:** requested only through the FLfB Configuration (the dialog sends no scope). Developer action: add it to Configuration 1138211818567426, then «Test connection». The discovery code already reads me/businesses and the owned and client accounts.
+- **Deletion callback:** mechanism reviewed. Fixed the substring idempotency defect (fail-first test). A genuine signed call can only come from Meta.
+- **Blocked on an Owner sign-in:** the admin session expired (401). Daily metrics vs Meta, report creation and export in the test workspace, and the Live before/after re-read wait for it. I do not sign in.
+- **GO/NO-GO:** public_profile GO; everything else NO-GO; see docs/META_SAAS_PERMISSIONS.md.
+
 # CURRENT STATE — 2026-10-30 (evening) — Meta SaaS real round trip and test connection; #889 deployed
 
 - **#889** (https data-deletion callback) deployed at `ec176e58` (run 41056283746). The readiness page now shows `https://api.campaignshub.io/api/v1/webhooks/data-deletion/meta-saas`; unsigned and bad-signature POSTs return 401.
