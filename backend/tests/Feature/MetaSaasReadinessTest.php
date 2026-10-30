@@ -66,7 +66,7 @@ final class MetaSaasReadinessTest extends TestCase
         foreach (['deletion_callback', 'credentials', 'oauth_round_trip', 'account_discovery', 'sync_and_reports'] as $key) {
             $this->assertSame('needs_credentials', $s[$key], $key);
         }
-        foreach (['meta_dashboard', 'business_verification', 'app_review', 'new_connections'] as $key) {
+        foreach (['test_workspace', 'meta_dashboard', 'business_verification', 'app_review', 'new_connections'] as $key) {
             $this->assertSame('owner_action', $s[$key], $key);
         }
         $this->assertEmpty(array_diff($s, MetaSaasReadiness::STATUSES));
@@ -136,15 +136,20 @@ final class MetaSaasReadinessTest extends TestCase
         $admin = $this->actingAs($this->admin, 'sanctum');
 
         $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/review', ['business_verified' => true])->assertStatus(422);
-        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/review', ['business_verified' => true, 'advanced_access_granted' => true])->assertOk()
-            ->assertJsonPath('data.readiness.8.detail.confirmed_by', $this->admin->id);
+        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/review', ['business_verified' => true, 'advanced_access_granted' => true])->assertOk();
+        $items = $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/settings/integrations/meta-saas')->json('data.readiness');
+        $this->assertSame($this->admin->id, collect($items)->firstWhere('key', 'business_verification')['detail']['confirmed_by']);
         $s = $this->statuses();
         $this->assertSame('ready', $s['business_verification']);
         $this->assertSame('ready', $s['app_review']);
         $this->assertSame('owner_action', $s['new_connections'], 'approval alone moves no connection');
         $this->assertDatabaseHas('audit_logs', ['action' => 'platform.integration.meta_saas.review_confirmed']);
 
-        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true])->assertOk();
+        // Meta's approval alone does not make the SaaS app primary: a real journey in the test workspace is still missing
+        // (MetaSaasModesTest covers turning it on).
+        $admin->putJson('/api/v1/admin/settings/integrations/meta-saas/routing', ['default' => 'saas', 'confirm' => true, 'approve_primary' => true, 'acknowledge_existing_unchanged' => true])
+            ->assertStatus(409)->assertJsonPath('errors.routing', fn (array $unmet) => in_array('test_journey_complete', $unmet, true));
+        ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->update(['enabled' => true]);
         $this->assertSame('ready', $this->statuses()['new_connections']);
 
         $admin->deleteJson('/api/v1/admin/settings/integrations/meta-saas/review')->assertOk()

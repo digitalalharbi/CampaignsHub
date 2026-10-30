@@ -126,7 +126,8 @@ export async function startPlatformOAuth(
 }
 
 /** META-SAAS-APP-001 — which Meta apps a new connection may be issued by (no credential is named). */
-export interface MetaApps { default: 'live' | 'saas'; apps: Array<{ key: 'live' | 'saas'; available: boolean }> }
+/** META-SAAS-APP-001 — `test_workspace`: this tenant is the isolated SaaS test workspace, which connects through the SaaS app only. */
+export interface MetaApps { default: 'live' | 'saas'; test_workspace?: boolean; apps: Array<{ key: 'live' | 'saas'; available: boolean; reason?: string | null }> }
 export const fetchMetaApps = () => getData<MetaApps>('/integrations/meta/apps')
 
 /**
