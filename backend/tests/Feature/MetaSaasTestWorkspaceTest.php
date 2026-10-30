@@ -146,6 +146,7 @@ final class MetaSaasTestWorkspaceTest extends TestCase
 
         $connection = ProviderConnection::withoutGlobalScopes()->where('tenant_id', $tenant->id)->sole();
         $this->assertSame('saas', $connection->app_profile);
+        $this->assertSame('saas-app-777', $connection->issuing_app_id, 'the token is recorded as the new app\'s, never Live\'s');
 
         $steps = $this->actingAs($this->admin, 'sanctum')->getJson(self::BASE)->json('data.test_workspace.steps');
         $this->assertTrue($steps['oauth']);
