@@ -12,6 +12,7 @@ use App\Domains\Identity\Http\Controllers\OAuthController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
+use App\Domains\Identity\Http\Controllers\SignInMethodsController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Legal\Http\Controllers\ConsentController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
@@ -114,6 +115,8 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
      * `callback` are public too: they ARE the sign-in.
      */
     Route::get('/oauth/providers', [OAuthController::class, 'providers'])->name('oauth.providers');
+    // AUTH-LOGIN-UX-002 — which ways in the page may offer (a way that cannot work is not shown).
+    Route::get('/methods', SignInMethodsController::class)->middleware('throttle:60,1')->name('methods');
 
     /*
      * `start` and `callback` need a SESSION of their own, stated explicitly here.
