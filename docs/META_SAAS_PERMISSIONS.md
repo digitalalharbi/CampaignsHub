@@ -70,3 +70,81 @@ No video is needed for Marketing API Access Tier.
 4. Business Verification is complete (Meta requires it for Advanced Access).
 5. The Marketing API tier eligibility is met (500 calls in 15 days, under 15% errors), or the tier request is deferred.
 6. The data-deletion URL `https://api.campaignshub.io/api/v1/webhooks/data-deletion/meta-saas` and App Domains `campaignshub.io` and `api.campaignshub.io` are set in Basic settings.
+
+## Follow-up, 2026-10-30 (night)
+
+### How a permission is actually requested
+The SaaS dialog sends `config_id` and no `scope` (`PlatformOAuth.php`: config_id replaces scope). The permissions a user is asked for are exactly the ones in Facebook Login for Business Configuration `1138211818567426`.
+- Nothing in CampaignsHub has to change to request `business_management`.
+- The scopes field on /admin/settings/integrations/meta-saas has no effect while a Configuration ID is set.
+- Live and Candidate use their own app and configuration and are not touched.
+
+**What the developer adds in Meta, for the SaaS app only:** in Facebook Login for Business → Configurations → `1138211818567426`, add:
+- `business_management`;
+- `pages_show_list` and `pages_read_engagement`, if the editor marks them as required dependencies;
+- keep `ads_read` and `ads_management`.
+
+Then the Owner re-runs «Test connection» on the admin page. It records the granted scopes from `/me/permissions`.
+
+### Discovery with `business_management`
+`MetaConnector::fetchAdAccounts` already reads:
+- `me/businesses`;
+- each business's `owned_ad_accounts` and `client_ad_accounts`.
+
+A direct account is kept once, and the business is recorded as its parent. Without the permission, discovery returns the direct accounts plus a `business_management` warning (Production: 1 direct account).
+- Not verified live until the Configuration grants it.
+
+### Data Deletion Callback
+Mechanism, from code and tests (`DataDeletionFlowTest`, `MetaSaasReadinessTest`, 46 passed):
+- `signed_request` is verified with HMAC-SHA256 under the SaaS app's own secret, never the Live one.
+- The algorithm is pinned, not read from the payload, and the comparison uses `hash_equals`.
+- A bad or missing signature returns 401; an unconfigured app returns 503; no `user_id` returns 422.
+- A valid call opens a verified `delete_data` request in the admin Legal inbox (`/admin/legal/data-requests`). It answers `{url, confirmation_code}`, and the status page is `/data-deletion?reference=…`.
+- Retries are idempotent per (provider, user id).
+
+Fixed alongside this note: idempotency matched the user id as a substring, so a callback for `1234` answered with the reference for `12345` and recorded no request (fail-first test).
+
+Production: unsigned and badly signed POSTs return 401.
+
+A correctly signed call needs the SaaS secret, which is never used outside the server. The only genuine one comes from Meta: a user removes the app under Facebook Settings → Apps and websites. So `deletion_callback` stays `not_verified` until Meta calls it.
+
+Deletion itself is carried out by an operator from the Legal inbox; the callback does not destroy data automatically.
+
+### Reviewer journey (for the App Review notes)
+1. **Reviewer account.** A dedicated CampaignsHub user in the test workspace «Meta SaaS Test — Project», created by the Owner. Its credentials go only into Meta's «App Review instructions» field, never into git or chat. Use a Facebook test user or a reviewer-owned account with:
+   - one ad account, where it has the advertiser role;
+   - a Business Manager that has one owned ad account and one client ad account.
+2. **Steps for the reviewer:**
+   1. Sign in at https://campaignshub.io/login (EN toggle).
+   2. Integrations → Connect Meta → consent.
+   3. Accounts appear (direct and business).
+   4. Bind one to the project.
+   5. Campaigns → Analytics → Reports → Export.
+   6. For `ads_management`: open the pre-created PAUSED test campaign → Resume → Pause.
+3. **No real spend.** The test campaign stays PAUSED, or has the minimum budget and a past end date. Resume/Pause and budget edits happen only on that campaign, after the Owner's written approval.
+
+### Approved vs requested (2026-10-30)
+| Item | State |
+|---|---|
+| `ads_read`, `ads_management`, `public_profile` | Granted by the user in the consent dialog (Standard Access, app roles only). **Not approved by Meta** |
+| `business_management`, `pages_show_list`, `pages_read_engagement` | Not in the Configuration; not granted |
+| Advanced Access (all) | Not submitted |
+| Marketing API Access Tier | Not submitted; eligibility not met (fewer than 500 calls) |
+| Business Verification | Not readable by CampaignsHub; Owner records it on the admin page once Meta shows it |
+
+### Videos
+| Video | State | Blocked by |
+|---|---|---|
+| 1 `ads_read` (+ public_profile) | Script ready; steps 1–6 possible now | Step 7 (report export) and Analytics figures need daily metrics on the test account |
+| 2 `business_management` (+ pages_*) | Script ready | The Configuration change, and a Business Manager with an owned and a client ad account |
+| 3 `ads_management` | Script ready | A PAUSED test campaign on the test ad account, and the Owner's written approval for one Resume/Pause |
+
+### GO/NO-GO per permission
+| Permission | Verdict | Why |
+|---|---|---|
+| `ads_read` | **NO-GO (close)** | Read path proven live; daily metrics and report export not yet proven on the test account |
+| `ads_management` | **NO-GO** | Granted; no authorised write recorded for the video |
+| `business_management` | **NO-GO** | Not in the Configuration |
+| `pages_show_list`, `pages_read_engagement` | **NO-GO (follow the parents)** | Dependencies only; submit with `ads_management` and `business_management` |
+| `public_profile` | **GO** | Automatic; nothing to submit |
+| Marketing API Access Tier | **NO-GO / defer** | Eligibility not met |

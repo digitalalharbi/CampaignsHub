@@ -259,6 +259,21 @@ final class DataDeletionFlowTest extends TestCase
     }
 
     /**
+     * Idempotency is per person: a callback for `1234` is not a retry of the one for `12345`. Matching the id as a substring of the
+     * stored sentence answered the second person with the first one's reference and recorded no request for them.
+     */
+    public function test_a_callback_for_an_id_contained_in_another_opens_its_own_request(): void
+    {
+        Config::set('ad_platforms.platforms.meta.client_secret', 'test-secret');
+
+        $first = $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '12345'], 'test-secret')])->assertOk();
+        $second = $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '1234'], 'test-secret')])->assertOk();
+
+        $this->assertSame(2, DataRequest::count());
+        $this->assertNotSame($first->json('confirmation_code'), $second->json('confirmation_code'));
+    }
+
+    /**
      * The Live app's callback is verified with the Live App Secret wherever the platform keeps it — the stored provider settings first,
      * the environment second. It used to read two keys no config file defines, so in Production it answered 503 to every call Meta made.
      */
