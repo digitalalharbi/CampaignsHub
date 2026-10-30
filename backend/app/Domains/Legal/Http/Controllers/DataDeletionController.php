@@ -244,12 +244,14 @@ final class DataDeletionController extends Controller
          * Idempotent by (provider, external id).
          *
          * A platform that retries — and they do — must not open a second request, because two
-         * references for one deletion is two answers to give and one of them will be wrong.
+         * references for one deletion is two answers to give and one of them will be wrong. The id is matched as the whole
+         * sentence it was stored in, never as a substring: `1234` is not a retry of `12345`.
          */
+        $details = 'Deletion requested by '.$provider.' for external user id '.$externalId.'.';
         $record = DataRequest::query()
             ->where('source', 'provider_callback')
             ->where('source_provider', $provider)
-            ->where('details', 'like', '%'.$externalId.'%')
+            ->where('details', $details)
             ->first();
 
         if ($record === null) {
@@ -260,7 +262,7 @@ final class DataDeletionController extends Controller
                 // No address is supplied by the platform, and inventing one would put a stranger's
                 // inbox on a deletion request. The identifier we DO have is the external id.
                 'email' => $provider.'+'.$externalId.'@deletion.invalid',
-                'details' => 'Deletion requested by '.$provider.' for external user id '.$externalId.'.',
+                'details' => $details,
                 'reference' => DataRequest::makeReference(),
                 'ip' => $request->ip(),
                 'user_agent' => substr((string) $request->userAgent(), 0, 500),
