@@ -152,6 +152,10 @@ final class MetaCandidateRoundTrip
             'long_lived_exchange' => $longLived ? 'ok' : 'not_needed (token has no expiry)',
             'expires_at' => $tokens->expiresAt?->toIso8601String(),
         ]]);
+        // META-SAAS-APP-001 — what Meta REALLY granted (ads_read, ads_management…), read back, never assumed from the request.
+        if ($run->granted_scopes === null && ($granted = $this->grantedPermissions($creds, $tokens)) !== null) {
+            $run->granted_scopes = $granted;
+        }
         $run->save();
 
         $accounts = $this->discover($run, $creds, $tokens);
@@ -161,6 +165,29 @@ final class MetaCandidateRoundTrip
         }
 
         $this->readAds($run, $creds, $tokens, $accounts);
+    }
+
+    /**
+     * `GET /me/permissions` — a read of the token's own grants, nothing written anywhere. Null when Meta does not answer, so a
+     * missing list is shown as unknown rather than as «nothing granted».
+     *
+     * @return list<string>|null
+     */
+    private function grantedPermissions(PlatformCredentials $creds, OAuthTokens $tokens): ?array
+    {
+        try {
+            $response = PlatformHttp::client('meta')->withToken($tokens->accessToken)->get($creds->apiBase().'/me/permissions');
+        } catch (Throwable) {
+            return null;
+        }
+        if ($response->failed() || ! is_array($response->json('data'))) {
+            return null;
+        }
+
+        return array_values(array_map(
+            static fn (array $p): string => (string) $p['permission'],
+            array_filter((array) $response->json('data'), static fn ($p): bool => is_array($p) && ($p['status'] ?? null) === 'granted' && isset($p['permission'])),
+        ));
     }
 
     /** @return list<array<string,mixed>>|null null when the step failed */

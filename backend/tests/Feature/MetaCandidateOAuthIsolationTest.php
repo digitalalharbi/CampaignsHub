@@ -342,7 +342,8 @@ final class MetaCandidateOAuthIsolationTest extends TestCase
 
         $this->get("/api/v1/oauth/ads/meta/callback?code=abc&state={$state}")->assertRedirectContains('outcome=succeeded');
 
-        Http::assertSentCount(3);
+        // The code exchange, the read-back of what Meta granted (/me/permissions), discovery and one insights read — no long-lived exchange.
+        Http::assertSentCount(4);
         Http::assertNotSent(fn (HttpRequest $r) => ($r->data()['grant_type'] ?? null) === 'fb_exchange_token');
     }
 
