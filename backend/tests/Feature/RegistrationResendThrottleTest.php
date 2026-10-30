@@ -124,6 +124,16 @@ final class RegistrationResendThrottleTest extends TestCase
         $this->resend($registration)->assertStatus(429);
     }
 
+    /** A deployed resend cannot replace a live challenge before its provider cooldown expires. */
+    public function test_a_mobile_resend_inside_the_provider_cooldown_is_refused(): void
+    {
+        config()->set('accounts.mobile_resend_cooldown_seconds', 60);
+        $registration = $this->applicant('cooldown@a.test');
+
+        $this->resend($registration)->assertOk();
+        $this->resend($registration)->assertStatus(422)->assertJsonValidationErrors(['channel']);
+    }
+
     /**
      * And the address ceiling still bites, so opening applications in a loop is not a way around it.
      *

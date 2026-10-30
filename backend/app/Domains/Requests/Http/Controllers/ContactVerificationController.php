@@ -114,8 +114,9 @@ final class ContactVerificationController
 
     private function ownerKey(Request $request): string
     {
-        $identity = $request->hasSession()
-            ? $request->session()->getId()
+        $csrf = $request->cookie('XSRF-TOKEN');
+        $identity = is_string($csrf) && $csrf !== ''
+            ? hash('sha256', rawurldecode($csrf))
             : hash('sha256', (string) $request->ip().'|'.(string) $request->userAgent());
 
         return 'request-verification:'.$identity;

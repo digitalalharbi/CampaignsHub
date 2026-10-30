@@ -111,6 +111,31 @@ final class TwilioVerifyPhoneTest extends TestCase
         Http::assertSentCount(1); // send only; ownership fails before a provider check
     }
 
+    public function test_an_anonymous_challenge_cannot_cross_browser_bindings(): void
+    {
+        Http::fake([
+            '*/Verifications' => Http::response(['status' => 'pending'], 201),
+            '*/VerificationCheck' => Http::response(['status' => 'approved'], 200),
+        ]);
+
+        User::factory()->create([
+            'phone' => '+966501234567',
+            'phone_verified_at' => now(),
+        ]);
+
+        $started = $this->withHeader('User-Agent', 'first-browser')
+            ->postJson('/api/v1/auth/phone/start', ['phone' => '0501234567'])
+            ->assertOk();
+
+        $this->withHeader('User-Agent', 'different-browser')
+            ->postJson('/api/v1/auth/phone/verify', [
+                'verification_id' => (string) $started->json('data.verification_id'),
+                'code' => '123456',
+            ])->assertStatus(422);
+
+        Http::assertSentCount(1); // ownership is rejected before Twilio receives the code
+    }
+
     public function test_resend_is_server_side_and_invalidates_the_previous_challenge(): void
     {
         Http::fake(['*' => Http::response(['status' => 'pending'], 201)]);

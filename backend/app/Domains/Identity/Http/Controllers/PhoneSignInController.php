@@ -185,9 +185,21 @@ final class PhoneSignInController extends Controller
         abort_if($suspended, 403, __('auth.unavailable'));
     }
 
-    /** Bind an anonymous challenge to the browser session that initiated it. */
+    /** Bind an anonymous challenge to the browser that initiated it. */
     private function ownerKey(Request $request): string
     {
-        return 'phone-sign-in:'.$request->session()->getId();
+        return 'phone-sign-in:'.$this->browserBinding($request);
+    }
+
+    private function browserBinding(Request $request): string
+    {
+        // Sanctum's CSRF cookie is stable across the start/check round-trip but is not shared with
+        // another browser session. Non-cookie API clients fall back to a redacted network/client
+        // fingerprint; the challenge UUID plus the SMS code are still both required.
+        $csrf = $request->cookie('XSRF-TOKEN');
+
+        return is_string($csrf) && $csrf !== ''
+            ? hash('sha256', rawurldecode($csrf))
+            : hash('sha256', (string) $request->ip().'|'.(string) $request->userAgent());
     }
 }

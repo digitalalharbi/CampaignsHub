@@ -36,8 +36,6 @@ final class RegistrationVerificationService
     /** Six digits is 10^6 guesses; this is what keeps that from being enough time to try them. */
     private const MAX_ATTEMPTS = 5;
 
-    private const RESEND_COOLDOWN_SECONDS = 60;
-
     public function __construct(
         private readonly AdvanceRegistration $advance,
         private readonly TwilioVerifyService $twilio,
@@ -51,6 +49,7 @@ final class RegistrationVerificationService
     public function send(RegistrationRequest $request, string $channel): array
     {
         if ($channel === 'mobile') {
+            $cooldownSeconds = $this->mobileResendCooldownSeconds();
             $recent = RegistrationVerification::query()
                 ->where('registration_request_id', $request->getKey())
                 ->where('channel', 'mobile')
@@ -58,8 +57,8 @@ final class RegistrationVerificationService
                 ->latest('created_at')
                 ->first();
 
-            if ($recent !== null && $recent->created_at->gt(Carbon::now()->subSeconds(self::RESEND_COOLDOWN_SECONDS))) {
-                $remaining = self::RESEND_COOLDOWN_SECONDS - (int) $recent->created_at->diffInSeconds(Carbon::now());
+            if ($cooldownSeconds > 0 && $recent !== null && $recent->created_at->gt(Carbon::now()->subSeconds($cooldownSeconds))) {
+                $remaining = $cooldownSeconds - (int) $recent->created_at->diffInSeconds(Carbon::now());
                 throw ValidationException::withMessages([
                     'channel' => [__('auth.resend_cooldown', ['seconds' => max(1, $remaining)])],
                 ]);
@@ -108,8 +107,13 @@ final class RegistrationVerificationService
             'dev_link' => $dev && $channel === 'email' ? $path : null,
             'dev_code' => $dev && $channel === 'mobile' && ! $usingTwilio ? $secret : null,
             'expires_at' => $expiresAt->toIso8601String(),
-            'resend_after' => $channel === 'mobile' ? self::RESEND_COOLDOWN_SECONDS : 0,
+            'resend_after' => $channel === 'mobile' ? $this->mobileResendCooldownSeconds() : 0,
         ];
+    }
+
+    private function mobileResendCooldownSeconds(): int
+    {
+        return max(0, (int) config('accounts.mobile_resend_cooldown_seconds', 60));
     }
 
     /**
