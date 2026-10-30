@@ -14,6 +14,7 @@ use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -566,6 +567,15 @@ final class ApplySubscriptionPaymentEvent
         string $rawBody,
         bool $processed,
     ): PaymentWebhookEvent {
+        /*
+         * PAY-WEBHOOK-REFUSAL-001 — the same body sent twice is one trace, not a unique-key crash. An unverified id is the body's
+         * hash, so a repeat lands here; two concurrent deliveries of one verified id do too.
+         */
+        $existing = PaymentWebhookEvent::query()->where('event_id', $eventId)->first();
+        if ($existing !== null) {
+            return $existing;
+        }
+
         $event = new PaymentWebhookEvent;
         $event->forceFill([
             'tenant_id' => null,
@@ -575,7 +585,13 @@ final class ApplySubscriptionPaymentEvent
             'verified' => $verified,
             'payload' => json_decode($rawBody, true) ?: ['raw' => mb_substr($rawBody, 0, 2000)],
             'processed_at' => $processed ? Carbon::now() : null,
-        ])->save();
+        ]);
+
+        try {
+            $event->save();
+        } catch (UniqueConstraintViolationException) {
+            return PaymentWebhookEvent::query()->where('event_id', $eventId)->firstOrFail();
+        }
 
         return $event->refresh();
     }

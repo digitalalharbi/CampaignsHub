@@ -42,7 +42,7 @@ final class ProductionReadiness
     private array $findings = [];
 
     /**
-     * @return array{ready: bool, environment: string, failures: int, warnings: int, findings: list<array{key: string, level: string, message: string, fix: string}>}
+     * @return array{ready: bool, environment: string, failures: int, warnings: int, findings: list<array{key: string, level: string, message: string, fix: string}>, credentials: list<array{key: string, status: string}>}
      */
     public function run(): array
     {
@@ -61,6 +61,7 @@ final class ProductionReadiness
         $this->checkAdPlatforms();
         $this->checkExchangeRates();
 
+        $credentials = $this->moyasarCredentials();
         $failures = count(array_filter($this->findings, fn (array $f) => $f['level'] === 'fail'));
 
         return [
@@ -69,8 +70,46 @@ final class ProductionReadiness
             'failures' => $failures,
             'warnings' => count($this->findings) - $failures,
             'findings' => array_values($this->findings),
+            'credentials' => $credentials,
         ];
     }
+
+    /**
+     * PAY-MOYASAR-ACTIVATION-001 — each Moyasar variable as `configured` or `missing`, and the gateway's name, which is not a secret.
+     *
+     * Silence used to mean both «missing» (the gateway is not the chosen one, so nothing was checked) and «fine». The shape checks are
+     * the mistakes made while pasting a key: Moyasar's keys are `sk_`/`pk_` plus a long body, so a short one was cut off; and the
+     * webhook token comes back inside the gateway's JSON, so anything but plain ASCII risks a byte-for-byte mismatch that silently
+     * refuses every confirmation. Warnings, never values.
+     *
+     * @return list<array{key: string, status: string}>
+     */
+    private function moyasarCredentials(): array
+    {
+        $out = [['key' => 'SUBSCRIPTION_PROVIDER', 'status' => (string) Config::get('subscriptions.default')]];
+
+        foreach (['MOYASAR_PUBLISHABLE_KEY' => ['publishable_key', 'pk_'], 'MOYASAR_SECRET_KEY' => ['secret_key', 'sk_'], 'MOYASAR_WEBHOOK_TOKEN' => ['webhook_token', null]] as $name => [$key, $prefix]) {
+            $value = Config::get("services.moyasar.{$key}");
+            $present = is_string($value) && trim($value) !== '';
+            $out[] = ['key' => $name, 'status' => $present ? 'configured' : 'missing'];
+
+            if (! $present) {
+                continue;
+            }
+
+            if ($prefix !== null && (! str_starts_with($value, $prefix) || strlen($value) < self::MOYASAR_KEY_MIN_LENGTH)) {
+                $this->warn("services.moyasar.{$key}.format", "{$name} does not look like a whole Moyasar key (expected «{$prefix}live_…» or «{$prefix}test_…» with a long body) — it may have been cut off while pasting.", 'Copy the key again, in full, from the Moyasar dashboard.');
+            }
+
+            if ($prefix === null && (preg_match('/^[\x21-\x7E]+$/', $value) !== 1 || strlen($value) < 16)) {
+                $this->warn("services.moyasar.{$key}.format", "{$name} should be at least 16 plain ASCII characters with no spaces; Moyasar returns it inside its JSON and any other character risks a mismatch that refuses every confirmation.", 'Generate an ASCII token and enter the same value in the Moyasar dashboard.');
+            }
+        }
+
+        return $out;
+    }
+
+    private const MOYASAR_KEY_MIN_LENGTH = 40;
 
     private function checkApplication(bool $production): void
     {
