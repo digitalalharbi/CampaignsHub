@@ -9,6 +9,7 @@ use App\Domains\Accounts\Services\AdvanceRegistration;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Providers\PaymentProvider;
+use App\Domains\Billing\Providers\ReconcilesCheckoutSessions;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
@@ -104,6 +105,45 @@ final class ApplySubscriptionPaymentEvent
         $event->forceFill(['processed_at' => Carbon::now()])->save();
 
         return $event->refresh();
+    }
+
+    /**
+     * PAY-RECONCILE-001 — settle a pending payment the gateway took although its webhook never arrived.
+     *
+     * The gateway is asked which payment paid the checkout; that id then goes through `applyTo` exactly as a webhook's would, so the
+     * payment is re-read and its reference, amount and currency checked before anything settles. True when it settled.
+     */
+    public function reconcile(SubscriptionPayment $payment): bool
+    {
+        $this->tenants->enterPlatformScope();
+
+        if ($payment->status !== 'pending' || $payment->provider_session_id === null || $payment->provider_session_id === '') {
+            return false;
+        }
+
+        $adapter = $this->providers->for((string) $payment->provider);
+
+        if (! $adapter instanceof ReconcilesCheckoutSessions || ! $adapter->isConfigured()) {
+            return false;
+        }
+
+        $paymentId = $adapter->paidPaymentIdForSession((string) $payment->provider_session_id);
+
+        if ($paymentId === null) {
+            return false;
+        }
+
+        $this->applyTo($payment, ['status' => 'paid', 'payment_id' => $paymentId, 'payload' => []], $adapter, null);
+
+        $this->audit->log(
+            action: 'subscription.payment.reconciled',
+            entityType: SubscriptionPayment::class,
+            entityId: (string) $payment->getKey(),
+            after: ['provider_payment_id' => $paymentId, 'status' => $payment->refresh()->status],
+            reason: 'The gateway reports this checkout paid and no webhook had settled it.',
+        );
+
+        return $payment->status === 'paid';
     }
 
     /**

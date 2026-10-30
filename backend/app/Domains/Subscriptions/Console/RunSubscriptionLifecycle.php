@@ -28,6 +28,22 @@ final class RunSubscriptionLifecycle extends Command
 
     public function handle(SubscriptionLifecycle $lifecycle, SubscriptionCheckout $checkout): int
     {
+        /*
+         * SCHEDULE-REGISTERED-001 — this command was scheduled and never registered, so in Production it has never run. Its first run
+         * would act at once on every trial, renewal and grace period whose date passed meanwhile — cancelling, marking past due and
+         * suspending real workspaces — and even `--dry-run` moves those states. So in Production it acts only once the Owner sets
+         * SUBSCRIPTION_LIFECYCLE_ENABLED=true; until then it counts what it would act on and changes nothing.
+         */
+        if (app()->environment('production') && ! (bool) config('subscriptions.lifecycle_enabled')) {
+            $this->warn('Lifecycle is not enabled in production (SUBSCRIPTION_LIFECYCLE_ENABLED); nothing was changed. Would act on:');
+            foreach ($lifecycle->duePreview() as $what => $count) {
+                $this->line(str_pad($what, 24).$count);
+            }
+            app(ScheduledRunRows::class)->report(0);
+
+            return self::SUCCESS;
+        }
+
         // A dry run passes no checkout, so the sweep moves states but opens no charge at the gateway.
         $result = $lifecycle->runDueWork($this->option('dry-run') ? null : $checkout);
 

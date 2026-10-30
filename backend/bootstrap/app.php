@@ -58,6 +58,8 @@ use App\Domains\Reports\Console\ReportsHealthCommand;
 use App\Domains\Reports\Console\ShareCardCheckCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
+use App\Domains\Subscriptions\Console\ReconcileSubscriptionPayments;
+use App\Domains\Subscriptions\Console\RunSubscriptionLifecycle;
 use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
 use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
@@ -175,6 +177,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ProvisionAgencyCommand::class,
         SallaReviewCommand::class,
         MailDiagnoseCommand::class,
+        // SCHEDULE-REGISTERED-001 — scheduled since billing shipped and never registered, so the nightly sweep never ran.
+        RunSubscriptionLifecycle::class,
+        // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
+        ReconcileSubscriptionPayments::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
