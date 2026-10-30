@@ -6,7 +6,9 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
+use App\Domains\Integrations\MetaCandidate\MetaSaasTestWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
@@ -139,7 +141,37 @@ final class AdPlatformOAuthController extends Controller
             'project_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('projects', 'id')
                 ->where('tenant_id', $tenant->tenantId())
                 ->whereNull('deleted_at')],
+            // META-SAAS-APP-001 — which Meta app issues THIS connection; absent = the platform's choice for new connections.
+            'app_profile' => ['sometimes', 'nullable', Rule::in([MetaCredentialProfile::Live->value, MetaCredentialProfile::Saas->value])],
         ]);
+
+        $metaProfile = MetaCredentialProfile::Live;
+        if ($creds->platform === 'meta') {
+            $metaProfile = MetaAppRouting::forNewConnection($validated['app_profile'] ?? null);
+            // The SaaS test workspace connects through the new app ONLY: a Live connection there would mix the two apps' evidence.
+            if (MetaSaasTestWorkspace::isTestTenant($tenant->tenantId())) {
+                $metaProfile = MetaCredentialProfile::Saas;
+            }
+            // The SaaS app issues a customer connection only after it passed its test with the credentials configured now — asked by name or not.
+            // Before Meta's approval is recorded, only the designated test workspace may use it (`saasEligibilityFor`).
+            if ($metaProfile === MetaCredentialProfile::Saas && ! ($eligibility = MetaAppRouting::saasEligibilityFor($tenant->tenantId()))['eligible']) {
+                return ApiResponse::error(
+                    message: 'The SaaS Meta app is not available for new connections yet.',
+                    errors: ['app_profile' => [$eligibility['reason']]],
+                    meta: ['status' => 'not_eligible', 'provider' => 'meta', 'app_profile' => 'saas'],
+                    status: 422,
+                );
+            }
+            $creds = PlatformCredentials::forMeta($metaProfile);
+            if (! $creds->isConfigured()) {
+                return ApiResponse::error(
+                    message: 'The selected Meta app is awaiting credentials.',
+                    errors: ['app_profile' => [$metaProfile->value], 'missing' => $creds->missing()],
+                    meta: ['status' => 'awaiting_credentials', 'provider' => 'meta', 'app_profile' => $metaProfile->value],
+                    status: 422,
+                );
+            }
+        }
 
         /*
          * X-PKCE-001 — the code verifier, minted here and carried by the state.
@@ -162,10 +194,12 @@ final class AdPlatformOAuthController extends Controller
                 'code_verifier' => $verifier,
                 'project_id' => $validated['project_id'] ?? null,
             ], static fn ($v): bool => $v !== null),
+            metaProfile: $metaProfile,
         );
 
         return ApiResponse::success([
             'provider' => $creds->platform,
+            'app_profile' => $creds->platform === 'meta' ? $metaProfile->value : null,
             'authorization_url' => $this->oauth->usesOAuth1($creds)
                 ? $this->oauth->beginOAuth1($creds, $state)
                 : $this->oauth->authorizationUrl($creds, $state, $verifier),
@@ -179,6 +213,27 @@ final class AdPlatformOAuthController extends Controller
      * Always ends in a redirect to the SPA, never a JSON body: a human is looking at this, and a page
      * of JSON is how an integration that actually worked gets reported as broken.
      */
+    /**
+     * META-SAAS-APP-001 — which Meta apps a NEW connection may be issued by, for the connect screen. Names no credential.
+     */
+    public function metaApps(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+        $tenantId = app(TenantContext::class)->tenantId();
+        $eligibility = MetaAppRouting::saasEligibilityFor($tenantId);
+        $testWorkspace = MetaSaasTestWorkspace::isTestTenant($tenantId);
+
+        return ApiResponse::success([
+            'default' => $testWorkspace ? MetaCredentialProfile::Saas->value : MetaAppRouting::default()->value,
+            'test_workspace' => $testWorkspace,
+            'apps' => [
+                // The test workspace is SaaS-only.
+                ['key' => MetaCredentialProfile::Live->value, 'available' => ! $testWorkspace && PlatformCredentials::forMeta(MetaCredentialProfile::Live)->isConfigured()],
+                ['key' => MetaCredentialProfile::Saas->value, 'available' => $eligibility['eligible'], 'reason' => $eligibility['reason']],
+            ],
+        ], 'Meta apps for new connections.');
+    }
+
     public function callback(Request $request, string $provider, TenantContext $tenant, AuditLogger $audit): RedirectResponse
     {
         $creds = $this->credentialsOr404($provider);
@@ -193,10 +248,11 @@ final class AdPlatformOAuthController extends Controller
         if ($creds->platform === 'meta') {
             $record = AuthorizationState::claim((string) $request->query('state', ''), 'meta');
 
-            if ($record !== null && $record['profile'] === MetaCredentialProfile::Candidate->value) {
+            if ($record !== null && isset($record['candidate_run_id'])) {
                 $run = app(MetaCandidateRoundTrip::class)->complete($record, $request->query());
+                $page = $record['profile'] === MetaCredentialProfile::Saas->value ? 'meta-saas' : 'meta-candidate';
 
-                return redirect()->away(Frontend::origin().'/admin/settings/integrations/meta-candidate?'.http_build_query([
+                return redirect()->away(Frontend::origin().'/admin/settings/integrations/'.$page.'?'.http_build_query([
                     'outcome' => $run === null ? 'invalid_state' : $run->status,
                 ]));
             }
@@ -209,8 +265,12 @@ final class AdPlatformOAuthController extends Controller
                 return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
             }
 
-            // Live, by the record — the same credentials `credentialsOr404` resolved, now by name.
-            $creds = PlatformCredentials::forMeta(MetaCredentialProfile::Live);
+            // The app the record names — Live or the SaaS app — and the token is exchanged, stored and later refreshed with THAT app.
+            $issuedBy = MetaCredentialProfile::from((string) $record['profile']);
+            $creds = PlatformCredentials::forMeta($issuedBy);
+            if (! $creds->isConfigured()) {
+                return $this->back('meta', 'failed', 'The Meta app this authorisation was started with is no longer configured.');
+            }
         } else {
             // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
             // (OAuth 1.0a reports a refusal as `denied=<request token>`.)
@@ -265,6 +325,7 @@ final class AdPlatformOAuthController extends Controller
                 connectionName: $creds->label(),
                 clientWorkspaceId: isset($record['client_workspace_id']) ? (string) $record['client_workspace_id'] : null,
                 createdBy: isset($record['user_id']) ? (int) $record['user_id'] : null,
+                appProfile: $creds->platform === 'meta' ? MetaCredentialProfile::from((string) $record['profile']) : null,
             );
 
             // The first real round trip. Until this returns, nothing is called connected.
@@ -293,7 +354,7 @@ final class AdPlatformOAuthController extends Controller
             action: 'integration.connection.opened',
             entityType: ProviderConnection::class,
             entityId: (string) $connection->getKey(),
-            after: ['provider' => $creds->platform, 'ad_accounts' => $discovered],
+            after: ['provider' => $creds->platform, 'ad_accounts' => $discovered, 'app_profile' => $creds->platform === 'meta' ? (string) $record['profile'] : null],
         );
 
         return $this->back(

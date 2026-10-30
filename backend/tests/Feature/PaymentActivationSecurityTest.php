@@ -151,7 +151,7 @@ final class PaymentActivationSecurityTest extends TestCase
             'id' => 'evt_forged', 'type' => 'payment_paid',
             'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
-        ])->assertOk()->assertJsonPath('data.verified', false);
+        ])->assertUnauthorized();
 
         // Untouched: with no gateway configured the charge never even opened, and a forged event
         // cannot move it.
@@ -173,7 +173,7 @@ final class PaymentActivationSecurityTest extends TestCase
             'id' => 'evt_wrong_secret', 'type' => 'payment_paid', 'secret_token' => 'not-the-real-token',
             'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
-        ])->assertOk()->assertJsonPath('data.verified', false);
+        ])->assertUnauthorized();
 
         $this->assertSame('pending', $payment->refresh()->status);
         $this->assertNothingGranted();

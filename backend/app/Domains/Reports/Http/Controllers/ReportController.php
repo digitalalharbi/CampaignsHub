@@ -10,6 +10,7 @@ use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
@@ -26,6 +27,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -343,10 +345,40 @@ final class ReportController extends Controller
         return ApiResponse::success(['sent_to' => count($emails), 'at' => $model->last_sent_at], 'Report sent.');
     }
 
-    public function destroy(Request $request, string $project, string $report): JsonResponse
+    /**
+     * Deleting a report deletes its links with it, and a client's link that stops answering is a question someone will ask.
+     *
+     * It was the one destructive report action with no audit row — sending and revoking a link were recorded, deleting the
+     * whole report was not — so «who deleted the NASEL links, and when» had no authorised source to answer it. The row keeps
+     * what identifies the report and each of its links (never a token), written in the same transaction as the delete.
+     */
+    public function destroy(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
-        $this->find($report)->delete();
+        $model = $this->find($report);
+        $shares = ReportShare::query()->where('report_id', $model->getKey())
+            ->get(['id', 'mode', 'revoked_at', 'expires_at', 'view_count', 'created_by', 'created_at'])
+            ->map(fn (ReportShare $s) => [
+                'id' => (string) $s->getKey(),
+                'mode' => $s->mode,
+                'revoked_at' => $s->revoked_at?->toIso8601String(),
+                'expires_at' => $s->expires_at?->toIso8601String(),
+                'view_count' => (int) $s->view_count,
+                'created_by' => $s->created_by,
+                'created_at' => $s->created_at?->toIso8601String(),
+            ])->all();
+
+        DB::transaction(function () use ($audit, $model, $shares): void {
+            $audit->log(action: 'report.deleted', entityType: Report::class, entityId: (string) $model->getKey(), before: [
+                'name' => $model->name,
+                'type' => $model->type,
+                'project_id' => (string) $model->project_id,
+                'period_start' => $model->period_start?->toDateString(),
+                'period_end' => $model->period_end?->toDateString(),
+                'shares' => $shares,
+            ]);
+            $model->delete();
+        });
 
         return ApiResponse::success(null, 'Report deleted.', status: 200);
     }

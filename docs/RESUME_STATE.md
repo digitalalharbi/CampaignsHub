@@ -1,3 +1,179 @@
+# CURRENT STATE — 2026-10-31 — #894 and #895 deployed; Moyasar waits on rotated keys
+
+- **#895** deployed at `b02e73c3`. The payment webhook now refuses forged events: on Production, an empty body twice gives 401 and 401 (it was 200, then 500); a wrong token gives 401; an unknown gateway gives 404; health 200. PAY-WEBHOOK-REFUSAL-001 is VERIFIED.
+- **Moyasar** is BLOCKED_EXTERNAL_CREDENTIALS. production:check: SUBSCRIPTION_PROVIDER sandbox; the three MOYASAR_* variables are missing. The Owner rotates the exposed keys and edits the env file; Claude then re-runs the deploy and the check. Claude never enters payment keys.
+- **#894** (docs, META-SESSION-190-001 VERIFIED) deployed at `9eab6f46`.
+- **Still waiting on the Owner:**
+  - reconnect the «Project 1» Meta connection;
+  - an admin sign-in, for the SaaS report test;
+  - Meta Developers: business_management, Basic settings, Business Verification.
+
+# CURRENT STATE — 2026-10-30 (late) — #892 and #893 deployed; Meta 190 connection now asks for reconnection
+
+- **#892** deployed at `31919faa` (run 41089272925): the deletion callback matches the user id exactly (fail-first). Production: forged and unsigned callbacks return 401. A genuinely signed call can only come from Meta (no secret is used outside the server), so the fix's live path is proven by tests plus deploy, not by a real Meta call.
+- **#893** deployed at `c6333a1b` (run 41115705157). Meta code 190 marks the connection `error` → «يحتاج إعادة مصادقة»; rate limits and transient errors don't. Production after the 20:02 sweep: Meta connections went from connected=3 to connected=2, error=1. The «Project 1» connection (hanka and RazahAvanue) has failed since 2026-10-25; the others are unchanged. **Owner action:** reconnect that connection. I do not reconnect.
+- **SaaS test account** (EGP): syncs every 30 min with `no_data`, and Meta returns 0 campaigns, so zero is correct. A report on it proves report generation only, not non-zero metrics.
+- **Blocked on an Owner sign-in:** the admin session expired (401). The SaaS test report and export, and the owner name on the Project 1 connection, wait for it.
+- **Meta approval blockers:** business_management in Configuration 1138211818567426; an ad account with delivery for video 1; a paused test campaign plus written approval for video 3; Business Verification; data-deletion URL and App Domains in Basic settings; Marketing API tier eligibility.
+
+# CURRENT STATE — 2026-10-30 (night) — App Review readiness; deletion-callback idempotency fix
+
+- **#891** (permission traceability) deployed at `d0a3bb1d` (run 41076495275).
+- **business_management:** requested only through the FLfB Configuration (the dialog sends no scope). Developer action: add it to Configuration 1138211818567426, then «Test connection». The discovery code already reads me/businesses and the owned and client accounts.
+- **Deletion callback:** mechanism reviewed. Fixed the substring idempotency defect (fail-first test). A genuine signed call can only come from Meta.
+- **Blocked on an Owner sign-in:** the admin session expired (401). Daily metrics vs Meta, report creation and export in the test workspace, and the Live before/after re-read wait for it. I do not sign in.
+- **GO/NO-GO:** public_profile GO; everything else NO-GO; see docs/META_SAAS_PERMISSIONS.md.
+
+# CURRENT STATE — 2026-10-30 (evening) — Meta SaaS real round trip and test connection; #889 deployed
+
+- **#889** (https data-deletion callback) deployed at `ec176e58` (run 41056283746). The readiness page now shows `https://api.campaignshub.io/api/v1/webhooks/data-deletion/meta-saas`; unsigned and bad-signature POSTs return 401.
+- **Meta SaaS (App ID ••••8530):** the secret was rotated (••••d56e); the admin round trip passed; granted scopes are ads_management, ads_read and public_profile; 1 account was discovered.
+- **Test workspace:** created by the Owner; the SaaS connection is bound and synced. Journey: oauth, discovery, binding and sync are true; metrics, reports and disconnect are not yet.
+- **Live unchanged:** 2 connections, 52 accounts, 3 synced in 24h, oldest sync 2026-10-25 20:01, 0 moved. Primary is locked, and new connections still go to Live.
+- **Next:** metrics need an ad account with delivery (or proof that zero is correct); a report in the test workspace (test-user session); disconnect last. Meta: Business Verification, App Review, Advanced Access (Owner).
+- **Open question:** only 3 of 52 Live accounts synced in the last 24h, and the oldest is 2026-10-25. Investigate whether that is unbound accounts or stalled sync.
+
+# CURRENT STATE — 2026-10-30 (afternoon) — #884, #886, #885 and #887 deployed; SaaS test GO for the Owner
+
+- **#884** (test workspace) at `cc46fbdb`, then **#886** (modes) and **#885** (records), deployed together at `d8143a8f` (run 41008742683; the bundle contains the modes screen). **#887** (AUTH-LOGIN-UX-002) deployed at `36ec24bd` (run 41022698292).
+- **AUTH-LOGIN-UX-002: VERIFIED** in Production. `/auth/methods` returns `email_code.available=false` because mail is failing. The card is 440px, methods are stacked, and the security card is gone.
+- **#887 webkit gate:** the first run failed and the log could not be downloaded (GitHub kept timing out); `rerun --failed` passed.
+- **META-SAAS-MODES-001 and META-SAAS-TEST-WORKSPACE-001: IMPLEMENTED_NOT_VERIFIED.** The admin Chrome session expired, and Claude does not sign in for the Owner. The live check (Primary locked, live 2 / saas 0) waits for the Owner's sign-in.
+- **Owner steps for the SaaS test:** sign in; at /admin/settings/integrations/meta-saas create the test workspace with a fresh email (the set-password link is shown once, because mail is failing); enter App ID 2604968763258530, Configuration ID 1138211818567426 and the ROTATED secret; in Meta Developers, set the redirect URI and the privacy, terms and data-deletion links and add testers; then connect from the test workspace.
+- **Owner external actions:** SMTP password; rotated Meta secret; Moyasar; FX rate source; agency session for #881 and #878.
+
+# CURRENT STATE — 2026-10-30 (morning) — #883 VERIFIED in Production; #880 VERIFIED; #884 in CI; modes PR next
+
+- **#883** (META-APP-SWITCH-GUARD-001), deployed at `69d1d49c`: **VERIFIED.** Production rollback guard reports `safe: false, affected: 2`, and the rollback button is disabled. Read-only.
+- **#880** (report delete audit): **VERIFIED.** A real `report.deleted` row with the actor, report fields and link metadata, and no token field.
+- **#884** (isolated SaaS test workspace) is in CI; the lander will merge and deploy it.
+- **Modes PR** (`feat/meta-saas-modes`: Live / SaaS Test / SaaS Primary, Primary locked behind evidence and the Owner's named approval) opens after #884 merges. Its full suite is running locally.
+- **SaaS real test:** NO-GO until #884 is deployed and its isolation is verified live.
+- **Still waiting on the agency session:** #881 export parity and #878 chips.
+- **PROD-READINESS-001: VERIFIED** (run 40994202712). **Owner:** the subscription gateway is sandbox (set Moyasar and its credentials), and there is no FX rate source (set FX_RATE_DRIVER or record rates at /admin/settings/currency-rates).
+- **MAIL-HEALTH-001: VERIFIED.** Production mail is **failing**: SMTP authentication for info@campaignshub.io is refused, and nothing has been sent (`last_sent_at` null). **Owner action:** correct the SMTP password in the Production mail settings (BLOCKED_EXTERNAL_CREDENTIALS). Until then every transactional email fails, so the SaaS test workspace shows its set-password link once to the creating admin (modes PR).
+
+# CURRENT STATE — 2026-10-30 (day) — Meta switch guard; SaaS app = NEW independent app (Owner correction)
+
+**Owner correction (binding):**
+- The Meta SaaS app is a NEW app, independent of Live and Candidate. Its goal is Meta's official approval for public use.
+- Replacing the current apps is a separate future phase (approval, migration plan, no interruption).
+- Forbidden: changing Live or Candidate, moving connections, promote/rollback.
+- Not VERIFIED until a real round trip from the new Meta app and Meta's approval.
+
+**In flight:** `fix/meta-switch-guard` (META-APP-SWITCH-GUARD-001). Promote and rollback refuse to strand connections the current Live app issued. Full backend suite: 5742 passed.
+
+**Next (Owner, 2026-10-30):** an isolated SaaS test workspace inside CampaignsHub. Before Meta's approval, the SaaS app is usable only in designated test workspaces, never in a customer workspace. Then the full journey: OAuth → discovery → binding → sync → campaigns → metrics → reports → reconnect/disconnect.
+
+# CURRENT STATE — 2026-10-30 — META-SAAS-APP-001 at maximum readiness on #871; AUTH-LOGIN-UX-002 queued
+
+**#871 (`feat/meta-saas-app`, `500345da`), rebased on main `bc422bf9`:**
+- A readiness list on `/admin/settings/integrations/meta-saas` (ready / not_verified / needs_credentials / owner_action), computed from evidence the server holds.
+- Routing new connections to the SaaS app needs the Owner's recorded Meta approval.
+- Production defect fixed: the Live deletion callback answered 503 because it read config keys that do not exist.
+- Routing stays Live. No credentials in chat; Live and Candidate are not used for testing.
+- Details: `docs/META_SAAS_APP_REVIEW.md`, section 2026-10-30.
+
+**#871 merged and deployed** at `5c79c079` (run 40973609502):
+- Local backend: 5733 passed. CI fully green on `500345da`.
+- Production: `/data-deletion/meta` answers 401 to a bad signature instead of 503. `/meta-saas` answers 503 because no secret is entered, as designed. The bundle carries the readiness list.
+- Routing stays Live.
+
+**#877/#879 (Twilio OTP, not merged):** the 13 backend failures plus 2 more in `PhoneConfirmationTest` were test defects, now fixed on #879 (`5c029c4a`, `f3b2dd04`):
+- The tests did not carry the session cookie that the OTP's `ownerKey` binds to.
+- One test re-verified an email inside the 60 s cooldown.
+- A new test proves a code cannot be redeemed from another session.
+- No auth logic changed. The contributor was told on #879.
+- #877 stays unmerged until full CI; no production OTP or real SMS.
+
+**Queue, in order:**
+1. Done: #871 (see above).
+2. Production proof for #881, #878 and #880 once the Owner signs in to the agency session (see below).
+3. **AUTH-LOGIN-UX-002** (secondary; starts only after 1–2 are closed or blocked). It extends `LOGIN-CARD-001` and `LOGIN-OTP-001`, so it adds no duplicate rows. Scope:
+   - premium login card, at most 440px wide, keeping the dark/green identity;
+   - every sign-in method stacked vertically at full width;
+   - the button reads «المتابعة برمز عبر البريد الإلكتروني»;
+   - the verify screen uses «تحقق من بريدك الإلكتروني» / «رمز التحقق» / «تأكيد الرمز والمتابعة» / «إعادة إرسال الرمز» / «استخدام بريد إلكتروني آخر»;
+   - remove the «حماية حسابك» card, keeping password recovery, «تذكرني» and sign-up;
+   - responsive layout, RTL/LTR, light and dark themes, loading, error and expired-code states;
+   - verify the backend Email OTP for real (send, verify, resend, expiry) and show no sign-in method that is not ready;
+   - no change to auth logic and no break to Google OAuth;
+   - then a11y, Playwright, CI, PR, deploy and a Production check.
+4. The remaining non-VERIFIED requirements.
+
+# CURRENT STATE — 2026-10-29 (late night) — #881, #878, #880 deployed; Production proof waits on an Owner sign-in; #871 CI rerun
+
+**Deployed (serial lander, each health 200):**
+- #881 at `100e45d1` (run 40924194281, bundle `index-Bj_dCVkO.js`). Live-report files are built from the page's builder.
+- #878 at `6d900f23` (run 40924269959, bundle `index-DoWgiNqs.js`). The served bundle contains `landing-comparison-evidence`.
+- #880 at `bc422bf9` (run 40935643681). Report deletions write `report.deleted`.
+
+**Production proof: BLOCKED_OPERATIONAL_EVIDENCE.** The agency session has expired in both Chrome and the in-app browser (`/api/v1/auth/me` → 401). Claude does not sign in for the Owner. Once the Owner signs in to agency@campaignshub.io in Chrome:
+1. Export `a2065cf6` as CSV, XLSX and PDF (`POST …/reports/a2065cf6…/export`; refresh `/sanctum/csrf-cookie` first) and compare each with the live page: period, currency, KPIs, Results.
+2. Open `/agency/campaigns` and check the chips' evidence panel.
+3. Confirm a `report.deleted` audit row only when a deletion really happens. No test deletion runs on NASEL data.
+
+None of #881, #878 or #880 is VERIFIED until those checks are done.
+
+**META-SAAS-APP-001 / #871** (`feat/meta-saas-app` at `8b2ab861`, not merged):
+- backend, frontend, image, chromium and webkit passed.
+- firefox first failed one unrelated spec: `launch.spec.ts:13`, where a rail click stayed on `/app/dashboard`. The diff is backend and docs only. The rerun passed (run 40923447073), so CI is fully green on `8b2ab861`.
+- Status: code IMPLEMENTED_NOT_VERIFIED; real round trip BLOCKED_EXTERNAL_CREDENTIALS; Business Verification and App Review BLOCKED_OPERATIONAL_EVIDENCE. See `docs/META_SAAS_APP_REVIEW.md`.
+
+# CURRENT STATE — 2026-10-29 (night) — #876 deployed; live-file defect found in Production; queue #878 → #881 → #880
+
+**Deployed:** #876 at `f9737930` (run 40898730692, health 200, bundle `index-Bj_dCVkO.js`). Files follow the link's Results contract. The first WebKit attempt hit the known «WebKit encountered an internal error» crash (999 passed); the rerun passed.
+
+**Production check of #876: FAILED → #881.**
+- Session: agency@campaignshub.io, signed in by the Owner in Chrome.
+- The NASEL live report `a2065cf6` exported to an empty CSV: « → » period, no KPI rows, platform header with revenue / conversions / ROAS / CPA.
+- Cause: live reports store no `data` snapshot, and every file path read that snapshot.
+- #881 (`fix/live-report-files`) renders files from the page's builder, in memory. It also carries a fix for a flaky `SharedLinkDownloadTest` substring assertion («42» matched the file's timestamp).
+
+**NASEL links, read from the agency session:**
+- One report, `a2065cf6`, with link `5392753f`: active, downloads off.
+- Reports behind Dk7… and brSe9… are absent from the list.
+- Deletion was unaudited, so cause and actor are unknown.
+- #880 (`fix/report-delete-audit`) audits deletions from now on.
+
+**Queue (one lander at a time):**
+- **#878** campaigns opportunity / higher-cost chips: comparable groups, data floor, explanatory evidence. One WebKit failure (`cross-product-consistency` › «/agency/settings never rendered») is unrelated to the diff; the job was rerun.
+- **#881**, then **#880**.
+
+**#877 Twilio OTP: NOT merged; no production OTP; no SMS sent.**
+- #879 (into #877's branch) fixes the first-send cooldown and the six-box OTP E2E. Its E2E now pass on all three browsers; backend failures went from 109 to 13.
+- The 13 left are #877's own: the session-bound `ownerKey` (12) and intake requiring `email_verification_id` (1). Both are written up in #879 for the contributor.
+- Credentials: Twilio vars are not wired into the deploy workflows; Saudi sender ID registration and Geo Permissions are operational. A Saudi handset test needs Owner approval.
+
+**Snapchat 477 rows:** dry run only (run 40867774062). No `--apply` or `--revert` without explicit Owner approval.
+
+**After the queue lands:**
+1. Re-export the NASEL CSV and compare with its page.
+2. Open `/agency/campaigns` (or `/app/campaigns`) and check the explanatory chips.
+3. Then the next non-VERIFIED requirement.
+
+# CURRENT STATE — 2026-10-29 (late) — Results contract deployed; exports on fix/nasel-exports-contract
+
+**Deployed:** #875 at `9515c939`:
+- section switches
+- KPI Results cards
+- the Results contract: «none» or undefined = Results disabled everywhere, never clicks; a chosen generic conversion is named «تحويلات المنصة»
+- Results label and clicks option
+- landing coverage note
+- revenue auto-hide
+- delete dialog with bulk delete
+
+**Production proof: BLOCKED_OPERATIONAL_EVIDENCE.** The public endpoint answers 404 «invalid, expired or revoked» for Dk7… and brSe9…. That says the links are not publicly active; it is NOT proof of deletion. The only browser session available is advertiser@campaignshub.io, which has no access to the NASEL project, so its empty report list proves nothing about NASEL. No replacement links are created without the Owner's authorisation. Next: an agency session, then read the links' state and ownership from it.
+
+**Branch fix/nasel-exports-contract:** files follow the link's Results contract (matrix NASEL-EXPORTS-RESULTS-CONTRACT-001).
+
+**Snapchat cross-project impact report (read-only)**, dry run 40867774062 on 2026-10-29:
+- 477 rows: 192 daily, 112 entity, 96 creative-daily, 53 creatives, 24 runs
+- dates 2026-10-19 → 26; non-zero only on 10-25 (97.31) and 10-26 (149.07)
+- both campaigns already filed in NASEL; the source project reads 0 of these rows
+- rollback via `--revert`
+- AWAITING OWNER APPROVAL. Do not apply.
+
 # CURRENT STATE — 2026-10-29 (evening) — NASEL report controls
 
 **Deployed:** #874 at `7aaf4535`: content and tables Results come from the resolver, plus landing evidence and docs.

@@ -29,6 +29,8 @@ final class PublicSurfaceInventoryTest extends TestCase
     private const PUBLIC = [
         'DELETE api/v1/client/team/{membership}',
         'DELETE api/v1/requests/uploads/{file}',
+        // AUTH-LOGIN-UX-002 — which ways in the sign-in page may offer; booleans only.
+        'GET api/v1/auth/methods',
         'GET api/v1/auth/oauth/providers',
         'GET api/v1/auth/oauth/{provider}/callback',
         'GET api/v1/auth/registration/{registration}',

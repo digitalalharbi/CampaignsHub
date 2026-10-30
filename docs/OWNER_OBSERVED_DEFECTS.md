@@ -250,3 +250,35 @@ On a new monthly-rolling detailed NASEL link the Owner found the following. Root
 Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) applying the same section and Results rules remain open.
 
 **Correction (Owner, same day, before #875 merged).** «None» means Results and Cost per Result are disabled entirely. It does not mean renamed to clicks/CPC, and clicks are a result only when chosen as the event. The first #875 draft substituted clicks; that draft was stopped before merge and rewritten to the contract (matrix NASEL-RESULTS-NONE-001, NASEL-PLATFORM-CARDS-RESULT-001). Links that never defined Results are held to the same contract: their generic conversions are not shown as «النتائج». A chosen `conversions` card is named «تحويلات المنصة».
+
+### NASEL 2026-10-29 — exports used generic conversions as «Results» and ignored the link's Results
+
+- **PDF (`PrintDocument`):**
+  - It printed «Results» from generic conversions on the platform, account and ad tables, and «Cost per Result» from generic CPA.
+  - It listed every saved KPI, including ones the link hides.
+- **CSV / XLSX (`ReportExporter`):**
+  - The daily ledger's «Results» column was generic conversions.
+  - Without a KPI allowlist the saved Results were listed whatever the link said.
+- **Download document (`ShareService::downloadDocument`):** it carried the saved copy's Results, not the link's events, «none» or label.
+
+All are fixed on fix/nasel-exports-contract. The fix is IMPLEMENTED_NOT_VERIFIED until a NASEL link with downloads allowed is exported in Production.
+
+**Correction (2026-10-29).** An earlier note read the NASEL links as deleted. The evidence was the public 404 («invalid, expired or revoked») plus an empty report list seen from an advertiser@ session that has no access to NASEL. Neither proves deletion. The links' state and ownership are BLOCKED_OPERATIONAL_EVIDENCE until an agency session reads them.
+
+**Read from the agency session, 2026-10-29 ~15:10 UTC (read-only).**
+- NASEL (`a8dcd0a4`) lists exactly one report: «تقرير أداء حملات مشروع رواق — نصل العقارية», live, created 10:05 UTC, period 2026-10-01 → 10-29.
+- Its one link `5392753f` is active (not revoked, no expiry, downloads off, 12 views).
+- The reports behind /r/Dk7… (report `9c7ed2b5`) and /r/brSe9… are **not in the project's report list**.
+- Report deletion is a hard delete that removes the report's links and, until #880, wrote **no audit row**. So whether they were deleted, by whom and when cannot be established from any authorised source. Recorded as absent, cause unattributed. Nothing was recreated.
+- #880 audits every future report deletion (actor, period, each link's id, mode, revocation, views, creator — never a token).
+- **2026-10-30, Production (read-only, admin audit):** the first real deletion after #880 deployed (2026-10-29 22:04 UTC, tenant «Mohammed Alharbi») wrote `report.deleted`. It records the actor, the report's name, type, project and period, and its one link (id, mode, created_at/by, expires_at, revoked_at, view_count), with no token field. No row exists for deletions before the deploy (no retroactive attribution). **#880: VERIFIED.**
+
+### NASEL 2026-10-29 (Production, after #876) — a live report's files were empty
+
+The CSV exported from the NASEL live report printed « → » for its period, no KPI rows, and a platform header naming revenue / conversions / ROAS / CPA the report never chose.
+
+**Cause:** a live report stores no `data` snapshot by design, and every file path (operator export, link download, PDF print) read that snapshot.
+
+**Fix:** #881. Files render from the page's own builder, in memory, under the report's KPIs, period and currency. Unreported metrics are empty, never zero. A link that hides spend ships none.
+
+**Status:** IMPLEMENTED_NOT_VERIFIED until #881 deploys and the NASEL CSV is re-exported and compared with its page.

@@ -117,7 +117,7 @@ final class PaidRegistrationTest extends TestCase
                 'id' => 'pay_forged', 'status' => 'paid', 'amount' => 9900, 'currency' => 'SAR',
                 'metadata' => ['reference' => $payment->idempotency_key],
             ],
-        ])->assertOk()->assertJsonPath('data.verified', false);
+        ])->assertUnauthorized();
 
         $this->assertSame('pending', $payment->refresh()->status);
         $this->assertFalse($registration->refresh()->isProvisioned());

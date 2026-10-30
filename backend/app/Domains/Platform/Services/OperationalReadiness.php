@@ -162,6 +162,15 @@ final class OperationalReadiness
         ];
     }
 
+    /**
+     * AUTH-LOGIN-UX-002 — the mail transport's state alone (`ok`, `failing`, `unknown`), for a surface that must not offer a way
+     * in that depends on mail when mail is known to be failing. No error text, no address: a public page may read this.
+     */
+    public function mailState(): string
+    {
+        return $this->mail(Carbon::now())['state'];
+    }
+
     /** Record that the scheduler ran. Called once a minute from `routes/console.php`. */
     public function markScheduler(?Carbon $now = null): void
     {

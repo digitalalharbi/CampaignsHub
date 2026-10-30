@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
+use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Services\DeletionVerification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -209,8 +211,7 @@ final class DataDeletionFlowTest extends TestCase
     /** With no app secret there is nothing to verify against, so the callback refuses. */
     public function test_the_platform_callback_refuses_when_the_provider_is_not_configured(): void
     {
-        Config::set('services.meta_ads.app_secret', null);
-        Config::set('ad_platforms.meta.client_secret', null);
+        Config::set('ad_platforms.platforms.meta.client_secret', null);
 
         $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => 'anything'])
             ->assertStatus(503);
@@ -221,7 +222,7 @@ final class DataDeletionFlowTest extends TestCase
     /** A body whose signature does not match is refused, and writes nothing. */
     public function test_the_platform_callback_refuses_a_bad_signature(): void
     {
-        Config::set('services.meta_ads.app_secret', 'test-secret');
+        Config::set('ad_platforms.platforms.meta.client_secret', 'test-secret');
 
         $payload = $this->base64Url(json_encode(['user_id' => '12345']));
 
@@ -235,7 +236,7 @@ final class DataDeletionFlowTest extends TestCase
     /** A genuine signed request opens ONE verified request and answers in the platform's shape. */
     public function test_a_signed_callback_opens_a_verified_request_and_is_idempotent(): void
     {
-        Config::set('services.meta_ads.app_secret', 'test-secret');
+        Config::set('ad_platforms.platforms.meta.client_secret', 'test-secret');
 
         $signed = $this->sign(['user_id' => '12345'], 'test-secret');
 
@@ -255,6 +256,73 @@ final class DataDeletionFlowTest extends TestCase
 
         $this->assertSame(1, DataRequest::count());
         $this->assertSame($first->json('confirmation_code'), $second->json('confirmation_code'));
+    }
+
+    /**
+     * Idempotency is per person: a callback for `1234` is not a retry of the one for `12345`. Matching the id as a substring of the
+     * stored sentence answered the second person with the first one's reference and recorded no request for them.
+     */
+    public function test_a_callback_for_an_id_contained_in_another_opens_its_own_request(): void
+    {
+        Config::set('ad_platforms.platforms.meta.client_secret', 'test-secret');
+
+        $first = $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '12345'], 'test-secret')])->assertOk();
+        $second = $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '1234'], 'test-secret')])->assertOk();
+
+        $this->assertSame(2, DataRequest::count());
+        $this->assertNotSame($first->json('confirmation_code'), $second->json('confirmation_code'));
+    }
+
+    /**
+     * The Live app's callback is verified with the Live App Secret wherever the platform keeps it — the stored provider settings first,
+     * the environment second. It used to read two keys no config file defines, so in Production it answered 503 to every call Meta made.
+     */
+    public function test_the_live_callback_is_verified_with_the_live_secret_from_the_provider_settings(): void
+    {
+        Config::set('ad_platforms.platforms.meta.client_secret', null);
+        $row = new ProviderConfiguration(['provider' => 'meta', 'environment' => 'production', 'enabled' => true]);
+        $row->credentials = ['client_id' => 'live-id', 'client_secret' => 'stored-live-secret'];
+        $row->save();
+
+        $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '4242'], 'stored-live-secret')])
+            ->assertOk()
+            ->assertJsonStructure(['url', 'confirmation_code']);
+        $this->assertSame('meta', DataRequest::sole()->source_provider);
+    }
+
+    /**
+     * META-SAAS-APP-001 — the SaaS app's deletion callback is verified with the SaaS app's own secret, never the Live one.
+     *
+     * Meta signs a callback with the secret of the app the person used. Verified against the Live secret, every SaaS-app
+     * deletion was refused — and App Review needs this URL to work.
+     */
+    public function test_the_saas_apps_callback_is_verified_with_its_own_secret_and_never_the_live_one(): void
+    {
+        Config::set('ad_platforms.platforms.meta.client_secret', 'live-secret');
+        app(MetaSaasCredentials::class)->save(['client_id' => '111', 'client_secret' => 'saas-secret', 'config_id' => '222']);
+
+        // Signed by the Live app: not a SaaS-app callback.
+        $this->postJson('/api/v1/webhooks/data-deletion/meta-saas', ['signed_request' => $this->sign(['user_id' => '777'], 'live-secret')])
+            ->assertStatus(401);
+        // Signed by the SaaS app but posted to the Live URL: refused there too.
+        $this->postJson('/api/v1/webhooks/data-deletion/meta', ['signed_request' => $this->sign(['user_id' => '777'], 'saas-secret')])
+            ->assertStatus(401);
+        $this->assertSame(0, DataRequest::count());
+
+        $this->postJson('/api/v1/webhooks/data-deletion/meta-saas', ['signed_request' => $this->sign(['user_id' => '777'], 'saas-secret')])
+            ->assertOk()
+            ->assertJsonStructure(['url', 'confirmation_code']);
+        $this->assertSame('meta-saas', DataRequest::sole()->source_provider);
+    }
+
+    /** With no SaaS secret stored, its callback refuses rather than trusting an unsigned body. */
+    public function test_the_saas_callback_refuses_when_the_saas_app_is_not_configured(): void
+    {
+        Config::set('ad_platforms.platforms.meta.client_secret', 'live-secret');
+
+        $this->postJson('/api/v1/webhooks/data-deletion/meta-saas', ['signed_request' => $this->sign(['user_id' => '777'], 'live-secret')])
+            ->assertStatus(503);
+        $this->assertSame(0, DataRequest::count());
     }
 
     private function sign(array $payload, string $secret): string

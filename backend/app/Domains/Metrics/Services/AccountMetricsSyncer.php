@@ -19,6 +19,7 @@ use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
@@ -150,7 +151,7 @@ final class AccountMetricsSyncer
         } catch (Throwable $e) {
             $this->noteInsightsRefusal($connection ?? null, $e->getMessage());
 
-            return $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage(), $account, $this->counts($connector), $this->categorise($e->getMessage()));
+            return $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage(), $account, $this->counts($connector), $this->categorise($e->getMessage(), $connection ?? null));
         }
 
         if (! $result->success) {
@@ -163,7 +164,7 @@ final class AccountMetricsSyncer
                 $result->message ?? 'The provider reported a failed sync.',
                 $account,
                 $this->counts($connector),
-                $this->categorise($result->message),
+                $this->categorise($result->message, $connection ?? null),
             );
         }
 
@@ -460,8 +461,13 @@ final class AccountMetricsSyncer
      * read insights at all?» — and both are needed: the connection decides what the card offers, the
      * account decides which name the card says.
      */
-    private function categorise(?string $message): string
+    private function categorise(?string $message, ?ProviderConnection $connection = null): string
     {
+        // META-SESSION-190-001 — an invalidated token is the connection's to fix by reconnecting, and is marked there.
+        if (app(ProviderSessionInvalidation::class)->record($connection, $message)) {
+            return 'token_invalidated';
+        }
+
         return InsightsAuthorisation::refusedBy($message) ? 'insights_not_authorised' : 'provider_error';
     }
 

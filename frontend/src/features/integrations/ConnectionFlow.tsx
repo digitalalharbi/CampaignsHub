@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from 'lucide-react'
 import {
-  connectWithApiKey, startPlatformOAuth, type ConnectableProvider, type HubConnection,
+  connectWithApiKey, fetchMetaApps, startPlatformOAuth, type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
 import { listProjects } from '@/features/projects/api'
@@ -373,6 +373,17 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
 }) {
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
 
+  /*
+   * META-SAAS-APP-001 — which Meta app this connection is issued by. Offered only when the SaaS app has passed its test; the connection
+   * stays with the app chosen here for its whole life, and no existing connection changes.
+   */
+  const metaApps = useQuery({ queryKey: ['meta-apps'], queryFn: fetchMetaApps, enabled: providerKey === 'meta' })
+  const [metaAppChoice, setMetaAppChoice] = useState<'live' | 'saas' | null>(null)
+  const metaApp = metaAppChoice ?? metaApps.data?.default ?? null
+  const saasAvailable = metaApps.data?.apps.some((a) => a.key === 'saas' && a.available) === true
+  // The isolated SaaS test workspace connects through the new app only, and says so when that app is not ready yet.
+  const testWorkspace = metaApps.data?.test_workspace === true
+
   const start = useMutation({
     /*
      * INTEGRATION-OWN-LOGIN-001 — a connection started FROM a client's project is that client's own.
@@ -383,7 +394,7 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
      * own — its own consent, its own credential — and the account step offers only what that login can see, which the assignment fence
      * already keeps off every other client's projects.
      */
-    mutationFn: () => startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination),
+    mutationFn: () => startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination, providerKey === 'meta' ? metaApp : null),
     onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
   })
 
@@ -417,6 +428,38 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
           </select>
         )}
       </section>
+
+      {providerKey === 'meta' && testWorkspace && !saasAvailable && (
+        <p data-testid="flow-meta-saas-not-ready" role="status" className="rounded-xl bg-[var(--warning-background)] px-4 py-3 text-xs text-text-primary">
+          {ar
+            ? 'هذه مساحة اختبار تطبيق المنصة الجديد، وتربط عبره فقط. التطبيق غير جاهز بعد: يُدخل مدير المنصة بياناته ويُنجح اختبار الربط أولًا.'
+            : 'This is the new platform app\'s test workspace and connects through it only. The app is not ready yet: the platform admin enters its credentials and passes the connection test first.'}
+        </p>
+      )}
+
+      {providerKey === 'meta' && saasAvailable && (
+        <section className="flex flex-col gap-2" data-testid="flow-meta-app">
+          <h3 className="text-sm font-bold text-text-primary">{ar ? 'تطبيق ميتا المستخدم لهذا الربط' : 'Meta app for this connection'}</h3>
+          <p className="text-xs text-text-secondary">
+            {ar
+              ? 'يبقى الربط مع التطبيق الذي تختاره هنا. الروابط القائمة لا تتغير.'
+              : 'The connection stays with the app you choose here. Existing connections do not change.'}
+          </p>
+          {(['live', 'saas'] as const).filter((key) => metaApps.data?.apps.some((a) => a.key === key && a.available)).map((key) => (
+            <label key={key} className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="meta-app"
+                data-testid={`flow-meta-app-${key}`}
+                checked={metaApp === key}
+                onChange={() => setMetaAppChoice(key)}
+                className="h-4 w-4 accent-brand-600"
+              />
+              {key === 'live' ? (ar ? 'التطبيق الحالي' : 'Current app') : (ar ? 'تطبيق المنصة (SaaS)' : 'Platform app (SaaS)')}
+            </label>
+          ))}
+        </section>
+      )}
 
       <section className="flex flex-col gap-2 rounded-xl bg-surface-secondary p-4">
         <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">

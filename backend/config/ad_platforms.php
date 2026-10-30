@@ -262,4 +262,15 @@ return [
         // Comma-separated. Empty means the candidate default, `ads_read` only.
         'scopes' => env('META_CANDIDATE_SCOPES'),
     ],
+    /*
+    | META-SAAS-APP-001 — the third, independent Meta app (the SaaS app under App Review). Its connections are customer
+    | connections bound to it for life. Entered at `/admin/settings/integrations/meta-saas` (row `meta.saas`, encrypted);
+    | these keys are only the fallback, and none falls back to a Live value.
+    */
+    'meta_saas' => [
+        'client_id' => env('META_SAAS_APP_ID'),
+        'client_secret' => env('META_SAAS_APP_SECRET'),
+        'config_id' => env('META_SAAS_CONFIG_ID'),
+        'scopes' => env('META_SAAS_SCOPES'),
+    ],
 ];

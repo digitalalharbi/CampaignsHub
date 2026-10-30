@@ -557,6 +557,89 @@ final class LiveReportService
      * @param  string  $currency  the report's own currency; every figure here is already normalised to it
      * @return array<string, mixed>
      */
+    /**
+     * RESULT-EVENTS-001 (Owner 2026-10-29) — a link's Results for one of its FILES: its own events, its «none», its label, read by the
+     * page's resolver over the window the file covers (the saved report's dates, exactly). Only the Results are computed — the file's
+     * other figures stay the saved report's — and the context is the share's own, as on the page.
+     *
+     * @return array{results: array<string, mixed>, results_label: string|null}
+     */
+    public function resultsForFile(ReportShare $share, Carbon $from, Carbon $to): array
+    {
+        $scope = $this->ceiling($share);
+        $this->tenants->setTenantId((string) $share->tenant_id);
+        $this->projects->setProjectId($scope['project_id'] === '' ? ReportScope::IMPOSSIBLE : $scope['project_id']);
+        $engine = $this->scopedEngine($share, $scope, $scope['providers']);
+        $label = ($share->settings ?? [])['results_label'] ?? null;
+
+        return [
+            'results' => $this->resultsFor($share, $scope, $engine, $from, $to),
+            'results_label' => is_string($label) && trim($label) !== '' ? trim($label) : null,
+        ];
+    }
+
+    /**
+     * LIVE-FILE-PARITY-001 — a live report's FILES are rendered from the same builder as its page.
+     *
+     * A live link's report is created with no `data` snapshot on purpose: the report IS the live definition. Every file path read
+     * that snapshot, so the CSV exported from the NASEL live report (Production, 2026-10-29) printed « → » for its period, an empty
+     * KPI block and a platform header the report never chose. This returns the report with a snapshot taken from the page's own
+     * payload — the window the page shows, its totals (a metric no platform reported is null, never the coalesced zero), its
+     * platforms and trend, its Results under the link's contract and the KPI list the report chose — held in memory only, never
+     * saved, so the live definition stays the only stored answer. A report with a snapshot, or one that is not live, is returned
+     * unchanged; so is a live report with no link to read through, which then fails the readiness gate rather than exporting nothing.
+     */
+    public function materialise(Report $report, ?ReportShare $share = null): Report
+    {
+        $live = (((array) ($report->config ?? []))['live'] ?? false) === true;
+        if (! $live || ! empty(((array) ($report->data ?? []))['kpis'] ?? null)) {
+            return $report;
+        }
+
+        $share ??= ReportShare::withoutGlobalScopes()
+            ->where('report_id', $report->getKey())
+            ->whereNull('revoked_at')
+            ->oldest('created_at')
+            ->first();
+        if ($share === null) {
+            return $report;
+        }
+
+        $page = $this->build($share, []);
+        $reported = (array) ($page['reported'] ?? []);
+        $isReported = static fn (string $key): bool => array_is_list($reported)
+            ? in_array($key, $reported, true)
+            : (($reported[$key] ?? true) !== false);
+
+        $kpis = [];
+        foreach ((array) ($page['totals'] ?? []) as $key => $value) {
+            if (is_array($value)) {
+                continue;
+            }
+            $kpis[(string) $key] = $isReported((string) $key) ? $value : null;
+        }
+
+        $data = [
+            'period' => ['from' => $page['period']['from'] ?? null, 'to' => $page['period']['to'] ?? null],
+            'currency' => $page['currency'] ?? $report->currency,
+            'mode' => 'live',
+            'kpis' => $kpis,
+            'metric_set' => array_values((array) ($page['metrics'] ?? [])),
+            'platforms' => array_values((array) ($page['platforms'] ?? [])),
+            'timeseries' => array_values((array) ($page['timeseries'] ?? [])),
+            'funnel' => array_values((array) ($page['funnel'] ?? [])),
+            'results' => $page['results'] ?? null,
+            'results_label' => $page['results_label'] ?? null,
+            'generated_at' => Carbon::now()->toIso8601String(),
+        ];
+        $data['checksum'] = ExportReadinessGate::checksum($data);
+
+        $copy = clone $report;
+        $copy->setAttribute('data', $data);
+
+        return $copy;
+    }
+
     public function build(ReportShare $share, array $requested, ?string $currency = ReportingCurrency::DEFAULT): array
     {
         $scope = $this->ceiling($share);

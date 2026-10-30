@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react'
-import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, login, phoneSignInStart, phoneSignInVerify, signInMethod, startOAuth } from './api'
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, fetchSignInMethods, login, phoneSignInStart, phoneSignInVerify, signInMethod, startOAuth } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { AuthShell } from './AuthShell'
 import { OtpField } from './OtpField'
@@ -59,9 +59,7 @@ const COPY = {
     forgot: 'نسيت كلمة المرور؟',
     signIn: 'تسجيل الدخول',
     orPasswordless: 'أو اختر طريقة أخرى للدخول',
-    sendCode: 'الدخول برمز البريد',
-    secureTitle: 'حماية حسابك',
-    secureBody: 'نستخدم إجراءات أمان لحماية بياناتك',
+    sendCode: 'المتابعة برمز عبر البريد الإلكتروني',
     noAccount: 'ليس لديك حساب؟',
     register: 'إنشاء حساب',
     emailRequired: 'أدخل بريدك الإلكتروني أولاً لإرسال الرمز.',
@@ -70,7 +68,9 @@ const COPY = {
     code: 'رمز التحقق',
     resend: 'إعادة إرسال الرمز',
     resendIn: 'إعادة الإرسال بعد :seconds ثانية',
-    changeEmail: 'تغيير البريد الإلكتروني',
+    changeEmail: 'استخدام بريد إلكتروني آخر',
+    confirmCode: 'تأكيد الرمز والمتابعة',
+    codeExpired: 'انتهت صلاحية رمز التحقق. أعد إرسال الرمز للحصول على رمز جديد.',
     notDelivered: 'لم يُرسل الرمز: خدمة البريد غير مفعّلة بعد على هذه البيئة.',
     deliveryFailed: 'تعذّر إرسال الرمز إلى بريدك. جرّب إعادة الإرسال بعد قليل.',
     // DEV/E2E only — never rendered in a production build.
@@ -93,9 +93,7 @@ const COPY = {
     forgot: 'Forgot your password?',
     signIn: 'Sign in',
     orPasswordless: 'Or sign in without a password',
-    sendCode: 'Email me a sign-in code',
-    secureTitle: 'Secure, encrypted sign-in',
-    secureBody: 'We follow current security practice to protect your account',
+    sendCode: 'Continue with an email code',
     noAccount: "Don't have an account?",
     register: 'Create an account',
     emailRequired: 'Enter your email address first so we know where to send the code.',
@@ -105,6 +103,8 @@ const COPY = {
     resend: 'Send the code again',
     resendIn: 'You can ask again in :seconds seconds',
     changeEmail: 'Use a different email address',
+    confirmCode: 'Confirm code and continue',
+    codeExpired: 'This verification code has expired. Send the code again to get a new one.',
     notDelivered: 'The code was not sent: email delivery is not configured on this environment yet.',
     deliveryFailed: 'The code could not be delivered to your inbox. Try sending it again in a moment.',
     phone: 'Mobile number',
@@ -141,6 +141,12 @@ export function LoginPage() {
   const { locale } = useUi()
   const c = COPY[locale]
   const oauthProviders = useQuery({ queryKey: ['oauth', 'providers'], queryFn: fetchOAuthProviders })
+  /*
+   * AUTH-LOGIN-UX-002 — a way in that cannot work is not shown. The email code is offered only once the server says mail can carry
+   * it (it withdraws it while the mail transport is failing); until it answers, nothing is offered that might not work.
+   */
+  const signInMethods = useQuery({ queryKey: ['auth', 'methods'], queryFn: fetchSignInMethods })
+  const emailCodeAvailable = signInMethods.data?.email_code.available === true
   const google = oauthProviders.data?.find((provider) => provider.provider === 'google')
   const googleAvailable = google?.available === true
   const googleSignIn = useMutation({
@@ -176,6 +182,9 @@ export function LoginPage() {
   const [code, setCode] = useState('')
   const [delivery, setDelivery] = useState<string | null>(null)
   const [cooldown, setCooldown] = useState(0)
+  // When the code in hand stops working — stated on the page instead of letting it be typed in vain.
+  const [expiresAt, setExpiresAt] = useState<number | null>(null)
+  const [expired, setExpired] = useState(false)
 
   /*
    * Already signed in? Then this page is not for you.
@@ -205,6 +214,16 @@ export function LoginPage() {
     return () => window.clearInterval(id)
   }, [cooldown])
 
+  /** One timer to the code's expiry; cleared when a new code arrives or the page goes. */
+  useEffect(() => {
+    if (expiresAt === null) return
+    const left = expiresAt - Date.now()
+    if (left <= 0) { setExpired(true); return }
+    const id = window.setTimeout(() => setExpired(true), left)
+
+    return () => window.clearTimeout(id)
+  }, [expiresAt])
+
   const identifier = engine === 'sms' ? (phoneFieldValue(phone, dialCode) ?? phone) : email.trim()
 
   /**
@@ -224,6 +243,8 @@ export function LoginPage() {
       setVerificationId(r.verification_id)
       setDelivery(r.delivery_status ?? null)
       setCooldown('resend_after' in r && typeof r.resend_after === 'number' ? r.resend_after : 60)
+      setExpired(false)
+      setExpiresAt('expires_in_minutes' in r && typeof r.expires_in_minutes === 'number' ? Date.now() + r.expires_in_minutes * 60_000 : null)
       // Dev-only: the backend returns `dev_code` ONLY outside production (hard-gated server-side).
       if (r.dev_code) setCode(r.dev_code)
     },
@@ -307,6 +328,8 @@ export function LoginPage() {
     setVerificationId(null)
     setDelivery(null)
     setCooldown(0)
+    setExpiresAt(null)
+    setExpired(false)
     signIn.reset(); requestCode.reset(); startCode.reset(); verifyCode.reset()
   }
 
@@ -335,11 +358,13 @@ export function LoginPage() {
 
   const submitCode = useCallback((typed?: string) => {
     const value = (typed ?? code).trim()
-    if (verificationId && value.length === 6 && !verifyCode.isPending) verifyCode.mutate(value)
-  }, [verificationId, code, verifyCode])
+    if (verificationId && value.length === 6 && !verifyCode.isPending && !expired) verifyCode.mutate(value)
+  }, [verificationId, code, verifyCode, expired])
 
   return (
     <AuthShell portal="default">
+      {/* AUTH-LOGIN-UX-002 — the sign-in column is at most 440px wide, so every way in reads as one narrow, deliberate stack. */}
+      <div data-testid="login-column" className="mx-auto w-full max-w-[440px]">
       <h2 className="font-heading text-[26px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[30px]">
         {step === 'code' ? c.codeTitle : c.title}
       </h2>
@@ -433,11 +458,13 @@ export function LoginPage() {
               would read as «choose», and the overwhelming majority of people here already know their
               password and want the green one.
             */}
-            <div className="my-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-[13px] text-text-secondary">{c.orPasswordless}</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
+            {(emailCodeAvailable || googleAvailable) && (
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-[13px] text-text-secondary">{c.orPasswordless}</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            )}
 
             {/*
               Keep the optional provider in the existing secondary-action row. Adding a second
@@ -445,18 +472,23 @@ export function LoginPage() {
               An unconfigured provider is omitted: there is no useful action for a visitor to take,
               and the server remains the authority that decides when the capability is available.
             */}
-            <div className={googleAvailable ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'grid grid-cols-1 gap-3'}>
-              <Button
-                type="button"
-                data-testid="login-request-code"
-                variant="secondary"
-                className="w-full"
-                size="lg"
-                loading={requestCode.isPending || startCode.isPending}
-                onClick={askForCode}
-              >
-                <Mail size={17} /> {c.sendCode}
-              </Button>
+            {/*
+              AUTH-LOGIN-UX-002 — every other way in, one above the other at full width, and only the ones that can work right now.
+            */}
+            <div className="flex flex-col gap-3" data-testid="login-methods">
+              {emailCodeAvailable && (
+                <Button
+                  type="button"
+                  data-testid="login-request-code"
+                  variant="secondary"
+                  className="w-full"
+                  size="lg"
+                  loading={requestCode.isPending || startCode.isPending}
+                  onClick={askForCode}
+                >
+                  <Mail size={17} /> {c.sendCode}
+                </Button>
+              )}
 
               {googleAvailable && (
                 <Button
@@ -472,21 +504,6 @@ export function LoginPage() {
                   {c.google}
                 </Button>
               )}
-            </div>
-
-            {/*
-              A statement of practice, not a claim about this request.
-
-              It says what the product does — transport encryption, hashed credentials, session
-              rotation — and deliberately does not say anything a page cannot know, such as that this
-              particular connection is safe.
-            */}
-            <div className="mt-5 flex items-start gap-3 rounded-xl bg-[var(--positive-background)] px-4 py-3">
-              <ShieldCheck size={18} className="mt-0.5 shrink-0 text-brand-600" />
-              <div>
-                <p className="text-[13.5px] font-bold text-brand-700">{c.secureTitle}</p>
-                <p className="mt-0.5 text-[12.5px] leading-relaxed text-text-secondary">{c.secureBody}</p>
-              </div>
             </div>
           </>
         )}
@@ -544,16 +561,23 @@ export function LoginPage() {
               </p>
             )}
 
+            {expired && (
+              <p data-testid="login-code-expired" role="alert" className="rounded-xl bg-[var(--warning-background)] px-4 py-3 text-[13px] leading-relaxed text-text-primary">
+                {c.codeExpired}
+              </p>
+            )}
+
             <ErrorNote error={activeError} always />
 
             <Button
               type="submit"
+              data-testid="login-confirm-code"
               loading={verifyCode.isPending}
-              disabled={!verificationId || code.trim().length < 6}
+              disabled={!verificationId || code.trim().length < 6 || expired}
               className="w-full"
               size="lg"
             >
-              {c.signIn}
+              {c.confirmCode}
             </Button>
 
             <div className="flex items-center justify-between gap-3 text-[13px]">
@@ -592,6 +616,7 @@ export function LoginPage() {
         offered a form to fill in instead.
       */}
       {step === 'credentials' && <HelpRequestModal locale={locale} ar={ar} />}
+      </div>
     </AuthShell>
   )
 }

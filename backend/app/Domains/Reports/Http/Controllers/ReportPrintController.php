@@ -12,6 +12,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
+use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportPlatformDrilldowns;
 use App\Domains\Reports\Services\ShareService;
 use App\Http\Controllers\Controller;
@@ -65,6 +66,13 @@ final class ReportPrintController extends Controller
 
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
+        /*
+         * LIVE-FILE-PARITY-001 — a live report prints the page's payload. A link's own file is materialised through THAT link,
+         * after it is re-checked below (`downloadDocument`); an operator's export reads through the report's definition link.
+         */
+        if (($ctx['share_id'] ?? null) === null) {
+            $report = app(LiveReportService::class)->materialise($report);
+        }
 
         $audience = $ctx['audience'] ?? ($report->audience ?? 'client');
         // Backend audience transform — the print route receives client-safe data for a client report;
@@ -98,6 +106,10 @@ final class ReportPrintController extends Controller
         }
         // REPORT-SECTION-SURFACES-001 — the PDF carries exactly the sections the page does.
         $body = app(ReportSectionSurfaces::class)->apply($body, $report, $share, 'print', audience: (string) $audience);
+        // REPORT-KPI-CONTRACT-001 — the PDF lists the KPIs the link shows, the same allowlist the CSV and XLSX read: nothing hidden is printed.
+        if ($audience !== 'internal' && is_array($body['metric_set'] ?? null) && $body['metric_set'] !== []) {
+            $body['kpi_allowlist'] = array_values($body['metric_set']);
+        }
 
         /*
          * REPORT-DRILLDOWN-001 — the optional platform drill-down section, present only when the operator
@@ -128,7 +140,7 @@ final class ReportPrintController extends Controller
             'watermark' => (bool) ($ctx['watermark'] ?? false),
             // IP-TRACE-001 — minted by the server with the token, never read from the URL.
             'trace' => isset($ctx['trace']) && is_string($ctx['trace']) ? $ctx['trace'] : null,
-            'currency' => $report->currency,
+            'currency' => $body['currency'] ?? $report->data['currency'] ?? $report->currency,
             'locale' => $report->reportLocale(),
             'is_demo' => (bool) $report->is_demo,
             'checksum' => $report->data['checksum'] ?? null,
