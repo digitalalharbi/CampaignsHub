@@ -1,3 +1,14 @@
+# CURRENT STATE — 2026-10-30 (morning) — #883 VERIFIED in Production; #880 VERIFIED; #884 in CI; modes PR next
+
+- **#883** (META-APP-SWITCH-GUARD-001), deployed at `69d1d49c`: **VERIFIED.** Production rollback guard reports `safe: false, affected: 2`, and the rollback button is disabled. Read-only.
+- **#880** (report delete audit): **VERIFIED.** A real `report.deleted` row with the actor, report fields and link metadata, and no token field.
+- **#884** (isolated SaaS test workspace) is in CI; the lander will merge and deploy it.
+- **Modes PR** (`feat/meta-saas-modes`: Live / SaaS Test / SaaS Primary, Primary locked behind evidence and the Owner's named approval) opens after #884 merges. Its full suite is running locally.
+- **SaaS real test:** NO-GO until #884 is deployed and its isolation is verified live.
+- **Still waiting on the agency session:** #881 export parity and #878 chips.
+- **PROD-READINESS-001: VERIFIED** (run 40994202712). **Owner:** the subscription gateway is sandbox (set Moyasar and its credentials), and there is no FX rate source (set FX_RATE_DRIVER or record rates at /admin/settings/currency-rates).
+- **MAIL-HEALTH-001: VERIFIED.** Production mail is **failing**: SMTP authentication for info@campaignshub.io is refused, and nothing has been sent (`last_sent_at` null). **Owner action:** correct the SMTP password in the Production mail settings (BLOCKED_EXTERNAL_CREDENTIALS). Until then every transactional email fails, so the SaaS test workspace shows its set-password link once to the creating admin (modes PR).
+
 # CURRENT STATE — 2026-10-30 (day) — Meta switch guard; SaaS app = NEW independent app (Owner correction)
 
 **Owner correction (binding):**
