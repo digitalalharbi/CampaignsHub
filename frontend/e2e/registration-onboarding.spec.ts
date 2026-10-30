@@ -348,8 +348,8 @@ async function verifyMobile(page: import('@playwright/test').Page) {
   const code = (await shown.innerText()).match(/(\d{6})/)?.[1]
   expect(code, 'no dev code was issued for the mobile challenge').toBeTruthy()
 
+  // OtpField submits as soon as the sixth digit lands.
   await page.getByTestId('registration-otp-0').fill(code!)
-  await page.getByRole('button', { name: /Confirm code|تأكيد الرمز/ }).click()
 }
 
 /**

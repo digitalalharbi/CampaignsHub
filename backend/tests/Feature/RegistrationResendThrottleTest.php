@@ -134,6 +134,18 @@ final class RegistrationResendThrottleTest extends TestCase
         $this->resend($registration)->assertStatus(422)->assertJsonValidationErrors(['channel']);
     }
 
+    /** The status payload and provider enforcement must read the same configured cooldown. */
+    public function test_the_status_payload_reports_the_configured_mobile_cooldown(): void
+    {
+        config()->set('accounts.mobile_resend_cooldown_seconds', 0);
+        $registration = $this->applicant('no-cooldown@a.test');
+
+        $this->resend($registration)->assertOk();
+        $this->getJson("/api/v1/auth/registration/{$registration->getKey()}")
+            ->assertOk()
+            ->assertJsonPath('data.registration.mobile_resend_after', 0);
+    }
+
     /**
      * And the address ceiling still bites, so opening applications in a loop is not a way around it.
      *

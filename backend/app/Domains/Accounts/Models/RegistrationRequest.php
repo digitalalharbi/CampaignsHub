@@ -144,7 +144,9 @@ final class RegistrationRequest extends Model
             return 0;
         }
 
-        return max(0, 60 - (int) $latest->created_at->diffInSeconds(now()));
+        $cooldownSeconds = max(0, (int) config('accounts.mobile_resend_cooldown_seconds', 60));
+
+        return max(0, $cooldownSeconds - (int) $latest->created_at->diffInSeconds(now()));
     }
 
     private function mobileDeliveryStatus(): ?string
