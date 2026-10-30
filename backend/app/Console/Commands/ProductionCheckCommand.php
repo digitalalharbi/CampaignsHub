@@ -52,6 +52,11 @@ final class ProductionCheckCommand extends Command
             $this->newLine();
         }
 
+        // PAY-MOYASAR-ACTIVATION-001 — names and states only, never a value.
+        foreach ($report['credentials'] as $credential) {
+            $this->line(sprintf('  %-24s %s', $credential['key'], $credential['status']));
+        }
+
         $this->line("  {$report['failures']} failing, {$report['warnings']} warning.");
         $this->newLine();
 
