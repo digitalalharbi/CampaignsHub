@@ -1,3 +1,12 @@
+# CURRENT STATE — 2026-10-30 (afternoon) — #884, #886, #885 and #887 deployed; SaaS test GO for the Owner
+
+- **#884** (test workspace) at `cc46fbdb`, then **#886** (modes) and **#885** (records), deployed together at `d8143a8f` (run 41008742683; the bundle contains the modes screen). **#887** (AUTH-LOGIN-UX-002) deployed at `36ec24bd` (run 41022698292).
+- **AUTH-LOGIN-UX-002: VERIFIED** in Production. `/auth/methods` returns `email_code.available=false` because mail is failing. The card is 440px, methods are stacked, and the security card is gone.
+- **#887 webkit gate:** the first run failed and the log could not be downloaded (GitHub kept timing out); `rerun --failed` passed.
+- **META-SAAS-MODES-001 and META-SAAS-TEST-WORKSPACE-001: IMPLEMENTED_NOT_VERIFIED.** The admin Chrome session expired, and Claude does not sign in for the Owner. The live check (Primary locked, live 2 / saas 0) waits for the Owner's sign-in.
+- **Owner steps for the SaaS test:** sign in; at /admin/settings/integrations/meta-saas create the test workspace with a fresh email (the set-password link is shown once, because mail is failing); enter App ID 2604968763258530, Configuration ID 1138211818567426 and the ROTATED secret; in Meta Developers, set the redirect URI and the privacy, terms and data-deletion links and add testers; then connect from the test workspace.
+- **Owner external actions:** SMTP password; rotated Meta secret; Moyasar; FX rate source; agency session for #881 and #878.
+
 # CURRENT STATE — 2026-10-30 (morning) — #883 VERIFIED in Production; #880 VERIFIED; #884 in CI; modes PR next
 
 - **#883** (META-APP-SWITCH-GUARD-001), deployed at `69d1d49c`: **VERIFIED.** Production rollback guard reports `safe: false, affected: 2`, and the rollback button is disabled. Read-only.
