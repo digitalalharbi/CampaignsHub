@@ -104,6 +104,11 @@ final class TokenVault
             'status' => 'connected',
             'token_expires_at' => $tokens->expiresAt,
             'last_error' => null,
+            /*
+             * META-APP-SWITCH-GUARD-001 — the app this token now belongs to. A token is only ever stored after the app it is used with
+             * issued or refreshed it (Meta refuses another app's token), so the connection's own app is the truthful issuer.
+             */
+            ...($connection->provider === 'meta' ? ['issuing_app_id' => PlatformCredentials::forConnection($connection)->get('client_id')] : []),
         ])->save();
     }
 
@@ -222,6 +227,8 @@ final class TokenVault
             'provider' => $creds->platform,
             // Recorded only for a non-Live Meta app: NULL stays the Live app, as for every connection before this.
             'app_profile' => $profile !== null && $profile !== MetaCredentialProfile::Live ? $profile->value : null,
+            // META-APP-SWITCH-GUARD-001 — the App ID that issued these tokens, so a later switch of the Live app can see who depends on it.
+            'issuing_app_id' => $profile !== null ? PlatformCredentials::forMeta($profile)->get('client_id') : null,
             'connection_name' => $connectionName,
             'scope' => $clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared',
             'external_owner_id' => $externalOwnerId,

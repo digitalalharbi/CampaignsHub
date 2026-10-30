@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\MetaCandidate\MetaAppSwitchGuard;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
@@ -30,6 +31,7 @@ final class MetaCandidateAppController extends Controller
         private readonly MetaCandidateRoundTrip $roundTrip,
         private readonly AuditLogger $audit,
         private readonly MetaProfilePromotion $promotion,
+        private readonly MetaAppSwitchGuard $guard,
     ) {}
 
     /** GET /admin/settings/integrations/meta-candidate */
@@ -124,6 +126,8 @@ final class MetaCandidateAppController extends Controller
             'confirm' => ['required', 'accepted'],
             // A SEPARATE, named confirmation — the general `confirm` never implies it.
             'confirm_narrow_scopes' => ['sometimes', 'boolean'],
+            // META-APP-SWITCH-GUARD-001 — the operator states they are changing which app every Live connection is refreshed with.
+            'acknowledge_app_switch' => ['required', 'accepted'],
         ]);
 
         $eligibility = $this->promotion->eligibility();
@@ -134,6 +138,10 @@ final class MetaCandidateAppController extends Controller
                 errors: ['promotion' => [$eligibility['reason']]],
                 status: 409,
             );
+        }
+
+        if (($refusal = $this->refuseIfStranding('promotion', $this->promotion->promotionTarget())) !== null) {
+            return $refusal;
         }
 
         $dropped = $this->promotion->droppedScopes();
@@ -169,7 +177,12 @@ final class MetaCandidateAppController extends Controller
     /** POST /admin/settings/integrations/meta-candidate/rollback — one step back to the previous Live app. */
     public function rollback(Request $request): JsonResponse
     {
-        $request->validate(['confirm' => ['required', 'accepted']]);
+        $request->validate(['confirm' => ['required', 'accepted'], 'acknowledge_app_switch' => ['required', 'accepted']]);
+
+        if ($this->promotion->rollbackAvailable()
+            && ($refusal = $this->refuseIfStranding('rollback', $this->promotion->rollbackTarget())) !== null) {
+            return $refusal;
+        }
 
         $result = $this->promotion->rollback($request->user()?->getKey());
 
@@ -191,6 +204,33 @@ final class MetaCandidateAppController extends Controller
         return ApiResponse::success($this->payload(), 'Live Meta app rolled back.');
     }
 
+    /**
+     * META-APP-SWITCH-GUARD-001 — refuse a switch of the Live app's identity that would leave connections holding tokens only the
+     * current app can refresh. The answer names the count and the four-character App ID hints, never a token or a secret, and the
+     * refusal is audited so a blocked attempt is on record.
+     */
+    private function refuseIfStranding(string $operation, ?string $target): ?JsonResponse
+    {
+        $check = $this->guard->check($target);
+        if ($check['safe']) {
+            return null;
+        }
+
+        $this->audit->log(
+            action: 'platform.integration.meta.'.$operation.'_refused',
+            entityType: ProviderConfiguration::class,
+            entityId: 'meta',
+            after: ['reason' => $check['reason'], 'affected_connections' => $check['affected'], 'unverified_issuer' => $check['unverified']],
+        );
+
+        return ApiResponse::error(
+            message: 'Active Meta connections hold tokens issued by the current Live app; switching the app would stop them syncing.',
+            errors: [$operation => [$check['reason']]],
+            status: 409,
+            meta: ['guard' => $check],
+        );
+    }
+
     /** @return array<string,mixed> */
     private function payload(): array
     {
@@ -201,6 +241,9 @@ final class MetaCandidateAppController extends Controller
                 ...$this->promotion->eligibility(),
                 'dropped_scopes' => $this->promotion->droppedScopes(),
                 'rollback_available' => $this->promotion->rollbackAvailable(),
+                // META-APP-SWITCH-GUARD-001 — whether each switch would strand connections, and how many; counts and hints only.
+                'promote_guard' => $this->guard->check($this->promotion->promotionTarget()),
+                'rollback_guard' => $this->promotion->rollbackAvailable() ? $this->guard->check($this->promotion->rollbackTarget()) : null,
             ],
         ];
     }
