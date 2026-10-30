@@ -1,3 +1,11 @@
+# CURRENT STATE — 2026-10-30 (late) — #892 and #893 deployed; Meta 190 connection now asks for reconnection
+
+- **#892** deployed at `31919faa` (run 41089272925): the deletion callback matches the user id exactly (fail-first). Production: forged and unsigned callbacks return 401. A genuinely signed call can only come from Meta (no secret is used outside the server), so the fix's live path is proven by tests plus deploy, not by a real Meta call.
+- **#893** deployed at `c6333a1b` (run 41115705157). Meta code 190 marks the connection `error` → «يحتاج إعادة مصادقة»; rate limits and transient errors don't. Production after the 20:02 sweep: Meta connections went from connected=3 to connected=2, error=1. The «Project 1» connection (hanka and RazahAvanue) has failed since 2026-10-25; the others are unchanged. **Owner action:** reconnect that connection. I do not reconnect.
+- **SaaS test account** (EGP): syncs every 30 min with `no_data`, and Meta returns 0 campaigns, so zero is correct. A report on it proves report generation only, not non-zero metrics.
+- **Blocked on an Owner sign-in:** the admin session expired (401). The SaaS test report and export, and the owner name on the Project 1 connection, wait for it.
+- **Meta approval blockers:** business_management in Configuration 1138211818567426; an ad account with delivery for video 1; a paused test campaign plus written approval for video 3; Business Verification; data-deletion URL and App Domains in Basic settings; Marketing API tier eligibility.
+
 # CURRENT STATE — 2026-10-30 (night) — App Review readiness; deletion-callback idempotency fix
 
 - **#891** (permission traceability) deployed at `d0a3bb1d` (run 41076495275).
