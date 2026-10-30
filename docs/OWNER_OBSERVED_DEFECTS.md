@@ -264,3 +264,20 @@ Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) ap
 All are fixed on fix/nasel-exports-contract. The fix is IMPLEMENTED_NOT_VERIFIED until a NASEL link with downloads allowed is exported in Production.
 
 **Correction (2026-10-29).** An earlier note read the NASEL links as deleted. The evidence was the public 404 («invalid, expired or revoked») plus an empty report list seen from an advertiser@ session that has no access to NASEL. Neither proves deletion. The links' state and ownership are BLOCKED_OPERATIONAL_EVIDENCE until an agency session reads them.
+
+**Read from the agency session, 2026-10-29 ~15:10 UTC (read-only).**
+- NASEL (`a8dcd0a4`) lists exactly one report: «تقرير أداء حملات مشروع رواق — نصل العقارية», live, created 10:05 UTC, period 2026-10-01 → 10-29.
+- Its one link `5392753f` is active (not revoked, no expiry, downloads off, 12 views).
+- The reports behind /r/Dk7… (report `9c7ed2b5`) and /r/brSe9… are **not in the project's report list**.
+- Report deletion is a hard delete that removes the report's links and, until #880, wrote **no audit row**. So whether they were deleted, by whom and when cannot be established from any authorised source. Recorded as absent, cause unattributed. Nothing was recreated.
+- #880 audits every future report deletion (actor, period, each link's id, mode, revocation, views, creator — never a token).
+
+### NASEL 2026-10-29 (Production, after #876) — a live report's files were empty
+
+The CSV exported from the NASEL live report printed « → » for its period, no KPI rows, and a platform header naming revenue / conversions / ROAS / CPA the report never chose.
+
+**Cause:** a live report stores no `data` snapshot by design, and every file path (operator export, link download, PDF print) read that snapshot.
+
+**Fix:** #881. Files render from the page's own builder, in memory, under the report's KPIs, period and currency. Unreported metrics are empty, never zero. A link that hides spend ships none.
+
+**Status:** IMPLEMENTED_NOT_VERIFIED until #881 deploys and the NASEL CSV is re-exported and compared with its page.

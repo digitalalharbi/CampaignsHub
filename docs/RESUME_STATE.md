@@ -1,3 +1,90 @@
+# CURRENT STATE — 2026-10-30 — META-SAAS-APP-001 at maximum readiness on #871; AUTH-LOGIN-UX-002 queued
+
+**#871 (`feat/meta-saas-app`, `500345da`), rebased on main `bc422bf9`:**
+- A readiness list on `/admin/settings/integrations/meta-saas` (ready / not_verified / needs_credentials / owner_action), computed from evidence the server holds.
+- Routing new connections to the SaaS app needs the Owner's recorded Meta approval.
+- Production defect fixed: the Live deletion callback answered 503 because it read config keys that do not exist.
+- Routing stays Live. No credentials in chat; Live and Candidate are not used for testing.
+- Details: `docs/META_SAAS_APP_REVIEW.md`, section 2026-10-30.
+
+**#871 merged and deployed** at `5c79c079` (run 40973609502):
+- Local backend: 5733 passed. CI fully green on `500345da`.
+- Production: `/data-deletion/meta` answers 401 to a bad signature instead of 503. `/meta-saas` answers 503 because no secret is entered, as designed. The bundle carries the readiness list.
+- Routing stays Live.
+
+**#877/#879 (Twilio OTP, not merged):** the 13 backend failures plus 2 more in `PhoneConfirmationTest` were test defects, now fixed on #879 (`5c029c4a`, `f3b2dd04`):
+- The tests did not carry the session cookie that the OTP's `ownerKey` binds to.
+- One test re-verified an email inside the 60 s cooldown.
+- A new test proves a code cannot be redeemed from another session.
+- No auth logic changed. The contributor was told on #879.
+- #877 stays unmerged until full CI; no production OTP or real SMS.
+
+**Queue, in order:**
+1. Done: #871 (see above).
+2. Production proof for #881, #878 and #880 once the Owner signs in to the agency session (see below).
+3. **AUTH-LOGIN-UX-002** (secondary; starts only after 1–2 are closed or blocked). It extends `LOGIN-CARD-001` and `LOGIN-OTP-001`, so it adds no duplicate rows. Scope:
+   - premium login card, at most 440px wide, keeping the dark/green identity;
+   - every sign-in method stacked vertically at full width;
+   - the button reads «المتابعة برمز عبر البريد الإلكتروني»;
+   - the verify screen uses «تحقق من بريدك الإلكتروني» / «رمز التحقق» / «تأكيد الرمز والمتابعة» / «إعادة إرسال الرمز» / «استخدام بريد إلكتروني آخر»;
+   - remove the «حماية حسابك» card, keeping password recovery, «تذكرني» and sign-up;
+   - responsive layout, RTL/LTR, light and dark themes, loading, error and expired-code states;
+   - verify the backend Email OTP for real (send, verify, resend, expiry) and show no sign-in method that is not ready;
+   - no change to auth logic and no break to Google OAuth;
+   - then a11y, Playwright, CI, PR, deploy and a Production check.
+4. The remaining non-VERIFIED requirements.
+
+# CURRENT STATE — 2026-10-29 (late night) — #881, #878, #880 deployed; Production proof waits on an Owner sign-in; #871 CI rerun
+
+**Deployed (serial lander, each health 200):**
+- #881 at `100e45d1` (run 40924194281, bundle `index-Bj_dCVkO.js`). Live-report files are built from the page's builder.
+- #878 at `6d900f23` (run 40924269959, bundle `index-DoWgiNqs.js`). The served bundle contains `landing-comparison-evidence`.
+- #880 at `bc422bf9` (run 40935643681). Report deletions write `report.deleted`.
+
+**Production proof: BLOCKED_OPERATIONAL_EVIDENCE.** The agency session has expired in both Chrome and the in-app browser (`/api/v1/auth/me` → 401). Claude does not sign in for the Owner. Once the Owner signs in to agency@campaignshub.io in Chrome:
+1. Export `a2065cf6` as CSV, XLSX and PDF (`POST …/reports/a2065cf6…/export`; refresh `/sanctum/csrf-cookie` first) and compare each with the live page: period, currency, KPIs, Results.
+2. Open `/agency/campaigns` and check the chips' evidence panel.
+3. Confirm a `report.deleted` audit row only when a deletion really happens. No test deletion runs on NASEL data.
+
+None of #881, #878 or #880 is VERIFIED until those checks are done.
+
+**META-SAAS-APP-001 / #871** (`feat/meta-saas-app` at `8b2ab861`, not merged):
+- backend, frontend, image, chromium and webkit passed.
+- firefox first failed one unrelated spec: `launch.spec.ts:13`, where a rail click stayed on `/app/dashboard`. The diff is backend and docs only. The rerun passed (run 40923447073), so CI is fully green on `8b2ab861`.
+- Status: code IMPLEMENTED_NOT_VERIFIED; real round trip BLOCKED_EXTERNAL_CREDENTIALS; Business Verification and App Review BLOCKED_OPERATIONAL_EVIDENCE. See `docs/META_SAAS_APP_REVIEW.md`.
+
+# CURRENT STATE — 2026-10-29 (night) — #876 deployed; live-file defect found in Production; queue #878 → #881 → #880
+
+**Deployed:** #876 at `f9737930` (run 40898730692, health 200, bundle `index-Bj_dCVkO.js`). Files follow the link's Results contract. The first WebKit attempt hit the known «WebKit encountered an internal error» crash (999 passed); the rerun passed.
+
+**Production check of #876: FAILED → #881.**
+- Session: agency@campaignshub.io, signed in by the Owner in Chrome.
+- The NASEL live report `a2065cf6` exported to an empty CSV: « → » period, no KPI rows, platform header with revenue / conversions / ROAS / CPA.
+- Cause: live reports store no `data` snapshot, and every file path read that snapshot.
+- #881 (`fix/live-report-files`) renders files from the page's builder, in memory. It also carries a fix for a flaky `SharedLinkDownloadTest` substring assertion («42» matched the file's timestamp).
+
+**NASEL links, read from the agency session:**
+- One report, `a2065cf6`, with link `5392753f`: active, downloads off.
+- Reports behind Dk7… and brSe9… are absent from the list.
+- Deletion was unaudited, so cause and actor are unknown.
+- #880 (`fix/report-delete-audit`) audits deletions from now on.
+
+**Queue (one lander at a time):**
+- **#878** campaigns opportunity / higher-cost chips: comparable groups, data floor, explanatory evidence. One WebKit failure (`cross-product-consistency` › «/agency/settings never rendered») is unrelated to the diff; the job was rerun.
+- **#881**, then **#880**.
+
+**#877 Twilio OTP: NOT merged; no production OTP; no SMS sent.**
+- #879 (into #877's branch) fixes the first-send cooldown and the six-box OTP E2E. Its E2E now pass on all three browsers; backend failures went from 109 to 13.
+- The 13 left are #877's own: the session-bound `ownerKey` (12) and intake requiring `email_verification_id` (1). Both are written up in #879 for the contributor.
+- Credentials: Twilio vars are not wired into the deploy workflows; Saudi sender ID registration and Geo Permissions are operational. A Saudi handset test needs Owner approval.
+
+**Snapchat 477 rows:** dry run only (run 40867774062). No `--apply` or `--revert` without explicit Owner approval.
+
+**After the queue lands:**
+1. Re-export the NASEL CSV and compare with its page.
+2. Open `/agency/campaigns` (or `/app/campaigns`) and check the explanatory chips.
+3. Then the next non-VERIFIED requirement.
+
 # CURRENT STATE — 2026-10-29 (late) — Results contract deployed; exports on fix/nasel-exports-contract
 
 **Deployed:** #875 at `9515c939`:
