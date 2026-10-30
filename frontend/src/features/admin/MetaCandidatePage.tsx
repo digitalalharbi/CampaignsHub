@@ -4,11 +4,12 @@ import { useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Circle, Loader2, PlayCircle, Trash2, XCircle } from 'lucide-react'
 import {
   fetchMetaCandidate, fetchMetaSaas, forgetMetaCandidateCredential, forgetMetaSaasCredential, promoteMetaCandidate, rollbackMetaLive, saveMetaCandidate,
-  saveMetaSaas, setMetaSaasRouting, startMetaCandidateTest, startMetaSaasTest,
+  saveMetaSaas, startMetaCandidateTest, startMetaSaasTest,
   type MetaAppSwitchGuard, type MetaCandidateRun, type MetaCandidateState, type MetaCandidateStep, type MetaCandidateStepKey,
 } from './api'
 import { MetaSaasReadiness } from './MetaSaasReadiness'
 import { MetaSaasTestWorkspace } from './MetaSaasTestWorkspace'
+import { MetaSaasModes } from './MetaSaasModes'
 import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
@@ -115,19 +116,11 @@ const SAAS_COPY = {
     title: 'تطبيق ميتا للمنصة (SaaS)',
     subtitle: 'تطبيق ميتا ثالث مستقل يُستخدم لربط حسابات جديدة فقط بعد نجاح اختباره واختياره. لا يستبدل تطبيق ميتا الحالي، ولا ينقل أي ربط قائم، ولا يلغي أي رمز. كل ربط يبقى مع التطبيق الذي أصدره.',
     credentials: 'بيانات تطبيق المنصة',
-    routing: 'التطبيق المستخدم للربط الجديد', routingNote: 'يؤثر على الربط الجديد فقط. الربط القائم يبقى مع تطبيقه، ونقل حساب قائم يتم صراحةً من صفحة الحسابات.',
-    useSaas: 'استخدام تطبيق المنصة للربط الجديد', useLive: 'العودة إلى التطبيق الحالي للربط الجديد',
-    current: 'الحالي', connections: 'روابط قائمة',
-    routingReasons: { not_configured: 'بيانات التطبيق غير مكتملة.', no_successful_test: 'لم ينجح اختبار الربط بعد.', credentials_changed_since_test: 'تغيّرت البيانات بعد آخر اختبار ناجح — أعد الاختبار.', test_workspace_only: 'قبل اعتماد ميتا يُستخدم التطبيق في مساحة الاختبار فقط.', app_review_not_confirmed: 'لم يُسجَّل بعد أن ميتا وثّقت النشاط ومنحت Advanced Access.' } as Record<string, string>,
   },
   en: {
     title: 'SaaS Meta app',
     subtitle: 'A third, independent Meta app, used for NEW connections only once its test has passed and it has been chosen. It never replaces the Live app, never moves an existing connection and never revokes a token. Every connection stays with the app that issued it.',
     credentials: 'SaaS app credentials',
-    routing: 'App used for new connections', routingNote: 'Affects new connections only. Existing connections stay with their app; moving an existing account is an explicit action on the accounts page.',
-    useSaas: 'Use the SaaS app for new connections', useLive: 'Back to the Live app for new connections',
-    current: 'Current', connections: 'existing connections',
-    routingReasons: { not_configured: 'The app credentials are incomplete.', no_successful_test: 'The connection test has not passed yet.', credentials_changed_since_test: 'The credentials changed after the last passing test — run it again.', test_workspace_only: 'Before Meta approves it, the app is used in the test workspace only.', app_review_not_confirmed: 'Meta’s Business Verification and Advanced Access have not been recorded yet.' } as Record<string, string>,
   },
 }
 
@@ -145,7 +138,6 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
   const qc = useQueryClient()
   const key = ['admin', saas ? 'meta-saas' : 'meta-candidate']
   const query = useQuery({ queryKey: key, queryFn: saas ? fetchMetaSaas : fetchMetaCandidate })
-  const routing = useMutation({ mutationFn: setMetaSaasRouting, onSuccess: (data) => qc.setQueryData(key, data) })
 
   const [form, setForm] = useState({ client_id: '', client_secret: '', config_id: '', scopes: '' })
 
@@ -181,8 +173,6 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
   }
 
   const { credentials, latest_run: run } = query.data
-  // META-SAAS-APP-001 — customers can authorise the SaaS app only once Meta approved it; the server refuses the switch without it too.
-  const reviewConfirmed = query.data.readiness?.find((i) => i.key === 'app_review')?.status === 'ready'
 
   return (
     <div data-testid={saas ? 'admin-meta-saas' : 'admin-meta-candidate'} className="flex flex-col gap-5">
@@ -281,31 +271,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
 
       {saas && query.data.test_workspace && <MetaSaasTestWorkspace state={query.data.test_workspace} ar={ar} />}
 
-      {saas && query.data.routing && (
-        <section data-testid="meta-saas-routing" className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="font-heading text-[15px] font-bold text-text-primary">{s2.routing}</h2>
-          <p className="mt-1 max-w-3xl text-xs text-text-secondary">{s2.routingNote}</p>
-          <p className="mt-2 text-sm" data-testid="meta-saas-routing-current">
-            {s2.current}: <b>{query.data.routing.default_for_new_connections === 'saas' ? 'SaaS' : 'Live'}</b>
-            {query.data.connections_by_app && (
-              <span className="ms-2 text-xs text-text-muted"><bdi dir="ltr">Live {query.data.connections_by_app.live} · SaaS {query.data.connections_by_app.saas}</bdi> {s2.connections}</span>
-            )}
-          </p>
-          {!query.data.routing.eligible && query.data.routing.reason ? (
-            <p className="mt-1 text-xs text-text-muted" data-testid="meta-saas-routing-reason">{s2.routingReasons[query.data.routing.reason] ?? query.data.routing.reason}</p>
-          ) : !reviewConfirmed && (
-            <p className="mt-1 text-xs text-text-muted" data-testid="meta-saas-routing-reason">{s2.routingReasons.app_review_not_confirmed}</p>
-          )}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {query.data.routing.default_for_new_connections === 'saas' ? (
-              <Button data-testid="meta-saas-use-live" variant="secondary" loading={routing.isPending} onClick={() => routing.mutate('live')}>{s2.useLive}</Button>
-            ) : (
-              <Button data-testid="meta-saas-use-saas" disabled={!query.data.routing.eligible || !reviewConfirmed} loading={routing.isPending} onClick={() => routing.mutate('saas')}>{s2.useSaas}</Button>
-            )}
-          </div>
-          {routing.isError && <p className="mt-2 text-xs text-danger">{toApiError(routing.error).message}</p>}
-        </section>
-      )}
+      {saas && query.data.modes && <MetaSaasModes modes={query.data.modes} ar={ar} />}
     </div>
   )
 }

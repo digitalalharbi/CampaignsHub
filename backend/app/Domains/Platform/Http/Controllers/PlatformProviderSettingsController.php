@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Configuration\ProviderProbe;
+use App\Domains\Integrations\MetaCandidate\MetaAppSwitchGuard;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -54,6 +55,37 @@ final class PlatformProviderSettingsController extends Controller
         private readonly ProviderProbe $probe,
         private readonly AuditLogger $audit,
     ) {}
+
+    /**
+     * META-APP-SWITCH-GUARD-001 — changing the Live Meta App ID here is the same switch as a promote or a rollback: every Live
+     * connection is refreshed with whatever App ID Live has, so moving it away from the app that issued their tokens stops them
+     * syncing. Refused with the count and four-character hints while that would happen; never a token or a secret.
+     */
+    private function refuseIfStrandingMeta(string $provider, mixed $newClientId): ?JsonResponse
+    {
+        if ($provider !== 'meta') {
+            return null;
+        }
+        $target = is_string($newClientId) && trim($newClientId) !== '' ? trim($newClientId) : null;
+        $check = app(MetaAppSwitchGuard::class)->check($target);
+        if ($check['safe']) {
+            return null;
+        }
+
+        $this->audit->log(
+            action: 'platform.integration.meta.app_id_change_refused',
+            entityType: ProviderConfiguration::class,
+            entityId: 'meta',
+            after: ['reason' => $check['reason'], 'affected_connections' => $check['affected'], 'unverified_issuer' => $check['unverified']],
+        );
+
+        return ApiResponse::error(
+            message: 'Active Meta connections hold tokens issued by the current Live app; changing its App ID would stop them syncing.',
+            errors: ['client_id' => [$check['reason']]],
+            status: 409,
+            meta: ['guard' => $check],
+        );
+    }
 
     /** GET /admin/settings/integrations/providers — every provider, in the product's order. */
     public function index(): JsonResponse
@@ -157,6 +189,10 @@ final class PlatformProviderSettingsController extends Controller
             }
         }
 
+        if (array_key_exists('client_id', $validated) && ($refusal = $this->refuseIfStrandingMeta($definition->key, $validated['client_id'])) !== null) {
+            return $refusal;
+        }
+
         $before = [
             'state' => $this->settings->state($provider)->value,
             'environment' => $this->settings->environment($provider),
@@ -240,6 +276,10 @@ final class PlatformProviderSettingsController extends Controller
             'value' => ['required', 'string', 'max:2000'],
         ]);
 
+        if ($validated['key'] === 'client_id' && ($refusal = $this->refuseIfStrandingMeta($definition->key, $validated['value'])) !== null) {
+            return $refusal;
+        }
+
         $this->settings->rotate($definition->key, $validated['key'], $validated['value'], $request->user()?->getKey());
 
         $this->audit->log(
@@ -301,6 +341,11 @@ final class PlatformProviderSettingsController extends Controller
         $definition = ProviderCatalogue::get($provider);
 
         abort_if($definition->field($key) === null, 404);
+
+        // Clearing the stored App ID hands Live to the environment's value (or to none): the same switch, the same guard.
+        if ($key === 'client_id' && ($refusal = $this->refuseIfStrandingMeta($definition->key, config('ad_platforms.platforms.meta.client_id'))) !== null) {
+            return $refusal;
+        }
 
         if (! $this->settings->forget($definition->key, $key)) {
             return ApiResponse::error(
