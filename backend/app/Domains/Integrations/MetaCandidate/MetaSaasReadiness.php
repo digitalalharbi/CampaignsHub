@@ -65,6 +65,9 @@ final class MetaSaasReadiness
             ['key' => 'credentials', 'status' => $configured ? 'ready' : 'needs_credentials', 'detail' => [
                 'missing' => $credentials->missing(),
             ]],
+            ['key' => 'test_workspace', 'status' => MetaSaasTestWorkspace::isTestTenant((string) app(MetaSaasTestWorkspace::class)->tenant()?->id) ? 'ready' : 'owner_action', 'detail' => [
+                'saas_only' => true,
+            ]],
             ['key' => 'meta_dashboard', 'status' => $runIsCurrent ? 'ready' : 'owner_action', 'detail' => [
                 'proven_by' => 'test_round_trip',
             ]],

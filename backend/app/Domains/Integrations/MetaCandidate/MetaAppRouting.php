@@ -36,6 +36,29 @@ final class MetaAppRouting
     }
 
     /**
+     * Whether the SaaS app may issue a connection IN THIS TENANT — `saasEligibility()` plus where it may be used.
+     *
+     * Before the Owner records Meta's approval the app is in test: only a designated test workspace (`MetaSaasTestWorkspace`) may
+     * connect through it. A customer tenant could otherwise open a second connection beside its Live one and re-discover the same
+     * accounts while the app is still unapproved — exactly what testing must never touch.
+     *
+     * @return array{eligible: bool, reason: string|null}
+     */
+    public static function saasEligibilityFor(?string $tenantId): array
+    {
+        $base = self::saasEligibility();
+        if (! $base['eligible']) {
+            return $base;
+        }
+        $approved = ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->value('review_confirmed_at') !== null;
+        if (! $approved && ! MetaSaasTestWorkspace::isTestTenant($tenantId)) {
+            return ['eligible' => false, 'reason' => 'test_workspace_only'];
+        }
+
+        return $base;
+    }
+
+    /**
      * Whether the SaaS app may issue a customer connection at all — the ONE rule every path asks: its credentials are complete and its
      * latest test round trip passed with exactly the credentials configured now.
      *
