@@ -84,6 +84,28 @@ final class MetaCandidateTestFlowTest extends TestCase
         $this->assertStringNotContainsString('cand-app-222222', $response->getContent());
     }
 
+    /** META-SAAS-APP-001 — the run records what Meta REALLY granted, read back from /me/permissions; a declined permission is not counted. */
+    public function test_the_run_records_the_permissions_meta_actually_granted(): void
+    {
+        $granted = ['ads_read', 'ads_management'];
+        Http::fake(fn ($r) => match (true) {
+            str_contains($r->url(), 'oauth/access_token') => Http::response(['access_token' => 'CAND-TOKEN-XYZ', 'expires_in' => 5184000]),
+            str_contains($r->url(), 'me/permissions') => Http::response(['data' => [
+                ...array_map(fn (string $p) => ['permission' => $p, 'status' => 'granted'], $granted),
+                ['permission' => 'business_management', 'status' => 'declined'],
+            ]]),
+            str_contains($r->url(), 'me/adaccounts') => Http::response(['data' => [['id' => 'act_9', 'name' => 'A', 'account_status' => 1, 'currency' => 'SAR']]]),
+            default => Http::response(['data' => []]),
+        });
+        $url = $this->actingAs($this->platformOwner, 'sanctum')->postJson('/api/v1/admin/settings/integrations/meta-candidate/test')->json('data.authorization_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+        $this->get("/api/v1/oauth/ads/meta/callback?code=abc&state={$q['state']}");
+
+        $this->assertSame($granted, MetaCandidateConnection::latestRun()->granted_scopes);
+        // Read only: nothing but GETs after the token exchange.
+        Http::assertNotSent(fn ($r) => ! str_contains($r->url(), 'oauth/access_token') && $r->method() !== 'GET');
+    }
+
     public function test_the_ads_read_step_records_the_business_use_case_usage_header(): void
     {
         $run = $this->runRoundTrip();

@@ -780,6 +780,20 @@ export interface MetaCandidateState {
   readiness?: MetaSaasReadinessItem[]
   /** META-SAAS-APP-001 — the isolated test workspace and its journey, each step read from real rows. */
   test_workspace?: MetaSaasTestWorkspaceState
+  /** META-SAAS-APP-001 — Live / SaaS Test / SaaS Primary, Primary's preconditions and the preview of what it changes. */
+  modes?: MetaSaasModesState
+}
+
+export interface MetaSaasModesState {
+  current: 'live' | 'saas_test' | 'saas_primary'
+  primary: {
+    enabled: boolean; eligible: boolean
+    preconditions: Array<{ key: string; met: boolean }>
+    preview: {
+      existing_live_connections: number; existing_live_tenants: number; existing_saas_connections: number; existing_connections_moved: number
+      existing_live_connected?: number; existing_live_ad_accounts?: number; live_ad_accounts_synced_24h?: number; live_oldest_last_successful_sync_at?: string | null
+    }
+  }
 }
 
 export type MetaSaasJourneyStep = 'oauth' | 'discovery' | 'binding' | 'sync' | 'metrics' | 'reports' | 'disconnect'
@@ -804,9 +818,13 @@ export const saveMetaSaas = (body: { client_id?: string; client_secret?: string;
 export const forgetMetaSaasCredential = (key: string): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/credentials/${key}`)
 export const startMetaSaasTest = (): Promise<{ run: MetaCandidateRun; authorization_url: string; expires_in_minutes: number }> => postData(`${META_SAAS}/test`, {})
 /** Which Meta app NEW customer connections use. Existing connections never change app. */
-export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandidateState> => putData(`${META_SAAS}/routing`, { default: target, confirm: true })
+/** Primary is sent only after the Owner ticked both named statements on the page; going back to Live needs neither. */
+export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandidateState> => putData(`${META_SAAS}/routing`, target === 'saas'
+  ? { default: target, confirm: true, approve_primary: true, acknowledge_existing_unchanged: true }
+  : { default: target, confirm: true })
 export const confirmMetaSaasReview = (): Promise<MetaCandidateState> => putData(`${META_SAAS}/review`, { business_verified: true, advanced_access_granted: true })
-export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState> => postData(`${META_SAAS}/test-workspace`, { email })
+/** The set-password link is in this response only, to be shown once to the admin who created the workspace. */
+export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState & { set_password_link?: string | null; mail_delivery?: string | null }> => postData(`${META_SAAS}/test-workspace`, { email })
 export const closeMetaSaasTestWorkspace = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/test-workspace`)
 export const withdrawMetaSaasReview = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/review`)
 

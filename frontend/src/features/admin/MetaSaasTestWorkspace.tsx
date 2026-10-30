@@ -25,6 +25,7 @@ const COPY = {
       sync: 'مزامنة فعلية', metrics: 'وصول المقاييس', reports: 'إنشاء تقرير', disconnect: 'فصل الاتصال (بعد إعادة الربط)',
     } as Record<MetaSaasJourneyStep, string>,
     manual: 'إعادة الربط تُنفَّذ يدويًا: اربط مرة أخرى من صفحة التكاملات قبل الفصل، ويبقى الاتصال نفسه.',
+    link: 'رابط تعيين كلمة المرور (يُعرض مرة واحدة، صالح لساعة ولاستخدام واحد). افتحه في نافذة خاصة وعيّن كلمة المرور، ثم سجّل الدخول ببريد مساحة الاختبار:',
     errors: { test_workspace_exists: 'مساحة الاختبار موجودة بالفعل.', email_already_registered: 'هذا البريد مسجّل لحساب قائم؛ استخدم بريدًا جديدًا.' } as Record<string, string>,
   },
   en: {
@@ -39,6 +40,7 @@ const COPY = {
       sync: 'A real sync', metrics: 'Metrics arrived', reports: 'A report created', disconnect: 'Disconnected (after a reconnect)',
     } as Record<MetaSaasJourneyStep, string>,
     manual: 'Reconnect is done by hand: connect again from Integrations before disconnecting; it stays the same connection.',
+    link: 'Set-password link (shown once, valid for one hour and one use). Open it in a private window, set the password, then sign in with the test workspace address:',
     errors: { test_workspace_exists: 'The test workspace already exists.', email_already_registered: 'That address already has an account; use a new one.' } as Record<string, string>,
   },
 }
@@ -50,7 +52,12 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
   const qc = useQueryClient()
   const onSuccess = (data: MetaCandidateState) => qc.setQueryData(['admin', 'meta-saas'], data)
   const [email, setEmail] = useState('')
-  const create = useMutation({ mutationFn: () => createMetaSaasTestWorkspace(email.trim()), onSuccess })
+  // Shown once, from the creation response only; a reload loses it on purpose (a new link needs «forgot password»).
+  const [link, setLink] = useState<string | null>(null)
+  const create = useMutation({
+    mutationFn: () => createMetaSaasTestWorkspace(email.trim()),
+    onSuccess: (data) => { setLink(data.set_password_link ?? null); onSuccess(data) },
+  })
   const close = useMutation({ mutationFn: closeMetaSaasTestWorkspace, onSuccess })
   const error = create.error ?? close.error
   const code = error ? (toApiError(error).errors?.email?.[0] ?? null) : null
@@ -83,6 +90,12 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
             <b>{state.active ? c.active : c.inactive}</b>
             {state.login_email && <span className="ms-2 text-xs text-text-secondary">{c.login}: <bdi dir="ltr">{state.login_email}</bdi></span>}
           </p>
+          {link && (
+            <div data-testid="meta-saas-test-workspace-link" role="status" className="rounded-xl bg-[var(--warning-background)] px-4 py-3 text-xs text-text-primary">
+              <p>{c.link}</p>
+              <p className="mt-1 break-all font-mono" dir="ltr">{link}</p>
+            </div>
+          )}
           <ol className="grid gap-1.5" data-testid="meta-saas-test-journey" aria-label={c.journey}>
             {STEPS.map((step) => {
               const done = state.steps[step] === true

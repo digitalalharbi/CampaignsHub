@@ -106,3 +106,26 @@ Only `ads_read` is requested. The product reads reporting data and never writes 
 | Reviewer workspace for Meta | Not built: needs the Owner's go-ahead before provisioning an account |
 | Screencast | Recorded after step 6, using the script above |
 | Replacing Live with this app | Future phase. Not started; needs Owner approval and a migration plan |
+
+## Real test — the journey inside CampaignsHub (2026-10-30)
+
+The new app (App ID `2604968763258530`, Configuration ID `1138211818567426`, permissions `ads_read` and `ads_management`) was supplied by the Owner. The App Secret is rotated and entered by the Owner only, at `/admin/settings/integrations/meta-saas`. The secret that appeared in chat is never used.
+
+| Step | Where | What it proves | What is read from rows |
+|---|---|---|---|
+| 1. Enter App ID, rotated App Secret, Configuration ID, scopes `ads_read, ads_management` | `/admin/settings/integrations/meta-saas` | Readiness «credentials» turns ready | `meta.saas` row |
+| 2. «تشغيل اختبار الربط» | same page | OAuth with the Configuration ID; token exchange with the SaaS secret; `GET /me/permissions` records what Meta **granted**; discovery; one `ads_read` insights read. GETs only after the exchange | `meta_candidate_connections` run `profile = saas` |
+| 3. Create the test workspace (new login address) | same page → «مساحة اختبار التطبيق الجديد» | An isolated tenant; the set-password link is shown once (mail is failing in Production) | `tenants.settings.meta_saas_test` |
+| 4. Sign in to the test workspace → Integrations → Connect Meta | `/login`, then `/app/integrations` | The workspace connects through the SaaS app only. Discovery lists the test ad accounts | `provider_connections.app_profile = saas`, `issuing_app_id = 2604968763258530` |
+| 5. Bind one test ad account to «Meta SaaS Test — Project», wait for the sync | Integrations → accounts | Campaigns and metrics arrive (ads_read) | `external_accounts.last_synced_at`, `daily_metrics` |
+| 6. Create a report in the test project | Reports | The report reads the synced figures | `reports` |
+| 7. Connect again, then disconnect | Integrations | Reconnect keeps the same connection; disconnect revokes it, and nothing is written to the ad account | `provider_connections.status = revoked` |
+
+**`ads_management` is tested as a grant only.** Step 2 records whether Meta granted it. CampaignsHub performs no write on any ad account, so no campaign is created, edited, paused or published. A write test would need the Owner's separate, explicit approval and a test ad account, and is not built.
+
+**Before and after, the Live side is unchanged.** The modes panel's «صحة Live الحالية» shows:
+- Live connections, connected count and ad accounts;
+- accounts synced in the last 24 h;
+- the oldest successful sync.
+
+Read it before step 1 and after step 7. The candidate page's rollback guard keeps showing `affected = 2`.
