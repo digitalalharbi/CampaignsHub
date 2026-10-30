@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -44,6 +45,12 @@ final class MetaConnectionMigrationController extends Controller
         $fromApp = MetaCredentialProfile::ofConnection($from->app_profile);
         $toApp = MetaCredentialProfile::ofConnection($to->app_profile);
         abort_if($fromApp === $toApp, 422, 'Both connections belong to the same Meta app; nothing would change.');
+        // Before Meta's approval is recorded the SaaS app is in test: a customer's account never moves onto it (test workspace only).
+        abort_if(
+            $toApp === MetaCredentialProfile::Saas && MetaAppRouting::saasEligibilityFor((string) $row->tenant_id)['reason'] === 'test_workspace_only',
+            409,
+            'The SaaS Meta app is in test; only the test workspace may use it until Meta approves it.',
+        );
 
         // The proof: the target app's own discovery found this account. Moving BACK to the connection it came from needs no new proof.
         $metadata = (array) ($row->metadata ?? []);

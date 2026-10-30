@@ -10,6 +10,7 @@ use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
 use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 use App\Domains\Integrations\MetaCandidate\MetaSaasReadiness;
+use App\Domains\Integrations\MetaCandidate\MetaSaasTestWorkspace;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
@@ -31,6 +32,7 @@ final class MetaSaasAppController extends Controller
         private readonly MetaCandidateRoundTrip $roundTrip,
         private readonly AuditLogger $audit,
         private readonly MetaSaasReadiness $readiness,
+        private readonly MetaSaasTestWorkspace $testWorkspace,
     ) {}
 
     public function show(): JsonResponse
@@ -164,6 +166,34 @@ final class MetaSaasAppController extends Controller
         return ApiResponse::success($this->payload(), 'Meta approval withdrawn; new connections use the Live app.');
     }
 
+    /**
+     * Create the isolated test workspace for the new app. The address is the Owner's own new login; its password is set from the
+     * reset email, never here. Refused when one already exists or the address already has an account.
+     */
+    public function createTestWorkspace(Request $request): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required', 'email:rfc', 'max:190']]);
+
+        try {
+            $created = $this->testWorkspace->provision($data['email'], $request->user()?->getKey());
+        } catch (\InvalidArgumentException $e) {
+            return ApiResponse::error(message: 'The test workspace could not be created.', errors: ['email' => [$e->getMessage()]], status: 409);
+        }
+
+        $this->audit->log(action: 'platform.integration.meta_saas.test_workspace_created', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: ['tenant_id' => (string) $created['tenant']->id]);
+
+        return ApiResponse::success($this->payload(), 'Test workspace created; a password link was emailed.', status: 201);
+    }
+
+    /** Close the test workspace to the SaaS app. Its data stays; nothing is deleted. */
+    public function closeTestWorkspace(): JsonResponse
+    {
+        $this->testWorkspace->deactivate();
+        $this->audit->log(action: 'platform.integration.meta_saas.test_workspace_closed', entityType: ProviderConfiguration::class, entityId: 'meta.saas');
+
+        return ApiResponse::success($this->payload(), 'Test workspace closed.');
+    }
+
     private function saasRow(): ?ProviderConfiguration
     {
         return ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->first();
@@ -191,6 +221,8 @@ final class MetaSaasAppController extends Controller
             // How many existing connections each app holds — read-only, and nothing here moves them.
             'connections_by_app' => ['live' => (int) ($connections['live'] ?? 0), 'saas' => (int) ($connections['saas'] ?? 0)],
             'readiness' => $this->readiness->items(),
+            // The end-to-end journey in the isolated test workspace, each step read from real rows.
+            'test_workspace' => $this->testWorkspace->journey(),
         ];
     }
 }

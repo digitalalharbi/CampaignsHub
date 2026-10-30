@@ -171,6 +171,8 @@ Route::middleware(['auth:sanctum', 'platform'])
             Route::put('/routing', [MetaSaasAppController::class, 'routing'])->middleware('throttle:10,1')->name('routing');
             Route::put('/review', [MetaSaasAppController::class, 'confirmReview'])->middleware('throttle:10,1')->name('review.confirm');
             Route::delete('/review', [MetaSaasAppController::class, 'withdrawReview'])->middleware('throttle:10,1')->name('review.withdraw');
+            Route::post('/test-workspace', [MetaSaasAppController::class, 'createTestWorkspace'])->middleware('throttle:5,1')->name('test-workspace.create');
+            Route::delete('/test-workspace', [MetaSaasAppController::class, 'closeTestWorkspace'])->middleware('throttle:10,1')->name('test-workspace.close');
         });
 
         Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {
