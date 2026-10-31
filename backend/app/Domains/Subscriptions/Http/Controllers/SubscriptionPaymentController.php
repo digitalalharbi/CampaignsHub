@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Http\Controllers;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Billing\Gateways\PaymentGatewayCatalogue;
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\SandboxPaymentProvider;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Services\ApplySubscriptionPaymentEvent;
@@ -38,7 +40,7 @@ final class SubscriptionPaymentController extends Controller
     public function providers(): JsonResponse
     {
         $configured = (array) config('subscriptions.providers', []);
-        $default = (string) config('subscriptions.default');
+        $default = app(SubscriptionProviderRegistry::class)->defaultKey();
 
         $providers = [];
 
@@ -66,7 +68,9 @@ final class SubscriptionPaymentController extends Controller
                     $adapter->isConfigured() => 'live',
                     default => 'awaiting_credentials',
                 },
-                'available' => $adapter->isConfigured(),
+                // PAY-GATEWAY-CONSOLE-001 — keys alone do not make a console gateway available: it must also be enabled.
+                'available' => $adapter->isConfigured()
+                    && (! PaymentGatewayCatalogue::exists((string) $key) || app(PaymentGatewaySettings::class)->isEnabled((string) $key)),
             ];
         }
 

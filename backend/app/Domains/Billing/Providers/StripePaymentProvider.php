@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Providers;
 
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -290,14 +291,14 @@ final class StripePaymentProvider implements PaymentProvider
 
     private function secretKey(): ?string
     {
-        $key = config('services.stripe.secret_key');
+        $key = app(PaymentGatewaySettings::class)->value('stripe', 'secret_key');
 
         return is_string($key) && $key !== '' ? $key : null;
     }
 
     private function webhookSecret(): ?string
     {
-        $secret = config('services.stripe.webhook_secret');
+        $secret = app(PaymentGatewaySettings::class)->value('stripe', 'webhook_secret');
 
         return is_string($secret) && $secret !== '' ? $secret : null;
     }

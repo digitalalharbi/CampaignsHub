@@ -123,13 +123,15 @@ Route::middleware(['auth:sanctum', 'platform'])
         /*
          * PAYSET-001 — the payment gateways.
          *
-         * READ and TEST only. There is deliberately no endpoint that writes a gateway secret: a
-         * console able to change one is a console whose compromise redirects every customer payment.
-         * Keys live in the environment; this surface says what the environment supports and what is
-         * missing, which is the question an operator actually has.
+         * Since PAY-GATEWAY-CONSOLE-001 (Owner decision, 2026-10-31) keys are stored here, encrypted and write-only;
+         * nothing returns a secret. Saving keys, enabling and choosing the primary are separate audited acts.
          */
         Route::prefix('/settings/integrations/payments')->name('payments.')->group(function (): void {
             Route::get('/', [PlatformPaymentSettingsController::class, 'index'])->name('index');
+            // PAY-GATEWAY-CONSOLE-001 — keys, activation and the primary gateway, each its own audited act.
+            Route::put('/primary', [PlatformPaymentSettingsController::class, 'primary'])->middleware('throttle:10,1')->name('primary');
+            Route::put('/{provider}', [PlatformPaymentSettingsController::class, 'save'])->middleware('throttle:20,1')->name('save');
+            Route::post('/{provider}/activation', [PlatformPaymentSettingsController::class, 'activation'])->middleware('throttle:10,1')->name('activation');
             Route::get('/{provider}/webhook', [PlatformPaymentSettingsController::class, 'webhook'])->name('webhook');
             Route::get('/{provider}/rotation', [PlatformPaymentSettingsController::class, 'rotation'])->name('rotation');
             // A real round trip to the gateway, rate limited because it leaves the building.

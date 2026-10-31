@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Domains\Billing\Providers\HyperPayPaymentProvider;
 use App\Domains\Billing\Providers\MoyasarPaymentProvider;
 use App\Domains\Billing\Providers\NullPaymentProvider;
+use App\Domains\Billing\Providers\PayTabsPaymentProvider;
 use App\Domains\Billing\Providers\SandboxPaymentProvider;
 use App\Domains\Billing\Providers\StripePaymentProvider;
 use App\Domains\Billing\Providers\TapPaymentProvider;
@@ -37,6 +39,9 @@ return [
         'moyasar' => MoyasarPaymentProvider::class,
         'tap' => TapPaymentProvider::class,
         'stripe' => StripePaymentProvider::class,
+        // PAY-GATEWAY-CONSOLE-001 — configured from the platform console; StreamPay has no adapter yet (see its catalogue note).
+        'hyperpay' => HyperPayPaymentProvider::class,
+        'paytabs' => PayTabsPaymentProvider::class,
         /*
          * A gateway that is honestly not one (PAY-SANDBOX-001).
          *

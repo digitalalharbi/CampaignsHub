@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
-use App\Domains\Audit\AuditLogger;
+use App\Domains\Billing\Gateways\PaymentGatewayCatalogue;
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use App\Domains\Subscriptions\Services\RecurringBilling;
@@ -15,54 +16,33 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The payment gateways, from the platform owner's console (PAYSET-001).
+ * The payment gateways, from the platform owner's console (PAYSET-001, PAY-GATEWAY-CONSOLE-001).
  *
- * What this deliberately does NOT do is accept secret keys over the API and write them somewhere. A
- * console that stored gateway credentials in the database would put every customer's money behind a
- * row an SQL injection could read, and would mean rotating a key required a working application.
- * Keys live in the environment; this surface tells an operator **what the environment currently
- * supports and what is missing**, which is the question they actually have.
- *
- * The distinction that matters throughout: `live`, `sandbox` and `awaiting_credentials` are three
- * different states, and a provider that is incomplete is shown as incomplete rather than as an option
- * somebody could select and have fail silently.
+ * Since PAY-GATEWAY-CONSOLE-001 (Owner decision, 2026-10-31) the keys ARE entered here: stored encrypted in
+ * `provider_configurations`, write-only (no endpoint ever returns a secret, a fragment of one or its length), every change audited
+ * by field name. An install configured from the environment keeps working until a key is saved here. Saving keys, testing,
+ * enabling (live needs its own confirmation) and choosing the primary gateway are four separate acts, and a gateway is enabled only
+ * after a passing test with the exact keys and mode now stored. New payments go to the primary; every existing payment and
+ * subscription keeps the gateway it was made with.
  */
 final class PlatformPaymentSettingsController extends Controller
 {
     public function __construct(
         private readonly SubscriptionProviderRegistry $providers,
-        private readonly AuditLogger $audit,
         private readonly RecurringBilling $recurring,
+        private readonly PaymentGatewaySettings $settings,
     ) {}
 
-    /**
-     * GET /api/v1/admin/settings/integrations/payments
-     *
-     * Every provider, what it needs, what it has, and what it is therefore able to do.
-     */
+    /** GET /api/v1/admin/settings/integrations/payments — every gateway, what it needs, what it has, and what it may do. */
     public function index(): JsonResponse
     {
         return ApiResponse::success([
-            'default' => (string) config('subscriptions.default'),
+            'default' => $this->settings->primary(),
+            'primary' => $this->settings->primary(),
+            'primary_source' => $this->settings->primaryIsFromConsole() ? 'console' : 'environment',
             'currency' => (string) config('subscriptions.currency'),
-            'providers' => [
-                $this->describeMoyasar(),
-                $this->describeTap(),
-                $this->describeStripe(),
-            ],
-            /*
-             * Whether renewals can be taken without the customer — PAY-TOKEN-003.
-             *
-             * Two facts, kept apart on purpose. `ready` is about the GATEWAY: this install could
-             * charge a saved card. `saved_methods` is how many customers actually have one, and it is
-             * the number that says whether the capability is doing anything. An operator reading
-             * «ready» beside a count of zero learns the true state — nothing is renewing itself yet —
-             * which a single boolean would have hidden either way round.
-             */
+            'providers' => array_map(fn (string $key) => $this->describe($key), PaymentGatewayCatalogue::KEYS),
             'recurring' => $this->recurring->readiness(),
-            // The notification transport belongs on this page too: a payment system that cannot tell
-            // anybody a charge failed is only half configured, and an operator checking one will want
-            // the other.
             'mail' => [
                 'state' => MailTransportState::current(),
                 'driver' => (string) config('mail.default'),
@@ -70,19 +50,57 @@ final class PlatformPaymentSettingsController extends Controller
         ], 'Payment settings.');
     }
 
+    /** PUT /api/v1/admin/settings/integrations/payments/{provider} — store keys and mode. Blank fields keep what is stored. */
+    public function save(Request $request, string $provider): JsonResponse
+    {
+        $definition = $this->definitionOr404($provider);
+        $rules = ['mode' => ['sometimes', 'nullable', 'in:test,live']];
+        foreach ($definition['fields'] as $field) {
+            $rules[$field['key']] = ['sometimes', 'nullable', 'string', 'max:4000'];
+        }
+        $data = $request->validate($rules);
+
+        $changed = $this->settings->save($provider, $data, $data['mode'] ?? null, $request->user()?->id);
+
+        return ApiResponse::success(['changed' => $changed, 'provider' => $this->describe($provider)], $changed === [] ? 'Nothing changed.' : 'Saved.');
+    }
+
+    /** POST /api/v1/admin/settings/integrations/payments/{provider}/activation — enable or disable for NEW payments. */
+    public function activation(Request $request, string $provider): JsonResponse
+    {
+        $this->definitionOr404($provider);
+        $data = $request->validate(['enabled' => ['required', 'boolean'], 'confirm_live' => ['sometimes', 'boolean']]);
+
+        $this->settings->setEnabled($provider, (bool) $data['enabled'], (bool) ($data['confirm_live'] ?? false), $request->user()?->id);
+
+        return ApiResponse::success(['provider' => $this->describe($provider)], $data['enabled'] ? 'Enabled.' : 'Disabled.');
+    }
+
+    /** PUT /api/v1/admin/settings/integrations/payments/primary — where NEW payments go. Nothing existing moves. */
+    public function primary(Request $request): JsonResponse
+    {
+        $data = $request->validate(['gateway' => ['required', 'string', 'in:'.implode(',', PaymentGatewayCatalogue::KEYS)], 'confirm' => ['required', 'accepted']]);
+
+        $this->settings->setPrimary($data['gateway'], $request->user()?->id);
+
+        return $this->index();
+    }
+
     /**
      * POST /api/v1/admin/settings/integrations/payments/{provider}/test
      *
-     * A REAL round trip to the gateway, not a config check.
-     *
-     * The difference matters: config being present proves somebody typed something, and this proves
-     * the gateway accepts it. An unconfigured provider is refused before any request is made, because
-     * "we could not reach the gateway" and "you have not given us a key" are different problems with
-     * different fixes.
+     * A REAL round trip to the gateway, not a config check: the smallest checkout session it accepts, which is an intent that expires
+     * unused — nothing is charged. The result is recorded against the exact keys and mode in use.
      */
     public function test(Request $request, string $provider): JsonResponse
     {
-        $adapter = $this->providerOr404($provider);
+        $this->definitionOr404($provider);
+
+        if (! $this->implemented($provider)) {
+            return ApiResponse::error('This gateway has no adapter yet.', meta: ['status' => 'not_implemented'], status: 422);
+        }
+
+        $adapter = $this->providers->for($provider);
 
         if (! $adapter->isConfigured()) {
             return ApiResponse::error(
@@ -92,39 +110,25 @@ final class PlatformPaymentSettingsController extends Controller
             );
         }
 
-        /*
-         * Tested by opening the smallest session the gateway will accept and reading the answer.
-         *
-         * Nothing is charged: a session is an intent, and it expires unused. Sending a real payment
-         * to prove connectivity would be taking a customer's money to answer an operator's question.
-         */
         $result = $adapter->createSession([
             'amount' => '1.00',
             'currency' => (string) config('subscriptions.currency'),
             'description' => 'CampaignsHub connection test',
             'reference' => 'connection-test:'.now()->timestamp,
             'return_url' => Frontend::origin().'/admin/settings',
-            // Some gateways (Tap) will not open an intent without a named, addressable customer: the
-            // operator running the test is that customer, and nothing is charged.
+            // Some gateways (Tap) will not open an intent without a named, addressable customer: the operator running the test is
+            // that customer, and nothing is charged.
             'customer' => ['name' => (string) $request->user()->name, 'email' => (string) $request->user()->email],
         ]);
 
         $reachable = ($result['status'] ?? '') === 'created';
-
-        $this->audit->log(
-            action: 'platform.payments.connection_tested',
-            entityType: 'payment_provider',
-            entityId: $provider,
-            after: ['reachable' => $reachable, 'status' => $result['status'] ?? null],
-            userId: $request->user()?->id,
-        );
+        $this->settings->recordTest($provider, $reachable, $reachable ? null : (string) ($result['error'] ?? 'The gateway refused the request.'), $request->user()?->id);
 
         return ApiResponse::success([
             'provider' => $provider,
             'reachable' => $reachable,
             'status' => $result['status'] ?? 'failed',
-            // The gateway's own words. A generic "connection failed" hides whether the key is wrong,
-            // the account is closed, or the currency is unsupported — three different fixes.
+            // The gateway's own words: a wrong key, a closed account and an unsupported currency are three different fixes.
             'error' => $result['error'] ?? null,
         ], $reachable ? 'The gateway accepted the request.' : 'The gateway refused the request.');
     }
@@ -137,147 +141,111 @@ final class PlatformPaymentSettingsController extends Controller
      */
     public function webhook(string $provider): JsonResponse
     {
-        $this->providerOr404($provider);
+        $definition = $this->definitionOr404($provider);
 
         return ApiResponse::success([
             'provider' => $provider,
-            'url' => rtrim((string) config('app.url'), '/')."/api/v1/payments/webhook/{$provider}",
-            'authentication' => match ($provider) {
-                'moyasar' => 'A shared secret carried in the body as `secret_token`, set from MOYASAR_WEBHOOK_TOKEN.',
-                'tap' => 'An HMAC-SHA256 signature in the `hashstring` header, keyed with TAP_SECRET_KEY.',
-                default => 'An HMAC-SHA256 signature in the `Stripe-Signature` header, set from STRIPE_WEBHOOK_SECRET.',
-            },
-            'events' => match ($provider) {
-                'moyasar' => ['payment_paid', 'payment_failed', 'payment_refunded'],
-                'tap' => ['charge (CAPTURED, FAILED, DECLINED, CANCELLED…)'],
-                default => ['checkout.session.completed', 'payment_intent.succeeded', 'payment_intent.payment_failed', 'charge.refunded'],
-            },
+            'url' => $this->webhookUrl($provider),
+            'authentication' => $definition['webhook']['scheme'],
+            'header' => $definition['webhook']['header'],
+            'events' => $definition['webhook']['events'],
         ], 'Webhook configuration.');
     }
 
-    /**
-     * Rotating a secret is an ENVIRONMENT change, and this says exactly which one.
-     *
-     * There is deliberately no endpoint that writes a new key. A console able to change a gateway
-     * secret is a console whose compromise redirects every customer payment — and the rotation an
-     * operator actually needs is at the provider, then in the environment, then a restart.
-     */
+    /** GET …/{provider}/rotation — rotating a key is: issue it at the gateway, save it here, test, then revoke the old one. */
     public function rotation(string $provider): JsonResponse
     {
-        $this->providerOr404($provider);
-
-        $variables = match ($provider) {
-            'moyasar' => ['MOYASAR_SECRET_KEY', 'MOYASAR_PUBLISHABLE_KEY', 'MOYASAR_WEBHOOK_TOKEN'],
-            'tap' => ['TAP_SECRET_KEY', 'TAP_PUBLISHABLE_KEY'],
-            default => ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET'],
-        };
+        $definition = $this->definitionOr404($provider);
 
         return ApiResponse::success([
             'provider' => $provider,
-            'variables' => $variables,
+            'fields' => array_values(array_map(fn (array $f) => $f['key'], array_filter($definition['fields'], fn (array $f) => $f['secret']))),
             'steps' => [
                 'Issue the new key in the provider’s own dashboard, leaving the old one active.',
-                'Set the new value in the environment and restart the application.',
-                'Run the connection test on this page and confirm it reports reachable.',
+                'Paste it here and save; the old value is replaced and never shown.',
+                'Run the connection test and confirm it passes with the new key.',
                 'Revoke the old key in the provider’s dashboard.',
             ],
-            // Said plainly, because the obvious "add a rotate button" is the wrong thing to build.
-            'note' => 'Secrets are never stored by CampaignsHub and cannot be changed from this console.',
+            'note' => 'Saved secrets are never shown again, not even here.',
         ], 'Secret rotation.');
     }
 
     /** @return array<string, mixed> */
-    private function describeMoyasar(): array
+    private function describe(string $key): array
     {
-        $adapter = $this->providers->for('moyasar');
+        $definition = PaymentGatewayCatalogue::get($key);
+        $implemented = $this->implemented($key);
+        $configured = $implemented && $this->settings->isConfigured($key);
+        $enabled = $implemented && $this->settings->isEnabled($key);
+        $row = $this->settings->row($key);
+        $testCurrent = $this->settings->testIsCurrent($key);
+
+        $status = match (true) {
+            ! $implemented => 'not_implemented',
+            ! $configured => 'awaiting_credentials',
+            $enabled => 'enabled',
+            ! $testCurrent => 'needs_test',
+            default => 'ready',
+        };
 
         return [
-            'provider' => 'moyasar',
-            'label' => ['ar' => 'ميسر', 'en' => 'Moyasar'],
-            // Named, not inferred from whichever happens to be configured: Moyasar is the official
-            // gateway whether or not anybody has supplied its keys yet.
-            'role' => 'primary',
-            'is_default' => config('subscriptions.default') === 'moyasar',
-            'status' => $adapter->isConfigured() ? 'live' : 'awaiting_credentials',
-            'available' => $adapter->isConfigured(),
-            'environment' => $this->environmentOf((string) config('services.moyasar.secret_key')),
-            'requires' => [
-                ['key' => 'MOYASAR_SECRET_KEY', 'present' => $this->filled(config('services.moyasar.secret_key'))],
-                ['key' => 'MOYASAR_PUBLISHABLE_KEY', 'present' => $this->filled(config('services.moyasar.publishable_key'))],
-                ['key' => 'MOYASAR_WEBHOOK_TOKEN', 'present' => $this->filled(config('services.moyasar.webhook_token'))],
+            'provider' => $key,
+            'label' => $definition['label'],
+            'role' => $key === 'moyasar' ? 'primary' : 'alternative',
+            'is_default' => $this->settings->primary() === $key,
+            'is_primary' => $this->settings->primary() === $key,
+            'implemented' => $implemented,
+            'status' => $status,
+            'available' => $configured && $enabled,
+            'enabled' => $enabled,
+            'mode' => $configured ? $this->settings->mode($key) : null,
+            'environment' => ! $configured ? 'unset' : ($this->settings->mode($key) === 'live' ? 'live' : 'sandbox'),
+            'source' => $this->settings->source($key),
+            'fields' => array_map(fn (array $f) => [
+                'key' => $f['key'],
+                'label' => $f['label'],
+                'secret' => $f['secret'],
+                'required' => $f['required'],
+                'present' => $this->settings->value($key, $f['key']) !== null,
+                // A publishable key is meant to be public; a secret is never shown in any form once saved.
+                'value' => $f['secret'] ? null : $this->settings->value($key, $f['key']),
+            ], $definition['fields']),
+            // Kept for the readiness view: the legacy environment names, presence only.
+            'requires' => array_values(array_map(fn (array $f) => [
+                'key' => (string) ($f['env'] ?? strtoupper($key.'_'.$f['key'])),
+                'present' => $this->settings->value($key, $f['key']) !== null,
+            ], array_filter($definition['fields'], fn (array $f) => $f['required']))),
+            'test' => [
+                'status' => $row?->last_test_status,
+                'at' => $row?->last_tested_at?->toIso8601String(),
+                'message' => $row?->last_test_status === 'failed' ? $row->last_test_message : null,
+                'current' => $testCurrent,
             ],
-            'webhook_url' => rtrim((string) config('app.url'), '/').'/api/v1/payments/webhook/moyasar',
+            'last_rotated_at' => $row?->last_rotated_at?->toIso8601String(),
+            'webhook_url' => $this->webhookUrl($key),
+            'webhook' => $definition['webhook'],
+            'capabilities' => $definition['capabilities'],
+            'methods' => $definition['methods'],
+            'docs' => $definition['docs'],
+            'note' => $definition['note'],
         ];
+    }
+
+    private function implemented(string $key): bool
+    {
+        return PaymentGatewayCatalogue::get($key)['fields'] !== [] && array_key_exists($key, (array) config('subscriptions.providers', []));
+    }
+
+    private function webhookUrl(string $provider): string
+    {
+        return PaymentGatewaySettings::webhookUrl($provider);
     }
 
     /** @return array<string, mixed> */
-    private function describeTap(): array
+    private function definitionOr404(string $provider): array
     {
-        $adapter = $this->providers->for('tap');
+        abort_unless(PaymentGatewayCatalogue::exists($provider), 404);
 
-        return [
-            'provider' => 'tap',
-            'label' => ['ar' => 'تاب', 'en' => 'Tap Payments'],
-            'role' => 'alternative',
-            'is_default' => config('subscriptions.default') === 'tap',
-            'status' => $adapter->isConfigured() ? 'live' : 'awaiting_credentials',
-            'available' => $adapter->isConfigured(),
-            'environment' => $this->environmentOf((string) config('services.tap.secret_key')),
-            // One secret: Tap signs its webhooks with the secret key itself.
-            'requires' => [
-                ['key' => 'TAP_SECRET_KEY', 'present' => $this->filled(config('services.tap.secret_key'))],
-                ['key' => 'TAP_PUBLISHABLE_KEY', 'present' => $this->filled(config('services.tap.publishable_key'))],
-            ],
-            'webhook_url' => rtrim((string) config('app.url'), '/').'/api/v1/payments/webhook/tap',
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function describeStripe(): array
-    {
-        $adapter = $this->providers->for('stripe');
-
-        return [
-            'provider' => 'stripe',
-            'label' => ['ar' => 'سترايب', 'en' => 'Stripe'],
-            'role' => 'alternative',
-            'is_default' => config('subscriptions.default') === 'stripe',
-            'status' => $adapter->isConfigured() ? 'live' : 'awaiting_credentials',
-            'available' => $adapter->isConfigured(),
-            'environment' => $this->environmentOf((string) config('services.stripe.secret_key')),
-            'requires' => [
-                ['key' => 'STRIPE_SECRET_KEY', 'present' => $this->filled(config('services.stripe.secret_key'))],
-                ['key' => 'STRIPE_PUBLISHABLE_KEY', 'present' => $this->filled(config('services.stripe.publishable_key'))],
-                ['key' => 'STRIPE_WEBHOOK_SECRET', 'present' => $this->filled(config('services.stripe.webhook_secret'))],
-            ],
-            'webhook_url' => rtrim((string) config('app.url'), '/').'/api/v1/payments/webhook/stripe',
-        ];
-    }
-
-    /**
-     * Test keys or live keys — read from the key itself, never from a separate toggle.
-     *
-     * Both gateways prefix their test keys, and a toggle that could disagree with the key in use is
-     * how an operator ends up certain they are in sandbox while taking real money.
-     */
-    private function environmentOf(string $key): string
-    {
-        if ($key === '') {
-            return 'unset';
-        }
-
-        return str_contains($key, '_test') || str_starts_with($key, 'sk_test') ? 'sandbox' : 'live';
-    }
-
-    private function filled(mixed $value): bool
-    {
-        return is_string($value) && trim($value) !== '';
-    }
-
-    private function providerOr404(string $provider)
-    {
-        abort_unless(in_array($provider, ['moyasar', 'tap', 'stripe'], true), 404);
-
-        return $this->providers->for($provider);
+        return PaymentGatewayCatalogue::get($provider);
     }
 }
