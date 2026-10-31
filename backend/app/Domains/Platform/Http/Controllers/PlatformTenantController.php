@@ -151,6 +151,9 @@ final class PlatformTenantController extends Controller
             // Who can get in, and through which portal. The owner's job is access, not content.
             'people' => $memberships->map(fn (Membership $m) => [
                 'user_id' => (string) $m->user_id,
+                // SUPERADMIN-ACCESS-001 — the key the access actions take, and whether two-factor is on (never the secret).
+                'user_uuid' => $m->user instanceof User ? $m->user->uuid : null,
+                'mfa_enabled' => $m->user instanceof User && (bool) $m->user->two_factor_enabled,
                 'name' => $m->user?->name,
                 'email' => $m->user?->email,
                 'portal' => $m->portal->value,
