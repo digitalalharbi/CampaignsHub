@@ -38,6 +38,18 @@ final class MembershipController extends Controller
         $memberships = $this->resolver->membershipsFor($user);
         $active = $this->context->membership();
 
+        // SUPERADMIN-SUPPORT-ACCESS-001 — during a support visit the visited workspace is the only one there is.
+        if ($active !== null && $active->getAttribute('support_session_id') !== null) {
+            return ApiResponse::success([
+                'memberships' => [$this->present($active, $active)],
+                'current' => $this->present($active, $active),
+                'destination' => ($active->portal instanceof Portal ? $active->portal : Portal::from((string) $active->portal))->landingPath(),
+                'needs_switcher' => false,
+                'requested_portal' => null,
+                'requested_portal_held' => null,
+            ], 'Memberships.');
+        }
+
         // The portal the visitor was heading for before they signed in. Honoured only if they hold
         // it — `landingPathFor` refuses to invent a membership — so it can carry the journey through
         // authentication without becoming a way to ask for a portal you do not have.

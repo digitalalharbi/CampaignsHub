@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Middleware;
 
 use App\Domains\Identity\Support\SessionRevocations;
+use App\Domains\Identity\Support\UserSessions;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Closure;
 use Illuminate\Http\Request;
@@ -56,7 +58,15 @@ final class RejectRevokedSessions
 
         $session = $request->session();
 
-        if (! $session->isStarted() || ! $this->revocations->isRevoked($session->getId())) {
+        if (! $session->isStarted()) {
+            return $next($request);
+        }
+
+        // SUPERADMIN-ACCESS-001 — a session that signed in before the user's cut-off («sign out everywhere») is refused too.
+        $user = Auth::guard('web')->user();
+        $stale = $user instanceof User && UserSessions::isStale($user, $session);
+
+        if (! $stale && ! $this->revocations->isRevoked($session->getId())) {
             return $next($request);
         }
 

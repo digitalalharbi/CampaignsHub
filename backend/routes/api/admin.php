@@ -20,7 +20,9 @@ use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
+use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
 use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
@@ -85,6 +87,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::put('/capabilities/{module}', [PlatformCapabilityController::class, 'setPlatform'])->middleware('throttle:30,1')->name('capabilities.platform');
         Route::get('/tenants/{tenant}/capabilities', [PlatformCapabilityController::class, 'tenant'])->name('tenants.capabilities');
         Route::put('/tenants/{tenant}/capabilities/{module}', [PlatformCapabilityController::class, 'setTenant'])->middleware('throttle:30,1')->name('tenants.capabilities.set');
+        // SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace; and the way back.
+        Route::post('/tenants/{tenant}/support-session', [PlatformSupportSessionController::class, 'start'])->middleware('throttle:10,1')->name('tenants.support-session');
+        Route::delete('/support-session', [PlatformSupportSessionController::class, 'end'])->name('support-session.end');
+        // SUPERADMIN-ACCESS-001 — restore a person's access: end their sessions, a one-time set-password link, or reset two-factor.
+        Route::post('/users/{user}/access', [PlatformUserAccessController::class, 'act'])->middleware('throttle:20,1')->name('users.access');
 
         /*
          * GRANT-001 — one account's administrative exceptions.

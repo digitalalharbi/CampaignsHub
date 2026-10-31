@@ -13,6 +13,7 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
@@ -31,6 +32,7 @@ use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
 use App\Domains\Subscriptions\Observers\SubscriptionPaymentAuditObserver;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Support\PhoneNumber;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -179,6 +181,12 @@ class AppServiceProvider extends ServiceProvider
             $html = $message->getHtmlBody();
             if (is_string($html) && $html !== '' && ($message->getTextBody() === null || $message->getTextBody() === '')) {
                 $message->text(PlainText::fromHtml($html));
+            }
+        });
+        // SUPERADMIN-ACCESS-001 — every session records when it signed in, so «sign out everywhere» can refuse the older ones.
+        Event::listen(Login::class, static function (Login $event): void {
+            if (request()->hasSession()) {
+                UserSessions::stamp(request()->session());
             }
         });
         Event::listen(ScheduledTaskStarting::class, [RecordScheduledRun::class, 'starting']);
@@ -370,7 +378,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('otp-request', function (Request $request): Limit {
             $perMinute = $this->app->environment('production') ? 4 : 60;
 
-            return Limit::perMinute($perMinute)->by($request->input('destination', '').'|'.$request->ip());
+            $destination = (string) $request->input('destination', $request->input('phone', ''));
+            $normalised = PhoneNumber::normalise($destination) ?? mb_strtolower(trim($destination));
+
+            return Limit::perMinute($perMinute)->by(hash('sha256', $normalised).'|'.$request->ip());
         });
 
         // OTP code checks: keyed by IP. Kept modest in production, but generous off-prod — a shared office/
