@@ -1,3 +1,24 @@
+# CURRENT STATE — 2026-11-01 — Super Admin completed in code; pricing programme phases 1–3; deploys unblocked
+
+- **Deploys were blocked** from 2026-10-31 20:26: contributor PR #877 (Twilio OTP) added uncommented keys to the production env example, so env-contract refused every deploy and Production stayed on 45c08f07. Fix #908 comments them out and adds `EnvContractNewKeyTest`, which fails a PR that adds a new uncommented key.
+- **refresh.sh no longer drops main.** Conflicts go through `resolve_safe.py` (diff3: superset / add-add / one-side-unchanged only; a real two-sided edit aborts). Every merge then runs `guard_main_lines.py`, which fails if any line main added is missing. Tests: `ch-scripts/test_refresh.sh` (9). Replaying the broken #906 merge 78871eee flags its four lost lines. This is local tooling, outside the repo.
+- **Super Admin landing order** (serial, safe refresh): #906 support access (E2E fixed: wait for the fresh sign-in; a visit is replaced per browser) → #907 feature control → console home → memberships → plan-level features → console evidence → limit overrides → this docs PR.
+- **Pricing (Owner, 2026-11-01):**
+  - SAR catalogue Solo/Team/Agency/Enterprise. Launch plans grandfathered: withdrawn from sale, untouched.
+  - Seats by real ad account with the 30-day replacement allowance.
+  - Add-ons: capacity packs sold; feature packs «coming soon» with no price.
+  - Stack: `feat/pricing-catalogue` → `feat/ad-account-seats` → `feat/pricing-addons`, landing after Super Admin.
+- **Not started:** PRICING-USAGE-CREDITS-001 (needs AI to become a priced platform service first) and PRICING-MIGRATION-001 (per-tenant preview and audited moves).
+- **Guarantees kept:** no subscription re-priced, no collection or renewal run (SUBSCRIPTION_LIFECYCLE_ENABLED off), no real payment.
+- **Owner:**
+  - sign in to walk the admin screens (Claude does not sign in);
+  - rotate and enter the Moyasar keys;
+  - enter the Twilio Verify credentials if wanted;
+  - reconnect Meta «Project 1» and X;
+  - Meta Developers: business_management, Basic settings, Business Verification;
+  - set the feature-pack prices after cost measurement;
+  - decide whether new plans get an introductory month.
+
 # CURRENT STATE — 2026-10-31 (evening) — payment-gateway console, workspace creation and access recovery
 
 - **Deployed:**
