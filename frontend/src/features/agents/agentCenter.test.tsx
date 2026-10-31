@@ -8,8 +8,9 @@ import { useProject } from '@/stores/project'
 vi.mock('./api', () => ({
   listAgents: vi.fn(), listThreads: vi.fn(), getThread: vi.fn(), sendToAgent: vi.fn(),
   listAiCredentials: vi.fn(), addAiCredential: vi.fn(), listRoutines: vi.fn(), setRoutine: vi.fn(),
+  getChatRetention: vi.fn(), setChatRetention: vi.fn(), deleteThread: vi.fn(), clearThreads: vi.fn(),
 }))
-import { addAiCredential, getThread, listAgents, listAiCredentials, listRoutines, listThreads, sendToAgent, setRoutine, type AgentRoutineRow } from './api'
+import { addAiCredential, getChatRetention, getThread, listAgents, listAiCredentials, listRoutines, listThreads, sendToAgent, setRoutine, type AgentRoutineRow } from './api'
 
 const role = (key: AgentRole['key'], over: Partial<AgentRole> = {}): AgentRole => ({ key, ar: key, en: key, enabled: true, why_disabled: null, can_propose: false, ...over })
 const ROLES = [role('orchestrator'), role('campaign', { can_propose: true }), role('analyst'), role('creative'), role('leads', { enabled: false, why_disabled: 'needs_lead_sources' }), role('reports')]
@@ -38,6 +39,7 @@ describe('the agent center', () => {
     vi.mocked(listAgents).mockResolvedValue({ agents: ROLES })
     vi.mocked(listThreads).mockResolvedValue({ threads: [] })
     vi.mocked(listAiCredentials).mockResolvedValue([])
+    vi.mocked(getChatRetention).mockResolvedValue({ days: 90, min: 7, max: 730, default: 90 })
     vi.mocked(listRoutines).mockResolvedValue({ routines: [routine()] })
   })
   afterEach(() => signOut())

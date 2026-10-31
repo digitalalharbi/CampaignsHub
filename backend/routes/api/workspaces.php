@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Agency\Http\Controllers\ClientBudgetController;
+use App\Domains\Agents\Http\Controllers\AgentChatRetentionController;
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
@@ -52,6 +53,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     // AI BYOK (masked; secrets never returned).
     Route::get('ai/credentials', [AICredentialController::class, 'index'])->name('ai.credentials.index');
     Route::post('ai/credentials', [AICredentialController::class, 'store'])->name('ai.credentials.store');
+    // AGENT-CHAT-RETENTION-001 — how long this workspace keeps agent conversations.
+    Route::get('ai/chat-retention', [AgentChatRetentionController::class, 'show'])->name('ai.chat-retention.show');
+    Route::put('ai/chat-retention', [AgentChatRetentionController::class, 'update'])->name('ai.chat-retention.update');
     Route::get('ai/credentials/{credential}/health', [AICredentialController::class, 'health'])->name('ai.credentials.health');
 
     // Alerting: rules + firing ledger (resolve / snooze).

@@ -1,4 +1,5 @@
 import { AgentHistoryCard } from './AgentHistoryCard'
+import { ChatRetentionCard } from './ChatRetentionCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -198,6 +199,7 @@ export function AgentCenterPage() {
             onGone={(ids) => { if (ids === 'all' || (threadId !== null && ids.includes(threadId))) setThreadId(null) }}
           />
           <RoutinesCard projectId={currentProjectId} ar={ar} canManage={canManage} onOpen={(id) => setThreadId(id)} />
+          {canManage && <ChatRetentionCard ar={ar} />}
           {canManage && <AiKeyCard ar={ar} />}
         </aside>
       </div>
