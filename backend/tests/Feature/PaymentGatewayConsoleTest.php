@@ -207,9 +207,11 @@ final class PaymentGatewayConsoleTest extends TestCase
     public function test_a_gateway_with_no_adapter_cannot_take_keys_or_be_tested(): void
     {
         $admin = $this->admin();
-        $this->actingAs($admin, 'sanctum')->putJson(self::URL.'/hyperpay', ['entity_id' => 'x'])->assertStatus(422);
-        $this->actingAs($admin, 'sanctum')->postJson(self::URL.'/hyperpay/test')->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->putJson(self::URL.'/streampay', ['api_key' => 'x'])->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->postJson(self::URL.'/streampay/test')->assertStatus(422);
         $this->actingAs($admin, 'sanctum')->putJson(self::URL.'/nope', [])->assertNotFound();
-        $this->assertSame('not_implemented', $this->describe($admin, 'hyperpay')['status']);
+        $streampay = $this->describe($admin, 'streampay');
+        $this->assertSame('not_implemented', $streampay['status']);
+        $this->assertStringContainsString('product', $streampay['note']['en'], 'the reason is stated, not hidden');
     }
 }

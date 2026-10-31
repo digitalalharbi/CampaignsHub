@@ -206,7 +206,10 @@ function ProviderCard({ provider, ar, copy }: { provider: PaymentProviderSetting
           )}
         </p>
       ) : (
-        <p className="flex items-center gap-1.5 text-xs text-text-muted"><AlertTriangle size={13} className="shrink-0" /> {copy.notImplemented}</p>
+        <div className="flex flex-col gap-1 text-xs text-text-muted">
+          <p className="flex items-center gap-1.5"><AlertTriangle size={13} className="shrink-0" /> {copy.notImplemented}</p>
+          {provider.note && <p data-testid={`payment-note-${provider.provider}`}>{ar ? provider.note.ar : provider.note.en}</p>}
+        </div>
       )}
 
       {provider.methods.length > 0 && (

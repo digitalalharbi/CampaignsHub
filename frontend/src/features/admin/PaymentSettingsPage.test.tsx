@@ -36,6 +36,7 @@ const gateway = (over: Partial<PaymentProviderSetting> = {}): PaymentProviderSet
   capabilities: { hosted_checkout: true, status_lookup: true, refund: false, recurring: true, webhook: true },
   methods: ['mada', 'visa'],
   docs: 'https://docs.moyasar.com',
+  note: null,
   ...over,
 })
 

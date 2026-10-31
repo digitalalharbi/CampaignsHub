@@ -570,6 +570,8 @@ export interface PaymentProviderSetting {
   capabilities: { hosted_checkout: boolean; status_lookup: boolean; refund: boolean; recurring: boolean; webhook: boolean }
   methods: string[]
   docs: string
+  /** Why a gateway is not implemented, when it is not. */
+  note: { ar: string; en: string } | null
 }
 
 export interface PaymentSettings {

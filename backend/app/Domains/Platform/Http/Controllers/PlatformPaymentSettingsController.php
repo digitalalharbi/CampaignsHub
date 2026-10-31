@@ -227,6 +227,7 @@ final class PlatformPaymentSettingsController extends Controller
             'capabilities' => $definition['capabilities'],
             'methods' => $definition['methods'],
             'docs' => $definition['docs'],
+            'note' => $definition['note'],
         ];
     }
 
@@ -237,8 +238,7 @@ final class PlatformPaymentSettingsController extends Controller
 
     private function webhookUrl(string $provider): string
     {
-        // The public API origin, as the OAuth redirect and the data-deletion callback use: `app.url` can be the SPA host.
-        return rtrim((string) config('ad_platforms.redirect_base', config('app.url')), '/')."/api/v1/payments/webhook/{$provider}";
+        return PaymentGatewaySettings::webhookUrl($provider);
     }
 
     /** @return array<string, mixed> */

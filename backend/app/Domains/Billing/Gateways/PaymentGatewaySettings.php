@@ -40,6 +40,12 @@ final class PaymentGatewaySettings
         return 'payment.'.$gateway;
     }
 
+    /** Where the gateway posts its events: the public API origin, as the OAuth redirect and the data-deletion callback use. */
+    public static function webhookUrl(string $gateway): string
+    {
+        return rtrim((string) config('ad_platforms.redirect_base', config('app.url')), '/')."/api/v1/payments/webhook/{$gateway}";
+    }
+
     /** The value an adapter uses, or null. */
     public function value(string $gateway, string $field): ?string
     {

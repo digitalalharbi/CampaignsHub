@@ -26,7 +26,7 @@ final class PaymentGatewayCatalogue
      *     test_prefix: ?string, live_prefix: ?string, prefixed_field: ?string,
      *     webhook: array{scheme: string, header: ?string, events: list<string>},
      *     capabilities: array{hosted_checkout: bool, status_lookup: bool, refund: bool, recurring: bool, webhook: bool},
-     *     methods: list<string>, docs: string
+     *     methods: list<string>, docs: string, note: array{ar: string, en: string}|null
      * }
      */
     public static function get(string $key): array
@@ -65,6 +65,7 @@ final class PaymentGatewayCatalogue
                 'capabilities' => ['hosted_checkout' => true, 'status_lookup' => true, 'refund' => false, 'recurring' => true, 'webhook' => true],
                 'methods' => ['mada', 'visa', 'mastercard', 'applepay', 'stcpay'],
                 'docs' => 'https://docs.moyasar.com',
+                'note' => null,
             ],
             'tap' => [
                 'key' => 'tap', 'label' => ['ar' => 'تاب', 'en' => 'Tap Payments'],
@@ -77,33 +78,50 @@ final class PaymentGatewayCatalogue
                 'capabilities' => ['hosted_checkout' => true, 'status_lookup' => true, 'refund' => false, 'recurring' => false, 'webhook' => true],
                 'methods' => ['mada', 'visa', 'mastercard', 'applepay', 'stcpay'],
                 'docs' => 'https://developers.tap.company',
+                'note' => null,
             ],
             'streampay' => [
                 'key' => 'streampay', 'label' => ['ar' => 'ستريم باي', 'en' => 'StreamPay'],
                 'fields' => [],
                 'test_prefix' => null, 'live_prefix' => null, 'prefixed_field' => null,
-                'webhook' => ['scheme' => '', 'header' => null, 'events' => []],
+                'webhook' => ['scheme' => 'HMAC-SHA256 over «{timestamp}.{raw body}» in `X-Webhook-Signature` (t=…,v1=…), keyed with the webhook secret.', 'header' => 'X-Webhook-Signature', 'events' => ['PAYMENT_SUCCEEDED', 'PAYMENT_FAILED', 'PAYMENT_REFUNDED']],
                 'capabilities' => ['hosted_checkout' => false, 'status_lookup' => false, 'refund' => false, 'recurring' => false, 'webhook' => false],
                 'methods' => [],
-                'docs' => 'https://streampay.sa',
+                'docs' => 'https://docs.streampay.sa',
+                // Why it is not implemented, stated rather than hidden behind a placeholder adapter.
+                'note' => [
+                    'ar' => 'روابط الدفع في ستريم باي لا تقبل مبلغًا حرًا وتتطلب منتجًا وسعرًا منشأين مسبقًا، ومخططا إنشاء المنتج والسعر وحمولة الويب هوك غير منشورة في المواصفة الرسمية. يلزم حساب Sandbox لتأكيدها قبل كتابة Adapter مالي.',
+                    'en' => 'StreamPay payment links take no free amount: they need a pre-created product and price, and the official spec does not publish the product, price or webhook payload schemas. A sandbox account is needed to confirm them before a money-moving adapter is written.',
+                ],
             ],
             'hyperpay' => [
                 'key' => 'hyperpay', 'label' => ['ar' => 'هايبر باي', 'en' => 'HyperPay'],
-                'fields' => [],
+                'fields' => [
+                    $field('access_token', 'رمز الوصول (Access Token)', 'Access token', true, true),
+                    $field('entity_id', 'معرّف الكيان (Entity ID)', 'Entity ID', false, true),
+                    $field('webhook_secret', 'سر تشفير الويب هوك (64 خانة)', 'Webhook decryption secret (64 hex)', true, true),
+                ],
+                // HyperPay's keys carry no test/live mark: the mode chooses the host (eu-test / eu-prod.oppwa.com).
                 'test_prefix' => null, 'live_prefix' => null, 'prefixed_field' => null,
-                'webhook' => ['scheme' => '', 'header' => null, 'events' => []],
-                'capabilities' => ['hosted_checkout' => false, 'status_lookup' => false, 'refund' => false, 'recurring' => false, 'webhook' => false],
-                'methods' => [],
-                'docs' => 'https://www.hyperpay.com',
+                'webhook' => ['scheme' => 'AES-256-GCM encrypted body; IV in `X-Initialization-Vector`, tag in `X-Authentication-Tag`, keyed with the webhook secret. Every payment is re-read from HyperPay before it settles. New HyperPay webhooks are inactive until enabled in its dashboard.', 'header' => 'X-Authentication-Tag', 'events' => ['PAYMENT']],
+                'capabilities' => ['hosted_checkout' => true, 'status_lookup' => true, 'refund' => false, 'recurring' => false, 'webhook' => true],
+                'methods' => ['mada', 'visa', 'mastercard'],
+                'docs' => 'https://hyperpay.docs.oppwa.com',
+                'note' => null,
             ],
             'paytabs' => [
                 'key' => 'paytabs', 'label' => ['ar' => 'باي تابس', 'en' => 'PayTabs'],
-                'fields' => [],
+                'fields' => [
+                    $field('profile_id', 'معرّف الملف (Profile ID)', 'Profile ID', false, true),
+                    $field('server_key', 'مفتاح الخادم (Server Key)', 'Server key', true, true),
+                ],
+                // Same host for test and live: the PROFILE is a test or a live one, so the mode is the operator's statement of it.
                 'test_prefix' => null, 'live_prefix' => null, 'prefixed_field' => null,
-                'webhook' => ['scheme' => '', 'header' => null, 'events' => []],
-                'capabilities' => ['hosted_checkout' => false, 'status_lookup' => false, 'refund' => false, 'recurring' => false, 'webhook' => false],
-                'methods' => [],
-                'docs' => 'https://site.paytabs.com',
+                'webhook' => ['scheme' => 'An HMAC-SHA256 `Signature` header over the raw body, keyed with the Server Key; every payment is re-read from PayTabs before it settles. The callback URL is sent with each payment request.', 'header' => 'Signature', 'events' => ['sale (A, D, E, V, P, H)', 'refund']],
+                'capabilities' => ['hosted_checkout' => true, 'status_lookup' => true, 'refund' => false, 'recurring' => false, 'webhook' => true],
+                'methods' => ['mada', 'visa', 'mastercard', 'applepay', 'stcpay'],
+                'docs' => 'https://docs.paytabs.com',
+                'note' => null,
             ],
             'stripe' => [
                 'key' => 'stripe', 'label' => ['ar' => 'سترايب', 'en' => 'Stripe'],
@@ -117,6 +135,7 @@ final class PaymentGatewayCatalogue
                 'capabilities' => ['hosted_checkout' => true, 'status_lookup' => true, 'refund' => false, 'recurring' => true, 'webhook' => true],
                 'methods' => ['visa', 'mastercard', 'applepay'],
                 'docs' => 'https://docs.stripe.com',
+                'note' => null,
             ],
         ];
     }
