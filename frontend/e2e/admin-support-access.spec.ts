@@ -15,6 +15,9 @@ test.describe('support access', () => {
     // sign-in alone can spend most of it on a cold CI run. Both earlier failures were that budget, not the feature.
     test.setTimeout(120_000)
     await signIn(page, 'admin@campaignshub.io', 'password')
+    // signIn() returns on the click; navigating before the sign-in lands aborts it and leaves the page on /login — what
+    // every earlier run of this spec showed, on all three browsers. Wait until the app has moved us on.
+    await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
     await page.goto('/admin/tenants')
     await switchToEnglish(page)
     await expect(page.getByTestId('tenant-list')).toBeVisible({ timeout: 30_000 })
