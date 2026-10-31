@@ -8,7 +8,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\TokenVault;
 
 /**
- * META-SESSION-190-001 — a refusal that only a new consent can fix.
+ * META-SESSION-190-001 — a refusal that only a new consent can fix (Meta code 190; X UNAUTHORIZED_ACCESS).
  *
  * Meta answers code 190 for a token it no longer honours: expired, the person changed their password, removed the app, or hit a
  * security checkpoint (subcodes 458–467, 492). Waiting never fixes it, so the connection is marked `error`, which every surface already
@@ -22,11 +22,17 @@ final class ProviderSessionInvalidation
 {
     public static function invalidatedBy(string $provider, ?string $message): bool
     {
-        if ($provider !== 'meta' || $message === null) {
+        if ($message === null) {
             return false;
         }
 
-        return preg_match('/(?<![\w])code 190(?!\d)|\(#190\)/', $message) === 1;
+        return match ($provider) {
+            'meta' => preg_match('/(?<![\w])code 190(?!\d)|\(#190\)/', $message) === 1,
+            // X's «This request is not properly authenticated»: the stored user token no longer authenticates. An ad-account grant
+            // refusal (NOT_AUTHORIZED…) or a rate limit is not this.
+            'x' => preg_match('/(?<![\w])code UNAUTHORIZED_ACCESS(?![\w])/', $message) === 1,
+            default => false,
+        };
     }
 
     /**

@@ -90,6 +90,19 @@ final class MetaSessionInvalidatedTest extends TestCase
         $this->assertFalse(ProviderSessionInvalidation::invalidatedBy('snapchat', 'Bad token · code 190'));
     }
 
+    /**
+     * X's authentication refusal is the same fact in X's words. Production, 2026-10-30: both X accounts bound to «Project 1» failed
+     * every sweep with «This request is not properly authenticated · code UNAUTHORIZED_ACCESS» while the connection said «متصل».
+     * An ad-account permission refusal (NOT_AUTHORIZED…) is the account's grant, not the authorisation, and is not this.
+     */
+    public function test_xs_unauthenticated_request_is_an_invalidated_session_and_an_account_refusal_is_not(): void
+    {
+        $this->assertTrue(ProviderSessionInvalidation::invalidatedBy('x', 'X Ads API could not return campaigns: This request is not properly authenticated · code UNAUTHORIZED_ACCESS'));
+        $this->assertFalse(ProviderSessionInvalidation::invalidatedBy('x', 'User is not authorized to access this account · code NOT_AUTHORIZED_FOR_ACCOUNT'));
+        $this->assertFalse(ProviderSessionInvalidation::invalidatedBy('x', 'Rate limit exceeded · code TOO_MANY_REQUESTS'));
+        $this->assertFalse(ProviderSessionInvalidation::invalidatedBy('meta', 'not properly authenticated · code UNAUTHORIZED_ACCESS'));
+    }
+
     public function test_a_190_on_the_metrics_sync_marks_the_connection_for_reconnecting_and_keeps_token_and_data(): void
     {
         [$connection, $account] = $this->boundAccount('act_1');
