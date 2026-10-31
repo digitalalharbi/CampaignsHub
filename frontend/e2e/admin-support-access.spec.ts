@@ -15,6 +15,9 @@ test.describe('support access', () => {
     await page.goto('/admin/tenants')
     await switchToEnglish(page)
 
+    // The list is 25 a page, by name, and other specs open workspaces that sort before «Demo Agency»: find it by name first.
+    await page.getByRole('textbox', { name: 'Search tenants' }).fill('Demo Agency')
+    await page.getByRole('textbox', { name: 'Search tenants' }).press('Enter')
     await page.getByTestId('support-enter-demo-agency').click()
     await page.getByTestId('support-reason').fill('E2E: checking support access')
     await page.getByTestId('support-password').fill('password')
