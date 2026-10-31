@@ -6,6 +6,7 @@ namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use App\Domains\Subscriptions\Models\TenantLimitOverride;
 use App\Domains\Subscriptions\Models\UsageCounter;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -51,6 +52,12 @@ final class SubscriptionService
      */
     public function effectiveLimit(Tenant $tenant, string $metric): ?int
     {
+        // SUPERADMIN-LIMITS-001 — a cap the console set for THIS workspace wins over its plan's, trial or not.
+        [$overridden, $cap] = $this->override($tenant, $metric);
+        if ($overridden) {
+            return $cap;
+        }
+
         $plan = $this->currentPlan($tenant);
 
         if ($plan === null) {
@@ -60,6 +67,21 @@ final class SubscriptionService
         return $this->subscriptionFor($tenant)?->isTrialing()
             ? $plan->trialLimitFor($metric)
             : $plan->limitFor($metric);
+    }
+
+    /**
+     * SUPERADMIN-LIMITS-001 — this workspace's own cap for a metric, set from the console: [true, cap] (a null cap is unlimited),
+     * or [false, null] when there is none or it has expired. Read fresh: an override is rare and must take effect at once.
+     *
+     * @return array{0: bool, 1: int|null}
+     */
+    public function override(Tenant $tenant, string $metric): array
+    {
+        $row = TenantLimitOverride::query()->where('tenant_id', $tenant->id)->where('metric', $metric)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->first(['limit_value']);
+
+        return $row === null ? [false, null] : [true, $row->limit_value === null ? null : (int) $row->limit_value];
     }
 
     public function subscriptionFor(Tenant $tenant): ?Subscription
@@ -113,7 +135,7 @@ final class SubscriptionService
     public function withinLimit(Tenant $tenant, string $metric): bool
     {
         $plan = $this->currentPlan($tenant);
-        if ($plan === null) {
+        if ($plan === null && ! $this->override($tenant, $metric)[0]) {
             return true; // no catalogue → do not block
         }
 
@@ -130,7 +152,7 @@ final class SubscriptionService
     public function remaining(Tenant $tenant, string $metric): ?int
     {
         $plan = $this->currentPlan($tenant);
-        if ($plan === null) {
+        if ($plan === null && ! $this->override($tenant, $metric)[0]) {
             return null;
         }
 
