@@ -1050,3 +1050,21 @@ export function createWorkspace(body: {
 export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Promise<{ owner_has_access: boolean; invitation: OwnerInvitation | null }> {
   return postData(`/admin/tenants/${tenantId}/owner-invitation`, { owner_email: ownerEmail })
 }
+
+/*
+ * SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace. Needs a reason and the operator's
+ * own password; the server refuses writes, secrets, money and exports for the whole visit.
+ */
+export function startSupportSession(tenantId: string, reason: string, currentPassword: string): Promise<{
+  support_session_id: string
+  tenant: { id: string; name: string }
+  mode: string
+  expires_at: string
+  landing_path: string
+}> {
+  return postData(`/admin/tenants/${tenantId}/support-session`, { reason, current_password: currentPassword })
+}
+
+export function endSupportSession(): Promise<{ ended: boolean; return_path: string }> {
+  return deleteData('/admin/support-session')
+}
