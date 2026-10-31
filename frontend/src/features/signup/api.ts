@@ -38,6 +38,9 @@ export interface RegistrationStatus {
   commitment_agreed: boolean
   email_verified: boolean
   mobile_verified: boolean
+  /** Server-derived resend cooldown; the browser countdown is display only. */
+  mobile_resend_after?: number
+  mobile_delivery_status?: string | null
   /** The one thing this applicant can do now, or null when the application is waiting on us. */
   next_step: string | null
   reason: string | null
@@ -58,6 +61,7 @@ export interface VerificationIssued {
   dev_link: string | null
   dev_code: string | null
   expires_at: string
+  resend_after?: number
 }
 
 export interface RegistrationEnvelope {

@@ -6,6 +6,8 @@ namespace App\Domains\Accounts\Services;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Models\RegistrationVerification;
+use App\Domains\Identity\Services\TwilioVerifyException;
+use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailLinks;
@@ -34,7 +36,10 @@ final class RegistrationVerificationService
     /** Six digits is 10^6 guesses; this is what keeps that from being enough time to try them. */
     private const MAX_ATTEMPTS = 5;
 
-    public function __construct(private readonly AdvanceRegistration $advance) {}
+    public function __construct(
+        private readonly AdvanceRegistration $advance,
+        private readonly TwilioVerifyService $twilio,
+    ) {}
 
     /**
      * Issue a fresh challenge, invalidating any earlier one on the same channel.
@@ -43,6 +48,23 @@ final class RegistrationVerificationService
      */
     public function send(RegistrationRequest $request, string $channel): array
     {
+        if ($channel === 'mobile') {
+            $cooldownSeconds = $this->mobileResendCooldownSeconds();
+            $recent = RegistrationVerification::query()
+                ->where('registration_request_id', $request->getKey())
+                ->where('channel', 'mobile')
+                ->whereNull('consumed_at')
+                ->latest('created_at')
+                ->first();
+
+            if ($cooldownSeconds > 0 && $recent !== null && $recent->created_at->gt(Carbon::now()->subSeconds($cooldownSeconds))) {
+                $remaining = $cooldownSeconds - (int) $recent->created_at->diffInSeconds(Carbon::now());
+                throw ValidationException::withMessages([
+                    'channel' => [__('auth.resend_cooldown', ['seconds' => max(1, $remaining)])],
+                ]);
+            }
+        }
+
         // One live challenge per channel: leaving the previous one usable would mean a resend widens
         // the window instead of replacing it.
         RegistrationVerification::query()
@@ -51,6 +73,8 @@ final class RegistrationVerificationService
             ->whereNull('consumed_at')
             ->delete();
 
+        $usingTwilio = $channel === 'mobile' && $this->twilio->configured();
+        // Twilio creates its own OTP. The random value below is only an opaque, unusable DB marker.
         $secret = $channel === 'mobile' ? (string) random_int(100000, 999999) : Str::random(48);
         $ttl = $channel === 'mobile' ? self::MOBILE_TTL_MINUTES : self::EMAIL_TTL_MINUTES;
         $expiresAt = Carbon::now()->addMinutes($ttl);
@@ -59,6 +83,7 @@ final class RegistrationVerificationService
         $verification->forceFill([
             'registration_request_id' => $request->getKey(),
             'channel' => $channel,
+            'provider' => $usingTwilio ? 'twilio_verify' : 'local',
             'token_hash' => hash('sha256', $secret),
             'delivery_status' => 'pending',
             'expires_at' => $expiresAt,
@@ -80,9 +105,15 @@ final class RegistrationVerificationService
              */
             'delivery_status' => $status,
             'dev_link' => $dev && $channel === 'email' ? $path : null,
-            'dev_code' => $dev && $channel === 'mobile' ? $secret : null,
+            'dev_code' => $dev && $channel === 'mobile' && ! $usingTwilio ? $secret : null,
             'expires_at' => $expiresAt->toIso8601String(),
+            'resend_after' => $channel === 'mobile' ? $this->mobileResendCooldownSeconds() : 0,
         ];
+    }
+
+    private function mobileResendCooldownSeconds(): int
+    {
+        return max(0, (int) config('accounts.mobile_resend_cooldown_seconds', 60));
     }
 
     /**
@@ -99,6 +130,19 @@ final class RegistrationVerificationService
         string $path,
         RegistrationVerification $verification,
     ): string {
+        if ($channel === 'mobile' && $this->twilio->configured()) {
+            try {
+                $state = $this->twilio->send((string) $request->phone);
+                $status = $state === 'pending' ? 'sent' : $state;
+            } catch (TwilioVerifyException) {
+                $status = 'failed';
+            }
+
+            $verification->forceFill(['delivery_status' => $status])->save();
+
+            return $status;
+        }
+
         if ($channel !== 'email') {
             $verification->forceFill(['delivery_status' => 'awaiting_provider_credentials'])->save();
 
@@ -175,7 +219,25 @@ final class RegistrationVerificationService
             ]);
         }
 
-        if (! hash_equals($verification->token_hash, hash('sha256', $code))) {
+        if ($verification->provider === 'twilio_verify') {
+            try {
+                $status = $this->twilio->check((string) $request->phone, $code);
+            } catch (TwilioVerifyException) {
+                throw ValidationException::withMessages([
+                    'code' => 'We could not check the code right now. Please try again.',
+                ]);
+            }
+
+            $verification->forceFill(['attempts' => $verification->attempts + 1])->save();
+
+            if ($status !== 'approved') {
+                throw ValidationException::withMessages([
+                    'code' => in_array($status, ['canceled', 'deleted'], true)
+                        ? 'This code has expired. Request a new one.'
+                        : 'That code is not correct.',
+                ]);
+            }
+        } elseif (! hash_equals($verification->token_hash, hash('sha256', $code))) {
             // Count the miss before answering, so a wrong guess costs the attacker one of five even
             // if they abandon the connection.
             $verification->forceFill(['attempts' => $verification->attempts + 1])->save();

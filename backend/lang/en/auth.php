@@ -22,6 +22,7 @@ return [
     'code_expired' => 'This verification code has expired. Request a new one.',
     'code_attempts' => 'Too many attempts. Request a new code.',
     'code_incorrect' => 'Incorrect code.',
+    'code_unavailable' => 'We could not check the code right now. Please try again.',
     'signed_out' => 'Signed out successfully.',
     'current_user' => 'Current user.',
     'token_issued' => 'Token issued successfully.',
