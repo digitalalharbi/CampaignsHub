@@ -8,6 +8,7 @@ use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Integrations\Models\ProviderConfiguration;
+use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -213,5 +214,23 @@ final class PaymentGatewayConsoleTest extends TestCase
         $streampay = $this->describe($admin, 'streampay');
         $this->assertSame('not_implemented', $streampay['status']);
         $this->assertStringContainsString('product', $streampay['note']['en'], 'the reason is stated, not hidden');
+    }
+
+    /**
+     * Keys alone do not make a gateway a place money can go. Found by the E2E gate: Stripe keys saved (not enabled) made Stripe the
+     * «available» gateway the registration page showed, and a caller naming it would have opened a charge on it.
+     */
+    public function test_a_gateway_with_keys_but_not_enabled_is_neither_available_nor_chosen_at_checkout(): void
+    {
+        config(['subscriptions.default' => 'sandbox']);
+        $admin = $this->admin();
+        $this->actingAs($admin, 'sanctum')->putJson(self::URL.'/stripe', ['secret_key' => 'sk_test_'.self::BODY, 'webhook_secret' => 'whsec_'.self::BODY, 'mode' => 'test'])->assertOk();
+
+        $stripe = collect($this->getJson('/api/v1/payments/providers')->assertOk()->json('data.providers'))->firstWhere('provider', 'stripe');
+        $this->assertFalse($stripe['available'], 'stored keys, not enabled');
+
+        $checkout = new \ReflectionMethod(SubscriptionCheckout::class, 'mayOpenOn');
+        $this->assertFalse($checkout->invoke(app(SubscriptionCheckout::class), 'stripe'));
+        $this->assertFalse($checkout->invoke(app(SubscriptionCheckout::class), 'no-such-gateway'));
     }
 }
