@@ -744,7 +744,7 @@ export interface MetaCandidateStep {
 
 export interface MetaCandidateRun {
   id: string
-  profile: 'candidate'
+  profile: 'candidate' | 'saas'
   status: 'started' | 'succeeded' | 'failed'
   app_id_hint: string | null
   started_at: string | null
@@ -757,7 +757,7 @@ export interface MetaCandidateRun {
 
 export interface MetaCandidateState {
   credentials: {
-    profile: 'candidate'
+    profile: 'candidate' | 'saas'
     configured: boolean
     missing: string[]
     effective_scopes: string[]
@@ -767,8 +767,66 @@ export interface MetaCandidateState {
   }
   latest_run: MetaCandidateRun | null
   /** Present once promotion exists server-side. `reason` names why it is refused. */
-  promotion?: { eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean }
+  promotion?: {
+    eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean
+    /** META-APP-SWITCH-GUARD-001 — whether switching Live to that app would strand connections the current app issued. */
+    promote_guard?: MetaAppSwitchGuard
+    rollback_guard?: MetaAppSwitchGuard | null
+  }
+  /** META-SAAS-APP-001 — the SaaS app only: which app NEW connections use, and whether the SaaS app may be chosen yet. */
+  routing?: { default_for_new_connections: 'live' | 'saas'; eligible: boolean; reason: string | null }
+  connections_by_app?: { live: number; saas: number }
+  /** META-SAAS-APP-001 — the SaaS app only: each readiness item and the status the server read from its own evidence. */
+  readiness?: MetaSaasReadinessItem[]
+  /** META-SAAS-APP-001 — the isolated test workspace and its journey, each step read from real rows. */
+  test_workspace?: MetaSaasTestWorkspaceState
+  /** META-SAAS-APP-001 — Live / SaaS Test / SaaS Primary, Primary's preconditions and the preview of what it changes. */
+  modes?: MetaSaasModesState
 }
+
+export interface MetaSaasModesState {
+  current: 'live' | 'saas_test' | 'saas_primary'
+  primary: {
+    enabled: boolean; eligible: boolean
+    preconditions: Array<{ key: string; met: boolean }>
+    preview: {
+      existing_live_connections: number; existing_live_tenants: number; existing_saas_connections: number; existing_connections_moved: number
+      existing_live_connected?: number; existing_live_ad_accounts?: number; live_ad_accounts_synced_24h?: number; live_oldest_last_successful_sync_at?: string | null
+    }
+  }
+}
+
+export type MetaSaasJourneyStep = 'oauth' | 'discovery' | 'binding' | 'sync' | 'metrics' | 'reports' | 'disconnect'
+export interface MetaSaasTestWorkspaceState {
+  exists: boolean; active: boolean; tenant_id: string | null; login_email: string | null; steps: Partial<Record<MetaSaasJourneyStep, boolean>>
+}
+
+export type MetaSaasReadinessStatus = 'ready' | 'not_verified' | 'needs_credentials' | 'owner_action'
+export type MetaSaasReadinessKey =
+  | 'legal_pages' | 'redirect_uri' | 'deletion_callback' | 'credentials' | 'test_workspace' | 'meta_dashboard' | 'oauth_round_trip'
+  | 'account_discovery' | 'sync_and_reports' | 'business_verification' | 'app_review' | 'new_connections'
+export interface MetaSaasReadinessItem { key: MetaSaasReadinessKey; status: MetaSaasReadinessStatus; detail: Record<string, unknown> }
+
+/* META-SAAS-APP-001 — the third, independent Meta app: same shape, its own endpoints, no promote/rollback. */
+const META_SAAS = '/admin/settings/integrations/meta-saas'
+export interface MetaAppSwitchGuard {
+  safe: boolean; reason: string | null; affected: number; unverified: number; current_app_hint: string | null; target_app_hint: string | null
+}
+
+export const fetchMetaSaas = (): Promise<MetaCandidateState> => getData(META_SAAS)
+export const saveMetaSaas = (body: { client_id?: string; client_secret?: string; config_id?: string; scopes?: string[] }): Promise<MetaCandidateState & { fields_changed: string[] }> => putData(META_SAAS, body)
+export const forgetMetaSaasCredential = (key: string): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/credentials/${key}`)
+export const startMetaSaasTest = (): Promise<{ run: MetaCandidateRun; authorization_url: string; expires_in_minutes: number }> => postData(`${META_SAAS}/test`, {})
+/** Which Meta app NEW customer connections use. Existing connections never change app. */
+/** Primary is sent only after the Owner ticked both named statements on the page; going back to Live needs neither. */
+export const setMetaSaasRouting = (target: 'live' | 'saas'): Promise<MetaCandidateState> => putData(`${META_SAAS}/routing`, target === 'saas'
+  ? { default: target, confirm: true, approve_primary: true, acknowledge_existing_unchanged: true }
+  : { default: target, confirm: true })
+export const confirmMetaSaasReview = (): Promise<MetaCandidateState> => putData(`${META_SAAS}/review`, { business_verified: true, advanced_access_granted: true })
+/** The set-password link is in this response only, to be shown once to the admin who created the workspace. */
+export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState & { set_password_link?: string | null; mail_delivery?: string | null }> => postData(`${META_SAAS}/test-workspace`, { email })
+export const closeMetaSaasTestWorkspace = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/test-workspace`)
+export const withdrawMetaSaasReview = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/review`)
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {
   return getData('/admin/settings/integrations/meta-candidate')
@@ -794,12 +852,14 @@ export function promoteMetaCandidate(confirmNarrowScopes = false): Promise<MetaC
     confirm: true,
     // A separate, named confirmation: Live would stop requesting `dropped_scopes`.
     confirm_narrow_scopes: confirmNarrowScopes,
+    // META-APP-SWITCH-GUARD-001 — sent only after the operator ticked the acknowledgement on the page.
+    acknowledge_app_switch: true,
   })
 }
 
 /** One step back to the previous Live Meta app. */
 export function rollbackMetaLive(): Promise<MetaCandidateState> {
-  return postData('/admin/settings/integrations/meta-candidate/rollback', { confirm: true })
+  return postData('/admin/settings/integrations/meta-candidate/rollback', { confirm: true, acknowledge_app_switch: true })
 }
 
 // ---- Email operations (MAIL-014) -----------------------------------------------------------------

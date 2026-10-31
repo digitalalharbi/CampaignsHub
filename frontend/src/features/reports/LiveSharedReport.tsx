@@ -62,6 +62,7 @@ export function LiveSharedReport({
   password,
   currency,
   form = 'detailed',
+  periodMode,
 }: {
   token: string
   password?: string
@@ -71,6 +72,11 @@ export function LiveSharedReport({
    * nothing else; a detailed link opens on the dashboard and offers every mode (`live/modes.ts`).
    */
   form?: 'executive_summary' | 'detailed'
+  /**
+   * REPORT-PERIOD-MODE-001 — `fixed` is exactly the saved dates: no 7/30/90-day presets, and nothing is asked of the server but the link.
+   * Absent or `rolling` is the window that follows the reader's day, which is what every link made before the mode did.
+   */
+  periodMode?: 'fixed' | 'rolling'
 }) {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -98,7 +104,9 @@ export function LiveSharedReport({
     })
   }, [setSearch, form])
 
-  const [days, setDays] = useState(30)
+  const fixed = periodMode === 'fixed'
+  const [rollingDays, setDays] = useState(30)
+  const days = fixed ? null : rollingDays
   /*
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by. The chips
    * belong to the summary and the dashboard; the platform and content modes choose one platform
@@ -226,7 +234,7 @@ export function LiveSharedReport({
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
-          {(payload.period.kind ?? 'custom') !== 'custom' && (
+          {!fixed && (payload.period.kind ?? 'custom') !== 'custom' && (
             <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
               {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
               {/* REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is the agency's view unless the Owner switched it on. */}
@@ -234,14 +242,19 @@ export function LiveSharedReport({
               {payload.period.partial ? (ar ? ' · الفترة لم تكتمل' : ' · in progress') : ''}
             </span>
           )}
-          {(payload.period.kind ?? 'custom') === 'custom' && RANGES.map((r) => (
+          {fixed && (
+            <span data-testid="live-period-fixed" className="tnum rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
+              {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
+            </span>
+          )}
+          {!fixed && (payload.period.kind ?? 'custom') === 'custom' && RANGES.map((r) => (
             <button
               key={r.days}
               type="button"
               data-testid={`live-range-${r.days}`}
               onClick={() => setDays(r.days)}
               className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
-                days === r.days
+                rollingDays === r.days
                   ? 'bg-brand-600 text-white'
                   : 'border border-border text-text-secondary hover:bg-surface-hover'
               }`}
@@ -300,6 +313,21 @@ export function LiveSharedReport({
         <p data-testid="live-refresh-failed" className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">
           {ar ? 'تعذّر تحديث الأرقام — المعروض هو آخر ما حُسب.' : 'The figures could not be refreshed — what is shown was computed last.'}
         </p>
+      )}
+
+      {/*
+        LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link opened before anything has run. The accounts are connected and the link is live: the figures
+        appear here on their own when the first campaign syncs. A page of zeros would say the campaigns ran and produced nothing.
+      */}
+      {payload.no_data_yet === true && (
+        <section data-testid="live-no-data-yet" className="rounded-2xl border border-border bg-surface px-5 py-6 text-center">
+          <h2 className="text-base font-bold text-text-primary">{ar ? 'التقرير جاهز وبانتظار أول بيانات' : 'Your report is ready and waiting for its first data'}</h2>
+          <p className="mx-auto mt-1 max-w-xl text-sm text-text-secondary">
+            {ar
+              ? 'هذا الرابط جاهز ومتصل. ستظهر الإعلانات والنتائج والأرقام هنا تلقائيًا بمجرد وصول أول بيانات، دون الحاجة إلى رابط جديد.'
+              : 'This link is live and connected. Ads, results and figures will appear here automatically as soon as the first data arrives — no new link needed.'}
+          </p>
+        </section>
       )}
 
       {/* Dimmed, not blanked, while refreshing: blanking would make every filter change feel like a page load. */}

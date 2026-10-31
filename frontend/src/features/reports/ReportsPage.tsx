@@ -1,4 +1,4 @@
-import { ReportIdentityCards } from './ReportIdentityCards'
+import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { ColumnPicker } from './ColumnPicker'
 import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
@@ -8,12 +8,14 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { productName } from '@/lib/brand'
 import { ShareAnalyticsStrip } from './ShareAnalyticsStrip'
 import { ShareEditDialog } from './ShareEditDialog'
 import {
   createReport,
+  projectReportIdentity,
+  updateReportNames,
   listReportSections,
   updateReportScope,
   getReportScope,
@@ -63,6 +65,7 @@ import { useProject } from '@/stores/project'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
+import { reports as countedReports } from '@/lib/counted'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -112,6 +115,10 @@ export function ReportsPage() {
   const [search, setSearch] = useState('')
   const [builderOpen, setBuilderOpen] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  // NASEL 2026-10-29 — deletion is confirmed in a dialog that names the reports and says their links stop; several at once, one confirmation.
+  const [picked, setPicked] = useState<string[]>([])
+  const [confirmDelete, setConfirmDelete] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [deleting, setDeleting] = useState(false)
   /*
    * Editing the scope of a report that already exists (§14.5).
    *
@@ -120,6 +127,7 @@ export function ReportsPage() {
    * and wrong, with the client holding it and no sign that anything had moved.
    */
   const [scopeId, setScopeId] = useState<string | null>(null)
+  const [namesId, setNamesId] = useState<string | null>(null)
   const [sectionsId, setSectionsId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
@@ -465,10 +473,71 @@ export function ReportsPage() {
               <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
             </div>
 
+          {picked.length > 0 && (
+            <div className="mb-2 hidden items-center justify-between gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm sm:flex" data-testid="reports-bulk-bar">
+              <span>{ar ? `المحدد: ${countedReports(picked.length, 'ar')}` : `Selected: ${countedReports(picked.length, 'en')}`}</span>
+              <Button
+                type="button"
+                variant="danger"
+                data-testid="reports-bulk-delete"
+                onClick={() => setConfirmDelete(rows.filter((r) => picked.includes(r.id)).map((r) => ({ id: r.id, name: r.name })))}
+              >
+                {ar ? 'حذف المحدد' : 'Delete selected'}
+              </Button>
+            </div>
+          )}
+
+          <Modal
+            open={confirmDelete !== null}
+            onClose={() => (deleting ? undefined : setConfirmDelete(null))}
+            title={confirmDelete && confirmDelete.length > 1 ? (ar ? `حذف ${countedReports(confirmDelete.length, 'ar')}` : `Delete ${countedReports(confirmDelete.length, 'en')}`) : (ar ? 'حذف التقرير' : 'Delete report')}
+            footer={(
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" disabled={deleting} onClick={() => setConfirmDelete(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  data-testid="reports-delete-confirm"
+                  loading={deleting}
+                  onClick={async () => {
+                    if (!confirmDelete) return
+                    setDeleting(true)
+                    try {
+                      for (const item of confirmDelete) await del.mutateAsync(item.id)
+                      setPicked((cur) => cur.filter((id) => !confirmDelete.some((c) => c.id === id)))
+                      setConfirmDelete(null)
+                    } finally {
+                      setDeleting(false)
+                    }
+                  }}
+                >
+                  {ar ? 'حذف' : 'Delete'}
+                </Button>
+              </div>
+            )}
+          >
+            <div data-testid="reports-delete-dialog" className="flex flex-col gap-2 text-sm text-text-secondary">
+              <ul className="list-disc ps-5 font-semibold text-text-primary">
+                {(confirmDelete ?? []).map((item) => <li key={item.id}>{item.name}</li>)}
+              </ul>
+              <p>{ar ? 'سيتوقف رابط العميل لكل تقرير منها فورًا، ولن يفتح بعد ذلك.' : 'Each report’s client link stops working immediately and will not open again.'}</p>
+            </div>
+          </Modal>
+
           <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted">
+                  <th data-col="actions" className="w-8 p-3 text-start">
+                    <input
+                      type="checkbox"
+                      aria-label={ar ? 'تحديد كل التقارير' : 'Select every report'}
+                      data-testid="reports-pick-all"
+                      checked={rows.length > 0 && rows.every((r) => picked.includes(r.id))}
+                      onChange={(e) => setPicked(e.target.checked ? rows.map((r) => r.id) : [])}
+                      className="h-4 w-4 accent-brand-600"
+                    />
+                  </th>
                   <th className="p-3 text-start font-semibold">{ar ? 'التقرير' : 'Report'}</th>
                   <th className="p-3 text-start font-semibold">{ar ? 'الفترة' : 'Period'}</th>
                   <th className="p-3 text-start font-semibold">{ar ? 'الحالة' : 'Status'}</th>
@@ -493,6 +562,7 @@ export function ReportsPage() {
                     onPreview={() => setPreviewId(r.id)}
                     onShare={() => setShareId(r.id)}
                     onScope={() => setScopeId(r.id)}
+                    onNames={() => setNamesId(r.id)}
                     onSections={() => setSectionsId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
@@ -501,7 +571,9 @@ export function ReportsPage() {
                       const emails = window.prompt(ar ? 'البريد الإلكتروني للمستلمين (مفصولة بفواصل):' : 'Recipient emails (comma separated):')
                       if (emails) send.mutate({ id: r.id, emails: emails.split(',').map((e) => e.trim()).filter(Boolean) })
                     }}
-                    onDelete={() => window.confirm(ar ? `حذف «${r.name}»؟` : `Delete “${r.name}”?`) && del.mutate(r.id)}
+                    picked={picked.includes(r.id)}
+                    onPick={(on) => setPicked((cur) => (on ? [...cur, r.id] : cur.filter((id) => id !== r.id)))}
+                    onDelete={() => setConfirmDelete([{ id: r.id, name: r.name }])}
                   />
                 ))}
               </tbody>
@@ -574,6 +646,9 @@ export function ReportsPage() {
           <ScopeLostDialog ar={ar} onClose={() => setSectionsId(null)} />
         )
       )}
+      {namesId && currentProjectId && (
+        <NamesEditor projectId={currentProjectId} report={(list.data?.reports ?? []).find((r) => r.id === namesId)} onClose={() => setNamesId(null)} onSaved={() => { setNamesId(null); invalidate() }} />
+      )}
       {scopeId && (
         currentProjectId ? (
           <ScopeEditor
@@ -599,18 +674,25 @@ function ReportRowView({
   onPreview,
   onShare,
   onScope,
+  onNames,
   onSections,
   onRegenerate,
   onExport,
   onTogglePdfDrilldown,
   onSend,
   onDelete,
+  picked,
+  onPick,
 }: {
+  picked: boolean
+  onPick: (on: boolean) => void
   report: ReportRow
   typeLabel: string
   onPreview: () => void
   onShare: () => void
   onScope: () => void
+  /** REPORT-IDENTITY-NAMES-001 — «prepared for / by» of an existing report. */
+  onNames: () => void
   onSections: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
@@ -622,6 +704,9 @@ function ReportRowView({
   const ar = useAr()
   return (
     <tr className="border-b border-border last:border-0 hover:bg-surface-secondary">
+      <td className="w-8 p-3">
+        <input type="checkbox" aria-label={ar ? `تحديد «${report.name}»` : `Select “${report.name}”`} data-testid="reports-pick" checked={picked} onChange={(e) => onPick(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+      </td>
       <td className="p-3">
         <button onClick={onPreview} className="text-start font-semibold text-text-primary hover:text-brand-600">
           {report.name}
@@ -687,6 +772,7 @@ function ReportRowView({
               <IconBtn title={ar ? 'إرسال' : 'Send'} onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
+          <IconBtn title={ar ? 'أسماء الهوية (مقدم إلى / من)' : 'Identity names (prepared for / by)'} onClick={onNames}><Pencil size={15} /></IconBtn>
           <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
           <IconBtn title={ar ? 'أقسام التقرير' : 'Report sections'} onClick={onSections}><ListChecks size={15} /></IconBtn>
           <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
@@ -717,6 +803,47 @@ function IconBtn({ children, title, onClick, danger }: { children: React.ReactNo
  * «re-apply» what was already there, and saving that would silently widen the report back to the
  * whole project.
  */
+/** REPORT-IDENTITY-NAMES-001 — re-open an existing report and change its printed «prepared for» / «prepared by» names. */
+function NamesEditor({ projectId, report, onClose, onSaved }: { projectId: string; report: ReportRow | undefined; onClose: () => void; onSaved: () => void }) {
+  const ar = useAr()
+  const identity = useQuery({ queryKey: ['report-identity', projectId], queryFn: () => projectReportIdentity(projectId) })
+  const stored = report?.config?.branding
+  const [forName, setForName] = useState<string | null>(null)
+  const [byName, setByName] = useState<string | null>(null)
+  const defaults = { for: identity.data?.client?.name ?? '', by: identity.data?.agency?.name ?? '' }
+  const forValue = forName ?? stored?.prepared_for_name ?? defaults.for
+  const byValue = byName ?? stored?.prepared_by_name ?? defaults.by
+
+  const save = useMutation({
+    mutationFn: () => updateReportNames(projectId, report!.id, {
+      prepared_for_name: forValue.trim() === defaults.for ? null : forValue.trim(),
+      prepared_by_name: byValue.trim() === defaults.by ? null : byValue.trim(),
+    }),
+    onSuccess: onSaved,
+  })
+  const field = 'h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm font-bold text-text-primary outline-none focus:border-brand-500'
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={ar ? 'أسماء هوية التقرير' : 'Report identity names'}
+      footer={<><Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button><Button loading={save.isPending} disabled={report === undefined} onClick={() => save.mutate()} data-testid="names-save">{ar ? 'حفظ' : 'Save'}</Button></>}
+    >
+      <div className="space-y-3" data-testid="names-editor">
+        <label className="grid gap-1 text-xs font-semibold text-text-secondary">{ar ? 'مقدم إلى' : 'Prepared for'}
+          <input className={field} maxLength={120} value={forValue} placeholder={defaults.for} onChange={(e) => setForName(e.target.value)} data-testid="names-for" />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-text-secondary">{ar ? 'مقدم من' : 'Prepared by'}
+          <input className={field} maxLength={120} value={byValue} placeholder={defaults.by} onChange={(e) => setByName(e.target.value)} data-testid="names-by" />
+        </label>
+        <p className="text-[11px] text-text-muted">{ar ? 'يُطبَّق على المعاينة والرابط المباشر والروابط المشاركة وملف PDF. اتركه فارغًا لاستخدام الاسم المسجّل؛ لا يتغير اسم العميل أو الشركة المسجّل.' : 'Applied to the preview, the live link, shared links and the PDF. Leave empty to use the stored name; the stored client and company are never renamed.'}</p>
+        {save.isError && <p role="alert" className="text-xs text-danger">{toApiError(save.error).message}</p>}
+      </div>
+    </Modal>
+  )
+}
+
 function ScopeEditor({
   projectId,
   reportId,
@@ -830,6 +957,8 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    * default of «client»: sending a choice nobody made would freeze a decision on every report.
    */
   const [brandingIdentity, setBrandingIdentity] = useState<'client' | 'agency' | null>(null)
+  // REPORT-IDENTITY-NAMES-001 — the two printed names; null = the stored names.
+  const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
   const [audience, setAudience] = useState<string | null>('client')
   /*
    * What the report COVERS (§14.5) — chosen here, before it is generated.
@@ -889,6 +1018,8 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
         detail_level: level,
         ...(Object.keys(sectionChoice).length === 0 ? {} : { section_settings: { sections: sectionChoice } }),
         ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
+        ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
+        ...(names.by === null || names.by.trim() === '' ? {} : { prepared_by_name: names.by.trim() }),
         ...(Object.keys(chosenColumns).length === 0 ? {} : { config: { columns: chosenColumns } }),
         audience: audience ?? 'client',
         period_start: from,
@@ -997,7 +1128,7 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
           The client's identity is the report's primary one and the only custom mark a shared link
           wears; the company's is secondary attribution inside the report.
         */}
-        <ReportIdentityCards projectId={projectId} ar={ar} />
+        <ReportIdentityCards projectId={projectId} ar={ar} names={names} onNames={setNames} />
         {/*
           REPORT-CREATION-UX-001 — WHOSE report this is, said at creation.
 

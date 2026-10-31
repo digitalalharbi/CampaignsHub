@@ -121,11 +121,11 @@ final class ReportScopeHierarchyTest extends TestCase
 
         $scope = $this->scope();
         $this->assertEqualsCanonicalizing([$this->razzah, $this->razzah2], $scope['account_ids']);
+        // LIVE-LINK-BEFORE-CAMPAIGNS-001 — with no campaign narrowed the link FOLLOWS its accounts: no frozen list, resolved at read time
+        // (the isolation itself is held by `test_the_live_link_figures_exclude_the_other_clients_accounts`).
+        $this->assertTrue($scope['dynamic_campaigns']);
+        $this->assertSame([], $scope['campaign_ids']);
         $this->assertNotContains((string) $this->hankaA->id, $scope['campaign_ids']);
-        $this->assertEqualsCanonicalizing(
-            [(string) $this->razzahA->id, (string) $this->razzahB->id, (string) $this->razzah2A->id],
-            $scope['campaign_ids'],
-        );
     }
 
     public function test_a_chosen_campaign_subset_narrows_only_its_own_account(): void

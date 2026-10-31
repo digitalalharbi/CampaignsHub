@@ -208,3 +208,77 @@ Owner screenshot of a live link: every content row read «—» for results, imp
 Production acceptance, 2026-10-20 (deployed b6976954, Owner's Hanka report /r/iVFz1QlsUaCRTZdlRkeilR), recorded separately for the two parts:
 - **Content table: VERIFIED on Production.** The Tables view's «All content that ran» lists 15 rows with real results, impressions, clicks, spend and cost (for example 57 results, 21.1K impressions, 328 clicks, 86 USD, 1.51 USD); no row is all dashes. Rows that genuinely carry no result (no leads reported) still show «—», nothing is filled in.
 - **Content preview: VERIFIED on Production in the in-app Chromium at 375px and 1280px; real iOS Safari is BLOCKED_OPERATIONAL_EVIDENCE.** Seven Meta creatives (four vertical ratios up to 1152x2048, one square) opened showing the whole frame at the file's own ratio with object-fit contain and no horizontal overflow. No physical iPhone or Safari was available to the session, so the Safari claim is not made.
+
+### NASEL 2026-10-29 — the client reports showed 2 leads where the platforms had about 80–100
+
+Owner: the new link /r/17vj0xDY38wcf2a1DT3FlF showed 2 leads; the Owner counted about 80 across Meta, TikTok and Snapchat.
+
+- **Root cause 1 (configuration):** both links' `settings.result_events` mapped the native-form path to `leads`, the platform/pixel Lead event (Meta 2). The project had no `lead_events` and no `campaign_paths`, so no campaign resolved a path and Native Leads read null. Corrected in Production through the audited endpoints: project lead_events/result_events (meta, tiktok, snapchat: lead_form → form_leads, landing_page → purchases; x: landing_page → purchases), campaign_paths LeadForm/LandingPage, and each link's events in place.
+- **Root cause 2 (code, #872 89e6ccd0):** an existing link's KPI cards could not be corrected without a new URL. `ResultEventsController::updateShare` now also edits metrics, kpi_labels and campaign_breakdown, audited and reversible. All three links now show Spend, Impressions, Clicks and «العملاء المحتملون الأصليون».
+- **Root cause 3 (code, #873 b2e5f6ec):** the platforms summary chose its figure from the link's KPI list (`headlineKeys`), not from the resolver: 2 / 0 / 0 / 2, then clicks. It now reads native leads per platform from `ResultEvents` and adds up to the total.
+- **Provider and sheet reconciliation:** read-only probes 2026-10-29 matched stored native submissions exactly (Meta 39, TikTok 11, Snapchat 44 at probe time). The Riwaq Leads Tracker sheet rows match: Meta 39 after one test lead; Snapchat 45 at read time; TikTok 13 after one test lead, one duplicate and one August lead. Production at 11:00 reads Meta 39, TikTok 13, Snapchat 48 = **100** native leads, plus 2 platform-attributed landing completions.
+
+Status:
+- Native lead cards: **VERIFIED** on Production in the browser.
+- Content and Tables Results: the follow-up PR, IMPLEMENTED_NOT_VERIFIED.
+- Landing conversion tracking end to end: **BLOCKED_EXTERNAL_CREDENTIALS**, because the nasel.co source and the GTM container are not accessible. See docs/NASEL_RIWAQ_TRACKING_HANDOFF.md.
+- Snapchat 2026-10-25/26: spend, impressions and the 10-26 purchases sit in another project. Native leads for those days are in NASEL, so Snapchat cost per result is understated. The cross-project reassignment needs the Owner's separate approval (SCOPE-REASSIGN-INTEGRITY-001).
+
+### NASEL 2026-10-29 (later) — a new link ignored its own settings
+
+On a new monthly-rolling detailed NASEL link the Owner found the following. Root causes and fixes are on the branch fix/nasel-report-controls.
+
+- **Conversion path off, lead strip still shown.** The strip was not tied to `funnel`.
+- **Detailed tables off, platform table still shown.** The table was gated on `platform_comparison`.
+- **Results and Cost per result chosen but absent.** The KPI reader had no definition for them.
+- **Results on «none» everywhere, «النتائج 0» still shown.**
+  - The builder sent nothing for «none», so the project default filled it.
+  - Content printed generic conversions.
+  - Now `results_off` is explicit, and clicks stand in everywhere with «تكلفة النقرة».
+- **Platform cards on the Platforms tab showed «1,126 نتيجة» for TikTok.** These were page views. They now show clicks.
+- **No Results label and no clicks option.** Both have been added.
+- **Landing completions: 2 in the summary, 5 in the content table.**
+  - The 5 was content's generic conversions, fixed by #874 (`verified_result`).
+  - The remaining 2 vs 3 is the Snapchat 10-25/26 cross-project split, which is Owner approval pending.
+- **Form starts above visits, and checkout beside them.**
+  - Visits come from Snapchat only.
+  - The strip now states the per-step coverage, and the duplicate checkout card is gone.
+- **Revenue and ROAS shown on zero revenue.** They are now hidden automatically.
+- **Delete without confirmation.** There is now a dialog with the name and «the link stops», plus bulk delete.
+- **Description.** Already in `og:description` and `twitter:description` in Production. Showing it in the page header is pending (Phase 2 header).
+
+Status: IMPLEMENTED_NOT_VERIFIED until Production. Exports (PDF / XLSX / CSV) applying the same section and Results rules remain open.
+
+**Correction (Owner, same day, before #875 merged).** «None» means Results and Cost per Result are disabled entirely. It does not mean renamed to clicks/CPC, and clicks are a result only when chosen as the event. The first #875 draft substituted clicks; that draft was stopped before merge and rewritten to the contract (matrix NASEL-RESULTS-NONE-001, NASEL-PLATFORM-CARDS-RESULT-001). Links that never defined Results are held to the same contract: their generic conversions are not shown as «النتائج». A chosen `conversions` card is named «تحويلات المنصة».
+
+### NASEL 2026-10-29 — exports used generic conversions as «Results» and ignored the link's Results
+
+- **PDF (`PrintDocument`):**
+  - It printed «Results» from generic conversions on the platform, account and ad tables, and «Cost per Result» from generic CPA.
+  - It listed every saved KPI, including ones the link hides.
+- **CSV / XLSX (`ReportExporter`):**
+  - The daily ledger's «Results» column was generic conversions.
+  - Without a KPI allowlist the saved Results were listed whatever the link said.
+- **Download document (`ShareService::downloadDocument`):** it carried the saved copy's Results, not the link's events, «none» or label.
+
+All are fixed on fix/nasel-exports-contract. The fix is IMPLEMENTED_NOT_VERIFIED until a NASEL link with downloads allowed is exported in Production.
+
+**Correction (2026-10-29).** An earlier note read the NASEL links as deleted. The evidence was the public 404 («invalid, expired or revoked») plus an empty report list seen from an advertiser@ session that has no access to NASEL. Neither proves deletion. The links' state and ownership are BLOCKED_OPERATIONAL_EVIDENCE until an agency session reads them.
+
+**Read from the agency session, 2026-10-29 ~15:10 UTC (read-only).**
+- NASEL (`a8dcd0a4`) lists exactly one report: «تقرير أداء حملات مشروع رواق — نصل العقارية», live, created 10:05 UTC, period 2026-10-01 → 10-29.
+- Its one link `5392753f` is active (not revoked, no expiry, downloads off, 12 views).
+- The reports behind /r/Dk7… (report `9c7ed2b5`) and /r/brSe9… are **not in the project's report list**.
+- Report deletion is a hard delete that removes the report's links and, until #880, wrote **no audit row**. So whether they were deleted, by whom and when cannot be established from any authorised source. Recorded as absent, cause unattributed. Nothing was recreated.
+- #880 audits every future report deletion (actor, period, each link's id, mode, revocation, views, creator — never a token).
+- **2026-10-30, Production (read-only, admin audit):** the first real deletion after #880 deployed (2026-10-29 22:04 UTC, tenant «Mohammed Alharbi») wrote `report.deleted`. It records the actor, the report's name, type, project and period, and its one link (id, mode, created_at/by, expires_at, revoked_at, view_count), with no token field. No row exists for deletions before the deploy (no retroactive attribution). **#880: VERIFIED.**
+
+### NASEL 2026-10-29 (Production, after #876) — a live report's files were empty
+
+The CSV exported from the NASEL live report printed « → » for its period, no KPI rows, and a platform header naming revenue / conversions / ROAS / CPA the report never chose.
+
+**Cause:** a live report stores no `data` snapshot by design, and every file path (operator export, link download, PDF print) read that snapshot.
+
+**Fix:** #881. Files render from the page's own builder, in memory, under the report's KPIs, period and currency. Unreported metrics are empty, never zero. A link that hides spend ships none.
+
+**Status:** IMPLEMENTED_NOT_VERIFIED until #881 deploys and the NASEL CSV is re-exported and compared with its page.

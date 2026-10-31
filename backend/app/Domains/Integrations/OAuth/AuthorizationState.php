@@ -42,6 +42,7 @@ final class AuthorizationState
         ?int $userId = null,
         ?string $clientWorkspaceId = null,
         array $extra = [],
+        MetaCredentialProfile $metaProfile = MetaCredentialProfile::Live,
     ): string {
         /*
          * META-CANDIDATE-001 — a tenant's authorisation is ALWAYS the Live profile.
@@ -58,7 +59,11 @@ final class AuthorizationState
         ];
 
         if ($provider === 'meta') {
-            $record['profile'] = MetaCredentialProfile::Live->value;
+            // META-SAAS-APP-001 — a customer connection is issued by Live or by the SaaS app; the Candidate never issues one.
+            if ($metaProfile === MetaCredentialProfile::Candidate) {
+                throw new \InvalidArgumentException('The Candidate Meta app does not issue customer connections.');
+            }
+            $record['profile'] = $metaProfile->value;
         }
 
         return self::put($record);
@@ -70,15 +75,20 @@ final class AuthorizationState
      * No tenant: the Candidate app belongs to the platform, and its connection is filed under no
      * workspace. Bound to the owner who started it and to the test run it will complete.
      */
-    public static function issueMetaCandidate(int $userId, string $runId): string
+    public static function issueMetaCandidate(int $userId, string $runId, MetaCredentialProfile $profile = MetaCredentialProfile::Candidate): string
     {
+        // A test round trip, owned by a platform admin and by no tenant — for the Candidate app, or for the SaaS app's own test.
+        if ($profile === MetaCredentialProfile::Live) {
+            throw new \InvalidArgumentException('The Live app is never exercised through a test round trip.');
+        }
+
         return self::put([
             'tenant_id' => null,
             'provider' => 'meta',
             'user_id' => $userId,
             'client_workspace_id' => null,
             'candidate_run_id' => $runId,
-            'profile' => MetaCredentialProfile::Candidate->value,
+            'profile' => $profile->value,
         ]);
     }
 
@@ -172,6 +182,10 @@ final class AuthorizationState
                 && ! isset($record['candidate_run_id']),
             MetaCredentialProfile::Candidate => ($record['tenant_id'] ?? null) === null
                 && isset($record['user_id'], $record['candidate_run_id']),
+            // Either a customer connection (a tenant, no test run) or the admin's test round trip (no tenant, a run) — never both.
+            MetaCredentialProfile::Saas => isset($record['candidate_run_id'])
+                ? ($record['tenant_id'] ?? null) === null && isset($record['user_id'])
+                : is_string($record['tenant_id'] ?? null) && $record['tenant_id'] !== '',
         };
     }
 }

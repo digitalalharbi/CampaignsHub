@@ -114,13 +114,21 @@ export async function startPlatformOAuth(
    * already in hand instead of asking for one as a fourth step after the fact.
    */
   projectId?: string | null,
+  /** META-SAAS-APP-001 — which Meta app issues this connection; absent = the platform's choice for new connections. */
+  appProfile?: 'live' | 'saas' | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`, {
     ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
     ...(projectId ? { project_id: projectId } : {}),
+    ...(appProfile ? { app_profile: appProfile } : {}),
   })
 }
+
+/** META-SAAS-APP-001 — which Meta apps a new connection may be issued by (no credential is named). */
+/** META-SAAS-APP-001 — `test_workspace`: this tenant is the isolated SaaS test workspace, which connects through the SaaS app only. */
+export interface MetaApps { default: 'live' | 'saas'; test_workspace?: boolean; apps: Array<{ key: 'live' | 'saas'; available: boolean; reason?: string | null }> }
+export const fetchMetaApps = () => getData<MetaApps>('/integrations/meta/apps')
 
 /**
  * INTEG-APIKEY-001 — connect a provider the advertiser holds their own key for.
@@ -516,6 +524,26 @@ export interface AccountsQuery {
   page?: number
   per_page?: number
 }
+
+/**
+ * INTEGRATION-UNLINK-001 — take ONE account off the project it feeds, by the account.
+ *
+ * The same deactivation «Manage accounts» performs: the history is kept, new data stops being filed under the project, and linking the
+ * account again restores it. The provider authorisation is untouched.
+ */
+export const unlinkAccount = (projectId: string, accountId: string) =>
+  postData<{ account_id: string; project_id: string; history_rows_kept: number }>(`/projects/${projectId}/integrations/accounts/${accountId}/unlink`, {})
+
+/** INTEGRATION-ESTATE-001 — project-first: what feeds each project, in one glance. */
+export interface EstateProject {
+  project_id: string
+  project_name: string
+  providers: string[]
+  accounts: number
+  last_synced_at: string | null
+  needs_attention: number
+}
+export const fetchEstate = () => getData<{ projects: EstateProject[] }>('/estate')
 
 export function listAccounts(query: AccountsQuery = {}): Promise<AccountsPage> {
   const params = new URLSearchParams()

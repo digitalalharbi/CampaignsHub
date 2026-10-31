@@ -4,6 +4,7 @@ import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/feature
 import { formatMoneyReading, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from '../api'
 import { clientKpiKeys } from '../clientKpis'
+import { landingLabel, purchaseIsLandingProxy, resultWords } from './leadResults'
 
 /**
  * How every figure on a live client link is read — one definition, shared by every mode.
@@ -129,7 +130,8 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     impressions: { ar: 'الظهور', en: 'Impressions', format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
-    conversions: { ar: 'النتائج', en: 'Results', format: (t, _p, _m, count) => count(t.conversions) },
+    // The platform's own optimised-for conversion. Never called «Results»: that name belongs to an event the link defined (RESULT-EVENTS-001).
+    conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions', format: (t, _p, _m, count) => count(t.conversions) },
     /*
      * RESULT-STAGE-TRUTH-001 — read the STAGE, not the section that happens to draw it.
      *
@@ -148,7 +150,10 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
-    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => asExactMoney(v))) },
+    // NASEL 2026-10-29 — Results and their cost as the link DEFINED them (`results`), never the platform's generic conversion.
+    results: { ar: 'النتائج', en: 'Results', format: (_t, p, _m, count) => (p.results?.configured !== true || p.results.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.total)) },
+    cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (_t, p) => (p.results?.configured !== true || p.results.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.cost))) },
+    cpa: { ar: 'تكلفة تحويل المنصة', en: 'Cost per platform conversion', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => asExactMoney(v))) },
     /*
      * The rest of what a marketing path is judged on — ANALYTICS-OBJECTIVE-SYSTEM-001.
      *
@@ -161,8 +166,17 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
     cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => asExactMoney(v))) },
     cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
-    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, _p, _m, count) => count(t.leads) },
-    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v))) },
+    // LEAD-EVIDENCE-001 / LEAD-EVENTS-001 — a lead is a submission a platform REPORTED as one. Where lead events are configured for the project,
+    // Leads is the verified landing-page forms plus the verified native forms (each on its own below); otherwise it is the platform's `leads`
+    // metric, and «غير متاح» where none was sent. It never borrows the platform's optimised-for `conversions`, and never prints a measured zero.
+    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, p, _m, count) => (p.results?.leads?.configured ? (p.results.leads.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.total)) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.leads)) },
+    // The funnel steps the platforms report for a landing form: InitiateCheckout is a form start, a landing page view is a visit.
+    // NASEL 2026-10-29 — with verified leads configured, the landing-page funnel (landing campaigns only) is the one reading of these two.
+    form_starts: { ar: 'بدء تعبئة النموذج', en: 'Form starts', format: (t, p, _m, count) => (p.results?.leads?.landing_funnel ? (p.results.leads.landing_funnel.form_starts == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing_funnel.form_starts)) : p.reported?.checkout === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.checkout)) },
+    page_views: { ar: 'زيارات الصفحة', en: 'Page views', format: (t, p, _m, count) => (p.results?.leads?.landing_funnel ? (p.results.leads.landing_funnel.page_views == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing_funnel.page_views)) : p.reported?.landing_page_views === false ? plain(ar ? 'غير متاح' : 'Not available') : count(t.landing_page_views)) },
+    landing_leads: { ar: 'عملاء صفحة الهبوط', en: 'Landing-page leads', format: (_t, p, _m, count) => (p.results?.leads?.landing == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.landing)) },
+    native_leads: { ar: 'عملاء النموذج الأصلي', en: 'Native-form leads', format: (_t, p, _m, count) => (p.results?.leads?.native == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.leads.native)) },
+    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => (p.results?.leads?.configured ? (p.results.leads.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.leads.cost))) : p.reported?.leads === false ? plain(ar ? 'غير متاح' : 'Not available') : plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v)))) },
     installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
     cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => asExactMoney(v))) },
     engagements: { ar: 'التفاعلات', en: 'Engagements', format: (t, _p, _m, count) => count(t.engagements) },
@@ -189,10 +203,10 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     revealed,
     count,
     /* Which cards this report shows — decided by what it is ABOUT, not by a fixed list (`clientKpis.ts`). */
-    keys: (payload: LivePayload | null | undefined) => clientKpiKeys(
+    keys: (payload: LivePayload | null | undefined) => gateResultKeys(clientKpiKeys(
       { metrics: payload?.metrics, objective_performance: payload?.objective_performance, totals: payload?.totals },
       new Set(Object.keys(METRIC_META)),
-    ),
+    ), payload),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [currency, ar])
 }
@@ -205,8 +219,42 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
  * never what the card is called — otherwise one campaign's messages, leads and results become three
  * names for one number. `result_kind` stays on the payload for calculation, diagnostics and context.
  */
-export function metricLabel(meta: MetricMeta, _key: string, _payload: LivePayload | null | undefined, ar: boolean): string {
+export function metricLabel(meta: MetricMeta, key: string, payload: LivePayload | null | undefined, ar: boolean): string {
+  // The operator's own name for this card on this link, when they gave one.
+  const custom = payload?.kpi_labels?.[key]
+  if (custom !== undefined && custom.trim() !== '') return custom
+  // NASEL 2026-10-29 — where the landing-page result IS the purchase event, it stands in for a form completion and is not called «Purchases».
+  if (payload && (key === 'purchases' || key === 'landing_leads') && purchaseIsLandingProxy(payload)) return landingLabel(payload, ar)
+  // The report's own word for Results («الاهتمام») on the two cards that ARE its Results.
+  if (payload && key === 'results') return resultWords(payload, ar).result
+  if (payload && key === 'cost_per_result') return resultWords(payload, ar).cost
+
   return ar ? meta.ar : meta.en
+}
+
+/**
+ * RESULT-EVENTS-001 — which result cards a client report may draw.
+ *
+ * `results` / `cost_per_result` exist only where a result event is configured. And where the operator chose no KPIs, the platform's raw
+ * `conversions` / `cpa` are not offered as a default at all unless the platform also reported purchases — a conversion with no purchase
+ * behind it is whatever event the campaign was optimised for (a page load, a form open), not an order and not a lead. An operator's explicit
+ * choice of them (a link made before Results were configurable) is still honoured.
+ */
+export function gateResultKeys(keys: string[], payload: LivePayload | null | undefined): string[] {
+  const configured = payload?.results?.configured === true
+  const chosen = (payload?.metrics?.length ?? 0) > 0
+
+  // NASEL-KPI-ORDER-001 — a KPI the operator CHOSE is never gated away: unconfigured or unreported, its card reads «غير متاح».
+  if (chosen) return keys
+
+  return keys.filter((key) => {
+    if (key === 'results' || key === 'cost_per_result') return configured
+    if (key === 'landing_leads' || key === 'native_leads' || key === 'form_starts' || key === 'page_views') return payload?.results?.leads?.configured === true
+    // A payload that does not say what was reported (an older one) is left exactly as it was.
+    if ((key === 'conversions' || key === 'cpa') && !chosen && payload?.reported !== undefined) return payload.reported.purchases === true
+
+    return true
+  })
 }
 
 /** What kind of result the card counts — context for a tooltip, never a replacement name. */
@@ -217,7 +265,7 @@ export function resultContext(payload: LivePayload | null | undefined, ar: boole
 }
 
 /** Money and cost-per keys: a null here is a figure the link hides or the platform did not give. */
-const MONEY_KEYS = new Set(['spend', 'revenue', 'roas', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'aov'])
+export const MONEY_KEYS = new Set(['spend', 'revenue', 'roas', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'aov'])
 
 /**
  * Whether a card has anything to say. A card whose reading is «—» is a hole in the grid: a spend the

@@ -8,6 +8,7 @@ import { mixedResultsNote } from './reportMetrics'
 import { spendHiddenByLink } from './live/liveMetrics'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
+import { resultWords } from './live/leadResults'
 
 /**
  * REPORT-PRODUCT-MODEL-001 §D — what makes a LIVE report detailed rather than a dashboard with a
@@ -162,8 +163,10 @@ export function LivePlatformComparison({
   }
   // A link that hides spend has no spend column and no cost column: «—» twice per row is not a table.
   const noSpend = spendHiddenByLink(payload)
-  const resultName = ar ? 'النتائج' : 'Results'
-  const costName = ar ? 'تكلفة النتيجة' : 'Cost per result'
+  // NASEL 2026-10-29 — the link's own words; with no Results defined the two columns do not exist (never generic conversions under that name).
+  const words = resultWords(payload, ar)
+  const resultName = words.result
+  const costName = words.cost
   const head = [
     t.platform,
     ar ? 'الإنفاق' : 'Spend',
@@ -210,6 +213,23 @@ export function LivePlatformComparison({
   const costPer = (row: Record<string, unknown>) =>
     readCostPer(row as MoneyTotals, 'cpa', 'conversions', currency, ar)
 
+  /*
+   * RESULT-EVENTS-001 — where Results are configured, both columns read the SAME configured event and that event's eligible spend
+   * (`results.by_platform`), never the platform's generic `conversions` / `cpa`. NASEL showed the contradiction: TikTok's card read 0
+   * Results while this column printed 1,113 conversions at 0.09. A platform with no configured or reported event reads «غير متاح»,
+   * and zero results have no cost.
+   */
+  const configuredResults = payload.results?.configured === true
+  const notAvailable = ar ? 'غير متاح' : 'Not available'
+  const eventOf = (row: Record<string, unknown>) => payload.results?.by_platform?.[canonicalPlatform(String(row.provider ?? ''))]
+  const resultCount = (row: Record<string, unknown>): number | null =>
+    configuredResults ? (eventOf(row)?.results ?? null) : numberOf(row, 'conversions')
+  const resultText = (row: Record<string, unknown>) => (configuredResults && resultCount(row) === null ? notAvailable : compact(resultCount(row)))
+  // Without Results the cost column is the cost per CLICK (Owner 2026-10-29), named «تكلفة النقرة» by `resultWords`.
+  const costValue = (row: Record<string, unknown>): number | null => (configuredResults ? (eventOf(row)?.cost ?? null) : costPer(row).amount)
+  const costText = (row: Record<string, unknown>) =>
+    configuredResults ? (eventOf(row)?.cost == null ? notAvailable : moneyExact(eventOf(row)?.cost, currency)) : formatMoneyReading(costPer(row), moneyExact)
+
   const built = {
     rows: rows.map((row) => [
       <span key="name" className="inline-flex items-center gap-1.5 font-semibold">
@@ -241,8 +261,8 @@ export function LivePlatformComparison({
         )}
       </span>,
       <span key="spend" dir="ltr">{spendOf(row).text}</span>,
-      <span key="results" dir="ltr">{compact(numberOf(row, 'conversions'))}</span>,
-      <span key="cost" dir="ltr">{formatMoneyReading(costPer(row), moneyExact)}</span>,
+      <span key="results" dir="ltr">{resultText(row)}</span>,
+      <span key="cost" dir="ltr">{costText(row)}</span>,
       <span key="impressions" dir="ltr">{compact(numberOf(row, 'impressions'))}</span>,
       <span key="clicks" dir="ltr">{compact(numberOf(row, 'clicks'))}</span>,
       <span key="ctr" dir="ltr">{percent(numberOf(row, 'ctr'), 2)}</span>,
@@ -250,8 +270,8 @@ export function LivePlatformComparison({
     values: rows.map((row): SortValues => [
       String(row.provider ?? ''),
       spendValue(row),
-      numberOf(row, 'conversions'),
-      costPer(row).amount,
+      resultCount(row),
+      costValue(row),
       numberOf(row, 'impressions'),
       numberOf(row, 'clicks'),
       numberOf(row, 'ctr'),
@@ -259,7 +279,7 @@ export function LivePlatformComparison({
     exact: rows.map((row) => [
       null,
       spendOf(row).exact,
-      full(numberOf(row, 'conversions')),
+      full(resultCount(row)),
       null,
       full(numberOf(row, 'impressions')),
       full(numberOf(row, 'clicks')),
@@ -276,6 +296,8 @@ export function LivePlatformComparison({
   const chosen = Array.isArray(payload.columns) ? undefined : payload.columns?.platforms
   const keep = (noSpend ? [0, 2, 4, 5, 6] : [0, 1, 2, 3, 4, 5, 6])
     .filter((i) => i === 0 || chosen === undefined || chosen.includes(COLUMN_KEYS[i]))
+    // RESULT-EVENTS-001 — without a defined event there is no Results column and no cost per result: not generic conversions, not clicks.
+    .filter((i) => words.shown || (i !== 2 && i !== 3))
   const pick = <T,>(cells: T[]): T[] => keep.map((i) => cells[i])
 
   return (

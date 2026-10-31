@@ -44,6 +44,7 @@ final class MetricDefinitionSeeder extends Seeder
             ['reach', 'Reach', 'count', 'integer', 'sum', false, true],
             ['leads', 'Leads', 'count', 'decimal', 'sum', false, true],
             ['qualified_leads', 'Qualified Leads', 'count', 'decimal', 'sum', false, true],
+            ['form_leads', 'Instant-form Leads', 'count', 'decimal', 'sum', false, true],
             ['purchases', 'Purchases', 'count', 'decimal', 'sum', false, true],
             ['installs', 'Installs', 'count', 'decimal', 'sum', false, true],
             ['registrations', 'Registrations', 'count', 'decimal', 'sum', false, true],

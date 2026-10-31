@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignDestinations;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -17,11 +18,14 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\CreativeDisplay;
+use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
+use App\Domains\Reports\Support\ResultEvents;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
@@ -158,6 +162,9 @@ final class LiveReportBuilderController extends Controller
             ->orderBy('provider')
             ->pluck('provider')
             ->all();
+        // A bound account that has not synced yet still names its platform (REPORT-BOUND-ACCOUNTS-001).
+        $providers = array_values(array_unique(array_merge($providers, array_map(static fn (array $a): string => (string) $a['provider'], $accounts['all']))));
+        sort($providers);
 
         return ApiResponse::success([
             'campaigns' => $campaigns,
@@ -279,6 +286,25 @@ final class LiveReportBuilderController extends Controller
             $all[$account['id']] = $account;
         }
 
+        /*
+         * REPORT-BOUND-ACCOUNTS-001 — and every account the project BINDS, whatever has or has not arrived.
+         *
+         * The two reads above find an account only through a campaign or a figure, so an authorised Meta, Google or ChatGPT Ads account
+         * that had not synced anything was missing from the Live link builder exactly as it was from the report builder. A link is made over
+         * accounts; `state` says what has arrived so the picker can label the empty ones instead of hiding them.
+         */
+        $withFigures = array_fill_keys(array_keys($all), true);
+        $boundIds = BoundAccountVisibility::activeAccountIds($project);
+        $bound = $boundIds === [] ? [] : ExternalAccount::query()->whereIn('id', $boundIds)->get(['id', 'name', 'external_id', 'provider', 'last_synced_at']);
+        foreach ($bound as $row) {
+            $id = (string) $row->getKey();
+            $all[$id] = ($all[$id] ?? [
+                'id' => $id,
+                'name' => trim((string) $row->name) !== '' ? (string) $row->name : (string) $row->external_id,
+                'provider' => AdPlatforms::canonical((string) $row->provider),
+            ]) + ['state' => isset($withFigures[$id]) ? 'data' : ($row->last_synced_at === null ? 'unsynced' : 'no_data')];
+        }
+
         return [
             'byCampaign' => array_map(static fn (array $a): array => array_values($a), $byCampaign),
             'all' => array_values($all),
@@ -332,17 +358,37 @@ final class LiveReportBuilderController extends Controller
      * CLIENT. `cpm` and `frequency` are real and useful to an operator and would be noise on a page
      * whose job is to answer «is my money working?».
      */
+    /** The KPI keys a client link may show — the same catalogue the builder offers. @return list<string> */
+    public static function metricKeys(): array
+    {
+        return array_column(self::METRICS, 'key');
+    }
+
     private const METRICS = [
         ['key' => 'spend', 'ar' => 'الإنفاق', 'en' => 'Spend'],
         ['key' => 'impressions', 'ar' => 'الظهور', 'en' => 'Impressions'],
         ['key' => 'clicks', 'ar' => 'النقرات', 'en' => 'Clicks'],
         ['key' => 'ctr', 'ar' => 'نسبة النقر', 'en' => 'CTR'],
-        ['key' => 'conversions', 'ar' => 'النتائج', 'en' => 'Results'],
+        ['key' => 'cpc', 'ar' => 'تكلفة النقرة', 'en' => 'CPC'],
+        ['key' => 'cpm', 'ar' => 'تكلفة الألف ظهور', 'en' => 'CPM'],
+        ['key' => 'reach', 'ar' => 'الوصول', 'en' => 'Reach'],
+        // A lead is a submission the platform REPORTED as one; the platform's generic «conversions» is not offered as anything.
+        ['key' => 'leads', 'ar' => 'العملاء المحتملون (حسب المنصة)', 'en' => 'Leads (as the platform reports)'],
+        ['key' => 'cpl', 'ar' => 'تكلفة العميل المحتمل', 'en' => 'CPL'],
+        // LEAD-EVENTS-001 — the two verified sources, offered only where a lead event is configured for the project.
+        ['key' => 'landing_leads', 'ar' => 'عملاء صفحة الهبوط', 'en' => 'Landing-page leads'],
+        ['key' => 'native_leads', 'ar' => 'العملاء المحتملون (نماذج موثّقة)', 'en' => 'Leads (verified native forms)'],
+        // NASEL — the funnel's visit and form-start steps, read from the metrics the platforms report for them (InitiateCheckout, landing page view).
+        ['key' => 'form_starts', 'ar' => 'بدء تعبئة النموذج', 'en' => 'Form starts'],
+        ['key' => 'page_views', 'ar' => 'زيارات الصفحة', 'en' => 'Page views'],
+        ['key' => 'qualified_leads', 'ar' => 'عملاء مؤهلون', 'en' => 'Qualified leads'],
+        // RESULT-EVENTS-001 — optional, and present only where a result event is configured for the project or the link.
+        ['key' => 'results', 'ar' => 'النتائج', 'en' => 'Results'],
+        ['key' => 'cost_per_result', 'ar' => 'تكلفة النتيجة', 'en' => 'Cost per result'],
         ['key' => 'add_to_cart', 'ar' => 'الإضافات للسلة', 'en' => 'Add to cart'],
         ['key' => 'purchases', 'ar' => 'المشتريات', 'en' => 'Purchases'],
         ['key' => 'revenue', 'ar' => 'الإيرادات', 'en' => 'Revenue'],
         ['key' => 'roas', 'ar' => 'العائد على الإنفاق', 'en' => 'ROAS'],
-        ['key' => 'cpa', 'ar' => 'تكلفة النتيجة', 'en' => 'Cost per result'],
     ];
 
     /** Build the report row + its live share, and return the link once. */
@@ -353,6 +399,9 @@ final class LiveReportBuilderController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:160'],
             'description' => ['nullable', 'string', 'max:500'],
+            // REPORT-IDENTITY-NAMES-001 — the printed «prepared for» / «prepared by» typed for this link; blank = the stored names.
+            'prepared_for_name' => ['nullable', 'string', 'max:120'],
+            'prepared_by_name' => ['nullable', 'string', 'max:120'],
             'campaign_ids' => ['array'],
             'campaign_ids.*' => ['uuid'],
             /*
@@ -379,6 +428,8 @@ final class LiveReportBuilderController extends Controller
             'to' => ['required', 'date', 'after_or_equal:from'],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom. The first three anchor on `to`.
             'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
+            // REPORT-PERIOD-MODE-001 — fixed = exactly these dates, always; rolling = the window follows the reader's day. Absent: fixed for explicit dates, rolling for a daily/weekly/monthly kind.
+            'period_mode' => ['nullable', Rule::in(ReportPeriod::MODES)],
             'password' => ['nullable', 'string', 'min:4', 'max:64'],
             'expires_at' => ['nullable', 'date', 'after:now'],
             'hide_spend' => ['boolean'],
@@ -415,7 +466,50 @@ final class LiveReportBuilderController extends Controller
             // REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) a detailed link offers; absent is all.
             'views' => ['sometimes', 'array', 'min:1'],
             'views.*' => [Rule::in(ReportViews::VIEWS)],
+            /*
+             * CREATIVE-DISPLAY-001 — the ad section, end to end.
+             *
+             * `creatives` is the visibility map (`creatives: true` is «show the ad section to the client»), the same vocabulary the saved-report
+             * dialog sends; `creative_display` is the listing policy; the id lists are the allow- and deny-list. The builder accepted none of
+             * these, so the ad-section controls changed nothing on a link created here.
+             */
+            'creatives' => ['sometimes', 'array'],
+            'creatives.*' => ['boolean'],
+            'creative_display' => ['sometimes', 'array'],
+            'creative_display.policy' => ['sometimes', Rule::in(CreativeDisplay::POLICIES)],
+            'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
+            'creative_display.auto_refresh' => ['sometimes', 'boolean'],
+            // RESULT-EVENTS-001 — this link's own definition of «Results»: platform → path → reported metric. Replaces the project's for the platforms it names.
+            // RESULT-EVENTS-001 — a serialized map is validated, not silently trimmed: an unknown platform, path or metric is a 422.
+            'result_events' => ['sometimes', 'array', static function (string $attribute, mixed $value, \Closure $fail): void {
+                foreach (ResultEvents::problems($value) as $problem) {
+                    $fail("{$attribute}: {$problem}");
+                }
+            }],
+            'lead_events' => ['sometimes', 'array', static function (string $attribute, mixed $value, \Closure $fail): void {
+                foreach (ResultEvents::problems($value) as $problem) {
+                    $fail("{$attribute}: {$problem}");
+                }
+            }],
+            // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
+            // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign; off unless the operator switches it on.
+            'campaign_breakdown' => ['sometimes', 'boolean'],
+            // NASEL 2026-10-29 — the report's own word for «Results» («الاهتمام»), and an explicit «no Results» that the project default cannot override.
+            'results_label' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'results_off' => ['sometimes', 'boolean'],
+            'kpi_labels' => ['sometimes', 'array', 'max:30'],
+            'kpi_labels.*' => ['nullable', 'string', 'max:60'],
+            'creative_ids' => ['sometimes', 'array', 'max:500'],
+            'creative_ids.*' => ['uuid'],
+            'excluded_creative_ids' => ['sometimes', 'array', 'max:500'],
+            'excluded_creative_ids.*' => ['uuid'],
         ]);
+
+        abort_if(
+            ($data['creative_display']['policy'] ?? null) === 'selected' && (array) ($data['creative_ids'] ?? []) === [],
+            422,
+            'Choose at least one creative, or pick another ad display policy.',
+        );
 
         /*
          * Every campaign must actually be in this project.
@@ -459,13 +553,32 @@ final class LiveReportBuilderController extends Controller
             $data['to'] = $window['to']->toDateString();
         }
 
+        // Absent: explicit dates are fixed; a daily/weekly/monthly KIND is «the current one», which follows the reader's day.
+        $periodMode = (string) ($data['period_mode'] ?? ($periodKind === 'custom' ? 'fixed' : 'rolling'));
+
         [$accountIds, $campaignIds, $adIds] = $this->resolveHierarchy($project, $data);
 
-        abort_if($campaignIds === [], 422, 'No campaigns in the selected accounts to share.');
+        /*
+         * LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link is created over ACCOUNTS, and campaigns are not a precondition.
+         *
+         * `resolveHierarchy` has already refused an account this project does not bind. What is left is a link whose accounts may hold no
+         * campaign, ad or figure yet; refusing it made the Owner's workflow (connect → share → launch) impossible in its first step. Unless
+         * the operator narrowed to named campaigns or ads, the link FOLLOWS its accounts: whatever syncs under them later appears on the same
+         * URL, and nothing outside them ever does.
+         */
+        $narrowed = array_filter(array_map(
+            static fn ($a): bool => ! empty($a['campaign_ids']) || ! empty($a['ad_ids']),
+            (array) ($data['accounts'] ?? []),
+        )) !== [];
+        $dynamic = ! $narrowed;
 
         $providers = array_values(array_unique((array) ($data['providers'] ?? [])));
         if ($providers === []) {
-            $providers = DailyMetric::query()->where('project_id', $project)->whereIn('external_account_id', $accountIds)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all();
+            $providers = array_values(array_unique(array_merge(
+                DailyMetric::query()->where('project_id', $project)->whereIn('external_account_id', $accountIds)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all(),
+                // An account with nothing synced still names its platform, so a campaign launched there tomorrow is inside the link.
+                ExternalAccount::query()->whereIn('id', $accountIds)->pluck('provider')->map(strval(...))->all(),
+            )));
         }
 
         $metrics = array_values(array_intersect(
@@ -507,7 +620,9 @@ final class LiveReportBuilderController extends Controller
              * No `data` snapshot on purpose — this report IS the live definition, and a stale copy
              * beside it would be a second answer nobody asked for.
              */
-            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind] + ($level === null ? [] : ['detail_level' => $level->value]),
+            'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'period_mode' => $periodMode]
+                + ($level === null ? [] : ['detail_level' => $level->value])
+                + (($names = array_filter(['prepared_for_name' => trim((string) ($data['prepared_for_name'] ?? '')), 'prepared_by_name' => trim((string) ($data['prepared_by_name'] ?? ''))], static fn (string $v): bool => $v !== '')) === [] ? [] : ['branding' => $names]),
             /*
              * REPORT-ARCHITECTURE-001 — the level's sections are the report's OWN section settings.
              *
@@ -525,23 +640,36 @@ final class LiveReportBuilderController extends Controller
             'expires_at' => $data['expires_at'] ?? null,
             'allow_download' => $data['allow_download'] ?? false,
             // CLIENT-REPORT-FRAMING-001 — a client link hides spend unless the owner chose to show it.
-            'hide_spend' => $data['hide_spend'] ?? true,
+            // CLIENT-REPORT-FRAMING-001 keeps spend off a link by default — unless the operator chose Spend as one of its KPIs, which is
+            // the Owner saying «show it» (NASEL: Spend is the first primary KPI). An explicit hide_spend still wins either way.
+            'hide_spend' => $data['hide_spend'] ?? ! in_array('spend', $metrics, true),
             'hide_revenue' => $data['hide_revenue'] ?? false,
             'form' => $data['form'] ?? null,
             'settings' => [
                 'section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? []))),
                 'columns' => ReportColumns::fromArray((array) ($data['columns'] ?? []))->toArray(),
-            ],
+            ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
+              + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? []))->onlyFor($providers))->configured() ? ['result_events' => $events->toArray()] : [])
+              + ((bool) ($data['campaign_breakdown'] ?? false) ? ['campaign_breakdown' => true] : [])
+              + ((bool) ($data['results_off'] ?? false) ? ['results_off' => true] : [])
+              + (trim((string) ($data['results_label'] ?? '')) !== '' ? ['results_label' => trim((string) $data['results_label'])] : [])
+              + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])
+              + (($leadEvents = ResultEvents::fromArray((array) ($data['lead_events'] ?? []))->onlyFor($providers))->configured() ? ['lead_events' => $leadEvents->toArray()] : [])
+              + (isset($data['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $data['creative_display']) ?? new CreativeDisplay)->toArray()] : []),
             'scope' => [
                 'project_id' => (string) $project,
-                'campaign_ids' => $campaignIds,
+                'campaign_ids' => $dynamic ? [] : $campaignIds,
+                'dynamic_campaigns' => $dynamic,
                 'account_ids' => $accountIds,
                 'ad_ids' => $adIds,
+                'creative_ids' => array_values(array_unique((array) ($data['creative_ids'] ?? []))),
+                'excluded_creative_ids' => array_values(array_unique((array) ($data['excluded_creative_ids'] ?? []))),
                 'providers' => $providers,
                 'metrics' => $metrics,
                 'earliest' => Carbon::parse($data['from'])->toDateString(),
-                // Open-ended forward, because «how is it going?» is a question about today.
-                'latest' => Carbon::now()->addYear()->toDateString(),
+                // Rolling: open-ended forward, because «how is it going?» is a question about today.
+                // Fixed: the saved end date — live data refreshes INSIDE the window and never widens it.
+                'latest' => $periodMode === 'fixed' ? Carbon::parse($data['to'])->toDateString() : Carbon::now()->addYear()->toDateString(),
             ],
         ], $request->user()->id);
 
@@ -549,7 +677,7 @@ final class LiveReportBuilderController extends Controller
             action: 'report.live_link_created',
             entityType: ReportShare::class,
             entityId: (string) $share->id,
-            after: ['project_id' => $project, 'campaigns' => count($campaignIds), 'providers' => $providers],
+            after: ['project_id' => $project, 'campaigns' => count($campaignIds), 'accounts' => count($accountIds), 'follows_accounts' => $dynamic, 'providers' => $providers],
         );
 
         return ApiResponse::success([

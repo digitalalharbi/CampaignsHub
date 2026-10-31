@@ -214,6 +214,16 @@ export const SPECS: Record<string, Spec> = {
     format: compact,
     hint: { ar: 'من ترك بياناته — ليس عميلًا مؤكدًا ولا عملية بيع.', en: 'People who left their details — not a confirmed customer, and not a sale.' },
   },
+  landing_leads: {
+    label: { ar: 'عملاء صفحة الهبوط', en: 'Landing-page leads' },
+    format: compact,
+    hint: { ar: 'نماذج صفحة الهبوط المكتملة كما تنسبها المنصات.', en: 'Completed landing-page forms, as the platforms attribute them.' },
+  },
+  native_leads: {
+    label: { ar: 'عملاء النموذج الأصلي', en: 'Native-form leads' },
+    format: compact,
+    hint: { ar: 'نماذج المنصة الأصلية المكتملة.', en: 'Completed native platform forms.' },
+  },
   qualified_leads: {
     label: { ar: 'المؤهلون', en: 'Qualified leads' },
     format: compact,
@@ -233,6 +243,22 @@ export const SPECS: Record<string, Spec> = {
       ar: 'مجموع ما أبلغت به كل منصة عن الحدث الذي حُسّنت له الحملة — وليس عدد طلبات فريدة.',
       en: 'The sum of what each platform reported for the event its campaign optimised for — not a count of unique orders.',
     },
+  },
+  /*
+   * RESULT-EVENTS-001 — the configured Result and what it cost. Present only where someone chose which reported metric IS the result for
+   * the project (or the report); never the platform's generic `conversions`.
+   */
+  results: {
+    label: { ar: 'النتائج', en: 'Results' },
+    format: compact,
+    hint: { ar: 'الحدث الذي اخترته ليُحسب نتيجة لهذا المشروع.', en: 'The event you chose to count as a result for this project.' },
+  },
+  cost_per_result: {
+    label: { ar: 'تكلفة النتيجة', en: 'Cost per result' },
+    format: moneyExact,
+    derived: true,
+    invertGood: true,
+    hint: { ar: 'الإنفاق ÷ النتائج المحددة.', en: 'Spend ÷ the configured results.' },
   },
   conversion_rate: {
     label: { ar: 'معدل التحويل', en: 'Conversion rate' },

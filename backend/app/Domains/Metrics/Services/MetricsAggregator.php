@@ -49,6 +49,8 @@ final class MetricsAggregator
         'landing_page_views' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'landing_page_views'), 0)",
         'leads' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'leads'), 0)",
         'qualified_leads' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'qualified_leads'), 0)",
+        // Leads submitted on the platform's own instant form (Meta `onsite_conversion.lead_grouped`) — never the messaging `leads`.
+        'form_leads' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'form_leads'), 0)",
         'purchases' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'purchases'), 0)",
         'installs' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'installs'), 0)",
         'registrations' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'registrations'), 0)",
@@ -375,7 +377,8 @@ final class MetricsAggregator
     public function forProviders(array $providers): self
     {
         $clone = clone $this;
-        $clone->providers = $providers === [] ? null : array_values($providers);
+        // Every spelling a row may carry: a scope saying `google` must still find the `google_ads` rows the connector stored.
+        $clone->providers = $providers === [] ? null : AdPlatforms::variants($providers);
 
         return $clone;
     }
@@ -2575,7 +2578,12 @@ final class MetricsAggregator
             'landing_page_views' => round($lpv, 2),
             'leads' => round($leads, 2),
             'qualified_leads' => round($qualifiedLeads, 2),
+            'form_leads' => round((float) ($row['form_leads'] ?? 0), 2),
             'purchases' => round($purchases, 2),
+            // REPORT-SALES-FUNNEL-001 — the two basket steps are SUMMED in the pivot and were dropped here, so every KPI card read «no data» for
+            // Add to Cart while the funnel beside it showed the real count. Whether a platform reported them is `reportedKeys`' job, not a zero's.
+            'add_to_cart' => round((float) ($row['add_to_cart'] ?? 0), 2),
+            'checkout' => round((float) ($row['checkout'] ?? 0), 2),
             'installs' => round($installs, 2),
             'registrations' => round($registrations, 2),
             'in_app_events' => round($inAppEvents, 2),

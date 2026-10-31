@@ -39,7 +39,7 @@ describe('the dependent report scope filters', () => {
     renderWithProviders(
       <ReportScopePicker
         projectId="p1"
-        value={{ providers: ['meta'], account_ids: ['a1'], objectives: ['leads'], destinations: ['whatsapp'] }}
+        value={{ providers: ['meta'], account_ids: ['a1'], objectives: ['leads'], objective_filter: true, destinations: ['whatsapp'] }}
         onChange={vi.fn()}
         audience="internal"
       />,
@@ -108,5 +108,19 @@ describe('the dependent report scope filters', () => {
     fireEvent.click(screen.getByTestId('scope-clear-campaigns'))
 
     expect(onChange.mock.calls.at(-1)![0]).toEqual({ account_ids: ['a1'] })
+  })
+})
+
+describe('the report objective is a template, not a filter (REPORT-OBJECTIVE-TEMPLATE-001)', () => {
+  it('sends no objective to the campaign list until the operator turns the filter on, and the switch writes the flag', async () => {
+    const onChange = vi.fn()
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ objectives: ['sales', 'conversions', 'purchases', 'add_to_cart'] }} onChange={onChange} />, { locale: 'en' })
+
+    const sw = await screen.findByTestId('scope-objective-filter')
+    expect(sw).not.toBeChecked()
+    expect(vi.mocked(scopeOptions).mock.calls.at(-1)![2]).toEqual(expect.not.objectContaining({ objectives: expect.anything() }))
+
+    fireEvent.click(sw)
+    expect(onChange.mock.calls.at(-1)![0]).toEqual({ objectives: ['sales', 'conversions', 'purchases', 'add_to_cart'], objective_filter: true })
   })
 })

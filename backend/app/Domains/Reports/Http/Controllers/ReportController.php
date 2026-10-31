@@ -10,6 +10,7 @@ use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
@@ -26,6 +27,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -99,6 +101,43 @@ final class ReportController extends Controller
         return $config;
     }
 
+    /**
+     * REPORT-IDENTITY-NAMES-001 — keep the typed names in `config.branding`, beside the identity choice.
+     *
+     * Blank clears the override (the stored names answer again). Only these two keys are touched, so a name edit never disturbs a
+     * frozen identity, the preference, or anything else the report's config carries.
+     *
+     * @param  array<string, mixed>|null  $config
+     * @param  array{prepared_for_name?: ?string, prepared_by_name?: ?string}  $names  only the keys the caller sent
+     * @return array<string, mixed>|null
+     */
+    private static function withPreparedNames(?array $config, array $names): ?array
+    {
+        if ($names === []) {
+            return $config;
+        }
+        $config ??= [];
+        $branding = (array) ($config['branding'] ?? []);
+        foreach (['prepared_for_name', 'prepared_by_name'] as $key) {
+            if (! array_key_exists($key, $names)) {
+                continue;
+            }
+            $value = trim((string) ($names[$key] ?? ''));
+            if ($value === '') {
+                unset($branding[$key]);
+            } else {
+                $branding[$key] = mb_substr($value, 0, 120);
+            }
+        }
+        if ($branding === []) {
+            unset($config['branding']);
+        } else {
+            $config['branding'] = $branding;
+        }
+
+        return $config === [] ? null : $config;
+    }
+
     public function store(Request $request, AuditLogger $audit, string $project): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
@@ -116,6 +155,8 @@ final class ReportController extends Controller
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
+            // REPORT-PERIOD-MODE-001 — fixed = exactly these dates; rolling = follows the reader's day. Absent: fixed when both dates were given.
+            'period_mode' => ['nullable', Rule::in(ReportPeriod::MODES)],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom; the first three anchor on `period_end` (default today).
             'period_kind' => ['nullable', Rule::in(ReportPeriod::KINDS)],
             'config' => ['nullable', 'array'],
@@ -131,10 +172,16 @@ final class ReportController extends Controller
              * did — so nothing that already exists changes meaning.
              */
             'branding_identity' => ['nullable', Rule::in(['client', 'agency'])],
+            // REPORT-IDENTITY-NAMES-001 — «prepared for» / «prepared by» typed for this report; blank = the stored names.
+            'prepared_for_name' => ['nullable', 'string', 'max:120'],
+            'prepared_by_name' => ['nullable', 'string', 'max:120'],
             'scope' => ['nullable', 'array'],
         ]);
 
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
+
+        $periodMode = $data['period_mode'] ?? (isset($data['period_start'], $data['period_end']) ? 'fixed' : 'rolling');
+        $data['config'] = (array) ($data['config'] ?? []) + ['period_mode' => $periodMode];
 
         $periodKind = in_array($data['period_kind'] ?? null, ReportPeriod::KINDS, true) ? (string) $data['period_kind'] : 'custom';
         if ($periodKind !== 'custom') {
@@ -152,7 +199,7 @@ final class ReportController extends Controller
             'form' => $level?->form() ?? $data['form'] ?? 'detailed',
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
-            'campaign_objective' => $data['campaign_objective'] ?? null,
+            'campaign_objective' => $data['campaign_objective'] ?? ReportScope::fromReport((array) ($data['scope'] ?? []))->objectiveTemplate(),
             'status' => 'processing',
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),
@@ -164,8 +211,8 @@ final class ReportController extends Controller
             'currency' => ReportingCurrency::DEFAULT,
             // REPORT-TABLES-OWNER-COLUMNS-001 — `config['columns']` is cut to the known tables and keys on the way in.
             'config' => ($periodKind === 'custom')
-                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level))
-                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
+                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'] ?? null, array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level))
+                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'] ?? null, array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
             // The level's starting sections, with whatever the Owner switched explicitly laid over them.
             'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
                 ? null
@@ -186,7 +233,7 @@ final class ReportController extends Controller
              * «no choice» used to mean every account the project binds — several clients' in one case.
              * Reports saved before this keep the scope they have; only creating or editing asks.
              */
-            'scope' => ($scope = ReportScope::fromArray(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
+            'scope' => ($scope = ReportScope::fromReport(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
             'created_by' => $request->user()->id,
         ]);
 
@@ -224,10 +271,19 @@ final class ReportController extends Controller
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'mode' => ['sometimes', Rule::in(['live', 'snapshot'])],
             'config' => ['sometimes', 'array'],
+            // REPORT-IDENTITY-NAMES-001 — re-open and change the two names; blank returns to the stored names. Nothing else in config moves.
+            'prepared_for_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'prepared_by_name' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
+        $names = array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']));
+        unset($data['prepared_for_name'], $data['prepared_by_name']);
         if (array_key_exists('config', $data)) {
             // REPORT-TABLES-OWNER-COLUMNS-001 — the same cut on an edit as on creation.
             $data['config'] = ReportColumns::normaliseConfig(is_array($data['config']) ? $data['config'] : null);
+        }
+        if ($names !== []) {
+            $base = array_key_exists('config', $data) ? (array) $data['config'] : (array) ($model->config ?? []);
+            $data['config'] = self::withPreparedNames($base, $names);
         }
         $model->update($data);
 
@@ -289,10 +345,40 @@ final class ReportController extends Controller
         return ApiResponse::success(['sent_to' => count($emails), 'at' => $model->last_sent_at], 'Report sent.');
     }
 
-    public function destroy(Request $request, string $project, string $report): JsonResponse
+    /**
+     * Deleting a report deletes its links with it, and a client's link that stops answering is a question someone will ask.
+     *
+     * It was the one destructive report action with no audit row — sending and revoking a link were recorded, deleting the
+     * whole report was not — so «who deleted the NASEL links, and when» had no authorised source to answer it. The row keeps
+     * what identifies the report and each of its links (never a token), written in the same transaction as the delete.
+     */
+    public function destroy(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
-        $this->find($report)->delete();
+        $model = $this->find($report);
+        $shares = ReportShare::query()->where('report_id', $model->getKey())
+            ->get(['id', 'mode', 'revoked_at', 'expires_at', 'view_count', 'created_by', 'created_at'])
+            ->map(fn (ReportShare $s) => [
+                'id' => (string) $s->getKey(),
+                'mode' => $s->mode,
+                'revoked_at' => $s->revoked_at?->toIso8601String(),
+                'expires_at' => $s->expires_at?->toIso8601String(),
+                'view_count' => (int) $s->view_count,
+                'created_by' => $s->created_by,
+                'created_at' => $s->created_at?->toIso8601String(),
+            ])->all();
+
+        DB::transaction(function () use ($audit, $model, $shares): void {
+            $audit->log(action: 'report.deleted', entityType: Report::class, entityId: (string) $model->getKey(), before: [
+                'name' => $model->name,
+                'type' => $model->type,
+                'project_id' => (string) $model->project_id,
+                'period_start' => $model->period_start?->toDateString(),
+                'period_end' => $model->period_end?->toDateString(),
+                'shares' => $shares,
+            ]);
+            $model->delete();
+        });
 
         return ApiResponse::success(null, 'Report deleted.', status: 200);
     }

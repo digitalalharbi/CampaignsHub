@@ -51,7 +51,7 @@ export interface ReportRow {
   error: string | null
   exports: ReportExportRow[]
   /** REPORT-DRILLDOWN-001 — only the part of the config this list reads: the PDF's optional sections. */
-  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } } } | null
+  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } }; branding?: { prepared_for_name?: string; prepared_by_name?: string } } | null
 }
 export interface ReportsIndex {
   reports: ReportRow[]
@@ -83,6 +83,9 @@ const base = (p: string) => `/projects/${p}/reports`
 export const listReports = (p: string, params = '') => getData<ReportsIndex>(`${base(p)}${params ? `?${params}` : ''}`)
 export const getReport = (p: string, id: string) => getData<ReportDetail>(`${base(p)}/${id}`)
 export const createReport = (p: string, body: Record<string, unknown>) => postData<ReportRow>(base(p), body)
+
+/** REPORT-IDENTITY-NAMES-001 — change the two printed names of an existing report; blank returns to the stored names. */
+export const updateReportNames = (p: string, id: string, body: { prepared_for_name?: string | null; prepared_by_name?: string | null }) => patchData<ReportRow>(`${base(p)}/${id}`, body)
 
 /** REPORT-CREATION-UX-001 — the sections an audience implies, so the builder can SAY what it is about to make. */
 export interface ReportSectionChoice {
@@ -207,6 +210,8 @@ export interface AdAccountRef {
   /** The provider's own name for the account, or its id when the provider gave no name. */
   name: string
   provider: string
+  /** REPORT-BOUND-ACCOUNTS-001 — what has arrived for a bound account: figures, a sync with none, or no sync yet. */
+  state?: 'data' | 'no_data' | 'unsynced'
 }
 
 export const liveBuilderOptions = (p: string, period?: { from: string; to: string }) =>
@@ -396,7 +401,68 @@ export interface StoreFunnelPayload {
   }
 }
 
+export interface LiveCampaignRow {
+  name: string
+  platform: string
+  status: string | null
+  objective: string | null
+  /** reported · zero (rows that measured nothing) · no_data (nothing in the window yet) · disconnected (its account's connection is not connected) */
+  data_state?: 'reported' | 'zero' | 'no_data' | 'disconnected'
+  spend: number | null
+  impressions: number | null
+  clicks: number | null
+  native_leads: number | null
+  landing_leads: number | null
+}
+
 export interface LivePayload {
+  /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
+  reported?: Record<string, boolean>
+  /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
+  no_data_yet?: boolean
+  /** The operator's own names for KPI cards on this link. */
+  kpi_labels?: Record<string, string>
+  /** NASEL 2026-10-29 — the link's own word for «Results»; null = «النتائج». */
+  results_label?: string | null
+  /** Every Results path set to «none»: clicks stand wherever Results would. */
+  results_off?: boolean
+  /** RESULT-EVENTS-001 — Results as configured for the project / this link; `configured: false` means none are drawn. */
+  results?: {
+    configured: boolean
+    total: number | null
+    cost: number | null
+    by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
+    by_path: Record<string, number>
+    events: Record<string, Record<string, string>>
+    /** LEAD-EVENTS-001 — verified Leads by source; the total is platform-attributed, not unique people. */
+    leads?: {
+      configured: boolean
+      total: number | null
+      landing: number | null
+      native: number | null
+      /** NASEL 2026-10-29 — `native` and `landing` per platform, from the same resolver, so platform cards add up to them. */
+      native_by_platform?: Record<string, number>
+      landing_by_platform?: Record<string, number>
+      /** NASEL 2026-10-29 — the landing-page funnel over landing-path campaigns only; null = not reported. Platform-attributed, not unique submissions. */
+      landing_funnel?: {
+        campaigns: number
+        page_views: number | null
+        form_starts: number | null
+        contacts: number | null
+        completions: number | null
+        completion_rate: number | null
+        spend: number | null
+        cost_per_completion: number | null
+        coverage?: Record<string, string[]>
+        basis: string
+      }
+      cost: number | null
+      by_platform: Record<string, { results: number; metric: string; spend?: number; cost?: number | null }>
+      by_path: Record<string, number>
+      events: Record<string, Record<string, string>>
+      basis?: string
+    }
+  }
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   /** REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) this link offers, named by the server. */
@@ -444,6 +510,11 @@ export interface LivePayload {
    * The operator's own drill-down reads `EntityPayload` below, which keeps the whole hierarchy.
    */
   campaigns: []
+  /**
+   * NASEL-CAMPAIGN-BREAKDOWN-001 — empty unless the link switches `campaign_breakdown` on, and then only client-safe fields: no id,
+   * no ad set, no audience. A null figure was not reported.
+   */
+  campaign_rows?: LiveCampaignRow[]
   /**
    * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
    *
@@ -666,9 +737,12 @@ export interface LivePayload {
  */
 export async function fetchLiveShared(
   token: string,
-  opts: { from: string; to: string; providers: string[]; campaigns: string[]; password?: string },
+  opts: { from?: string; to?: string; providers: string[]; campaigns: string[]; password?: string },
 ) {
-  const qs = new URLSearchParams({ from: opts.from, to: opts.to })
+  // A FIXED report sends no window: the server answers with exactly the saved dates (REPORT-PERIOD-MODE-001).
+  const qs = new URLSearchParams()
+  if (opts.from) qs.set('from', opts.from)
+  if (opts.to) qs.set('to', opts.to)
   opts.providers.forEach((p) => qs.append('providers[]', p))
   opts.campaigns.forEach((c) => qs.append('campaigns[]', c))
 
@@ -833,6 +907,11 @@ export interface ReportScopeShape {
   ad_ids?: string[]
   creative_ids?: string[]
   objectives?: string[]
+  /**
+   * REPORT-OBJECTIVE-TEMPLATE-001 — true only when the operator chose «filter campaigns by this objective». Without it `objectives` is the
+   * report's measurement template (which funnel and KPIs it presents) and every authorised platform with data is included.
+   */
+  objective_filter?: boolean
   /** LEAD-DESTINATION-001 — lead_form · website · whatsapp · messenger · instagram_direct · calls · mixed. */
   destinations?: string[]
   paths?: string[]
@@ -868,7 +947,7 @@ export interface ScopeOptions {
     last_active_on?: string | null
   }>
   providers: string[]
-  accounts: Array<{ id: string; name: string; provider: string }>
+  accounts: Array<{ id: string; name: string; provider: string; state?: 'data' | 'no_data' | 'unsynced' }>
   ad_sets: Array<{ id: string; name: string; provider: string; campaign_id: string }>
   ads: Array<{ id: string; name: string; provider: string; campaign_id: string }>
   creatives: Array<{ id: string; name: string; provider: string; format: string | null; campaign_id: string }>
@@ -1072,3 +1151,17 @@ export const updateShareSections = (
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
   views?: string[] | null,
 ) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }) })
+
+/** RESULT-EVENTS-001 — which reported metric is a project's «Result», per platform and acquisition path. */
+export type ResultEventsMap = Record<string, Record<string, string>>
+export interface ResultEventsConfig {
+  result_events: ResultEventsMap
+  lead_events?: ResultEventsMap
+  campaign_paths?: Record<string, string>
+  platforms: string[]
+  paths: string[]
+  metrics: string[]
+}
+export const fetchResultEvents = (projectId: string) => getData<ResultEventsConfig>(`/projects/${projectId}/result-events`)
+export const saveResultEvents = (projectId: string, resultEvents: ResultEventsMap) =>
+  putData<ResultEventsConfig>(`/projects/${projectId}/result-events`, { result_events: resultEvents })

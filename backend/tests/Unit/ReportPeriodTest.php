@@ -86,6 +86,20 @@ final class ReportPeriodTest extends TestCase
         $this->assertEquals([['date' => '2026-10-05', 'clicks' => 30.0, 'impressions' => 3000.0], ['date' => '2026-10-12', 'clicks' => 5.0, 'impressions' => 500.0]], $weeks);
     }
 
+    /** NASEL 2026-10-28 — a rolling link's ceiling a year ahead made «this month» 2027-10-01 → 2026-10-28 and every figure 0. */
+    public function test_a_future_anchor_never_moves_the_month_or_week_past_today(): void
+    {
+        $today = $this->day('2026-10-28');
+
+        $m = ReportPeriod::resolve('monthly', $this->day('2026-09-28'), $this->day('2027-10-28'), $today);
+        $this->assertSame(['2026-10-01', '2026-10-28'], [$m['from']->toDateString(), $m['to']->toDateString()]);
+        $this->assertSame(['2026-09-01', '2026-09-28'], [$m['previous_from']->toDateString(), $m['previous_to']->toDateString()]);
+
+        $w = ReportPeriod::resolve('weekly', $this->day('2026-09-28'), $this->day('2027-10-28'), $today);
+        $this->assertSame(['2026-10-26', '2026-10-28'], [$w['from']->toDateString(), $w['to']->toDateString()]);
+        $this->assertTrue($m['from']->lte($m['to']) && $w['from']->lte($w['to']), 'a window never ends before it starts');
+    }
+
     public function test_an_unknown_kind_is_custom(): void
     {
         $this->assertSame('custom', ReportPeriod::resolve('hourly', $this->day('2026-09-01'), $this->day('2026-09-02'))['kind']);

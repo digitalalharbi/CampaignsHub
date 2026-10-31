@@ -150,7 +150,10 @@ test('export → download → the XLSX and CSV a person receives are real files 
 
   const headerAt = lines.findIndex((l) => l.startsWith('Platforms,'))
   expect(headerAt, 'the CSV has no platform header row').toBeGreaterThan(-1)
-  expect(cells(lines[headerAt])).toEqual(['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share'])
+  // REPORT-KPI-CONTRACT-001 — a client file's metric columns are the report's visible-KPI allowlist (the Sales template here:
+  // spend, impressions, clicks, add to cart, purchases, revenue, ROAS), so the cost-per and CTR columns are absent.
+  // RESULT-EVENTS-001 — a platform's generic `conversions` is no client column: it is never a Lead or a Result unless configured.
+  expect(cells(lines[headerAt])).toEqual(['Platforms', 'spend', 'revenue', 'roas', 'share'])
 
   const platformRows: string[][] = []
   for (let i = headerAt + 1; i < lines.length && lines[i].trim() !== ''; i++) platformRows.push(cells(lines[i]))

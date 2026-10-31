@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\MetaCandidate;
 
+use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
 
@@ -35,9 +36,10 @@ final class MetaCandidateConnection extends Model
 
     protected $hidden = ['encrypted_token', 'credential_fingerprint'];
 
-    public static function latestRun(): ?self
+    /** The latest test round trip OF ONE APP — a SaaS-app test never answers for the Candidate, nor the reverse (META-SAAS-APP-001). */
+    public static function latestRun(MetaCredentialProfile $profile = MetaCredentialProfile::Candidate): ?self
     {
-        return self::query()->orderByDesc('started_at')->orderByDesc('created_at')->first();
+        return self::query()->where('profile', $profile->value)->orderByDesc('started_at')->orderByDesc('created_at')->first();
     }
 
     /** @param array<string,mixed> $detail */

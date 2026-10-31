@@ -1,7 +1,7 @@
 import { CompositionTree, VIEW_KEYS, viewsBody, type ViewKey } from './CompositionTree'
 import { ColumnPicker } from './ColumnPicker'
 import { CANONICAL_OBJECTIVES, DESTINATIONS, DETAIL_LEVELS, formOf, type DetailLevelKey, levelSections } from './reportSetupCatalog'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { PlatformMark } from '@/components/brand/PlatformMark'
@@ -13,9 +13,12 @@ import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
-import { Skeleton } from '@/components/ui/States'
+import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
-import { ReportIdentityCards } from './ReportIdentityCards'
+import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
+import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
+import { fetchResultEvents, type ResultEventsMap } from './api'
+import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -63,11 +66,23 @@ const isoDaysAgo = (days: number) => {
  */
 const SUMMARY_WITHHOLDS: readonly string[] = ['funnel']
 
+/** NASEL-OBJECTIVE-TEMPLATE-001 — the four cards each report objective opens on; keys from the builder's own metric catalogue. */
+const OBJECTIVE_KPI_TEMPLATES: Record<string, string[]> = {
+  leads: ['spend', 'impressions', 'clicks', 'native_leads'],
+  traffic: ['spend', 'impressions', 'clicks', 'ctr'],
+  awareness: ['spend', 'impressions', 'reach', 'cpm'],
+  engagement: ['spend', 'impressions', 'clicks', 'ctr'],
+  sales: ['spend', 'purchases', 'revenue', 'roas'],
+  app: ['spend', 'impressions', 'clicks', 'cpc'],
+}
+
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  // NASEL 2026-10-29 — the report's own word for «Results» («الاهتمام»); blank = «النتائج».
+  const [resultsLabel, setResultsLabel] = useState('')
   /*
    * REPORT-SCOPE-HIERARCHY-001 — the hierarchy is chosen top-down: ad accounts first, then (optionally)
    * campaigns inside them, then (optionally) ads inside those. Nothing selected at a level means ALL of
@@ -81,8 +96,24 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [adQuery, setAdQuery] = useState('')
   const [providers, setProviders] = useState<string[]>([])
   const [metrics, setMetrics] = useState<string[]>([])
+  /*
+   * NASEL-style projects: when the project defines its verified lead events, a new link opens on the owner's four primary KPIs —
+   * Spend, Impressions, Clicks, Native Leads — in that order. Untouched until the operator chooses something else.
+   */
+  const events = useQuery({ queryKey: ['result-events', projectId], queryFn: () => fetchResultEvents(projectId) })
+  const [metricsTouched, setMetricsTouched] = useState(false)
+  // The operator's own names for the cards they chose; blank = the catalogue name.
+  const [kpiLabels, setKpiLabels] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!metricsTouched && events.data && Object.keys(events.data.lead_events ?? {}).length > 0) {
+      setMetrics((prev) => (prev.length === 0 ? ['spend', 'impressions', 'clicks', 'native_leads'] : prev))
+      setKpiLabels((prev) => (prev.native_leads ? prev : { ...prev, native_leads: 'العملاء المحتملون' }))
+    }
+  }, [events.data, metricsTouched])
   // REPORT-PERIOD-001 — the period KIND decides the window; only «custom» takes free dates.
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
+  /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
+  const [periodMode, setPeriodMode] = useState<'fixed' | 'rolling'>('fixed')
   const [from, setFrom] = useState(isoDaysAgo(30))
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
 
@@ -134,13 +165,18 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    */
   const [campaignQuery, setCampaignQuery] = useState('')
 
-  // REPORT-SETUP-001 — Objective and Destination narrow the campaign list like the platform and account do.
+  /*
+   * NASEL-OBJECTIVE-TEMPLATE-001 — the report's objective is a KPI TEMPLATE: choosing «العملاء المحتملون» sets the client's cards, it
+   * never removes a campaign. Narrowing the list by campaign objective is a separate, explicit switch that starts off.
+   * Destination still narrows the list like the platform and account do (REPORT-SETUP-001).
+   */
   const [campaignObjective, setCampaignObjective] = useState<string | null>(null)
+  const [filterByObjective, setFilterByObjective] = useState(false)
   const [campaignDestination, setCampaignDestination] = useState<string | null>(null)
 
   const visibleCampaigns = useMemo(() => {
     const needle = campaignQuery.trim().toLocaleLowerCase()
-    const members = CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null
+    const members = filterByObjective ? (CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null) : null
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
@@ -153,7 +189,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, campaignDestination, campaignQuery])
+  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, filterByObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -192,8 +228,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const form = formOf(level)
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
-  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it.
-  const [hideSpend, setHideSpend] = useState(true)
+  // CLIENT-REPORT-FRAMING-001 — «لا تتطرق للإنفاق أبدًا»: a new client link hides spend unless the owner chooses to show it — and
+  // choosing Spend as a KPI is that choice (NASEL opens on Spend first). Null follows the KPI list until the box is touched.
+  const [hideSpendChoice, setHideSpend] = useState<boolean | null>(null)
+  const hideSpend = hideSpendChoice ?? !metrics.includes('spend')
+  // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign: name, platform, status, objective and the primary KPIs; no ids.
+  const [campaignBreakdown, setCampaignBreakdown] = useState(true)
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
   /*
@@ -216,22 +256,47 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [otherCols, setOtherCols] = useState<Record<'accounts' | 'content' | 'days', string[] | null>>({ accounts: null, content: null, days: null })
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // REPORT-IDENTITY-NAMES-001 — the printed names; null = the stored names.
+  const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
+
+  /*
+   * CREATIVE-DISPLAY-001 — the ad section, chosen here and SENT. The builder never carried it, so the controls an operator reached for
+   * on the saved-report dialog did nothing on a link made from here. The defaults are the Owner's: the section shown, the ads listed by
+   * period activity, refreshed automatically, zero-activity ads left out.
+   */
+  const [creatives, setCreatives] = useState<CreativeSharing>(() => ({ ...emptyCreativeSharing(), permissions: { creatives: true } }))
+
+  /* RESULT-EVENTS-001 — this link's definition of «Results»; empty = none, and then no Results are drawn. */
+  const [resultEvents, setResultEvents] = useState<ResultEventsMap>({})
+  const selectedPlatforms = useMemo(
+    () => [...new Set(adAccounts.filter((a) => selectedAccounts.includes(a.id)).map((a) => a.provider))],
+    [adAccounts, selectedAccounts],
+  )
 
   const create = useMutation({
     mutationFn: () =>
       createLiveLink(projectId, {
+        ...creativeSharingBody(creatives),
+        // Every path on «none» is a choice: the link has no Results, and the project default does not fill them back in.
+        ...(Object.keys(pickSelected(resultEvents, selectedPlatforms)).length > 0 ? { result_events: pickSelected(resultEvents, selectedPlatforms) } : { results_off: true }),
+        ...(resultsLabel.trim() === '' ? {} : { results_label: resultsLabel.trim() }),
         name: name.trim(),
         ...(description.trim() === '' ? {} : { description: description.trim() }),
+        ...(names.for === null || names.for.trim() === '' ? {} : { prepared_for_name: names.for.trim() }),
+        ...(names.by === null || names.by.trim() === '' ? {} : { prepared_by_name: names.by.trim() }),
         account_ids: selectedAccounts,
         accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
         metrics,
+        ...(Object.values(kpiLabels).some((v) => v.trim() !== '') ? { kpi_labels: kpiLabels } : {}),
         from,
         to,
         period_kind: periodKind,
+        period_mode: periodMode,
         form,
         detail_level: level,
         hide_spend: hideSpend,
+        campaign_breakdown: campaignBreakdown,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
@@ -342,9 +407,13 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
       ) : options.isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : options.isError ? (
-        <p className="py-8 text-center text-sm text-danger">
-          {ar ? 'تعذّر تحميل خيارات المشروع.' : 'Could not load this project’s options.'}
-        </p>
+        /* LIVE-LINK-ERRORS-001 — the status decides the wording (expired session, no permission, server fault, offline) and Retry asks again. */
+        <ErrorState
+          title={ar ? 'تعذّر تحميل خيارات المشروع.' : 'Could not load this project’s options.'}
+          error={options.error}
+          onRetry={() => { void options.refetch() }}
+          ar={ar}
+        />
       ) : (
         <div className="grid gap-4">
           {/*
@@ -354,7 +423,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             where somebody DECIDES to send it showed neither, so an operator could only find out
             whose marks a client would see by making the link and opening it.
           */}
-          <ReportIdentityCards projectId={projectId} ar={ar} />
+          <ReportIdentityCards projectId={projectId} ar={ar} names={names} onNames={setNames} />
 
           <Field label={ar ? 'اسم التقرير' : 'Report name'} required>
             <input
@@ -442,10 +511,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             */}
             <div className="flex flex-wrap items-center gap-2">
               <select
-                aria-label={ar ? 'الهدف' : 'Objective'}
+                aria-label={ar ? 'هدف التقرير (قالب المؤشرات)' : 'Report objective (KPI template)'}
                 data-testid="live-builder-campaign-objective"
                 value={campaignObjective ?? ''}
-                onChange={(e) => setCampaignObjective(e.target.value === '' ? null : e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value === '' ? null : e.target.value
+                  setCampaignObjective(id)
+                  const template = id === null ? undefined : OBJECTIVE_KPI_TEMPLATES[id]
+                  if (template !== undefined) {
+                    setMetricsTouched(true)
+                    setMetrics(template)
+                    // The Owner's name for the verified count on a Leads report; an operator's own name is kept.
+                    if (id === 'leads') setKpiLabels((prev) => (prev.native_leads ? prev : { ...prev, native_leads: 'العملاء المحتملون' }))
+                  }
+                }}
                 className="min-w-0 flex-1 truncate rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
               >
                 <option value="">{ar ? 'كل الأهداف' : 'All objectives'}</option>
@@ -453,6 +532,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <option key={o.id} value={o.id}>{ar ? o.ar : o.en}</option>
                 ))}
               </select>
+              {campaignObjective !== null && (
+                <label className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <input type="checkbox" data-testid="live-builder-filter-by-objective" checked={filterByObjective} onChange={(e) => setFilterByObjective(e.target.checked)} className="h-3.5 w-3.5 accent-brand-600" />
+                  {ar ? 'تصفية الحملات حسب هذا الهدف' : 'Also filter campaigns by this objective'}
+                </label>
+              )}
               {(options.data?.campaigns ?? []).some((c) => c.destination) && (
                 <select
                   aria-label={ar ? 'الوجهة' : 'Destination'}
@@ -624,6 +709,28 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               {periodKind === 'custom' && (ar ? 'نطاق تحدده، يُقارَن بفترة بنفس الطول قبله.' : 'A range you choose, compared with the same length before it.')}
             </p>
           </div>
+          <div className="grid gap-2" data-testid="live-link-period-mode">
+            <span className="text-xs font-bold text-text-muted">{ar ? 'سلوك الفترة' : 'Period behaviour'}</span>
+            <div role="group" className="grid grid-cols-2 gap-1">
+              {([['fixed', 'فترة ثابتة', 'Fixed dates'], ['rolling', 'فترة متحركة', 'Rolling']] as const).map(([key, labelAr, labelEn]) => (
+                <button
+                  key={key}
+                  type="button"
+                  data-testid={`live-link-period-mode-${key}`}
+                  aria-pressed={periodMode === key}
+                  onClick={() => setPeriodMode(key)}
+                  className={`rounded-xl border px-2 py-1.5 text-sm font-semibold ${periodMode === key ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary'}`}
+                >
+                  {ar ? labelAr : labelEn}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-text-muted">
+              {periodMode === 'fixed'
+                ? (ar ? 'تبقى التواريخ المحفوظة كما هي عند كل فتح للرابط؛ تتحدّث الأرقام داخل هذه الفترة فقط.' : 'The saved dates never move; the figures refresh inside them only.')
+                : (ar ? 'تتبع الفترة يوم القارئ، ويمكنه اختيار آخر 7 أو 30 أو 90 يومًا.' : 'The window follows the reader’s day, and they may pick the last 7, 30 or 90 days.')}
+            </p>
+          </div>
           {periodKind === 'custom' && (
             <div className="grid gap-2 sm:grid-cols-2">
               <Field label={ar ? 'من' : 'From'}><DateField value={from} onChange={setFrom} /></Field>
@@ -635,11 +742,36 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <span className="text-xs font-bold text-text-muted">{ar ? 'المؤشرات المعروضة للعميل' : 'Metrics the client sees'}</span>
             <div className="flex flex-wrap gap-1.5">
               {options.data!.metrics.map((m) => (
-                <button key={m.key} type="button" data-testid={`metric-${m.key}`} onClick={() => toggle(setMetrics, m.key)} className={chip(metrics.includes(m.key))}>
+                <button key={m.key} type="button" data-testid={`metric-${m.key}`} onClick={() => { setMetricsTouched(true); toggle(setMetrics, m.key) }} className={chip(metrics.includes(m.key))}>
                   {ar ? m.ar : m.en}
                 </button>
               ))}
             </div>
+            {/* The chosen set, in the order the client reads it: move, rename. Nothing outside it is shown. */}
+            {metrics.length > 0 && (
+              <ol className="grid gap-1" data-testid="metric-order">
+                {metrics.map((key, i) => {
+                  const m = options.data!.metrics.find((x) => x.key === key)
+                  const move = (to: number) => { setMetricsTouched(true); setMetrics((prev) => { const next = [...prev]; const [item] = next.splice(i, 1); next.splice(to, 0, item); return next }) }
+                  return (
+                    <li key={key} className="flex items-center gap-2 rounded-lg bg-surface-secondary px-2 py-1 text-xs">
+                      <span className="w-6 text-text-muted">{i + 1}</span>
+                      <span className="w-32 shrink-0 truncate">{m ? (ar ? m.ar : m.en) : key}</span>
+                      <input
+                        data-testid={`metric-label-${key}`}
+                        value={kpiLabels[key] ?? ''}
+                        onChange={(e) => setKpiLabels((prev) => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={ar ? 'اسم مخصص (اختياري)' : 'Custom name (optional)'}
+                        maxLength={60}
+                        className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1"
+                      />
+                      <button type="button" data-testid={`metric-up-${key}`} disabled={i === 0} onClick={() => move(i - 1)} className="rounded border border-border px-1.5 disabled:opacity-30" aria-label={ar ? 'أعلى' : 'Move up'}>↑</button>
+                      <button type="button" data-testid={`metric-down-${key}`} disabled={i === metrics.length - 1} onClick={() => move(i + 1)} className="rounded border border-border px-1.5 disabled:opacity-30" aria-label={ar ? 'أسفل' : 'Move down'}>↓</button>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
@@ -732,6 +864,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           </label>
 
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+            <span>{ar ? 'عرض تفصيل الحملات للعميل' : 'Show the campaign breakdown to the client'}</span>
+            <input type="checkbox" data-testid="live-link-campaign-breakdown" checked={campaignBreakdown} onChange={(e) => setCampaignBreakdown(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
             <span>{ar ? 'إخفاء الإيراد عن العميل' : 'Hide revenue from the client'}</span>
             <input type="checkbox" data-testid="live-link-hide-revenue" checked={hideRevenue} onChange={(e) => setHideRevenue(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
@@ -746,13 +883,40 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <input type="checkbox" data-testid="live-link-allow-download" checked={allowDownload} onChange={(e) => setAllowDownload(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
 
+          <ResultEventsPanel projectId={projectId} providers={selectedPlatforms} value={resultEvents} onChange={setResultEvents} />
+
+          <label className="grid gap-1 text-xs text-text-secondary">
+            {ar ? 'مسمّى النتائج' : 'Results label'}
+            <input
+              data-testid="live-link-results-label"
+              value={resultsLabel}
+              maxLength={40}
+              placeholder={ar ? 'النتائج' : 'Results'}
+              onChange={(e) => setResultsLabel(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
+            />
+            <span className="text-[11px] text-text-muted">{ar ? 'يحل محل «النتائج» و«تكلفة النتيجة» في كل التقرير، مثل «الاهتمام» و«تكلفة الاهتمام».' : 'Replaces «Results» and «Cost per result» across the report, e.g. «Interest» and «Cost per interest».'}</span>
+          </label>
+
+          <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
+
           {/* What the link will show, in words, before it is created — see ViewCustomiser for the same idea. */}
           <p data-testid="live-link-summary" className="text-xs text-text-secondary">{summary}</p>
 
           {create.isError && (
-            <p className="text-xs text-danger">
-              {ar ? 'تعذّر إنشاء الرابط. تأكد من وجود حملات في هذا المشروع.' : 'Could not create the link. Check this project has campaigns.'}
-            </p>
+            /*
+              LIVE-LINK-ERRORS-001 — say what actually failed. The old line blamed «no campaigns» for EVERYTHING — an expired session, a
+              missing permission, a plan limit, a server fault, a dropped connection — so the owner was sent looking for campaigns that
+              were there. The server's own message and the status are shown, and Retry is offered where asking again can help.
+            */
+            <div data-testid="live-link-create-error">
+              <ErrorState
+                title={ar ? 'تعذّر إنشاء الرابط.' : 'Could not create the link.'}
+                error={create.error}
+                onRetry={() => create.mutate()}
+                ar={ar}
+              />
+            </div>
           )}
 
           <Button data-testid="live-link-create" loading={create.isPending} disabled={name.trim() === '' || selectedAccounts.length === 0} onClick={() => create.mutate()}>
@@ -881,6 +1045,11 @@ function AccountPicker({ ar, accounts, selected, query, onQuery, onToggle, onAll
             <label key={a.id} className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={selected.includes(a.id)} onChange={() => onToggle(a.id)} data-testid={`live-builder-account-${a.id}`} className="h-3.5 w-3.5 shrink-0 accent-brand-600" />
               <span className="min-w-0 flex-1 truncate">{a.name}</span>
+              {a.state === 'unsynced' || a.state === 'no_data' ? (
+                <span data-testid={`account-state-${a.state}`} className="shrink-0 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
+                  {a.state === 'unsynced' ? (ar ? 'لم تتم مزامنته' : 'not synced yet') : (ar ? 'لا بيانات بعد' : 'no data yet')}
+                </span>
+              ) : null}
               <span className="shrink-0 text-text-muted"><PlatformMark platform={a.provider} size={12} /></span>
             </label>
           ))}

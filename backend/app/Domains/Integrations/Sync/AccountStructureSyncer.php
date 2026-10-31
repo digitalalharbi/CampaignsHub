@@ -16,6 +16,7 @@ use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Support\ProviderErrorText;
+use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Enums\SyncRunStatus;
 use Illuminate\Support\Carbon;
@@ -165,6 +166,11 @@ final class AccountStructureSyncer
                 // SNAP-OCT26-SUBREQUEST-WARNINGS — verbatim, beside the run they concern.
                 'warnings' => $connector->lastWarnings(),
             ]])->save();
+        }
+
+        // META-SESSION-190-001 — the same refusal on the structure read marks the connection for reconnecting.
+        if ($problems !== [] && isset($connection)) {
+            app(ProviderSessionInvalidation::class)->record($connection, implode(' ', $problems));
         }
 
         return $this->finish($run, $status, $records, $problems === [] ? null : implode(' ', $problems));

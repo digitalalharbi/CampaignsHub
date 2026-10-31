@@ -87,6 +87,9 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         'purchases' => 'complete_payment',
         'revenue' => 'total_complete_payment_rate',
         'conversions' => 'conversion',
+        // NASEL — «Form submissions (TikTok)»: leads submitted on TikTok's own Instant Form (v1.3 basic report metrics, read 2026-10-28).
+        // Never `form`, which is «Form submissions (website)» — a pixel event on the landing page — and never `conversion`.
+        'form_leads' => 'onsite_form',
     ];
 
     /** The figures a report is not a report without — never dropped to save a refused request. */

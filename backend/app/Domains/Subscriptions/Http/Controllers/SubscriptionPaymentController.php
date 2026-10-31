@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 /**
  * Paying for a subscription, and hearing back about it (PAY-002).
@@ -146,8 +147,10 @@ final class SubscriptionPaymentController extends Controller
      * The gateway's own voice. No auth, because a gateway has no session — the signature IS the
      * authentication, and an unverified body reaches nothing.
      *
-     * Always answers 200. A gateway that gets an error retries, and retrying a payload we have
-     * already rejected achieves nothing except noise; what matters is recorded either way.
+     * PAY-WEBHOOK-REFUSAL-001 — a refusal is answered as one. This used to answer 200 to everything so a gateway would not retry a
+     * rejected payload, and the cost was that a forged event read «Webhook received» and a genuine one refused for a wrong token
+     * was dropped in silence. Now: unknown gateway 404, unverified 401 (still recorded once as a trace), verified 200. A genuine event
+     * refused for a misconfigured token is retried by the gateway and lands once the token is corrected.
      */
     public function webhook(Request $request, string $provider): JsonResponse
     {
@@ -157,7 +160,15 @@ final class SubscriptionPaymentController extends Controller
             $headers[$key] = is_array($values) ? (string) ($values[0] ?? '') : (string) $values;
         }
 
-        $event = $this->events->handle($provider, $request->getContent(), $headers);
+        try {
+            $event = $this->events->handle($provider, $request->getContent(), $headers);
+        } catch (InvalidArgumentException) {
+            return ApiResponse::error(__('api.not_found'), status: 404);
+        }
+
+        if (! $event->verified) {
+            return ApiResponse::error(__('api.unauthenticated'), status: 401);
+        }
 
         return ApiResponse::success(
             ['event_id' => $event->event_id, 'verified' => (bool) $event->verified],

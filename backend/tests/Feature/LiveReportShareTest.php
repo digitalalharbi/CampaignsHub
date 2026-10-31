@@ -364,7 +364,7 @@ final class LiveReportShareTest extends TestCase
     public function test_a_weekly_link_is_the_iso_week_and_says_what_it_is_compared_with(): void
     {
         $token = $this->liveLink(['earliest' => '2026-01-01', 'latest' => '2027-01-01']);
-        $this->report->forceFill(['config' => array_merge((array) $this->report->config, ['period_kind' => 'weekly'])])->save();
+        $this->report->forceFill(['config' => array_merge((array) $this->report->config, ['period_kind' => 'weekly', 'period_mode' => 'rolling'])])->save();
 
         $period = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data.period');
 

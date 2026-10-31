@@ -17,6 +17,7 @@ use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportIdentity;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\ConditionalThrottle;
@@ -133,6 +134,8 @@ final class PublicReportController extends Controller
             'period' => [
                 'from' => $report->period_start?->toDateString(),
                 'to' => $report->period_end?->toDateString(),
+                // REPORT-PERIOD-MODE-001 — fixed pages offer no rolling presets and ask for no window.
+                'mode' => ReportPeriod::modeOfReport($report),
             ],
             /*
              * Two independent facts, and the client page needs both: `form` is what the report is,

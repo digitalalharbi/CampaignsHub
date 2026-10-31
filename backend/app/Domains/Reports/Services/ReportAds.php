@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Reports\Support\CreativeDisplay;
 use Illuminate\Support\Carbon;
 
 /**
@@ -155,56 +156,66 @@ final class ReportAds
          * period holds no figure for. A report that quietly shrank its own estate would be this same
          * defect wearing the opposite sign.
          */
-        $query->where(function ($outer) use ($from, $to): void {
-            $outer
-                ->whereExists(function ($sub) use ($from, $to): void {
-                    $sub->selectRaw('1')
-                        ->from('creative_daily_metrics')
-                        ->whereColumn('creative_daily_metrics.creative_id', 'external_creatives.id')
-                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
-                })
-                /*
-                 * …or measured one grain down, at the AD.
-                 *
-                 * Not every platform reports per creative. Where it reports per ad, the creative has
-                 * no `creative_daily_metrics` row of its own and is still a creative that ran — the
-                 * same path `lean()` already walks to decide whether an ad delivered. Reading only
-                 * the creative grain dropped exactly those from the report, which is «unavailable
-                 * treated as absent», the error this change exists to remove rather than relocate.
-                 *
-                 * Caught by `LiveReportContentAccountCeilingTest`, whose fixture records campaign and
-                 * ad figures and no creative ones.
-                 */
-                ->orWhereExists(function ($sub) use ($from, $to): void {
-                    $sub->selectRaw('1')
-                        ->from('external_ads')
-                        ->whereColumn('external_ads.creative_id', 'external_creatives.id')
-                        ->whereExists(function ($inner) use ($from, $to): void {
-                            $inner->selectRaw('1')
-                                ->from('entity_daily_metrics')
-                                ->where('entity_type', 'ad')
-                                ->whereColumn('entity_daily_metrics.entity_id', 'external_ads.id')
-                                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
-                        });
-                })
-                /*
-                 * …or the creative itself records that it was delivering inside the window.
-                 *
-                 * Some platforms report at the CAMPAIGN grain only: no creative row, no ad row, and a
-                 * creative that genuinely ran. What the sync does record on it is `last_active_at`,
-                 * which is the platform saying «this was delivering on this date». A date inside the
-                 * period is the period measuring something about this creative, and that is the whole
-                 * test being applied here.
-                 *
-                 * It is also what keeps this change narrow. What is excluded is content with NO
-                 * evidence of activity in the period from ANY grain — the owner's «no spend and no
-                 * indicators» — rather than everything a single table happens not to carry.
-                 */
-                ->orWhereBetween('external_creatives.last_active_at', [
-                    $from->copy()->startOfDay(),
-                    $to->copy()->endOfDay(),
-                ]);
-        });
+        /*
+         * CREATIVE-DISPLAY-001 — a link that carries a display policy is read by it: `activity` keeps creatives with a REAL figure in the
+         * period, `all` / `selected` and «include zero activity» list the scope as it stands. A link made before the policy existed has
+         * none and keeps the row-existence reading below, so nothing already shared changes.
+         */
+        $display = CreativeDisplay::fromArray(is_array($filters['creative_display'] ?? null) ? $filters['creative_display'] : null);
+        if ($display === null) {
+            $query->where(function ($outer) use ($from, $to): void {
+                $outer
+                    ->whereExists(function ($sub) use ($from, $to): void {
+                        $sub->selectRaw('1')
+                            ->from('creative_daily_metrics')
+                            ->whereColumn('creative_daily_metrics.creative_id', 'external_creatives.id')
+                            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+                    })
+                    /*
+                     * …or measured one grain down, at the AD.
+                     *
+                     * Not every platform reports per creative. Where it reports per ad, the creative has
+                     * no `creative_daily_metrics` row of its own and is still a creative that ran — the
+                     * same path `lean()` already walks to decide whether an ad delivered. Reading only
+                     * the creative grain dropped exactly those from the report, which is «unavailable
+                     * treated as absent», the error this change exists to remove rather than relocate.
+                     *
+                     * Caught by `LiveReportContentAccountCeilingTest`, whose fixture records campaign and
+                     * ad figures and no creative ones.
+                     */
+                    ->orWhereExists(function ($sub) use ($from, $to): void {
+                        $sub->selectRaw('1')
+                            ->from('external_ads')
+                            ->whereColumn('external_ads.creative_id', 'external_creatives.id')
+                            ->whereExists(function ($inner) use ($from, $to): void {
+                                $inner->selectRaw('1')
+                                    ->from('entity_daily_metrics')
+                                    ->where('entity_type', 'ad')
+                                    ->whereColumn('entity_daily_metrics.entity_id', 'external_ads.id')
+                                    ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+                            });
+                    })
+                    /*
+                     * …or the creative itself records that it was delivering inside the window.
+                     *
+                     * Some platforms report at the CAMPAIGN grain only: no creative row, no ad row, and a
+                     * creative that genuinely ran. What the sync does record on it is `last_active_at`,
+                     * which is the platform saying «this was delivering on this date». A date inside the
+                     * period is the period measuring something about this creative, and that is the whole
+                     * test being applied here.
+                     *
+                     * It is also what keeps this change narrow. What is excluded is content with NO
+                     * evidence of activity in the period from ANY grain — the owner's «no spend and no
+                     * indicators» — rather than everything a single table happens not to carry.
+                     */
+                    ->orWhereBetween('external_creatives.last_active_at', [
+                        $from->copy()->startOfDay(),
+                        $to->copy()->endOfDay(),
+                    ]);
+            });
+        } elseif ($display->filtersByPeriod()) {
+            $this->creatives->applyPeriodActivity($query, $from, $to);
+        }
 
         $measured = (clone $query)->count();
         $unmeasured = $inScope - $measured;

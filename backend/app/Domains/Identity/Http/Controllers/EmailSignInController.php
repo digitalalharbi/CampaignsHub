@@ -144,6 +144,8 @@ final class EmailSignInController extends Controller
              */
             'delivery_status' => $result['delivery_status'],
             'resend_after' => self::RESEND_COOLDOWN,
+            // AUTH-LOGIN-UX-002 — the code's life, so the page can say it has expired instead of letting it be typed in vain.
+            'expires_in_minutes' => $ttl,
             // Non-production only; hard-gated inside the verification service.
             'dev_code' => $result['dev_code'],
         ], __('auth.code_sent'));

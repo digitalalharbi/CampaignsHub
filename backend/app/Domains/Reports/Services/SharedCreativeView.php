@@ -378,6 +378,17 @@ final class SharedCreativeView
          */
         $query->where('project_id', $ceiling['project_id'] === '' ? ReportScope::IMPOSSIBLE : $ceiling['project_id']);
 
+        /*
+         * CREATIVE-DISPLAY-001 — the link's display policy, enforced at the ONE query every listing and every direct read starts from.
+         * A creative the policy leaves out is therefore absent from the library, the summary, the comparison AND its own address.
+         * The window is the report's: the reader's narrowing, clamped inside the ceiling.
+         */
+        $display = $share->creativeDisplay();
+        if ($display?->filtersByPeriod()) {
+            $window = $this->activityWindow($ceiling, $applied);
+            $this->rows->applyPeriodActivity($query, $window[0], $window[1]);
+        }
+
         $this->rows->applyFilters($query, [
             'providers' => $applied['providers'],
             'campaign_ids' => $applied['campaign_ids'],
@@ -391,6 +402,22 @@ final class SharedCreativeView
         ]);
 
         return $query;
+    }
+
+    /**
+     * The days a creative must have been active in to be listed under the `activity` policy.
+     *
+     * @param  array<string, mixed>  $ceiling
+     * @param  array<string, mixed>  $applied
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function activityWindow(array $ceiling, array $applied): array
+    {
+        $today = Carbon::now()->startOfDay();
+        $from = Carbon::parse((string) ($applied['from'] ?? $ceiling['earliest']))->startOfDay();
+        $to = Carbon::parse((string) ($applied['to'] ?? $ceiling['latest']))->startOfDay();
+
+        return [$from, $to->greaterThan($today) ? $today : $to];
     }
 
     /**

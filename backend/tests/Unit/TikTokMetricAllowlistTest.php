@@ -34,12 +34,14 @@ final class TikTokMetricAllowlistTest extends TestCase
         'complete_payment' => 'Purchases (website)',
         'total_complete_payment_rate' => 'Purchase value (website)',
         'conversion' => 'Conversions — the optimisation event selected',
+        'onsite_form' => 'Form submissions (TikTok) — lead actions on TikTok\'s own Instant Form (read 2026-10-28)',
     ];
 
     /** Names that look right and are not report metrics, or mean something else. */
     private const NOT_TO_REQUEST = [
         'add_to_cart' => 'not a report metric — the 40002 refusal of 2026-10-12',
         'total_purchase_value' => 'Purchase value (APP) — not the website purchases complete_payment counts',
+        'form' => 'Form submissions (WEBSITE) — a pixel event, never a native Instant Form lead',
     ];
 
     /** @return array<string,string> canonical => TikTok field */
@@ -71,5 +73,10 @@ final class TikTokMetricAllowlistTest extends TestCase
         $this->assertSame('initiate_checkout', $m['checkout']);
         $this->assertSame('complete_payment', $m['purchases']);
         $this->assertSame('total_complete_payment_rate', $m['revenue'], 'revenue must price the same website purchases the count counts');
+    }
+
+    public function test_native_form_leads_are_the_instant_form_count_not_the_website_form(): void
+    {
+        $this->assertSame('onsite_form', $this->requested()['form_leads']);
     }
 }

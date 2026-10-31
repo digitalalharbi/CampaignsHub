@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -223,7 +226,16 @@ final class ShareService
      */
     public function downloadDocument(Report $report, ReportShare $share): array
     {
+        // LIVE-FILE-PARITY-001 — a live link's file is the page's payload, not the empty stored copy.
+        $report = app(LiveReportService::class)->materialise($report, $share);
         $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh($report->data ?? []), $share);
+
+        /*
+         * RESULT-EVENTS-001 (Owner 2026-10-29) — the link's Results, not the saved report's: its own events, its «none», its label, read
+         * by the same resolver the page uses, over the period the file covers. A saved document holds no campaign rows for a client
+         * report, so the resolver's answer for that window is taken from the live builder rather than re-derived from the copy.
+         */
+        $data = $this->withLinkResults($data, $report, $share);
 
         // §15.12 — the creative rows reach the file only if the link may show them.
         if ($share->creativeVisibility()->creatives) {
@@ -234,6 +246,44 @@ final class ShareService
 
         // WIDGET-REGISTRY-001 — the widgets this link shows on the web, in the same client-safe shape, so the file matches the page.
         $data['widgets'] = app(SharedWidgetData::class)->forShare($share, $report);
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withLinkResults(array $data, Report $report, ReportShare $share): array
+    {
+        if ($report->period_start === null || $report->period_end === null) {
+            // No saved window to resolve over: the copy's Results stand only where the link still defines Results at all.
+            $settings = (array) ($share->settings ?? []);
+            $project = $report->project_id ? Project::withoutGlobalScopes()->find($report->project_id) : null;
+            $defined = ($settings['results_off'] ?? false) !== true
+                && ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null)->configured();
+            if (! $defined) {
+                $data['results'] = ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []]
+                    + ['leads' => ((array) ($data['results'] ?? []))['leads'] ?? null];
+            }
+
+            return $data;
+        }
+        $live = app(LiveReportService::class)->resultsForFile($share, Carbon::parse($report->period_start->toDateString()), Carbon::parse($report->period_end->toDateString()));
+        $results = (array) ($live['results'] ?? []);
+        // A link that hides spend states no cost per result in its files either: the cost is spend divided by the count beside it.
+        if ($share->hide_spend) {
+            $results['cost'] = null;
+            foreach ((array) ($results['by_platform'] ?? []) as $provider => $row) {
+                $results['by_platform'][$provider] = ['cost' => null, 'spend' => null] + (array) $row;
+            }
+            if (is_array($results['leads'] ?? null)) {
+                $results['leads']['cost'] = null;
+            }
+        }
+        $data['results'] = $results;
+        $data['results_label'] = $live['results_label'] ?? null;
+        $data['results_spend_hidden'] = (bool) $share->hide_spend;
 
         return $data;
     }

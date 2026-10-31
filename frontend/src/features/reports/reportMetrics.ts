@@ -57,6 +57,8 @@ type Input = {
   metric_set?: string[]
   /** LEAD-DESTINATION-001 — where a lead report's results happen; null when unstated or not a lead report. */
   lead_destination?: string | null
+  /** RESULT-EVENTS-001 — Results as configured; `configured: false` means the report draws no Results at all. */
+  results?: { configured: boolean; total: number | null; cost: number | null; leads?: { configured: boolean; total: number | null; landing: number | null; native: number | null; cost: number | null } } | null
 }
 
 /**
@@ -126,7 +128,12 @@ export function reportLabel(
   objective: string | undefined,
   destination: string | null | undefined,
   ar: boolean,
+  reported?: Record<string, boolean>,
 ): string | null {
+  // LEAD-EVIDENCE-001 — `conversions` / `cpa` are named Leads / cost per lead only where the platform ALSO reported leads. A platform that
+  // sent only its optimised-for `conversion` (any event: a page view, a click-through, a form open) has results, not verified leads.
+  if (objective === 'leads' && reported?.leads === false && (key === 'conversions' || key === 'cpa') && !isMessagingDestination(destination)) return null
+
   const entry = objective === 'leads' && isMessagingDestination(destination)
     ? MESSAGING_LABEL[key]
     : OBJECTIVE_LABEL[objective ?? '']?.[key]
@@ -181,21 +188,39 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
    * and a client link re-rendered a month later must show the report they were sent. `layoutFor` is
    * the fallback for snapshots written before the set was stored.
    */
-  const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective).primary
+  const configured = data.results?.configured === true
+  // RESULT-EVENTS-001 — Results and Cost per Result are drawn only where a result event is configured; a platform's generic conversion
+  // is never promoted to either, whatever objective the report was written under.
+  const leadEvents = data.results?.leads?.configured === true
+  const keys = (data.metric_set?.length ? data.metric_set : layoutFor(objective).primary)
+    .filter((key) => configured || (key !== 'results' && key !== 'cost_per_result'))
+    .filter((key) => leadEvents || (key !== 'landing_leads' && key !== 'native_leads'))
   const direct = data.objective_performance?.direct
+  const lead = data.results?.leads
+  // LEAD-EVENTS-001 — where lead events are configured, Leads / CPL are the verified landing + native submissions, each source on its own.
+  const kpis: Record<string, number | null> = {
+    ...(data.kpis ?? {}),
+    ...(configured ? { results: data.results?.total ?? null, cost_per_result: data.results?.cost ?? null } : {}),
+    ...(leadEvents ? { leads: lead?.total ?? null, cpl: lead?.cost ?? null, landing_leads: lead?.landing ?? null, native_leads: lead?.native ?? null } : {}),
+  }
+  const reported: Record<string, boolean> = {
+    ...(data.reported ?? {}),
+    ...(configured ? { results: data.results?.total != null, cost_per_result: data.results?.cost != null } : {}),
+    ...(leadEvents ? { leads: lead?.total != null, landing_leads: lead?.landing != null, native_leads: lead?.native != null } : {}),
+  }
 
   return keys
     .filter((key) => SPECS[key])
     .map((key) => {
       const spec = SPECS[key]
       const substituted = direct && (key === 'cpa' || key === 'roas')
-      const value = substituted ? direct[key as 'cpa' | 'roas'] : (data.kpis ?? {})[key]
+      const value = substituted ? direct[key as 'cpa' | 'roas'] : kpis[key]
 
       return {
         key,
         label: substituted
           ? (ar ? DIRECT_LABEL[key].ar : DIRECT_LABEL[key].en)
-          : reportLabel(key, objective, data.lead_destination, ar) ?? (ar ? spec.label.ar : spec.label.en),
+          : reportLabel(key, objective, data.lead_destination, ar, data.reported) ?? (ar ? spec.label.ar : spec.label.en),
         // A substituted figure is a derived ratio of a NARROWER scope than `reported` describes, so
         // it is read straight: `reported` would answer a question about the wrong denominator.
         reading: substituted
@@ -203,7 +228,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
               ? { kind: 'no_data' }
               // MONEY-USD-001 — the report's own currency, not the formatter's default.
               : { kind: 'value', text: spec.format(value, data.currency ?? null) })
-          : readMetric(key, spec, data.kpis ?? {}, data.reported, data.currency ?? null),
+          : readMetric(key, spec, kpis, reported, data.currency ?? null),
         // The period-over-period change belongs to the blended figure it was computed from. Showing
         // it beside a Direct value would attach one scope's movement to another scope's number.
         delta: substituted ? undefined : (data.delta?.[key] ?? null),

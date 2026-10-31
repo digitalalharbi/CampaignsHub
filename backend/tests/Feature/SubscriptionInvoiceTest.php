@@ -216,7 +216,7 @@ final class SubscriptionInvoiceTest extends TestCase
             'id' => 'evt_forged', 'type' => 'payment_paid', // no secret_token
             'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
-        ])->assertOk();
+        ])->assertUnauthorized();
 
         $this->assertSame('issued', SubscriptionInvoice::query()->firstOrFail()->status);
     }

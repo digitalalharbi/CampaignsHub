@@ -9,6 +9,7 @@ use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
+use App\Domains\Integrations\Http\Controllers\MetaConnectionMigrationController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
@@ -74,6 +75,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         // a 302, because the caller is an SPA doing `fetch` and a cross-origin redirect would be
         // swallowed. Which platforms those are is the catalogue's answer (`ProviderAuth`), not a
         // number written here.
+        // META-SAAS-APP-001 — which Meta app a new connection may use (declared before `{provider}` routes; GET, so no overlap).
+        Route::get('meta/apps', [AdPlatformOAuthController::class, 'metaApps'])->name('meta.apps');
         Route::post('{provider}/oauth/start', [AdPlatformOAuthController::class, 'start'])->name('oauth.start');
 
         /*
@@ -136,9 +139,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      * a project or it is not, and that answer lives in `ProjectIntegrationBinding` — a second way to
      * say who owns an account is the exact defect this programme spent three PRs removing.
      */
+    Route::get('estate', [AccountInventoryController::class, 'estate'])->name('estate');
     Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
     Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
     // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
+    // META-SAAS-APP-001 — read an existing Meta account through another Meta app's connection, explicitly and reversibly.
+    Route::post('accounts/{account}/move-to-connection', [MetaConnectionMigrationController::class, 'move'])
+        ->middleware('throttle:20,1')->name('accounts.move-to-connection');
     Route::post('accounts/{account}/backfill', [AccountInventoryController::class, 'backfill'])
         ->middleware('throttle:20,1')->name('accounts.backfill');
 });
@@ -188,5 +195,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
          */
         Route::put('primary', [ProjectIntegrationController::class, 'setPrimary'])->middleware('project.can:integrations.manage')->name('primary');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->middleware('project.can:integrations.manage')->name('sync');
+        // INTEGRATION-UNLINK-001 — take ONE account off this project, addressed by the account (the binding id is not what an operator holds).
+        Route::post('accounts/{account}/unlink', [ProjectIntegrationController::class, 'unlinkAccount'])->middleware('project.can:integrations.manage')->name('accounts.unlink');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->middleware('project.can:integrations.manage')->name('detach');
     });

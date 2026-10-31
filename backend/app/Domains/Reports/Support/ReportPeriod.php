@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Reports\Models\Report;
 use Illuminate\Support\Carbon;
 
 /**
@@ -27,6 +28,42 @@ use Illuminate\Support\Carbon;
  */
 final class ReportPeriod
 {
+    /**
+     * REPORT-PERIOD-MODE-001 — how a report's window behaves over time.
+     *
+     * `fixed`   — exactly the saved start and end, on every reload and every later day; interactive filters may only narrow inside it.
+     * `rolling` — the window follows the reader's day: «the last 7/30/90 days», the current week, the current month.
+     *
+     * A report or link made before the mode existed carries none and stays `rolling`, which is what it always did. A frozen SNAPSHOT is
+     * not a third mode of a live link: it is a link whose `mode` is `snapshot` and which never recomputes at all.
+     */
+    public const MODES = ['fixed', 'rolling'];
+
+    /** @param  array<string, mixed>|null  $config */
+    public static function modeOf(?array $config): string
+    {
+        $mode = $config['period_mode'] ?? null;
+
+        return is_string($mode) && in_array($mode, self::MODES, true) ? $mode : 'rolling';
+    }
+
+    /**
+     * The mode of a stored report, including the ones made before the mode existed.
+     *
+     * A report built from the live builder (`config.live`) was always «follow the reader's day» and stays rolling. Every other report is a
+     * DOCUMENT of the period it was made for: with explicit saved dates and no stated mode it is fixed, so a weekly report opened a month
+     * later still says that week — it never starts offering «last 30 days» of something it was not about.
+     */
+    public static function modeOfReport(Report $report): string
+    {
+        $config = (array) ($report->config ?? []);
+        if (isset($config['period_mode'])) {
+            return self::modeOf($config);
+        }
+
+        return empty($config['live']) && $report->period_start !== null && $report->period_end !== null ? 'fixed' : 'rolling';
+    }
+
     public const KINDS = ['daily', 'weekly', 'monthly', 'custom'];
 
     /**
@@ -60,6 +97,9 @@ final class ReportPeriod
 
     private static function weekly(Carbon $anchor, Carbon $today): array
     {
+        // A rolling link's ceiling runs a year ahead; anchoring on it made «this month» October NEXT year, cut at today — a
+        // window that ends before it starts (NASEL 2026-10-28: 2027-10-01 → 2026-10-28, every figure 0). The anchor is never after today.
+        $anchor = $anchor->copy()->min($today);
         $start = $anchor->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
         $end = $start->copy()->addDays(6)->min($today->copy()->startOfDay());
         $length = (int) $start->diffInDays($end) + 1;
@@ -75,6 +115,9 @@ final class ReportPeriod
 
     private static function monthly(Carbon $anchor, Carbon $today): array
     {
+        // A rolling link's ceiling runs a year ahead; anchoring on it made «this month» October NEXT year, cut at today — a
+        // window that ends before it starts (NASEL 2026-10-28: 2027-10-01 → 2026-10-28, every figure 0). The anchor is never after today.
+        $anchor = $anchor->copy()->min($today);
         $start = $anchor->copy()->startOfMonth()->startOfDay();
         $full = $start->copy()->endOfMonth()->startOfDay();
         $end = $full->copy()->min($today->copy()->startOfDay());

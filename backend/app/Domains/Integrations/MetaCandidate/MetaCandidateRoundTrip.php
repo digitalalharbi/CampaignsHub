@@ -42,9 +42,9 @@ final class MetaCandidateRoundTrip
      *
      * @throws RuntimeException when the candidate is not fully configured
      */
-    public function start(int $ownerId): array
+    public function start(int $ownerId, MetaCredentialProfile $profile = MetaCredentialProfile::Candidate): array
     {
-        $creds = PlatformCredentials::forMeta(MetaCredentialProfile::Candidate);
+        $creds = PlatformCredentials::forMeta($profile);
 
         if (! $creds->isConfigured()) {
             throw new RuntimeException('The Candidate Meta app is missing: '.implode(', ', $creds->missing()).'.');
@@ -52,17 +52,17 @@ final class MetaCandidateRoundTrip
 
         $run = new MetaCandidateConnection;
         $run->forceFill([
-            'profile' => MetaCredentialProfile::Candidate->value,
+            'profile' => $profile->value,
             'started_by' => $ownerId,
             'status' => 'started',
-            'credential_fingerprint' => $this->credentials->fingerprint(),
+            'credential_fingerprint' => $this->store($profile)->fingerprint(),
             'app_id_hint' => mb_substr((string) $creds->get('client_id'), -4),
             'started_at' => Carbon::now(),
         ]);
         $run->recordStep('oauth_start', 'ok', ['detail' => 'Dialog built from the FLfB configuration; scope not sent.']);
         $run->save();
 
-        $state = AuthorizationState::issueMetaCandidate($ownerId, (string) $run->getKey());
+        $state = AuthorizationState::issueMetaCandidate($ownerId, (string) $run->getKey(), $profile);
 
         return ['run' => $run, 'authorization_url' => $this->oauth->authorizationUrl($creds, $state)];
     }
@@ -116,10 +116,11 @@ final class MetaCandidateRoundTrip
 
         $run->recordStep('consent', 'ok');
 
-        $creds = PlatformCredentials::forMeta(MetaCredentialProfile::Candidate);
+        $profile = MetaCredentialProfile::tryFrom((string) $run->profile) ?? MetaCredentialProfile::Candidate;
+        $creds = PlatformCredentials::forMeta($profile);
 
         // The secret about to be sent must be the one the run started with.
-        if (! $creds->isConfigured() || ! hash_equals((string) $run->credential_fingerprint, (string) $this->credentials->fingerprint())) {
+        if (! $creds->isConfigured() || ! hash_equals((string) $run->credential_fingerprint, (string) $this->store($profile)->fingerprint())) {
             $this->fail($run, 'token_exchange', ['error' => [
                 'message' => 'The Candidate credentials changed after this test started. Start it again.',
             ]]);
@@ -151,6 +152,10 @@ final class MetaCandidateRoundTrip
             'long_lived_exchange' => $longLived ? 'ok' : 'not_needed (token has no expiry)',
             'expires_at' => $tokens->expiresAt?->toIso8601String(),
         ]]);
+        // META-SAAS-APP-001 — what Meta REALLY granted (ads_read, ads_management…), read back, never assumed from the request.
+        if ($run->granted_scopes === null && ($granted = $this->grantedPermissions($creds, $tokens)) !== null) {
+            $run->granted_scopes = $granted;
+        }
         $run->save();
 
         $accounts = $this->discover($run, $creds, $tokens);
@@ -160,6 +165,29 @@ final class MetaCandidateRoundTrip
         }
 
         $this->readAds($run, $creds, $tokens, $accounts);
+    }
+
+    /**
+     * `GET /me/permissions` — a read of the token's own grants, nothing written anywhere. Null when Meta does not answer, so a
+     * missing list is shown as unknown rather than as «nothing granted».
+     *
+     * @return list<string>|null
+     */
+    private function grantedPermissions(PlatformCredentials $creds, OAuthTokens $tokens): ?array
+    {
+        try {
+            $response = PlatformHttp::client('meta')->withToken($tokens->accessToken)->get($creds->apiBase().'/me/permissions');
+        } catch (Throwable) {
+            return null;
+        }
+        if ($response->failed() || ! is_array($response->json('data'))) {
+            return null;
+        }
+
+        return array_values(array_map(
+            static fn (array $p): string => (string) $p['permission'],
+            array_filter((array) $response->json('data'), static fn ($p): bool => is_array($p) && ($p['status'] ?? null) === 'granted' && isset($p['permission'])),
+        ));
     }
 
     /** @return list<array<string,mixed>>|null null when the step failed */
@@ -285,5 +313,11 @@ final class MetaCandidateRoundTrip
         $secrets = array_filter([$tokens?->accessToken, $this->credentials->value('client_secret')]);
 
         return mb_substr(ProviderErrorText::forReceipt((string) ProviderErrorText::forDisplay($text), array_values($secrets)), 0, 500);
+    }
+
+    /** The credentials store of the app under test — the Candidate's or the SaaS app's, never Live's. */
+    private function store(MetaCredentialProfile $profile): MetaCandidateCredentials
+    {
+        return $profile === MetaCredentialProfile::Saas ? app(MetaSaasCredentials::class) : $this->credentials;
     }
 }

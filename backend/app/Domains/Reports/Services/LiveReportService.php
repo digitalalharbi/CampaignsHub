@@ -17,6 +17,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
@@ -35,9 +36,12 @@ use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
+use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * LIVEREP-001 — the figures behind a live shared link, recomputed on every request.
@@ -198,7 +202,7 @@ final class LiveReportService
      *
      * @param  array<string, mixed>  $applied
      * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
-     * @return array<string, list<string>>
+     * @return array<string, mixed>
      */
     private function contentFilters(ReportShare $share, array $applied, array $scope): array
     {
@@ -226,7 +230,134 @@ final class LiveReportService
             'excluded_creative_ids' => $shareList('excluded_creative_ids'),
             'objectives' => $shareList('objectives'),
             'paths' => $shareList('paths'),
+            // CREATIVE-DISPLAY-001 — read by `ReportAds`; null for a link made before the policy existed.
+            'creative_display' => $share->creativeDisplay()?->toArray(),
         ];
+    }
+
+    /**
+     * NASEL-CAMPAIGN-BREAKDOWN-001 — one client-safe row per campaign in the link's scope, whatever its objective, figures or not.
+     *
+     * The objective is a column, never a filter. Every campaign the ceiling authorises is listed — one that has not reported in the
+     * window is a row too, so «awaiting metrics» is visible instead of silently absent. `data_state` says which of four things a row is:
+     * `reported`, `zero` (rows that measured nothing), `no_data` (no row in the window) or `disconnected` (its account's connection is not
+     * connected); `status` carries active / paused. Native and landing-page leads come from the SAME `lead_events` derivation as the
+     * headline, one campaign at a time; an unreported metric is null («غير متاح»), never zero. Spend is null where the link hides it,
+     * and the label falls back to the platform and a position where the link hides campaign names. No id leaves this method.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @param  list<string>  $narrowed  the campaigns the reader narrowed to, inside the ceiling; empty = the whole ceiling
+     * @return list<array<string, mixed>>
+     */
+    private function campaignBreakdown(ReportShare $share, array $scope, MetricsAggregator $engine, Carbon $from, Carbon $to, array $narrowed = []): array
+    {
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ((($share->settings ?? [])['lead_events'] ?? [])) ?: null);
+        $rows = $engine->byCampaign($from, $to);
+        $inScope = $narrowed !== [] ? $narrowed : $scope['campaign_ids'];
+        /*
+         * A link that follows its accounts also lists the campaigns whose STRUCTURE has synced and whose figures have not: «awaiting
+         * metrics» is a row, not an absence. Only under the link's own accounts, and only while each is still actively bound to this
+         * project — the same authorisation the figures need, never a wider one.
+         */
+        $accountIds = array_values(array_filter((array) (($share->scope ?? [])['account_ids'] ?? [])));
+        if ($narrowed === [] && (($share->scope ?? [])['dynamic_campaigns'] ?? false) === true && $accountIds !== [] && $scope['project_id'] !== '') {
+            $structural = DB::table('external_campaigns')
+                ->join('project_integration_bindings as b', fn ($j) => $j->on('b.external_account_id', '=', 'external_campaigns.external_account_id')
+                    ->where('b.project_id', $scope['project_id'])->where('b.is_active', true))
+                ->where('external_campaigns.project_id', $scope['project_id'])
+                ->whereIn('external_campaigns.external_account_id', $accountIds)
+                ->whereNotNull('external_campaigns.unified_campaign_id')
+                ->distinct()
+                ->pluck('external_campaigns.unified_campaign_id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all();
+            $inScope = array_values(array_unique(array_merge(array_diff($inScope, [ReportScope::IMPOSSIBLE]), $structural)));
+        }
+        $ids = array_values(array_unique(array_merge($inScope, array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows))));
+        $destinations = app(CampaignDestinations::class)->for($ids);
+
+        // Each scoped campaign's identity, platform and whether every account feeding it is still connected — read once.
+        $meta = [];
+        if ($ids !== []) {
+            foreach (DB::table('unified_campaigns')
+                ->leftJoin('external_campaigns', 'external_campaigns.unified_campaign_id', '=', 'unified_campaigns.id')
+                ->leftJoin('external_accounts', 'external_accounts.id', '=', 'external_campaigns.external_account_id')
+                ->leftJoin('provider_connections', 'provider_connections.id', '=', 'external_accounts.provider_connection_id')
+                ->whereIn('unified_campaigns.id', $ids)
+                ->when($scope['project_id'] !== '', fn ($q) => $q->where('unified_campaigns.project_id', $scope['project_id']))
+                ->get(['unified_campaigns.id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.status', 'unified_campaigns.objective', 'external_campaigns.provider', 'provider_connections.status as connection_status']) as $c) {
+                $id = (string) $c->id;
+                $meta[$id] ??= ['name' => (string) $c->name, 'client_display_name' => $c->client_display_name, 'status' => $c->status, 'objective' => $c->objective, 'provider' => $c->provider, 'connected' => null];
+                $meta[$id]['provider'] ??= $c->provider;
+                if ($c->connection_status !== null) {
+                    $meta[$id]['connected'] = ($meta[$id]['connected'] ?? true) && $c->connection_status === 'connected';
+                }
+            }
+        }
+
+        $byId = [];
+        foreach ($rows as $row) {
+            $byId[(string) ($row['campaign_id'] ?? '')] = $row;
+        }
+        foreach ($inScope as $id) {
+            if (! isset($byId[$id]) && isset($meta[$id])) {
+                $byId[$id] = ['campaign_id' => $id, 'campaign_name' => $meta[$id]['name'], 'client_display_name' => $meta[$id]['client_display_name'], 'status' => $meta[$id]['status'], 'objective' => $meta[$id]['objective'], 'provider' => $meta[$id]['provider'], 'no_rows' => true];
+            }
+        }
+        $all = array_values($byId);
+        // Reported campaigns by spend, then reach; the ones awaiting metrics after them.
+        usort($all, static fn (array $a, array $b): int => [isset($a['no_rows']) ? 1 : 0, -(float) ($a['spend'] ?? 0), -(float) ($a['impressions'] ?? 0)] <=> [isset($b['no_rows']) ? 1 : 0, -(float) ($b['spend'] ?? 0), -(float) ($b['impressions'] ?? 0)]);
+
+        $out = [];
+        foreach ($all as $i => $row) {
+            $id = (string) ($row['campaign_id'] ?? '');
+            $provider = AdPlatforms::canonical((string) ($row['provider'] ?? ''));
+            $noRows = isset($row['no_rows']);
+            $lead = $leads->configured() && ! $noRows ? $leads->leadBreakdown([$row], $destinations) : null;
+            $name = trim((string) (($row['client_display_name'] ?? '') ?: ($row['campaign_name'] ?? '')));
+            $measuredNothing = ! $noRows && (float) ($row['spend'] ?? 0) == 0.0 && (int) ($row['impressions'] ?? 0) === 0 && (int) ($row['clicks'] ?? 0) === 0;
+            $out[] = [
+                'name' => $share->hide_campaign_names || $name === '' ? AdPlatforms::name($provider).' — '.($i + 1) : $name,
+                'platform' => $provider,
+                'status' => $row['status'] ?? null,
+                'objective' => $row['objective'] ?? null,
+                'data_state' => ($meta[$id]['connected'] ?? true) === false ? 'disconnected' : ($noRows ? 'no_data' : ($measuredNothing ? 'zero' : 'reported')),
+                'spend' => $share->hide_spend || $noRows ? null : (isset($row['spend']) ? round((float) $row['spend'], 2) : null),
+                'impressions' => $noRows ? null : (int) ($row['impressions'] ?? 0),
+                'clicks' => $noRows ? null : (int) ($row['clicks'] ?? 0),
+                'native_leads' => $lead['native'] ?? null,
+                'landing_leads' => $lead['landing'] ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * RESULT-EVENTS-001 — Results as the project (and, over it, this link) defined them.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @return array<string, mixed>
+     */
+    private function resultsFor(ReportShare $share, array $scope, MetricsAggregator $engine, Carbon $from, Carbon $to): array
+    {
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        $settings = (array) ($share->settings ?? []);
+        // NASEL 2026-10-29 — a link that says «no Results» has none, whatever the project's default: the word never appears on it.
+        $results = ($settings['results_off'] ?? false) === true ? ResultEvents::fromArray(null) : ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null);
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
+
+        $none = ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
+        if (! $results->configured() && ! $leads->configured()) {
+            return $none + ['leads' => $none + ['landing' => null, 'native' => null]];
+        }
+
+        $rows = $engine->byCampaign($from, $to);
+        $ids = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows)));
+        $destinations = app(CampaignDestinations::class)->for($ids);
+
+        return ($results->configured() ? $results->over($rows, $destinations) : $none) + ['leads' => $leads->leadBreakdown($rows, $destinations)];
     }
 
     /**
@@ -245,6 +376,93 @@ final class LiveReportService
         // Each content row gets its share-bound handle before the boundary removes the ids.
         foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
             $built[$list] = ContentCopy::rows(ContentKey::attach($built[$list] ?? [], $share), $share->creativeVisibility());
+        }
+
+        /*
+         * NASEL 2026-10-29 — a content's «Results» under the project's verified events, read while the campaign name is still on the row
+         * (the boundary removes it). The tile printed the platform's generic `conversions`: «0» on a Snapchat lead-form ad that had 27 native
+         * leads, and a landing-page load count on TikTok.
+         */
+        $settings = (array) ($share->settings ?? []);
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        // RESULT-EVENTS-001 — Results exist only where an event is defined; an explicit «none» (results_off) is never filled from the project.
+        $resultsConfigured = ($settings['results_off'] ?? false) !== true && ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null)->configured();
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
+        if ($leads->configured() && $resultsConfigured) {
+            // A content row names its creative, not its campaign: the campaign's name (the project's path convention) is looked up once.
+            $ids = [];
+            $collect = static function (array $rows) use (&$collect, &$ids): void {
+                foreach ($rows as $row) {
+                    if (isset($row['groups']) && is_array($row['groups'])) {
+                        $collect($row['groups']);
+                    }
+                    if (isset($row['ads']) && is_array($row['ads']) && ! isset($row['provider'])) {
+                        $collect($row['ads']);
+                    }
+                    if (isset($row['id'], $row['provider'])) {
+                        $ids[] = (string) $row['id'];
+                        $ids[] = (string) ($row['campaign_id'] ?? '');
+                    }
+                }
+            };
+            foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+                $collect($built[$list] ?? []);
+            }
+            $ids = array_values(array_unique(array_filter($ids, static fn (string $id): bool => Str::isUuid($id))));
+            $campaignOf = ExternalCreative::withoutGlobalScopes()->whereIn('id', $ids)->pluck('campaign_id', 'id')->all();
+            $nameOf = UnifiedCampaign::withoutGlobalScopes()->whereIn('id', array_values(array_unique(array_filter([...array_map('strval', $campaignOf), ...$ids], static fn (string $id): bool => Str::isUuid($id)))))->pluck('name', 'id')->all();
+            $resultsLabel = is_string($settings['results_label'] ?? null) && trim($settings['results_label']) !== '' ? trim($settings['results_label']) : null;
+            $mark = static function (array $rows) use (&$mark, $leads, $campaignOf, $nameOf, $resultsLabel): array {
+                return array_map(static function (array $row) use ($mark, $leads, $campaignOf, $nameOf, $resultsLabel): array {
+                    if (isset($row['groups']) && is_array($row['groups'])) {
+                        $row['groups'] = $mark($row['groups']);
+                    }
+                    if (isset($row['ads']) && is_array($row['ads']) && ! isset($row['provider'])) {
+                        $row['ads'] = $mark($row['ads']);
+                    }
+                    if (isset($row['id'], $row['provider'])) {
+                        $campaignId = (string) ($row['campaign_id'] ?? ($campaignOf[(string) $row['id']] ?? ''));
+                        $campaign = (string) ($nameOf[$campaignId] ?? ($row['campaign_name'] ?? ''));
+                        $verified = $leads->contentResult(['campaign_name' => $campaign] + $row);
+                        // The card's name is the link's own word for Results, when it has one.
+                        $row['verified_result'] = $verified === null ? null : $verified + ['label' => $resultsLabel];
+                    }
+
+                    return $row;
+                }, $rows);
+            };
+            foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+                $built[$list] = $mark($built[$list] ?? []);
+            }
+        }
+
+        /*
+         * NASEL 2026-10-29 — a link without defined Results says nothing about results: each content row is marked `result_defined: false`
+         * so no surface prints its generic conversion, cost or return as a result (the figures stay, so every surface still reconciles), and
+         * the content is ordered by clicks, which the page names as the basis.
+         */
+        if (! $resultsConfigured) {
+            $strip = static function (array $rows) use (&$strip): array {
+                return array_map(static function (array $row) use ($strip): array {
+                    foreach (['groups', 'ads'] as $nested) {
+                        if (isset($row[$nested]) && is_array($row[$nested]) && ! isset($row['provider'])) {
+                            $row[$nested] = $strip($row[$nested]);
+                        }
+                    }
+                    if (isset($row['provider'])) {
+                        $row['result_defined'] = false;
+                    }
+
+                    return $row;
+                }, $rows);
+            };
+            foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+                $built[$list] = $strip($built[$list] ?? []);
+            }
+            $clicks = static fn (array $row): float => (float) ($row['clicks'] ?? ($row['metrics']['clicks'] ?? 0));
+            usort($built['ads'], static fn (array $a, array $b): int => $clicks($b) <=> $clicks($a));
+            usort($built['worst'], static fn (array $a, array $b): int => $clicks($a) <=> $clicks($b));
+            $built['basis'] = ['family' => 'clicks', 'metric' => 'clicks', 'label_ar' => 'النقرات', 'label_en' => 'Clicks', 'family_label_ar' => 'النقرات', 'family_label_en' => 'clicks'];
         }
 
         return [
@@ -339,6 +557,89 @@ final class LiveReportService
      * @param  string  $currency  the report's own currency; every figure here is already normalised to it
      * @return array<string, mixed>
      */
+    /**
+     * RESULT-EVENTS-001 (Owner 2026-10-29) — a link's Results for one of its FILES: its own events, its «none», its label, read by the
+     * page's resolver over the window the file covers (the saved report's dates, exactly). Only the Results are computed — the file's
+     * other figures stay the saved report's — and the context is the share's own, as on the page.
+     *
+     * @return array{results: array<string, mixed>, results_label: string|null}
+     */
+    public function resultsForFile(ReportShare $share, Carbon $from, Carbon $to): array
+    {
+        $scope = $this->ceiling($share);
+        $this->tenants->setTenantId((string) $share->tenant_id);
+        $this->projects->setProjectId($scope['project_id'] === '' ? ReportScope::IMPOSSIBLE : $scope['project_id']);
+        $engine = $this->scopedEngine($share, $scope, $scope['providers']);
+        $label = ($share->settings ?? [])['results_label'] ?? null;
+
+        return [
+            'results' => $this->resultsFor($share, $scope, $engine, $from, $to),
+            'results_label' => is_string($label) && trim($label) !== '' ? trim($label) : null,
+        ];
+    }
+
+    /**
+     * LIVE-FILE-PARITY-001 — a live report's FILES are rendered from the same builder as its page.
+     *
+     * A live link's report is created with no `data` snapshot on purpose: the report IS the live definition. Every file path read
+     * that snapshot, so the CSV exported from the NASEL live report (Production, 2026-10-29) printed « → » for its period, an empty
+     * KPI block and a platform header the report never chose. This returns the report with a snapshot taken from the page's own
+     * payload — the window the page shows, its totals (a metric no platform reported is null, never the coalesced zero), its
+     * platforms and trend, its Results under the link's contract and the KPI list the report chose — held in memory only, never
+     * saved, so the live definition stays the only stored answer. A report with a snapshot, or one that is not live, is returned
+     * unchanged; so is a live report with no link to read through, which then fails the readiness gate rather than exporting nothing.
+     */
+    public function materialise(Report $report, ?ReportShare $share = null): Report
+    {
+        $live = (((array) ($report->config ?? []))['live'] ?? false) === true;
+        if (! $live || ! empty(((array) ($report->data ?? []))['kpis'] ?? null)) {
+            return $report;
+        }
+
+        $share ??= ReportShare::withoutGlobalScopes()
+            ->where('report_id', $report->getKey())
+            ->whereNull('revoked_at')
+            ->oldest('created_at')
+            ->first();
+        if ($share === null) {
+            return $report;
+        }
+
+        $page = $this->build($share, []);
+        $reported = (array) ($page['reported'] ?? []);
+        $isReported = static fn (string $key): bool => array_is_list($reported)
+            ? in_array($key, $reported, true)
+            : (($reported[$key] ?? true) !== false);
+
+        $kpis = [];
+        foreach ((array) ($page['totals'] ?? []) as $key => $value) {
+            if (is_array($value)) {
+                continue;
+            }
+            $kpis[(string) $key] = $isReported((string) $key) ? $value : null;
+        }
+
+        $data = [
+            'period' => ['from' => $page['period']['from'] ?? null, 'to' => $page['period']['to'] ?? null],
+            'currency' => $page['currency'] ?? $report->currency,
+            'mode' => 'live',
+            'kpis' => $kpis,
+            'metric_set' => array_values((array) ($page['metrics'] ?? [])),
+            'platforms' => array_values((array) ($page['platforms'] ?? [])),
+            'timeseries' => array_values((array) ($page['timeseries'] ?? [])),
+            'funnel' => array_values((array) ($page['funnel'] ?? [])),
+            'results' => $page['results'] ?? null,
+            'results_label' => $page['results_label'] ?? null,
+            'generated_at' => Carbon::now()->toIso8601String(),
+        ];
+        $data['checksum'] = ExportReadinessGate::checksum($data);
+
+        $copy = clone $report;
+        $copy->setAttribute('data', $data);
+
+        return $copy;
+    }
+
     public function build(ReportShare $share, array $requested, ?string $currency = ReportingCurrency::DEFAULT): array
     {
         $scope = $this->ceiling($share);
@@ -375,9 +676,12 @@ final class LiveReportService
          * A daily/weekly/monthly link is anchored on the day the reader asked for (today by default),
          * not on a free range; a custom link is exactly the range asked for.
          */
-        $periodKind = ((array) ($share->report->config ?? []))['period_kind'] ?? null;
-        $window = ReportPeriod::resolve(is_string($periodKind) ? $periodKind : null, $from, $to);
-        if ($window['kind'] !== 'custom') {
+        $ownReport = $this->reportOf($share);
+        $periodKind = ((array) ($ownReport->config ?? []))['period_kind'] ?? null;
+        // REPORT-PERIOD-MODE-001 — a FIXED link is exactly its saved dates: no kind re-anchors it on the reader's day.
+        $fixed = ReportPeriod::modeOfReport($ownReport) === 'fixed';
+        $window = ReportPeriod::resolve($fixed || ! is_string($periodKind) ? null : $periodKind, $from, $to);
+        if (! $fixed && $window['kind'] !== 'custom') {
             $from = $window['from'];
             $to = $window['to'];
         }
@@ -476,11 +780,15 @@ final class LiveReportService
          */
         $comparison = $this->comparison($totals, $previous);
 
+        $results = $this->resultsFor($share, $scope, $engine, $from, $to);
+
         $payload = [
             'period' => [
                 'from' => $from->toDateString(),
                 'to' => $to->toDateString(),
                 'days' => $from->diffInDays($to) + 1,
+                // REPORT-PERIOD-MODE-001 — fixed windows are exactly the saved dates; the page offers no rolling presets for them.
+                'mode' => $fixed ? 'fixed' : 'rolling',
                 // REPORT-PERIOD-001 — what kind of window this is and what it is compared with.
                 'kind' => $window['kind'],
                 'grain' => $window['grain'],
@@ -503,6 +811,28 @@ final class LiveReportService
             'conversions_basis' => $engine->conversionsBasis($from, $to),
             // REPORT-RESULT-KIND-001 — what ONE result is called for the campaigns in scope.
             'result_kind' => $this->resultKind($scope, $applied['campaigns']),
+            /*
+             * LEAD-EVIDENCE-001 — which base metrics any connected platform actually SENT for this window.
+             *
+             * The totals coalesce to 0, and a client link must not read «Leads 0» for a platform that never
+             * reported a lead event (TikTok reports its optimised-for `conversion`, not leads). The page asks
+             * this map before it prints a count it cannot stand behind.
+             */
+            'reported' => $engine->reportedKeys($from, $to),
+            // LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has arrived for this window: the page says so instead of printing zeros.
+            'no_data_yet' => ! $engine->hasRows($from, $to),
+            /*
+             * RESULT-EVENTS-001 — «Results» exists only where somebody configured which reported metric IS the result.
+             * `configured: false` means the page draws no Results and no Cost per Result at all; a platform's generic
+             * `conversions` is never promoted to either.
+             */
+            'results' => $results,
+            // The operator's own names for KPI cards on this link (empty when none were set).
+            'kpi_labels' => (object) array_filter((array) (($share->settings ?? [])['kpi_labels'] ?? []), static fn ($v): bool => is_string($v) && $v !== ''),
+            // NASEL 2026-10-29 — the report's own word for «Results», used for every result and cost-per-result label on the page and in its exports.
+            'results_label' => is_string($label = ($share->settings ?? [])['results_label'] ?? null) && trim($label) !== '' ? trim($label) : null,
+            // Owner 2026-10-29 — every Results path on «none»: the page reads clicks wherever it would have said «النتائج».
+            'results_off' => (($share->settings ?? [])['results_off'] ?? false) === true,
             'deltas' => $comparison['comparable'] ? $this->deltas($totals, $previous) : array_fill_keys(array_keys($totals), null),
             'comparison' => $comparison,
             // A daily report's trend is the trailing week (a single day has no curve); the others one point per grain bucket.
@@ -528,8 +858,14 @@ final class LiveReportService
              *
              * The operator's own screens do not come through this service: `MetricsController` still
              * serves the full campaign → ad set → ad hierarchy to anybody who signs in.
+             *
+             * NASEL-CAMPAIGN-BREAKDOWN-001 — the Owner's explicit exception: a link whose settings switch `campaign_breakdown` on carries a
+             * CLIENT-SAFE row per campaign (display name, platform, status, objective, the four primary KPIs) and nothing else — no id, no
+             * ad set, no audience — in `campaign_rows`. Off on every link built before it, so those pages are unchanged.
              */
             'campaigns' => [],
+            // Its own key, outside the section registry's `campaigns` (detailed tables): the switch on the link is the whole permission.
+            'campaign_rows' => (($share->settings ?? [])['campaign_breakdown'] ?? false) === true ? $this->campaignBreakdown($share, $scope, $engine, $from, $to, $applied['campaigns']) : [],
             /*
              * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
              *
@@ -1025,6 +1361,8 @@ final class LiveReportService
             'campaign_ids' => $scope['campaign_ids'],
             'account_ids' => $share->scope['account_ids'] ?? [],
             'objectives' => $share->scope['objectives'] ?? [],
+            // A link's objectives are a ceiling the operator granted: they keep filtering (nothing widens).
+            'objective_filter' => true,
             'paths' => $share->scope['paths'] ?? [],
             'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
             'ad_ids' => $share->scope['ad_ids'] ?? [],
@@ -1176,6 +1514,14 @@ final class LiveReportService
         return $payload;
     }
 
+    /** The share's report, read past the tenant scope: a public request has no tenant context, and a missing report must not read as «not fixed». */
+    private function reportOf(ReportShare $share): Report
+    {
+        // Never through `$share->report`: that lazy-loads under whatever tenant context is set at the moment of the call and caches a
+        // null when there is none, which silently changed what every later read of the relation (the objective lens) meant.
+        return $share->relationLoaded('report') && $share->report !== null ? $share->report : Report::withoutGlobalScopes()->findOrFail($share->report_id);
+    }
+
     /**
      * The ceiling, normalised, with every value forced into the shape the rest of this class expects.
      *
@@ -1189,13 +1535,40 @@ final class LiveReportService
     private function ceiling(ReportShare $share): array
     {
         $scope = $share->scope ?? [];
+        $earliest = (string) ($scope['earliest'] ?? Carbon::now()->subDays(30)->toDateString());
+        $latest = (string) ($scope['latest'] ?? Carbon::now()->toDateString());
+
+        /*
+         * REPORT-PERIOD-MODE-001 — a FIXED report's window is its saved dates, whatever the link's stored ceiling says.
+         *
+         * Links made before the mode ran their ceiling out to «today + a year», so «the data refreshes» silently became «the window
+         * grows»: a weekly report opened a month later showed a month. The saved dates cap the ceiling on read, which fixes the links
+         * that already exist as well as the ones made from now on. The ceiling can only narrow here, never widen.
+         */
+        $report = $this->reportOf($share);
+        if (ReportPeriod::modeOfReport($report) === 'fixed' && $report->period_start !== null && $report->period_end !== null) {
+            $earliest = max($earliest, $report->period_start->toDateString());
+            $latest = min($latest, $report->period_end->toDateString());
+        }
+
+        $campaignIds = array_values(array_filter((array) ($scope['campaign_ids'] ?? [])));
+        /*
+         * LIVE-LINK-BEFORE-CAMPAIGNS-001 — a link made over ACCOUNTS follows them.
+         *
+         * Its campaign list is not a frozen copy of what existed on the day it was created: the accounts are the authorisation, and a campaign
+         * that syncs afterwards under one of them is inside the link without anyone recreating or re-sending it. An account that has none yet
+         * resolves to the fail-closed «nothing», which the page states as «no data yet» rather than as zeros.
+         */
+        if (($scope['dynamic_campaigns'] ?? false) === true && $campaignIds === []) {
+            $campaignIds = AccountCampaignCeiling::campaigns([], array_values(array_filter((array) ($scope['account_ids'] ?? []))));
+        }
 
         return [
             'project_id' => (string) ($scope['project_id'] ?? ''),
-            'campaign_ids' => array_values(array_filter((array) ($scope['campaign_ids'] ?? []))),
+            'campaign_ids' => $campaignIds,
             'providers' => array_values(array_filter((array) ($scope['providers'] ?? []))),
-            'earliest' => (string) ($scope['earliest'] ?? Carbon::now()->subDays(30)->toDateString()),
-            'latest' => (string) ($scope['latest'] ?? Carbon::now()->toDateString()),
+            'earliest' => $earliest,
+            'latest' => $latest,
         ];
     }
 
@@ -1217,6 +1590,21 @@ final class LiveReportService
 
         $earliest = Carbon::parse($scope['earliest'])->startOfDay();
         $latest = Carbon::parse($scope['latest'])->startOfDay();
+
+        /*
+         * A request that lies wholly OUTSIDE the ceiling is not a request for its nearest edge.
+         *
+         * Clamping each end on its own turned «the last 30 days», asked of a window that ended last month, into a single day (both ends
+         * pinned to the last date) — a page that looked like data and was one day of it. No overlap means the request says nothing
+         * about this window, so the window answers in full.
+         */
+        foreach (['from', 'to'] as $edge) {
+            $asked = $this->parseDate($requested[$edge] ?? null);
+            if ($asked !== null && (($edge === 'from' && $asked->greaterThan($latest)) || ($edge === 'to' && $asked->lessThan($earliest)))) {
+                unset($requested['from'], $requested['to']);
+                break;
+            }
+        }
 
         $from = $this->clamp($requested['from'] ?? null, $earliest, $latest, $earliest);
         $to = $this->clamp($requested['to'] ?? null, $earliest, $latest, $latest);
@@ -1288,6 +1676,19 @@ final class LiveReportService
     }
 
     /** A requested date, pinned inside the granted window; unparseable or absent falls back to `$default`. */
+    private function parseDate(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function clamp(mixed $value, Carbon $min, Carbon $max, Carbon $default): Carbon
     {
         if (! is_string($value) || $value === '') {

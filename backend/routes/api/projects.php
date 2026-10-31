@@ -44,6 +44,7 @@ use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
 use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
+use App\Domains\Reports\Http\Controllers\ResultEventsController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use App\Domains\Tracking\Http\Controllers\TrackingSummaryController;
@@ -419,6 +420,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * for the same reason `reports/schedules` is: a wildcard segment would otherwise swallow them and
      * the picker would ask for a report whose id is the word "scope".
      */
+    // RESULT-EVENTS-001 — what «Results» means for this project, per platform and acquisition path. Unconfigured = no Results anywhere.
+    Route::get('result-events', [ResultEventsController::class, 'show'])->middleware('project.can:reports.view')->name('result-events.show');
+    Route::put('result-events', [ResultEventsController::class, 'update'])->middleware('project.can:reports.manage')->name('result-events.update');
+    Route::put('reports/{report}/shares/{share}/result-events', [ResultEventsController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.result-events.update')->whereUuid(['report', 'share']);
     Route::get('reports/scope/options', [ReportScopeController::class, 'options'])->middleware('project.can:reports.view')->name('reports.scope.options');
     // What a scope being BUILT would cover, in words — REPORT-SCOPE-SELECTION-001 §C. Reads nothing.
     Route::post('reports/scope/explain', [ReportScopeController::class, 'explain'])->middleware('project.can:reports.view')->name('reports.scope.explain');

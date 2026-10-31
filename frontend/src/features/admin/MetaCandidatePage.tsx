@@ -3,9 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Circle, Loader2, PlayCircle, Trash2, XCircle } from 'lucide-react'
 import {
-  fetchMetaCandidate, forgetMetaCandidateCredential, promoteMetaCandidate, rollbackMetaLive, saveMetaCandidate,
-  startMetaCandidateTest, type MetaCandidateRun, type MetaCandidateState, type MetaCandidateStep, type MetaCandidateStepKey,
+  fetchMetaCandidate, fetchMetaSaas, forgetMetaCandidateCredential, forgetMetaSaasCredential, promoteMetaCandidate, rollbackMetaLive, saveMetaCandidate,
+  saveMetaSaas, startMetaCandidateTest, startMetaSaasTest,
+  type MetaAppSwitchGuard, type MetaCandidateRun, type MetaCandidateState, type MetaCandidateStep, type MetaCandidateStepKey,
 } from './api'
+import { MetaSaasReadiness } from './MetaSaasReadiness'
+import { MetaSaasTestWorkspace } from './MetaSaasTestWorkspace'
+import { MetaSaasModes } from './MetaSaasModes'
 import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
@@ -52,6 +56,13 @@ const COPY = {
       credentials_changed_since_round_trip: 'تغيّرت البيانات بعد آخر اختبار ناجح — أعد الاختبار.',
       candidate_already_live: 'المرشّح هو التطبيق الحالي بالفعل.',
     } as Record<string, string>,
+    guard: {
+      blocked: 'محظور حمايةً للاتصالات الحالية',
+      reason: (n: number) => `${n} اتصال ميتا فعّال يحمل رمزًا أصدره التطبيق الحالي. تغيير التطبيق سيوقف مزامنته حتى يُعاد ربطه. لا يُنقل ولا يُفصل أي اتصال.`,
+      unverified: (n: number) => `منها ${n} بلا تطبيق مُصدِر مسجّل، وتُحسب على التطبيق الحالي احتياطًا.`,
+      apps: 'التطبيق', current: 'الحالي', target: 'بعد العملية',
+      acknowledge: 'أفهم أن هذا يغيّر التطبيق الذي تُجدَّد وتُستدعى به كل اتصالات ميتا الحالية، وأنه لا اتصال يعتمد على التطبيق الحالي.',
+    },
     outcome: { succeeded: 'عاد الاختبار من ميتا بنجاح.', failed: 'عاد الاختبار من ميتا بفشل — التفاصيل أدناه.', invalid_state: 'رابط التفويض منتهٍ أو استُخدم من قبل.' } as Record<string, string>,
   },
   en: {
@@ -83,24 +94,55 @@ const COPY = {
       credentials_changed_since_round_trip: 'The credentials changed after the last passing test — run it again.',
       candidate_already_live: 'The candidate is already the Live app.',
     } as Record<string, string>,
+    guard: {
+      blocked: 'Blocked to protect existing connections',
+      reason: (n: number) => `${n} active Meta connection(s) hold a token the current app issued. Switching the app would stop them syncing until they reconnect. No connection is moved or disconnected.`,
+      unverified: (n: number) => `${n} of them have no recorded issuing app and are counted as the current app's to be safe.`,
+      apps: 'App', current: 'current', target: 'after',
+      acknowledge: 'I understand this changes the app every existing Meta connection is refreshed and called with, and that no connection depends on the current app.',
+    },
     outcome: { succeeded: 'The test came back from Meta and passed.', failed: 'The test came back from Meta and failed — details below.', invalid_state: 'The authorisation link expired or was already used.' } as Record<string, string>,
   },
 }
 
 type Copy = typeof COPY.en
 
-export function MetaCandidatePage() {
+/*
+ * META-SAAS-APP-001 — the third Meta app reuses this page: its own credentials, its own test, and the choice of app for NEW connections.
+ * It never shows promote or rollback, because it never replaces the Live app.
+ */
+const SAAS_COPY = {
+  ar: {
+    title: 'تطبيق ميتا للمنصة (SaaS)',
+    subtitle: 'تطبيق ميتا ثالث مستقل يُستخدم لربط حسابات جديدة فقط بعد نجاح اختباره واختياره. لا يستبدل تطبيق ميتا الحالي، ولا ينقل أي ربط قائم، ولا يلغي أي رمز. كل ربط يبقى مع التطبيق الذي أصدره.',
+    credentials: 'بيانات تطبيق المنصة',
+  },
+  en: {
+    title: 'SaaS Meta app',
+    subtitle: 'A third, independent Meta app, used for NEW connections only once its test has passed and it has been chosen. It never replaces the Live app, never moves an existing connection and never revokes a token. Every connection stays with the app that issued it.',
+    credentials: 'SaaS app credentials',
+  },
+}
+
+export function MetaSaasPage() {
+  return <MetaCandidatePage variant="saas" />
+}
+
+export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candidate' | 'saas' }) {
   const ar = useUi((s) => s.locale) === 'ar'
-  const c: Copy = COPY[ar ? 'ar' : 'en']
+  const saas = variant === 'saas'
+  const s2 = SAAS_COPY[ar ? 'ar' : 'en']
+  const c: Copy = saas ? { ...COPY[ar ? 'ar' : 'en'], title: s2.title, subtitle: s2.subtitle, credentials: s2.credentials } : COPY[ar ? 'ar' : 'en']
   const [params] = useSearchParams()
   const outcome = params.get('outcome')
   const qc = useQueryClient()
-  const query = useQuery({ queryKey: ['admin', 'meta-candidate'], queryFn: fetchMetaCandidate })
+  const key = ['admin', saas ? 'meta-saas' : 'meta-candidate']
+  const query = useQuery({ queryKey: key, queryFn: saas ? fetchMetaSaas : fetchMetaCandidate })
 
   const [form, setForm] = useState({ client_id: '', client_secret: '', config_id: '', scopes: '' })
 
   const save = useMutation({
-    mutationFn: () => saveMetaCandidate({
+    mutationFn: () => (saas ? saveMetaSaas : saveMetaCandidate)({
       client_id: form.client_id || undefined,
       client_secret: form.client_secret || undefined,
       config_id: form.config_id || undefined,
@@ -108,17 +150,17 @@ export function MetaCandidatePage() {
     }),
     onSuccess: (data) => {
       setForm({ client_id: '', client_secret: '', config_id: '', scopes: '' })
-      qc.setQueryData(['admin', 'meta-candidate'], data)
+      qc.setQueryData(key, data)
     },
   })
 
   const forget = useMutation({
-    mutationFn: (key: string) => forgetMetaCandidateCredential(key),
-    onSuccess: (data) => qc.setQueryData(['admin', 'meta-candidate'], data),
+    mutationFn: (field: string) => (saas ? forgetMetaSaasCredential : forgetMetaCandidateCredential)(field),
+    onSuccess: (data) => qc.setQueryData(key, data),
   })
 
   const start = useMutation({
-    mutationFn: startMetaCandidateTest,
+    mutationFn: saas ? startMetaSaasTest : startMetaCandidateTest,
     onSuccess: (data) => { window.location.assign(data.authorization_url) },
   })
 
@@ -133,7 +175,7 @@ export function MetaCandidatePage() {
   const { credentials, latest_run: run } = query.data
 
   return (
-    <div data-testid="admin-meta-candidate" className="flex flex-col gap-5">
+    <div data-testid={saas ? 'admin-meta-saas' : 'admin-meta-candidate'} className="flex flex-col gap-5">
       <header>
         <h1 className="font-heading text-2xl font-extrabold text-text-primary">{c.title}</h1>
         <p className="mt-1 max-w-3xl text-sm text-text-secondary">{c.subtitle}</p>
@@ -223,7 +265,13 @@ export function MetaCandidatePage() {
 
       <RunChecklist run={run} copy={c} />
 
-      {query.data.promotion && <Promotion promotion={query.data.promotion} copy={c} />}
+      {!saas && query.data.promotion && <Promotion promotion={query.data.promotion} copy={c} />}
+
+      {saas && query.data.readiness && <MetaSaasReadiness items={query.data.readiness} ar={ar} />}
+
+      {saas && query.data.test_workspace && <MetaSaasTestWorkspace state={query.data.test_workspace} ar={ar} />}
+
+      {saas && query.data.modes && <MetaSaasModes modes={query.data.modes} ar={ar} />}
     </div>
   )
 }
@@ -237,6 +285,12 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
   const promote = useMutation({ mutationFn: () => promoteMetaCandidate(narrows && narrowConfirmed), onSuccess })
   const rollback = useMutation({ mutationFn: rollbackMetaLive, onSuccess })
   const error = promote.error ?? rollback.error
+  // META-APP-SWITCH-GUARD-001 — the server refuses a stranding switch too; the page says why before anyone presses.
+  const [acknowledged, setAcknowledged] = useState(false)
+  const promoteBlocked = promotion.promote_guard?.safe === false
+  const rollbackBlocked = promotion.rollback_guard?.safe === false
+  const canPromote = promotion.eligible && !promoteBlocked
+  const canRollback = promotion.rollback_available && !rollbackBlocked
 
   return (
     <section data-testid="meta-candidate-promotion" className="rounded-2xl border border-border bg-surface p-5">
@@ -259,11 +313,19 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           <span>{c.narrowScopes} <span dir="ltr" className="font-mono">{dropped.join(', ')}</span></span>
         </label>
       )}
+      {promotion.eligible && promotion.promote_guard && !promotion.promote_guard.safe && <SwitchBlocked testId="meta-candidate-promote-blocked" guard={promotion.promote_guard} copy={c} />}
+      {promotion.rollback_available && promotion.rollback_guard && !promotion.rollback_guard.safe && <SwitchBlocked testId="meta-candidate-rollback-blocked" guard={promotion.rollback_guard} copy={c} />}
+      {(canPromote || canRollback) && (
+        <label className="mt-3 flex items-start gap-2 text-xs text-text-primary">
+          <input type="checkbox" data-testid="meta-candidate-acknowledge-switch" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
+          <span>{c.guard.acknowledge}</span>
+        </label>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           data-testid="meta-candidate-promote"
           variant="danger"
-          disabled={!promotion.eligible || (narrows && !narrowConfirmed)}
+          disabled={!canPromote || !acknowledged || (narrows && !narrowConfirmed)}
           loading={promote.isPending}
           onClick={() => { if (window.confirm(c.confirmPromote)) promote.mutate() }}
         >
@@ -272,7 +334,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
         <Button
           data-testid="meta-candidate-rollback"
           variant="secondary"
-          disabled={!promotion.rollback_available}
+          disabled={!canRollback || !acknowledged}
           loading={rollback.isPending}
           onClick={() => { if (window.confirm(c.confirmRollback)) rollback.mutate() }}
         >
@@ -281,6 +343,20 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
       </div>
       {error && <p className="mt-2 text-xs text-danger">{toApiError(error).message}</p>}
     </section>
+  )
+}
+
+/** Why a switch of the Live app is refused: how many connections it would strand, and which apps — hints, never IDs or secrets. */
+function SwitchBlocked({ guard, copy: c, testId }: { guard: MetaAppSwitchGuard; copy: Copy; testId: string }) {
+  return (
+    <div data-testid={testId} role="status" className="mt-3 rounded-xl border border-border bg-[var(--warning-background)] px-4 py-3 text-xs text-text-primary">
+      <p className="font-semibold text-warning">{c.guard.blocked}</p>
+      <p className="mt-1">{c.guard.reason(guard.affected)}</p>
+      {guard.unverified > 0 && <p className="mt-1 text-text-secondary">{c.guard.unverified(guard.unverified)}</p>}
+      <p className="mt-1 text-text-secondary">
+        {c.guard.apps}: <bdi dir="ltr">••••{guard.current_app_hint ?? '—'}</bdi> ({c.guard.current}) → <bdi dir="ltr">••••{guard.target_app_hint ?? '—'}</bdi> ({c.guard.target})
+      </p>
+    </div>
   )
 }
 

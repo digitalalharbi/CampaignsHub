@@ -45,7 +45,8 @@ final class TokenVault
      */
     public function fresh(ProviderConnection $connection): OAuthTokens
     {
-        $creds = PlatformCredentials::for($connection->provider);
+        // META-SAAS-APP-001 — refreshed with the app that ISSUED this token, never the platform's default app.
+        $creds = PlatformCredentials::forConnection($connection);
         $tokens = $this->stored($connection);
 
         if (! $tokens->isExpired()) {
@@ -103,6 +104,11 @@ final class TokenVault
             'status' => 'connected',
             'token_expires_at' => $tokens->expiresAt,
             'last_error' => null,
+            /*
+             * META-APP-SWITCH-GUARD-001 — the app this token now belongs to. A token is only ever stored after the app it is used with
+             * issued or refreshed it (Meta refuses another app's token), so the connection's own app is the truthful issuer.
+             */
+            ...($connection->provider === 'meta' ? ['issuing_app_id' => PlatformCredentials::forConnection($connection)->get('client_id')] : []),
         ])->save();
     }
 
@@ -149,12 +155,22 @@ final class TokenVault
          * answered, and that answer already lives in the token's own expiry.
          */
         string $credentialType = 'oauth2',
+        /*
+         * META-SAAS-APP-001 — which Meta app issued `$tokens`. A connection belongs to ONE app for life, so the existing row this login
+         * refreshes is the one of the SAME app; a login through another app opens its own connection and never overwrites the tokens,
+         * scopes or accounts of a connection another app issued.
+         */
+        ?MetaCredentialProfile $appProfile = null,
     ): ProviderConnection {
         $creds = PlatformCredentials::for($provider);
+        $profile = $creds->platform === 'meta' ? ($appProfile ?? MetaCredentialProfile::Live) : null;
 
         $existing = ProviderConnection::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('provider', $creds->platform)
+            ->when($profile !== null, fn ($q) => $profile === MetaCredentialProfile::Live
+                ? $q->where(fn ($w) => $w->whereNull('app_profile')->orWhere('app_profile', MetaCredentialProfile::Live->value))
+                : $q->where('app_profile', $profile->value))
             ->when(
                 $clientWorkspaceId === null,
                 fn ($q) => $q->whereNull('client_workspace_id'),
@@ -171,6 +187,14 @@ final class TokenVault
                 'scopes' => $tokens->scope === null ? $creds->scopes() : explode(' ', $tokens->scope),
                 'last_health_check_at' => Carbon::now(),
             ], static fn ($v) => $v !== null))->save();
+
+            /*
+             * META-SESSION-190-001 — a new consent is what an `error` connection was waiting for, so it is connected again. Only `error`:
+             * a disconnected or revoked row keeps the status somebody chose for it.
+             */
+            if ($existing->status === 'error') {
+                $existing->forceFill(['status' => 'connected', 'last_error' => null])->save();
+            }
 
             /*
              * A NEW authorisation clears a remembered insights refusal — META-INSIGHTS-GRANT-001.
@@ -209,6 +233,10 @@ final class TokenVault
             'client_workspace_id' => $clientWorkspaceId,
             'credential_id' => $credential->getKey(),
             'provider' => $creds->platform,
+            // Recorded only for a non-Live Meta app: NULL stays the Live app, as for every connection before this.
+            'app_profile' => $profile !== null && $profile !== MetaCredentialProfile::Live ? $profile->value : null,
+            // META-APP-SWITCH-GUARD-001 — the App ID that issued these tokens, so a later switch of the Live app can see who depends on it.
+            'issuing_app_id' => $profile !== null ? PlatformCredentials::forMeta($profile)->get('client_id') : null,
             'connection_name' => $connectionName,
             'scope' => $clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared',
             'external_owner_id' => $externalOwnerId,

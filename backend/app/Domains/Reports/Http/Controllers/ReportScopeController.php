@@ -21,6 +21,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
+use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
@@ -218,21 +219,36 @@ final class ReportScopeController extends Controller
             ->whereNotNull('unified_campaign_id')
             ->whereNotNull('external_account_id')
             ->distinct()->pluck('external_account_id')->all();
+        /*
+         * REPORT-BOUND-ACCOUNTS-001 — and the accounts the project BINDS, whether or not anything has arrived.
+         *
+         * «Figures OR campaigns» still left an authorised account invisible until its first sync
+         * brought a campaign: NASEL was bound to TikTok, Meta, Google and ChatGPT Ads, and the picker
+         * offered TikTok alone because only it had campaigns. The binding is the ownership record; the
+         * picker lists every active one and says, per account, what has arrived (`state`).
+         */
+        $metricAccountIds = array_map('strval', $accountIds);
+        $boundAccountIds = BoundAccountVisibility::activeAccountIds($project);
         $accountIds = array_values(array_unique(array_merge(
-            array_map('strval', $accountIds),
+            $metricAccountIds,
             array_map('strval', $structureAccountIds),
+            $boundAccountIds,
         )));
 
         $accounts = $accountIds === [] ? [] : ExternalAccount::query()
             ->whereIn('id', $accountIds)
             ->when($fProviders !== [], fn ($q) => $q->whereIn('provider', $fProviders))
             ->orderBy('name')
-            ->get(['id', 'name', 'provider', 'external_id'])
+            ->get(['id', 'name', 'provider', 'external_id', 'last_synced_at'])
             ->map(fn (ExternalAccount $a): array => [
                 'id' => (string) $a->getKey(),
                 'name' => $a->name ?: $a->external_id,
                 'provider' => $a->provider,
+                // data = figures exist; no_data = synced, none for this period yet; unsynced = never synced.
+                'state' => in_array((string) $a->getKey(), $metricAccountIds, true) ? 'data' : ($a->last_synced_at === null ? 'unsynced' : 'no_data'),
             ])->all();
+        $providers = array_values(array_unique(array_merge($providers, array_map(static fn (array $a): string => (string) $a['provider'], $accounts))));
+        sort($providers);
 
         /*
          * REPORT-SCOPE-HIERARCHY-001 — an account with figures and no account row is still an account.
@@ -256,7 +272,7 @@ final class ReportScopeController extends Controller
                 if ($fProviders !== [] && ! in_array(strtolower($provider), $fProviders, true)) {
                     continue;
                 }
-                $accounts[] = ['id' => $id, 'name' => $id, 'provider' => $provider];
+                $accounts[] = ['id' => $id, 'name' => $id, 'provider' => $provider, 'state' => 'data'];
             }
         }
 
@@ -514,8 +530,13 @@ final class ReportScopeController extends Controller
         ReportScopeHierarchy::verifyFlat($project, (array) $request->input('scope', []));
         $scope = $this->validated($request, $project);
 
+        // REPORT-KPI-CONTRACT-001 — the objective the editor sent is the report's measurement TEMPLATE: it moves to the report and the
+        // stored scope keeps no objective unless «filter campaigns by objective» was explicitly switched on.
+        $template = $scope->objectiveTemplate();
+
         $model->forceFill([
             'scope' => $scope->isUnbounded() ? null : $scope->toArray(),
+            'campaign_objective' => $template ?? $model->campaign_objective,
             'status' => 'processing',
             'error' => null,
         ])->save();
@@ -574,10 +595,19 @@ final class ReportScopeController extends Controller
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
         $model = Report::query()->where('project_id', $project)->findOrFail($report);
-        $scope = ReportScope::fromArray($model->scope);
+        $scope = ReportScope::fromReport($model->scope);
+
+        // The editor's objective chips read `objectives`; for a report whose objective lives on the report (and not in its scope) they are
+        // filled from it for DISPLAY only — saving moves them straight back to the report, so no data bound is stored.
+        $shown = $scope->toArray();
+        $objective = (string) ($model->campaign_objective ?? '');
+        if (! $scope->objectiveFilter && $objective !== '' && isset(ReportObjectiveLens::TEMPLATE_MEMBERS[$objective])) {
+            $shown['objectives'] = ReportObjectiveLens::TEMPLATE_MEMBERS[$objective];
+        }
 
         return ApiResponse::success([
-            'scope' => $scope->toArray(),
+            'scope' => $shown,
+            'objective' => $objective === '' ? null : $objective,
             'explain' => $scope->explain(),
             'bound_axes' => $scope->boundAxes(),
             /*
@@ -741,7 +771,7 @@ final class ReportScopeController extends Controller
             'scope.to' => ['nullable', 'date'],
         ]);
 
-        $submitted = ReportScope::fromArray((array) $request->input('scope', []));
+        $submitted = ReportScope::fromReport((array) $request->input('scope', []));
 
         $keep = function (array $asked, array $available): array {
             if ($asked === []) {
@@ -756,12 +786,13 @@ final class ReportScopeController extends Controller
         $campaignIds = UnifiedCampaign::query()->where('project_id', $project)
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
 
-        return ReportScope::fromArray([
+        return ReportScope::fromReport([
+            'objective_filter' => $submitted->objectiveFilter,
             'project_ids' => $submitted->projectIds === [] ? [] : [$project],
             'providers' => $submitted->providers,
-            'account_ids' => $keep($submitted->accountIds, DailyMetric::query()
+            'account_ids' => $keep($submitted->accountIds, array_values(array_unique(array_merge(DailyMetric::query()
                 ->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->whereNotNull('external_account_id')
-                ->distinct()->pluck('external_account_id')->map(fn ($id): string => (string) $id)->all()),
+                ->distinct()->pluck('external_account_id')->map(fn ($id): string => (string) $id)->all(), BoundAccountVisibility::activeAccountIds($project))))),
             'campaign_ids' => $keep($submitted->campaignIds, $campaignIds),
             'ad_set_ids' => $keep($submitted->adSetIds, ExternalAdSet::query()
                 ->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all()),
