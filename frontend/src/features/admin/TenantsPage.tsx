@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Building2, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
 import { fetchTenant, fetchTenants, reissueOwnerInvitation, setTenantStatus, type PlatformTenant, type TenantPerson } from './api'
 import { UserAccessDialog } from './UserAccessDialog'
+import { MembershipDialog } from './MembershipDialog'
 import { accountTypeLabel, planLabel } from './labels'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -213,9 +214,13 @@ export function TenantsPage() {
 function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar: boolean }) {
   const detail = useQuery({ queryKey: ['admin', 'tenant', id], queryFn: () => fetchTenant(id) })
   const [managing, setManaging] = useState<TenantPerson | null>(null)
+  const [member, setMember] = useState<TenantPerson | null>(null)
 
   if (managing) {
     return <UserAccessDialog person={managing} ar={ar} onClose={() => setManaging(null)} />
+  }
+  if (member) {
+    return <MembershipDialog tenantId={id} person={member} roles={detail.data?.available_roles ?? []} ar={ar} onClose={() => setMember(null)} />
   }
 
   return (
@@ -261,7 +266,14 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
                   </span>
                   <span className="flex items-center gap-2 text-[12px] text-text-secondary">
                     <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">{p.portal}</span>
-                    <span>{p.role}</span>
+                    <span>{(p.roles ?? []).join(', ') || p.role}</span>
+                    {p.status !== 'active' && <span className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{p.status}</span>}
+                    {p.user_uuid && !p.is_platform_admin && (
+                      <button type="button" data-testid={`membership-${p.user_uuid}`} onClick={() => setMember(p)}
+                        className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">
+                        {ar ? 'العضوية' : 'Membership'}
+                      </button>
+                    )}
                     {p.user_uuid && (
                       <button type="button" data-testid={`user-access-${p.user_uuid}`} onClick={() => setManaging(p)}
                         className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">
