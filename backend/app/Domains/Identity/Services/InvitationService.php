@@ -38,7 +38,11 @@ final class InvitationService
      * @param  list<string>|null  $projectIds
      * @return array{id: string, delivery_status: string, dev_link: ?string}
      */
-    public function invite(Tenant $tenant, string $email, string $roleSlug, ?array $projectIds, ?User $invitedBy, bool $allowExisting = false): array
+    /**
+     * `$withLink` (SUPERADMIN-WORKSPACE-001) returns the one-time accept link to the PLATFORM OPERATOR who issued it, so a workspace can
+     * be handed to its owner when mail does not arrive. Only the platform console asks for it; a tenant's own team invites never do.
+     */
+    public function invite(Tenant $tenant, string $email, string $roleSlug, ?array $projectIds, ?User $invitedBy, bool $allowExisting = false, bool $withLink = false): array
     {
         $email = Str::lower(trim($email));
 
@@ -120,6 +124,8 @@ final class InvitationService
             'id' => $id,
             'delivery_status' => $status,
             'dev_link' => ContactVerificationService::exposeDevSecrets() ? "/invite/accept?token={$token}" : null,
+            'accept_link' => $withLink ? MailLinks::to("/invite/accept?token={$token}") : null,
+            'expires_in_hours' => self::TTL_HOURS,
         ];
     }
 
