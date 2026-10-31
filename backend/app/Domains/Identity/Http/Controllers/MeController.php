@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Support\SessionRevocations;
+use App\Domains\Identity\Support\UserSessions;
 use App\Models\User;
 use App\Rules\PhoneNumberRule;
 use App\Support\PhoneNumber;
@@ -160,8 +161,9 @@ final class MeController
             throw ValidationException::withMessages(['current_password' => __('The current password is incorrect.')]);
         }
 
-        $user->setRememberToken(Str::random(60));
-        $user->save();
+        // SUPERADMIN-ACCESS-001 — rotating the remember token alone left every other device signed in (sessions are in Redis and
+        // carry no password hash to compare). The cut-off ends them; this session is re-stamped and stays.
+        app(UserSessions::class)->revokeAll($user, $request->hasSession() ? $request->session() : null);
         if ($request->hasSession()) {
             // The id being retired is revoked, not merely replaced (ACCESS-EXIT-003) — otherwise a
             // request still in flight can write the old authenticated payload back under it, and
