@@ -53,6 +53,7 @@ final class PlanCommercialTermsTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
     }
 
     private function plan(string $code): SubscriptionPlan
@@ -67,12 +68,17 @@ final class PlanCommercialTermsTest extends TestCase
 
     // ── PAY-AUDIT-002: the currency ──────────────────────────────────────────────────────────────
 
-    /** Every plan on sale is priced in USD. */
-    public function test_the_catalogue_is_denominated_in_usd(): void
+    /**
+     * Each catalogue edition is priced in one currency: the launch plans in USD (as they were sold, and as their subscribers
+     * keep paying), the 2026-11 plans in SAR (PRICING-CATALOGUE-001). Never a mix within an edition.
+     */
+    public function test_each_catalogue_edition_is_denominated_in_one_currency(): void
     {
-        $currencies = SubscriptionPlan::query()->pluck('currency')->unique()->values()->all();
+        $legacy = SubscriptionPlan::query()->whereIn('code', ['starter', 'growth', 'agency', 'enterprise'])->pluck('currency')->unique()->values()->all();
+        $current = SubscriptionPlan::query()->whereIn('code', ['solo', 'team', 'agency_2026', 'enterprise_2026'])->pluck('currency')->unique()->values()->all();
 
-        $this->assertSame(['USD'], $currencies, 'a plan is still priced in another currency');
+        $this->assertSame(['USD'], $legacy, 'a launch plan was re-denominated');
+        $this->assertSame(['SAR'], $current, 'a 2026-11 plan is priced in another currency');
     }
 
     /** And the quote a customer is shown says so, rather than leaving them to assume. */
@@ -184,8 +190,10 @@ final class PlanCommercialTermsTest extends TestCase
 
         $this->assertFalse($this->catalogue()->isOffered('enterprise'), 'Enterprise must not be buyable');
 
+        // Re-offered for this file (offerLaunchCatalogue), beside the 2026-11 plans; neither Enterprise is ever buyable.
         $offered = $this->catalogue()->offered()->pluck('code')->all();
-        $this->assertSame(['starter', 'growth', 'agency'], $offered);
+        $this->assertSame(['starter', 'growth', 'agency', 'solo', 'team', 'agency_2026'], $offered);
+        $this->assertFalse($this->catalogue()->isOffered('enterprise_2026'), 'the 2026-11 Enterprise is listed, never sold');
     }
 
     /**

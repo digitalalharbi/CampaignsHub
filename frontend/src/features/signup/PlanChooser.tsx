@@ -4,7 +4,7 @@ import { Check, Loader2, Table2 } from 'lucide-react'
 import { fetchPlans, type BillingInterval, type Plan } from './api'
 import { useUi } from '@/stores/ui'
 import { Modal } from '@/components/ui/Modal'
-import { comparisonFor, plansForJourney, whyUpgrade, type ComparisonGroup, type Journey } from './planFit'
+import { comparisonFor, isRecommended, plansForJourney, whyUpgrade, type ComparisonGroup, type Journey } from './planFit'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -103,13 +103,7 @@ const COPY = {
 
 type Copy = typeof COPY['en'] | typeof COPY['ar']
 
-/**
- * Growth is the recommended plan — the owner's pricing of 2026-08-09.
- *
- * A constant rather than a column: it is a marketing position, not a property of the catalogue, and
- * the moment it becomes a column somebody has to keep it in step across three plans.
- */
-const RECOMMENDED = 'growth'
+/** The recommended plan is the catalogue's choice (`features.recommended`, set in /admin) — PRICING-CATALOGUE-001. */
 
 /**
  * A step that cannot be completed, and the reason it cannot — SIGNUP-CAT-001.
@@ -280,7 +274,7 @@ export function PlanChooser({
             onSelect={() => onChange(plan.code)}
             // What this plan gives, or adds over the one before it — from the catalogue's own limits.
             why={whyUpgrade(plan, offered[i - 1], ar)}
-            recommended={plan.code === RECOMMENDED}
+            recommended={isRecommended(plan)}
             solo={solo}
           />
         ))}
@@ -352,7 +346,7 @@ function ComparisonTable({
     <>
       <span className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm font-bold text-text-primary">{ar ? plan.name_ar : plan.name}</span>
-        {plan.code === RECOMMENDED && (
+        {isRecommended(plan) && (
           <span className="rounded-full bg-brand-primary-soft px-1.5 py-0.5 text-[10px] font-bold text-brand-700">
             {copy.recommended}
           </span>
@@ -383,7 +377,7 @@ function ComparisonTable({
       type="button"
       data-testid={`compare-choose-${plan.code}`}
       onClick={() => onPick(plan.code)}
-      className={`mt-2 block w-full rounded-lg px-3 py-1.5 text-center text-xs font-bold ${plan.code === RECOMMENDED ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-brand-700'}`}
+      className={`mt-2 block w-full rounded-lg px-3 py-1.5 text-center text-xs font-bold ${isRecommended(plan) ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-brand-700'}`}
     >
       {copy.chooseNamed(ar ? plan.name_ar : plan.name)}
     </button>
@@ -399,7 +393,7 @@ function ComparisonTable({
             {plans.map((p) => (
               <th
                 key={p.code}
-                className={`p-2 text-start ${p.code === RECOMMENDED ? 'rounded-t-xl bg-brand-primary-soft/40' : ''}`}
+                className={`p-2 text-start ${isRecommended(p) ? 'rounded-t-xl bg-brand-primary-soft/40' : ''}`}
               >
                 <Head plan={p} />
               </th>
@@ -426,7 +420,7 @@ function ComparisonTable({
                   <td
                     key={p.code}
                     data-testid={`compare-${row.key}-${p.code}`}
-                    className={`p-2 text-sm text-text-primary ${p.code === RECOMMENDED ? 'bg-brand-primary-soft/40' : ''}`}
+                    className={`p-2 text-sm text-text-primary ${isRecommended(p) ? 'bg-brand-primary-soft/40' : ''}`}
                   >
                     <span className="tnum">{row.value(p, ar)}</span>
                   </td>
@@ -439,7 +433,7 @@ function ComparisonTable({
           <tr>
             <td className="p-2" />
             {plans.map((p) => (
-              <td key={p.code} className={`p-2 align-top ${p.code === RECOMMENDED ? 'rounded-b-xl bg-brand-primary-soft/40' : ''}`}>
+              <td key={p.code} className={`p-2 align-top ${isRecommended(p) ? 'rounded-b-xl bg-brand-primary-soft/40' : ''}`}>
                 <Cta plan={p} />
               </td>
             ))}
@@ -453,7 +447,7 @@ function ComparisonTable({
           <section
             key={p.code}
             data-testid={`compare-card-${p.code}`}
-            className={`rounded-xl border p-3 ${p.code === RECOMMENDED ? 'border-brand-500 bg-brand-primary-soft/40' : 'border-border bg-surface'}`}
+            className={`rounded-xl border p-3 ${isRecommended(p) ? 'border-brand-500 bg-brand-primary-soft/40' : 'border-border bg-surface'}`}
           >
             <Head plan={p} />
             {groups.map((group) => (
@@ -561,7 +555,7 @@ function PlanCard({
       {/* The offer, stated in full beneath the price it discounts — never in place of it. */}
       {hasIntro && (
         <span data-testid={`plan-${plan.code}-intro`} className="text-[11px] font-semibold leading-[1.35] text-brand-600">
-          {copy.intro(plan.trial_days, plan.trial_fee, plan.price_monthly, plan.currency)}
+          {copy.intro(plan.trial_days, plan.trial_fee, plan.price_monthly ?? '', plan.currency)}
           {commitment > 0 && (
             <>
               {' · '}

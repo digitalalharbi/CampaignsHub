@@ -51,22 +51,27 @@ export type Journey = 'self-service' | 'multi-client'
  * `Enterprise` is in neither list, and no longer needs excluding here — it is `is_public: false`
  * server-side, so the signup catalogue never contains it.
  */
-const OFFERED: Record<Journey, string[]> = {
-  'self-service': ['starter', 'growth'],
-  'multi-client': ['agency'],
+/**
+ * PRICING-CATALOGUE-001 — which journey a plan serves is the CATALOGUE's to say (`features.journeys`, editable in /admin), not a
+ * list of codes in React: a new catalogue edition must not need a frontend release to be sold on the right path.
+ */
+function journeysOf(plan: Plan): string[] {
+  const raw = (plan.features ?? {}).journeys
+  return Array.isArray(raw) ? raw.filter((j): j is string => typeof j === 'string') : []
 }
 
-/** The plans this journey can actually buy, in the order they step up. */
+/** The plans this journey can actually buy, in the catalogue's own order (the API sorts by sort_order, then price). */
 export function plansForJourney(plans: Plan[], journey: Journey | null): Plan[] {
   const buyable = plans.filter((p) => p.contact_sales !== true)
 
   if (journey === null) return buyable
 
-  const offered = OFFERED[journey]
+  return buyable.filter((p) => journeysOf(p).includes(journey))
+}
 
-  return buyable
-    .filter((p) => offered.includes(p.code))
-    .sort((a, b) => offered.indexOf(a.code) - offered.indexOf(b.code))
+/** The plan the catalogue marks as recommended (`features.recommended`), if any. */
+export function isRecommended(plan: Plan): boolean {
+  return (plan.features ?? {}).recommended === true
 }
 
 /** A capped number, or null for «no ceiling». Reads the catalogue's own shape. */

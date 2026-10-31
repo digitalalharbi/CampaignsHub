@@ -53,21 +53,61 @@ final class PlanCatalogueTest extends TestCase
     {
         $res = $this->getJson('/api/v1/plans')->assertOk();
 
+        // PRICING-CATALOGUE-001 — the 2026-11 edition only; the launch plans are withdrawn from sale.
         $codes = array_column((array) $res->json('data.plans'), 'code');
-        $this->assertSame(['starter', 'growth', 'agency'], $codes, 'ordered by the catalogue, not by id');
+        $this->assertSame(['solo', 'team', 'agency_2026', 'enterprise_2026'], $codes, 'ordered by the catalogue, not by id');
 
-        /*
-         * Both terms are published, because both are sold — read from the catalogue rather than
-         * hard-coded, so re-pricing is a commercial decision and not a test failure. The literals
-         * that were here (`499.00`, `4990.00`, `7`) had to be edited by hand the moment the owner
-         * moved the catalogue to USD and to a thirty-day introductory month.
-         */
-        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
-        $growth = collect($res->json('data.plans'))->firstWhere('code', 'growth');
-        $this->assertSame((string) $plan->price_monthly, $growth['price_monthly']);
-        $this->assertSame((string) $plan->price_annual, $growth['price_annual']);
-        $this->assertSame($plan->trial_days, $growth['trial_days']);
-        $this->assertSame('USD', $growth['currency'], 'subscriptions are sold in USD (PAY-AUDIT-002)');
+        // Figures read from the catalogue, so re-pricing from /admin is a commercial decision and not a test failure.
+        $plan = SubscriptionPlan::where('code', 'team')->firstOrFail();
+        $team = collect($res->json('data.plans'))->firstWhere('code', 'team');
+        $this->assertSame((string) $plan->price_monthly, $team['price_monthly']);
+        $this->assertSame((string) $plan->price_annual, $team['price_annual']);
+        $this->assertSame('SAR', $team['currency'], 'the 2026-11 catalogue is sold in SAR');
+
+        // Enterprise is listed as «contact us»: no price is published for it, not even the 0.00 that satisfies NOT NULL.
+        $enterprise = collect($res->json('data.plans'))->firstWhere('code', 'enterprise_2026');
+        $this->assertTrue($enterprise['contact_sales']);
+        $this->assertNull($enterprise['price_monthly']);
+        $this->assertNull($enterprise['price_annual']);
+    }
+
+    /** The launch plans are withdrawn from sale and still live for their subscribers (grandfathered). */
+    public function test_the_launch_catalogue_is_withdrawn_but_not_switched_off(): void
+    {
+        foreach (['starter', 'growth', 'agency', 'enterprise'] as $code) {
+            $plan = SubscriptionPlan::where('code', $code)->firstOrFail();
+            $this->assertTrue($plan->is_active, "{$code} must keep working for its subscribers");
+            $this->assertFalse($this->catalogue()->isOffered($code), "{$code} must not be sold any more");
+            $this->assertSame(1, $plan->catalogueVersion?->number);
+        }
+        $this->getJson('/api/v1/plans/growth/quote?interval=monthly')->assertNotFound();
+        $this->assertSame(2, SubscriptionPlan::where('code', 'solo')->firstOrFail()->catalogueVersion?->number);
+    }
+
+    /** Sold by conversation means no checkout: neither a quote nor a sign-up can land on Enterprise at 0.00. */
+    public function test_enterprise_is_listed_but_never_sold(): void
+    {
+        $this->getJson('/api/v1/plans/enterprise_2026/quote?interval=monthly')->assertNotFound();
+        $this->apply(['email' => 'free-ride@a.test', 'plan_code' => 'enterprise_2026'])
+            ->assertStatus(422)->assertJsonValidationErrors(['plan_code']);
+    }
+
+    /**
+     * The seeder runs on EVERY deploy (`platform:provision`). It used to upsert, so a price edited in /admin was put back on the
+     * next deploy. It now only creates what is missing.
+     */
+    public function test_a_deploy_never_overwrites_a_price_set_in_the_console(): void
+    {
+        SubscriptionPlan::where('code', 'team')->update(['price_monthly' => 749, 'name' => 'Team+']);
+        SubscriptionPlan::where('code', 'growth')->update(['is_public' => true]);
+
+        $this->seed(SubscriptionPlanSeeder::class);
+
+        $team = SubscriptionPlan::where('code', 'team')->firstOrFail();
+        $this->assertSame('749.00', (string) $team->price_monthly);
+        $this->assertSame('Team+', $team->name);
+        $this->assertTrue(SubscriptionPlan::where('code', 'growth')->firstOrFail()->is_public, 'an owner decision stays made');
+        $this->assertSame(8, SubscriptionPlan::query()->count());
     }
 
     /**
@@ -78,6 +118,7 @@ final class PlanCatalogueTest extends TestCase
      */
     public function test_a_withdrawn_plan_stops_being_offered_without_being_switched_off(): void
     {
+        $this->offerLaunchCatalogue();
         SubscriptionPlan::where('code', 'growth')->update(['is_public' => false]);
 
         $codes = array_column((array) $this->getJson('/api/v1/plans')->json('data.plans'), 'code');
@@ -103,6 +144,7 @@ final class PlanCatalogueTest extends TestCase
      */
     public function test_the_introductory_quote_separates_what_is_taken_now_from_what_falls_due_later(): void
     {
+        $this->offerLaunchCatalogue();
         $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
 
         $this->getJson('/api/v1/plans/growth/quote?interval=monthly')->assertOk()
@@ -115,6 +157,7 @@ final class PlanCatalogueTest extends TestCase
     /** And the ANNUAL term never passes through it — see PlanCommercialTermsTest for the full case. */
     public function test_the_annual_term_skips_the_introductory_month(): void
     {
+        $this->offerLaunchCatalogue();
         $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
 
         $this->getJson('/api/v1/plans/growth/quote?interval=annual')->assertOk()
@@ -131,6 +174,7 @@ final class PlanCatalogueTest extends TestCase
      */
     public function test_a_plan_without_an_introductory_month_charges_its_price_today(): void
     {
+        $this->offerLaunchCatalogue();
         SubscriptionPlan::where('code', 'growth')->update(['trial_days' => 0]);
         $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
 
@@ -170,23 +214,23 @@ final class PlanCatalogueTest extends TestCase
             ->assertJsonPath('data.quote.due_now', '199.00');
     }
 
-    /** «البداية» is sold, not given away (PLAN-PAID-001). */
+    /** The entry plan is sold, not given away (PLAN-PAID-001) — Solo in the 2026-11 catalogue. */
     public function test_the_entry_plan_is_priced_on_both_terms(): void
     {
         $res = $this->getJson('/api/v1/plans')->assertOk();
 
-        $plan = SubscriptionPlan::where('code', 'starter')->firstOrFail();
-        $starter = collect($res->json('data.plans'))->firstWhere('code', 'starter');
-        $this->assertSame((string) $plan->price_monthly, $starter['price_monthly']);
-        $this->assertSame((string) $plan->price_annual, $starter['price_annual'], 'the annual term must be published before payment');
-        $this->assertGreaterThan(0, (float) $starter['price_monthly'], 'there is no free tier');
+        $plan = SubscriptionPlan::where('code', 'solo')->firstOrFail();
+        $solo = collect($res->json('data.plans'))->firstWhere('code', 'solo');
+        $this->assertSame((string) $plan->price_monthly, $solo['price_monthly']);
+        $this->assertSame((string) $plan->price_annual, $solo['price_annual'], 'the annual term must be published before payment');
+        $this->assertGreaterThan(0, (float) $solo['price_monthly'], 'there is no free tier');
 
         // What the plan is sold ON, as data rather than as marketing copy.
-        $this->assertTrue((bool) $starter['features']['campaign_tracking']);
-        $this->assertTrue((bool) $starter['features']['reports']);
+        $this->assertTrue((bool) $solo['features']['campaign_tracking']);
+        $this->assertTrue((bool) $solo['features']['reports']);
 
         // The quote a visitor is shown before paying names the whole annual amount, not a monthly one.
-        $this->getJson('/api/v1/plans/starter/quote?interval=annual')->assertOk()
+        $this->getJson('/api/v1/plans/solo/quote?interval=annual')->assertOk()
             ->assertJsonPath('data.quote.due_now', (string) $plan->price_annual)
             ->assertJsonPath('data.quote.renews_in_days', 365);
     }
@@ -218,6 +262,7 @@ final class PlanCatalogueTest extends TestCase
      */
     public function test_trial_limits_narrow_the_plan_and_fall_back_to_it(): void
     {
+        $this->offerLaunchCatalogue();
         $growth = $this->catalogue()->byCode('growth');
 
         $this->assertSame(3, $growth->trialLimitFor('projects'), 'the trial caps projects tighter');
@@ -234,6 +279,7 @@ final class PlanCatalogueTest extends TestCase
     /** The trial's fee and length are a setting, not a deploy. */
     public function test_the_platform_owner_can_change_the_trial_terms(): void
     {
+        $this->offerLaunchCatalogue();
         $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
 
         $this->actingAs($this->platformAdmin(), 'sanctum')
@@ -291,6 +337,7 @@ final class PlanCatalogueTest extends TestCase
 
     public function test_registration_accepts_a_plan_that_is_on_sale(): void
     {
+        $this->offerLaunchCatalogue();
         $this->apply(['email' => 'buyer@a.test', 'plan_code' => 'growth'])->assertStatus(202);
 
         $this->assertSame('growth', RegistrationRequest::query()->firstOrFail()->plan_code);
@@ -304,6 +351,7 @@ final class PlanCatalogueTest extends TestCase
      */
     public function test_registration_refuses_a_plan_that_is_not_on_sale(): void
     {
+        $this->offerLaunchCatalogue();
         SubscriptionPlan::where('code', 'growth')->update(['is_public' => false]);
 
         $this->apply(['email' => 'sneaky@a.test', 'plan_code' => 'growth'])
