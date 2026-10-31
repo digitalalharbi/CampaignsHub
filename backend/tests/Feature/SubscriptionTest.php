@@ -50,6 +50,7 @@ final class SubscriptionTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
 

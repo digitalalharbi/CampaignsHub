@@ -45,6 +45,7 @@ final class SubscriptionNotificationTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
         $this->assertingAcrossTenants();
 
         config([

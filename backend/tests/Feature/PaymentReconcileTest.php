@@ -41,6 +41,7 @@ final class PaymentReconcileTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
         config(['accounts.registration.plans.growth' => ['requires_payment' => true]]);
         config(['services.moyasar.secret_key' => 'sk_test_x', 'services.moyasar.publishable_key' => 'pk_test_x', 'services.moyasar.webhook_token' => 'tok', 'subscriptions.default' => 'moyasar']);
 

@@ -44,6 +44,7 @@ final class PaymentActivationSecurityTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
 
         // The gate under test: this plan is only had by paying for it.
         config(['accounts.registration.plans.growth' => ['requires_payment' => true]]);
