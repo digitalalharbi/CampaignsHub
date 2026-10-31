@@ -14,6 +14,7 @@ use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
+use App\Domains\Platform\Http\Controllers\PlatformLimitController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
@@ -90,6 +91,9 @@ Route::middleware(['auth:sanctum', 'platform'])
          * for, and because that shape makes "grant this to everybody" an endpoint nobody can call by
          * accident. `destroy` revokes; nothing here deletes.
          */
+        // SUPERADMIN-LIMITS-001 — one workspace's own plan-limit caps.
+        Route::get('/tenants/{tenant}/limits', [PlatformLimitController::class, 'index'])->name('tenants.limits');
+        Route::put('/tenants/{tenant}/limits/{metric}', [PlatformLimitController::class, 'set'])->middleware('throttle:30,1')->name('tenants.limits.set');
         Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
         Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
             ->middleware('throttle:30,1')->name('grants.store');
