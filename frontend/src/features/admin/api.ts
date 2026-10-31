@@ -980,3 +980,36 @@ export function recordCurrencyRate(body: {
 }): Promise<StoredRate> {
   return postData('/admin/fx/rates', body)
 }
+
+/*
+ * SUPERADMIN-WORKSPACE-001 — create a workspace and hand it to its owner.
+ *
+ * `accept_link` is a one-time credential returned only to the operator who issued it, for handing over when mail does not arrive.
+ * It is shown once and never stored by the console.
+ */
+export interface OwnerInvitation {
+  delivery_status: string | null
+  accept_link: string | null
+  expires_in_hours: number | null
+}
+
+export interface ProvisionedWorkspace {
+  tenant: { id: string; name: string; slug: string; plan: string; modules: string[] }
+  created: boolean
+  owner_has_access: boolean
+  invitation: OwnerInvitation | null
+}
+
+export function createWorkspace(body: {
+  company_name: string
+  workspace_name?: string
+  owner_email: string
+  plan?: string
+  modules?: string[]
+}): Promise<ProvisionedWorkspace> {
+  return postData('/admin/tenants', body)
+}
+
+export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Promise<{ owner_has_access: boolean; invitation: OwnerInvitation | null }> {
+  return postData(`/admin/tenants/${tenantId}/owner-invitation`, { owner_email: ownerEmail })
+}

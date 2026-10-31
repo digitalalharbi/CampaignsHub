@@ -20,6 +20,7 @@ use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
 use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Http\Controllers\Dev\DevStatusController;
@@ -72,6 +73,9 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::post('/review-accounts/{tenant}/revoke', [PlatformReviewAccountController::class, 'revoke'])->middleware('throttle:30,1')->name('review-accounts.revoke');
 
         Route::get('/tenants', [PlatformTenantController::class, 'index'])->name('tenants.index');
+        // SUPERADMIN-WORKSPACE-001 — create a workspace and hand it to its owner; a fresh owner link when the first went nowhere.
+        Route::post('/tenants', [PlatformWorkspaceProvisioningController::class, 'store'])->middleware('throttle:20,1')->name('tenants.store');
+        Route::post('/tenants/{tenant}/owner-invitation', [PlatformWorkspaceProvisioningController::class, 'resendOwner'])->middleware('throttle:20,1')->name('tenants.owner-invitation');
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
         Route::patch('/tenants/{tenant}/status', [PlatformTenantController::class, 'updateStatus'])
             ->name('tenants.status');
