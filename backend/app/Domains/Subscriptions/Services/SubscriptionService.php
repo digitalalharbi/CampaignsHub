@@ -255,8 +255,9 @@ final class SubscriptionService
                 ->where('project_integration_bindings.tenant_id', $id)
                 ->where('project_integration_bindings.is_active', true)
                 ->where('external_accounts.account_type', 'ad_account')
+                // PRICING-SEATS-001 — one REAL account (provider + its id), however many connections reach it.
                 ->distinct()
-                ->count('project_integration_bindings.external_account_id'),
+                ->count(DB::raw("external_accounts.provider || ':' || external_accounts.external_id")),
 
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.

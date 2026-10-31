@@ -72,7 +72,8 @@ final class SubscriptionPlanSeeder extends Seeder
     /** @return list<array<string, mixed>> the 2026-11 SAR catalogue */
     public static function currentPlans(): array
     {
-        $seats = fn (?int $projects, ?int $adAccounts, ?int $users) => [
+        // PRICING-SEATS-001 — `ad_account_replacements`: how many DIFFERENT accounts may take a released seat per 30 days.
+        $seats = fn (?int $projects, ?int $adAccounts, ?int $users, ?int $replacements = null) => [
             'projects' => $projects,
             // A client workspace holds the projects; a plan never caps one below the other.
             'clients' => $projects,
@@ -80,6 +81,7 @@ final class SubscriptionPlanSeeder extends Seeder
             'ad_accounts' => $adAccounts,
             'connections' => null,
             'reports_per_month' => null,
+            'ad_account_replacements' => $replacements,
         ];
 
         return [
@@ -93,7 +95,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'campaign_tracking' => true, 'reports' => true, 'support' => 'email', 'ai_assist' => false, 'white_label' => false,
                     'journeys' => ['self-service'],
                 ],
-                'limits' => $seats(1, 5, 1), 'trial_limits' => $seats(1, 5, 1),
+                'limits' => $seats(1, 5, 1, 1), 'trial_limits' => $seats(1, 5, 1, 1),
             ],
             [
                 'code' => 'team', 'name' => 'Team', 'name_ar' => 'Team',
@@ -105,7 +107,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'campaign_tracking' => true, 'reports' => true, 'support' => 'email', 'ai_assist' => true, 'white_label' => false,
                     'journeys' => ['self-service', 'multi-client'], 'recommended' => true,
                 ],
-                'limits' => $seats(5, 20, 3), 'trial_limits' => $seats(5, 20, 3),
+                'limits' => $seats(5, 20, 3, 3), 'trial_limits' => $seats(5, 20, 3, 3),
             ],
             [
                 'code' => 'agency_2026', 'name' => 'Agency', 'name_ar' => 'Agency',
@@ -117,7 +119,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'campaign_tracking' => true, 'reports' => true, 'support' => 'priority', 'ai_assist' => true, 'white_label' => true,
                     'journeys' => ['multi-client'],
                 ],
-                'limits' => $seats(20, 80, 10), 'trial_limits' => $seats(20, 80, 10),
+                'limits' => $seats(20, 80, 10, 10), 'trial_limits' => $seats(20, 80, 10, 10),
             ],
             [
                 'code' => 'enterprise_2026', 'name' => 'Enterprise', 'name_ar' => 'Enterprise',

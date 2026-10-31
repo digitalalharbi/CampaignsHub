@@ -20,7 +20,7 @@ use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
-use App\Domains\Subscriptions\Services\SubscriptionService;
+use App\Domains\Subscriptions\Seats\AdAccountSeats;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -39,36 +39,8 @@ final class ProjectIntegrationController extends Controller
     public function __construct(
         private readonly ProjectContext $project,
         private readonly AccountAssignment $assignment,
-        private readonly SubscriptionService $subscriptions,
+        private readonly AdAccountSeats $seats,
     ) {}
-
-    /**
-     * ORCH-100 §J — refuse when the plan's Connected Ad Accounts cap is already met.
-     *
-     * Called INSIDE the quota transaction, after the tenant row is locked, so the count it reads
-     * cannot move underneath it. `withinLimit` is the same entitlement path the project, client and
-     * team caps already use — this adds a metric to it rather than a second opinion about limits.
-     */
-    private function guardQuota(string $tenantId): void
-    {
-        $tenant = Tenant::withoutGlobalScopes()->findOrFail($tenantId);
-
-        if ($this->subscriptions->withinLimit($tenant, 'ad_accounts')) {
-            return;
-        }
-
-        $used = $this->subscriptions->usage($tenant, 'ad_accounts');
-        $limit = $this->subscriptions->effectiveLimit($tenant, 'ad_accounts');
-
-        throw new PlanLimitReached(
-            'ad_accounts',
-            $used,
-            $limit,
-            $limit === null
-                ? 'Your plan does not allow another connected ad account.'
-                : "Your plan allows {$limit} connected ad account(s) and {$used} are already connected.",
-        );
-    }
 
     /** Bindings attached to the current project (project-scoped). */
     public function index(Request $request): JsonResponse
@@ -220,7 +192,11 @@ final class ProjectIntegrationController extends Controller
                     return $existing;
                 }
 
-                $this->guardQuota($account->tenant_id);
+                // PRICING-SEATS-001 — the same real account again is free; a different one is a seat, maybe a replacement.
+                $this->seats->claim(
+                    Tenant::withoutGlobalScopes()->findOrFail((string) $account->tenant_id),
+                    collect([$account]), 1, auth()->id() === null ? null : (int) auth()->id(),
+                );
 
                 /* Coming back to a binding that was put aside: the same row, reactivated. */
                 if ($existing !== null) {
