@@ -11,6 +11,7 @@ use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
+use App\Domains\Platform\Http\Controllers\PlatformAddonController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
@@ -109,6 +110,12 @@ Route::middleware(['auth:sanctum', 'platform'])
         // SUPERADMIN-LIMITS-001 — one workspace's own plan-limit caps.
         Route::get('/tenants/{tenant}/limits', [PlatformLimitController::class, 'index'])->name('tenants.limits');
         Route::put('/tenants/{tenant}/limits/{metric}', [PlatformLimitController::class, 'set'])->middleware('throttle:30,1')->name('tenants.limits.set');
+        // PRICING-ADDONS-001 — the add-ons catalogue, and each workspace's add-ons (grant, approve, decline, cancel).
+        Route::get('/addons', [PlatformAddonController::class, 'index'])->name('addons.index');
+        Route::patch('/addons/{addon}', [PlatformAddonController::class, 'update'])->middleware('throttle:30,1')->name('addons.update');
+        Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
+        Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
+        Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
         Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
         Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
             ->middleware('throttle:30,1')->name('grants.store');
