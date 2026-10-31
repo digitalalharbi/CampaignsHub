@@ -12,6 +12,7 @@ use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
+use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
@@ -79,6 +80,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
         Route::patch('/tenants/{tenant}/status', [PlatformTenantController::class, 'updateStatus'])
             ->name('tenants.status');
+        // SUPERADMIN-FEATURES-001 — capabilities on or off for every workspace, and one workspace's own switch.
+        Route::get('/capabilities', [PlatformCapabilityController::class, 'index'])->name('capabilities.index');
+        Route::put('/capabilities/{module}', [PlatformCapabilityController::class, 'setPlatform'])->middleware('throttle:30,1')->name('capabilities.platform');
+        Route::get('/tenants/{tenant}/capabilities', [PlatformCapabilityController::class, 'tenant'])->name('tenants.capabilities');
+        Route::put('/tenants/{tenant}/capabilities/{module}', [PlatformCapabilityController::class, 'setTenant'])->middleware('throttle:30,1')->name('tenants.capabilities.set');
 
         /*
          * GRANT-001 — one account's administrative exceptions.
