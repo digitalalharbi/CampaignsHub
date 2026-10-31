@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Providers;
 
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -253,7 +254,7 @@ final class TapPaymentProvider implements PaymentProvider
 
     private function secretKey(): ?string
     {
-        $key = config('services.tap.secret_key');
+        $key = app(PaymentGatewaySettings::class)->value('tap', 'secret_key');
 
         return is_string($key) && $key !== '' ? $key : null;
     }

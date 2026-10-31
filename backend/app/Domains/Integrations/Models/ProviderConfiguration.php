@@ -27,7 +27,7 @@ final class ProviderConfiguration extends Model
         'provider', 'environment', 'credentials', 'scopes', 'enabled',
         'last_tested_at', 'last_test_status', 'last_test_message',
         'last_rotated_at', 'configured_at', 'configured_by',
-        'review_confirmed_at', 'review_confirmed_by',
+        'review_confirmed_at', 'review_confirmed_by', 'tested_fingerprint',
     ];
 
     protected $casts = [

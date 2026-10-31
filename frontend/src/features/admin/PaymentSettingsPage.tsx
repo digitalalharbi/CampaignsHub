@@ -1,39 +1,44 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Check, CreditCard, KeyRound, Loader2, Webhook, X } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, Check, Copy, CreditCard, KeyRound, Loader2, Settings2, Star, Webhook } from 'lucide-react'
 import {
-  fetchPaymentSettings, fetchPaymentWebhook, fetchSecretRotation, testPaymentProvider,
-  type PaymentProviderSetting,
+  fetchPaymentSettings, fetchSecretRotation, savePaymentGateway, setPaymentGatewayEnabled, setPrimaryPaymentGateway,
+  testPaymentProvider, type PaymentProviderSetting,
 } from './api'
 import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
 /**
- * The payment gateways, from the platform owner's console (PAYSET-001).
+ * The payment gateways, from the platform owner's console (PAYSET-001, PAY-GATEWAY-CONSOLE-001).
  *
- * Deliberately has no field for a secret key. A console able to change a gateway secret is a console
- * whose compromise redirects every customer payment, and the rotation an operator actually needs is
- * at the provider, then in the environment, then a restart. This page tells them WHAT the environment
- * currently supports and WHAT is missing, which is the question they have.
- *
- * The distinction it exists to make visible: `live`, `sandbox` and `awaiting_credentials` are three
- * different states, and a half-configured provider is shown as unusable rather than as an option
- * somebody could select and have fail silently.
+ * Six approved gateways. Keys are pasted here and stored encrypted by the server; a saved secret is never shown again, only that it
+ * is present. Saving keys, testing, enabling (live needs its own confirmation) and choosing the primary are separate acts, and the
+ * server refuses to enable a gateway whose current keys have not passed a test. New payments go to the primary; nothing that exists
+ * moves when it changes.
  */
 
 const COPY = {
   ar: {
     title: 'وسائل الدفع',
-    subtitle: 'ميسر هي البوابة الرسمية والأساسية، وتاب وسترايب بوابتان بديلتان. المفاتيح تُدار من بيئة التشغيل ولا تُخزَّن هنا.',
-    primary: 'المزوّد الأساسي', alternative: 'مزوّد بديل', isDefault: 'الافتراضي',
-    live: 'مفعّل', awaiting: 'بانتظار بيانات الاعتماد',
-    envSandbox: 'بيئة اختبار (Sandbox)', envLive: 'بيئة إنتاج (Live)', envUnset: 'لا توجد مفاتيح',
-    required: 'المتطلبات', present: 'موجود', missing: 'ناقص',
-    test: 'اختبار الاتصال', testing: 'جارٍ الاختبار…',
+    subtitle: 'ميسر هي البوابة الأساسية المستهدفة. أدخل مفاتيح كل بوابة هنا مباشرة؛ تُحفظ مشفّرة ولا تُعرض بعد الحفظ.',
+    primary: 'المزوّد الأساسي', alternative: 'مزوّد بديل', isPrimary: 'الأساسية الآن',
+    status: {
+      not_implemented: 'غير منفّذة بعد', awaiting_credentials: 'بانتظار المفاتيح', needs_test: 'تحتاج اختبارًا',
+      ready: 'جاهزة — غير مفعّلة', enabled: 'مفعّلة',
+    } as Record<string, string>,
+    modeTest: 'وضع الاختبار', modeLive: 'وضع الإنتاج (Live)', noKeys: 'لا توجد مفاتيح',
+    sourceEnv: 'المفاتيح الحالية من بيئة التشغيل', sourceConsole: 'المفاتيح محفوظة من لوحة الأدمن',
+    setup: 'إعداد الربط', close: 'إغلاق', save: 'حفظ', saving: 'جارٍ الحفظ…', saved: 'حُفظ.', nothing: 'لم يتغيّر شيء.',
+    stored: 'محفوظ — اتركه فارغًا للإبقاء عليه', notStored: 'غير محفوظ', optional: 'اختياري',
+    mode: 'الوضع', test: 'اختبار الاتصال', testing: 'جارٍ الاختبار…',
     reachable: 'البوابة استجابت بنجاح.', unreachable: 'البوابة رفضت الطلب.',
-    cannotTest: 'لا يمكن الاختبار قبل إدخال بيانات الاعتماد.',
-    webhook: 'إعدادات Webhook', rotation: 'تدوير الأسرار',
+    lastTest: 'آخر اختبار', stale: 'المفاتيح تغيّرت بعد آخر اختبار — أعد الاختبار.',
+    enable: 'تفعيل للمدفوعات الجديدة', disable: 'تعطيل', makePrimary: 'تعيين كبوابة أساسية',
+    confirmLive: 'هذه مفاتيح إنتاج وستُحصّل أموالًا حقيقية. هل تريد التفعيل؟',
+    confirmPrimary: 'ستتجه المدفوعات الجديدة فقط إلى هذه البوابة، وتبقى المدفوعات والاشتراكات السابقة على بوابتها الأصلية. متابعة؟',
+    webhook: 'Webhook', copy: 'نسخ الرابط', copied: 'نُسخ', rotation: 'تدوير المفاتيح',
+    methods: 'وسائل الدفع', notImplemented: 'هذه البوابة لا تملك Adapter بعد؛ لا يمكن حفظ مفاتيحها أو اختبارها.',
     mailTitle: 'قناة الإشعارات',
     mailSandbox: 'مزوّد محلي (Sandbox) — الرسائل تُكتب ولا تصل إلى أحد.',
     mailAwaiting: 'لا يوجد مزوّد بريد — لن تصل أي إشعارات.',
@@ -43,19 +48,27 @@ const COPY = {
     recurringNoGateway: 'لا توجد بوابة دفع مهيّأة، لذلك كل تجديد يصل كفاتورة يسدّدها العميل بنفسه.',
     recurringUnsupported: 'البوابة الحالية لا تدعم الخصم التلقائي، لذلك كل تجديد يصل كفاتورة يسدّدها العميل بنفسه.',
     recurringCards: 'البطاقات المحفوظة',
-    noWrite: 'لا يمكن تغيير أي مفتاح من هذه الصفحة.',
   },
   en: {
     title: 'Payment methods',
-    subtitle: 'Moyasar is the official, primary gateway; Tap Payments and Stripe are alternatives. Keys are managed in the environment and are never stored here.',
-    primary: 'Primary provider', alternative: 'Alternative provider', isDefault: 'Default',
-    live: 'Live', awaiting: 'Awaiting credentials',
-    envSandbox: 'Sandbox keys', envLive: 'Live keys', envUnset: 'No keys',
-    required: 'Requires', present: 'present', missing: 'missing',
-    test: 'Test connection', testing: 'Testing…',
+    subtitle: 'Moyasar is the intended primary gateway. Enter each gateway’s keys here; they are stored encrypted and never shown again.',
+    primary: 'Primary provider', alternative: 'Alternative provider', isPrimary: 'Primary now',
+    status: {
+      not_implemented: 'Not implemented yet', awaiting_credentials: 'Awaiting keys', needs_test: 'Needs a test',
+      ready: 'Ready — not enabled', enabled: 'Enabled',
+    } as Record<string, string>,
+    modeTest: 'Test mode', modeLive: 'Live mode', noKeys: 'No keys',
+    sourceEnv: 'Current keys come from the environment', sourceConsole: 'Keys saved from the console',
+    setup: 'Set up', close: 'Close', save: 'Save', saving: 'Saving…', saved: 'Saved.', nothing: 'Nothing changed.',
+    stored: 'Stored — leave blank to keep it', notStored: 'Not stored', optional: 'optional',
+    mode: 'Mode', test: 'Test connection', testing: 'Testing…',
     reachable: 'The gateway accepted the request.', unreachable: 'The gateway refused the request.',
-    cannotTest: 'There is nothing to test until credentials are supplied.',
-    webhook: 'Webhook setup', rotation: 'Secret rotation',
+    lastTest: 'Last test', stale: 'The keys changed after the last test — test again.',
+    enable: 'Enable for new payments', disable: 'Disable', makePrimary: 'Make primary',
+    confirmLive: 'These are live keys and will take real money. Enable?',
+    confirmPrimary: 'Only NEW payments will go to this gateway; existing payments and subscriptions stay with their own. Continue?',
+    webhook: 'Webhook', copy: 'Copy URL', copied: 'Copied', rotation: 'Rotate keys',
+    methods: 'Payment methods', notImplemented: 'This gateway has no adapter yet, so its keys cannot be stored or tested.',
     mailTitle: 'Notification channel',
     mailSandbox: 'A local provider (sandbox) — messages are written and reach nobody.',
     mailAwaiting: 'No mail provider — no notification will reach anyone.',
@@ -65,9 +78,10 @@ const COPY = {
     recurringNoGateway: 'No payment gateway is configured, so every renewal arrives as an invoice the customer pays themselves.',
     recurringUnsupported: 'The current gateway does not take automatic payments, so every renewal arrives as an invoice the customer pays themselves.',
     recurringCards: 'Cards on file',
-    noWrite: 'No key can be changed from this page.',
   },
 } as const
+
+type Copy = typeof COPY['en'] | typeof COPY['ar']
 
 export function PaymentSettingsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
@@ -93,16 +107,12 @@ export function PaymentSettingsPage() {
         <p className="mt-1 max-w-2xl text-sm text-text-secondary">{c.subtitle}</p>
       </header>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {settings.data.providers.map((p) => (
           <ProviderCard key={p.provider} provider={p} ar={ar} copy={c} />
         ))}
       </div>
 
-      {/*
-        The mail transport belongs on this page: a payment system that cannot tell anybody a charge
-        failed is only half configured, and an operator checking one will want the other.
-      */}
       <section data-testid="payment-mail-state" data-state={mail.state} className="rounded-2xl border border-border bg-surface p-4">
         <p className="text-sm font-bold text-text-primary">{c.mailTitle}</p>
         <p className="mt-1 text-sm text-text-secondary">
@@ -111,14 +121,6 @@ export function PaymentSettingsPage() {
         </p>
       </section>
 
-      {/*
-        Whether renewals take themselves — PAY-TOKEN-003.
-
-        Both numbers, deliberately. «Ready» says the gateway could charge a saved card; the count
-        says how many customers have one. On a fresh install that is ready-and-zero, which is the
-        honest state: nothing is renewing itself yet, and a single badge would have implied
-        otherwise.
-      */}
       <section
         data-testid="payment-recurring-state"
         data-ready={recurring.ready}
@@ -135,135 +137,182 @@ export function PaymentSettingsPage() {
           {c.recurringCards}: <span className="tnum font-semibold" dir="ltr">{recurring.saved_methods}</span>
         </p>
       </section>
-
-      <p className="text-xs text-text-muted">{c.noWrite}</p>
     </div>
   )
 }
 
-type Copy = typeof COPY['en'] | typeof COPY['ar']
-
 function ProviderCard({ provider, ar, copy }: { provider: PaymentProviderSetting; ar: boolean; copy: Copy }) {
-  const [panel, setPanel] = useState<'webhook' | 'rotation' | null>(null)
+  const qc = useQueryClient()
+  const [panel, setPanel] = useState<'setup' | 'webhook' | 'rotation' | null>(null)
+  const [copied, setCopied] = useState(false)
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin', 'payment-settings'] })
 
-  const test = useMutation({ mutationFn: () => testPaymentProvider(provider.provider) })
-  const webhook = useQuery({
-    queryKey: ['admin', 'payment-webhook', provider.provider],
-    queryFn: () => fetchPaymentWebhook(provider.provider),
-    enabled: panel === 'webhook',
+  const test = useMutation({ mutationFn: () => testPaymentProvider(provider.provider), onSettled: refresh })
+  const activation = useMutation({
+    mutationFn: (enabled: boolean) => setPaymentGatewayEnabled(provider.provider, enabled, enabled && provider.mode === 'live'),
+    onSuccess: refresh,
   })
+  const primary = useMutation({ mutationFn: () => setPrimaryPaymentGateway(provider.provider), onSuccess: refresh })
   const rotation = useQuery({
     queryKey: ['admin', 'payment-rotation', provider.provider],
     queryFn: () => fetchSecretRotation(provider.provider),
     enabled: panel === 'rotation',
   })
 
-  const environment = provider.environment === 'sandbox'
-    ? copy.envSandbox
-    : provider.environment === 'live' ? copy.envLive : copy.envUnset
+  const name = ar ? provider.label.ar : provider.label.en
+  const statusTone = provider.status === 'enabled'
+    ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]'
+    : provider.status === 'needs_test' || provider.status === 'ready' ? 'bg-[var(--warning-background)] text-[var(--warning)]' : 'bg-surface-secondary text-text-muted'
+  const actionError = activation.error ?? primary.error
+
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(provider.webhook_url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
+    }
+  }
 
   return (
     <section
       data-testid={`payment-provider-${provider.provider}`}
       data-status={provider.status}
       data-environment={provider.environment}
-      className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
+      className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
     >
       <div className="flex flex-wrap items-center gap-2">
         <CreditCard size={18} className="shrink-0 text-brand-600" />
-        <span className="text-sm font-bold text-text-primary">{ar ? provider.label.ar : provider.label.en}</span>
+        <span className="text-sm font-bold text-text-primary">{name}</span>
         <span className="rounded-lg bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
           {provider.role === 'primary' ? copy.primary : copy.alternative}
         </span>
-        {provider.is_default && (
-          <span className="rounded-lg bg-brand-primary-soft px-2 py-0.5 text-[11px] font-semibold text-brand-700">{copy.isDefault}</span>
+        {provider.is_primary && (
+          <span data-testid={`payment-primary-${provider.provider}`} className="flex items-center gap-1 rounded-lg bg-brand-primary-soft px-2 py-0.5 text-[11px] font-semibold text-brand-700">
+            <Star size={11} /> {copy.isPrimary}
+          </span>
         )}
-
-        {/* Never "enabled": a provider with no credentials is shown as unusable, not as an option. */}
-        <span
-          data-testid={`payment-status-${provider.provider}`}
-          className={`ms-auto rounded-lg px-2.5 py-1 text-xs font-semibold ${provider.available ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}
-        >
-          {provider.available ? copy.live : copy.awaiting}
+        <span data-testid={`payment-status-${provider.provider}`} className={`ms-auto rounded-lg px-2.5 py-1 text-xs font-semibold ${statusTone}`}>
+          {copy.status[provider.status] ?? provider.status}
         </span>
       </div>
 
-      {/* Read from the key itself — a toggle that could disagree with the key in use is how somebody
-          ends up certain they are in sandbox while taking real money. */}
-      <p data-testid={`payment-environment-${provider.provider}`} className="text-xs font-semibold text-text-secondary">
-        {environment}
-      </p>
-
-      {/* Exactly which piece is missing, rather than "not configured". */}
-      <div>
-        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">{copy.required}</p>
-        <ul className="flex flex-col gap-1">
-          {provider.requires.map((r) => (
-            <li key={r.key} data-testid={`payment-requirement-${r.key}`} data-present={r.present} className="flex items-center gap-1.5 text-xs">
-              {r.present
-                ? <Check size={13} className="shrink-0 text-[var(--positive-foreground)]" />
-                : <X size={13} className="shrink-0 text-danger" />}
-              <span className="font-mono text-text-secondary" dir="ltr">{r.key}</span>
-              <span className="text-text-muted">— {r.present ? copy.present : copy.missing}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          data-testid={`payment-test-${provider.provider}`}
-          size="sm"
-          variant="secondary"
-          disabled={!provider.available || test.isPending}
-          onClick={() => test.mutate()}
-        >
-          {test.isPending ? copy.testing : copy.test}
-        </Button>
-        <button type="button" data-testid={`payment-webhook-${provider.provider}`} onClick={() => setPanel(panel === 'webhook' ? null : 'webhook')}
-          className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary">
-          <Webhook size={13} /> {copy.webhook}
-        </button>
-        <button type="button" data-testid={`payment-rotation-${provider.provider}`} onClick={() => setPanel(panel === 'rotation' ? null : 'rotation')}
-          className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary">
-          <KeyRound size={13} /> {copy.rotation}
-        </button>
-      </div>
-
-      {/* Testing an unconfigured provider is refused rather than attempted: "we could not reach the
-          gateway" and "you have not given us a key" are different problems with different fixes. */}
-      {!provider.available && (
-        <p className="flex items-center gap-1.5 text-xs text-text-muted">
-          <AlertTriangle size={13} className="shrink-0" /> {copy.cannotTest}
+      {provider.implemented ? (
+        <p data-testid={`payment-environment-${provider.provider}`} className="text-xs font-semibold text-text-secondary">
+          {provider.mode === 'live' ? copy.modeLive : provider.mode === 'test' ? copy.modeTest : copy.noKeys}
+          {provider.source !== 'none' && (
+            <span className="ms-1.5 font-normal text-text-muted">· {provider.source === 'console' ? copy.sourceConsole : copy.sourceEnv}</span>
+          )}
         </p>
+      ) : (
+        <div className="flex flex-col gap-1 text-xs text-text-muted">
+          <p className="flex items-center gap-1.5"><AlertTriangle size={13} className="shrink-0" /> {copy.notImplemented}</p>
+          {provider.note && <p data-testid={`payment-note-${provider.provider}`}>{ar ? provider.note.ar : provider.note.en}</p>}
+        </div>
+      )}
+
+      {provider.methods.length > 0 && (
+        <p data-testid={`payment-methods-${provider.provider}`} className="text-xs text-text-muted">
+          {copy.methods}: <span dir="ltr">{provider.methods.join(' · ')}</span>
+        </p>
+      )}
+
+      {provider.test.status && (
+        <p data-testid={`payment-last-test-${provider.provider}`} data-current={provider.test.current} className="text-xs text-text-secondary">
+          {copy.lastTest}: <span className={provider.test.status === 'passed' ? 'text-[var(--positive-foreground)]' : 'text-danger'}>
+            {provider.test.status === 'passed' ? copy.reachable : copy.unreachable}
+          </span>
+          {provider.test.at && <span className="ms-1 text-text-muted" dir="ltr">{new Date(provider.test.at).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB')}</span>}
+          {provider.test.message && <span className="ms-1 text-text-muted" dir="ltr">— {provider.test.message}</span>}
+          {provider.test.status === 'passed' && !provider.test.current && <span className="block text-danger">{copy.stale}</span>}
+        </p>
+      )}
+
+      {provider.implemented && (
+        <div className="flex flex-wrap gap-2">
+          <Button data-testid={`payment-setup-${provider.provider}`} size="sm" variant="secondary" onClick={() => setPanel(panel === 'setup' ? null : 'setup')}>
+            <Settings2 size={13} /> {panel === 'setup' ? copy.close : copy.setup}
+          </Button>
+          <Button
+            data-testid={`payment-test-${provider.provider}`}
+            size="sm"
+            variant="secondary"
+            disabled={provider.status === 'awaiting_credentials' || test.isPending}
+            onClick={() => test.mutate()}
+          >
+            {test.isPending ? copy.testing : copy.test}
+          </Button>
+          {provider.enabled ? (
+            !provider.is_primary && (
+              <Button data-testid={`payment-disable-${provider.provider}`} size="sm" variant="secondary" disabled={activation.isPending} onClick={() => activation.mutate(false)}>
+                {copy.disable}
+              </Button>
+            )
+          ) : (
+            <Button
+              data-testid={`payment-enable-${provider.provider}`}
+              size="sm"
+              disabled={provider.status !== 'ready' || activation.isPending}
+              onClick={() => { if (provider.mode !== 'live' || window.confirm(copy.confirmLive)) activation.mutate(true) }}
+            >
+              {copy.enable}
+            </Button>
+          )}
+          {provider.enabled && !provider.is_primary && (
+            <Button
+              data-testid={`payment-make-primary-${provider.provider}`}
+              size="sm"
+              disabled={primary.isPending}
+              onClick={() => { if (window.confirm(copy.confirmPrimary)) primary.mutate() }}
+            >
+              <Star size={13} /> {copy.makePrimary}
+            </Button>
+          )}
+          <button type="button" data-testid={`payment-webhook-${provider.provider}`} onClick={() => setPanel(panel === 'webhook' ? null : 'webhook')}
+            className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+            <Webhook size={13} /> {copy.webhook}
+          </button>
+          <button type="button" data-testid={`payment-rotation-${provider.provider}`} onClick={() => setPanel(panel === 'rotation' ? null : 'rotation')}
+            className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+            <KeyRound size={13} /> {copy.rotation}
+          </button>
+        </div>
       )}
 
       {test.data && (
         <p data-testid={`payment-test-result-${provider.provider}`} data-reachable={test.data.reachable}
           className={`text-xs font-semibold ${test.data.reachable ? 'text-[var(--positive-foreground)]' : 'text-danger'}`}>
           {test.data.reachable ? copy.reachable : copy.unreachable}
-          {/* The gateway's own words: a generic failure hides whether the key is wrong, the account
-              is closed, or the currency is unsupported — three different fixes. */}
           {test.data.error && <span className="ms-1 font-normal text-text-muted" dir="ltr">{test.data.error}</span>}
         </p>
       )}
       {test.isError && (
-        <p data-testid={`payment-test-result-${provider.provider}`} className="text-xs font-semibold text-danger">
-          {toApiError(test.error).message}
-        </p>
+        <p data-testid={`payment-test-result-${provider.provider}`} className="text-xs font-semibold text-danger">{toApiError(test.error).message}</p>
+      )}
+      {actionError && (
+        <p data-testid={`payment-action-error-${provider.provider}`} className="text-xs font-semibold text-danger">{toApiError(actionError).message}</p>
       )}
 
-      {panel === 'webhook' && webhook.data && (
-        <div data-testid={`payment-webhook-panel-${provider.provider}`} className="rounded-xl bg-surface-secondary p-3 text-xs">
-          <p className="break-all font-mono text-text-primary" dir="ltr">{webhook.data.url}</p>
-          <p className="mt-1.5 text-text-secondary">{webhook.data.authentication}</p>
-          <p className="mt-1.5 text-text-muted" dir="ltr">{webhook.data.events.join(' · ')}</p>
+      {panel === 'setup' && <SetupForm provider={provider} ar={ar} copy={copy} onSaved={refresh} />}
+
+      {panel === 'webhook' && (
+        <div data-testid={`payment-webhook-panel-${provider.provider}`} className="min-w-0 rounded-xl bg-surface-secondary p-3 text-xs">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 break-all font-mono text-text-primary" dir="ltr">{provider.webhook_url}</p>
+            <button type="button" data-testid={`payment-webhook-copy-${provider.provider}`} onClick={() => void copyUrl()}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 font-semibold text-text-secondary hover:text-text-primary">
+              {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? copy.copied : copy.copy}
+            </button>
+          </div>
+          <p className="mt-1.5 text-text-secondary">{provider.webhook.scheme}</p>
+          {provider.webhook.events.length > 0 && <p className="mt-1.5 text-text-muted" dir="ltr">{provider.webhook.events.join(' · ')}</p>}
         </div>
       )}
 
       {panel === 'rotation' && rotation.data && (
         <div data-testid={`payment-rotation-panel-${provider.provider}`} className="rounded-xl bg-surface-secondary p-3 text-xs">
-          <p className="font-mono text-text-primary" dir="ltr">{rotation.data.variables.join(' · ')}</p>
+          <p className="font-mono text-text-primary" dir="ltr">{rotation.data.fields.join(' · ')}</p>
           <ol className="mt-1.5 flex list-decimal flex-col gap-1 ps-4 text-text-secondary">
             {rotation.data.steps.map((s) => <li key={s}>{s}</li>)}
           </ol>
@@ -271,5 +320,61 @@ function ProviderCard({ provider, ar, copy }: { provider: PaymentProviderSetting
         </div>
       )}
     </section>
+  )
+}
+
+/** Only the fields the gateway's adapter reads. A stored secret is never shown — the box says it is stored and stays empty. */
+function SetupForm({ provider, ar, copy, onSaved }: { provider: PaymentProviderSetting; ar: boolean; copy: Copy; onSaved: () => void }) {
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [mode, setMode] = useState<'test' | 'live'>(provider.mode ?? 'test')
+  const save = useMutation({
+    mutationFn: () => savePaymentGateway(provider.provider, { ...values, mode }),
+    onSuccess: () => { setValues({}); onSaved() },
+  })
+
+  return (
+    <form
+      data-testid={`payment-setup-form-${provider.provider}`}
+      className="flex flex-col gap-3 rounded-xl border border-border p-3"
+      onSubmit={(e) => { e.preventDefault(); save.mutate() }}
+    >
+      {provider.fields.map((f) => (
+        <label key={f.key} className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
+          <span>
+            {ar ? f.label.ar : f.label.en}
+            {!f.required && <span className="ms-1 font-normal text-text-muted">({copy.optional})</span>}
+          </span>
+          <input
+            data-testid={`payment-field-${provider.provider}-${f.key}`}
+            type={f.secret ? 'password' : 'text'}
+            autoComplete="off"
+            spellCheck={false}
+            dir="ltr"
+            value={values[f.key] ?? ''}
+            placeholder={f.present ? (f.secret ? copy.stored : (f.value ?? copy.stored)) : copy.notStored}
+            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+            className="min-w-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-sm font-normal text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          />
+        </label>
+      ))}
+
+      <fieldset className="flex flex-wrap items-center gap-3 text-xs">
+        <legend className="mb-1 font-semibold text-text-secondary">{copy.mode}</legend>
+        {(['test', 'live'] as const).map((m) => (
+          <label key={m} className="flex items-center gap-1.5 text-text-primary">
+            <input data-testid={`payment-mode-${provider.provider}-${m}`} type="radio" name={`mode-${provider.provider}`} checked={mode === m} onChange={() => setMode(m)} />
+            {m === 'live' ? copy.modeLive : copy.modeTest}
+          </label>
+        ))}
+      </fieldset>
+
+      <div className="flex items-center gap-2">
+        <Button data-testid={`payment-save-${provider.provider}`} type="submit" size="sm" disabled={save.isPending}>
+          {save.isPending ? copy.saving : copy.save}
+        </Button>
+        {save.data && <span data-testid={`payment-saved-${provider.provider}`} className="text-xs text-text-muted">{save.data.changed.length > 0 ? copy.saved : copy.nothing}</span>}
+        {save.isError && <span data-testid={`payment-save-error-${provider.provider}`} className="text-xs font-semibold text-danger">{toApiError(save.error).message}</span>}
+      </div>
+    </form>
   )
 }

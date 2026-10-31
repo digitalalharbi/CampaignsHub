@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Subscriptions\Http\Controllers\HostedCheckoutController;
 use App\Domains\Subscriptions\Http\Controllers\PublicPlanController;
 use App\Domains\Subscriptions\Http\Controllers\SandboxCheckoutController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionController;
@@ -45,6 +46,10 @@ Route::middleware('throttle:public-catalogue')->group(function (): void {
  */
 Route::post('payments/webhook/{provider}', [SubscriptionPaymentController::class, 'webhook'])
     ->name('payments.webhook');
+
+// PAY-GATEWAY-CONSOLE-001 — HyperPay's card widget, hosted on a page reached only by the signed URL its checkout minted.
+Route::get('payments/hyperpay/checkout', [HostedCheckoutController::class, 'hyperpay'])
+    ->middleware('signed:relative')->name('payments.hyperpay.checkout');
 
 /*
  * The sandbox gateway's own pages (PAY-SANDBOX-001) — NEVER registered in production.

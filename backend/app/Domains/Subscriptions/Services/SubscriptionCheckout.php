@@ -6,6 +6,8 @@ namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Billing\Gateways\PaymentGatewayCatalogue;
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Models\Subscription;
@@ -238,7 +240,9 @@ final class SubscriptionCheckout
         ?Subscription $subscription = null,
     ): array {
         $key = $this->providers->defaultKey();
-        $providerKey = $provider ?? $key;
+        // PAY-GATEWAY-CONSOLE-001 — a gateway the caller names is honoured only when the console has it enabled; anything else
+        // (a disabled gateway, an unknown key) opens on the primary rather than on a gateway nobody switched on.
+        $providerKey = $provider !== null && $provider !== $key && $this->mayOpenOn($provider) ? $provider : $key;
         $adapter = $this->providers->for($providerKey);
 
         /*
@@ -546,5 +550,15 @@ final class SubscriptionCheckout
             AccountState::ApprovedAwaitingPayment,
             AccountState::PaymentPending,
         ], true);
+    }
+
+    /** Whether NEW payments may be opened on `$provider`: an enabled console gateway, or the off-production sandbox. */
+    private function mayOpenOn(string $provider): bool
+    {
+        if (PaymentGatewayCatalogue::exists($provider)) {
+            return app(PaymentGatewaySettings::class)->isEnabled($provider) && app(PaymentGatewaySettings::class)->isConfigured($provider);
+        }
+
+        return $provider === 'sandbox' && array_key_exists('sandbox', (array) config('subscriptions.providers', [])) && $this->providers->for('sandbox')->isConfigured();
     }
 }

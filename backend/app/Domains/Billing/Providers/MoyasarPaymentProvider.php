@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Providers;
 
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -429,14 +430,14 @@ final class MoyasarPaymentProvider implements PaymentProvider, ReconcilesCheckou
 
     private function secretKey(): ?string
     {
-        $key = config('services.moyasar.secret_key');
+        $key = app(PaymentGatewaySettings::class)->value('moyasar', 'secret_key');
 
         return is_string($key) && $key !== '' ? $key : null;
     }
 
     private function webhookToken(): ?string
     {
-        $token = config('services.moyasar.webhook_token');
+        $token = app(PaymentGatewaySettings::class)->value('moyasar', 'webhook_token');
 
         return is_string($token) && $token !== '' ? $token : null;
     }

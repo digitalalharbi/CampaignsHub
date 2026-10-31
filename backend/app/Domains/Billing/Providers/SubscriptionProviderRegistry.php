@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Providers;
 
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
+
 /**
  * The gateways that take the PLATFORM's money (PAY-001).
  *
@@ -17,5 +19,14 @@ final class SubscriptionProviderRegistry extends PaymentProviderRegistry
     protected function namespace(): string
     {
         return 'subscriptions';
+    }
+
+    /**
+     * PAY-GATEWAY-CONSOLE-001 — the primary gateway chosen in the platform console, or the environment's when none was chosen.
+     * Read per call, so a switch is in effect on the next checkout with no restart.
+     */
+    public function defaultKey(): string
+    {
+        return app(PaymentGatewaySettings::class)->primary();
     }
 }

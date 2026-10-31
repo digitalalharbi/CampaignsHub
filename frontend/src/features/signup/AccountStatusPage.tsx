@@ -415,7 +415,8 @@ function PaymentStep({
     onSuccess: (r) => { setResult(r); onOpened(r) },
   })
 
-  const live = providers.data?.providers.find((p) => p.available)
+  // The PRIMARY gateway first (PAY-GATEWAY-CONSOLE-001): the first available one in the list is not where the charge opens.
+  const live = providers.data?.providers.find((p) => p.available && p.is_default) ?? providers.data?.providers.find((p) => p.available)
   /*
    * Sandbox is said out loud, on the page where somebody is about to press Pay.
    *

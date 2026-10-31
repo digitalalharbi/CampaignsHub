@@ -63,6 +63,7 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/oauth/ads/{provider}/callback',
         'GET api/v1/oauth/commerce/{provider}/callback',
         'GET api/v1/oauth/measurement/{provider}/callback',
+        'GET api/v1/payments/hyperpay/checkout', // PAY-GATEWAY-CONSOLE-001 — HyperPay's widget page; temporary signed URL only, reads no card data.
         'GET api/v1/payments/providers',
         'GET api/v1/plans',
         'GET api/v1/plans/{code}/quote',

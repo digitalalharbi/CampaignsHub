@@ -317,7 +317,8 @@ final class CommercialJourneyTest extends TestCase
         $moyasar = collect($settings['providers'])->firstWhere('provider', 'moyasar');
 
         // Configured — but with a TEST key, and the console reads that from the key itself.
-        $this->assertSame('live', $moyasar['status'], 'credentials are present');
+        // PAY-GATEWAY-CONSOLE-001 — an environment-configured gateway is `enabled`; its mode is a separate fact.
+        $this->assertSame('enabled', $moyasar['status'], 'credentials are present');
         $this->assertSame('sandbox', $moyasar['environment'], 'and they are sandbox credentials');
 
         // And the notifications above went nowhere: a local transport is `sandbox`, never `sent`.
