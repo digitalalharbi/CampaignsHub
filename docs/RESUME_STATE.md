@@ -11,7 +11,8 @@
   - PayTabs, HyperPay: implemented against the official contracts; not verified with a sandbox.
   - StreamPay: not implemented (needs products and prices plus a sandbox to confirm the schemas).
 - **Support access:** «الدخول للدعم» is built (#906): read-only, 30 minutes, audited in the tenant's trail.
-- **Next task:** central feature control at system, plan and tenant level (SUPERADMIN-FEATURES-001): admin control of tenant capability switches and a system-wide switch, enforced in the existing `module:`/`entitlement:` middleware.
+- **Feature control:** built (#907): platform-wide and per-workspace switches, enforced by the `module:` checks.
+- **Next task:** SUPERADMIN-CONSOLE-HOME-001 (reconnect-needed accounts, alerts, recent audit and quick actions on /admin); then per-tenant role change, membership removal and plan-limit overrides.
 - **Then:** SUPERADMIN-CONSOLE-HOME-001; per-tenant role change and membership removal from the console; plan change and limit overrides per tenant.
 - **Owner:**
   - sign in so the admin screens can be walked: payment console, create workspace, access recovery;
