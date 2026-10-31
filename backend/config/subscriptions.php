@@ -26,6 +26,13 @@ return [
     */
     'default' => env('SUBSCRIPTION_PROVIDER', 'moyasar'),
 
+    /*
+     * SCHEDULE-REGISTERED-001 — the nightly lifecycle (trial conversion, renewals, past due, suspension) acts in production only when
+     * this is true. It had never run there; its first run acts on everything that fell due meanwhile, so the Owner turns it on after
+     * reading `subscriptions:lifecycle`'s own preview. Other environments always run it.
+     */
+    'lifecycle_enabled' => (bool) env('SUBSCRIPTION_LIFECYCLE_ENABLED', false),
+
     'providers' => [
         'moyasar' => MoyasarPaymentProvider::class,
         'tap' => TapPaymentProvider::class,

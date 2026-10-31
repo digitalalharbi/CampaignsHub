@@ -194,6 +194,26 @@ final class SubscriptionLifecycle
      *
      * @return array<string, int>
      */
+    /**
+     * SCHEDULE-REGISTERED-001 — what `runDueWork()` would act on now, counted and never touched.
+     *
+     * The production gate's evidence: the nightly sweep had never run, so its first run acts on every subscription whose dates
+     * passed meanwhile. These are the same selections the steps make, read only.
+     *
+     * @return array<string, int>
+     */
+    public function duePreview(): array
+    {
+        $now = Carbon::now();
+
+        return [
+            'trials_due' => $this->query()->where('status', 'trialing')->whereNotNull('trial_ends_at')->where('trial_ends_at', '<=', $now)->count(),
+            'plan_changes_due' => $this->query()->whereNotNull('scheduled_plan_id')->whereNotNull('scheduled_change_at')->where('scheduled_change_at', '<=', $now)->count(),
+            'renewals_due' => $this->query()->where('status', 'active')->whereNotNull('current_period_end')->where('current_period_end', '<=', $now)->count(),
+            'grace_expired' => $this->query()->where('status', 'past_due')->whereNotNull('grace_ends_at')->where('grace_ends_at', '<=', $now)->count(),
+        ];
+    }
+
     public function runDueWork(?SubscriptionCheckout $checkout = null): array
     {
         return [
