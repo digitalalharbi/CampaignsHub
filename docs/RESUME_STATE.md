@@ -1,3 +1,26 @@
+# CURRENT STATE — 2026-10-31 (evening) — payment-gateway console, workspace creation and access recovery
+
+- **Deployed:**
+  - #902 (`80d13e17`): six-gateway console, PayTabs and HyperPay adapters, and the «keys ≠ available» checkout fix.
+  - #901: env-file key states in the readiness workflow.
+- **Landing in order:** #903 (create a workspace and owner link), then #904 (access recovery and real sign-out-everywhere).
+- **Moyasar on Production (proven):** in the env file `SUBSCRIPTION_PROVIDER=sandbox` and the three `MOYASAR_*` keys are empty; `SUBSCRIPTION_LIFECYCLE_ENABLED` is absent, so false. The file was last edited 2026-10-30 18:40Z, before the backend's 2026-10-31 09:47Z start. Keys can now be entered in the console instead of the env file. BLOCKED_EXTERNAL_CREDENTIALS until the rotated keys are saved, tested and enabled.
+- **Gateways:**
+  - Moyasar: implemented; live blocked on keys.
+  - Tap, Stripe: awaiting credentials.
+  - PayTabs, HyperPay: implemented against the official contracts; not verified with a sandbox.
+  - StreamPay: not implemented (needs products and prices plus a sandbox to confirm the schemas).
+- **Support access:** «الدخول للدعم» is built (#906): read-only, 30 minutes, audited in the tenant's trail.
+- **Feature control:** built (#907): platform-wide and per-workspace switches, enforced by the `module:` checks.
+- **Next task:** SUPERADMIN-CONSOLE-HOME-001 (reconnect-needed accounts, alerts, recent audit and quick actions on /admin); then per-tenant role change, membership removal and plan-limit overrides.
+- **Then:** SUPERADMIN-CONSOLE-HOME-001; per-tenant role change and membership removal from the console; plan change and limit overrides per tenant.
+- **Owner:**
+  - sign in so the admin screens can be walked: payment console, create workspace, access recovery;
+  - rotate the Moyasar keys and enter them in the console;
+  - reconnect Meta «Project 1» and X;
+  - in Meta Developers: business_management, Basic settings, Business Verification;
+  - mark #877 ready if wanted.
+
 # CURRENT STATE — 2026-10-31 (morning) — #897/#898/#899/#854 deployed; X joins the reconnect fix; billing lifecycle registered (gated)
 
 - **Deployed:**
