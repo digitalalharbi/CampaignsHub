@@ -55,9 +55,14 @@ final class SupportAccess
 
     public function __construct(private readonly AuditLogger $audit) {}
 
-    public function start(User $admin, Tenant $tenant, string $reason, ?string $ip): SupportSession
+    /**
+     * Starts a visit. `$replacing` is the visit this BROWSER already holds (its session key): only that one is replaced. Ending
+     * every open visit of the admin's instead would cut short the same admin's visit in another browser — a visit is held per
+     * browser session, so it is ended per browser session.
+     */
+    public function start(User $admin, Tenant $tenant, string $reason, ?string $ip, ?string $replacing = null): SupportSession
     {
-        $this->endFor($admin, 'replaced');
+        $this->endVisit($admin, $replacing, 'replaced');
 
         $session = SupportSession::query()->create([
             'admin_user_id' => $admin->getKey(),
@@ -108,9 +113,14 @@ final class SupportAccess
         return $session;
     }
 
-    public function endFor(User $admin, string $reason = 'ended'): void
+    /** Ends the one visit named (this browser's), if it is the admin's and still open. */
+    public function endVisit(User $admin, ?string $id, string $reason = 'ended'): void
     {
-        SupportSession::query()->where('admin_user_id', $admin->getKey())->whereNull('ended_at')->get()
+        if ($id === null || $id === '') {
+            return;
+        }
+
+        SupportSession::query()->whereKey($id)->where('admin_user_id', $admin->getKey())->whereNull('ended_at')->get()
             ->each(fn (SupportSession $s) => $this->close($s, $reason, (int) $admin->getKey()));
     }
 

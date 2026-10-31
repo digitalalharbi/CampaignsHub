@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Platform\Models\SupportSession;
+use App\Domains\Platform\Support\SupportAccess;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -164,5 +165,20 @@ final class SupportAccessTest extends TestCase
 
         $this->assertSame((string) $this->other->id, $this->getJson('/api/v1/auth/memberships')->json('data.current.tenant.id'));
         $this->assertSame(1, SupportSession::query()->whereNull('ended_at')->count());
+    }
+
+    /** A visit is held per browser session: the same admin in another browser keeps theirs (and parallel E2E runs keep theirs). */
+    public function test_a_new_visit_replaces_only_this_browsers_visit_not_the_admins_others(): void
+    {
+        $admin = $this->admin();
+        $support = app(SupportAccess::class);
+
+        $elsewhere = $support->start($admin, $this->acme, 'Other browser visit', null);
+        $here = $support->start($admin, $this->other, 'This browser visit', null);
+        $this->assertNull($elsewhere->fresh()->ended_at, 'the other browser keeps its visit');
+
+        $support->start($admin, $this->acme, 'This browser again', null, $here->id);
+        $this->assertSame('replaced', $here->fresh()->ended_reason);
+        $this->assertNull($elsewhere->fresh()->ended_at);
     }
 }

@@ -46,7 +46,8 @@ final class PlatformSupportSessionController extends Controller
         $this->tenants->enterPlatformScope();
         $model = Tenant::query()->findOrFail($tenant);
 
-        $visit = $this->support->start($admin, $model, $data['reason'], $request->ip());
+        $current = $request->session()->get(SupportAccess::SESSION_KEY);
+        $visit = $this->support->start($admin, $model, $data['reason'], $request->ip(), is_string($current) ? $current : null);
         $request->session()->put(SupportAccess::SESSION_KEY, $visit->id);
 
         return ApiResponse::success([
@@ -64,8 +65,10 @@ final class PlatformSupportSessionController extends Controller
         /** @var User $admin */
         $admin = $request->user();
 
-        $this->support->endFor($admin);
+        // This browser's visit only; the same admin's visit in another browser is its own and ends there.
         if ($request->hasSession()) {
+            $current = $request->session()->get(SupportAccess::SESSION_KEY);
+            $this->support->endVisit($admin, is_string($current) ? $current : null);
             $request->session()->forget(SupportAccess::SESSION_KEY);
         }
 
