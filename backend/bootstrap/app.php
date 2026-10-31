@@ -60,6 +60,7 @@ use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
 use App\Domains\Subscriptions\Console\ReconcileSubscriptionPayments;
 use App\Domains\Subscriptions\Console\RunSubscriptionLifecycle;
+use App\Domains\Subscriptions\Seats\ReconcileAdAccountSeats;
 use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
 use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
@@ -179,6 +180,7 @@ return Application::configure(basePath: dirname(__DIR__))
         MailDiagnoseCommand::class,
         // SCHEDULE-REGISTERED-001 — scheduled since billing shipped and never registered, so the nightly sweep never ran.
         RunSubscriptionLifecycle::class,
+        ReconcileAdAccountSeats::class,
         // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
         ReconcileSubscriptionPayments::class,
     ])
