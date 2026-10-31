@@ -37,6 +37,24 @@ export interface PlatformOverview {
   }
   /** Counts worth acting on, each with the page that answers it. Zeros included on purpose. */
   attention: Array<{ key: string; count: number; to: string; tone: 'warning' | 'danger' | 'info' }>
+  /** SUPERADMIN-CONSOLE-HOME-001 — what needs the operator across every workspace. Names only; never a provider's error text. */
+  operations: {
+    connections: {
+      total: number
+      items: Array<{
+        id: string
+        tenant_id: string
+        tenant_name: string | null
+        provider: string
+        connection_name: string | null
+        /** refused: the provider invalidated the session; expired: the token passed its expiry. */
+        reason: 'refused' | 'expired'
+        since: string | null
+      }>
+    }
+    alerts: { open: number; by_severity: { critical: number; warning: number; info: number }; tenants: number }
+    recent: Array<{ id: string; action: string; tenant_name: string | null; user_name: string | null; created_at: string | null }>
+  }
 }
 
 export interface PlatformTenant {

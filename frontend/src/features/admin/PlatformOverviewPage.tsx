@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CheckCircle2, Info, Receipt, ShieldCheck, Users, Wallet } from 'lucide-react'
-import { fetchOverview } from './api'
+import { AlertTriangle, ArrowLeft, ArrowRight, Bell, Building2, CheckCircle2, CreditCard, History, Info, Link2Off, Plus, Receipt, ShieldCheck, ToggleRight, Users, Wallet } from 'lucide-react'
+import { fetchOverview, type PlatformOverview } from './api'
 import { ATTENTION_LABELS, accountTypeLabel, planLabel, subscriptionStateLabel } from './labels'
 import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytics/charts'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
@@ -99,6 +99,7 @@ export function PlatformOverviewPage() {
             ? 'حالة المنصة: المستأجرون والوصول والاشتراكات — لا بيانات عمل أي عميل.'
             : 'The state of the platform: tenants, access and subscriptions — never any customer’s work.'}
         </p>
+        <QuickActions ar={ar} />
       </header>
 
       <div className="mb-4">
@@ -199,6 +200,8 @@ export function PlatformOverviewPage() {
           </ul>
         )}
       </section>
+
+      <Operations ops={d.operations} ar={ar} />
 
       <div className="mb-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         {/* Latin digits in the Arabic copy too — the product's standing rule, and why every figure
@@ -335,5 +338,149 @@ function Metric({
         }
       />
     </Link>
+  )
+}
+
+/** Latin digits, the reader's calendar, minutes. */
+function when(iso: string | null, ar: boolean): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn-ca-gregory' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+const PROVIDERS: Record<string, { ar: string; en: string }> = {
+  meta: { ar: 'ميتا', en: 'Meta' },
+  google: { ar: 'جوجل', en: 'Google' },
+  tiktok: { ar: 'تيك توك', en: 'TikTok' },
+  snapchat: { ar: 'سناب شات', en: 'Snapchat' },
+  x: { ar: 'إكس', en: 'X' },
+  linkedin: { ar: 'لينكدإن', en: 'LinkedIn' },
+}
+
+/**
+ * SUPERADMIN-CONSOLE-HOME-001 — the console's usual errands, one press away. Each goes to the page that does
+ * the work; nothing is done from here.
+ */
+function QuickActions({ ar }: { ar: boolean }) {
+  const actions = [
+    { to: '/admin/tenants', icon: Plus, label: ar ? 'إنشاء مساحة عمل' : 'Create a workspace', id: 'create-workspace' },
+    { to: '/admin/settings/integrations/payments', icon: CreditCard, label: ar ? 'بوابات الدفع' : 'Payment gateways', id: 'payments' },
+    { to: '/admin/features', icon: ToggleRight, label: ar ? 'التحكم بالميزات' : 'Feature control', id: 'features' },
+    { to: '/admin/audit', icon: History, label: ar ? 'سجل التدقيق' : 'Audit log', id: 'audit' },
+  ]
+
+  return (
+    <nav data-testid="quick-actions" aria-label={ar ? 'إجراءات سريعة' : 'Quick actions'} className="mt-4 flex flex-wrap gap-2">
+      {actions.map(({ to, icon: Icon, label, id }) => (
+        <Link key={id} to={to} data-testid={`quick-${id}`}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-primary transition-colors hover:border-brand-400 hover:bg-surface-hover">
+          <Icon size={15} className="text-brand-600" aria-hidden />
+          {label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+/**
+ * SUPERADMIN-CONSOLE-HOME-001 — connections that stopped working, open alerts, and what was last done from
+ * the console. The console names a broken connection; only the workspace's owner can sign it in again.
+ */
+function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: boolean }) {
+  const { connections, alerts, recent } = ops
+
+  return (
+    <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <section data-testid="console-connections" className="min-w-0 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="flex items-center gap-2 font-heading text-base font-bold text-text-primary">
+          <Link2Off size={16} className="text-warning" aria-hidden />
+          {ar ? 'حسابات تحتاج إعادة ربط' : 'Accounts needing reconnection'}
+          <span className="tnum ms-auto text-sm text-text-muted" dir="ltr">{num(connections.total)}</span>
+        </h2>
+        {connections.items.length === 0 ? (
+          <p className="mt-3 flex items-center gap-2 text-sm text-text-secondary">
+            <CheckCircle2 size={16} className="text-success" aria-hidden />
+            {ar ? 'كل الحسابات المربوطة تعمل.' : 'Every connected account is working.'}
+          </p>
+        ) : (
+          <>
+            <ul className="mt-3 grid gap-2">
+              {connections.items.map((c) => (
+                <li key={c.id} data-testid={`console-connection-${c.id}`} className="min-w-0 rounded-xl border border-border px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-text-primary">{c.connection_name ?? '—'}</span>
+                    <span className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${c.reason === 'refused' ? 'bg-danger/15 text-danger' : 'bg-warning/15 text-warning'}`}>
+                      {c.reason === 'refused' ? (ar ? 'رفضته المنصة' : 'Refused') : (ar ? 'انتهت صلاحيته' : 'Expired')}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-[12px] text-text-muted">
+                    {(ar ? PROVIDERS[c.provider]?.ar : PROVIDERS[c.provider]?.en) ?? c.provider} · {c.tenant_name ?? (ar ? 'مساحة محذوفة' : 'Deleted workspace')} · {when(c.since, ar)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-[12px] text-text-muted">
+              {ar ? 'إعادة الربط يقوم بها مالك مساحة العمل من صفحة التكاملات؛ لا تتم من لوحة المنصة.'
+                : 'The workspace owner reconnects from their integrations page; it is not done from the console.'}
+            </p>
+          </>
+        )}
+      </section>
+
+      <section data-testid="console-alerts" className="min-w-0 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="flex items-center gap-2 font-heading text-base font-bold text-text-primary">
+          <Bell size={16} className="text-info" aria-hidden />
+          {ar ? 'التنبيهات المفتوحة' : 'Open alerts'}
+          <span className="tnum ms-auto text-sm text-text-muted" dir="ltr">{num(alerts.open)}</span>
+        </h2>
+        {alerts.open === 0 ? (
+          <p className="mt-3 flex items-center gap-2 text-sm text-text-secondary">
+            <CheckCircle2 size={16} className="text-success" aria-hidden />
+            {ar ? 'لا تنبيهات مفتوحة في أي مساحة عمل.' : 'No open alerts in any workspace.'}
+          </p>
+        ) : (
+          <>
+            <dl className="mt-3 grid grid-cols-3 gap-2">
+              {([
+                ['critical', ar ? 'حرجة' : 'Critical', 'text-danger'],
+                ['warning', ar ? 'تحذير' : 'Warning', 'text-warning'],
+                ['info', ar ? 'معلومة' : 'Info', 'text-info'],
+              ] as const).map(([key, label, tone]) => (
+                <div key={key} data-testid={`console-alerts-${key}`} className="rounded-xl border border-border px-3 py-2 text-center">
+                  <dt className="text-[12px] text-text-muted">{label}</dt>
+                  <dd className={`tnum text-xl font-extrabold ${tone}`} dir="ltr">{num(alerts.by_severity[key])}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-3 text-[12px] text-text-muted">
+              {ar ? `في ${num(alerts.tenants)} مساحة عمل. كل تنبيه يُعالَج داخل مساحته.` : `Across ${num(alerts.tenants)} workspaces. Each alert is handled inside its workspace.`}
+            </p>
+          </>
+        )}
+      </section>
+
+      <section data-testid="console-recent" className="min-w-0 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="flex items-center gap-2 font-heading text-base font-bold text-text-primary">
+          <History size={16} className="text-brand-600" aria-hidden />
+          {ar ? 'آخر ما تم من اللوحة' : 'Recent console activity'}
+          <Link to="/admin/audit" className="ms-auto text-sm font-semibold text-brand-600 hover:underline">
+            {ar ? 'السجل' : 'Audit log'}
+          </Link>
+        </h2>
+        {recent.length === 0 ? (
+          <p className="mt-3 text-sm text-text-secondary">{ar ? 'لا نشاط مسجّل بعد.' : 'Nothing recorded yet.'}</p>
+        ) : (
+          <ul className="mt-3 grid gap-1.5">
+            {recent.map((r) => (
+              <li key={r.id} className="min-w-0 text-[13px]">
+                <code className="block truncate text-text-primary" dir="ltr">{r.action}</code>
+                <span className="block truncate text-[12px] text-text-muted">
+                  {r.user_name ?? '—'} · {r.tenant_name ?? (ar ? 'المنصة' : 'Platform')} · {when(r.created_at, ar)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   )
 }
