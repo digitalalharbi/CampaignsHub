@@ -48,6 +48,16 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    // Server-side only. Twilio Verify creates and checks OTPs; no credential belongs in the SPA.
+    'twilio' => [
+        'account_sid' => env('TWILIO_ACCOUNT_SID'),
+        'auth_token' => env('TWILIO_AUTH_TOKEN'),
+        'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'),
+        'verify_channel' => env('TWILIO_VERIFY_CHANNEL', 'sms'),
+        'connect_timeout' => (int) env('TWILIO_CONNECT_TIMEOUT', 3),
+        'timeout' => (int) env('TWILIO_TIMEOUT', 8),
+    ],
+
     'apple' => [
         'client_id' => env('APPLE_CLIENT_ID'),
         'client_secret' => env('APPLE_CLIENT_SECRET'),

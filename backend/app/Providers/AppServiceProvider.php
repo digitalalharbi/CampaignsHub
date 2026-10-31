@@ -31,6 +31,7 @@ use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
 use App\Domains\Subscriptions\Observers\SubscriptionPaymentAuditObserver;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Support\PhoneNumber;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -370,7 +371,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('otp-request', function (Request $request): Limit {
             $perMinute = $this->app->environment('production') ? 4 : 60;
 
-            return Limit::perMinute($perMinute)->by($request->input('destination', '').'|'.$request->ip());
+            $destination = (string) $request->input('destination', $request->input('phone', ''));
+            $normalised = PhoneNumber::normalise($destination) ?? mb_strtolower(trim($destination));
+
+            return Limit::perMinute($perMinute)->by(hash('sha256', $normalised).'|'.$request->ip());
         });
 
         // OTP code checks: keyed by IP. Kept modest in production, but generous off-prod — a shared office/

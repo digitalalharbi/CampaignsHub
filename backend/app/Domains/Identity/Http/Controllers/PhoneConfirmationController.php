@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Http\Controllers\Controller;
@@ -54,6 +55,7 @@ final class PhoneConfirmationController extends Controller
         private readonly ContactVerificationService $verification,
         private readonly ProviderRegistry $providers,
         private readonly AuditLogger $audit,
+        private readonly TwilioVerifyService $twilio,
     ) {}
 
     /**
@@ -72,7 +74,7 @@ final class PhoneConfirmationController extends Controller
             'confirmed' => $user?->phone_verified_at !== null,
             'confirmed_at' => $user?->phone_verified_at,
             'channels' => [
-                'sms' => $this->providers->isConfigured('sms'),
+                'sms' => $this->twilio->configured() || $this->providers->isConfigured('sms'),
                 'whatsapp' => $this->providers->isConfigured('whatsapp'),
             ],
         ], 'The number on this account.');
@@ -106,6 +108,7 @@ final class PhoneConfirmationController extends Controller
             null,
             cooldownSeconds: self::RESEND_COOLDOWN,
             invalidatePrevious: true,
+            ownerKey: $this->ownerKey($request),
         );
 
         $this->audit->log('user.phone_confirmation_requested', 'user', (string) $request->user()?->uuid, null, [
@@ -140,7 +143,11 @@ final class PhoneConfirmationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $verification = $this->verification->verify($data['verification_id'], (string) $data['code']);
+        $verification = $this->verification->verify(
+            $data['verification_id'],
+            (string) $data['code'],
+            $this->ownerKey($request),
+        );
 
         // A code minted to sign in, or for the client portal, is not proof of a number.
         abort_unless($verification->purpose === self::PURPOSE, 422);
@@ -187,5 +194,10 @@ final class PhoneConfirmationController extends Controller
         ]);
 
         return ApiResponse::success(['confirmed' => false], 'The number is no longer a sign-in method.');
+    }
+
+    private function ownerKey(Request $request): string
+    {
+        return 'user:'.(string) $request->user()?->getAuthIdentifier();
     }
 }

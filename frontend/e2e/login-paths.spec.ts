@@ -177,8 +177,8 @@ async function openAccount(
   const code = (await shown.innerText()).match(/(\d{6})/)?.[1]
   expect(code, 'no dev code was issued for the mobile challenge').toBeTruthy()
 
-  await page.getByLabel(/code we sent to your mobile|رمز التحقق المرسل إلى جوالك/i).fill(code!)
-  await page.getByRole('button', { name: /Confirm code|تأكيد الرمز/ }).click()
+  // OtpField submits as soon as the sixth digit lands.
+  await page.getByTestId('registration-otp-0').fill(code!)
 
   await expect(page.getByTestId('registration-payment-sandbox')).toBeVisible({ timeout: 20000 })
   await page.getByTestId('registration-pay').click()

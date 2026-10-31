@@ -50,6 +50,7 @@ use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use App\Models\User;
+use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,6 +73,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class ClientPortalController
 {
+    private const RESEND_COOLDOWN = 60;
+
     /** The ceiling on every list this portal renders — see `capped()`. */
     private const LIST_CAP = 200;
 
@@ -111,11 +114,20 @@ final class ClientPortalController
         ]);
         $destination = $this->normalize($data['channel'], $data['destination']);
         $tenant = $this->portal->resolve($request);
-        $result = $this->verification->start($data['channel'], $destination, 'portal_login', $tenant ? (string) $tenant->id : null);
+        $result = $this->verification->start(
+            $data['channel'],
+            $destination,
+            'portal_login',
+            $tenant ? (string) $tenant->id : null,
+            cooldownSeconds: self::RESEND_COOLDOWN,
+            invalidatePrevious: true,
+            ownerKey: $this->verificationOwnerKey($request),
+        );
 
         return response()->json(['data' => [
             'verification_id' => $result['id'],
             'delivery_status' => $result['delivery_status'],
+            'resend_after' => self::RESEND_COOLDOWN,
             'dev_code' => $result['dev_code'],
         ]], 201);
     }
@@ -127,7 +139,11 @@ final class ClientPortalController
             'verification_id' => ['required', 'string'],
             'code' => ['required', 'string', 'size:6'],
         ]);
-        $v = $this->verification->verify($data['verification_id'], $data['code']);
+        $v = $this->verification->verify(
+            $data['verification_id'],
+            $data['code'],
+            $this->verificationOwnerKey($request),
+        );
         abort_unless($v->purpose === 'portal_login', 422);
 
         $tenant = $this->portal->resolve($request);
@@ -1879,8 +1895,17 @@ final class ClientPortalController
         if ($channel === 'email') {
             return Str::lower($destination);
         }
-        $plus = str_starts_with($destination, '+') ? '+' : '';
 
-        return $plus.preg_replace('/\D+/', '', $destination);
+        return PhoneNumber::normalise($destination) ?? $destination;
+    }
+
+    private function verificationOwnerKey(Request $request): string
+    {
+        $csrf = $request->cookie('XSRF-TOKEN');
+        $identity = is_string($csrf) && $csrf !== ''
+            ? hash('sha256', rawurldecode($csrf))
+            : hash('sha256', (string) $request->ip().'|'.(string) $request->userAgent());
+
+        return 'portal-login:'.$identity;
     }
 }
