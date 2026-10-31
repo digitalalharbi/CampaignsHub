@@ -1,3 +1,4 @@
+import { AddonsShop } from './AddonsShop'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
@@ -282,6 +283,9 @@ export function SubscriptionsPage() {
           )}
 
           <UsageTable usage={current.usage} c={c} />
+
+          {/* PRICING-ADDONS-001 — capacity and feature packs, beside the usage they extend. */}
+          <AddonsShop ar={locale === 'ar'} canManage={canManage} />
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}

@@ -211,3 +211,26 @@ export const revokeSubscriptionInvoiceShare = (id: string) =>
 /** The download is a real endpoint, so the link is a real link rather than a rendered blob. */
 export const subscriptionInvoiceDownloadUrl = (id: string) =>
   `/api/v1/subscriptions/invoices/${id}/download`
+
+/** PRICING-ADDONS-001 — the add-ons shop: readiness is real; a request grants and charges nothing until it is confirmed. */
+export interface ShopAddon {
+  code: string
+  kind: 'capacity' | 'feature'
+  name: string
+  name_ar: string
+  summary_en: string | null
+  summary_ar: string | null
+  /** Null until the add-on is ready and priced — never shown as available before then. */
+  price_monthly: string | null
+  currency: string
+  readiness: 'available' | 'coming_soon'
+  sold: boolean
+  grants: { limits?: Record<string, number> } | null
+  active_quantity: number
+  requested: boolean
+}
+
+export const getAddons = () => getData<{ addons: ShopAddon[]; prices_exclude_vat: boolean }>('/subscriptions/addons')
+
+export const requestAddon = (code: string, quantity = 1) =>
+  postData<{ request_id: string; status: string }>(`/subscriptions/addons/${code}/request`, { quantity })

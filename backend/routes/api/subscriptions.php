@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Subscriptions\Http\Controllers\AddonController;
 use App\Domains\Subscriptions\Http\Controllers\HostedCheckoutController;
 use App\Domains\Subscriptions\Http\Controllers\PublicPlanController;
 use App\Domains\Subscriptions\Http\Controllers\SandboxCheckoutController;
@@ -84,6 +85,9 @@ Route::get('subscriptions/invoices/shared/{token}', [SubscriptionInvoiceControll
     ->middleware('throttle:30,1')->name('subscriptions.invoices.shared');
 
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
+    // PRICING-ADDONS-001 — the add-ons shop: the catalogue with its readiness, and a request (no charge, no capacity on a click).
+    Route::get('subscriptions/addons', [AddonController::class, 'index'])->name('subscriptions.addons.index');
+    Route::post('subscriptions/addons/{code}/request', [AddonController::class, 'request'])->middleware('throttle:10,1')->name('subscriptions.addons.request');
     // CampaignsHub's own invoices to this customer — NOT the agency's invoices to its clients,
     // which live under /billing and answer to a different permission.
     Route::get('subscriptions/invoices', [SubscriptionInvoiceController::class, 'index'])
