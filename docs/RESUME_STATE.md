@@ -1,3 +1,25 @@
+# CURRENT STATE — 2026-10-31 (morning) — #897/#898/#899/#854 deployed; X joins the reconnect fix; billing lifecycle registered (gated)
+
+- **Deployed:**
+  - #896 docs (`afea4a63`);
+  - #854 agent-chat retention (`b1e1d794`);
+  - #897 billing (lifecycle registered + payment reconciliation; first deploy stopped at env-contract);
+  - #899 env-contract fix (`76a307c4`, which carried #897);
+  - #898 X UNAUTHORIZED_ACCESS → reconnect (`0333aa42`).
+- **Verified in Production:**
+  - X connection went from connected=1 to error=1 after the 06:32 sweep, and the sweep stopped calling X;
+  - payment webhook 401/404 (PAY-WEBHOOK-REFUSAL-001);
+  - Meta 190 (META-SESSION-190-001).
+- **Integrations audit (read-only, all providers):** TikTok, Google, LinkedIn and Snapchat sync. Per-account grant refusals («Joodtelecom» TikTok 40001, «joodtelecom» Snapchat) are correctly «sync failed» for that account only. Reconnect needed (Owner): Meta «Project 1» connection, X connection.
+- **#877 (Twilio OTP, contributor):** fully green and mergeable, but a **draft**; not merged. The contributor or Owner marks it ready, then it lands. #879 was closed as superseded.
+- **Lesson:** a new uncommented key in deploy/backend.production.env.example blocks every deploy (env-contract). Optional keys go in commented.
+- **Owner:**
+  - rotate Moyasar keys and set the env, then decide SUBSCRIPTION_LIFECYCLE_ENABLED after reading the lifecycle preview;
+  - reconnect Meta «Project 1» and X;
+  - admin sign-in for the SaaS report test and the ops/scheduled-run proof;
+  - Meta Developers: business_management, Basic settings, Business Verification;
+  - mark #877 ready if wanted.
+
 # CURRENT STATE — 2026-10-31 — #894 and #895 deployed; Moyasar waits on rotated keys
 
 - **#895** deployed at `b02e73c3`. The payment webhook now refuses forged events: on Production, an empty body twice gives 401 and 401 (it was 200, then 500); a wrong token gives 401; an unknown gateway gives 404; health 200. PAY-WEBHOOK-REFUSAL-001 is VERIFIED.
