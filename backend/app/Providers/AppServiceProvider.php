@@ -13,6 +13,7 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
@@ -179,6 +180,12 @@ class AppServiceProvider extends ServiceProvider
             $html = $message->getHtmlBody();
             if (is_string($html) && $html !== '' && ($message->getTextBody() === null || $message->getTextBody() === '')) {
                 $message->text(PlainText::fromHtml($html));
+            }
+        });
+        // SUPERADMIN-ACCESS-001 — every session records when it signed in, so «sign out everywhere» can refuse the older ones.
+        Event::listen(Login::class, static function (Login $event): void {
+            if (request()->hasSession()) {
+                UserSessions::stamp(request()->session());
             }
         });
         Event::listen(ScheduledTaskStarting::class, [RecordScheduledRun::class, 'starting']);

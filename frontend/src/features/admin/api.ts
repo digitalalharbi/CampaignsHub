@@ -54,6 +54,9 @@ export interface PlatformTenant {
 
 export interface TenantPerson {
   user_id: string
+  /** SUPERADMIN-ACCESS-001 — the key the access actions take. */
+  user_uuid: string | null
+  mfa_enabled: boolean
   name: string | null
   email: string | null
   portal: string
@@ -1019,6 +1022,22 @@ export function recordCurrencyRate(body: {
 }
 
 /*
+ * SUPERADMIN-ACCESS-001 — restore a person's access. A reason is always required; `password_link` and `reset_mfa` also need the
+ * operator's own current password. A returned link is single use and shown once.
+ */
+export type UserAccessAction = 'revoke_sessions' | 'password_link' | 'reset_mfa'
+
+export function actOnUserAccess(userUuid: string, body: { action: UserAccessAction; reason: string; current_password?: string }): Promise<{
+  action: UserAccessAction
+  link?: string | null
+  delivery?: string | null
+  sessions_revoked?: boolean
+  mfa_enabled?: boolean
+}> {
+  return postData(`/admin/users/${userUuid}/access`, body)
+}
+
+/*
  * SUPERADMIN-WORKSPACE-001 — create a workspace and hand it to its owner.
  *
  * `accept_link` is a one-time credential returned only to the operator who issued it, for handing over when mail does not arrive.
@@ -1085,4 +1104,22 @@ export function fetchTenantCapabilities(tenantId: string): Promise<{ capabilitie
 
 export function setTenantCapability(tenantId: string, module: string, enabled: boolean | null, reason: string): Promise<{ capabilities: TenantCapability[] }> {
   return putData(`/admin/tenants/${tenantId}/capabilities/${module}`, { enabled, reason })
+}
+
+/*
+ * SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace. Needs a reason and the operator's
+ * own password; the server refuses writes, secrets, money and exports for the whole visit.
+ */
+export function startSupportSession(tenantId: string, reason: string, currentPassword: string): Promise<{
+  support_session_id: string
+  tenant: { id: string; name: string }
+  mode: string
+  expires_at: string
+  landing_path: string
+}> {
+  return postData(`/admin/tenants/${tenantId}/support-session`, { reason, current_password: currentPassword })
+}
+
+export function endSupportSession(): Promise<{ ended: boolean; return_path: string }> {
+  return deleteData('/admin/support-session')
 }

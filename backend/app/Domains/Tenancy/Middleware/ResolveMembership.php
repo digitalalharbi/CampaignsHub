@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Middleware;
 
+use App\Domains\Platform\Support\SupportAccess;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -50,6 +51,21 @@ final class ResolveMembership
         // the flag alone — pairing it with `tenant_id === null` would make the legacy column part of
         // an authorisation decision again.
         if ($user->is_platform_admin) {
+            /*
+             * SUPERADMIN-SUPPORT-ACCESS-001 — a live support visit pins this request to ONE tenant, as a member would be, through a
+             * membership that exists only for the request; its read-only rules run before any controller. No visit: platform scope,
+             * exactly as before.
+             */
+            $support = app(SupportAccess::class);
+            $visit = $support->liveFor($request, $user);
+
+            if ($visit !== null) {
+                $this->memberships->set($support->membershipFor($visit, $user));
+                $this->tenants->setTenantId($visit->tenant_id);
+
+                return $support->deny($request, $user, $visit) ?? $next($request);
+            }
+
             $this->tenants->enterPlatformScope();
 
             return $next($request);
