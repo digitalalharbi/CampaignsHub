@@ -80,12 +80,13 @@ final class PlatformPaymentSettingsTest extends TestCase
         $data = $this->settings();
         $providers = collect($data['providers']);
 
-        $this->assertSame(['moyasar', 'tap', 'stripe'], $providers->pluck('provider')->all());
+        // PAY-GATEWAY-CONSOLE-001 — the six approved gateways, Moyasar first.
+        $this->assertSame(['moyasar', 'tap', 'streampay', 'hyperpay', 'paytabs', 'stripe'], $providers->pluck('provider')->all());
         $this->assertSame('primary', $providers->firstWhere('provider', 'moyasar')['role']);
         $this->assertSame('alternative', $providers->firstWhere('provider', 'stripe')['role']);
 
         foreach ($providers as $provider) {
-            $this->assertSame('awaiting_credentials', $provider['status']);
+            $this->assertContains($provider['status'], ['awaiting_credentials', 'not_implemented']);
             $this->assertFalse($provider['available']);
             $this->assertSame('unset', $provider['environment']);
         }
@@ -202,25 +203,18 @@ final class PlatformPaymentSettingsTest extends TestCase
     }
 
     /**
-     * Rotation is an environment procedure, and the console says so rather than offering a button.
-     *
-     * A console able to change a gateway secret is a console whose compromise redirects every
-     * customer payment.
+     * Rotation is done here since PAY-GATEWAY-CONSOLE-001: issue at the gateway, save, test, revoke. The steps name the secret
+     * fields, and say that a saved secret is never shown again.
      */
-    public function test_rotation_is_documented_rather_than_performed(): void
+    public function test_rotation_names_the_secret_fields_and_the_steps(): void
     {
         $data = $this->actingAs($this->owner(), 'sanctum')
             ->getJson('/api/v1/admin/settings/integrations/payments/stripe/rotation')
             ->assertOk()->json('data');
 
-        $this->assertContains('STRIPE_WEBHOOK_SECRET', $data['variables']);
+        $this->assertSame(['secret_key', 'webhook_secret'], $data['fields']);
         $this->assertCount(4, $data['steps']);
-        $this->assertStringContainsString('never stored', $data['note']);
-
-        // There is deliberately no write endpoint to find.
-        $this->actingAs($this->owner(), 'sanctum')
-            ->postJson('/api/v1/admin/settings/integrations/payments/stripe/rotation')
-            ->assertStatus(405);
+        $this->assertStringContainsString('never shown', $data['note']);
     }
 
     // ── Mail, because half a payment system is one that cannot tell anybody ───────────────────

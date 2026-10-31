@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Building2, Search, ShieldOff, ShieldCheck } from 'lucide-react'
-import { fetchTenant, fetchTenants, setTenantStatus, type PlatformTenant, type TenantPerson } from './api'
+import { AlertTriangle, Building2, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
+import { fetchTenant, fetchTenants, reissueOwnerInvitation, setTenantStatus, type PlatformTenant, type TenantPerson } from './api'
 import { UserAccessDialog } from './UserAccessDialog'
 import { accountTypeLabel, planLabel } from './labels'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { AccountGrantsPanel } from './AccountGrants'
+import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
  * `/admin/tenants` — every workspace on the platform (ADMIN-001).
@@ -37,6 +38,7 @@ export function TenantsPage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [suspending, setSuspending] = useState<PlatformTenant | null>(null)
   const [reason, setReason] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const list = useQuery({
     queryKey: ['admin', 'tenants', submitted, status],
@@ -58,15 +60,21 @@ export function TenantsPage() {
   return (
     <div className="w-full">
       <header className="mb-5">
-        <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">
-          {ar ? 'المستأجرون' : 'Tenants'}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">
+            {ar ? 'المستأجرون' : 'Tenants'}
+          </h1>
+          <Button data-testid="add-workspace" size="sm" onClick={() => setCreating(true)}>
+            <Plus size={14} /> {ar ? 'إضافة مساحة عمل' : 'Add a workspace'}
+          </Button>
+        </div>
         <p className="mt-1 text-sm text-text-secondary">
           {ar
             ? 'كل مساحة عمل على المنصة: من هي، وحجمها، وحالتها. لا تظهر هنا بيانات عمل أي عميل.'
             : 'Every workspace on the platform: who they are, how large, and their status. No customer’s work appears here.'}
         </p>
       </header>
+      <CreateWorkspaceDialog open={creating} onClose={() => setCreating(false)} ar={ar} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <form className="relative" onSubmit={(e) => { e.preventDefault(); setSubmitted(term.trim()) }}>
@@ -265,6 +273,9 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
               ))}
             </ul>
           )}
+
+          {/* SUPERADMIN-WORKSPACE-001 — a fresh one-time owner link; the previous one stops working. */}
+          <ReissueOwnerInvitation tenantId={id} ar={ar} />
         </>
       )}
     </Modal>
@@ -277,5 +288,27 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dt className="text-[11px] uppercase tracking-wide text-text-muted">{label}</dt>
       <dd className="font-semibold text-text-primary">{value}</dd>
     </div>
+  )
+}
+
+function ReissueOwnerInvitation({ tenantId, ar }: { tenantId: string; ar: boolean }) {
+  const [email, setEmail] = useState('')
+  const reissue = useMutation({ mutationFn: () => reissueOwnerInvitation(tenantId, email.trim()) })
+
+  return (
+    <section className="mt-5">
+      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوة المالك' : 'Owner invitation'}</h3>
+      <form data-testid="reissue-owner-form" className="mt-2 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); reissue.mutate() }}>
+        <input data-testid="reissue-owner-email" type="email" required dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder={ar ? 'بريد المالك' : 'Owner email'} aria-label={ar ? 'بريد المالك' : 'Owner email'}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-600" />
+        <Button data-testid="reissue-owner-submit" type="submit" size="sm" variant="secondary" disabled={reissue.isPending}>
+          {ar ? 'إعادة إصدار الرابط' : 'Reissue link'}
+        </Button>
+      </form>
+      {reissue.isError && <p className="mt-2 text-xs font-semibold text-danger">{toApiError(reissue.error).message}</p>}
+      {reissue.data?.owner_has_access && <p className="mt-2 text-xs text-text-secondary">{ar ? 'المالك لديه وصول بالفعل؛ لم يُصدر رابط.' : 'The owner already has access; no link was issued.'}</p>}
+      {reissue.data?.invitation && <div className="mt-2"><InvitationLink invitation={reissue.data.invitation} ar={ar} /></div>}
+    </section>
   )
 }
