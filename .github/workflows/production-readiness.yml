@@ -39,3 +39,33 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan production:check || true
+
+      # PAY-MOYASAR-ACTIVATION-001 — the env FILE beside what the running backend loaded, by state only.
+      #
+      # production:check reads the configuration the backend container booted with. An edit to the env file after the last
+      # container recreation is not loaded yet, and that report cannot see it. This reads the file's own line for each key and
+      # prints absent / empty / set — never a value, its length or any fragment of it — plus when the backend container started,
+      # so «set in the file, missing in Laravel» names its cause: the containers have not been recreated since the edit.
+      - name: Payment keys in the env file (states only)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            f=deploy/backend.production.env
+            echo "env file modified: $(date -u -r "$f" +%Y-%m-%dT%H:%M:%SZ)"
+            echo "backend started:   $(docker inspect -f '{{.State.StartedAt}}' campaignshub-backend 2>/dev/null || echo unknown)"
+            for k in SUBSCRIPTION_PROVIDER MOYASAR_PUBLISHABLE_KEY MOYASAR_SECRET_KEY MOYASAR_WEBHOOK_TOKEN SUBSCRIPTION_LIFECYCLE_ENABLED; do
+              line="$(grep -E "^${k}=" "$f" | tail -n 1 || true)"
+              v="${line#*=}"; v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+              if [ -z "$line" ]; then state=absent
+              elif [ -z "$v" ]; then state=empty
+              else state=set; fi
+              # The gateway's name and the lifecycle switch are not secrets; they are the only values printed.
+              case "$k" in SUBSCRIPTION_PROVIDER|SUBSCRIPTION_LIFECYCLE_ENABLED) [ "$state" = set ] && state="set ($v)";; esac
+              printf '  %-32s %s\n' "$k" "$state"
+            done
