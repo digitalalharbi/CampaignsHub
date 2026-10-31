@@ -73,6 +73,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'two_factor_secret' => 'encrypted',
             'two_factor_enabled' => 'bool',
+            'sessions_valid_after' => 'datetime',
         ];
     }
 
