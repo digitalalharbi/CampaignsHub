@@ -48,6 +48,7 @@ export interface VerificationStart {
   channel: string
   destination: string
   delivery_status: string
+  resend_after?: number
   dev_code: string | null // non-production only
 }
 
