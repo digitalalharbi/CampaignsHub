@@ -13,6 +13,7 @@ use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
+use App\Domains\Platform\Http\Controllers\PlatformAddonController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
@@ -90,6 +91,12 @@ Route::middleware(['auth:sanctum', 'platform'])
          * for, and because that shape makes "grant this to everybody" an endpoint nobody can call by
          * accident. `destroy` revokes; nothing here deletes.
          */
+        // PRICING-ADDONS-001 — the add-ons catalogue, and each workspace's add-ons (grant, approve, decline, cancel).
+        Route::get('/addons', [PlatformAddonController::class, 'index'])->name('addons.index');
+        Route::patch('/addons/{addon}', [PlatformAddonController::class, 'update'])->middleware('throttle:30,1')->name('addons.update');
+        Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
+        Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
+        Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
         Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
         Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
             ->middleware('throttle:30,1')->name('grants.store');

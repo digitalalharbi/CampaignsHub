@@ -1069,3 +1069,53 @@ export function createWorkspace(body: {
 export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Promise<{ owner_has_access: boolean; invitation: OwnerInvitation | null }> {
   return postData(`/admin/tenants/${tenantId}/owner-invitation`, { owner_email: ownerEmail })
 }
+
+/** PRICING-ADDONS-001 — the add-ons catalogue and each workspace's add-ons, from the console. Every change carries a reason. */
+export interface AdminAddon {
+  id: string
+  code: string
+  kind: 'capacity' | 'feature'
+  name: string
+  name_ar: string
+  price_monthly: string | null
+  currency: string
+  readiness: 'available' | 'coming_soon'
+  is_active: boolean
+  sold: boolean
+  grants: { limits?: Record<string, number> } | null
+  active_workspaces: number
+  requests_waiting: number
+}
+
+export interface WorkspaceAddon {
+  id: string
+  code: string | null
+  name: string | null
+  name_ar: string | null
+  quantity: number
+  status: 'requested' | 'active' | 'declined' | 'cancelled'
+  source: string
+  unit_price: string | null
+  currency: string | null
+  reason: string | null
+}
+
+export function fetchAddons(): Promise<{ addons: AdminAddon[] }> {
+  return getData('/admin/addons')
+}
+
+export function updateAddon(id: string, body: { price_monthly?: number | null; readiness?: 'available' | 'coming_soon'; is_active?: boolean; reason: string }): Promise<{ addon: AdminAddon }> {
+  return patchData(`/admin/addons/${id}`, body)
+}
+
+export function fetchWorkspaceAddons(tenantId: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return getData(`/admin/tenants/${tenantId}/addons`)
+}
+
+export function grantWorkspaceAddon(tenantId: string, code: string, quantity: number, reason: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return postData(`/admin/tenants/${tenantId}/addons`, { code, quantity, reason })
+}
+
+export function decideWorkspaceAddon(id: string, decision: 'approve' | 'decline' | 'cancel', reason: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return patchData(`/admin/tenant-addons/${id}`, { decision, reason })
+}

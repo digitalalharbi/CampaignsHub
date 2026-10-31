@@ -104,6 +104,7 @@ import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
 import { ProviderReviewPage } from '@/features/admin/ProviderReviewPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
+import { AddonsPage } from '@/features/admin/AddonsPage'
 import { EmailOperationsPage } from '@/features/admin/EmailOperationsPage'
 import { CutoverPage } from '@/features/admin/CutoverPage'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
@@ -535,6 +536,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // own entry rather than a tab inside Tenants.
             { path: 'registrations', element: <RegistrationsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
+            { path: 'addons', element: <AddonsPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.
