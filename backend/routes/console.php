@@ -30,6 +30,9 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
  */
 Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
 
+// PAY-RECONCILE-001 — a payment the gateway took is settled even when its webhook was dropped after the gateway's retries.
+Schedule::command('subscriptions:reconcile-payments')->everyFifteenMinutes()->withoutOverlapping();
+
 // FORMS-PDPL-001 — the evidence around a form submission expires; the consent record does not.
 Schedule::command('forms:purge-evidence')->dailyAt('02:30')->withoutOverlapping();
 

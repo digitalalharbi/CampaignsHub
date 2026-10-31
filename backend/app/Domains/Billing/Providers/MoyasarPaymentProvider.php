@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Providers;
 
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -25,7 +26,7 @@ use Throwable;
  * 2. It publishes no card fingerprint. The best available identity for a payment method is the brand
  *    plus the last four digits, which is NOT unique — see `paymentMethodFingerprint()`.
  */
-final class MoyasarPaymentProvider implements PaymentProvider
+final class MoyasarPaymentProvider implements PaymentProvider, ReconcilesCheckoutSessions
 {
     private const API = 'https://api.moyasar.com/v1';
 
@@ -390,16 +391,53 @@ final class MoyasarPaymentProvider implements PaymentProvider
         };
     }
 
+    /**
+     * PAY-RECONCILE-001 — `GET /v1/invoices/{id}`: has the checkout this invoice opened been paid?
+     *
+     * The id returned is the invoice's `paid` payment (or its `payment_id`), handed to the same confirmation a webhook goes through.
+     * Null on anything else — unpaid, unreadable, unreachable — and null is never read as an answer.
+     */
+    public function paidPaymentIdForSession(string $sessionId): ?string
+    {
+        if (! $this->isConfigured() || $sessionId === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::withBasicAuth((string) $this->secretKey(), '')
+                ->timeout(10)
+                ->acceptJson()
+                ->get(self::API.'/invoices/'.rawurlencode($sessionId));
+        } catch (Throwable) {
+            return null;
+        }
+
+        /** @var array<string,mixed> $body */
+        $body = $response->successful() ? (array) $response->json() : [];
+
+        if (($body['status'] ?? null) !== 'paid') {
+            return null;
+        }
+
+        foreach ((array) ($body['payments'] ?? []) as $payment) {
+            if (is_array($payment) && ($payment['status'] ?? null) === 'paid' && is_string($payment['id'] ?? null) && $payment['id'] !== '') {
+                return $payment['id'];
+            }
+        }
+
+        return is_string($body['payment_id'] ?? null) && $body['payment_id'] !== '' ? $body['payment_id'] : null;
+    }
+
     private function secretKey(): ?string
     {
-        $key = config('services.moyasar.secret_key');
+        $key = app(PaymentGatewaySettings::class)->value('moyasar', 'secret_key');
 
         return is_string($key) && $key !== '' ? $key : null;
     }
 
     private function webhookToken(): ?string
     {
-        $token = config('services.moyasar.webhook_token');
+        $token = app(PaymentGatewaySettings::class)->value('moyasar', 'webhook_token');
 
         return is_string($token) && $token !== '' ? $token : null;
     }

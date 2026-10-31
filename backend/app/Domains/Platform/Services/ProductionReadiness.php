@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Services;
 
+use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Support\AdPlatforms;
@@ -87,10 +88,10 @@ final class ProductionReadiness
      */
     private function moyasarCredentials(): array
     {
-        $out = [['key' => 'SUBSCRIPTION_PROVIDER', 'status' => (string) Config::get('subscriptions.default')]];
+        $out = [['key' => 'SUBSCRIPTION_PROVIDER', 'status' => (string) app(PaymentGatewaySettings::class)->primary()]];
 
         foreach (['MOYASAR_PUBLISHABLE_KEY' => ['publishable_key', 'pk_'], 'MOYASAR_SECRET_KEY' => ['secret_key', 'sk_'], 'MOYASAR_WEBHOOK_TOKEN' => ['webhook_token', null]] as $name => [$key, $prefix]) {
-            $value = Config::get("services.moyasar.{$key}");
+            $value = app(PaymentGatewaySettings::class)->value('moyasar', $key);
             $present = is_string($value) && trim($value) !== '';
             $out[] = ['key' => $name, 'status' => $present ? 'configured' : 'missing'];
 
@@ -198,7 +199,7 @@ final class ProductionReadiness
 
     private function checkPayments(bool $production): void
     {
-        $provider = (string) Config::get('subscriptions.default');
+        $provider = (string) app(PaymentGatewaySettings::class)->primary();
 
         if ($production && in_array($provider, ['sandbox', 'null'], true)) {
             $this->fail('subscriptions.default', "The subscription gateway is «{$provider}», which settles nothing real — customers would be activated without money moving, or unable to pay at all.", 'Set SUBSCRIPTION_PROVIDER=moyasar and supply its credentials.');
@@ -207,9 +208,9 @@ final class ProductionReadiness
         foreach (['moyasar' => ['secret_key', 'publishable_key', 'webhook_token'], 'stripe' => ['secret_key', 'publishable_key', 'webhook_secret'], 'tap' => ['secret_key', 'publishable_key', 'secret_key']] as $gateway => $keys) {
             [$secretKey, $publishableKey, $webhookKey] = $keys;
 
-            $secret = Config::get("services.{$gateway}.{$secretKey}");
-            $publishable = Config::get("services.{$gateway}.{$publishableKey}");
-            $webhook = Config::get("services.{$gateway}.{$webhookKey}");
+            $secret = app(PaymentGatewaySettings::class)->value($gateway, $secretKey);
+            $publishable = app(PaymentGatewaySettings::class)->value($gateway, $publishableKey);
+            $webhook = app(PaymentGatewaySettings::class)->value($gateway, $webhookKey);
 
             $configured = is_string($secret) && $secret !== '';
 
@@ -282,7 +283,7 @@ final class ProductionReadiness
             return;
         }
 
-        $provider = (string) Config::get('subscriptions.default');
+        $provider = (string) app(PaymentGatewaySettings::class)->primary();
         $adapter = app(SubscriptionProviderRegistry::class)->for($provider);
 
         // An unconfigured gateway is already a failure above; saying it twice buries the first.

@@ -528,64 +528,101 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
 }
 
 /*
- * The payment gateways, from the console (PAYSET-001).
+ * The payment gateways, from the console (PAYSET-001, PAY-GATEWAY-CONSOLE-001).
  *
- * Read and test only. There is deliberately no function here that writes a secret: a console able to
- * change a gateway key is a console whose compromise redirects every customer payment. Keys live in
- * the environment, and this surface reports what the environment supports.
+ * Keys are entered here and stored encrypted by the server; nothing ever returns a secret. Saving keys, testing, enabling (live
+ * confirmed separately) and choosing the primary are separate calls, each audited.
  */
 
+export interface PaymentGatewayField {
+  key: string
+  label: { ar: string; en: string }
+  secret: boolean
+  required: boolean
+  present: boolean
+  /** Only for a non-secret field (a publishable key). A secret is never returned. */
+  value: string | null
+}
+
 export interface PaymentProviderSetting {
-  provider: 'moyasar' | 'stripe' | string
+  provider: string
   label: { ar: string; en: string }
   /** `primary` or `alternative` — a product decision, not a consequence of which keys exist. */
   role: string
   is_default: boolean
-  /** `live` or `awaiting_credentials`. */
+  is_primary: boolean
+  implemented: boolean
+  /** `not_implemented`, `awaiting_credentials`, `needs_test`, `ready` (tested, disabled) or `enabled`. */
   status: string
   available: boolean
-  /** `sandbox`, `live` or `unset` — read from the KEY, never from a separate toggle. */
+  enabled: boolean
+  mode: 'test' | 'live' | null
+  /** `sandbox`, `live` or `unset`. */
   environment: string
+  /** Where the effective keys come from: `console`, `environment` or `none`. */
+  source: string
+  fields: PaymentGatewayField[]
   requires: { key: string; present: boolean }[]
+  test: { status: string | null; at: string | null; message: string | null; current: boolean }
+  last_rotated_at: string | null
   webhook_url: string
+  webhook: { scheme: string; header: string | null; events: string[] }
+  capabilities: { hosted_checkout: boolean; status_lookup: boolean; refund: boolean; recurring: boolean; webhook: boolean }
+  methods: string[]
+  docs: string
+  /** Why a gateway is not implemented, when it is not. */
+  note: { ar: string; en: string } | null
 }
 
 export interface PaymentSettings {
   default: string
+  primary: string
+  primary_source: 'console' | 'environment'
   currency: string
   providers: PaymentProviderSetting[]
   /** A payment system that cannot tell anybody a charge failed is only half configured. */
   mail: { state: string; driver: string }
-  /**
-   * Whether renewals take themselves — PAY-TOKEN-003.
-   *
-   * `ready` is about the GATEWAY; `saved_methods` is how many customers actually have a card. Kept
-   * apart because «ready» beside a count of zero is the true state of a fresh install, and one
-   * boolean would have hidden it either way round.
-   */
+  /** Whether renewals take themselves — PAY-TOKEN-003. */
   recurring: { ready: boolean; provider: string; reason: string; saved_methods: number }
 }
 
+const PAYMENTS = '/admin/settings/integrations/payments'
+
 export function fetchPaymentSettings(): Promise<PaymentSettings> {
-  return getData('/admin/settings/integrations/payments')
+  return getData(PAYMENTS)
 }
 
 export function fetchPaymentWebhook(provider: string): Promise<{
   provider: string
   url: string
   authentication: string
+  header: string | null
   events: string[]
 }> {
-  return getData(`/admin/settings/integrations/payments/${provider}/webhook`)
+  return getData(`${PAYMENTS}/${provider}/webhook`)
 }
 
 export function fetchSecretRotation(provider: string): Promise<{
   provider: string
-  variables: string[]
+  fields: string[]
   steps: string[]
   note: string
 }> {
-  return getData(`/admin/settings/integrations/payments/${provider}/rotation`)
+  return getData(`${PAYMENTS}/${provider}/rotation`)
+}
+
+/** Write-only: blank fields keep what is stored; the answer never contains a secret. */
+export function savePaymentGateway(provider: string, body: Record<string, string | undefined>): Promise<{ changed: string[]; provider: PaymentProviderSetting }> {
+  return putData(`${PAYMENTS}/${provider}`, body)
+}
+
+export function setPaymentGatewayEnabled(provider: string, enabled: boolean, confirmLive = false): Promise<{ provider: PaymentProviderSetting }> {
+  return postData(`${PAYMENTS}/${provider}/activation`, { enabled, confirm_live: confirmLive })
+}
+
+/** New payments go to `gateway`; every existing payment keeps the gateway it was made with. */
+export function setPrimaryPaymentGateway(gateway: string): Promise<PaymentSettings> {
+  return putData(`${PAYMENTS}/primary`, { gateway, confirm: true })
 }
 
 /** A real round trip to the gateway. Nothing is charged — a session is an intent that expires unused. */
@@ -595,7 +632,7 @@ export function testPaymentProvider(provider: string): Promise<{
   status: string
   error: string | null
 }> {
-  return postData(`/admin/settings/integrations/payments/${provider}/test`, {})
+  return postData(`${PAYMENTS}/${provider}/test`, {})
 }
 
 /*
@@ -979,4 +1016,37 @@ export function recordCurrencyRate(body: {
   rate_date: string
 }): Promise<StoredRate> {
   return postData('/admin/fx/rates', body)
+}
+
+/*
+ * SUPERADMIN-WORKSPACE-001 — create a workspace and hand it to its owner.
+ *
+ * `accept_link` is a one-time credential returned only to the operator who issued it, for handing over when mail does not arrive.
+ * It is shown once and never stored by the console.
+ */
+export interface OwnerInvitation {
+  delivery_status: string | null
+  accept_link: string | null
+  expires_in_hours: number | null
+}
+
+export interface ProvisionedWorkspace {
+  tenant: { id: string; name: string; slug: string; plan: string; modules: string[] }
+  created: boolean
+  owner_has_access: boolean
+  invitation: OwnerInvitation | null
+}
+
+export function createWorkspace(body: {
+  company_name: string
+  workspace_name?: string
+  owner_email: string
+  plan?: string
+  modules?: string[]
+}): Promise<ProvisionedWorkspace> {
+  return postData('/admin/tenants', body)
+}
+
+export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Promise<{ owner_has_access: boolean; invitation: OwnerInvitation | null }> {
+  return postData(`/admin/tenants/${tenantId}/owner-invitation`, { owner_email: ownerEmail })
 }
