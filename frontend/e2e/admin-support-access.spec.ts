@@ -11,9 +11,13 @@ test.describe('support access', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
   test('enters a workspace read-only with a banner, and returns to the console', async ({ page }) => {
+    // A fresh sign-in, a language switch, a visit and a return: the 30s default is the budget for the WHOLE test, and the
+    // sign-in alone can spend most of it on a cold CI run. Both earlier failures were that budget, not the feature.
+    test.setTimeout(120_000)
     await signIn(page, 'admin@campaignshub.io', 'password')
     await page.goto('/admin/tenants')
     await switchToEnglish(page)
+    await expect(page.getByTestId('tenant-list')).toBeVisible({ timeout: 30_000 })
 
     // The list is 25 a page, by name, and other specs open workspaces that sort before «Demo Agency»: find it by name first.
     await page.getByRole('textbox', { name: 'Search tenants' }).fill('Demo Agency')
