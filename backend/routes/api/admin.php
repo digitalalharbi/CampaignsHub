@@ -19,6 +19,7 @@ use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
+use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -79,6 +80,9 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
         Route::patch('/tenants/{tenant}/status', [PlatformTenantController::class, 'updateStatus'])
             ->name('tenants.status');
+        // SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace; and the way back.
+        Route::post('/tenants/{tenant}/support-session', [PlatformSupportSessionController::class, 'start'])->middleware('throttle:10,1')->name('tenants.support-session');
+        Route::delete('/support-session', [PlatformSupportSessionController::class, 'end'])->name('support-session.end');
 
         /*
          * GRANT-001 — one account's administrative exceptions.
