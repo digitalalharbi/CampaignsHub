@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Building2, LifeBuoy, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
-import { fetchTenant, fetchTenants, reissueOwnerInvitation, setTenantStatus, type PlatformTenant } from './api'
+import { fetchTenant, fetchTenants, reissueOwnerInvitation, setTenantStatus, type PlatformTenant, type TenantPerson } from './api'
+import { UserAccessDialog } from './UserAccessDialog'
 import { accountTypeLabel, planLabel } from './labels'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -217,6 +218,11 @@ export function TenantsPage() {
 /** One tenant's access, in a drawer — a maximum of two levels means this gets no route of its own. */
 function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar: boolean }) {
   const detail = useQuery({ queryKey: ['admin', 'tenant', id], queryFn: () => fetchTenant(id) })
+  const [managing, setManaging] = useState<TenantPerson | null>(null)
+
+  if (managing) {
+    return <UserAccessDialog person={managing} ar={ar} onClose={() => setManaging(null)} />
+  }
 
   return (
     <Modal open onClose={onClose} title={detail.data?.tenant.name ?? (ar ? 'مستأجر' : 'Tenant')}>
@@ -262,6 +268,12 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
                   <span className="flex items-center gap-2 text-[12px] text-text-secondary">
                     <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">{p.portal}</span>
                     <span>{p.role}</span>
+                    {p.user_uuid && (
+                      <button type="button" data-testid={`user-access-${p.user_uuid}`} onClick={() => setManaging(p)}
+                        className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">
+                        {ar ? 'إدارة الوصول' : 'Manage access'}
+                      </button>
+                    )}
                   </span>
                 </li>
               ))}
