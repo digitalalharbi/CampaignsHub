@@ -31,6 +31,7 @@ final class PlatformConsoleEvidenceCommand extends Command
         'SUPERADMIN-SUPPORT-ACCESS-001' => [['POST', 'api/v1/admin/tenants/{tenant}/support-session'], ['DELETE', 'api/v1/admin/support-session']],
         'SUPERADMIN-FEATURES-001' => [['GET', 'api/v1/admin/capabilities'], ['PUT', 'api/v1/admin/tenants/{tenant}/capabilities/{module}'], ['PUT', 'api/v1/admin/plans/{plan}/capabilities/{module}']],
         'SUPERADMIN-MEMBERS-001' => [['POST', 'api/v1/admin/tenants/{tenant}/members/{user}']],
+        'SUPERADMIN-LIMITS-001' => [['GET', 'api/v1/admin/tenants/{tenant}/limits'], ['PUT', 'api/v1/admin/tenants/{tenant}/limits/{metric}']],
         'SUPERADMIN-CONSOLE-HOME-001' => [['GET', 'api/v1/admin/overview']],
         'PAY-GATEWAY-CONSOLE-001' => [['GET', 'api/v1/admin/settings/integrations/payments']],
     ];
@@ -40,6 +41,7 @@ final class PlatformConsoleEvidenceCommand extends Command
         'SUPERADMIN-ACCESS-001' => [['users', 'sessions_valid_after']],
         'SUPERADMIN-SUPPORT-ACCESS-001' => [['support_sessions', null]],
         'SUPERADMIN-FEATURES-001' => [['platform_settings', 'disabled_capabilities'], ['capability_switches', null]],
+        'SUPERADMIN-LIMITS-001' => [['tenant_limit_overrides', null]],
         'PAY-GATEWAY-CONSOLE-001' => [['provider_configurations', 'tested_fingerprint'], ['platform_settings', 'payment_primary_gateway']],
     ];
 
@@ -69,6 +71,7 @@ final class PlatformConsoleEvidenceCommand extends Command
                 'platform_disabled_capabilities' => Schema::hasColumn('platform_settings', 'disabled_capabilities')
                     ? array_values((array) json_decode((string) DB::table('platform_settings')->value('disabled_capabilities'), true))
                     : null,
+                'limit_overrides' => Schema::hasTable('tenant_limit_overrides') ? DB::table('tenant_limit_overrides')->count() : null,
                 'connections_needing_reconnect' => DB::table('provider_connections')->where('status', 'error')->count(),
                 'payment_gateways' => $this->gateways($gateways),
                 'console_actions_30d' => DB::table('audit_logs')->where('created_at', '>=', now()->subDays(30))
