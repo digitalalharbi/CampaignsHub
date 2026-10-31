@@ -8,6 +8,8 @@ use App\Domains\Accounts\Capabilities\Capabilities;
 use App\Domains\Accounts\Capabilities\CapabilitySwitch;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Legal\Models\PlatformSetting;
+use App\Domains\Subscriptions\Models\Subscription;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -18,11 +20,13 @@ use Illuminate\Http\Request;
 /**
  * SUPERADMIN-FEATURES-001 — which capabilities exist for whom, decided from the console.
  *
- * Two levels the console did not have, both read by the SAME resolver the `module:` middleware enforces (`Capabilities::resolve`),
- * so a switch here is refused on the server, not merely hidden:
+ * Three levels, all read by the SAME resolver the `module:` middleware enforces (`Capabilities::resolve`), so a switch here is
+ * refused on the server, not merely hidden:
  * - platform: off for every workspace (joins the environment's `capabilities.disabled`);
+ * - plan: which modules a plan carries (`features.modules.<key>`) — what its active and trialing subscribers are entitled to;
  * - tenant: the workspace-level switch a tenant's own settings write — on, off, or back to inheriting its plan.
- * Plans' own features stay on the plans page; entitlement by grant stays on the grants panel. Every change is audited with a reason.
+ * Entitlement by grant stays on the grants panel. Every change is audited with a reason. A plan's price and currency are never
+ * touched from here.
  */
 final class PlatformCapabilityController extends Controller
 {
@@ -74,6 +78,74 @@ final class PlatformCapabilityController extends Controller
         );
 
         return $this->index();
+    }
+
+    /** GET /api/v1/admin/plans/capabilities — every plan, the modules it carries, and how many workspaces it reaches. */
+    public function plans(): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $reach = Subscription::query()->whereIn('status', ['active', 'trialing'])
+            ->selectRaw('plan_id, count(distinct tenant_id) as c')->groupBy('plan_id')->pluck('c', 'plan_id');
+        $catalogue = Capabilities::catalogue();
+
+        return ApiResponse::success([
+            'modules' => array_map(fn (string $m) => [
+                'module' => $m,
+                // A module every workspace already has does not depend on its plan; the switch would change nothing.
+                'default_entitled' => ($catalogue[$m]['default_entitled'] ?? false) === true,
+            ], array_keys($catalogue)),
+            'plans' => SubscriptionPlan::query()->orderBy('sort_order')->orderBy('price_monthly')->get()
+                ->map(fn (SubscriptionPlan $p) => [
+                    'id' => (string) $p->getKey(),
+                    'code' => $p->code,
+                    'name' => $p->name,
+                    'name_ar' => $p->name_ar,
+                    'is_active' => (bool) $p->is_active,
+                    'workspaces' => (int) ($reach[$p->getKey()] ?? 0),
+                    'modules' => $this->planModules($p),
+                ])->values()->all(),
+        ], 'Plan capabilities.');
+    }
+
+    /** PUT /api/v1/admin/plans/{plan}/capabilities/{module} — the plan carries the module, or it does not. */
+    public function setPlan(Request $request, string $plan, string $module): JsonResponse
+    {
+        abort_unless(Capabilities::exists($module), 404);
+        $data = $request->validate(['enabled' => ['required', 'boolean'], 'reason' => ['required', 'string', 'min:5', 'max:500']]);
+
+        $this->tenants->enterPlatformScope();
+        $model = SubscriptionPlan::query()->findOrFail($plan);
+        $features = (array) ($model->features ?? []);
+        $modules = (array) ($features['modules'] ?? []);
+        $before = ($modules[$module] ?? false) === true;
+        $modules[$module] = (bool) $data['enabled'];
+        $features['modules'] = $modules;
+        // Only `features.modules` changes: price, currency, trial and limits are left exactly as they were.
+        $model->forceFill(['features' => $features])->save();
+
+        $affected = Subscription::query()->where('plan_id', $model->getKey())->whereIn('status', ['active', 'trialing'])
+            ->distinct()->pluck('tenant_id');
+        $affected->each(fn ($id) => $this->capabilities->bump((string) $id));
+
+        $this->audit->log(
+            action: 'platform.plan.capability_set',
+            entityType: 'subscription_plan',
+            entityId: (string) $model->getKey(),
+            before: ['module' => $module, 'carried' => $before],
+            after: ['module' => $module, 'carried' => (bool) $data['enabled'], 'workspaces' => $affected->count()],
+            reason: $data['reason'],
+            userId: $request->user()?->id,
+        );
+
+        return $this->plans();
+    }
+
+    /** @return array<string, bool> */
+    private function planModules(SubscriptionPlan $plan): array
+    {
+        $modules = (array) (((array) ($plan->features ?? []))['modules'] ?? []);
+
+        return array_map(static fn ($v): bool => $v === true, $modules);
     }
 
     /** GET /api/v1/admin/tenants/{tenant}/capabilities — every module's state for this workspace, and its own switch. */

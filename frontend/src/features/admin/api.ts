@@ -1079,6 +1079,20 @@ export function setPlatformCapability(module: string, disabled: boolean, reason:
   return putData(`/admin/capabilities/${module}`, { disabled, reason })
 }
 
+/** SUPERADMIN-FEATURES-001 — plan level: which modules each plan carries, and how many workspaces it reaches. */
+export interface PlanCapabilities {
+  modules: Array<{ module: string; default_entitled: boolean }>
+  plans: Array<{ id: string; code: string; name: string; name_ar: string | null; is_active: boolean; workspaces: number; modules: Record<string, boolean> }>
+}
+
+export function fetchPlanCapabilities(): Promise<PlanCapabilities> {
+  return getData('/admin/plans/capabilities')
+}
+
+export function setPlanCapability(planId: string, module: string, enabled: boolean, reason: string): Promise<PlanCapabilities> {
+  return putData(`/admin/plans/${planId}/capabilities/${module}`, { enabled, reason })
+}
+
 export function fetchTenantCapabilities(tenantId: string): Promise<{ capabilities: TenantCapability[] }> {
   return getData(`/admin/tenants/${tenantId}/capabilities`)
 }
