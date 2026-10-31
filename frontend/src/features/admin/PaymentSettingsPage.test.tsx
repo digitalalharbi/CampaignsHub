@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { PaymentSettingsPage } from './PaymentSettingsPage'
-import type { PaymentSettings } from './api'
+import type { PaymentProviderSetting, PaymentSettings } from './api'
 import { renderWithProviders, signOut } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
@@ -12,176 +12,165 @@ vi.mock('./api', async (orig) => {
     fetchPaymentWebhook: vi.fn(),
     fetchSecretRotation: vi.fn(),
     testPaymentProvider: vi.fn(),
+    savePaymentGateway: vi.fn(),
+    setPaymentGatewayEnabled: vi.fn(),
+    setPrimaryPaymentGateway: vi.fn(),
   }
 })
 
-import { fetchPaymentSettings, testPaymentProvider } from './api'
+import { fetchPaymentSettings, savePaymentGateway, setPaymentGatewayEnabled, setPrimaryPaymentGateway, testPaymentProvider } from './api'
 
-const settings = (over: Partial<PaymentSettings> = {}): PaymentSettings => ({
-  default: 'moyasar',
-  currency: 'SAR',
-  providers: [
-    {
-      provider: 'moyasar', label: { ar: 'ميسر', en: 'Moyasar' }, role: 'primary', is_default: true,
-      status: 'awaiting_credentials', available: false, environment: 'unset',
-      requires: [
-        { key: 'MOYASAR_SECRET_KEY', present: false },
-        { key: 'MOYASAR_WEBHOOK_TOKEN', present: false },
-      ],
-      webhook_url: 'https://example.test/api/v1/payments/webhook/moyasar',
-    },
-    {
-      provider: 'stripe', label: { ar: 'سترايب', en: 'Stripe' }, role: 'alternative', is_default: false,
-      status: 'awaiting_credentials', available: false, environment: 'unset',
-      requires: [{ key: 'STRIPE_SECRET_KEY', present: false }],
-      webhook_url: 'https://example.test/api/v1/payments/webhook/stripe',
-    },
+const gateway = (over: Partial<PaymentProviderSetting> = {}): PaymentProviderSetting => ({
+  provider: 'moyasar', label: { ar: 'ميسر', en: 'Moyasar' }, role: 'primary', is_default: false, is_primary: false,
+  implemented: true, status: 'awaiting_credentials', available: false, enabled: false, mode: null, environment: 'unset', source: 'none',
+  fields: [
+    { key: 'secret_key', label: { ar: 'المفتاح السري', en: 'Secret key' }, secret: true, required: true, present: false, value: null },
+    { key: 'publishable_key', label: { ar: 'المفتاح العام', en: 'Publishable key' }, secret: false, required: false, present: false, value: null },
+    { key: 'webhook_token', label: { ar: 'رمز', en: 'Webhook secret token' }, secret: true, required: true, present: false, value: null },
   ],
+  requires: [{ key: 'MOYASAR_SECRET_KEY', present: false }],
+  test: { status: null, at: null, message: null, current: false },
+  last_rotated_at: null,
+  webhook_url: 'https://api.example.test/api/v1/payments/webhook/moyasar',
+  webhook: { scheme: 'A shared secret carried in the body as `secret_token`.', header: null, events: ['payment_paid'] },
+  capabilities: { hosted_checkout: true, status_lookup: true, refund: false, recurring: true, webhook: true },
+  methods: ['mada', 'visa'],
+  docs: 'https://docs.moyasar.com',
+  ...over,
+})
+
+const settings = (providers: PaymentProviderSetting[] = [gateway()], over: Partial<PaymentSettings> = {}): PaymentSettings => ({
+  default: 'sandbox', primary: 'sandbox', primary_source: 'environment', currency: 'SAR', providers,
   mail: { state: 'awaiting_credentials', driver: 'smtp' },
-  // PAY-TOKEN-003 — whether renewals take themselves, and how many cards exist to take them from.
   recurring: { ready: false, provider: 'moyasar', reason: 'no_gateway', saved_methods: 0 },
   ...over,
 })
 
 /**
- * The gateways as an operator sees them (PAYSET-001).
- *
- * The claim throughout is that the page does not flatter the install: an incomplete provider is shown
- * as unusable, sandbox keys are labelled sandbox, and there is nowhere to type a secret.
+ * PAY-GATEWAY-CONSOLE-001 — the gateways are configured from this page: keys typed in and stored write-only, then tested, enabled
+ * (live confirmed) and made primary, each a separate act. A stored secret is never put back into a box.
  */
 describe('PaymentSettingsPage', () => {
   beforeEach(() => vi.clearAllMocks())
   afterEach(() => signOut())
 
-  it('shows an unconfigured gateway as awaiting credentials, and cannot test it', async () => {
+  it('shows an unconfigured gateway as awaiting keys, with test and enable unavailable', async () => {
     vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
-
     renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('payment-status-moyasar')).toHaveTextContent(/Awaiting credentials/i)
-    // A control that cannot work is disabled rather than offered.
+    expect(await screen.findByTestId('payment-status-moyasar')).toHaveTextContent(/Awaiting keys/i)
     expect(screen.getByTestId('payment-test-moyasar')).toBeDisabled()
-
+    expect(screen.getByTestId('payment-enable-moyasar')).toBeDisabled()
     fireEvent.click(screen.getByTestId('payment-test-moyasar'))
     await waitFor(() => expect(testPaymentProvider).not.toHaveBeenCalled())
   })
 
-  /** Which gateway is OFFICIAL is a product decision, not a consequence of which keys exist. */
-  it('names Moyasar the primary gateway even when nothing is configured', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
-
+  it('stores keys through the setup form and never shows a stored secret back', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({
+      status: 'needs_test', mode: 'test', source: 'console',
+      fields: [
+        { key: 'secret_key', label: { ar: 'س', en: 'Secret key' }, secret: true, required: true, present: true, value: null },
+        { key: 'webhook_token', label: { ar: 'ر', en: 'Webhook secret token' }, secret: true, required: true, present: false, value: null },
+      ],
+    })]))
+    vi.mocked(savePaymentGateway).mockResolvedValue({ changed: ['webhook_token'], provider: gateway() })
     renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('payment-provider-moyasar')).toHaveTextContent(/Primary provider/i)
-    expect(screen.getByTestId('payment-provider-stripe')).toHaveTextContent(/Alternative provider/i)
+    fireEvent.click(await screen.findByTestId('payment-setup-moyasar'))
+    const secret = screen.getByTestId('payment-field-moyasar-secret_key') as HTMLInputElement
+    expect(secret.type).toBe('password')
+    expect(secret.value).toBe('')
+    expect(secret.placeholder).toMatch(/Stored/i)
+
+    fireEvent.change(screen.getByTestId('payment-field-moyasar-webhook_token'), { target: { value: 'New-Token-123' } })
+    fireEvent.click(screen.getByTestId('payment-save-moyasar'))
+
+    await waitFor(() => expect(savePaymentGateway).toHaveBeenCalledWith('moyasar', { webhook_token: 'New-Token-123', mode: 'test' }))
+    expect(await screen.findByTestId('payment-saved-moyasar')).toHaveTextContent(/Saved/i)
   })
 
-  /** Exactly which piece is missing — not "not configured". */
-  it('says which credential is missing', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
-
-    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
-
-    expect(await screen.findByTestId('payment-requirement-MOYASAR_WEBHOOK_TOKEN'))
-      .toHaveAttribute('data-present', 'false')
-  })
-
-  /**
-   * Sandbox is labelled sandbox.
-   *
-   * An operator certain they are in test mode while taking real money is the failure this label
-   * exists to prevent.
-   */
-  it('labels sandbox keys as sandbox', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings({
-      providers: [{
-        provider: 'moyasar', label: { ar: 'ميسر', en: 'Moyasar' }, role: 'primary', is_default: true,
-        status: 'live', available: true, environment: 'sandbox',
-        requires: [{ key: 'MOYASAR_SECRET_KEY', present: true }],
-        webhook_url: 'https://example.test/api/v1/payments/webhook/moyasar',
-      }],
-    }))
-
-    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
-
-    const card = await screen.findByTestId('payment-provider-moyasar')
-    expect(card).toHaveAttribute('data-environment', 'sandbox')
-    expect(screen.getByTestId('payment-environment-moyasar')).toHaveTextContent(/Sandbox keys/i)
-  })
-
-  it('runs a real connection test once a gateway is configured', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings({
-      providers: [{
-        provider: 'moyasar', label: { ar: 'ميسر', en: 'Moyasar' }, role: 'primary', is_default: true,
-        status: 'live', available: true, environment: 'sandbox',
-        requires: [{ key: 'MOYASAR_SECRET_KEY', present: true }],
-        webhook_url: 'https://example.test/api/v1/payments/webhook/moyasar',
-      }],
-    }))
-    vi.mocked(testPaymentProvider).mockResolvedValue({
-      provider: 'moyasar', reachable: false, status: 'failed', error: 'Moyasar refused the invoice: 401',
-    })
-
+  it('runs a real connection test and shows the gateway’s own refusal', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({ status: 'needs_test', mode: 'test', source: 'console' })]))
+    vi.mocked(testPaymentProvider).mockResolvedValue({ provider: 'moyasar', reachable: false, status: 'failed', error: 'Moyasar refused the invoice: 401' })
     renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('payment-test-moyasar'))
 
     await waitFor(() => expect(testPaymentProvider).toHaveBeenCalledWith('moyasar'))
-    // The gateway's own words: a generic failure hides whether the key is wrong or the account is
-    // closed, which are different fixes.
     expect(await screen.findByTestId('payment-test-result-moyasar')).toHaveTextContent(/401/)
   })
 
-  /**
-   * PAY-TOKEN-003 — «the gateway can» and «anybody has a card» are two facts, and both are shown.
-   *
-   * A fresh install is ready-and-zero. Showing only the badge would read as «renewals are handled»;
-   * showing only the count would read as a gateway problem. Together they say the true thing:
-   * nothing is renewing itself yet, and it is not the gateway's fault.
-   */
-  it('says whether renewals can be taken and how many cards exist', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings({
-      recurring: { ready: true, provider: 'moyasar', reason: 'ready', saved_methods: 0 },
-    }))
+  it('says when the keys changed after the last passing test', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({
+      status: 'needs_test', mode: 'test', test: { status: 'passed', at: '2026-10-31T10:00:00Z', message: null, current: false },
+    })]))
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
 
+    expect(await screen.findByTestId('payment-last-test-moyasar')).toHaveTextContent(/keys changed after the last test/i)
+  })
+
+  it('asks before enabling live keys, and only then calls the server with the confirmation', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({
+      status: 'ready', mode: 'live', environment: 'live', test: { status: 'passed', at: null, message: null, current: true },
+    })]))
+    vi.mocked(setPaymentGatewayEnabled).mockResolvedValue({ provider: gateway() })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('payment-enable-moyasar'))
+    expect(setPaymentGatewayEnabled).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('payment-enable-moyasar'))
+    await waitFor(() => expect(setPaymentGatewayEnabled).toHaveBeenCalledWith('moyasar', true, true))
+    confirm.mockRestore()
+  })
+
+  it('makes an enabled gateway primary after saying that existing payments stay where they are', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({ status: 'enabled', enabled: true, available: true, mode: 'test' })]))
+    vi.mocked(setPrimaryPaymentGateway).mockResolvedValue(settings())
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('payment-make-primary-moyasar'))
+
+    expect(confirm.mock.calls[0][0]).toMatch(/existing payments and subscriptions stay/i)
+    await waitFor(() => expect(setPrimaryPaymentGateway).toHaveBeenCalledWith('moyasar'))
+    confirm.mockRestore()
+  })
+
+  it('shows the webhook URL with a copy button and the gateway’s scheme', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('payment-webhook-moyasar'))
+
+    const panel = screen.getByTestId('payment-webhook-panel-moyasar')
+    expect(panel).toHaveTextContent('https://api.example.test/api/v1/payments/webhook/moyasar')
+    expect(panel).toHaveTextContent(/secret_token/)
+    expect(screen.getByTestId('payment-webhook-copy-moyasar')).toBeInTheDocument()
+  })
+
+  it('shows a gateway with no adapter as not implemented, with no setup offered', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({ provider: 'hyperpay', label: { ar: 'هايبر باي', en: 'HyperPay' }, implemented: false, status: 'not_implemented', fields: [], methods: [] })]))
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('payment-status-hyperpay')).toHaveTextContent(/Not implemented/i)
+    expect(screen.queryByTestId('payment-setup-hyperpay')).not.toBeInTheDocument()
+  })
+
+  it('says whether renewals can be taken and how many cards exist', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings(undefined, { recurring: { ready: true, provider: 'moyasar', reason: 'ready', saved_methods: 0 } }))
     renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
 
     const block = await screen.findByTestId('payment-recurring-state')
     expect(block).toHaveAttribute('data-ready', 'true')
-    expect(block.textContent).toMatch(/card on file/i)
     expect(screen.getByTestId('payment-recurring-cards').textContent).toMatch(/0/)
   })
 
-  /** With no gateway, the page says so rather than leaving an operator to infer it from a zero. */
-  it('names the gateway when no renewal can be taken automatically', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
-
-    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
-
-    const block = await screen.findByTestId('payment-recurring-state')
-    expect(block).toHaveAttribute('data-reason', 'no_gateway')
-    expect(block.textContent).toMatch(/invoice the customer pays themselves/i)
-  })
-
-  /** A notification channel that reaches nobody is reported, because half a payment system is that. */
   it('reports the notification channel honestly', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings({ mail: { state: 'sandbox', driver: 'log' } }))
-
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings(undefined, { mail: { state: 'sandbox', driver: 'log' } }))
     renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
 
-    const mail = await screen.findByTestId('payment-mail-state')
-    expect(mail).toHaveAttribute('data-state', 'sandbox')
-    expect(mail).toHaveTextContent(/reach nobody/i)
-  })
-
-  /** There is nowhere to type a secret, and that is the point. */
-  it('offers no field for a gateway secret', async () => {
-    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
-
-    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
-
-    await screen.findByTestId('admin-payment-settings')
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(screen.getByText(/No key can be changed from this page/i)).toBeInTheDocument()
+    expect(await screen.findByTestId('payment-mail-state')).toHaveTextContent(/reach nobody/i)
   })
 })

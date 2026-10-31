@@ -38,7 +38,7 @@ final class SubscriptionPaymentController extends Controller
     public function providers(): JsonResponse
     {
         $configured = (array) config('subscriptions.providers', []);
-        $default = (string) config('subscriptions.default');
+        $default = app(SubscriptionProviderRegistry::class)->defaultKey();
 
         $providers = [];
 
