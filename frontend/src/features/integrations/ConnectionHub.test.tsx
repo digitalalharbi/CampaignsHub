@@ -15,6 +15,8 @@ import { renderWithProviders } from '@/test/utils'
 
 const hub = vi.hoisted(() => ({ data: { connections: [], connectable: [] } as Hub }))
 const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; projectId?: string | null; workspaceId?: string | null; appProfile?: string }> }))
+const listCalls = vi.hoisted(() => ({ queries: [] as Array<Record<string, unknown>> }))
+const estate = vi.hoisted(() => ({ projects: [] as Array<{ project_id: string; project_name: string; providers: string[]; accounts: number; last_synced_at: string | null; needs_attention: number }> }))
 const metaApps = vi.hoisted(() => ({ saas: false, testWorkspace: false }))
 
 vi.mock('./api', async (importOriginal) => {
@@ -22,11 +24,15 @@ vi.mock('./api', async (importOriginal) => {
   return {
     ...actual,
     fetchConnectionHub: () => Promise.resolve(hub.data),
+    fetchEstate: () => Promise.resolve({ projects: estate.projects }),
     listConnectors: () => Promise.resolve([]),
-    listAccounts: () => Promise.resolve({
-      accounts: [], summary: { total: 0, linked: 0, unlinked: 0 },
-      meta: { total: 0, per_page: 50, current_page: 1, last_page: 1 },
-    }),
+    listAccounts: (query: Record<string, unknown>) => {
+      listCalls.queries.push(query)
+      return Promise.resolve({
+        accounts: [], summary: { total: 0, linked: 0, unlinked: 0 },
+        meta: { total: 0, per_page: 10, current_page: 1, last_page: 1 },
+      })
+    },
     getAccountLogs: () => Promise.resolve({ runs: [] }),
     fetchMetaApps: () => Promise.resolve(metaApps.testWorkspace
       ? { default: 'saas', test_workspace: true, apps: [{ key: 'live', available: false }, { key: 'saas', available: metaApps.saas, reason: metaApps.saas ? null : 'not_configured' }] }
@@ -72,6 +78,8 @@ describe('the Connection Hub', () => {
   beforeEach(() => {
     hub.data = { connections: [], connectable: [] }
     started.calls = []
+    listCalls.queries = []
+    estate.projects = []
   })
 
   it('says nothing is connected, and offers the one thing that can be done about it', async () => {
@@ -146,8 +154,98 @@ describe('the Connection Hub', () => {
 
     expect(await screen.findByTestId('connection-drawer')).toBeInTheDocument()
     expect(screen.getByTestId('drawer-tab-accounts')).toHaveAttribute('aria-current', 'page')
-    // Selected only, by default: seventeen rows is how the old page taught people everything syncs.
-    expect(screen.getByTestId('drawer-only-selected')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('drawer-tab-accounts')).toHaveTextContent('Selected accounts')
+    // No way to widen it: the discovered ones are the wizard's, not the drawer's.
+    expect(screen.queryByTestId('drawer-only-selected')).toBeNull()
+    expect(screen.queryByTestId('drawer-account-search')).toBeNull()
+  })
+
+  /**
+   * INTEGRATIONS-CENTRE-001 — the drawer never reads the inventory, only the SELECTED accounts.
+   *
+   * Every `GET /accounts` the drawer makes carries `link=linked` and this connection's id.
+   */
+  it('lists only the selected accounts of the connection and never the whole inventory', async () => {
+    hub.data = { connections: [connection()], connectable: [] }
+
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByTestId('hub-accounts-c-1'))
+    await screen.findByTestId('selected-accounts-empty')
+
+    const drawerQueries = listCalls.queries.filter((q) => q.connection === 'c-1')
+    expect(drawerQueries.length).toBeGreaterThan(0)
+    for (const query of listCalls.queries) {
+      expect(query).toMatchObject({ link: 'linked' })
+      expect(query.connection ?? query.project).toBeDefined()
+    }
+  })
+
+  /** Discovery and search are the wizard's: the drawer's own button opens it in manage mode. */
+  it('opens the wizard in manage mode from «Edit the selection»', async () => {
+    hub.data = { connections: [connection()], connectable: [] }
+
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByTestId('hub-accounts-c-1'))
+    fireEvent.click(await screen.findByTestId('drawer-edit-selection'))
+
+    expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Edit the selection')
+    expect(screen.queryByTestId('connection-drawer')).toBeNull()
+  })
+
+  /** The all-discovered panel and its toggle are gone from the page, in both languages. */
+  it.each(['en', 'ar'] as const)('has no all-discovered-accounts section (%s)', async (locale) => {
+    hub.data = { connections: [connection()], connectable: [] }
+
+    renderWithProviders(<IntegrationsPage />, { locale })
+
+    await screen.findByTestId('hub-row-c-1')
+    expect(screen.queryByTestId('toggle-account-inventory')).toBeNull()
+    expect(screen.queryByTestId('inventory-list')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/جميع الحسابات المكتشفة|Every discovered account|All discovered accounts/)
+    // Nothing on the page itself asks the server for accounts at all until a drawer is opened.
+    expect(listCalls.queries).toEqual([])
+  })
+
+  /**
+   * The per-project «link» is not a second connect flow: it opens the centre's one flow with the
+   * project already chosen, so the next press goes to the provider with that project on the state.
+   */
+  it('links a platform for a project through the same flow, project preselected', async () => {
+    hub.data = {
+      connections: [connection()],
+      connectable: [{ key: 'meta', label: 'Meta Ads', label_ar: 'ميتا', kind: 'advertising', has_parent: true, auth: 'oauth' }],
+    }
+    estate.projects = [{ project_id: 'p-1', project_name: 'Razah', providers: ['meta'], accounts: 1, last_synced_at: null, needs_attention: 0 }]
+
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByTestId('estate-link-p-1'))
+    fireEvent.click(await screen.findByTestId('estate-link-p-1-meta'))
+
+    expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Connect')
+    await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-1'))
+    fireEvent.click(screen.getByTestId('flow-authorise'))
+
+    await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
+    // The picker of platforms is the hub's own entry; the estate skipped it by naming the platform.
+    expect(screen.queryByTestId('provider-picker')).toBeNull()
+  })
+
+  /** One connect entry per surface: with rows it is in the head, without rows it is in the empty state. */
+  it('has exactly one connect button, with and without connections', async () => {
+    const { unmount } = renderWithProviders(<IntegrationsPage />)
+    await screen.findByTestId('hub-connect-empty')
+    expect(screen.queryByTestId('hub-connect')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /Connect a source/ })).toHaveLength(1)
+    unmount()
+
+    hub.data = { connections: [connection()], connectable: [] }
+    renderWithProviders(<IntegrationsPage />)
+    await screen.findByTestId('hub-connect')
+    expect(screen.queryByTestId('hub-connect-empty')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /Connect a source/ })).toHaveLength(1)
   })
 
   it('carries both truths into the drawer header', async () => {
@@ -164,8 +262,8 @@ describe('the Connection Hub', () => {
     expect(screen.getByTestId('drawer-sync')).toHaveTextContent('Sync failed')
   })
 
-  /** Refreshing the catalogue and re-authorising are different acts, and the drawer says so. */
-  it('separates refreshing the account list from re-authorising', async () => {
+  /** Discovery is not a drawer act any more: no refresh-the-catalogue here, and re-authorising stays. */
+  it('keeps catalogue refresh out of the drawer', async () => {
     hub.data = { connections: [connection()], connectable: [] }
 
     renderWithProviders(<IntegrationsPage />)
@@ -173,9 +271,33 @@ describe('the Connection Hub', () => {
     fireEvent.click(await screen.findByTestId('hub-open-c-1'))
     fireEvent.click(await screen.findByTestId('drawer-tab-settings'))
 
-    expect(screen.getByTestId('drawer-refresh')).toBeInTheDocument()
+    expect(screen.queryByTestId('drawer-refresh')).toBeNull()
     expect(screen.getByTestId('drawer-reauthorise')).toBeInTheDocument()
-    expect(screen.getByTestId('drawer-settings')).toHaveTextContent('no consent screen')
+  })
+
+  /**
+   * The single OAuth path. Re-authorising goes through the connection flow, which starts OAuth with
+   * the connection's client workspace and project — the state the callback needs to find THIS
+   * connection again instead of opening a second one for the same accounts.
+   */
+  it('re-authorises through the flow, carrying the workspace and the project', async () => {
+    hub.data = { connections: [connection({ connection_state: 'REAUTH_REQUIRED' })], connectable: [] }
+
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByTestId('hub-open-c-1'))
+    fireEvent.click(await screen.findByTestId('drawer-tab-settings'))
+    fireEvent.click(screen.getByTestId('drawer-reauthorise'))
+
+    // Not straight to the provider: the flow opens first, on its sign-in stage.
+    expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Reconnect')
+    expect(started.calls).toEqual([])
+    expect(await screen.findByTestId('flow-step-login')).toHaveTextContent('selected accounts and their clients are untouched')
+
+    await waitFor(() => expect(screen.getByTestId('flow-authorise')).toBeEnabled())
+    fireEvent.click(screen.getByTestId('flow-authorise'))
+
+    await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
   })
 
   /** Disconnecting states how many accounts stop syncing before it will go. */

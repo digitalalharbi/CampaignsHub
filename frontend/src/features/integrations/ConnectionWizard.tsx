@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
+import { accountHealthLabel, accountHealthTone } from './accountHealth'
 
 /**
  * ORCH-100 §3 §5 §6 — choosing what to connect, after the provider has said what exists.
@@ -41,48 +42,6 @@ import { accounts as countedAccounts } from '@/lib/counted'
  */
 
 type Step = 'parent' | 'accounts' | 'project' | 'review' | 'done'
-
-/**
- * An account's state in one phrase — RUNTIME-100 §31.
- *
- * Each of these names a different next action, which is the only reason to tell them apart. «مربوط
- * بمشروع» said all of them at once, so an account whose access had been withdrawn and one syncing
- * happily read identically.
- */
-function accountHealthLabel(health: DiscoveredAccount['health'], ar: boolean): string {
-  switch (health) {
-    case 'healthy': return ar ? 'تعمل' : 'Healthy'
-    case 'pending_first_sync': return ar ? 'بانتظار أول مزامنة' : 'First sync pending'
-    case 'delayed': return ar ? 'متأخرة' : 'Delayed'
-    case 'failed': return ar ? 'فشلت آخر محاولة' : 'Last attempt failed'
-    /*
-      META-INSIGHTS-GRANT-001 — an ASSET grant, named on the account it is missing from.
-      «(#200) Ad account owner has NOT grant ads_management or ads_read permission» is decided per ad
-      account in Business Manager, so one authorisation can hold this account refused and its
-      siblings fine. «فشلت آخر محاولة» sent a reader to the logs; this sends them to the grant.
-      `ads_read` alone: it is sufficient for insights, and naming `business_management` would ask
-      for a capability this product does not need.
-    */
-    case 'insights_not_authorised': return ar ? 'لم تُمنح صلاحية ads_read لهذا الحساب' : 'ads_read is not granted on this account'
-    case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
-    case 'revoked': return ar ? 'الربط ملغى' : 'Connection revoked'
-    // Assigned but the server did not say — an older response, not a state worth inventing a word for.
-    default: return ar ? 'مربوط بمشروع' : 'Connected'
-  }
-}
-
-/** Colour carries the same distinction the words do, so the state survives a glance. */
-function accountHealthTone(health: DiscoveredAccount['health']): string {
-  switch (health) {
-    case 'healthy': return 'text-success'
-    case 'delayed': return 'text-warning'
-    case 'failed':
-    case 'insights_not_authorised':
-    case 'access_lost':
-    case 'revoked': return 'text-danger'
-    default: return 'text-text-muted'
-  }
-}
 
 interface Props {
   connectionId: string
@@ -513,6 +472,32 @@ export function ConnectionWizard({
               {ar
                 ? `الحسابات تحت ${h.parent_label?.labelAr ?? 'المؤسسة'}: ${parents[0]?.name ?? soleParent}`
                 : `Accounts under the one ${h.parent_label?.label ?? 'organization'} on this authorisation: ${parents[0]?.name ?? soleParent}`}
+            </p>
+          )}
+
+          {/*
+            INTEGRATIONS-CENTRE-001 — re-reading the catalogue lives HERE, where accounts are searched
+            and chosen, and not in the connection drawer: discovery belongs to connecting and to editing
+            the selection, and nowhere else in the centre.
+          */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-text-muted">
+              {ar ? 'لا يُزامَن إلا ما تحدّده هنا.' : 'Only what you tick here is ever synced.'}
+            </p>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => refresh.mutate()}
+              disabled={refresh.isPending}
+              data-testid="wizard-refresh-catalogue"
+            >
+              {refresh.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {ar ? 'تحديث الحسابات المتاحة' : 'Refresh available accounts'}
+            </Button>
+          </div>
+
+          {refresh.isError && (
+            <p className="text-sm text-danger" data-testid="wizard-refresh-catalogue-error">
+              {toApiError(refresh.error).message}
             </p>
           )}
 

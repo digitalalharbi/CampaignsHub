@@ -23,6 +23,7 @@ const calls = vi.hoisted(() => ({
   created: [] as Array<{ name: string; client_workspace_id?: string }>,
   confirmed: [] as Array<{ projectId: string; connectionId: string; externalAccountIds: string[] }>,
   refreshed: [] as string[],
+  discovered: [] as Array<{ id: string; parent?: string | null; q?: string | null; page?: number; perPage?: number }>,
 }))
 
 const state = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const state = vi.hoisted(() => ({
   parents: [] as Array<{ external_id: string; name: string | null; account_count: number }>,
   createError: null as unknown,
   firstSync: null as unknown,
+  lastPage: 1,
 }))
 
 vi.mock('@/features/projects/api', async (importOriginal) => ({
@@ -59,13 +61,13 @@ vi.mock('./api', async (importOriginal) => {
       assigned_count: 0,
       wizard: { state: 'needs_selection', discovered: 309, assigned: 0, synced: 0, has_parent: true, resumable: true, next_step: 'parent' },
     }),
-    fetchDiscoveredAccounts: () => Promise.resolve({
+    fetchDiscoveredAccounts: (id: string, params: { parent?: string | null; q?: string | null; page?: number; perPage?: number }) => (calls.discovered.push({ id, ...params }), Promise.resolve({
       accounts: [
         { id: 'acct-1', external_id: 'act-1', name: 'Riyadh Retail', parent_external_id: 'org-1', parent_name: 'Acme Media', currency: 'SAR', timezone: 'Asia/Riyadh', status: 'active', assigned_project_id: null, assigned: false, last_synced_at: null, access_lost_at: null },
         { id: 'acct-2', external_id: 'act-2', name: 'Jeddah Retail', parent_external_id: 'org-1', parent_name: 'Acme Media', currency: 'SAR', timezone: 'Asia/Riyadh', status: 'active', assigned_project_id: null, assigned: false, last_synced_at: null, access_lost_at: null },
       ],
-      meta: { total: 2, per_page: 25, current_page: 1, last_page: 1 },
-    }),
+      meta: { total: state.lastPage * 25, per_page: 25, current_page: params.page ?? 1, last_page: state.lastPage },
+    })),
     fetchPlanUsage: () => Promise.resolve({ ad_accounts: { limit: 5, used: 0, remaining: 5 } }),
     confirmAccountSelection: (input: { projectId: string; connectionId: string; externalAccountIds: string[] }) => {
       calls.confirmed.push(input)
@@ -404,5 +406,58 @@ describe('ConnectionWizard — the client step exists only when there is a clien
     fireEvent.click(screen.getByRole('button', { name: /متابعة|Continue/ }))
 
     expect(await screen.findByTestId('wizard-step-project')).toBeInTheDocument()
+  })
+})
+
+/**
+ * INTEGRATIONS-CENTRE-001 — discovery lives here and nowhere else, and it is served a page at a time.
+ *
+ * The wizard is the only surface that searches the catalogue, and it asks the SERVER: a connection
+ * with hundreds of accounts is never loaded whole, and nothing is ticked until the reader ticks it.
+ */
+describe('ConnectionWizard — server-side search and pages, nothing pre-selected', () => {
+  afterEach(() => {
+    calls.discovered = []
+    calls.refreshed = []
+    state.lastPage = 1
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+  })
+
+  it('ticks nothing on open, however many accounts are offered', async () => {
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    const boxes = await screen.findAllByRole('checkbox')
+    expect(boxes.length).toBeGreaterThan(1)
+    boxes.forEach((box) => expect(box).not.toBeChecked())
+    expect(screen.getByTestId('wizard-selected-count')).toHaveTextContent(/^0 of|^تم اختيار 0/)
+  })
+
+  it('searches on the server and returns to page one', async () => {
+    state.lastPage = 4
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    await screen.findAllByRole('checkbox')
+    fireEvent.click(screen.getByRole('button', { name: /التالي|Next/ }))
+    await waitFor(() => expect(calls.discovered.at(-1)).toMatchObject({ page: 2, perPage: 25 }))
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'riyadh' } })
+    await waitFor(() => expect(calls.discovered.at(-1)).toMatchObject({ q: 'riyadh', page: 1, perPage: 25 }))
+  })
+
+  it('pages the catalogue 25 at a time', async () => {
+    state.lastPage = 4
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />, { locale: 'en' })
+
+    await screen.findAllByRole('checkbox')
+    expect(calls.discovered[0]).toMatchObject({ id: 'conn-1', page: 1, perPage: 25 })
+    expect(screen.getByText('1 / 4')).toBeInTheDocument()
+  })
+
+  it('re-reads the catalogue from the accounts step, with no second consent', async () => {
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    fireEvent.click(await screen.findByTestId('wizard-refresh-catalogue'))
+
+    await waitFor(() => expect(calls.refreshed).toEqual(['conn-1']))
   })
 })

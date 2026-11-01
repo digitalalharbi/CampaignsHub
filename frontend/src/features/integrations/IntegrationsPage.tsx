@@ -4,13 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
   fetchConnectionHub,
-  type ConnectableProvider, type HubConnection,
+  type AccountRow, type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionHub } from './ConnectionHub'
-import { SectionHeader } from '@/components/patterns/Status'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
-import { AccountsPanel } from './AccountsPanel'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
 import { Button } from '@/components/ui/Button'
@@ -59,6 +57,16 @@ export function IntegrationsPage() {
   const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, retry: false })
 
   /*
+   * «Manage link» on a SELECTED account: its own connection, edited for the project it feeds.
+   * Both come from the account row, so nothing here guesses a client.
+   */
+  const manageAccount = (account: AccountRow) => {
+    const connection = hub.data?.connections.find((c) => c.id === account.connection_id)
+    if (connection === undefined) return
+    setFlow({ mode: 'manage', provider: null, connection, projectId: account.assigned_project_id })
+  }
+
+  /*
    * The return from a consent screen lands HERE, carrying what it left with.
    *
    * `?connection=` and `?project=` are written by the OAuth callback (§17). Without them the return
@@ -72,12 +80,11 @@ export function IntegrationsPage() {
   const returningProject = params.get('project')
 
   const [flow, setFlow] = useState<
-    { mode: 'connect' | 'manage'; provider: ConnectableProvider | null; connection: HubConnection | null; projectId: string | null } | null
+    { mode: 'connect' | 'manage' | 'reauthorise'; provider: ConnectableProvider | null; connection: HubConnection | null; projectId: string | null } | null
   >(null)
   const [picking, setPicking] = useState(false)
   const [drawer, setDrawer] = useState<{ id: string; tab: DrawerTab } | null>(null)
   const [menu, setMenu] = useState<HubConnection | null>(null)
-  const [inventoryOpen, setInventoryOpen] = useState(false)
 
   const connections = hub.data?.connections ?? []
   const open = drawer === null ? null : connections.find((c) => c.id === drawer.id) ?? null
@@ -115,6 +122,7 @@ export function IntegrationsPage() {
       <ProjectsEstate
         connectable={hub.data?.connectable ?? []}
         onLink={(projectId, provider) => setFlow({ mode: 'connect', provider, connection: null, projectId })}
+        onManage={manageAccount}
       />
 
       <ConnectionHub
@@ -122,56 +130,6 @@ export function IntegrationsPage() {
         onOpen={(connection, tab) => setDrawer({ id: connection.id, tab: tab ?? 'overview' })}
         onAction={(connection) => setMenu(connection)}
       />
-
-      {/*
-        INTEGRATION-DATASOURCE-WIZARD-001 §11 §28 — «everything we can SEE» is a real question, and
-        it is not this page's.
-
-        The inventory used to sit open beneath the cards: on the live Snapchat estate, three hundred
-        rows under the six things somebody came for. It is not permanently rendered any more and it
-        is not gone either — a reader asks for it, and the control says what it will show. The
-        drawer's Accounts tab answers the narrower and far commoner question of «which of THIS
-        authorisation's accounts are ours».
-      */}
-      <section className="flex flex-col gap-3">
-        {/*
-          A labelled section, not a button floating in the margin.
-
-          The Arabic dark review of `/app/integrations` on a workspace with nothing connected showed
-          this control alone in the middle of the page: a bordered button, no heading above it and no
-          content under it, reading as something half-rendered. It is not gated on the hub having
-          rows, because the inventory is tenant-wide — the sandbox and anything else non-advertising
-          is discovered without ever appearing as a hub authorisation — so what it needed was a name.
-        */}
-        <SectionHeader
-          title={ar ? 'جميع الحسابات المكتشفة' : 'Every discovered account'}
-          question={ar
-            ? 'ما الذي نراه في هذه المساحة، سواء اخترته أم لا؟'
-            : 'What can this workspace see, whether or not it was selected?'}
-          action={
-            /*
-             * «عرض القائمة», not «عرض جميع الحسابات المكتشفة».
-             *
-             * The heading beside it now says which accounts, so a button repeating the heading word
-             * for word reads as the same sentence printed twice. The control says only what pressing
-             * it does.
-             */
-            <button
-              type="button"
-              data-testid="toggle-account-inventory"
-              aria-expanded={inventoryOpen}
-              onClick={() => setInventoryOpen((open) => !open)}
-              className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-            >
-              {inventoryOpen
-                ? (ar ? 'إخفاء القائمة' : 'Hide the list')
-                : (ar ? 'عرض القائمة' : 'Show the list')}
-            </button>
-          }
-        />
-
-        {inventoryOpen && <AccountsPanel />}
-      </section>
 
       {/*
         INTEG-STORES-001 — Salla and Zid keep their own journey (§7).
@@ -220,10 +178,19 @@ export function IntegrationsPage() {
           tab={drawer.tab}
           onTab={(tab) => setDrawer({ id: open.id, tab })}
           onClose={() => setDrawer(null)}
-          onManageAccounts={(connection) => {
+          onManageAccounts={(connection, projectId) => {
             setDrawer(null)
             setFlow({
               mode: 'manage',
+              provider: null,
+              connection,
+              projectId: projectId ?? manageDestination(connection),
+            })
+          }}
+          onReauthorise={(connection) => {
+            setDrawer(null)
+            setFlow({
+              mode: 'reauthorise',
               provider: null,
               connection,
               projectId: manageDestination(connection),
@@ -338,7 +305,7 @@ function ActionMenu({ ar, onClose, onOpen, onManageAccounts }: {
           {ar ? 'عرض التفاصيل' : 'View details'}
         </MenuItem>
         <MenuItem testId="action-manage" onClick={onManageAccounts}>
-          {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+          {ar ? 'تعديل الاختيار' : 'Edit the selection'}
         </MenuItem>
         <MenuItem testId="action-history" onClick={() => onOpen('history')}>
           {ar ? 'سجل المزامنة' : 'Sync history'}
