@@ -7,6 +7,7 @@ import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytic
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { fmtDateTime } from '@/lib/datetime'
 
 /**
  * `/admin` — the platform at a glance (ADMIN-001, rebuilt for ADMIN-100).
@@ -341,12 +342,6 @@ function Metric({
   )
 }
 
-/** Latin digits, the reader's calendar, minutes. */
-function when(iso: string | null, ar: boolean): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn-ca-gregory' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' })
-}
-
 const PROVIDERS: Record<string, { ar: string; en: string }> = {
   meta: { ar: 'ميتا', en: 'Meta' },
   google: { ar: 'جوجل', en: 'Google' },
@@ -413,7 +408,7 @@ function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: bool
                     </span>
                   </div>
                   <p className="mt-0.5 truncate text-[12px] text-text-muted">
-                    {(ar ? PROVIDERS[c.provider]?.ar : PROVIDERS[c.provider]?.en) ?? c.provider} · {c.tenant_name ?? (ar ? 'مساحة محذوفة' : 'Deleted workspace')} · {when(c.since, ar)}
+                    {(ar ? PROVIDERS[c.provider]?.ar : PROVIDERS[c.provider]?.en) ?? c.provider} · {c.tenant_name ?? (ar ? 'مساحة محذوفة' : 'Deleted workspace')} · {fmtDateTime(c.since)}
                   </p>
                 </li>
               ))}
@@ -447,7 +442,7 @@ function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: bool
               ] as const).map(([key, label, tone]) => (
                 <div key={key} data-testid={`console-alerts-${key}`} className="rounded-xl border border-border px-3 py-2 text-center">
                   <dt className="text-[12px] text-text-muted">{label}</dt>
-                  <dd className={`tnum text-xl font-extrabold ${tone}`} dir="ltr">{num(alerts.by_severity[key])}</dd>
+                  <dd className={`tnum text-xl font-extrabold ${tone}`}><span dir="ltr">{num(alerts.by_severity[key])}</span></dd>
                 </div>
               ))}
             </dl>
@@ -474,7 +469,7 @@ function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: bool
               <li key={r.id} className="min-w-0 text-[13px]">
                 <code className="block truncate text-text-primary" dir="ltr">{r.action}</code>
                 <span className="block truncate text-[12px] text-text-muted">
-                  {r.user_name ?? '—'} · {r.tenant_name ?? (ar ? 'المنصة' : 'Platform')} · {when(r.created_at, ar)}
+                  {r.user_name ?? '—'} · {r.tenant_name ?? (ar ? 'المنصة' : 'Platform')} · {fmtDateTime(r.created_at)}
                 </span>
               </li>
             ))}
