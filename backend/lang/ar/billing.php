@@ -25,6 +25,8 @@ return [
     'addon_already_requested' => 'طلبك لهذه الإضافة قيد المراجعة.',
     'addon_requested' => 'استلمنا طلبك. لن يُخصم أي مبلغ ولن تُفعَّل الإضافة قبل تأكيدها.',
     'ad_account_replacements_used' => 'استخدمت حد الاستبدال في باقتك (:allowance كل 30 يومًا). يمكنك ربط حساب مختلف بعد :date، أو ترقية باقتك. إعادة ربط الحسابات نفسها مجانية دائمًا.',
+    'migration_confirm_mismatch' => 'اكتب المعرّف المختصر لمساحة العمل كما هو لتأكيد النقل.',
+    'migration_bulk_confirm_mismatch' => 'اكتب «MOVE :n» لتأكيد نقل :n مساحة عمل.',
 
     /*
      * The metric, named in Arabic.

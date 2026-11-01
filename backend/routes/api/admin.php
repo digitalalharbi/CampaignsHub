@@ -14,6 +14,7 @@ use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
 use App\Domains\Platform\Http\Controllers\PlatformAddonController;
+use App\Domains\Platform\Http\Controllers\PlatformPlanMigrationController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
@@ -97,6 +98,13 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
         Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
         Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
+
+        // PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue: previewed, typed, audited, at period end.
+        Route::get('/plan-migration', [PlatformPlanMigrationController::class, 'index'])->name('plan-migration.index');
+        Route::post('/plan-migration/bulk', [PlatformPlanMigrationController::class, 'bulk'])->middleware('throttle:10,1')->name('plan-migration.bulk');
+        Route::get('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'show'])->name('tenants.plan-migration.show');
+        Route::post('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'store'])->middleware('throttle:30,1')->name('tenants.plan-migration.store');
+        Route::delete('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'destroy'])->middleware('throttle:30,1')->name('tenants.plan-migration.destroy');
         Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
         Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
             ->middleware('throttle:30,1')->name('grants.store');

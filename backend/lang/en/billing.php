@@ -13,6 +13,8 @@ return [
     'addon_already_requested' => 'Your request for this add-on is being reviewed.',
     'addon_requested' => 'Request received. Nothing is charged and nothing is activated until it is confirmed.',
     'ad_account_replacements_used' => 'You have used your plan\'s replacement allowance (:allowance every 30 days). You can connect a different account after :date, or upgrade your plan. Reconnecting the same accounts is always free.',
+    'migration_confirm_mismatch' => 'Type the workspace\'s slug exactly to confirm the move.',
+    'migration_bulk_confirm_mismatch' => 'Type «MOVE :n» to confirm moving :n workspaces.',
 
     'metrics' => [
         'campaigns' => 'campaigns',

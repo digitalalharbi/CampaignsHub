@@ -608,6 +608,38 @@ final class SubscriptionLifecycle
 
     // ── Changing plan mid-term (PAY-002) ──────────────────────────────────────────────────────
 
+    public const CROSS_CURRENCY = 'That plan is priced in another currency. Moving to it is arranged by our team and takes effect when your paid period ends.';
+
+    /**
+     * PRICING-MIGRATION-001 — a plan priced in another currency is a different catalogue.
+     *
+     * Proration credits the unused part of what was paid against the new price; across currencies that subtracts dollars from
+     * riyals. Self-service therefore never crosses currencies; the console schedules such a move for the period end instead.
+     */
+    public static function crossesCurrency(Subscription $subscription, SubscriptionPlan $plan): bool
+    {
+        return $subscription->currency !== null && strtoupper((string) $subscription->currency) !== strtoupper((string) $plan->currency);
+    }
+
+    /**
+     * PRICING-MIGRATION-001 — book a move onto another catalogue's plan for the end of the period already paid for.
+     *
+     * No proration, no credit, no charge: the customer keeps what they bought until it ends, and then the plan, its price and its
+     * currency move together (see {@see applyPlan()}). The customer is told, through the same notice as a scheduled downgrade.
+     */
+    public function scheduleMigration(Subscription $subscription, SubscriptionPlan $plan, string $interval): Subscription
+    {
+        $price = $plan->priceFor($interval);
+        if ($price === null) {
+            throw new \RuntimeException('That plan is not sold on that term.');
+        }
+        if ($subscription->current_period_end === null) {
+            throw new \RuntimeException('This subscription has no paid period to end; assign the plan from the workspace instead.');
+        }
+
+        return $this->scheduleChange($subscription, $plan, $interval, ['new_period_price' => number_format((float) $price, 2, '.', '')]);
+    }
+
     /**
      * Move a subscription to another plan, part-way through a period it has already paid for.
      *
@@ -644,6 +676,10 @@ final class SubscriptionLifecycle
 
         if ($subscription->plan_id === $newPlan->getKey() && $subscription->billing_interval === $interval) {
             throw new \RuntimeException('This subscription is already on that plan and term.');
+        }
+
+        if (self::crossesCurrency($subscription, $newPlan)) {
+            throw new \RuntimeException(self::CROSS_CURRENCY);
         }
 
         $quote = $this->proration->quote($subscription, $newPlan, $interval);
@@ -844,6 +880,8 @@ final class SubscriptionLifecycle
             'plan_id' => $plan->getKey(),
             'billing_interval' => $interval,
             'unit_amount' => $plan->priceFor($interval),
+            // The price and its currency move together: a SAR price left labelled USD is a different amount of money.
+            'currency' => $plan->currency,
             'scheduled_plan_id' => null,
             'scheduled_billing_interval' => null,
             'scheduled_unit_amount' => null,
