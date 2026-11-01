@@ -176,6 +176,34 @@ final class TokenVault
                 fn ($q) => $q->whereNull('client_workspace_id'),
                 fn ($q) => $q->where('client_workspace_id', $clientWorkspaceId),
             )
+            /*
+             * ACCOUNT-SCOPE-ISOLATION-002 — a pasted key is scoped to ONE ad account, so the connection
+             * it re-credentials is the one holding THAT account, never «the one for this platform».
+             *
+             * Re-keying in place by (tenant, workspace, platform) is right for OAuth, where a new
+             * consent names a new identity and the old identity's accounts stop being refreshed. It
+             * was wrong for keys: a second advertiser's key pasted into the same workspace replaced the
+             * first advertiser's credential on the SAME row, and every account row on it — still
+             * named, still bound to its project — went on syncing with a key that could only answer
+             * for the second advertiser. Keyed by the account the provider says the key belongs to,
+             * a different account opens its own connection and the first keeps its own key.
+             *
+             * A connection from before this rule names no owner. It is adopted only when this account
+             * is the ONLY one it holds; re-keying one that holds others is the incident itself.
+             */
+            ->when(
+                $credentialType === 'api_key' && $externalOwnerId !== null,
+                fn ($q) => $q->where(fn ($w) => $w
+                    ->where('external_owner_id', $externalOwnerId)
+                    ->orWhere(fn ($legacy) => $legacy
+                        ->whereNull('external_owner_id')
+                        ->whereExists(fn ($e) => $e->selectRaw('1')->from('external_accounts')
+                            ->whereColumn('external_accounts.provider_connection_id', 'provider_connections.id')
+                            ->where('external_accounts.external_id', $externalOwnerId))
+                        ->whereNotExists(fn ($e) => $e->selectRaw('1')->from('external_accounts')
+                            ->whereColumn('external_accounts.provider_connection_id', 'provider_connections.id')
+                            ->where('external_accounts.external_id', '!=', $externalOwnerId)))),
+            )
             ->first();
 
         if ($existing !== null) {

@@ -120,6 +120,19 @@ final class AccountAssignment
             return false;
         }
 
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-002 — an account its own credential no longer lists is not synced.
+         *
+         * `access_lost_at` is stamped by discovery when the connection's credential stops answering
+         * for this account — on a key-scoped provider, the moment the connection was re-keyed for a
+         * different advertiser. A sync that went ahead would fetch with that other advertiser's
+         * credential and file the result under this account's project. Cleared by the next discovery
+         * that lists the account again, which is the only route back.
+         */
+        if ($account->access_lost_at !== null) {
+            return false;
+        }
+
         $projectId = $this->projectIdFor($account);
 
         if ($projectId === null) {

@@ -1,0 +1,53 @@
+name: Isolation Quarantine
+
+# ACCOUNT-SCOPE-ISOLATION-002 — takes the other copies of a named owner's campaigns out of the live tables.
+#
+# Manual only, and only after the Owner has approved the named account from the audit's evidence. Copies
+# every row whole into `isolation_quarantines` before removing it, in one transaction, and prints the batch
+# id. `restore_batch` puts a batch back. The inputs are VALUES passed to a fixed command.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_account:
+        description: 'Our id of the account the Owner established as the owner of its campaigns'
+        required: false
+        default: ''
+      restore_batch:
+        description: 'Put this quarantine batch back instead'
+        required: false
+        default: ''
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  quarantine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Quarantine or restore on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          KEEP: ${{ inputs.keep_account }}
+          RESTORE: ${{ inputs.restore_batch }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: KEEP,RESTORE
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            if [ -n "${RESTORE}" ]; then
+              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+                exec -T backend php artisan integrations:account-ownership-audit --restore="${RESTORE}"
+            elif [ -n "${KEEP}" ]; then
+              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+                exec -T backend php artisan integrations:account-ownership-audit --apply --keep-account="${KEEP}"
+            else
+              echo "Name keep_account or restore_batch." >&2
+              exit 1
+            fi
