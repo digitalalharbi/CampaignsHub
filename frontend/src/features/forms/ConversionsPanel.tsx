@@ -20,10 +20,12 @@ const KIND: Record<ConversionKind, { ar: string; en: string; config: Array<{ key
   ga4: { ar: 'GA4 (Measurement Protocol)', en: 'GA4 (Measurement Protocol)', config: [{ key: 'measurement_id', ar: 'معرّف القياس', en: 'Measurement id', placeholder: 'G-XXXXXXXXXX' }], secrets: [{ key: 'api_secret', ar: 'مفتاح API السري', en: 'API secret' }] },
   meta_capi: { ar: 'Meta (واجهة التحويلات)', en: 'Meta (Conversions API)', config: [{ key: 'pixel_id', ar: 'معرّف البيكسل / مجموعة البيانات', en: 'Pixel / dataset id', placeholder: '123456789012345' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
   snapchat_capi: { ar: 'Snapchat (واجهة التحويلات)', en: 'Snapchat (Conversions API)', config: [{ key: 'pixel_id', ar: 'معرّف البيكسل', en: 'Pixel id', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
+  tiktok_events: { ar: 'TikTok (واجهة الأحداث)', en: 'TikTok (Events API)', config: [{ key: 'pixel_code', ar: 'رمز البيكسل', en: 'Pixel Code', placeholder: 'C4A1B2C3D4E5F6G7' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
+  linkedin_capi: { ar: 'LinkedIn (واجهة التحويلات)', en: 'LinkedIn (Conversions API)', config: [{ key: 'conversion_rule_id', ar: 'معرّف قاعدة التحويل', en: 'Conversion rule id', placeholder: '104012' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
   gtm_server: { ar: 'GTM من جهة الخادم', en: 'Server-side GTM', config: [{ key: 'endpoint_url', ar: 'عنوان الحاوية (https)', en: 'Container address (https)', placeholder: 'https://gtm.example.com/collect' }], secrets: [{ key: 'api_key', ar: 'مفتاح API (اختياري)', en: 'API key (optional)' }] },
   gtm_web: { ar: 'GTM على الصفحة', en: 'Web GTM (on the page)', config: [{ key: 'container_id', ar: 'معرّف الحاوية', en: 'Container id', placeholder: 'GTM-XXXXXX' }], secrets: [] },
 }
-const PLANNED = ['TikTok Events API', 'Google Ads', 'LinkedIn Conversions API', 'X']
+const PLANNED = ['Google Ads', 'X']
 const STATUS_TONE = { test: 'neutral', live: 'success', off: 'warning' } as const
 const DELIVERY_TONE = { queued: 'info', sent: 'success', failed: 'danger', skipped_consent: 'warning', test: 'neutral' } as const
 const input = 'w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text-primary'

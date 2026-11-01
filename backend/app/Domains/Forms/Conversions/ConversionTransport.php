@@ -51,6 +51,11 @@ final class ConversionTransport
                 return ['ok' => false, 'code' => $code, 'error' => $this->clean('Rejected by GA4: '.json_encode($problems), $secrets), 'retryable' => false];
             }
 
+            // TikTok answers HTTP 200 for a refusal too: its own `code` is what says so («If the code is not 0, it indicates an error»).
+            if ($d->kind === ConversionKinds::TIKTOK && (int) $response->json('code', -1) !== 0) {
+                return ['ok' => false, 'code' => $code, 'error' => $this->clean('Rejected by TikTok: '.$response->json('code').' '.$response->json('message'), $secrets), 'retryable' => false];
+            }
+
             return ['ok' => true, 'code' => $code, 'error' => null, 'retryable' => false];
         }
 
@@ -89,6 +94,18 @@ final class ConversionTransport
             case ConversionKinds::SNAPCHAT:
                 // Snap documents validation as the same call with `/validate` appended to the path.
                 return [($validate ? $payload['url'].'/validate' : $payload['url']).'?'.http_build_query(['access_token' => $secrets['access_token'] ?? '']), []];
+
+            case ConversionKinds::TIKTOK:
+                // Its current reference documents no validation call for /event/track/, so diagnostics say so and test mode shows the payload.
+                return [$validate ? null : $payload['url'], ['Access-Token' => (string) ($secrets['access_token'] ?? '')]];
+
+            case ConversionKinds::LINKEDIN:
+                // No validation interface in its reference either. The version header is required; 202610 is the current one.
+                return [$validate ? null : $payload['url'], [
+                    'Authorization' => 'Bearer '.($secrets['access_token'] ?? ''),
+                    'Linkedin-Version' => '202610',
+                    'X-Restli-Protocol-Version' => '2.0.0',
+                ]];
 
             default:
                 return [$payload['url'], isset($secrets['api_key']) ? ['X-API-Key' => (string) $secrets['api_key']] : []];

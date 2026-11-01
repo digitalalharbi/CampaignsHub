@@ -27,7 +27,9 @@ describe('the conversion destinations screen', () => {
     expect(await screen.findByTestId('destination-status-d1')).toHaveTextContent('Test — sends nothing')
     expect(screen.getByTestId('destination-counts-d1')).toHaveTextContent('Last 7 days: sent 4 · failed 1 · no consent 2 · test 3')
     expect(screen.getByTestId('destination-last-error-d1')).toHaveTextContent('HTTP 403 ***')
-    expect(screen.getByTestId('planned-kinds')).toHaveTextContent('TikTok Events API')
+    expect(screen.getByTestId('planned-kinds')).toHaveTextContent('Google Ads')
+    expect(screen.getByTestId('planned-kinds')).not.toHaveTextContent('TikTok')
+    expect(screen.getByTestId('planned-kinds')).not.toHaveTextContent('LinkedIn')
     expect(document.body.textContent).not.toMatch(/SECRET/)
   })
 

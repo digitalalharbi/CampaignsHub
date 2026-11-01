@@ -33,6 +33,8 @@ final class ConversionPayloads
             ConversionKinds::META => self::meta($d, $event, $e),
             ConversionKinds::GTM_SERVER => self::gtm($d, $event, $e),
             ConversionKinds::SNAPCHAT => self::snapchat($d, $event, $e),
+            ConversionKinds::TIKTOK => self::tiktok($d, $event, $e),
+            ConversionKinds::LINKEDIN => self::linkedin($d, $e),
             default => throw new \InvalidArgumentException('No payload builder for '.$d->kind),
         };
     }
@@ -122,6 +124,66 @@ final class ConversionPayloads
                 'event_source_url' => $e['source_url'],
                 'user_data' => $user,
             ], static fn ($v): bool => $v !== null && $v !== [])]],
+        ];
+    }
+
+    /**
+     * TikTok Events API 2.0, event_source `web`. The phone is hashed in E.164 WITH its `+` (TikTok's rule, unlike Snap's digits);
+     * `page.url` is required for web events, so a conversion with no landing path is refused by the platform, not invented here.
+     *
+     * @param  Evidence  $e
+     * @return array{url: string, body: array<string,mixed>}
+     */
+    private static function tiktok(ConversionDestination $d, string $event, array $e): array
+    {
+        $user = array_filter([
+            'email' => $e['email'] === null ? null : self::hash($e['email']),
+            'phone' => $e['phone'] === null ? null : self::hash('+'.self::digits($e['phone'])),
+            'ttclid' => $e['click_ids']['ttclid'] ?? null,
+        ]);
+
+        return [
+            'url' => 'https://business-api.tiktok.com/open_api/v1.3/event/track/',
+            'body' => [
+                'event_source' => 'web',
+                'event_source_id' => $d->config['pixel_code'],
+                'data' => [array_filter([
+                    'event' => $event,
+                    'event_time' => $e['occurred_at']->getTimestamp(),
+                    'event_id' => $e['event_id'],
+                    'user' => $user,
+                    'page' => $e['source_url'] === null ? null : ['url' => $e['source_url']],
+                ], static fn ($v): bool => $v !== null && $v !== [])],
+            ],
+        ];
+    }
+
+    /**
+     * LinkedIn Conversions API. `userIds` must be present even when empty. LinkedIn's `userInfo` takes names in plain text, which
+     * this class never sends: identifiers leave hashed or not at all, so a lead with no email and no click id is refused by the
+     * platform rather than sent with a readable name.
+     *
+     * @param  Evidence  $e
+     * @return array{url: string, body: array<string,mixed>}
+     */
+    private static function linkedin(ConversionDestination $d, array $e): array
+    {
+        $ids = [];
+        if ($e['email'] !== null) {
+            $ids[] = ['idType' => 'SHA256_EMAIL', 'idValue' => self::hash($e['email'])];
+        }
+        if (isset($e['click_ids']['li_fat_id'])) {
+            $ids[] = ['idType' => 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', 'idValue' => $e['click_ids']['li_fat_id']];
+        }
+
+        return [
+            'url' => 'https://api.linkedin.com/rest/conversionEvents',
+            'body' => [
+                'conversion' => 'urn:lla:llaPartnerConversion:'.$d->config['conversion_rule_id'],
+                'conversionHappenedAt' => $e['occurred_at']->getTimestamp() * 1000,
+                'user' => ['userIds' => $ids],
+                'eventId' => $e['event_id'],
+            ],
         ];
     }
 

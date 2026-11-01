@@ -428,6 +428,89 @@ final class LeadFormConversionsTest extends TestCase
         Http::assertSent(fn (HttpRequest $r): bool => str_starts_with($r->url(), 'https://tr.snapchat.com/v3/1c5b9a3e-aaaa-4bbb-8ccc-0123456789ab/events/validate?') && str_contains($r->url(), 'access_token=TOKEN-snap-value'));
     }
 
+    /** TikTok Events API 2.0, from its current reference: seconds, hashed fields, the phone hashed in E.164 with its plus. */
+    public function test_tiktok_gets_the_shape_its_reference_names(): void
+    {
+        $this->httpReturns(Http::response(['code' => 0, 'message' => 'OK', 'data' => []], 200));
+        $id = $this->create(['kind' => 'tiktok_events', 'name' => 'TT', 'config' => ['pixel_code' => 'c4a1b2c3d4e5f6g7'], 'secrets' => ['access_token' => 'TOKEN-tt-value']]);
+        $slug = $this->slug();
+        $body = $this->submission();
+        $body['attribution']['ttclid'] = 'E.C.P.abc';
+
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $body)->assertCreated();
+
+        $delivery = ConversionDelivery::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('https://business-api.tiktok.com/open_api/v1.3/event/track/', $delivery->payload['url']);
+        $this->assertSame('web', $delivery->payload['body']['event_source']);
+        $this->assertSame('C4A1B2C3D4E5F6G7', $delivery->payload['body']['event_source_id']);
+        $row = $delivery->payload['body']['data'][0];
+        $this->assertSame('Lead', $row['event']);
+        $this->assertLessThan(10_000_000_000, $row['event_time'], 'Unix seconds, not milliseconds.');
+        $this->assertSame((string) $delivery->event_id, $row['event_id']);
+        $this->assertSame(hash('sha256', 'sara@example.test'), $row['user']['email']);
+        $this->assertSame(hash('sha256', '+966500000123'), $row['user']['phone']);
+        $this->assertSame('E.C.P.abc', $row['user']['ttclid']);
+        $this->assertStringContainsString('/villas', $row['page']['url']);
+        $this->assertStringNotContainsString('TOKEN-tt-value', json_encode($delivery->payload));
+        $this->assertSame('test', $delivery->status, 'A destination starts in test mode and sends nothing.');
+
+        // Its current reference documents no validation call: diagnostics say so rather than pretend.
+        $this->live($id);
+        $this->as()->postJson("/api/v1/projects/{$this->project->id}/conversion-destinations/{$id}/diagnose")->assertOk()->assertJsonPath('data.validation.ok', false);
+    }
+
+    /** TikTok answers HTTP 200 for a refusal: only its own `code` says so, and a refused event must not be recorded as sent. */
+    public function test_a_tiktok_refusal_on_http_200_is_a_failure_and_the_token_is_never_echoed(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 40001, 'message' => 'bad token TOKEN-tt-value'], 200)]);
+        $d = new ConversionDestination(['kind' => 'tiktok_events', 'config' => ['pixel_code' => 'C4A1B2C3D4E5F6G7']]);
+        $d->secrets = ['access_token' => 'TOKEN-tt-value'];
+
+        $r = app(ConversionTransport::class)->send($d, ['url' => 'https://business-api.tiktok.com/open_api/v1.3/event/track/', 'body' => ['data' => []]]);
+
+        $this->assertFalse($r['ok']);
+        $this->assertFalse($r['retryable']);
+        $this->assertStringContainsString('40001', (string) $r['error']);
+        $this->assertStringNotContainsString('TOKEN-tt-value', (string) $r['error']);
+        Http::assertSent(fn ($q) => $q->hasHeader('Access-Token', 'TOKEN-tt-value') && ! str_contains($q->url(), 'TOKEN-tt-value'));
+    }
+
+    /** LinkedIn's Conversions API: rule URN, milliseconds, hashed email, its required headers; a name never leaves in plain text. */
+    public function test_linkedin_gets_the_shape_its_reference_names_and_no_plain_name(): void
+    {
+        $this->httpReturns(Http::response([], 201));
+        $id = $this->create(['kind' => 'linkedin_capi', 'name' => 'LI', 'config' => ['conversion_rule_id' => '104012'], 'secrets' => ['access_token' => 'TOKEN-li-value']]);
+        $slug = $this->slug();
+        $body = $this->submission();
+        $body['attribution']['li_fat_id'] = 'df5gf5-gh6t7';
+
+        $this->postJson("/api/v1/public/forms/{$slug}/submissions", $body)->assertCreated();
+
+        $payload = ConversionDelivery::withoutGlobalScopes()->firstOrFail()->payload;
+        $this->assertSame('https://api.linkedin.com/rest/conversionEvents', $payload['url']);
+        $this->assertSame('urn:lla:llaPartnerConversion:104012', $payload['body']['conversion']);
+        $this->assertGreaterThan(1_700_000_000_000, $payload['body']['conversionHappenedAt'], 'Epoch milliseconds.');
+        $this->assertContains(['idType' => 'SHA256_EMAIL', 'idValue' => hash('sha256', 'sara@example.test')], $payload['body']['user']['userIds']);
+        $this->assertArrayNotHasKey('userInfo', $payload['body']['user'], 'LinkedIn takes names in plain text; this product does not send them.');
+        $this->assertStringNotContainsString('TOKEN-li-value', json_encode($payload));
+
+        $d = ConversionDestination::withoutGlobalScopes()->findOrFail($id);
+        Http::fake(['*' => Http::response([], 201)]);
+        $this->assertTrue(app(ConversionTransport::class)->send($d, $payload)['ok']);
+        Http::assertSent(fn ($q) => $q->hasHeader('Linkedin-Version', '202610') && $q->hasHeader('X-Restli-Protocol-Version', '2.0.0') && $q->hasHeader('Authorization', 'Bearer TOKEN-li-value'));
+    }
+
+    public function test_tiktok_and_linkedin_settings_are_validated_and_need_a_token_to_go_live(): void
+    {
+        $url = "/api/v1/projects/{$this->project->id}/conversion-destinations";
+        $this->as()->postJson($url, ['kind' => 'tiktok_events', 'name' => 'T', 'config' => ['pixel_code' => 'x']])->assertStatus(422);
+        $this->as()->postJson($url, ['kind' => 'tiktok_events', 'name' => 'T', 'config' => ['pixel_code' => 'C4A1B2C3D4E5F6G7', 'event_name' => 'lead']])->assertStatus(422);
+        $this->as()->postJson($url, ['kind' => 'linkedin_capi', 'name' => 'L', 'config' => ['conversion_rule_id' => 'abc']])->assertStatus(422);
+        $this->as()->postJson($url, ['kind' => 'linkedin_capi', 'name' => 'L', 'config' => ['conversion_rule_id' => '104012']])->assertCreated();
+        $id = ConversionDestination::withoutGlobalScopes()->firstOrFail()->id;
+        $this->as()->patchJson("{$url}/{$id}", ['status' => 'live', 'confirm_live' => true])->assertStatus(422);
+    }
+
     public function test_snapchat_settings_are_validated_against_its_own_event_list(): void
     {
         $url = "/api/v1/projects/{$this->project->id}/conversion-destinations";

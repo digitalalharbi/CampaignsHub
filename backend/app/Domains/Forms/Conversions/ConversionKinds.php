@@ -25,14 +25,20 @@ final class ConversionKinds
     /** Snapchat Conversions API v3 — built from Snap's own published reference (endpoint, required fields, `/validate`). */
     public const SNAPCHAT = 'snapchat_capi';
 
+    /** TikTok Events API 2.0, `/open_api/v1.3/event/track/` — from TikTok's current reference (read 2026-11-01). */
+    public const TIKTOK = 'tiktok_events';
+
+    /** LinkedIn Conversions API, `/rest/conversionEvents`, version 202610 — from LinkedIn's current reference (read 2026-11-01). */
+    public const LINKEDIN = 'linkedin_capi';
+
     /** The tag manager container the PUBLIC PAGE loads — no server delivery, only a script on the page once the team made it live. */
     public const GTM_WEB = 'gtm_web';
 
     /** @var list<string> */
-    public const IMPLEMENTED = [self::GA4, self::META, self::GTM_SERVER, self::SNAPCHAT, self::GTM_WEB];
+    public const IMPLEMENTED = [self::GA4, self::META, self::GTM_SERVER, self::SNAPCHAT, self::TIKTOK, self::LINKEDIN, self::GTM_WEB];
 
     /** @var list<string> official conversions interfaces whose builders are not written yet */
-    public const PLANNED = ['tiktok_events', 'google_ads', 'linkedin_capi', 'x_conversions'];
+    public const PLANNED = ['google_ads', 'x_conversions'];
 
     /** Whether a kind is a server-side delivery. `gtm_web` is configuration for the page and has nothing to deliver. */
     public static function deliversFromServer(string $kind): bool
@@ -41,13 +47,13 @@ final class ConversionKinds
     }
 
     /** @var array<string,string> kind => the platform's own event name used when none is chosen */
-    private const DEFAULT_EVENT = [self::GA4 => 'generate_lead', self::META => 'Lead', self::GTM_SERVER => 'generate_lead', self::SNAPCHAT => 'SIGN_UP', self::GTM_WEB => ''];
+    private const DEFAULT_EVENT = [self::GA4 => 'generate_lead', self::META => 'Lead', self::GTM_SERVER => 'generate_lead', self::SNAPCHAT => 'SIGN_UP', self::TIKTOK => 'Lead', self::LINKEDIN => '', self::GTM_WEB => ''];
 
     /** @var array<string,list<string>> the secret keys each kind may hold */
-    private const SECRET_KEYS = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => ['api_key'], self::SNAPCHAT => ['access_token'], self::GTM_WEB => []];
+    private const SECRET_KEYS = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => ['api_key'], self::SNAPCHAT => ['access_token'], self::TIKTOK => ['access_token'], self::LINKEDIN => ['access_token'], self::GTM_WEB => []];
 
     /** @var array<string,list<string>> the secret keys a destination needs before it may go live */
-    private const REQUIRED_FOR_LIVE = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => [], self::SNAPCHAT => ['access_token'], self::GTM_WEB => []];
+    private const REQUIRED_FOR_LIVE = [self::GA4 => ['api_secret'], self::META => ['access_token'], self::GTM_SERVER => [], self::SNAPCHAT => ['access_token'], self::TIKTOK => ['access_token'], self::LINKEDIN => ['access_token'], self::GTM_WEB => []];
 
     /**
      * Normalise and validate a destination's non-secret settings.
@@ -104,6 +110,27 @@ final class ConversionKinds
                 }
 
                 return ['pixel_id' => $pixel, 'event_name' => $event];
+
+            case self::TIKTOK:
+                $pixel = strtoupper(trim((string) ($raw['pixel_code'] ?? '')));
+                if (preg_match('/^[A-Z0-9]{8,40}$/', $pixel) !== 1) {
+                    throw new InvalidArgumentException('A TikTok destination needs its Pixel Code.');
+                }
+                // TikTok's standard events a lead form can honestly report; the names are case-sensitive in its reference.
+                if (! in_array($event, ['Lead', 'Contact', 'SubmitApplication', 'CompleteRegistration', 'Schedule'], true)) {
+                    throw new InvalidArgumentException('Choose one of TikTok\'s events: Lead, Contact, SubmitApplication, CompleteRegistration or Schedule.');
+                }
+
+                return ['pixel_code' => $pixel, 'event_name' => $event];
+
+            case self::LINKEDIN:
+                // The rule is created in the customer's Campaign Manager with method CONVERSIONS_API; its id is what they paste here.
+                $rule = trim((string) ($raw['conversion_rule_id'] ?? ''));
+                if (preg_match('/^[0-9]{1,20}$/', $rule) !== 1) {
+                    throw new InvalidArgumentException('A LinkedIn destination needs the id of its conversion rule (digits).');
+                }
+
+                return ['conversion_rule_id' => $rule];
 
             case self::GTM_WEB:
                 $container = strtoupper(trim((string) ($raw['container_id'] ?? '')));

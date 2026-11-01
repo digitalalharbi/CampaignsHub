@@ -55,7 +55,7 @@ export interface LeadFormDetail extends LeadFormRow {
 }
 
 /** FORMS-DISPATCH-001 — a place a lead's conversion is reported. Secrets are never in this shape: only which exist. */
-export type ConversionKind = 'ga4' | 'meta_capi' | 'snapchat_capi' | 'gtm_server' | 'gtm_web'
+export type ConversionKind = 'ga4' | 'meta_capi' | 'snapchat_capi' | 'tiktok_events' | 'linkedin_capi' | 'gtm_server' | 'gtm_web'
 export interface ConversionDestination {
   id: string
   kind: ConversionKind
