@@ -281,6 +281,10 @@ final class SubscriptionService
                 ->distinct()
                 ->count(DB::raw("external_accounts.provider || ':' || external_accounts.external_id")),
 
+            // PRICING-SEATS-001 — replacements used in the rolling 30-day window: a different account taking a released seat.
+            'ad_account_replacements' => DB::table('ad_account_seat_events')->where('tenant_id', $id)->where('type', 'replaced')
+                ->where('occurred_at', '>', Carbon::now()->subDays(30))->count(),
+
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.
             'connections' => DB::table('provider_connections')->where('tenant_id', $id)
