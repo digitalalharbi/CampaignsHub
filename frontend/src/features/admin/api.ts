@@ -1071,6 +1071,42 @@ export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Pr
 }
 
 /*
+ * SUPERADMIN-FEATURES-001 — capabilities on or off for every workspace, and one workspace's own switch. Enforced by the server's
+ * `module:` checks, not by hiding: every change needs a reason and is audited.
+ */
+export interface PlatformCapability {
+  module: string
+  activation: string
+  platform_disabled: boolean
+  disabled_by_environment: boolean
+}
+
+export interface TenantCapability {
+  module: string
+  entitled: boolean
+  enabled: boolean
+  reason: string | null
+  /** The workspace's own switch: true, false, or null when it inherits. */
+  tenant_switch: boolean | null
+}
+
+export function fetchPlatformCapabilities(): Promise<{ capabilities: PlatformCapability[] }> {
+  return getData('/admin/capabilities')
+}
+
+export function setPlatformCapability(module: string, disabled: boolean, reason: string): Promise<{ capabilities: PlatformCapability[] }> {
+  return putData(`/admin/capabilities/${module}`, { disabled, reason })
+}
+
+export function fetchTenantCapabilities(tenantId: string): Promise<{ capabilities: TenantCapability[] }> {
+  return getData(`/admin/tenants/${tenantId}/capabilities`)
+}
+
+export function setTenantCapability(tenantId: string, module: string, enabled: boolean | null, reason: string): Promise<{ capabilities: TenantCapability[] }> {
+  return putData(`/admin/tenants/${tenantId}/capabilities/${module}`, { enabled, reason })
+}
+
+/*
  * SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace. Needs a reason and the operator's
  * own password; the server refuses writes, secrets, money and exports for the whole visit.
  */

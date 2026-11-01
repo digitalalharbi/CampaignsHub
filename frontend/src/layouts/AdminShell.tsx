@@ -14,6 +14,7 @@ import {
   Sun,
   Mail,
   Coins,
+  ToggleRight,
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
@@ -71,6 +72,8 @@ const adminNav = [
    * clicks and one guess away from the person looking for it.
    */
   { to: '/admin/settings/integrations', ar: 'مزوّدو التكامل', en: 'Integration providers', icon: Plug },
+  // SUPERADMIN-FEATURES-001 — a capability on or off for every workspace.
+  { to: '/admin/features', ar: 'الخصائص', en: 'Features', icon: ToggleRight },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
 ] as const
 

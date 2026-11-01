@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { AccountGrantsPanel } from './AccountGrants'
+import { TenantCapabilitiesPanel } from './TenantCapabilitiesPanel'
 import { SupportAccessDialog } from './SupportAccessDialog'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
@@ -249,6 +250,9 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
 
           {/* GRANT-001 — what this account has beyond its plan, and who gave it. */}
           <AccountGrantsPanel tenantId={id} ar={ar} />
+
+          {/* SUPERADMIN-FEATURES-001 — this workspace's own switch per capability. */}
+          <TenantCapabilitiesPanel tenantId={id} ar={ar} />
 
           <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}
