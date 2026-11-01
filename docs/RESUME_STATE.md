@@ -1,3 +1,99 @@
+# CURRENT STATE — 2026-11-01 (evening) — the launchd lander, the open-row code items, decisions waiting
+
+- **Landing runs without a Claude session.**
+  - A launchd agent (`~/Library/LaunchAgents/com.campaignshub.lander.plist`) runs `ch-scripts/lander/lander.sh` at login and every 10 minutes.
+  - A lock admits one runner. State lives in `lander/queue.tsv`; evidence in `lander/state/evidence/`; blocked reports in `lander/state/blocked-*.log`.
+  - Commands: `status`, `logs`, `show <branch>`, `resume <branch>`.
+  - Verified: a restart resumes without redoing anything; a merged PR is only re-verified, never merged or deployed twice; an outage never blocks a row.
+- **Landed and deployed by the lander:**
+  - #911 `d959b374`;
+  - #912 `0d56e351` (readiness: SUPERADMIN-FEATURES / MEMBERS / CONSOLE-HOME / SUPPORT-ACCESS = DEPLOYED from inside production);
+  - #913 `c4debd76`.
+- **#914 was blocked by the gate** — four real failures. Fixed: comparison rows on ad accounts, no catalogue data printed as features, plan cards fit 390px, the login E2E picks Solo. The fix is cascaded down the whole stack, then the row resumed.
+- **Queue after #914:** seats → add-ons → migration → usage-credits → pricing-console → tenancy-scope → vat-console → tenancy-unify-2 → portal-request-attachments → #905 docs (last, so it can cite every test named in the matrix).
+- **From the end-to-end walk** of console and subscriber (fixed on tenancy-unify-2):
+  - a superseded scheduled move is now cleared on assignment;
+  - the current-plan card shows the price actually paid, with its VAT;
+  - the displayed plan follows the subscription;
+  - the drawer refreshes caps after an add-on change;
+  - add-ons stack on overrides;
+  - edition VAT is limited to standard 15%;
+  - seats are shown to the subscriber and in the console.
+- **Open-row code items:**
+  - built: CP-REQ-ONE-001 (portal attachments), CAMPAIGN-INTELLIGENCE-HUB (parity test + deep-link E2E), GATE-WK-ENGINE-FAULT-001 (connection log);
+  - already done: FUNNEL data-quality.
+- **Owner decisions waiting:**
+  - UX-COMPACT-CHARTS-001 — spark on the inflow card only / a separate chart / none;
+  - BRANDING-HIERARCHY-001 — font source;
+  - FORMS-DISPATCH-001 — TikTok Events and LinkedIn CAPI need their official specs before payload builders (no invented formats);
+  - TYPOGRAPHY-PRODUCT-POLISH-001 is large (1,122 arbitrary sizes) and still to do.
+- **Guarantees kept:** no collection, no renewal run, no bulk move, no existing subscription or invoice changed.
+
+# CURRENT STATE — 2026-11-01 (afternoon) — landing chain, VAT option A, usage and credits, tenancy audit
+
+- **Deployed today:** #909 console home (`11b1fbd5`, run 41269705307, health 200); #910 member management (`15e65991`, run 41285384063, health 200).
+- **Restack:** #907 and #910 were squash-merged, so every branch after them carried their pre-squash commits and merging main failed lint. The stack was rebuilt on main with each branch's own commits (`ch-scripts/restack-pricing.sh`, `union_resolve.py` keeps only add-only conflicts and never de-duplicates non-import lines). The full backend suite on the rebuilt top passed (5,914). Old heads are kept as `backup/2026-11-01/*`.
+- **Landing order** (`ch-scripts/chain-pricing.sh` → `chain-vat.sh` → `chain-unify2.sh`; each step resets the local branch to origin, then CI → merge → deploy → health and bundle):
+  - #911 plan features, then evidence, tenant limits, SAR catalogue, seats, add-ons and migration;
+  - then usage-credits, pricing-console (VAT-001 and limits), tenancy-scope and #905 docs;
+  - then vat-console (VAT-002), then tenancy-unify-2.
+- **VAT (Owner: option A):**
+  - launch subscribers keep the totals they agreed, with VAT shown as included;
+  - 2026-11 SAR prices exclude VAT and are charged with VAT added, shown before payment;
+  - invoices equal what was charged;
+  - VAT terms are captured per subscription, and the console changes new sales only (standard 15% only at edition level; customer-dependent treatments are not selectable);
+  - historical invoices are never rewritten — `subscriptions:vat-review` flags them for an accountant.
+- **Usage and credits:** built. Own-key AI usage is never charged. Platform meters charge only once the Super Admin prices them and switches charging on.
+- **Tenancy audit (27 findings):** fixed and tested — limits counted on every create path, client-portal users are not team seats, AI key scope, onboarding and Salla filing, alert scoping, wording. Recorded as decisions: findings 20, 25 and 29–31.
+- **Open matrix rows triaged (51):**
+  - 8 need code: CP-REQ-ONE-001 portal attachments, CAMPAIGN-INTELLIGENCE-HUB parity test, BRANDING-HIERARCHY-001, FORMS-DISPATCH-001, UX-COMPACT-CHARTS-001, TYPOGRAPHY-PRODUCT-POLISH-001, FUNNEL-ANALYTICAL-PATTERN-001, GATE-WK-ENGINE-FAULT-001;
+  - 15 need credentials, 25 need production evidence, 3 need an Owner decision.
+- **Guarantees kept:** no real collection, no renewal run (SUBSCRIPTION_LIFECYCLE_ENABLED off), no bulk plan move, no historical invoice changed.
+
+# CURRENT STATE — 2026-11-01 — Super Admin completed in code; pricing programme phases 1–3; deploys unblocked
+
+- **Deploys were blocked** from 2026-10-31 20:26: contributor PR #877 (Twilio OTP) added uncommented keys to the production env example, so env-contract refused every deploy and Production stayed on 45c08f07. Fix #908 comments them out and adds `EnvContractNewKeyTest`, which fails a PR that adds a new uncommented key.
+- **refresh.sh no longer drops main.** Conflicts go through `resolve_safe.py` (diff3: superset / add-add / one-side-unchanged only; a real two-sided edit aborts). Every merge then runs `guard_main_lines.py`, which fails if any line main added is missing. Tests: `ch-scripts/test_refresh.sh` (9). Replaying the broken #906 merge 78871eee flags its four lost lines. This is local tooling, outside the repo.
+- **Super Admin landing order** (serial, safe refresh): #906 support access (E2E fixed: wait for the fresh sign-in; a visit is replaced per browser) → #907 feature control → console home → memberships → plan-level features → console evidence → limit overrides → this docs PR.
+- **Pricing (Owner, 2026-11-01):**
+  - SAR catalogue Solo/Team/Agency/Enterprise. Launch plans grandfathered: withdrawn from sale, untouched.
+  - Seats by real ad account with the 30-day replacement allowance.
+  - Add-ons: capacity packs sold; feature packs «coming soon» with no price.
+  - Stack: `feat/pricing-catalogue` → `feat/ad-account-seats` → `feat/pricing-addons`, landing after Super Admin.
+- **Not started:** PRICING-USAGE-CREDITS-001 (needs AI to become a priced platform service first) and PRICING-MIGRATION-001 (per-tenant preview and audited moves).
+- **Guarantees kept:** no subscription re-priced, no collection or renewal run (SUBSCRIPTION_LIFECYCLE_ENABLED off), no real payment.
+- **Owner:**
+  - sign in to walk the admin screens (Claude does not sign in);
+  - rotate and enter the Moyasar keys;
+  - enter the Twilio Verify credentials if wanted;
+  - reconnect Meta «Project 1» and X;
+  - Meta Developers: business_management, Basic settings, Business Verification;
+  - set the feature-pack prices after cost measurement;
+  - decide whether new plans get an introductory month.
+
+# CURRENT STATE — 2026-10-31 (evening) — payment-gateway console, workspace creation and access recovery
+
+- **Deployed:**
+  - #902 (`80d13e17`): six-gateway console, PayTabs and HyperPay adapters, and the «keys ≠ available» checkout fix.
+  - #901: env-file key states in the readiness workflow.
+- **Landing in order:** #903 (create a workspace and owner link), then #904 (access recovery and real sign-out-everywhere).
+- **Moyasar on Production (proven):** in the env file `SUBSCRIPTION_PROVIDER=sandbox` and the three `MOYASAR_*` keys are empty; `SUBSCRIPTION_LIFECYCLE_ENABLED` is absent, so false. The file was last edited 2026-10-30 18:40Z, before the backend's 2026-10-31 09:47Z start. Keys can now be entered in the console instead of the env file. BLOCKED_EXTERNAL_CREDENTIALS until the rotated keys are saved, tested and enabled.
+- **Gateways:**
+  - Moyasar: implemented; live blocked on keys.
+  - Tap, Stripe: awaiting credentials.
+  - PayTabs, HyperPay: implemented against the official contracts; not verified with a sandbox.
+  - StreamPay: not implemented (needs products and prices plus a sandbox to confirm the schemas).
+- **Support access:** «الدخول للدعم» is built (#906): read-only, 30 minutes, audited in the tenant's trail.
+- **Feature control:** built (#907): platform-wide and per-workspace switches, enforced by the `module:` checks.
+- **Next task:** SUPERADMIN-CONSOLE-HOME-001 (reconnect-needed accounts, alerts, recent audit and quick actions on /admin); then per-tenant role change, membership removal and plan-limit overrides.
+- **Then:** SUPERADMIN-CONSOLE-HOME-001; per-tenant role change and membership removal from the console; plan change and limit overrides per tenant.
+- **Owner:**
+  - sign in so the admin screens can be walked: payment console, create workspace, access recovery;
+  - rotate the Moyasar keys and enter them in the console;
+  - reconnect Meta «Project 1» and X;
+  - in Meta Developers: business_management, Basic settings, Business Verification;
+  - mark #877 ready if wanted.
+
 # CURRENT STATE — 2026-10-31 (morning) — #897/#898/#899/#854 deployed; X joins the reconnect fix; billing lifecycle registered (gated)
 
 - **Deployed:**
