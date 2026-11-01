@@ -61,6 +61,17 @@ final class ReportGenerator
 
     public function generate(Report $report): array
     {
+        try {
+            return $this->snapshot($report);
+        } finally {
+            // SECURITY CLUSTER 5 — a failed generation must not leave its project behind in the worker (ProjectContext is a singleton).
+            app(ProjectContext::class)->forget();
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function snapshot(Report $report): array
+    {
         app(TenantContext::class)->setTenantId((string) $report->tenant_id);
         app(ProjectContext::class)->setProjectId((string) $report->project_id);
 

@@ -8,15 +8,20 @@ use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportBreakdowns;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\SeedsDrilldownFixture;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * SECURITY CLUSTER 5 — a public report link shows exactly what its ceiling allows, on EVERY surface.
@@ -136,5 +141,42 @@ final class ReportLinkCeilingIsolationTest extends TestCase
         $this->assertNotNull($funnel);
         $this->assertEqualsWithDelta(300.0, (float) $funnel['totals']['spend'], 0.0001, "the tiktok account's spend was published in a meta-only link's store funnel");
         $this->assertSame(['meta'], collect($funnel['comparisons']['platforms'])->pluck('platform')->all());
+    }
+
+    public function test_a_password_protected_links_attribution_needs_the_password(): void
+    {
+        $this->report->forceFill(['data' => ['period' => ['from' => '2026-07-01', 'to' => '2026-07-31']]])->saveQuietly();
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'password' => 'open-sesame',
+            'settings' => ['sections' => ['attribution' => true]],
+        ], null);
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertStatus(401);
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution", ['X-Report-Password' => 'wrong'])->assertStatus(401);
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution", ['X-Report-Password' => 'open-sesame'])->assertOk();
+    }
+
+    public function test_a_failed_generation_leaves_no_project_behind_in_the_worker(): void
+    {
+        // A window that cannot be read: the generation dies right after the project was set.
+        $this->report->setRawAttributes(['period_end' => 'not-a-date'] + $this->report->getAttributes());
+
+        try {
+            app(ReportGenerator::class)->generate($this->report);
+            $this->fail('the generation was expected to fail');
+        } catch (Throwable) {
+            // expected
+        }
+
+        $this->assertFalse(app(ProjectContext::class)->hasProject(), 'the failed job handed its project to the next job in the worker');
+    }
+
+    public function test_a_queue_worker_starts_each_job_without_a_project(): void
+    {
+        app(ProjectContext::class)->setProjectId((string) $this->project->id);
+
+        event(new JobProcessing('redis', \Mockery::mock(Job::class, ['payload' => []])));
+
+        $this->assertFalse(app(ProjectContext::class)->hasProject());
     }
 }
