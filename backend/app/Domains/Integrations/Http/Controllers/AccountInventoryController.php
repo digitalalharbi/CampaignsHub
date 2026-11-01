@@ -12,6 +12,8 @@ use App\Domains\Integrations\Services\AccountLabel;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\SyncRunLog;
+use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -83,7 +85,61 @@ final class AccountInventoryController extends Controller
         private readonly TenantContext $tenant,
         private readonly AccountLabel $label,
         private readonly AccountHealth $health,
+        private readonly ReachableProjects $reach,
     ) {}
+
+    /**
+     * SEC-CLUSTER-2 — the projects this reader may see on the inventory, or null for every project of the tenant.
+     *
+     * The inventory is a TENANT page (`integrations.view`), and it read every project's name, bound accounts
+     * and health for anyone holding that permission — a teammate confined to one client, or a member of one
+     * project, saw the whole agency. The ceiling is the one the project routes use ({@see ReachableProjects}):
+     * all projects only with `projects.view.all`, otherwise active memberships.
+     *
+     * @return list<string>|null
+     */
+    private function reachableProjectIds(Request $request, string $tenantId): ?array
+    {
+        $reach = $this->reach->for($request->user(), ProjectCapability::DASHBOARD_VIEW);
+
+        if ($reach['only'] === null && $reach['except'] === []) {
+            return null;
+        }
+
+        $q = Project::withoutGlobalScopes()->where('tenant_id', $tenantId);
+        $this->reach->constrain($q, $request->user(), 'id', ProjectCapability::DASHBOARD_VIEW);
+
+        return $q->pluck('id')->map(static fn (mixed $id): string => (string) $id)->all();
+    }
+
+    /**
+     * Narrow an account query to what a restricted reader may see: accounts actively bound to a project they
+     * reach, plus accounts nobody has bound that are tenant-level or belong to a client they reach. Unrestricted
+     * readers (`$ids === null`) get the query untouched.
+     *
+     * @param  list<string>|null  $ids
+     */
+    private function visibleTo(mixed $query, ?array $ids, string $tenantId): void
+    {
+        if ($ids === null) {
+            return;
+        }
+
+        $clients = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $ids)
+            ->pluck('client_workspace_id')->filter()->unique()->map(static fn (mixed $c): string => (string) $c)->values()->all();
+
+        $bound = fn () => ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('is_active', true)->select('external_account_id');
+
+        $query->where(function ($q) use ($ids, $clients, $bound, $tenantId): void {
+            $q->whereIn('external_accounts.id', $bound()->whereIn('project_id', $ids ?: ['00000000-0000-0000-0000-000000000000']))
+                ->orWhere(fn ($u) => $u
+                    ->whereNotIn('external_accounts.id', ProjectIntegrationBinding::withoutGlobalScopes()
+                        ->where('tenant_id', $tenantId)->where('is_active', true)->select('external_account_id'))
+                    ->where(fn ($c) => $c->whereNull('external_accounts.client_workspace_id')
+                        ->orWhereIn('external_accounts.client_workspace_id', $clients ?: ['00000000-0000-0000-0000-000000000000'])));
+        });
+    }
 
     /**
      * GET /estate — PROJECT-first: what each client's project is fed by, in one glance.
@@ -100,9 +156,11 @@ final class AccountInventoryController extends Controller
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
         $tenantId = (string) $this->tenant->tenantId();
+        $reachable = $this->reachableProjectIds($request, $tenantId);
         $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
+            ->when($reachable !== null, fn ($q) => $q->whereIn('project_id', $reachable ?: ['00000000-0000-0000-0000-000000000000']))
             ->get(['project_id', 'external_account_id']);
 
         $accounts = ExternalAccount::withoutGlobalScopes()
@@ -168,14 +226,23 @@ final class AccountInventoryController extends Controller
         ]);
 
         $tenantId = (string) $this->tenant->tenantId();
+        $reachable = $this->reachableProjectIds($request, $tenantId);
+
+        // SEC-CLUSTER-2 — a project outside the reader's reach is refused, not silently listed.
+        abort_if(
+            ($validated['project'] ?? null) !== null && $reachable !== null && ! in_array((string) $validated['project'], $reachable, true),
+            403,
+            'You do not have access to this project.',
+        );
 
         $base = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->whereIn('account_type', self::MANAGED_TYPES)
             // META-SAAS-APP-001 — a row retired by a move between Meta apps is history, not an account anybody manages.
-            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'));
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'))
+            ->tap(fn ($q) => $this->visibleTo($q, $reachable, $tenantId));
 
-        $summary = $this->summarise($tenantId);
+        $summary = $this->summarise($tenantId, $reachable);
 
         $query = (clone $base)
             ->when(
@@ -269,7 +336,7 @@ final class AccountInventoryController extends Controller
             'to' => ['required', 'date_format:Y-m-d'],
         ]);
 
-        $account = $this->accountOr404($accountId);
+        $account = $this->accountOr404($accountId, $request);
 
         if (! $this->isLinked($account)) {
             return ApiResponse::error(__('integrations.backfill_unassigned'), status: 409);
@@ -323,7 +390,7 @@ final class AccountInventoryController extends Controller
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
-        $account = $this->accountOr404($accountId);
+        $account = $this->accountOr404($accountId, $request);
 
         /*
          * OPS-LEDGER-001 — two caps stacked here, and neither said so.
@@ -453,9 +520,10 @@ final class AccountInventoryController extends Controller
     /**
      * How many of the tenant's accounts are linked, and how many are not.
      *
+     * @param  list<string>|null  $reachable
      * @return array<string, int>
      */
-    private function summarise(string $tenantId): array
+    private function summarise(string $tenantId, ?array $reachable = null): array
     {
         $linkedIds = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
@@ -467,7 +535,8 @@ final class AccountInventoryController extends Controller
             ->where('tenant_id', $tenantId)
             ->whereIn('account_type', self::MANAGED_TYPES)
             // META-SAAS-APP-001 — a row retired by a move between Meta apps is history, not an account anybody manages.
-            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'));
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'))
+            ->tap(fn ($q) => $this->visibleTo($q, $reachable, $tenantId));
 
         $total = (clone $base)->count();
         $linked = (clone $base)->whereIn('id', $linkedIds)->count();
@@ -484,11 +553,13 @@ final class AccountInventoryController extends Controller
     }
 
     /** The account, or a 404 — never another tenant's, and never a type this page does not manage. */
-    private function accountOr404(string $accountId): ExternalAccount
+    private function accountOr404(string $accountId, Request $request): ExternalAccount
     {
+        // SEC-CLUSTER-2 — an account outside the reader's reach does not exist for them (backfill, logs).
         $account = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $this->tenant->tenantId())
             ->whereIn('account_type', self::MANAGED_TYPES)
+            ->tap(fn ($q) => $this->visibleTo($q, $this->reachableProjectIds($request, (string) $this->tenant->tenantId()), (string) $this->tenant->tenantId()))
             ->find($accountId);
 
         abort_if($account === null, 404);
