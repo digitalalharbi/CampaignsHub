@@ -22,6 +22,8 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Usage\CreditTransaction;
+use App\Domains\Subscriptions\Usage\UsageEvent;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -242,6 +244,22 @@ final class AgentEngineTest extends TestCase
         $this->assertSame('failed', $thread['status']);
         $this->assertSame('ai_token_limit_reached', $thread['error']);
         $this->assertCount(0, $this->model->calls);
+    }
+
+    /** PRICING-USAGE-CREDITS-001 — each model call on the workspace's own key is metered once, against that key, and costs no credits. */
+    public function test_each_call_on_the_workspace_s_own_key_is_metered_and_never_charged(): void
+    {
+        $this->model->script([$this->toolTurn('get_rules', []), $this->textTurn('Done.')]);
+
+        $this->thread($this->send('Hello'));
+
+        $events = UsageEvent::query()->where('tenant_id', $this->tenant->id)->get();
+        $this->assertCount(2, $events, 'one row per model call');
+        $this->assertSame(['ai_tokens_own_key'], $events->pluck('meter_code')->unique()->values()->all());
+        $this->assertSame((string) AIProviderCredential::withoutGlobalScopes()->value('id'), $events->first()->scope);
+        $this->assertSame('customer', $events->first()->funded_by);
+        $this->assertSame(0.0, (float) $events->sum('credits_charged'));
+        $this->assertSame(0, CreditTransaction::query()->count());
     }
 
     public function test_the_creative_agent_reads_this_project_s_ads_and_copy_only(): void

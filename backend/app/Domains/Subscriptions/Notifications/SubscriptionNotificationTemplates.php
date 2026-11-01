@@ -34,6 +34,12 @@ final class SubscriptionNotificationTemplates
         // The plan being MOVED TO, and the date it starts — only a plan change carries these.
         $planName = (string) ($c['plan_name'] ?? '');
         $effectiveAt = (string) ($c['effective_at'] ?? '');
+        // A usage alert (PRICING-USAGE-CREDITS-001): which meter, how far through its monthly cap, and whose money it is.
+        $meter = (string) ($ar ? ($c['meter_ar'] ?? $c['meter'] ?? '') : ($c['meter'] ?? ''));
+        $threshold = (int) ($c['threshold'] ?? 0);
+        $used = (string) ($c['used'] ?? '');
+        $cap = (string) ($c['cap'] ?? '');
+        $ownKey = (bool) ($c['own_key'] ?? false);
 
         return match ($event) {
             /*
@@ -172,6 +178,31 @@ final class SubscriptionNotificationTemplates
                     ."Nothing has been charged and nothing has been refunded.\n{$url}",
             ],
 
+            /*
+             * A meter has reached 75%, 90% or 100% of its monthly cap.
+             *
+             * On the customer's own AI key the cap is the one THEY set on that key, and the cost is between them and their
+             * provider — the message says so, so nobody reads it as a bill from us. Reaching 100% on their key stops further
+             * agent calls this month, because that is the cap they asked for.
+             */
+            'usage_threshold' => $ar ? [
+                'subject' => "بلغ استهلاك «{$meter}» {$threshold}% من الحد الشهري",
+                'body' => "الاستهلاك هذا الشهر: {$used} من {$cap}.\n"
+                    .($ownKey
+                        ? 'هذا الحد وضعته أنت على مفتاحك الخاص، والتكلفة تُدفع لمزوّدك مباشرة ولا تُخصم من رصيدك لدينا.'
+                            .($threshold >= 100 ? ' تتوقف طلبات الوكلاء على هذا المفتاح حتى بداية الشهر القادم أو رفع الحد.' : '')
+                        : 'لم يُخصم أي مبلغ بسبب هذا التنبيه.')
+                    ."\n{$url}",
+            ] : [
+                'subject' => "«{$meter}» has reached {$threshold}% of its monthly cap",
+                'body' => "Used this month: {$used} of {$cap}.\n"
+                    .($ownKey
+                        ? 'You set this cap on your own key; the cost is paid to your provider directly and never taken from your balance with us.'
+                            .($threshold >= 100 ? ' Agent calls on this key stop until next month or until you raise the cap.' : '')
+                        : 'Nothing has been charged because of this alert.')
+                    ."\n{$url}",
+            ],
+
             'registration_approved' => $ar ? [
                 'subject' => 'تم اعتماد طلب تسجيلك',
                 'body' => "راجعنا طلبك واعتمدناه.\n"
@@ -220,7 +251,7 @@ final class SubscriptionNotificationTemplates
         return [
             'subscription_started', 'trial_started', 'trial_ending', 'trial_converted', 'payment_confirmed',
             'renewal_failed', 'past_due', 'suspended', 'reactivated',
-            'plan_changed', 'plan_change_scheduled',
+            'plan_changed', 'plan_change_scheduled', 'usage_threshold',
             'registration_approved', 'registration_rejected', 'registration_information_requested',
         ];
     }

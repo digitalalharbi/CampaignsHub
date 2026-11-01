@@ -11,6 +11,7 @@ use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Models\ClientAgentRule;
 use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use RuntimeException;
@@ -28,6 +29,7 @@ final class AgentConversation
     public function __construct(
         private readonly ModelClientFactory $models,
         private readonly AgentToolbox $toolbox,
+        private readonly UsageLedger $usage,
     ) {}
 
     /** Run the reply to the latest user message in the thread. Returns the final assistant text. */
@@ -40,7 +42,7 @@ final class AgentConversation
             return $this->say($thread, 'This agent is not available yet: '.($role['why_disabled'] ?? 'unknown_agent').'.', 'system');
         }
 
-        ['client' => $client, 'model' => $model, 'token_limit' => $limit] = $this->models->for($project, $thread->agent_key);
+        ['client' => $client, 'model' => $model, 'token_limit' => $limit, 'credential_id' => $credentialId] = $this->models->for($project, $thread->agent_key);
         $system = AgentRoles::systemPrompt($thread->agent_key, (string) $project->name, $this->rulesSummary($project));
         $tools = $this->toolbox->specs($role['tools']);
 
@@ -52,12 +54,20 @@ final class AgentConversation
             }
             $turn = $client->respond($model, $system, $this->history($thread), $tools);
 
-            AgentMessage::withoutGlobalScopes()->create([
+            $message = AgentMessage::withoutGlobalScopes()->create([
                 'tenant_id' => $thread->tenant_id, 'thread_id' => $thread->getKey(), 'role' => 'assistant',
                 'content' => $turn->blocks, 'text' => $turn->text === '' ? null : $turn->text,
                 'tool_calls' => $turn->toolCalls === [] ? null : array_map(static fn (array $c): array => ['name' => $c['name'], 'input' => $c['input']], $turn->toolCalls),
                 'usage' => $turn->usage, 'model' => $turn->model,
             ]);
+            // PRICING-USAGE-CREDITS-001 — the customer's own key: recorded so they see it and their cap alerts at 75/90/100%,
+            // never charged against credits.
+            $this->usage->record(
+                (string) $thread->tenant_id, 'ai_tokens_own_key',
+                (int) ($turn->usage['input_tokens'] ?? 0) + (int) ($turn->usage['output_tokens'] ?? 0),
+                'agent_message:'.$message->getKey(), scope: $credentialId, cap: $limit,
+                referenceType: 'agent_message', referenceId: (string) $message->getKey(),
+            );
 
             if ($turn->stop === 'refusal') {
                 return $turn->text !== '' ? $turn->text : 'The model declined to answer this request.';

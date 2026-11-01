@@ -24,4 +24,8 @@ return [
     'plan_not_available' => 'That plan is not available.',
     'plan_term_not_sold' => 'This plan is not sold on that term.',
     'no_payment_due' => 'This application is not waiting on a payment.',
+    'usage_own_key_never_charged' => 'Usage on the customer\'s own key is paid to their provider and never charged against credits.',
+    'usage_cost_required' => 'Enter the actual cost per unit before charging credits for this meter.',
+    'credits_amount_invalid' => 'Enter an amount other than zero.',
+    'credits_balance_negative' => 'That would take the balance below zero.',
 ];

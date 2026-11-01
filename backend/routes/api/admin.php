@@ -26,6 +26,7 @@ use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformUsageController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -117,6 +118,12 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
         Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
         Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
+
+        // PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
+        Route::get('/usage/meters', [PlatformUsageController::class, 'meters'])->name('usage.meters');
+        Route::patch('/usage/meters/{code}', [PlatformUsageController::class, 'update'])->middleware('throttle:30,1')->name('usage.meters.update');
+        Route::get('/tenants/{tenant}/credits', [PlatformUsageController::class, 'tenant'])->name('tenants.credits');
+        Route::post('/tenants/{tenant}/credits', [PlatformUsageController::class, 'adjust'])->middleware('throttle:30,1')->name('tenants.credits.adjust');
 
         // PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue: previewed, typed, audited, at period end.
         Route::get('/plan-migration', [PlatformPlanMigrationController::class, 'index'])->name('plan-migration.index');
