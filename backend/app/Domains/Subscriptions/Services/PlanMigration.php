@@ -27,12 +27,14 @@ final class PlanMigration
         private readonly PlanCatalogue $catalogue,
     ) {}
 
-    /** @return Collection<int, Subscription> subscriptions on a plan whose catalogue edition is no longer published */
+    /** @return Collection<int, Subscription> live subscriptions on a plan whose catalogue edition is no longer published */
     public function candidates(): Collection
     {
         return Subscription::query()->withoutGlobalScopes()
             ->with(['plan.catalogueVersion', 'scheduledPlan'])
             ->whereHas('plan.catalogueVersion', fn ($q) => $q->where('status', '!=', 'published'))
+            // A cancelled subscription is leaving; booking it onto a new plan would revive a contract the customer ended.
+            ->where('status', '!=', 'cancelled')
             ->orderBy('created_at')
             ->get();
     }

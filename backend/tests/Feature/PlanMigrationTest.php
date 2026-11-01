@@ -227,6 +227,16 @@ final class PlanMigrationTest extends TestCase
         $this->assertSame(1, AuditLog::withoutGlobalScopes()->where('action', 'platform.plan_migration.scheduled')->count());
     }
 
+    public function test_a_cancelled_subscription_is_not_offered_a_move(): void
+    {
+        $this->subscription->forceFill(['status' => 'cancelled'])->save();
+
+        $this->assertSame([], $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/plan-migration')->assertOk()->json('data.workspaces'));
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/v1/admin/tenants/{$this->tenant->id}/plan-migration", ['plan_code' => 'team', 'reason' => 'Catalogue move', 'confirm' => 'legacy-co'])
+            ->assertStatus(422);
+    }
+
     public function test_only_a_platform_admin_reaches_the_migration_console(): void
     {
         $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/admin/plan-migration')->assertForbidden();
