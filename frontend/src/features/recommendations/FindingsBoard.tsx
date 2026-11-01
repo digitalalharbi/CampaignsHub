@@ -47,8 +47,8 @@ export function FindingsBoard({
         <h2 className="text-base font-bold text-text-primary">{ar ? 'ما يحتاج قرارًا الآن' : 'What needs a decision now'}</h2>
         <span className="text-[11px] text-text-secondary">
           {ar
-            ? 'مُستنتجة من بيانات الحساب نفسه — كل بطاقة تفتح دليلها.'
-            : 'Derived from this account’s own data — every card opens its evidence.'}
+            ? 'مُستنتجة من بيانات مساحة العمل نفسها — كل بطاقة تفتح دليلها.'
+            : 'Derived from this workspace’s own data — every card opens its evidence.'}
         </span>
       </div>
 

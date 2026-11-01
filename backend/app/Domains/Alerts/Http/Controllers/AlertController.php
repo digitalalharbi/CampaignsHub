@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -85,6 +86,11 @@ final class AlertController extends Controller
         abort_unless($request->user()?->hasPermission('alerts.view'), 403);
 
         $query = AlertRule::query()->latest('created_at');
+        // Scoped exactly as the events are (TENANCY-UNIFY-001): this project's rules plus the workspace-wide ones.
+        $project = $request->string('project')->toString();
+        if ($project !== '') {
+            $query->where(fn ($q) => $q->where('project_id', $project)->orWhereNull('project_id'));
+        }
 
         return ApiResponse::success(
             (clone $query)->limit(self::RULE_PAGE_SIZE)->get()->all(),
@@ -128,7 +134,8 @@ final class AlertController extends Controller
         $data = $request->validate([
             'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
             'name' => ['required', 'string', 'min:2', 'max:120'],
-            'project_id' => ['nullable', 'uuid'],
+            // A project of THIS workspace — an id from elsewhere is refused, never stored (TENANCY-UNIFY-001).
+            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())->whereNull('deleted_at')],
             /*
              * EMAIL-SETTINGS-DEPTH-001 — a threshold that would SILENCE the alert is refused.
              *

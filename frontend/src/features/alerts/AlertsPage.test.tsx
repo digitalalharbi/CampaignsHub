@@ -228,7 +228,7 @@ describe('AlertsPage — the queue says whose alert each row is, and can be narr
 
     expect(await screen.findByTestId('alert-scope-mine')).toHaveTextContent('Henka')
     expect(screen.getByTestId('alert-scope-theirs')).toHaveTextContent('Aldairman')
-    expect(screen.getByTestId('alert-scope-wide')).toHaveTextContent('Account-wide')
+    expect(screen.getByTestId('alert-scope-wide')).toHaveTextContent('Workspace-wide')
   })
 
   it('narrows the ledger itself when a project is chosen, not the rows already fetched', async () => {
@@ -282,7 +282,7 @@ describe('AlertsPage — the queue says whose alert each row is, and can be narr
     await openRulesTab()
 
     const empty = await screen.findByTestId('alert-rules-empty')
-    expect(empty).toHaveTextContent(/No rule is watching this account/i)
+    expect(empty).toHaveTextContent(/No rule is watching this workspace/i)
     expect(empty).not.toHaveTextContent(/Nothing here/i)
     expect(empty).toHaveTextContent(/no threshold to choose/i)
 

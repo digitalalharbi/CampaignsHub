@@ -66,6 +66,11 @@ function OwnKey({ k, ar }: { k: OwnKeyUsage; ar: boolean }) {
         <KeyRound size={14} className="text-text-muted" aria-hidden />
         <span className="font-semibold text-text-primary">{ar ? 'مفتاحك' : 'Your key'} · {k.provider}</span>
         <span className="text-[12px] text-text-muted"><bdi>{k.key}</bdi></span>
+        <span data-testid={`usage-key-scope-${k.id}`} className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary">
+          {k.scope === 'project' ? `${ar ? 'مشروع' : 'Project'}: ${k.scope_name ?? ''}`
+            : k.scope === 'client' ? `${ar ? 'عميل' : 'Client'}: ${k.scope_name ?? ''}`
+            : (ar ? 'كل مساحة العمل' : 'Whole workspace')}
+        </span>
         <span className="ms-auto text-text-secondary">
           <Num>{fmt(k.used)}</Num>{k.monthly_token_limit !== null && <> / <Num>{fmt(k.monthly_token_limit)}</Num></>} {ar ? 'رمز' : 'tokens'}
         </span>

@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * PRICING-USAGE-CREDITS-001 — what this workspace has used this month, what it cost, and its credit balance.
@@ -34,6 +35,11 @@ final class UsageController extends Controller
         $keys = AIProviderCredential::query()->where('tenant_id', $tenantId)->where('status', 'active')->get()
             ->map(fn (AIProviderCredential $c) => [
                 'id' => (string) $c->getKey(), 'provider' => $c->provider, 'key' => $c->maskedKey(),
+                // Which level the key serves (TENANCY-UNIFY-001): the whole workspace, one client, or one project.
+                'scope' => $c->project_id !== null ? 'project' : ($c->client_workspace_id !== null ? 'client' : 'tenant'),
+                'scope_name' => $c->project_id !== null
+                    ? DB::table('projects')->where('id', $c->project_id)->value('name')
+                    : ($c->client_workspace_id !== null ? DB::table('client_workspaces')->where('id', $c->client_workspace_id)->value('name') : null),
                 'monthly_token_limit' => $c->monthly_token_limit === null ? null : (int) $c->monthly_token_limit,
                 'used' => $this->ledger->usedThisMonth($tenantId, 'ai_tokens_own_key', (string) $c->getKey()),
             ])->values()->all();

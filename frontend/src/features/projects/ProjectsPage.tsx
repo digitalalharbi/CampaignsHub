@@ -340,8 +340,8 @@ export function ProjectsPage() {
         testid="projects-intro"
         title={t('projects')}
         purpose={locale === 'ar'
-          ? 'كل مشروع مساحة معزولة لعميل واحد — حساباته الإعلانية وحملاته وفريقه وتقاريره.'
-          : 'Each project is one client’s isolated workspace — its ad accounts, campaigns, team and reports.'}
+          ? 'كل مشروع يتبع عميلًا واحدًا ويعزل حساباته الإعلانية وحملاته وفريقه وتقاريره.'
+          : 'Each project belongs to one client and keeps its ad accounts, campaigns, team and reports apart.'}
         badges={items.length > 0
           ? (
             <Badge tone={needingAttention > 0 ? 'warning' : 'success'} data-testid="projects-health">

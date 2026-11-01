@@ -232,8 +232,12 @@ final class SubscriptionService
         return match ($metric) {
             // Archived is not deleted, and it is not occupying a slot either — restoring one is a
             // create as far as the cap is concerned, which is why `restore` is guarded too.
-            'projects' => DB::table('projects')->where('tenant_id', $id)
-                ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
+            // …and a project whose client was removed (soft-deleted) is gone with it: it holds no slot (TENANCY-UNIFY-001).
+            'projects' => DB::table('projects')->where('projects.tenant_id', $id)
+                ->whereNull('projects.deleted_at')->where('projects.status', '!=', 'archived')
+                ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('client_workspaces')
+                    ->whereColumn('client_workspaces.id', 'projects.client_workspace_id')->whereNotNull('client_workspaces.deleted_at'))
+                ->count(),
 
             /*
              * The agency's client roster — the axis the Agency plan is actually sold on.

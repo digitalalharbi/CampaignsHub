@@ -259,6 +259,9 @@ export interface OwnKeyUsage {
   id: string
   provider: string
   key: string
+  /** Which level the key serves — the whole workspace, one client or one project. */
+  scope?: 'tenant' | 'client' | 'project'
+  scope_name?: string | null
   monthly_token_limit: number | null
   used: number
 }

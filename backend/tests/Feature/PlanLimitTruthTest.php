@@ -58,6 +58,18 @@ final class PlanLimitTruthTest extends TestCase
         $this->assertSame(1, app(SubscriptionService::class)->usage($this->tenant, 'clients'));
     }
 
+    public function test_a_removed_clients_projects_hold_no_project_slot(): void
+    {
+        $live = $this->client();
+        $removed = $this->client(['deleted_at' => now()]);
+        foreach ([$live, $removed] as $c) {
+            DB::table('projects')->insert(['id' => (string) Str::uuid(), 'tenant_id' => (string) $this->tenant->id, 'client_workspace_id' => $c,
+                'name' => 'P', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+        }
+
+        $this->assertSame(1, app(SubscriptionService::class)->usage($this->tenant, 'projects'));
+    }
+
     public function test_client_portal_users_and_invitations_do_not_take_team_seats(): void
     {
         $client = $this->client();

@@ -138,7 +138,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
   afterEach(() => { signOut(); localStorage.clear() })
 
   const fill = async (planCode: string) => {
-    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Workspace name/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
     fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
@@ -190,7 +190,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     // No `?journey` — the case this test exists for.
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
 
-    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Workspace name/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
     fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
@@ -220,7 +220,7 @@ describe('RegisterPage — error summary + draft', () => {
     })
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
-    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Workspace name/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'dup@test.dev' } })
     fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
@@ -249,7 +249,7 @@ describe('RegisterPage — error summary + draft', () => {
   it('restores a saved draft (non-secret fields) on mount', () => {
     localStorage.setItem('chub:draft:register', JSON.stringify({ tenant_name: 'Restored Co', name: 'Draft User', email: 'draft@test.dev' }))
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
-    expect((screen.getByLabelText(/Organization|Org/i) as HTMLInputElement).value).toBe('Restored Co')
+    expect((screen.getByLabelText(/Workspace name/i) as HTMLInputElement).value).toBe('Restored Co')
     expect((screen.getByLabelText(/Email/i) as HTMLInputElement).value).toBe('draft@test.dev')
   })
 })
@@ -266,7 +266,7 @@ describe('RegisterPage — details, then plan', () => {
   afterEach(() => { signOut(); localStorage.clear() })
 
   const fillDetails = () => {
-    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Workspace name/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
     fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
@@ -351,7 +351,7 @@ describe('RegisterPage — the account step is validated before the packages ste
   afterEach(() => { signOut(); localStorage.clear() })
 
   const fillValid = () => {
-    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Workspace name/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
     fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
@@ -444,7 +444,7 @@ describe('RegisterPage — the account step is validated before the packages ste
     fireEvent.click(await screen.findByTestId('plan-starter'))
     fireEvent.click(screen.getByTestId('register-back'))
 
-    expect((screen.getByLabelText(/Organization|Org/i) as HTMLInputElement).value).toBe('Acme')
+    expect((screen.getByLabelText(/Workspace name/i) as HTMLInputElement).value).toBe('Acme')
     expect((screen.getByLabelText(/Email/i) as HTMLInputElement).value).toBe('new@test.dev')
     expect((screen.getByLabelText(/^Password/i) as HTMLInputElement).value).toBe('secret123')
     expect((screen.getByLabelText(/Confirm password/i) as HTMLInputElement).value).toBe('secret123')
