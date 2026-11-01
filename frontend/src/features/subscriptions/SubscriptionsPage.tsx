@@ -1,4 +1,5 @@
 import { AddonsShop } from './AddonsShop'
+import { UsageCard } from './UsageCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
@@ -283,6 +284,9 @@ export function SubscriptionsPage() {
           )}
 
           <UsageTable usage={current.usage} c={c} />
+
+          {/* PRICING-USAGE-CREDITS-001 — metered usage, own-key caps and the usage balance. */}
+          <UsageCard ar={locale === 'ar'} />
 
           {/* PRICING-ADDONS-001 — capacity and feature packs, beside the usage they extend. */}
           <AddonsShop ar={locale === 'ar'} canManage={canManage} />

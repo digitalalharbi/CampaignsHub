@@ -1288,3 +1288,41 @@ export function withdrawPlanMigration(tenantId: string, reason: string): Promise
 export function bulkPlanMigration(body: { tenant_ids: string[]; reason: string; confirm: string }): Promise<{ scheduled: string[]; skipped: { tenant_id: string; reason: string }[] }> {
   return postData('/admin/plan-migration/bulk', body)
 }
+
+// PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
+export interface AdminUsageMeter {
+  code: string
+  name: string
+  name_ar: string
+  unit: string
+  funded_by: 'platform' | 'customer'
+  unit_cost: string | null
+  currency: string
+  charges_credits: boolean
+  charges: boolean
+  included_per_plan: Record<string, number>
+  is_active: boolean
+}
+
+export interface WorkspaceCredits {
+  balance: string
+  currency: string
+  meters: { code: string; name: string; name_ar: string; used: number; included: number | null; cost: string; credits_charged: string; uncovered: string; funded_by: 'platform' | 'customer' }[]
+  transactions: { id: number; kind: 'grant' | 'consume' | 'adjust'; amount: string; balance_after: string; reason: string | null; actor_id: number | null; at: string | null }[]
+}
+
+export function fetchUsageMeters(): Promise<{ meters: AdminUsageMeter[] }> {
+  return getData('/admin/usage/meters')
+}
+
+export function updateUsageMeter(code: string, body: { unit_cost?: number | null; charges_credits?: boolean; included_per_plan?: Record<string, number | null>; reason: string }): Promise<{ meter: AdminUsageMeter }> {
+  return patchData(`/admin/usage/meters/${code}`, body)
+}
+
+export function fetchWorkspaceCredits(tenantId: string): Promise<WorkspaceCredits> {
+  return getData(`/admin/tenants/${tenantId}/credits`)
+}
+
+export function adjustWorkspaceCredits(tenantId: string, amount: number, reason: string, idempotencyKey: string): Promise<{ balance: string; transaction_id: number }> {
+  return postData(`/admin/tenants/${tenantId}/credits`, { amount, reason, idempotency_key: idempotencyKey })
+}

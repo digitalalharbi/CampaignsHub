@@ -15,6 +15,7 @@ import { TenantCapabilitiesPanel } from './TenantCapabilitiesPanel'
 import { SupportAccessDialog } from './SupportAccessDialog'
 import { TenantLimitsPanel } from './TenantLimitsPanel'
 import { TenantAddonsPanel } from './TenantAddonsPanel'
+import { TenantCreditsPanel } from './TenantCreditsPanel'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
@@ -264,6 +265,8 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           <TenantCapabilitiesPanel tenantId={id} ar={ar} />
           {/* PRICING-ADDONS-001 — requests to approve, add-ons to cancel or grant. */}
           <TenantAddonsPanel tenantId={id} ar={ar} />
+          {/* PRICING-USAGE-CREDITS-001 — this month's metered usage, the usage balance and hand adjustments. */}
+          <TenantCreditsPanel tenantId={id} ar={ar} />
 
           <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}
