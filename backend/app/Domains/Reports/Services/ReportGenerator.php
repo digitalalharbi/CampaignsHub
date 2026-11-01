@@ -90,7 +90,7 @@ final class ReportGenerator
          * An unbounded scope returns the singleton unchanged, so a report that names no scope behaves
          * exactly as it did before this existed.
          */
-        $scope = ReportScope::fromReport($report->scope);
+        $scope = ReportScope::fromReport($report->scope, (string) $report->project_id);
         // Historical reports stored the objective choice inside the scope. It is the report's measurement template, never a data bound:
         // moved to the report, the stored scope loses it, and an explicit «filter campaigns by objective» (flagged) is left exactly as chosen.
         if (($template = $scope->objectiveTemplate()) !== null) {

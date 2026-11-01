@@ -14,6 +14,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Models\ReportShare;
@@ -277,5 +278,20 @@ final class ReportLinkCeilingIsolationTest extends TestCase
         $this->actingAs($this->operator, 'sanctum')
             ->patchJson($base, ['scope' => ['campaign_ids' => [$this->campaigns[0]]]])
             ->assertUnprocessable();
+    }
+
+    public function test_a_new_report_cannot_store_a_scope_naming_another_project(): void
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $other = Project::create(['client_workspace_id' => $this->project->client_workspace_id, 'name' => 'Other client', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        $url = "/api/v1/projects/{$this->project->id}/reports";
+        $body = fn (array $scope): array => ['name' => 'R', 'type' => 'executive', 'scope' => ['account_ids' => [$this->accountId('act-meta')]] + $scope];
+
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, $body(['project_ids' => [(string) $other->id]]))->assertUnprocessable();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, $body(['project_ids' => [(string) $this->project->id, (string) $other->id]]))->assertUnprocessable();
+        // Its own project is a statement of the frame, not a lift of it.
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, $body(['project_ids' => [(string) $this->project->id]]))->assertCreated();
     }
 }
