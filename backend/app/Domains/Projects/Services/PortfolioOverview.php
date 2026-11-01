@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Services;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
-use App\Domains\Projects\Models\ProjectMembership;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -299,14 +299,9 @@ final class PortfolioOverview
          * Unrestricted access is a POSITIVE grant. Inferring it from the absence of memberships is
          * the exact inversion this product has already paid for once.
          */
-        if (! $user->hasPermission('projects.view.all')) {
-            $reachable = ProjectMembership::query()
-                ->where('user_id', $user->getKey())
-                ->where('status', 'active')
-                ->pluck('project_id')
-                ->map(static fn (mixed $id): string => (string) $id)
-                ->all();
+        $reachable = app(ProjectReach::class)->idsFor($user);
 
+        if ($reachable !== null) {
             $query->whereIn('id', $reachable);
         }
 

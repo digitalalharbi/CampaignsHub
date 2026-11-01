@@ -6,9 +6,9 @@ namespace App\Domains\Projects\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Actions\DeleteProject;
 use App\Domains\Projects\Models\Project;
-use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Projects\Resources\ProjectResource;
 use App\Domains\Projects\Services\ProjectDeletionImpact;
 use App\Domains\Projects\Services\ProjectListSummary;
@@ -326,16 +326,7 @@ final class ProjectController extends Controller
      */
     private function reachable(User $user): ?array
     {
-        if ($user->hasPermission('projects.view.all')) {
-            return null;
-        }
-
-        return ProjectMembership::query()
-            ->where('user_id', $user->id)
-            ->where('status', 'active')
-            ->pluck('project_id')
-            ->map(static fn (mixed $id): string => (string) $id)
-            ->all();
+        return app(ProjectReach::class)->idsFor($user);
     }
 
     /** Tenant-scoped lookup (global TenantScope makes cross-tenant fail-closed → 404). */
