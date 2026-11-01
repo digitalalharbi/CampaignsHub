@@ -86,8 +86,8 @@ final class AccountOwnershipAuditCommandTest extends TestCase
         $this->campaignA = $this->seedCampaign($this->accountA, $this->projectA, 'cmp_shared');
         $this->campaignB = $this->seedCampaign($this->accountB, $this->projectB, 'cmp_shared');
 
-        // The key answers for B.
-        Http::fake(['api.ads.openai.com/*' => Http::response(['id' => 'acct_b', 'object' => 'ad_account', 'name' => 'SECRET-NAME-B'])]);
+        // The key answers for B, and B's account lists the shared campaign.
+        $this->providerLists(['cmp_shared']);
     }
 
     protected function tearDown(): void
@@ -218,6 +218,66 @@ final class AccountOwnershipAuditCommandTest extends TestCase
         $this->assertSame(2, DB::table('daily_metrics')->where('external_campaign_id', $this->campaignA)->count());
         $this->assertSame(2, DB::table('creative_daily_metrics')->where('project_id', $this->projectA->id)->count());
         $this->assertSame(0, DB::table('isolation_quarantines')->where('batch', $m[1])->whereNull('restored_at')->count());
+    }
+
+    /** The provider's word decides: a campaign the owner's account does not list is never quarantined. */
+    public function test_a_campaign_the_provider_does_not_list_under_the_owner_is_not_selected(): void
+    {
+        $this->providerLists([]);
+
+        $output = $this->audit(['--apply' => true, '--keep-account' => $this->accountB->id]);
+
+        $this->assertStringContainsString('NOT LISTED', $output);
+        $this->assertSame(1, DB::table('external_campaigns')->where('id', $this->campaignA)->count());
+        $this->assertSame(0, DB::table('isolation_quarantines')->count());
+    }
+
+    /** A key that answers for another account confirms nothing, so nothing is selected. */
+    public function test_a_key_for_another_account_cannot_confirm_the_owner(): void
+    {
+        // The connection's key answers for acct_b; naming A as the owner must select nothing.
+        $output = $this->audit(['--apply' => true, '--keep-account' => $this->accountA->id]);
+
+        $this->assertStringContainsString('cannot confirm', $output);
+        $this->assertSame(1, DB::table('external_campaigns')->where('id', $this->campaignB)->count());
+        $this->assertSame(0, DB::table('isolation_quarantines')->count());
+    }
+
+    public function test_the_dry_run_shows_what_the_provider_confirms(): void
+    {
+        $output = $this->audit(['--dry-run' => true, '--keep-account' => $this->accountB->id]);
+
+        $this->assertMatchesRegularExpression('/CONFIRMED\s+campaign '.preg_quote($this->campaignA, '/').'/', $output);
+        $this->assertStringContainsString('1 of the 1 candidate copies are confirmed', $output);
+    }
+
+    /** @var list<string> the campaigns the provider currently lists under the key's account */
+    private array $listed = [];
+
+    private bool $faked = false;
+
+    /**
+     * Registered once and read per call. `Http::fake()` merges stubs and the FIRST match wins, so a
+     * second registration would silently keep answering with the first list.
+     *
+     * @param  list<string>  $campaigns
+     */
+    private function providerLists(array $campaigns): void
+    {
+        $this->listed = $campaigns;
+
+        if ($this->faked) {
+            return;
+        }
+
+        $this->faked = true;
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), '/campaigns')) {
+                return Http::response(['data' => array_map(static fn (string $id): array => ['id' => $id, 'name' => 'n'], $this->listed), 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'acct_b', 'object' => 'ad_account', 'name' => 'SECRET-NAME-B']);
+        });
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────

@@ -42,6 +42,9 @@ use Illuminate\Support\Str;
  *      inferred: the current key cannot prove it, and the wrong guess takes a customer's own data out
  *      of their own project. A copy under the same provider account (another row of the same
  *      advertiser) is left alone and reported. Nothing is moved to another project and nothing merged.
+ *      The provider has the last word: before anything is selected the owner's own credential is asked,
+ *      read-only, for that account's campaigns, and only a campaign it lists is ever quarantined. A
+ *      key that answers for a different account, or a provider that cannot be reached, selects nothing.
  *   6. `--dry-run` (with `--keep-account`) prints the plan `--apply` would execute: per project the
  *      campaigns, the rows of every table, and the stored spend before and after. It is what an Owner
  *      approves; `--apply` runs the same selection.
@@ -349,6 +352,8 @@ final class AccountOwnershipAuditCommand extends Command
         $campaignIds = array_values(array_unique($campaignIds));
         $this->line("     copies under the same provider account, left alone : {$sameAdvertiser}");
 
+        $campaignIds = $this->confirmedByProvider($owner, $campaignIds);
+
         if ($campaignIds === []) {
             $this->line('     nothing to quarantine: no other account holds a copy of this account\'s campaigns.');
 
@@ -393,6 +398,73 @@ final class AccountOwnershipAuditCommand extends Command
         $this->line("     restore with: php artisan integrations:account-ownership-audit --restore={$batch}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The provider's own answer: which of these campaigns does the owner's account really list?
+     *
+     * Asked with the credential of the connection that holds the owner's account, and only when that
+     * credential answers for the owner's provider account — a key for another account would list
+     * another account's campaigns and confirm nothing. Read-only: nothing is stored.
+     *
+     * @param  list<string>  $campaignIds  our campaign row ids
+     * @return list<string> the ones the provider lists under the owner
+     */
+    private function confirmedByProvider(ExternalAccount $owner, array $campaignIds): array
+    {
+        $connection = ProviderConnection::withoutGlobalScopes()->find($owner->provider_connection_id);
+        $connector = $this->registry->get($owner->provider);
+
+        if ($connection === null || ! $connector instanceof ApiAdvertisingConnector) {
+            $this->line('     PROVIDER CHECK: the owner has no connection that can be asked. Nothing is selected.');
+
+            return [];
+        }
+
+        $bound = $connector->withConnection($connection);
+
+        try {
+            $answers = (string) ($bound->listAdAccounts()[0]['external_id'] ?? '');
+
+            if ($answers !== $owner->external_id) {
+                $this->line('     PROVIDER CHECK: the credential on the owner\'s connection answers for '.($answers === '' ? 'no account' : $this->short($answers))
+                    .', not for '.$this->short($owner->external_id).'. It cannot confirm the owner\'s campaigns. Nothing is selected.');
+                $this->line('       Name the account row whose connection holds the owner\'s own key (the probe above shows OWNED rows).');
+
+                return [];
+            }
+
+            $listed = $bound->syncCampaigns($owner->external_id);
+        } catch (\Throwable $e) {
+            $this->line('     PROVIDER CHECK: could not ask the provider ('.ProviderErrorText::forDisplay($e->getMessage()).'). Nothing is selected.');
+
+            return [];
+        }
+
+        if (! $listed->success) {
+            $this->line('     PROVIDER CHECK: the provider refused the campaign list. Nothing is selected.');
+
+            return [];
+        }
+
+        $theirs = array_flip(array_map(static fn (array $c): string => (string) $c['external_id'], $listed->records));
+        $mine = DB::table('external_campaigns')->whereIn('id', $campaignIds)->pluck('external_id', 'id');
+        $confirmed = [];
+
+        foreach ($campaignIds as $id) {
+            $external = (string) ($mine[$id] ?? '');
+            $isListed = isset($theirs[$external]);
+            $this->line(sprintf('       %-10s campaign %s  provider id %s', $isListed ? 'CONFIRMED' : 'NOT LISTED', $id, $this->short($external)));
+
+            if ($isListed) {
+                $confirmed[] = $id;
+            }
+        }
+
+        $this->line(sprintf('     PROVIDER CHECK: the owner\'s account lists %d campaign(s); %d of the %d candidate copies are confirmed as its own.',
+            count($theirs), count($confirmed), count($campaignIds)));
+
+        return $confirmed;
     }
 
     /**

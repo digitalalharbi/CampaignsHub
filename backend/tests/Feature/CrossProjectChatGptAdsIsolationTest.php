@@ -19,6 +19,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -91,6 +92,15 @@ final class CrossProjectChatGptAdsIsolationTest extends TestCase
 
         app(ProjectContext::class)->forget();
         app(TenantContext::class)->forget();
+
+        // The key on the connection is Avenue's: it answers for Avenue's account and lists Avenue's campaign.
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), '/campaigns')) {
+                return Http::response(['data' => [['id' => 'cmp_avenue', 'name' => 'n']], 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'adacct_avenue', 'object' => 'ad_account', 'name' => 'Avenue']);
+        });
     }
 
     public function test_riwaqs_report_carries_no_avenue_spend_after_the_approved_repair_and_avenues_is_unchanged(): void
