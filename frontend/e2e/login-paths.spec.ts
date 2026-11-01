@@ -163,7 +163,8 @@ async function openAccount(
 
   // The path decides which plans exist, so it is answered first — LAUNCH-PRICING-001.
   await page.getByTestId('journey-self-service').click()
-  await page.getByTestId('plan-starter').click()
+  // PRICING-CATALOGUE-001 — the 2026-11 catalogue sells Solo to a self-managed advertiser; Starter was withdrawn.
+  await page.getByTestId('plan-solo').click()
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
 
   await page.getByTestId('registration-dev-verify').click()
