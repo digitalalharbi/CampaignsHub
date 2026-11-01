@@ -1,62 +1,63 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarClock, Link2, RefreshCw, ScrollText, X } from 'lucide-react'
 import { UnlinkAccountButton } from './UnlinkAccountButton'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { CalendarClock, EyeOff, ScrollText, Search, X } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { toApiError } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
 import { syncStatusMeaning } from '@/lib/syncStatus'
 import {
-  backfillAccount, getAccountLogs, listAccounts,
-  type AccountRow, type AccountsQuery, type LinkFilter,
+  backfillAccount, getAccountLogs, listAccounts, syncAccountNow,
+  type AccountRow,
 } from './api'
+import { accountHealthBadgeTone, accountHealthLabel } from './accountHealth'
 
 /**
- * INTEG-RUNTIME §3 §5 — every account this tenant reaches, and where each one goes.
+ * INTEGRATIONS-CENTRE-001 — the accounts that were CHOSEN, and nothing else.
  *
- * ## The screen this replaces, twice over
+ * ## What this replaced
  *
- * One real Snapchat authorisation returned **309 ad accounts** and the product first rendered them as
- * 309 identical rows saying «متصل» — three unrelated facts wearing one word, so the page could not
- * answer either question anybody has: «which of these am I paying for?» and «where do this account's
- * numbers go?»
+ * `AccountsPanel` listed every account the workspace could reach (the «all discovered» panel), with
+ * «linked / not linked» chips to tell the chosen few from the hundreds that were merely visible. One
+ * Snapchat authorisation returned 309 ad accounts, and a list that shows them beside the four that
+ * feed a client teaches people that all 309 are being read. The Owner's rule is the opposite: an
+ * unselected account is not shown on the page at all.
  *
- * The first answer to that was a four-state curation workflow: discovered → enabled → excluded, with
- * chips, a bulk bar and a column of its own. It was internal bookkeeping promoted to customer-facing
- * vocabulary. **Enabling an account did nothing** — it did not sync, did not attach, did not spend a
- * quota slot; only linking it to a project ever did any of those — so the customer was asked to learn
- * a state machine in order to press a button with no effect.
+ * Searching and discovering accounts is part of CONNECTING and of EDITING A SELECTION — that is the
+ * wizard, which searches and pages on the server. This list is the result of those choices, so it
+ * carries no search box and no way to widen itself.
  *
- * There is one distinction left, and it is the only one that was ever real: an account is **linked to
- * a project**, or it is not. That answer is read from the binding, which is the single record of
- * ownership in this system.
+ * ## How the rule is enforced rather than hoped for
  *
- * ## The two numbers on every chip
+ * The props are a union that requires a project or a connection, and the request ALWAYS carries
+ * `link=linked`. There is no combination of arguments that asks the server for the whole inventory.
+ * The list is paged, so a connection with a hundred selected accounts is never loaded at once.
  *
- * The counts describe the WHOLE inventory and the list describes the filtered part. «مرتبطة ٤» leaves
- * the customer with no way to know whether four is most of what they have or a rounding error on
- * three hundred; «٤ من ٣٠٩» answers it.
+ * ## Per account
+ *
+ * State, last sync and next sync, then the four acts that make sense of a chosen account: sync now,
+ * pull history, manage the link, remove it from the project. Every one of them needs a project to
+ * land in, which a chosen account by definition has.
  */
 
 const COPY = {
   ar: {
-    title: 'الحسابات المكتشَفة',
-    subtitle: 'كل حساب تصل إليه المنصة عبر ارتباطاتك، وإلى أي مشروع تذهب بياناته.',
-    search_ph: 'ابحث بالاسم أو المعرّف…',
-    all: 'الكل',
-    linked: 'مرتبطة بمشروع',
-    unlinked: 'غير مرتبطة',
-    of: 'من',
     loading: 'جارٍ التحميل…',
-    empty: 'لا توجد حسابات مطابقة.',
-    empty_all: 'لم يُكتشف أي حساب بعد. اربط منصة من الأعلى ليظهر ما تصل إليه هنا.',
+    empty: 'لم يُختر أي حساب بعد.',
+    sync_now: 'مزامنة الآن',
+    synced_queued: 'أُدرجت المزامنة في الطابور.',
+    next_sync: 'المزامنة القادمة',
+    paused: 'متوقفة',
+    manage_link: 'إدارة الربط',
+    prev: 'السابق',
+    next: 'التالي',
+    reference: 'المعرّف',
+    project: 'المشروع',
     logs: 'سجل المزامنة',
     backfill: 'سحب بيانات سابقة',
-    project: 'المشروع',
-    no_project: 'غير مرتبط بمشروع — لا تُجلب له بيانات',
-    reference: 'المعرّف',
-    unnamed_note: 'لم تُرسل المنصة اسمًا لهذا الحساب. سمِّه في لوحة المزوّد ليظهر هنا.',
-    quota_free: 'لا يستهلك حصة الحسابات الإعلانية',
     last_sync: 'آخر مزامنة',
     never: 'لا يوجد',
     close: 'إغلاق',
@@ -81,23 +82,19 @@ const COPY = {
     run_waited: 'انتظرت في الطابور',
   },
   en: {
-    title: 'Discovered accounts',
-    subtitle: 'Every account this platform can reach through your connections, and which project its data feeds.',
-    search_ph: 'Search by name or reference…',
-    all: 'All',
-    linked: 'Linked to a project',
-    unlinked: 'Not linked',
-    of: 'of',
     loading: 'Loading…',
-    empty: 'No matching accounts.',
-    empty_all: 'Nothing discovered yet. Connect a platform above and what it can reach appears here.',
+    empty: 'No account has been selected yet.',
+    sync_now: 'Sync now',
+    synced_queued: 'The sync is queued.',
+    next_sync: 'Next sync',
+    paused: 'Paused',
+    manage_link: 'Manage link',
+    prev: 'Previous',
+    next: 'Next',
+    reference: 'Reference',
+    project: 'Project',
     logs: 'Sync log',
     backfill: 'Pull history',
-    project: 'Project',
-    no_project: 'Not linked to a project — nothing is fetched for it',
-    reference: 'Reference',
-    unnamed_note: 'The provider sent no name for this account. Name it in the provider’s console and it appears here.',
-    quota_free: 'Does not use an ad-account slot',
     last_sync: 'Last sync',
     never: 'None',
     close: 'Close',
@@ -123,223 +120,165 @@ const COPY = {
   },
 } as const
 
+
 /** Widened so either language satisfies it — a `typeof COPY.ar` would only accept the Arabic one. */
 type Copy = typeof COPY.ar | typeof COPY.en
 
-export function AccountsPanel({ project, heading }: {
-  /*
-   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — pinned to ONE client, for the estate's expanded row.
-   *
-   * The same panel, the same request, the same per-account health and the same logs and backfill
-   * dialogs — scoped. Building a second account list for the estate would have meant two answers to
-   * «what is the state of this account», which is exactly the defect this programme has spent its
-   * PRs removing. Absent, it is the tenant-wide inventory it has always been.
-   */
-  project?: string
-  /** The estate supplies its own heading, so the panel does not repeat one inside a row. */
-  heading?: boolean
-} = {}) {
-  const locale = useUi((s) => s.locale)
-  const ar = locale === 'ar'
-  const c = COPY[ar ? 'ar' : 'en']
+/** A project or a connection — at least one, so the list can never be the whole inventory. */
+export type SelectedAccountsScope =
+  | { project: string; connection?: string }
+  | { connection: string; project?: string }
 
-  const [link, setLink] = useState<LinkFilter | 'all'>('all')
-  const [search, setSearch] = useState('')
+const PER_PAGE = 10
+
+export function SelectedAccounts({ project, connection, onManage }: SelectedAccountsScope & {
+  /** Opens the wizard in manage mode on that account's connection and project. */
+  onManage?: (account: AccountRow) => void
+}) {
+  const ar = useUi((s) => s.locale) === 'ar'
+  const c = COPY[ar ? 'ar' : 'en']
+  const [page, setPage] = useState(1)
   const [logsFor, setLogsFor] = useState<AccountRow | null>(null)
   const [backfillFor, setBackfillFor] = useState<AccountRow | null>(null)
 
-  const query: AccountsQuery = useMemo(
-    () => ({
-      ...(link === 'all' ? {} : { link }),
-      ...(search.trim() === '' ? {} : { q: search.trim() }),
-      ...(project === undefined ? {} : { project }),
-      per_page: 50,
-    }),
-    [link, search, project],
-  )
+  const scoped = project !== undefined || connection !== undefined
 
   const accountsQuery = useQuery({
-    queryKey: ['integration-accounts', query],
-    queryFn: () => listAccounts(query),
+    queryKey: ['integration-accounts', { project, connection, link: 'linked', page }],
+    queryFn: () => listAccounts({
+      link: 'linked',
+      ...(project === undefined ? {} : { project }),
+      ...(connection === undefined ? {} : { connection }),
+      page,
+      per_page: PER_PAGE,
+    }),
+    enabled: scoped,
+    placeholderData: (previous) => previous,
   })
 
   const accounts = accountsQuery.data?.accounts ?? []
-  const summary = accountsQuery.data?.summary
+  const lastPage = accountsQuery.data?.meta.last_page ?? 1
+
+  if (accountsQuery.isLoading) return <Skeleton className="h-20 w-full" />
 
   return (
-    <section
-      className={heading === false
-        /*
-         * Embedded in a row that already draws a card: a second border and a second padding inside
-         * the first is what took the width away from the account rows on a phone.
-         */
-        ? 'flex flex-col gap-3'
-        : 'flex flex-col gap-3 rounded-xl border border-border bg-surface p-4'}
-    >
-      {heading !== false && (
-        <header className="flex flex-col gap-0.5">
-          <h2 className="text-base font-bold text-text-primary">{c.title}</h2>
-          <p className="text-xs text-text-secondary">{c.subtitle}</p>
-        </header>
-      )}
-
-      {/* The chips are the filter AND the census — «٤ من ٣٠٩» in one control. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Chip label={c.all} count={summary?.total} active={link === 'all'} onClick={() => setLink('all')} />
-        <Chip
-          label={c.linked}
-          count={summary?.linked}
-          total={summary?.total}
-          totalWord={c.of}
-          active={link === 'linked'}
-          onClick={() => setLink((current) => (current === 'linked' ? 'all' : 'linked'))}
-        />
-        <Chip
-          label={c.unlinked}
-          count={summary?.unlinked}
-          total={summary?.total}
-          totalWord={c.of}
-          active={link === 'unlinked'}
-          onClick={() => setLink((current) => (current === 'unlinked' ? 'all' : 'unlinked'))}
-        />
-
-        <div className="relative min-w-0 flex-1 sm:flex-none">
-          <Search size={15} className="pointer-events-none absolute inset-y-0 my-auto ms-2.5 text-text-muted" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={c.search_ph}
-            aria-label={c.search_ph}
-            data-testid="inventory-search"
-            className="w-full rounded-lg border border-border bg-background py-1.5 ps-8 pe-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none sm:w-64"
-          />
-        </div>
-      </div>
-
-      {accountsQuery.isLoading ? (
-        <p className="p-6 text-center text-sm text-text-secondary">{c.loading}</p>
-      ) : accounts.length === 0 ? (
-        <p
-          data-testid="inventory-empty"
-          className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-text-secondary"
-        >
-          {summary?.total === 0 ? c.empty_all : c.empty}
+    <div className="flex min-w-0 flex-col gap-3" data-testid="selected-accounts">
+      {accounts.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-secondary" data-testid="selected-accounts-empty">
+          {c.empty}
         </p>
       ) : (
-        <ul className="flex flex-col gap-2" data-testid="inventory-list">
+        <ul className="flex flex-col gap-2" data-testid="selected-accounts-list">
           {accounts.map((account) => (
-            <li
+            <SelectedAccountItem
               key={account.id}
-              data-testid="inventory-row"
-              data-linked={account.is_linked}
-              className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-background p-3"
-            >
-              {/*
-                `basis-full` until there is room for a second column, and it is load-bearing on a
-                phone. `flex-1` alone let the actions — two buttons that do not wrap — keep their
-                min-content width and squeeze this column to about sixty pixels, which stacked the
-                account's name, id and project one character wide. Measured at 390px inside the
-                estate's expanded row, where the nesting takes the available width down furthest.
-              */}
-              <div className="min-w-0 flex-1 basis-full sm:basis-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* The NAME leads. Always words — the server never returns an id here. */}
-                  <span className="truncate text-sm font-semibold text-text-primary">{account.name}</span>
-                  <span className="text-[11px] text-text-muted">
-                    {account.provider_label} · {account.account_type_label}
-                  </span>
-                </div>
-
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-secondary">
-                  {/* The identifier, as a reference — labelled, secondary, never the name. */}
-                  <span className="font-mono">{c.reference}: {account.reference}</span>
-                  {account.parent_name !== null && <span>{account.parent_name}</span>}
-                  {account.is_linked ? (
-                    <span className="text-success">{c.project}: {account.assigned_project_name}</span>
-                  ) : (
-                    /* Said in words, because «no project» is the reason nothing is happening to it. */
-                    <span className="text-text-muted">{c.no_project}</span>
-                  )}
-                  <span>
-                    {c.last_sync}: {account.last_synced_at === null ? c.never : fmtDateTime(account.last_synced_at)}
-                  </span>
-                  {!account.counts_toward_ad_account_quota && (
-                    <span className="rounded bg-surface-hover px-1.5 py-0.5">{c.quota_free}</span>
-                  )}
-                </div>
-
-                {!account.named_by_provider && (
-                  <p className="mt-1 flex items-center gap-1 text-[11px] text-warning">
-                    <EyeOff size={12} /> {c.unnamed_note}
-                  </p>
-                )}
-
-                {/* INTEGRATION-UNLINK-001 — the way back for an account linked to the wrong client, on the account's own row. */}
-                {account.is_linked && account.assigned_project_id !== null && (
-                  <UnlinkAccountButton projectId={account.assigned_project_id} projectName={account.assigned_project_name} accountId={account.id} accountName={account.name} />
-                )}
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  data-testid={`account-logs-${account.id}`}
-                  onClick={() => setLogsFor(account)}
-                  className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-text-primary hover:bg-surface-hover"
-                >
-                  <ScrollText size={13} /> {c.logs}
-                </button>
-                {/* Offered only where history has somewhere to land — the server refuses otherwise. */}
-                {account.is_linked && (
-                  <button
-                    type="button"
-                    onClick={() => setBackfillFor(account)}
-                    className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-text-primary hover:bg-surface-hover"
-                  >
-                    <CalendarClock size={13} /> {c.backfill}
-                  </button>
-                )}
-              </div>
-            </li>
+              account={account}
+              ar={ar}
+              onLogs={() => setLogsFor(account)}
+              onBackfill={() => setBackfillFor(account)}
+              onManage={onManage}
+            />
           ))}
         </ul>
+      )}
+
+      {lastPage > 1 && (
+        <div className="flex items-center justify-between gap-2 text-xs" data-testid="selected-accounts-pager">
+          <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} data-testid="selected-accounts-prev">
+            {c.prev}
+          </Button>
+          <span className="tnum text-text-muted">{page} / {lastPage}</span>
+          <Button variant="secondary" size="sm" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)} data-testid="selected-accounts-next">
+            {c.next}
+          </Button>
+        </div>
       )}
 
       {logsFor !== null && <LogsDialog account={logsFor} c={c} ar={ar} onClose={() => setLogsFor(null)} />}
       {backfillFor !== null && (
         <BackfillDialog account={backfillFor} c={c} onClose={() => setBackfillFor(null)} />
       )}
-    </section>
+    </div>
   )
 }
 
-function Chip({
-  label, count, total, totalWord, active, onClick,
-}: {
-  label: string
-  count?: number
-  total?: number
-  totalWord?: string
-  active: boolean
-  onClick: () => void
+function SelectedAccountItem({ account, ar, onLogs, onBackfill, onManage }: {
+  account: AccountRow
+  ar: boolean
+  onLogs: () => void
+  onBackfill: () => void
+  onManage?: (account: AccountRow) => void
 }) {
+  const c = COPY[ar ? 'ar' : 'en']
+  const qc = useQueryClient()
+  const projectId = account.assigned_project_id
+
+  const sync = useMutation({
+    mutationFn: () => syncAccountNow(projectId!, account.id),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['integration-accounts'] })
+      void qc.invalidateQueries({ queryKey: ['connection-hub'] })
+    },
+  })
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-        active ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-text-secondary'
-      }`}
-    >
-      {label}
-      {count !== undefined && (
-        <span className="ms-1.5 font-mono text-[11px]">
-          {count}
-          {total !== undefined && totalWord !== undefined ? ` ${totalWord} ${total}` : ''}
-        </span>
+    <li className="rounded-lg border border-border bg-background p-3" data-testid="selected-account-row" data-account={account.id}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="min-w-0 truncate text-sm font-semibold text-text-primary">{account.name}</span>
+        <Badge tone={accountHealthBadgeTone(account.health)} data-testid="selected-account-state">
+          {accountHealthLabel(account.health, ar)}
+        </Badge>
+      </div>
+
+      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">
+        <span className="font-mono" dir="ltr">{account.reference}</span>
+        {account.assigned_project_name !== null && (
+          <span className="text-success">{c.project}: {account.assigned_project_name}</span>
+        )}
+      </p>
+
+      <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-text-secondary">
+        <div className="flex gap-1">
+          <dt>{c.last_sync}:</dt>
+          <dd className="tnum font-semibold text-text-primary" data-testid="selected-account-last-sync">
+            {account.last_synced_at === null ? c.never : fmtDateTime(account.last_synced_at)}
+          </dd>
+        </div>
+        <div className="flex gap-1">
+          <dt>{c.next_sync}:</dt>
+          <dd className="tnum font-semibold text-text-primary" data-testid="selected-account-next-sync">
+            {account.next_sync_at === null ? c.paused : fmtDateTime(account.next_sync_at)}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {projectId !== null && (
+          <Button variant="secondary" size="sm" loading={sync.isPending} onClick={() => sync.mutate()} data-testid="selected-account-sync">
+            <RefreshCw size={13} /> {c.sync_now}
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" onClick={onBackfill} data-testid="selected-account-backfill">
+          <CalendarClock size={13} /> {c.backfill}
+        </Button>
+        {onManage !== undefined && (
+          <Button variant="ghost" size="sm" onClick={() => onManage(account)} data-testid="selected-account-manage">
+            <Link2 size={13} /> {c.manage_link}
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" onClick={onLogs} data-testid={`account-logs-${account.id}`}>
+          <ScrollText size={13} /> {c.logs}
+        </Button>
+      </div>
+
+      {sync.isSuccess && <p className="mt-1 text-[11px] text-success" role="status">{c.synced_queued}</p>}
+      {sync.isError && <p className="mt-1 text-[11px] text-danger" role="alert">{toApiError(sync.error).message}</p>}
+
+      {/* INTEGRATION-UNLINK-001 — the way back for an account linked to the wrong client, on the account's own row. */}
+      {projectId !== null && (
+        <UnlinkAccountButton projectId={projectId} projectName={account.assigned_project_name} accountId={account.id} accountName={account.name} />
       )}
-    </button>
+    </li>
   )
 }
 

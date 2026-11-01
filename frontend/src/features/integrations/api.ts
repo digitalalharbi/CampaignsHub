@@ -668,6 +668,20 @@ export function fetchFirstSyncStatus(
   return getData<FirstSyncStatus>(`/connections/${connectionId}/first-sync?${params.toString()}`)
 }
 
+/**
+ * Queue a sync for ONE selected account, now.
+ *
+ * Goes through the project the account feeds — the same call the project page's «sync now» makes —
+ * so there is one way to start a run and one place the server decides whether it may.
+ */
+export async function syncAccountNow(
+  projectId: string,
+  accountId: string,
+): Promise<{ queued: boolean; will_fetch: boolean }> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${projectId}/sync-runs`, { external_account_id: accountId })
+}
+
 /** A window the scheduled sweep will never cover — refused for an account no project owns. */
 export async function backfillAccount(
   id: string,

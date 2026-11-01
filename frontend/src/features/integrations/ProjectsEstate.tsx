@@ -6,21 +6,23 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { fmtDateTime } from '@/lib/datetime'
 import { accounts } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
-import { AccountsPanel } from './AccountsPanel'
-import { fetchEstate, type ConnectableProvider, type EstateProject } from './api'
+import { SelectedAccounts } from './SelectedAccounts'
+import { fetchEstate, type AccountRow, type ConnectableProvider, type EstateProject } from './api'
 
 /**
  * INTEGRATION-ESTATE-001 — the integrations page, the way an operator thinks about it: client first.
  *
- * The hub answers «what did we authorise» and the inventory «what can we see». Neither answers the question asked when something is
- * wrong — «what is Razzah Avenue connected to, is it syncing, and how do I take something off it». One row per project: its platforms,
- * how many accounts, the newest sync, anything needing attention. Opening a row shows ITS accounts (the inventory's own panel, scoped —
- * health, logs, backfill, and «remove from project» on each). «ربط منصة» lists the platforms and starts that client's OWN sign-in:
- * the login is filed under the client, so it can only offer — and only ever bind — that client's accounts.
+ * The hub answers «what did we authorise». This answers the question asked when something is wrong — «what is Razzah Avenue
+ * connected to, is it syncing, and how do I take something off it». One row per project: its platforms, how many accounts, the newest
+ * sync, anything needing attention. Opening a row shows ITS SELECTED accounts only (state, last and next sync, sync now, pull history,
+ * manage link, remove from project) — never the rest of what the sign-in could see. «ربط منصة» is not a second connect flow: it opens
+ * the centre's one `ConnectionFlow` with this project already chosen, and the login is filed under the client, so it can only offer —
+ * and only ever bind — that client's accounts.
  */
-export function ProjectsEstate({ connectable, onLink }: {
+export function ProjectsEstate({ connectable, onLink, onManage }: {
   connectable: ConnectableProvider[]
   onLink: (projectId: string, provider: ConnectableProvider) => void
+  onManage?: (account: AccountRow) => void
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const estate = useQuery({ queryKey: ['integration-estate'], queryFn: fetchEstate })
@@ -59,6 +61,7 @@ export function ProjectsEstate({ connectable, onLink }: {
               onMenu={() => setLinking(linking === project.project_id ? null : project.project_id)}
               providers={providers}
               onLink={(provider) => { setLinking(null); onLink(project.project_id, provider) }}
+              onManage={onManage}
             />
           ))}
         </ul>
@@ -67,7 +70,7 @@ export function ProjectsEstate({ connectable, onLink }: {
   )
 }
 
-function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, onLink }: {
+function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, onLink, onManage }: {
   project: EstateProject
   ar: boolean
   open: boolean
@@ -76,6 +79,7 @@ function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, o
   onMenu: () => void
   providers: ConnectableProvider[]
   onLink: (provider: ConnectableProvider) => void
+  onManage?: (account: AccountRow) => void
 }) {
   const Chevron = open ? ChevronDown : ChevronLeft
 
@@ -135,7 +139,7 @@ function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, o
 
       {open && (
         <div className="border-t border-border p-3" data-testid="estate-accounts">
-          <AccountsPanel project={project.project_id} heading={false} />
+          <SelectedAccounts project={project.project_id} onManage={onManage} />
         </div>
       )}
     </li>

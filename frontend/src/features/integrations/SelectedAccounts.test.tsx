@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
-import { AccountsPanel } from './AccountsPanel'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { SelectedAccounts } from './SelectedAccounts'
 import { renderWithProviders } from '@/test/utils'
 import type { AccountRow, AccountsPage } from './api'
 
@@ -8,9 +8,10 @@ vi.mock('./api', () => ({
   listAccounts: vi.fn(),
   getAccountLogs: vi.fn(),
   backfillAccount: vi.fn(),
+  syncAccountNow: vi.fn(),
 }))
 
-import { getAccountLogs, listAccounts } from './api'
+import { getAccountLogs, listAccounts, syncAccountNow } from './api'
 
 function account(overrides: Partial<AccountRow> = {}): AccountRow {
   return {
@@ -51,113 +52,123 @@ function page(accounts: AccountRow[], summary?: Partial<AccountsPage['summary']>
 }
 
 /**
- * INTEG-RUNTIME §3 §5 — what the accounts panel must SHOW.
+ * INTEGRATIONS-CENTRE-001 — the list of SELECTED accounts.
  *
- * The backend tests hold the rules; these hold the screen. They are separate because every defect
- * this panel exists for was a rendering defect: the data was right and the page said «متصل» to all of
- * it, or printed a UUID where a name belonged, or offered a curation step that did nothing.
+ * The backend tests hold the rules; these hold the screen. The contract here is a negative one: this
+ * list can only ever ask the server for accounts that carry a binding, and it is paged.
  */
-describe('AccountsPanel', () => {
+describe('SelectedAccounts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  /** **The unanswerable question.** An unnamed account reads as words, and says whose blank it is. */
-  it('never prints an identifier where a name belongs', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(page([
-      account({ name: 'حساب سناب شات بدون اسم من المنصة', reference: '8f3ac1de-90b2-4c77-b0e1-2a4419d7c5aa', named_by_provider: false }),
-    ]))
+  /** **The fence.** Every request carries the selection filter and a scope; none can ask for the inventory. */
+  it('always asks for linked accounts of one connection or project, a page at a time', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true, assigned_project_id: 'p-1' })]))
 
-    renderWithProviders(<AccountsPanel />)
+    renderWithProviders(<SelectedAccounts connection="c1" />)
 
-    expect(await screen.findByText('حساب سناب شات بدون اسم من المنصة')).toBeInTheDocument()
-    expect(screen.getByText(/8f3ac1de-90b2-4c77-b0e1-2a4419d7c5aa/)).toBeInTheDocument()
-    expect(screen.getByText(/لم تُرسل المنصة اسمًا|provider sent no name/i)).toBeInTheDocument()
+    await screen.findByText('متجر العطور')
+    expect(listAccounts).toHaveBeenCalledWith({ link: 'linked', connection: 'c1', page: 1, per_page: 10 })
+    for (const [query] of vi.mocked(listAccounts).mock.calls) {
+      expect(query).toMatchObject({ link: 'linked' })
+    }
   })
 
-  /** «٤ من ٣٠٩» — a count without its whole cannot tell anybody whether they have finished. */
-  it('shows each count against the whole inventory', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(
-      page([account({ is_linked: true, assigned_project_name: 'حملة الصيف' })], {
-        linked: 4, unlinked: 305, total: 309,
+  it('scopes to a project when given one', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true, assigned_project_id: 'p-1' })]))
+
+    renderWithProviders(<SelectedAccounts project="p-1" />)
+
+    await screen.findByText('متجر العطور')
+    expect(listAccounts).toHaveBeenCalledWith({ link: 'linked', project: 'p-1', page: 1, per_page: 10 })
+  })
+
+  /** No search box, no link chips, no «show all»: widening the list is the wizard's job. */
+  it('has no search, no all/unlinked filter and no discovery wording', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true, assigned_project_id: 'p-1' })]))
+
+    renderWithProviders(<SelectedAccounts connection="c1" />)
+
+    await screen.findByText('متجر العطور')
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByText(/غير مرتبطة|Not linked/)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/جميع الحسابات المكتشفة|Every discovered account|الحسابات المكتشَفة|Discovered accounts/)
+  })
+
+  /** State, last sync and next sync are on every row; a null next sync reads as paused, not blank. */
+  it('shows state, last sync and next sync per account', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([
+      account({
+        is_linked: true, assigned_project_id: 'p-1', assigned_project_name: 'حملة الصيف', health: 'healthy',
+        last_synced_at: '2026-09-30T10:00:00Z', next_sync_at: null,
       }),
-    )
-
-    renderWithProviders(<AccountsPanel />)
-
-    await screen.findByText('متجر العطور')
-    expect(screen.getByText(/4 of 309|4 من 309/)).toBeInTheDocument()
-  })
-
-  /** An unlinked row says so in words — «no project» is the reason nothing is happening to it. */
-  it('says out loud when nothing will be fetched for an account', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(page([account()]))
-
-    renderWithProviders(<AccountsPanel />)
-
-    expect(await screen.findByText(/غير مرتبط بمشروع|Not linked to a project/)).toBeInTheDocument()
-  })
-
-  /** A linked row names the project. An id would not answer «where do these numbers go?». */
-  it('names the project a linked account belongs to', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(page([
-      account({ is_linked: true, assigned_project_id: 'p-1', assigned_project_name: 'حملة الصيف', health: 'healthy' }),
-    ], { linked: 1, unlinked: 0, total: 1 }))
-
-    renderWithProviders(<AccountsPanel />)
-
-    expect(await screen.findByText(/حملة الصيف/)).toBeInTheDocument()
-  })
-
-  /** A store row says out loud that it costs nothing against the advertising cap. */
-  it('marks a store as not consuming an ad-account slot', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(page([
-      account({ account_type: 'store', account_type_label: 'store', provider: 'salla', provider_label: 'Salla', counts_toward_ad_account_quota: false }),
     ]))
 
-    renderWithProviders(<AccountsPanel />)
+    renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'en' })
 
-    expect(await screen.findByText(/لا يستهلك حصة|not use an ad-account slot/i)).toBeInTheDocument()
+    expect(await screen.findByTestId('selected-account-state')).toHaveTextContent('Healthy')
+    expect(screen.getByTestId('selected-account-last-sync')).not.toHaveTextContent('None')
+    expect(screen.getByTestId('selected-account-next-sync')).toHaveTextContent('Paused')
+    expect(screen.getByText(/حملة الصيف/)).toBeInTheDocument()
   })
 
-  /**
-   * **The step that is gone.** No enable, no exclude, no bulk bar.
-   *
-   * They named a decision that changed nothing: enabling an account did not sync it, attach it or
-   * spend a quota slot. Asserting their ABSENCE is the point — a curation control that quietly
-   * returns is a customer being asked to learn a state machine again.
-   */
-  it('offers no curation step, because none of them ever did anything', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(page([account(), account({ id: 'a2', name: 'ثانٍ', reference: 'snap-2' })]))
+  /** Latin digits in the Arabic interface: the product-wide numeral rule. */
+  it('prints the reference and the page counter with Latin digits', async () => {
+    vi.mocked(listAccounts).mockResolvedValue({
+      ...page([account({ is_linked: true, assigned_project_id: 'p-1', reference: 'snap-12345' })]),
+      meta: { total: 25, per_page: 10, current_page: 1, last_page: 3 },
+    })
 
-    renderWithProviders(<AccountsPanel />)
+    renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'ar' })
+
+    await screen.findByText('snap-12345')
+    expect(screen.getByTestId('selected-accounts-pager')).toHaveTextContent('1 / 3')
+    expect(document.body.textContent).not.toMatch(/[\u0660-\u0669]/)
+  })
+
+  /** A hundred selected accounts are never loaded at once: the pager asks the server for the next page. */
+  it('pages on the server', async () => {
+    vi.mocked(listAccounts).mockResolvedValue({
+      ...page([account({ is_linked: true, assigned_project_id: 'p-1' })]),
+      meta: { total: 25, per_page: 10, current_page: 1, last_page: 3 },
+    })
+
+    renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'en' })
 
     await screen.findByText('متجر العطور')
-    expect(screen.queryByRole('button', { name: /تفعيل|^Enable$/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /استبعاد|^Exclude$/ })).not.toBeInTheDocument()
-    expect(screen.queryByTestId('inventory-bulk-bar')).not.toBeInTheDocument()
+    expect(screen.getByTestId('selected-accounts-prev')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('selected-accounts-next'))
+
+    await waitFor(() => expect(listAccounts).toHaveBeenCalledWith({ link: 'linked', connection: 'c1', page: 2, per_page: 10 }))
   })
 
-  /** Backfill is offered only where the history has a project to land in. */
-  it('offers history only for an account a project owns', async () => {
-    vi.mocked(listAccounts).mockResolvedValue(page([
-      account({ id: 'a1', name: 'مرتبط', is_linked: true, assigned_project_name: 'حملة' }),
-      account({ id: 'a2', name: 'غير مرتبط', reference: 'snap-2' }),
-    ], { linked: 1, unlinked: 1, total: 2 }))
-
-    renderWithProviders(<AccountsPanel />)
-
-    await screen.findByText('مرتبط')
-    expect(screen.getAllByRole('button', { name: /سحب بيانات سابقة|Pull history/ })).toHaveLength(1)
-  })
-
-  /** An empty inventory says which kind of empty it is — «nothing yet» is not «nothing matched». */
-  it('distinguishes an empty inventory from an empty filter', async () => {
+  it('says plainly when nothing has been selected yet', async () => {
     vi.mocked(listAccounts).mockResolvedValue(page([]))
 
-    renderWithProviders(<AccountsPanel />)
+    renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'en' })
 
-    expect(await screen.findByTestId('inventory-empty')).toHaveTextContent(/لم يُكتشف أي حساب|Nothing discovered yet/)
+    expect(await screen.findByTestId('selected-accounts-empty')).toHaveTextContent('No account has been selected yet')
+  })
+
+  /** The four account-level acts, each on the selected account's own row. */
+  it('offers sync now, pull history, manage link and remove from project', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true, assigned_project_id: 'p-1', assigned_project_name: 'حملة' })]))
+    vi.mocked(syncAccountNow).mockResolvedValue({ queued: true, will_fetch: true })
+    const onManage = vi.fn()
+
+    renderWithProviders(<SelectedAccounts connection="c1" onManage={onManage} />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('selected-account-sync'))
+    await waitFor(() => expect(syncAccountNow).toHaveBeenCalledWith('p-1', 'a1'))
+    expect(await screen.findByRole('status')).toHaveTextContent('queued')
+
+    expect(screen.getByRole('button', { name: /Pull history/ })).toBeInTheDocument()
+    expect(screen.getByTestId('unlink-account')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('selected-account-manage'))
+    expect(onManage).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1', assigned_project_id: 'p-1' }))
   })
 })
 
@@ -188,7 +199,7 @@ describe('the account sync log', () => {
       }],
     })
 
-    renderWithProviders(<AccountsPanel />)
+    renderWithProviders(<SelectedAccounts connection="c1" />)
 
     fireEvent.click(await screen.findByTestId('account-logs-a1'))
 
@@ -211,7 +222,7 @@ describe('the account sync log', () => {
       }],
     })
 
-    renderWithProviders(<AccountsPanel />)
+    renderWithProviders(<SelectedAccounts connection="c1" />)
 
     fireEvent.click(await screen.findByTestId('account-logs-a1'))
 
