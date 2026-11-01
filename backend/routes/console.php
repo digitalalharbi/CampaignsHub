@@ -29,6 +29,8 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
  * that.
  */
 Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
+// PRICING-SEATS-001 — released ad-account seats stamped within the hour, so the 30-day replacement window starts on time.
+Schedule::command('seats:reconcile')->hourly()->withoutOverlapping();
 
 // PAY-RECONCILE-001 — a payment the gateway took is settled even when its webhook was dropped after the gateway's retries.
 Schedule::command('subscriptions:reconcile-payments')->everyFifteenMinutes()->withoutOverlapping();
