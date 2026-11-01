@@ -23,6 +23,7 @@ use App\Domains\Delivery\Console\RemindDeliveryReviewers;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
+use App\Domains\Integrations\Console\AccountOwnershipAuditCommand;
 use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
@@ -141,6 +142,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
         // rows belong to, classified against the project's bindings. Writes nothing.
         ScopeAuditCommand::class,
+        AccountOwnershipAuditCommand::class,
         // ACCOUNT-SCOPE-ISOLATION-001 — the two WRITE paths of the cleanup, dry-run unless --apply. Neither
         // is reachable from the read-only diagnostics workflow.
         ScopeCleanupCommand::class,

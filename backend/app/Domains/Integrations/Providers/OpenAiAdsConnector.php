@@ -9,6 +9,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 /**
  * ChatGPT Ads — the OpenAI Advertiser API, `https://api.ads.openai.com/v1`.
@@ -24,8 +25,13 @@ use Illuminate\Support\Facades\Log;
  *     through and no parent level to choose inside, which is why `ProviderHierarchy` does not name
  *     one for this provider and the wizard does not draw the step.
  *   - the account id is not a parameter. Campaigns, ad groups and ads are read from collection
- *     endpoints that are already scoped by the key, so `$adAccountId` arrives here and is used only
- *     to label what came back.
+ *     endpoints that are already scoped by the key — so the KEY decides whose rows come back, and
+ *     `$adAccountId` only says whose rows the caller is about to store. ACCOUNT-SCOPE-ISOLATION-002:
+ *     those two must be the same account, and every read here proves it first (`assertKeyOwns()`).
+ *     Before that proof existed, an account row whose connection had since been re-keyed for a
+ *     different advertiser synced that advertiser's campaigns under its own name and into its own
+ *     project — which is how one customer's ChatGPT Ads spend reached another customer's report on
+ *     Production (2026-11-01). A mismatch now refuses the read and stores nothing.
  *
  * ## Ad group, not ad set
  *
@@ -45,6 +51,18 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
 {
     /** The first refusal of the last entity sweep — see {@see ReportsEntityGrains::lastEntityFailure()}. */
     private ?string $entityFailure = null;
+
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-002 — account ids this instance has proved the current key to own.
+     *
+     * One `GET /v1/ad_account` per (key, account) rather than one per fetch: a structure sync asks for
+     * campaigns, then ad groups (which re-read campaigns), then ads (which re-read both). The instance
+     * is a clone bound to ONE connection (`withConnection()`), so a memo here never outlives the key
+     * it was proved against — a rotated key is a new connection row and a new bound clone.
+     *
+     * @var array<string, true>
+     */
+    private array $provedOwned = [];
 
     protected function platform(): string
     {
@@ -87,8 +105,45 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
         ]];
     }
 
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-002 — the key must belong to the account whose rows are about to be stored.
+     *
+     * The collection endpoints take no account id, so this is the ONLY place the product can tell
+     * whether «the campaigns this key lists» are the campaigns of `$adAccountId`. The provider answers
+     * `GET /v1/ad_account` with the one account the key is scoped to; anything else means the stored
+     * account row and the stored credential have drifted apart, and a sync that went ahead would file
+     * another advertiser's figures under this account's name and project.
+     *
+     * Thrown rather than returned empty, so the run is recorded as FAILED with this sentence and the
+     * operator sees «re-enter this account's own key» instead of «no data» — and so that nothing is
+     * written: an empty result would be stored as a day with no delivery.
+     */
+    private function assertKeyOwns(OAuthTokens $tokens, string $adAccountId): void
+    {
+        $memo = hash('sha256', $tokens->accessToken).'|'.$adAccountId;
+
+        if (isset($this->provedOwned[$memo])) {
+            return;
+        }
+
+        $account = $this->read($this->api($tokens)->get($this->url('ad_account')), 'the ChatGPT Ads account');
+        $owned = (string) ($account['id'] ?? '');
+
+        if ($owned === '' || $owned !== $adAccountId) {
+            throw new RuntimeException(
+                'ACCOUNT-SCOPE-ISOLATION-002: the stored ChatGPT Ads key belongs to a different ad account than the one '
+                .'being synced ('.($owned === '' ? 'the provider named no account' : 'provider account '.$owned)
+                .' ≠ '.$adAccountId.'). Nothing was read or stored. Re-enter this account\'s own key to resume.',
+            );
+        }
+
+        $this->provedOwned[$memo] = true;
+    }
+
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
+        $this->assertKeyOwns($tokens, $adAccountId);
+
         $campaigns = [];
 
         foreach ($this->readPages($tokens, 'campaigns', 'campaigns') as $c) {
@@ -121,6 +176,8 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
      */
     protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
     {
+        $this->assertKeyOwns($tokens, $adAccountId);
+
         $groups = [];
 
         foreach ($this->fetchCampaigns($tokens, $adAccountId) as $campaign) {
@@ -161,6 +218,8 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
      */
     protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
     {
+        $this->assertKeyOwns($tokens, $adAccountId);
+
         $ads = [];
 
         foreach ($this->fetchAdSets($tokens, $adAccountId) as $group) {
@@ -256,6 +315,8 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
      */
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
+        $this->assertKeyOwns($tokens, $adAccountId);
+
         $rows = [];
 
         foreach ($this->insightRows($tokens, 'campaign', $from, $to) as $row) {
@@ -280,7 +341,7 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
                     $rows[$key] += $measures;
                 }
             }
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             $this->refusedMetrics = array_values(array_unique([...$this->refusedMetrics, 'conversions']));
             Log::warning('ChatGPT Ads conversion insights were refused; delivery figures were kept.', ['reason' => $e->getMessage()]);
         }
@@ -299,6 +360,15 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
         $this->entityFailure = null;
         $tokens = $this->tokens();
         $rows = [];
+
+        // The same proof as every other read: a refused key is a failure, never an empty grain.
+        try {
+            $this->assertKeyOwns($tokens, $adAccountId);
+        } catch (\Throwable $e) {
+            $this->entityFailure = $e->getMessage();
+
+            return SyncResult::of([]);
+        }
 
         $level = $grain === ReportsEntityGrains::AD_SET ? 'ad_group' : 'ad';
 
@@ -407,7 +477,7 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
             $this->countRawInsightRows(count($data));
 
             if ($data !== [] && array_filter($data, fn (array $r): bool => $this->dayOf($r) !== null && $this->stringOrNull($r, "{$level}_id") !== null) === []) {
-                throw new \RuntimeException('ChatGPT Ads insights returned '.count($data).' row(s) with none carrying a day and a '.$level.' id; row keys: '.implode(', ', array_keys($data[0])).'. Not stored as «no data».');
+                throw new RuntimeException('ChatGPT Ads insights returned '.count($data).' row(s) with none carrying a day and a '.$level.' id; row keys: '.implode(', ', array_keys($data[0])).'. Not stored as «no data».');
             }
 
             array_push($out, ...$data);

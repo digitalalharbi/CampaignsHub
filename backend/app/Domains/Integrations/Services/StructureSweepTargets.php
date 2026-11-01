@@ -39,6 +39,8 @@ final class StructureSweepTargets
             ->whereIn('provider_connection_id', $connections)
             ->where('account_type', 'ad_account')
             ->where('status', 'active')
+            // ACCOUNT-SCOPE-ISOLATION-002 — the credential no longer answers for it; see AccountAssignment.
+            ->whereNull('access_lost_at')
             ->tap(fn ($q) => $this->assignment->scopeToAssigned($q))
             ->orderBy('id')
             ->get();

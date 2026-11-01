@@ -29,6 +29,7 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
     private const SEES_EVERY_ROW = [
         // The cleanup acts on the rows the rule HIDES, so it must see them all; it refuses a selected account itself.
         'Domains/Integrations/Console/ScopeCleanupCommand.php' => 'the cleanup, which acts on hidden rows and refuses selected ones',
+        'Domains/Integrations/Console/AccountOwnershipAuditCommand.php' => 'audit and quarantine of every stored row, including hidden ones; serves no reader',
         // Writers and the sync pipeline resolve ids against everything the account holds.
         'Domains/Metrics/Services/AccountMetricsSyncer.php' => 'writer',
         'Domains/Metrics/Actions/UpsertDailyMetrics.php' => 'writer',
