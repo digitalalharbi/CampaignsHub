@@ -5,17 +5,22 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
+use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Actions\DeleteProject;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Resources\ProjectResource;
 use App\Domains\Projects\Services\ProjectDeletionImpact;
 use App\Domains\Projects\Services\ProjectListSummary;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\UserInCurrentTenant;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -108,10 +113,20 @@ final class ProjectController extends Controller
             'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'name' => ['required', 'string', 'max:160'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
-            'account_manager_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'account_manager_id' => ['nullable', 'integer', new UserInCurrentTenant],
         ]);
 
         $workspaceId = $validated['client_workspace_id'] ?? null;
+
+        /*
+         * An agency member files a project only under a client they reach (ADR 0002). The permission alone let a
+         * manager confined to one client create work inside a sibling's workspace, and so in its portal.
+         * Answered like an unknown id, so the existence of a client outside the ceiling is not confirmed.
+         */
+        if ($workspaceId !== null && app(MembershipContext::class)->isPortal(Portal::Agency)
+            && ! app(ClientAccess::class)->canAccessClient($request->user(), ClientWorkspace::query()->findOrFail($workspaceId))) {
+            throw ValidationException::withMessages(['client_workspace_id' => [__('validation.exists', ['attribute' => 'client workspace id'])]]);
+        }
 
         if ($workspaceId === null) {
             $tenant = Tenant::withoutGlobalScopes()->findOrFail(app(TenantContext::class)->tenantId());
@@ -151,7 +166,7 @@ final class ProjectController extends Controller
             'name' => ['sometimes', 'string', 'max:160'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
             'setup_completion' => ['sometimes', 'integer', 'min:0', 'max:100'],
-            'account_manager_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'account_manager_id' => ['nullable', 'integer', new UserInCurrentTenant],
         ]);
 
         $before = $model->only(['name', 'status', 'setup_completion']);

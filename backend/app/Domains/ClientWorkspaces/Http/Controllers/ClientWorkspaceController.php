@@ -83,6 +83,7 @@ final class ClientWorkspaceController extends Controller
     public function update(Request $request, ClientWorkspace $clientWorkspace, AuditLogger $audit): JsonResponse
     {
         abort_unless($request->user()->hasPermission('clients.update'), 403);
+        $this->assertReach($request, (string) $clientWorkspace->id);
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:160'],
@@ -101,6 +102,7 @@ final class ClientWorkspaceController extends Controller
     public function archive(Request $request, ClientWorkspace $clientWorkspace, AuditLogger $audit): JsonResponse
     {
         abort_unless($request->user()->hasPermission('clients.delete'), 403);
+        $this->assertReach($request, (string) $clientWorkspace->id);
         $clientWorkspace->delete(); // soft delete
         $audit->log(action: 'client_workspace.archived', entityType: ClientWorkspace::class, entityId: (string) $clientWorkspace->id);
 
@@ -111,10 +113,17 @@ final class ClientWorkspaceController extends Controller
     {
         abort_unless($request->user()->hasPermission('clients.delete'), 403);
         $ws = ClientWorkspace::withTrashed()->findOrFail($clientWorkspace);
+        $this->assertReach($request, (string) $ws->id);
         $ws->restore();
         $audit->log(action: 'client_workspace.restored', entityType: ClientWorkspace::class, entityId: (string) $ws->id);
 
         return ApiResponse::success(new ClientWorkspaceResource($ws->loadCount('projects')), 'Client workspace restored.');
+    }
+
+    /** A write needs the same reach as the read: an id outside the ceiling is not confirmed to exist (404). */
+    private function assertReach(Request $request, string $clientId): void
+    {
+        abort_unless($this->scope->canReach($request->user(), $clientId), 404);
     }
 
     private function uniqueSlug(string $name): string

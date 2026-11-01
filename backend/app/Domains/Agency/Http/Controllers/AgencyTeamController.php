@@ -208,7 +208,8 @@ final class AgencyTeamController extends Controller
             return [];
         }
 
-        return ClientWorkspace::query()->whereIn('id', $ids)
+        // Named only if the READER reaches the client: present() promises an unreachable one is counted, not named.
+        return $this->scopes->constrain(ClientWorkspace::query()->whereIn('id', $ids), request()->user(), 'id')
             ->pluck('name', 'id')
             ->mapWithKeys(fn ($name, $id) => [(string) $id => (string) $name])
             ->all();

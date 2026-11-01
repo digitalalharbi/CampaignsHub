@@ -150,6 +150,18 @@ final class ClientPortalIdentity
             $user = User::query()->where('email', $token->contact_email)->first();
         }
 
+        /*
+         * A phone one-time code is as good a proof of identity as an email one, and was ignored here: such a
+         * token carries no address, so the person's membership never resolved and the session fell back to the
+         * legacy engine, which derives reach from request rows — the whole client, with neither the project
+         * ceiling nor the read-only role the agency chose. The number must be one the account PROVED it holds, and
+         * must name exactly one account (two accounts on one number is not an identity).
+         */
+        if ($user === null && $token?->contact_email === null && $token?->contact_phone !== null) {
+            $holders = User::query()->where('phone', $token->contact_phone)->whereNotNull('phone_verified_at')->limit(2)->get();
+            $user = $holders->count() === 1 ? $holders->first() : null;
+        }
+
         if ($user === null) {
             return null;
         }
