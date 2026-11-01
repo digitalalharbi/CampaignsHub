@@ -13,6 +13,7 @@ use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -41,8 +42,10 @@ final class CampaignStructureController extends Controller
 
         $model = UnifiedCampaign::query()->findOrFail($campaign);
 
+        // SEC-CLUSTER-2 — ad sets and ads are derived only from the campaigns that survive the bound-account rule.
         $externalCampaigns = ExternalCampaign::query()
             ->where('unified_campaign_id', $model->id)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
             ->get(['id', 'provider', 'external_id', 'name', 'external_account_id']);
 
         $adSets = $externalCampaigns->isEmpty()
