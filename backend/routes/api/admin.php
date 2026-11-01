@@ -15,6 +15,7 @@ use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
+use App\Domains\Platform\Http\Controllers\PlatformMembershipController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
@@ -92,6 +93,8 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::delete('/support-session', [PlatformSupportSessionController::class, 'end'])->name('support-session.end');
         // SUPERADMIN-ACCESS-001 — restore a person's access: end their sessions, a one-time set-password link, or reset two-factor.
         Route::post('/users/{user}/access', [PlatformUserAccessController::class, 'act'])->middleware('throttle:20,1')->name('users.access');
+        // SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace.
+        Route::post('/tenants/{tenant}/members/{user}', [PlatformMembershipController::class, 'act'])->middleware('throttle:20,1')->name('tenants.members');
 
         /*
          * GRANT-001 — one account's administrative exceptions.

@@ -79,6 +79,9 @@ export interface TenantPerson {
   email: string | null
   portal: string
   role: string
+  /** SUPERADMIN-MEMBERS-001 — the roles this person holds in THIS workspace. */
+  roles?: string[]
+  is_platform_admin?: boolean
   status: string
 }
 
@@ -112,7 +115,13 @@ export function fetchTenants(params: { q?: string; status?: string } = {}): Prom
   return getData(`/admin/tenants${qs ? `?${qs}` : ''}`)
 }
 
-export function fetchTenant(id: string): Promise<{ tenant: PlatformTenant & { is_default_portal: boolean }; people: TenantPerson[]; client_workspaces: number }> {
+export function fetchTenant(id: string): Promise<{
+  tenant: PlatformTenant & { is_default_portal: boolean }
+  people: TenantPerson[]
+  client_workspaces: number
+  /** SUPERADMIN-MEMBERS-001 — the workspace's own roles. */
+  available_roles?: Array<{ slug: string; name: string }>
+}> {
   return getData(`/admin/tenants/${id}`)
 }
 
@@ -1053,6 +1062,15 @@ export function actOnUserAccess(userUuid: string, body: { action: UserAccessActi
   mfa_enabled?: boolean
 }> {
   return postData(`/admin/users/${userUuid}/access`, body)
+}
+
+/** SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace. A reason is always required. */
+export type MembershipAction = 'change_role' | 'suspend' | 'reactivate' | 'remove'
+
+export function actOnMembership(tenantId: string, userUuid: string, body: { action: MembershipAction; role?: string; reason: string }): Promise<{
+  member: { roles: string[]; status: string | null; member: boolean }
+}> {
+  return postData(`/admin/tenants/${tenantId}/members/${userUuid}`, body)
 }
 
 /*

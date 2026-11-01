@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -14,6 +15,7 @@ use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -135,6 +137,10 @@ final class PlatformTenantController extends Controller
         abort_if($model === null, 404);
 
         $memberships = Membership::query()->where('tenant_id', $model->getKey())->with('user')->get();
+        // SUPERADMIN-MEMBERS-001 — the workspace's own roles, and which of them each person holds here.
+        $roles = Role::query()->where('tenant_id', $model->getKey())->orderBy('name')->get(['id', 'slug', 'name']);
+        $held = DB::table('role_user')->whereIn('role_id', $roles->pluck('id'))->get(['user_id', 'role_id'])
+            ->groupBy('user_id')->map(fn ($rows) => $roles->whereIn('id', $rows->pluck('role_id'))->pluck('slug')->sort()->values()->all());
 
         return ApiResponse::success([
             'tenant' => [
@@ -158,8 +164,11 @@ final class PlatformTenantController extends Controller
                 'email' => $m->user?->email,
                 'portal' => $m->portal->value,
                 'role' => $m->role,
+                'roles' => $held[$m->user_id] ?? [],
+                'is_platform_admin' => $m->user instanceof User && (bool) $m->user->is_platform_admin,
                 'status' => $m->status,
             ])->values()->all(),
+            'available_roles' => $roles->map(fn (Role $r) => ['slug' => $r->slug, 'name' => $r->name])->values()->all(),
             'client_workspaces' => ClientWorkspace::query()
                 ->where('tenant_id', $model->getKey())->whereNull('archived_at')->count(),
         ], 'Tenant.');
