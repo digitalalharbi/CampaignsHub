@@ -78,6 +78,42 @@ final class ClientAccess
             ->exists();
     }
 
+    /**
+     * The projects of this client the user is limited to, or null when nothing limits them there.
+     *
+     * A roster member (`client_workspace_user`) can be granted a client with a project allow-list. The list was
+     * stored and shown but nothing read it, so a member limited to one project read the whole client. It binds
+     * only when the roster is what grants the access: a holder of `clients.view_all`, a membership that names
+     * the client, and the client's owner are reached by other, wider grants and are not narrowed by a row.
+     *
+     * @return list<string>|null
+     */
+    public function projectRestriction(User $user, ClientWorkspace $client): ?array
+    {
+        if ($this->canViewAll($user)) {
+            return null;
+        }
+
+        $scoped = $this->scopes->reachableClientIds($user);
+        if ($scoped !== null && $scoped !== []) {
+            return null;
+        }
+
+        if ($client->owner_id !== null && (int) $client->owner_id === (int) $user->id) {
+            return null;
+        }
+
+        $row = DB::table('client_workspace_user')
+            ->where('client_workspace_id', $client->id)->where('user_id', $user->id)->first();
+        if ($row === null || $row->project_ids === null) {
+            return null;
+        }
+
+        $ids = json_decode((string) $row->project_ids, true);
+
+        return is_array($ids) && $ids !== [] ? array_values(array_map('strval', $ids)) : null;
+    }
+
     /** Assert the user may SEE this client at all (membership-gated). Aborts 403 otherwise. */
     public function assertView(User $user, ClientWorkspace $client): void
     {
