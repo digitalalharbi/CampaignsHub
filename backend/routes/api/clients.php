@@ -12,6 +12,7 @@ use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientReportsControll
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTaxonomyController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTeamController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,13 +34,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     Route::post('/{client}/logo', [ScopedLogoController::class, 'storeClient'])->name('logo.store');
     Route::delete('/{client}/logo', [ScopedLogoController::class, 'destroyClient'])->name('logo.destroy');
     Route::post('/{client}/archive', [ClientManagementController::class, 'archive'])->name('archive');
-    Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore');
+    // Restoring takes a slot back — guarded like `client-workspaces/{id}/restore`.
+    Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore')
+        ->middleware(EnsureWithinPlanLimit::class.':clients');
 
     // Command-center tabs backed by existing engines (metrics/reports/…).
     Route::get('/{client}/analytics', ClientAnalyticsController::class)->name('analytics');
 
     Route::get('/{client}/reports', [ClientReportsController::class, 'index'])->name('reports.index');
-    Route::post('/{client}/reports', [ClientReportsController::class, 'store'])->name('reports.store');
+    Route::post('/{client}/reports', [ClientReportsController::class, 'store'])->name('reports.store')
+        ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::post('/{client}/reports/{report}/share', [ClientReportsController::class, 'share'])->name('reports.share');
     Route::post('/{client}/reports/{report}/shares/{share}/revoke', [ClientReportsController::class, 'revoke'])->name('reports.revoke');
 

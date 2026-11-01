@@ -105,41 +105,41 @@ final class SubscriptionNotificationTemplates
             'renewal_failed' => $ar ? [
                 'subject' => 'تعذّر تجديد اشتراكك',
                 'body' => "رفض المزوّد عملية التجديد بقيمة {$amount}.\n"
-                    ."حسابك ما زال يعمل حتى {$date} — حدّث وسيلة الدفع قبل ذلك التاريخ لتفادي التعليق.\n{$url}",
+                    ."مساحة عملك ما زالت تعمل حتى {$date} — حدّث وسيلة الدفع قبل ذلك التاريخ لتفادي التعليق.\n{$url}",
             ] : [
                 'subject' => 'We could not renew your subscription',
                 'body' => "The provider refused the renewal of {$amount}.\n"
-                    ."Your account keeps working until {$date} — update your payment method before then to avoid suspension.\n{$url}",
+                    ."Your workspace keeps working until {$date} — update your payment method before then to avoid suspension.\n{$url}",
             ],
 
             // Past due is an OPERATING state, and the message says so rather than alarming somebody
             // whose account is still working.
             'past_due' => $ar ? [
                 'subject' => 'اشتراكك متأخر السداد',
-                'body' => "لم يُستلم تأكيد الدفع للفترة الحالية. حسابك يعمل بشكل طبيعي حتى {$date}.\n"
-                    ."بعد ذلك التاريخ سيُعلَّق الحساب مع الاحتفاظ الكامل ببياناتك.\n{$url}",
+                'body' => "لم يُستلم تأكيد الدفع للفترة الحالية. مساحة عملك تعمل بشكل طبيعي حتى {$date}.\n"
+                    ."بعد ذلك التاريخ ستُعلَّق مساحة العمل مع الاحتفاظ الكامل ببياناتك.\n{$url}",
             ] : [
                 'subject' => 'Your subscription is past due',
-                'body' => "No payment confirmation was received for the current period. Your account works normally until {$date}.\n"
+                'body' => "No payment confirmation was received for the current period. Your workspace works normally until {$date}.\n"
                     ."After that it will be suspended, with all of your data kept.\n{$url}",
             ],
 
             'suspended' => $ar ? [
-                'subject' => 'تم تعليق حسابك',
+                'subject' => 'تم تعليق مساحة عملك',
                 'body' => "انتهت مهلة السماح دون تأكيد دفع، وتم تعليق الوصول إلى مساحة العمل.\n"
                     ."بياناتك محفوظة بالكامل ولم يُحذف منها شيء. أكمل الدفع لإعادة التفعيل فورًا.\n{$url}",
             ] : [
-                'subject' => 'Your account has been suspended',
+                'subject' => 'Your workspace has been suspended',
                 'body' => "The grace period ended without a confirmed payment, and access to the workspace has stopped.\n"
                     ."All of your data is kept and nothing has been deleted. Complete the payment to reactivate.\n{$url}",
             ],
 
             'reactivated' => $ar ? [
-                'subject' => 'تمت إعادة تفعيل حسابك',
-                'body' => "عاد حسابك للعمل، والفترة الحالية تنتهي في {$date}.\n{$url}",
+                'subject' => 'تمت إعادة تفعيل مساحة عملك',
+                'body' => "عادت مساحة عملك للعمل، والفترة الحالية تنتهي في {$date}.\n{$url}",
             ] : [
-                'subject' => 'Your account is active again',
-                'body' => "Your account is working again, and the current period runs until {$date}.\n{$url}",
+                'subject' => 'Your workspace is active again',
+                'body' => "Your workspace is working again, and the current period runs until {$date}.\n{$url}",
             ],
 
             /*

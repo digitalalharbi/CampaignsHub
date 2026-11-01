@@ -19,6 +19,11 @@ return [
     'metrics' => [
         'campaigns' => 'campaigns',
         'projects' => 'projects',
+        'clients' => 'clients',
+        'team_members' => 'team members',
+        'ad_accounts' => 'ad accounts',
+        'connections' => 'connections',
+        'reports_per_month' => 'reports this month',
     ],
 
     'plan_not_available' => 'That plan is not available.',

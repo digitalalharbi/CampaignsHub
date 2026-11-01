@@ -36,7 +36,7 @@ describe('ProjectsPage — create-form ErrorSummary', () => {
     fireEvent.click(screen.getByRole('button', { name: /New project/i }))
     // Wait for the async workspace option before selecting it (native selects ignore unknown values).
     await screen.findByRole('option', { name: 'Acme WS' })
-    fireEvent.change(screen.getByLabelText(/Client workspace/i), { target: { value: 'w1' } })
+    fireEvent.change(screen.getByLabelText(/^Client/), { target: { value: 'w1' } })
     fireEvent.change(screen.getByLabelText(/^Name/i), { target: { value: 'Dup' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 

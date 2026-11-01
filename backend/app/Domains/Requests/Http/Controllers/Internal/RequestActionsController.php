@@ -8,13 +8,17 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Billing\Services\BillingService;
 use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Requests\Services\RequestConversionService;
 use App\Domains\Requests\Services\RequestNotifier;
 use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Services\RequestStatusMachine;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -174,6 +178,21 @@ final class RequestActionsController
             'client_id' => ['nullable', 'string'],
             'idempotency_key' => ['nullable', 'string', 'max:100'],
         ]);
+
+        /*
+         * The plan's caps, checked before anything is created — a conversion makes a project, and a client too when none is
+         * chosen. A retry of a conversion that already happened creates nothing, so it is never refused.
+         */
+        $done = RequestConversion::query()->where('tenant_id', $req->tenant_id)->where('external_request_id', $req->id)
+            ->where('status', 'completed')->exists();
+        $tenant = Tenant::query()->find((string) $req->tenant_id);
+        if (! $done && $tenant !== null) {
+            foreach (empty($data['client_id']) ? ['clients', 'projects'] : ['projects'] as $metric) {
+                if (! app(SubscriptionService::class)->withinLimit($tenant, $metric)) {
+                    return app(EnsureWithinPlanLimit::class)->refusal($tenant, $metric);
+                }
+            }
+        }
 
         $conversion = app(RequestConversionService::class)->convert($req, $data, $request->user());
 

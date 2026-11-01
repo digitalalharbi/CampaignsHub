@@ -10,6 +10,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use Closure;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Lang;
 use Symfony\Component\HttpFoundation\Response;
@@ -69,40 +70,49 @@ final class EnsureWithinPlanLimit
                  * Nothing is deleted and nothing is hidden: the create is refused, and everything the
                  * customer already has stays exactly where it is.
                  */
-                $limit = $this->subscriptions->effectiveLimit($tenant, $metric);
-                $used = $this->subscriptions->usage($tenant, $metric);
-
-                /*
-                 * RETURNED, not thrown.
-                 *
-                 * `abort()` with a Response raises HttpResponseException, and this application's
-                 * exception handler renders that as a 500 — the refusal never reached the customer
-                 * and looked like a crash instead. Returning from middleware short-circuits the
-                 * pipeline with exactly this response.
-                 */
-                return response()->json([
-                    'success' => false,
-                    'message' => __('billing.plan_limit_reached', [
-                        // A metric added later has no label yet, and its own key reads better in the
-                        // sentence than the missing-key string `billing.metrics.whatever` would.
-                        'metric' => Lang::has('billing.metrics.'.$metric) ? __('billing.metrics.'.$metric) : $metric,
-                        'used' => $used,
-                        'limit' => $limit,
-                    ]),
-                    'data' => null,
-                    'errors' => null,
-                    'meta' => [
-                        'plan_limit' => true,
-                        'metric' => $metric,
-                        'used' => $used,
-                        'limit' => $limit,
-                        // Named so the interface can offer the upgrade rather than inventing a route.
-                        'upgrade_path' => $this->upgradePath(),
-                    ],
-                ], 403);
+                return $this->refusal($tenant, $metric);
             }
         }
 
         return $next($request);
+    }
+
+    /**
+     * The refusal, for a create path that cannot carry this middleware (a conversion that may or may not create a client).
+     * Same shape and status as the middleware's own, so the interface handles both alike.
+     */
+    public function refusal(Tenant $tenant, string $metric): JsonResponse
+    {
+        $limit = $this->subscriptions->effectiveLimit($tenant, $metric);
+        $used = $this->subscriptions->usage($tenant, $metric);
+
+        /*
+         * RETURNED, not thrown.
+         *
+         * `abort()` with a Response raises HttpResponseException, and this application's
+         * exception handler renders that as a 500 — the refusal never reached the customer
+         * and looked like a crash instead. Returning from middleware short-circuits the
+         * pipeline with exactly this response.
+         */
+        return response()->json([
+            'success' => false,
+            'message' => __('billing.plan_limit_reached', [
+                // A metric added later has no label yet, and its own key reads better in the
+                // sentence than the missing-key string `billing.metrics.whatever` would.
+                'metric' => Lang::has('billing.metrics.'.$metric) ? __('billing.metrics.'.$metric) : $metric,
+                'used' => $used,
+                'limit' => $limit,
+            ]),
+            'data' => null,
+            'errors' => null,
+            'meta' => [
+                'plan_limit' => true,
+                'metric' => $metric,
+                'used' => $used,
+                'limit' => $limit,
+                // Named so the interface can offer the upgrade rather than inventing a route.
+                'upgrade_path' => $this->upgradePath(),
+            ],
+        ], 403);
     }
 }
