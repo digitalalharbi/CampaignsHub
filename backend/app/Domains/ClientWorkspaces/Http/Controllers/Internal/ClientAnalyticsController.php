@@ -30,6 +30,6 @@ final class ClientAnalyticsController
             [$from, $to] = [$to, $from];
         }
 
-        return response()->json(['data' => $this->analytics->forClient($c, $from, $to)]);
+        return response()->json(['data' => $this->analytics->forClient($c, $from, $to, $this->access->projectCeilings($request->user())[(string) $c->id] ?? null)]);
     }
 }

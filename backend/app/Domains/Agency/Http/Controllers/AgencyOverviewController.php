@@ -61,9 +61,13 @@ final class AgencyOverviewController extends Controller
         $this->access->restrictQuery($clientQuery, $user);
         $clientIds = $clientQuery->pluck('id')->map(fn ($id) => (string) $id)->all();
 
+        // SEC-3 — a team member confined to some of a client's projects reads only those (client_workspace_user.project_ids).
+        $ceilings = $this->access->projectCeilings($user);
         $projects = $clientIds === []
             ? collect()
-            : Project::query()->whereIn('client_workspace_id', $clientIds)->get();
+            : Project::query()->whereIn('client_workspace_id', $clientIds)->get()
+                ->filter(fn (Project $p): bool => $this->access->projectAllowed($ceilings, (string) $p->client_workspace_id, (string) $p->getKey()))
+                ->values();
         $projectIds = $projects->map(fn (Project $p) => (string) $p->getKey())->all();
 
         $scope = [
