@@ -1,129 +1,133 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 import { NotFoundPage } from './NotFoundPage'
-import { LoginPage } from '@/features/auth/LoginPage'
-import { RegisterPage } from '@/features/auth/RegisterPage'
-import { AccountStatusPage } from '@/features/signup/AccountStatusPage'
-import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
-import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
-import { RequireAuth } from '@/features/auth/RequireAuth'
-import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
-import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
-import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
-import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
-import { AgentCenterPage } from '@/features/agents/AgentCenterPage'
-import { AutomationPage } from '@/features/automation/AutomationPage'
-import { EntityWorkspacePage } from '@/features/campaigns/EntityWorkspacePage'
-import { LaunchPage } from '@/features/launch/LaunchPage'
-import { ApprovalsPage } from '@/features/agents/ApprovalsPage'
-import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
-import { ExecutiveOpsPage } from '@/features/crm/ExecutiveOpsPage'
-import { LeadsPage } from '@/features/crm/LeadsPage'
-import { ReportsPage } from '@/features/reports/ReportsPage'
-import { SettingsPage } from '@/features/settings/SettingsPage'
-import { PublicReport } from '@/features/reports/PublicReport'
-import { PrintReport } from '@/features/reports/PrintReport'
-import { DesignSystemPage } from '@/features/design/DesignSystemPage'
-import { SettingsLayout } from '@/features/account/SettingsLayout'
-import { AccountSettingsLayout } from '@/features/account/AccountSettingsLayout'
-import { PreferencesPage } from '@/features/account/PreferencesPage'
-import { PersonalNotificationsPage } from '@/features/account/PersonalNotificationsPage'
-import { ProfilePage } from '@/features/account/ProfilePage'
-import { PasswordPage } from '@/features/account/PasswordPage'
-import { SecurityPage } from '@/features/account/SecurityPage'
-import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
-import { ProjectsPage } from '@/features/projects/ProjectsPage'
-import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
-import { SystemStatusPage } from '@/features/system/SystemStatusPage'
-import { PublicHomePage } from '@/features/marketing/PublicHomePage'
-import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
-import { DataDeletionPage } from '@/features/marketing/DataDeletionPage'
-import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
-import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
-import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
-import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
-import { ClientNewRequestPage } from '@/features/requests/portal/ClientNewRequestPage'
-import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
-import { ClientDashboardPage } from '@/features/requests/portal/ClientDashboardPage'
-import { ClientQuotesPage } from '@/features/requests/portal/ClientQuotesPage'
-import { ClientQuoteDetailPage } from '@/features/requests/portal/ClientQuoteDetailPage'
-import { ClientInvoicesPage } from '@/features/requests/portal/ClientInvoicesPage'
-import { ClientInvoiceDetailPage } from '@/features/requests/portal/ClientInvoiceDetailPage'
-import { ClientMessagesPage } from '@/features/requests/portal/ClientMessagesPage'
-import { ClientThreadPage } from '@/features/requests/portal/ClientThreadPage'
-import { ClientProfilePage } from '@/features/requests/portal/ClientProfilePage'
-import { ClientFilesPage } from '@/features/requests/portal/ClientFilesPage'
-import { ClientCampaignsPage } from '@/features/requests/portal/ClientCampaignsPage'
-import { ClientReportsPage } from '@/features/requests/portal/ClientReportsPage'
-import { ClientSpacePickerPage } from '@/features/requests/portal/ClientSpacePickerPage'
-import { ClientPortalHomePage } from '@/features/requests/portal/ClientPortalHomePage'
-import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
-import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
-import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
-import { InviteAcceptPage } from '@/features/onboarding/InviteAcceptPage'
-import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
-import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
-import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
-import { PortfolioPage } from '@/features/projects/PortfolioPage'
-import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
-import { AlertsPage } from '@/features/alerts/AlertsPage'
-import { SpendLimitsPage } from '@/features/budget/SpendLimitsPage'
-import { DeliveryOverviewPage } from '@/features/clients/delivery/DeliveryOverviewPage'
-import { DevStatusPage } from '@/features/dev/DevStatusPage'
 import { billingRoutes } from '@/features/billing/billingRoutes'
 import { messagingRoutes } from '@/features/messaging/messagingRoutes'
 import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRoutes'
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
-import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
-import { StoreInstallPage } from '@/features/integrations/StoreInstallPage'
-import { DrivePage } from '@/features/drive/DrivePage'
-import { ShortLinksPage } from '@/features/shortLinks/ShortLinksPage'
-import { FormsPage } from '@/features/forms/FormsPage'
-import { FormBuilderPage } from '@/features/forms/FormBuilderPage'
-import { PublicFormPage } from '@/features/forms/PublicFormPage'
-import { TasksPage } from '@/features/tasks/TasksPage'
-import { CreativesPage } from '@/features/content/CreativesPage'
-import { CreativeDetailPage } from '@/features/content/CreativeDetailPage'
-import { CreativeGroupsPage } from '@/features/content/CreativeGroupsPage'
-import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
-import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
-import { AppShell } from '@/layouts/AppShell'
-import { AgencyShell } from '@/layouts/AgencyShell'
-import { AdminShell } from '@/layouts/AdminShell'
-import { RequirePlatformAdmin } from '@/features/admin/RequirePlatformAdmin'
-import { RequirePortal } from '@/features/auth/RequirePortal'
-import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
-import { TenantsPage } from '@/features/admin/TenantsPage'
-import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
-import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
-import { PlatformFeaturesPage } from '@/features/admin/PlatformFeaturesPage'
-import { CurrencyRatesPage } from '@/features/admin/CurrencyRatesPage'
-import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
-import { MetaCandidatePage, MetaSaasPage } from '@/features/admin/MetaCandidatePage'
-import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
-import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
-import { ProviderReviewPage } from '@/features/admin/ProviderReviewPage'
-import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
-import { AuditPage } from '@/features/admin/AuditPage'
-import { EmailOperationsPage } from '@/features/admin/EmailOperationsPage'
-import { CutoverPage } from '@/features/admin/CutoverPage'
-import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
-import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
-import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
-import { InfluencerShell } from '@/layouts/InfluencerShell'
-import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluencerPortal'
-import { RequireInfluencersEnabled } from '@/features/influencers/RequireInfluencersEnabled'
 import { features } from '@/lib/features'
-import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
-import { LegacyLoginRedirect } from '@/features/auth/LegacyLoginRedirect'
-import { NominationsPage } from '@/features/influencers/NominationsPage'
-import { RosterPage } from '@/features/influencers/RosterPage'
-import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
-import { CreatorShell } from '@/layouts/CreatorShell'
-import { CreatorWorkPage } from '@/features/influencers/creator/CreatorWorkPage'
-import { CreatorCollaborationPage } from '@/features/influencers/creator/CreatorCollaborationPage'
-import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { lazyPage } from './lazyPage'
+
+// PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
+const LoginPage = lazyPage(() => import('@/features/auth/LoginPage'), 'LoginPage')
+const RegisterPage = lazyPage(() => import('@/features/auth/RegisterPage'), 'RegisterPage')
+const AccountStatusPage = lazyPage(() => import('@/features/signup/AccountStatusPage'), 'AccountStatusPage')
+const ForgotPasswordPage = lazyPage(() => import('@/features/auth/ForgotPasswordPage'), 'ForgotPasswordPage')
+const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPage'), 'ResetPasswordPage')
+const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
+const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
+const CampaignsPage = lazyPage(() => import('@/features/campaigns/CampaignsPage'), 'CampaignsPage')
+const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
+const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
+const AgentCenterPage = lazyPage(() => import('@/features/agents/AgentCenterPage'), 'AgentCenterPage')
+const AutomationPage = lazyPage(() => import('@/features/automation/AutomationPage'), 'AutomationPage')
+const EntityWorkspacePage = lazyPage(() => import('@/features/campaigns/EntityWorkspacePage'), 'EntityWorkspacePage')
+const LaunchPage = lazyPage(() => import('@/features/launch/LaunchPage'), 'LaunchPage')
+const ApprovalsPage = lazyPage(() => import('@/features/agents/ApprovalsPage'), 'ApprovalsPage')
+const FollowUpWorkspacePage = lazyPage(() => import('@/features/crm/FollowUpWorkspacePage'), 'FollowUpWorkspacePage')
+const ExecutiveOpsPage = lazyPage(() => import('@/features/crm/ExecutiveOpsPage'), 'ExecutiveOpsPage')
+const LeadsPage = lazyPage(() => import('@/features/crm/LeadsPage'), 'LeadsPage')
+const ReportsPage = lazyPage(() => import('@/features/reports/ReportsPage'), 'ReportsPage')
+const SettingsPage = lazyPage(() => import('@/features/settings/SettingsPage'), 'SettingsPage')
+const PublicReport = lazyPage(() => import('@/features/reports/PublicReport'), 'PublicReport')
+const PrintReport = lazyPage(() => import('@/features/reports/PrintReport'), 'PrintReport')
+const DesignSystemPage = lazyPage(() => import('@/features/design/DesignSystemPage'), 'DesignSystemPage')
+const SettingsLayout = lazyPage(() => import('@/features/account/SettingsLayout'), 'SettingsLayout')
+const AccountSettingsLayout = lazyPage(() => import('@/features/account/AccountSettingsLayout'), 'AccountSettingsLayout')
+const PreferencesPage = lazyPage(() => import('@/features/account/PreferencesPage'), 'PreferencesPage')
+const PersonalNotificationsPage = lazyPage(() => import('@/features/account/PersonalNotificationsPage'), 'PersonalNotificationsPage')
+const ProfilePage = lazyPage(() => import('@/features/account/ProfilePage'), 'ProfilePage')
+const PasswordPage = lazyPage(() => import('@/features/account/PasswordPage'), 'PasswordPage')
+const SecurityPage = lazyPage(() => import('@/features/account/SecurityPage'), 'SecurityPage')
+const ProjectIntegrationsPage = lazyPage(() => import('@/features/projects/ProjectIntegrationsPage'), 'ProjectIntegrationsPage')
+const ProjectsPage = lazyPage(() => import('@/features/projects/ProjectsPage'), 'ProjectsPage')
+const ProjectTeamPage = lazyPage(() => import('@/features/projects/ProjectTeamPage'), 'ProjectTeamPage')
+const SystemStatusPage = lazyPage(() => import('@/features/system/SystemStatusPage'), 'SystemStatusPage')
+const PublicHomePage = lazyPage(() => import('@/features/marketing/PublicHomePage'), 'PublicHomePage')
+const PublicInfoPage = lazyPage(() => import('@/features/marketing/PublicInfoPage'), 'PublicInfoPage')
+const DataDeletionPage = lazyPage(() => import('@/features/marketing/DataDeletionPage'), 'DataDeletionPage')
+const PublicServicesPage = lazyPage(() => import('@/features/marketing/PublicServicesPage'), 'PublicServicesPage')
+const RequestIntakePage = lazyPage(() => import('@/features/requests/RequestIntakePage'), 'RequestIntakePage')
+const RequestTrackPage = lazyPage(() => import('@/features/requests/RequestTrackPage'), 'RequestTrackPage')
+const ClientRequestsPage = lazyPage(() => import('@/features/requests/portal/ClientRequestsPage'), 'ClientRequestsPage')
+const ClientNewRequestPage = lazyPage(() => import('@/features/requests/portal/ClientNewRequestPage'), 'ClientNewRequestPage')
+const ClientRequestDetailPage = lazyPage(() => import('@/features/requests/portal/ClientRequestDetailPage'), 'ClientRequestDetailPage')
+const ClientDashboardPage = lazyPage(() => import('@/features/requests/portal/ClientDashboardPage'), 'ClientDashboardPage')
+const ClientQuotesPage = lazyPage(() => import('@/features/requests/portal/ClientQuotesPage'), 'ClientQuotesPage')
+const ClientQuoteDetailPage = lazyPage(() => import('@/features/requests/portal/ClientQuoteDetailPage'), 'ClientQuoteDetailPage')
+const ClientInvoicesPage = lazyPage(() => import('@/features/requests/portal/ClientInvoicesPage'), 'ClientInvoicesPage')
+const ClientInvoiceDetailPage = lazyPage(() => import('@/features/requests/portal/ClientInvoiceDetailPage'), 'ClientInvoiceDetailPage')
+const ClientMessagesPage = lazyPage(() => import('@/features/requests/portal/ClientMessagesPage'), 'ClientMessagesPage')
+const ClientThreadPage = lazyPage(() => import('@/features/requests/portal/ClientThreadPage'), 'ClientThreadPage')
+const ClientProfilePage = lazyPage(() => import('@/features/requests/portal/ClientProfilePage'), 'ClientProfilePage')
+const ClientFilesPage = lazyPage(() => import('@/features/requests/portal/ClientFilesPage'), 'ClientFilesPage')
+const ClientCampaignsPage = lazyPage(() => import('@/features/requests/portal/ClientCampaignsPage'), 'ClientCampaignsPage')
+const ClientReportsPage = lazyPage(() => import('@/features/requests/portal/ClientReportsPage'), 'ClientReportsPage')
+const ClientSpacePickerPage = lazyPage(() => import('@/features/requests/portal/ClientSpacePickerPage'), 'ClientSpacePickerPage')
+const ClientPortalHomePage = lazyPage(() => import('@/features/requests/portal/ClientPortalHomePage'), 'ClientPortalHomePage')
+const VerifyEmailPage = lazyPage(() => import('@/features/onboarding/VerifyEmailPage'), 'VerifyEmailPage')
+const OnboardingWizard = lazyPage(() => import('@/features/onboarding/OnboardingWizard'), 'OnboardingWizard')
+const OnboardingGate = lazyPage(() => import('@/features/onboarding/OnboardingGate'), 'OnboardingGate')
+const InviteAcceptPage = lazyPage(() => import('@/features/onboarding/InviteAcceptPage'), 'InviteAcceptPage')
+const RequestsDashboardPage = lazyPage(() => import('@/features/requests/RequestsDashboardPage'), 'RequestsDashboardPage')
+const RequestDetailPage = lazyPage(() => import('@/features/requests/RequestDetailPage'), 'RequestDetailPage')
+const ClientsPortfolioPage = lazyPage(() => import('@/features/clients/ClientsPortfolioPage'), 'ClientsPortfolioPage')
+const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage'), 'PortfolioPage')
+const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
+const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
+const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
+const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
+const DevStatusPage = lazyPage(() => import('@/features/dev/DevStatusPage'), 'DevStatusPage')
+const IntegrationsPage = lazyPage(() => import('@/features/integrations/IntegrationsPage'), 'IntegrationsPage')
+const StoreInstallPage = lazyPage(() => import('@/features/integrations/StoreInstallPage'), 'StoreInstallPage')
+const DrivePage = lazyPage(() => import('@/features/drive/DrivePage'), 'DrivePage')
+const ShortLinksPage = lazyPage(() => import('@/features/shortLinks/ShortLinksPage'), 'ShortLinksPage')
+const FormsPage = lazyPage(() => import('@/features/forms/FormsPage'), 'FormsPage')
+const FormBuilderPage = lazyPage(() => import('@/features/forms/FormBuilderPage'), 'FormBuilderPage')
+const PublicFormPage = lazyPage(() => import('@/features/forms/PublicFormPage'), 'PublicFormPage')
+const TasksPage = lazyPage(() => import('@/features/tasks/TasksPage'), 'TasksPage')
+const CreativesPage = lazyPage(() => import('@/features/content/CreativesPage'), 'CreativesPage')
+const CreativeDetailPage = lazyPage(() => import('@/features/content/CreativeDetailPage'), 'CreativeDetailPage')
+const CreativeGroupsPage = lazyPage(() => import('@/features/content/CreativeGroupsPage'), 'CreativeGroupsPage')
+const FilesLibraryPage = lazyPage(() => import('@/features/files/FilesLibraryPage'), 'FilesLibraryPage')
+const BrandingCenterPage = lazyPage(() => import('@/features/branding/BrandingCenterPage'), 'BrandingCenterPage')
+const AppShell = lazyPage(() => import('@/layouts/AppShell'), 'AppShell')
+const AgencyShell = lazyPage(() => import('@/layouts/AgencyShell'), 'AgencyShell')
+const AdminShell = lazyPage(() => import('@/layouts/AdminShell'), 'AdminShell')
+const RequirePlatformAdmin = lazyPage(() => import('@/features/admin/RequirePlatformAdmin'), 'RequirePlatformAdmin')
+const RequirePortal = lazyPage(() => import('@/features/auth/RequirePortal'), 'RequirePortal')
+const PlatformOverviewPage = lazyPage(() => import('@/features/admin/PlatformOverviewPage'), 'PlatformOverviewPage')
+const TenantsPage = lazyPage(() => import('@/features/admin/TenantsPage'), 'TenantsPage')
+const RegistrationsPage = lazyPage(() => import('@/features/admin/RegistrationsPage'), 'RegistrationsPage')
+const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
+const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
+const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
+const ProviderSettingsPage = lazyPage(() => import('@/features/admin/ProviderSettingsPage'), 'ProviderSettingsPage')
+const MetaCandidatePage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaCandidatePage')
+const MetaSaasPage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaSaasPage')
+const SystemSettingsPage = lazyPage(() => import('@/features/admin/SystemSettingsPage'), 'SystemSettingsPage')
+const PlatformLegalPage = lazyPage(() => import('@/features/admin/PlatformLegalPage'), 'PlatformLegalPage')
+const ProviderReviewPage = lazyPage(() => import('@/features/admin/ProviderReviewPage'), 'ProviderReviewPage')
+const AdminBillingPage = lazyPage(() => import('@/features/admin/BillingPage'), 'BillingPage')
+const AuditPage = lazyPage(() => import('@/features/admin/AuditPage'), 'AuditPage')
+const EmailOperationsPage = lazyPage(() => import('@/features/admin/EmailOperationsPage'), 'EmailOperationsPage')
+const CutoverPage = lazyPage(() => import('@/features/admin/CutoverPage'), 'CutoverPage')
+const AgencyDashboardPage = lazyPage(() => import('@/features/agency/AgencyDashboardPage'), 'AgencyDashboardPage')
+const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
+const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
+const InfluencerShell = lazyPage(() => import('@/layouts/InfluencerShell'), 'InfluencerShell')
+const RequireInfluencerPortal = lazyPage(() => import('@/features/influencers/RequireInfluencerPortal'), 'RequireInfluencerPortal')
+const RequireInfluencersEnabled = lazyPage(() => import('@/features/influencers/RequireInfluencersEnabled'), 'RequireInfluencersEnabled')
+const CollaborationsPage = lazyPage(() => import('@/features/influencers/CollaborationsPage'), 'CollaborationsPage')
+const LegacyLoginRedirect = lazyPage(() => import('@/features/auth/LegacyLoginRedirect'), 'LegacyLoginRedirect')
+const NominationsPage = lazyPage(() => import('@/features/influencers/NominationsPage'), 'NominationsPage')
+const RosterPage = lazyPage(() => import('@/features/influencers/RosterPage'), 'RosterPage')
+const DeliverablesPage = lazyPage(() => import('@/features/influencers/DeliverablesPage'), 'DeliverablesPage')
+const CreatorShell = lazyPage(() => import('@/layouts/CreatorShell'), 'CreatorShell')
+const CreatorWorkPage = lazyPage(() => import('@/features/influencers/creator/CreatorWorkPage'), 'CreatorWorkPage')
+const CreatorCollaborationPage = lazyPage(() => import('@/features/influencers/creator/CreatorCollaborationPage'), 'CreatorCollaborationPage')
+const WorkspaceSwitcherPage = lazyPage(() => import('@/features/auth/WorkspaceSwitcherPage'), 'WorkspaceSwitcherPage')
 
 /**
  * ROUTE-BOUNDARY-001 — every branch of the tree has somewhere to land when it throws.
