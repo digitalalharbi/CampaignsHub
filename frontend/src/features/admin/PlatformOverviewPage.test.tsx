@@ -32,6 +32,11 @@ function overview(over: Partial<PlatformOverview> = {}): PlatformOverview {
       { key: 'tenants_suspended', count: 1, to: '/admin/tenants', tone: 'danger' },
       { key: 'users_without_membership', count: 0, to: '/admin/tenants', tone: 'info' },
     ],
+    operations: {
+      connections: { total: 0, items: [] },
+      alerts: { open: 0, by_severity: { critical: 0, warning: 0, info: 0 }, tenants: 0 },
+      recent: [],
+    },
     ...over,
   }
 }
@@ -168,4 +173,43 @@ describe('PlatformOverviewPage', () => {
     await waitFor(() => expect(screen.getByTestId('attention')).toBeInTheDocument())
     expect(screen.getByTestId('attention')).toHaveTextContent('Nothing pending')
   })
+
+  /** SUPERADMIN-CONSOLE-HOME-001 — what needs the operator, named; nothing is done from here. */
+  it('names the accounts that need reconnecting and says only their owner can reconnect them', async () => {
+    vi.mocked(fetchOverview).mockResolvedValue(overview({
+      operations: {
+        connections: { total: 2, items: [
+          { id: 'c1', tenant_id: 't1', tenant_name: 'Acme', provider: 'meta', connection_name: 'Project 1', reason: 'refused', since: '2026-10-30T10:00:00Z' },
+          { id: 'c2', tenant_id: 't2', tenant_name: 'Beta', provider: 'x', connection_name: 'Beta X', reason: 'expired', since: '2026-10-29T10:00:00Z' },
+        ] },
+        alerts: { open: 3, by_severity: { critical: 1, warning: 2, info: 0 }, tenants: 2 },
+        recent: [{ id: 'a1', action: 'support.session.started', tenant_name: 'Acme', user_name: 'Sara Ops', created_at: '2026-10-31T09:00:00Z' }],
+      },
+    }))
+    renderWithProviders(<PlatformOverviewPage />, { route: '/admin', locale: 'en' })
+
+    const c1 = await screen.findByTestId('console-connection-c1')
+    expect(c1).toHaveTextContent('Project 1')
+    expect(c1).toHaveTextContent('Refused')
+    expect(c1).toHaveTextContent('Meta · Acme')
+    expect(screen.getByTestId('console-connection-c2')).toHaveTextContent('Expired')
+    expect(screen.getByTestId('console-connections')).toHaveTextContent(/workspace owner reconnects/i)
+    expect(screen.queryByRole('button', { name: /reconnect/i })).not.toBeInTheDocument()
+    expect(screen.getByTestId('console-alerts-critical')).toHaveTextContent('1')
+    expect(screen.getByTestId('console-alerts-warning')).toHaveTextContent('2')
+    expect(screen.getByTestId('console-recent')).toHaveTextContent('support.session.started')
+    expect(screen.getByTestId('console-recent')).toHaveTextContent('Sara Ops')
+  })
+
+  it('says a quiet platform is quiet, and offers the console’s errands', async () => {
+    vi.mocked(fetchOverview).mockResolvedValue(overview())
+    renderWithProviders(<PlatformOverviewPage />, { route: '/admin', locale: 'en' })
+
+    expect(await screen.findByTestId('console-connections')).toHaveTextContent('Every connected account is working.')
+    expect(screen.getByTestId('console-alerts')).toHaveTextContent('No open alerts in any workspace.')
+    expect(screen.getByTestId('quick-create-workspace')).toHaveAttribute('href', '/admin/tenants')
+    expect(screen.getByTestId('quick-payments')).toHaveAttribute('href', '/admin/settings/integrations/payments')
+    expect(screen.getByTestId('quick-features')).toHaveAttribute('href', '/admin/features')
+  })
 })
+

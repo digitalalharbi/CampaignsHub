@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Building2, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Building2, LifeBuoy, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
 import { fetchTenant, fetchTenants, reissueOwnerInvitation, setTenantStatus, type PlatformTenant, type TenantPerson } from './api'
 import { UserAccessDialog } from './UserAccessDialog'
 import { MembershipDialog } from './MembershipDialog'
@@ -11,6 +11,8 @@ import { Modal } from '@/components/ui/Modal'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { AccountGrantsPanel } from './AccountGrants'
+import { TenantCapabilitiesPanel } from './TenantCapabilitiesPanel'
+import { SupportAccessDialog } from './SupportAccessDialog'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
@@ -39,6 +41,7 @@ export function TenantsPage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [suspending, setSuspending] = useState<PlatformTenant | null>(null)
   const [reason, setReason] = useState('')
+  const [supporting, setSupporting] = useState<PlatformTenant | null>(null)
   const [creating, setCreating] = useState(false)
 
   const list = useQuery({
@@ -75,6 +78,7 @@ export function TenantsPage() {
             : 'Every workspace on the platform: who they are, how large, and their status. No customer’s work appears here.'}
         </p>
       </header>
+      {supporting && <SupportAccessDialog tenant={supporting} ar={ar} onClose={() => setSupporting(null)} />}
       <CreateWorkspaceDialog open={creating} onClose={() => setCreating(false)} ar={ar} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -151,6 +155,9 @@ export function TenantsPage() {
                 </p>
               </button>
 
+              <Button data-testid={`support-enter-${t.slug}`} size="sm" variant="secondary" onClick={() => setSupporting(t)}>
+                <LifeBuoy size={14} /> {ar ? 'الدخول للدعم' : 'Support access'}
+              </Button>
               {t.status === 'active' ? (
                 <Button size="sm" variant="secondary" onClick={() => setSuspending(t)}>
                   <ShieldOff size={14} /> {ar ? 'إيقاف' : 'Suspend'}
@@ -248,6 +255,9 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
 
           {/* GRANT-001 — what this account has beyond its plan, and who gave it. */}
           <AccountGrantsPanel tenantId={id} ar={ar} />
+
+          {/* SUPERADMIN-FEATURES-001 — this workspace's own switch per capability. */}
+          <TenantCapabilitiesPanel tenantId={id} ar={ar} />
 
           <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}

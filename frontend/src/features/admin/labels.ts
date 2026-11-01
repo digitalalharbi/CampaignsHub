@@ -66,4 +66,5 @@ export const ATTENTION_LABELS: Record<string, Label> = {
   subscriptions_past_due: { ar: 'اشتراكات متأخرة السداد', en: 'Subscriptions past due' },
   tenants_suspended: { ar: 'مستأجرون موقوفون', en: 'Suspended tenants' },
   users_without_membership: { ar: 'مستخدمون بلا مساحة عمل', en: 'People with no workspace' },
+  connections_need_reconnect: { ar: 'حسابات إعلانية تحتاج إعادة ربط', en: 'Ad accounts needing reconnection' },
 }

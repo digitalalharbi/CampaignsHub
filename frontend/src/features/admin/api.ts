@@ -37,6 +37,24 @@ export interface PlatformOverview {
   }
   /** Counts worth acting on, each with the page that answers it. Zeros included on purpose. */
   attention: Array<{ key: string; count: number; to: string; tone: 'warning' | 'danger' | 'info' }>
+  /** SUPERADMIN-CONSOLE-HOME-001 — what needs the operator across every workspace. Names only; never a provider's error text. */
+  operations: {
+    connections: {
+      total: number
+      items: Array<{
+        id: string
+        tenant_id: string
+        tenant_name: string | null
+        provider: string
+        connection_name: string | null
+        /** refused: the provider invalidated the session; expired: the token passed its expiry. */
+        reason: 'refused' | 'expired'
+        since: string | null
+      }>
+    }
+    alerts: { open: number; by_severity: { critical: number; warning: number; info: number }; tenants: number }
+    recent: Array<{ id: string; action: string; tenant_name: string | null; user_name: string | null; created_at: string | null }>
+  }
 }
 
 export interface PlatformTenant {
@@ -1086,4 +1104,58 @@ export function createWorkspace(body: {
 
 export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Promise<{ owner_has_access: boolean; invitation: OwnerInvitation | null }> {
   return postData(`/admin/tenants/${tenantId}/owner-invitation`, { owner_email: ownerEmail })
+}
+
+/*
+ * SUPERADMIN-FEATURES-001 — capabilities on or off for every workspace, and one workspace's own switch. Enforced by the server's
+ * `module:` checks, not by hiding: every change needs a reason and is audited.
+ */
+export interface PlatformCapability {
+  module: string
+  activation: string
+  platform_disabled: boolean
+  disabled_by_environment: boolean
+}
+
+export interface TenantCapability {
+  module: string
+  entitled: boolean
+  enabled: boolean
+  reason: string | null
+  /** The workspace's own switch: true, false, or null when it inherits. */
+  tenant_switch: boolean | null
+}
+
+export function fetchPlatformCapabilities(): Promise<{ capabilities: PlatformCapability[] }> {
+  return getData('/admin/capabilities')
+}
+
+export function setPlatformCapability(module: string, disabled: boolean, reason: string): Promise<{ capabilities: PlatformCapability[] }> {
+  return putData(`/admin/capabilities/${module}`, { disabled, reason })
+}
+
+export function fetchTenantCapabilities(tenantId: string): Promise<{ capabilities: TenantCapability[] }> {
+  return getData(`/admin/tenants/${tenantId}/capabilities`)
+}
+
+export function setTenantCapability(tenantId: string, module: string, enabled: boolean | null, reason: string): Promise<{ capabilities: TenantCapability[] }> {
+  return putData(`/admin/tenants/${tenantId}/capabilities/${module}`, { enabled, reason })
+}
+
+/*
+ * SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace. Needs a reason and the operator's
+ * own password; the server refuses writes, secrets, money and exports for the whole visit.
+ */
+export function startSupportSession(tenantId: string, reason: string, currentPassword: string): Promise<{
+  support_session_id: string
+  tenant: { id: string; name: string }
+  mode: string
+  expires_at: string
+  landing_path: string
+}> {
+  return postData(`/admin/tenants/${tenantId}/support-session`, { reason, current_password: currentPassword })
+}
+
+export function endSupportSession(): Promise<{ ended: boolean; return_path: string }> {
+  return deleteData('/admin/support-session')
 }

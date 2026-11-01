@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CheckCircle2, Loader2, ShieldCheck } from 'lucide-react'
 import { checkVerification, startVerification } from './api'
 
 type Channel = 'phone' | 'email'
-interface ChannelState { status: 'idle' | 'sending' | 'awaiting_code' | 'verified'; vid?: string; code: string; error?: string }
-const initial: ChannelState = { status: 'idle', code: '' }
+interface ChannelState { status: 'idle' | 'sending' | 'awaiting_code' | 'verified'; vid?: string; code: string; error?: string; cooldown: number }
+const initial: ChannelState = { status: 'idle', code: '', cooldown: 0 }
 
 /**
  * A final request is never accepted without a verified phone + email. This runs the real OTP challenge.
@@ -22,6 +22,15 @@ export function ContactVerification({
   const [ph, setPh] = useState<ChannelState>(initial)
   const [em, setEm] = useState<ChannelState>(initial)
 
+  useEffect(() => {
+    if (ph.cooldown <= 0 && em.cooldown <= 0) return
+    const timer = window.setTimeout(() => {
+      setPh((state) => state.cooldown > 0 ? { ...state, cooldown: state.cooldown - 1 } : state)
+      setEm((state) => state.cooldown > 0 ? { ...state, cooldown: state.cooldown - 1 } : state)
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [ph.cooldown, em.cooldown])
+
   const setFor = (ch: Channel) => (ch === 'phone' ? setPh : setEm)
 
   const run = async (ch: Channel) => {
@@ -32,10 +41,10 @@ export function ContactVerification({
       const res = await startVerification(ch === 'phone' ? 'sms' : 'email', destination)
       if (res.dev_code) {
         await checkVerification(res.verification_id, res.dev_code) // no provider → auto-verify (dev/test only)
-        set({ status: 'verified', vid: res.verification_id, code: '' })
+        set({ status: 'verified', vid: res.verification_id, code: '', cooldown: 0 })
         onChange({ [ch]: res.verification_id }) // parent merges — never clobbers the other channel
       } else {
-        set({ status: 'awaiting_code', vid: res.verification_id, code: '' })
+        set({ status: 'awaiting_code', vid: res.verification_id, code: '', cooldown: res.resend_after ?? 60 })
       }
     } catch {
       set({ ...initial, status: 'idle', error: ar ? 'تعذّر الإرسال' : 'Could not send' })
@@ -65,10 +74,11 @@ export function ContactVerification({
         {state.status === 'verified' ? (
           <span className="flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-success"><CheckCircle2 size={15} /> {ar ? 'تم التحقق' : 'Verified'}</span>
         ) : (
-          <button type="button" disabled={!value || state.status === 'sending'} aria-label={`${ar ? 'تحقّق' : 'Verify'} ${label}`}
+          <button type="button" disabled={!value || state.status === 'sending' || state.cooldown > 0} aria-label={`${ar ? 'تحقّق' : 'Verify'} ${label}`}
             onClick={() => run(ch)}
             className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-brand-400 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-primary-soft disabled:opacity-50">
-            {state.status === 'sending' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />} {ar ? 'تحقّق' : 'Verify'}
+            {state.status === 'sending' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+            {state.cooldown > 0 ? `${ar ? 'إعادة الإرسال' : 'Resend'} (${state.cooldown}s)` : state.status === 'awaiting_code' ? (ar ? 'إعادة الإرسال' : 'Resend') : (ar ? 'تحقّق' : 'Verify')}
           </button>
         )}
       </div>

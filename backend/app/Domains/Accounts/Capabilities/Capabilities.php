@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Accounts\Capabilities;
 
 use App\Domains\Accounts\Services\AccountEntitlements;
+use App\Domains\Legal\Models\PlatformSetting;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\Cache;
@@ -42,6 +43,19 @@ final class Capabilities
         return $modules;
     }
 
+    /**
+     * SUPERADMIN-FEATURES-001 — modules switched off for EVERY workspace: the environment's kill switch and the console's, together.
+     *
+     * @return list<string>
+     */
+    public static function platformDisabled(): array
+    {
+        $raw = PlatformSetting::query()->where('is_singleton', true)->value('disabled_capabilities');
+        $console = is_string($raw) ? (array) json_decode($raw, true) : (array) ($raw ?? []);
+
+        return array_values(array_unique(array_map('strval', [...(array) config('capabilities.disabled', []), ...$console])));
+    }
+
     public static function exists(string $module): bool
     {
         return array_key_exists($module, self::catalogue());
@@ -54,7 +68,7 @@ final class Capabilities
     {
         $switches = $this->switches($tenant, $clientId, $projectId);
         $given = $this->entitlements->modules($tenant);
-        $killed = array_map('strval', (array) config('capabilities.disabled', []));
+        $killed = self::platformDisabled();
         $planModules = $this->planModules($tenant);
 
         $out = [];

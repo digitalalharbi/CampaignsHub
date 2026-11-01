@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Alerts\Models\AlertEvent;
+use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
@@ -69,6 +72,11 @@ final class PlatformOverviewController extends Controller
             'growth' => $this->growth(),
             'subscriptions' => $this->subscriptions(),
             'attention' => $this->attention(),
+            'operations' => [
+                'connections' => $this->connectionsNeedingReconnect(),
+                'alerts' => $this->openAlerts(),
+                'recent' => $this->recentConsoleActivity(),
+            ],
         ], 'Platform overview.');
     }
 
@@ -174,8 +182,100 @@ final class PlatformOverviewController extends Controller
             ['key' => 'registrations_pending', 'count' => (int) $pendingReview, 'to' => '/admin/registrations', 'tone' => 'warning'],
             ['key' => 'subscriptions_past_due', 'count' => (int) $pastDue, 'to' => '/admin/billing', 'tone' => 'danger'],
             ['key' => 'tenants_suspended', 'count' => Tenant::query()->where('status', 'suspended')->count(), 'to' => '/admin/tenants', 'tone' => 'danger'],
+            ['key' => 'connections_need_reconnect', 'count' => $this->reconnectQuery()->count(), 'to' => '/admin/tenants', 'tone' => 'warning'],
             ['key' => 'users_without_membership', 'count' => User::query()->where('is_platform_admin', false)
                 ->whereDoesntHave('memberships')->count(), 'to' => '/admin/tenants', 'tone' => 'info'],
         ];
+    }
+
+    /**
+     * SUPERADMIN-CONSOLE-HOME-001 — ad-platform connections that have stopped working.
+     *
+     * A connection the provider refused (status `error`, set by ProviderSessionInvalidation when the token
+     * was invalidated) or whose token has passed its expiry while still marked connected. Both mean the
+     * workspace's numbers have stopped updating until its owner signs the account in again — which only
+     * the owner can do; the console names it, it does not reconnect it.
+     */
+    private function reconnectQuery()
+    {
+        return ProviderConnection::query()->where(fn ($q) => $q
+            ->where('status', 'error')
+            ->orWhere(fn ($q) => $q->where('status', 'connected')->whereNotNull('token_expires_at')->where('token_expires_at', '<', now())));
+    }
+
+    /**
+     * The provider's error text is deliberately left out: it can carry the customer's account ids, and
+     * the tenant's own integrations page already shows it to the people who can act on it.
+     *
+     * @return array{total: int, items: list<array<string, mixed>>}
+     */
+    private function connectionsNeedingReconnect(): array
+    {
+        $rows = $this->reconnectQuery()->orderByDesc('updated_at')->limit(10)
+            ->get(['id', 'tenant_id', 'provider', 'connection_name', 'status', 'token_expires_at', 'last_health_check_at', 'updated_at']);
+        $names = Tenant::query()->whereIn('id', $rows->pluck('tenant_id')->unique())->pluck('name', 'id');
+
+        return [
+            'total' => $this->reconnectQuery()->count(),
+            'items' => $rows->map(fn (ProviderConnection $c) => [
+                'id' => (string) $c->id,
+                'tenant_id' => (string) $c->tenant_id,
+                'tenant_name' => $names[$c->tenant_id] ?? null,
+                'provider' => (string) $c->provider,
+                'connection_name' => $c->connection_name,
+                'reason' => $c->status === 'error' ? 'refused' : 'expired',
+                'since' => ($c->status === 'error' ? ($c->last_health_check_at ?? $c->updated_at) : $c->token_expires_at)?->toIso8601String(),
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Open alerts across every workspace, by severity — counts only. Each alert belongs to its workspace and
+     * is handled there; the console shows whether the platform as a whole is quiet.
+     *
+     * @return array{open: int, by_severity: array<string, int>, tenants: int}
+     */
+    private function openAlerts(): array
+    {
+        $open = AlertEvent::query()->where(fn ($q) => $q->where('status', 'open')
+            ->orWhere(fn ($q) => $q->where('status', 'snoozed')->where('snoozed_until', '<', now())));
+
+        $bySeverity = (clone $open)->selectRaw('severity, count(*) as n')->groupBy('severity')->pluck('n', 'severity')
+            ->map(fn ($n) => (int) $n);
+
+        return [
+            'open' => (int) $bySeverity->sum(),
+            'by_severity' => [
+                'critical' => (int) ($bySeverity['critical'] ?? 0),
+                'warning' => (int) ($bySeverity['warning'] ?? 0),
+                'info' => (int) ($bySeverity['info'] ?? 0),
+            ],
+            'tenants' => (int) (clone $open)->distinct()->count('tenant_id'),
+        ];
+    }
+
+    /**
+     * The last ten things done FROM the console — platform changes and support visits. Who, what, where,
+     * when; the before/after values stay on the audit page, behind its own filters.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function recentConsoleActivity(): array
+    {
+        $rows = AuditLog::query()
+            ->where(fn ($q) => $q->where('action', 'like', 'platform.%')->orWhere('action', 'like', 'support.%'))
+            ->orderByDesc('created_at')->orderByDesc('id')->limit(10)
+            ->get(['id', 'tenant_id', 'user_id', 'action', 'created_at']);
+
+        $tenants = Tenant::query()->whereIn('id', $rows->pluck('tenant_id')->filter()->unique())->pluck('name', 'id');
+        $users = User::query()->whereIn('id', $rows->pluck('user_id')->filter()->unique())->pluck('name', 'id');
+
+        return $rows->map(fn (AuditLog $a) => [
+            'id' => (string) $a->id,
+            'action' => (string) $a->action,
+            'tenant_name' => $a->tenant_id ? ($tenants[$a->tenant_id] ?? null) : null,
+            'user_name' => $a->user_id ? ($users[$a->user_id] ?? null) : null,
+            'created_at' => $a->created_at?->toIso8601String(),
+        ])->values()->all();
     }
 }

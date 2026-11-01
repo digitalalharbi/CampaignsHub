@@ -121,12 +121,41 @@ final class RegistrationRequest extends Model
             'commitment_agreed' => $this->commitment_consent_at !== null,
             'email_verified' => $this->emailIsVerified(),
             'mobile_verified' => $this->mobileIsVerified(),
+            'mobile_resend_after' => $this->mobileResendAfter(),
+            'mobile_delivery_status' => $this->mobileDeliveryStatus(),
             // Present only when there is something the applicant can act on, so the screen never
             // shows an empty "next step" box.
             'next_step' => $this->nextStep($ar),
             'reason' => $this->state_reason,
             'provisioned' => $this->isProvisioned(),
         ];
+    }
+
+    private function mobileResendAfter(): int
+    {
+        $latest = RegistrationVerification::query()
+            ->where('registration_request_id', $this->getKey())
+            ->where('channel', 'mobile')
+            ->whereNull('consumed_at')
+            ->latest('created_at')
+            ->first();
+
+        if ($latest === null) {
+            return 0;
+        }
+
+        $cooldownSeconds = max(0, (int) config('accounts.mobile_resend_cooldown_seconds', 60));
+
+        return max(0, $cooldownSeconds - (int) $latest->created_at->diffInSeconds(now()));
+    }
+
+    private function mobileDeliveryStatus(): ?string
+    {
+        return RegistrationVerification::query()
+            ->where('registration_request_id', $this->getKey())
+            ->where('channel', 'mobile')
+            ->latest('created_at')
+            ->value('delivery_status');
     }
 
     /** The one thing this applicant should do next, or null when they are waiting on us. */
