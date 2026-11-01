@@ -79,6 +79,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'reports:dispatch-scheduled',
         'requests:evaluate-sla',
         'requests:prune-uploads',
+        // PRICING-SEATS-001 — hourly; stamps a released ad-account seat near when it was released.
+        'seats:reconcile',
         'subscriptions:lifecycle',
         // PAY-RECONCILE-001 — every fifteen minutes; asks the gateway only about pending payments past their webhook's window.
         'subscriptions:reconcile-payments',
