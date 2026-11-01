@@ -88,7 +88,7 @@ const KIND_LABEL: Record<BrandingKind, { ar: string; en: string }> = {
 
 const SCOPE_LABEL: Record<BrandingScope, { ar: string; en: string }> = {
   platform: { ar: 'المنصّة', en: 'Platform' },
-  tenant: { ar: 'المستأجر', en: 'Tenant' },
+  tenant: { ar: 'مساحة العمل', en: 'Workspace' },
   client: { ar: 'العميل', en: 'Client' },
   project: { ar: 'المشروع', en: 'Project' },
   report: { ar: 'التقرير', en: 'Report' },

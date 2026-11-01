@@ -17,7 +17,7 @@ import { Num } from '@/components/ui/Num'
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 export const COPY = {
   ar: {
-    title: 'الاشتراكات', subtitle: 'اطّلع على خطة المستأجر الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
+    title: 'الاشتراكات', subtitle: 'اطّلع على خطة مساحة العمل الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
     no_permission: 'لا تملك صلاحية عرض الاشتراكات.',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل بيانات الاشتراك.',
     current_plan: 'الخطة الحالية', default_plan: 'الخطة الافتراضية (بدون اشتراك مُسجَّل)',
@@ -64,7 +64,7 @@ export const COPY = {
     remove_card_note: 'إزالة البطاقة لا تُلغي الاشتراك؛ ستصلك فاتورة التجديد لتسديدها بنفسك.',
   },
   en: {
-    title: 'Subscriptions', subtitle: 'See the tenant’s current plan and usage against limits, and change plan.',
+    title: 'Subscriptions', subtitle: 'See your workspace’s current plan and usage against limits, and change plan.',
     no_permission: 'You do not have permission to view subscriptions.',
     loading: 'Loading…', error: 'Could not load subscription data.',
     current_plan: 'Current plan', default_plan: 'Default plan (no explicit subscription)',

@@ -7,6 +7,7 @@ namespace App\Domains\Subscriptions\Services;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Models\UsageCounter;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Support\Carbon;
@@ -221,8 +222,10 @@ final class SubscriptionService
              * Archived and soft-deleted rosters do not hold a slot, for the same reason an archived
              * project does not: the customer gave the capacity back and must get it back.
              */
+            // Archived from the clients screen sets `archived_at` / `client_status`, not `status` — all three are honoured.
             'clients' => DB::table('client_workspaces')->where('tenant_id', $id)
-                ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
+                ->whereNull('deleted_at')->whereNull('archived_at')->where('status', '!=', 'archived')
+                ->where(fn ($q) => $q->whereNull('client_status')->orWhere('client_status', '!=', 'archived'))->count(),
 
             /*
              * Seats held, not accounts created.
@@ -231,9 +234,12 @@ final class SubscriptionService
              * so counting memberships alone would let a workspace on a cap of three invite thirty
              * people and pass every check until the day they all accepted.
              */
-            'team_members' => DB::table('memberships')->where('tenant_id', $id)->where('status', 'active')->count()
+            // A client's portal users read their own reports; they are the agency's clients, not its team (CP-USERS-001).
+            'team_members' => DB::table('memberships')->where('tenant_id', $id)->where('status', 'active')
+                ->where('portal', '!=', Portal::ClientPortal->value)->count()
                 + DB::table('workspace_invitations')->where('tenant_id', $id)
-                    ->whereNull('accepted_at')->where('expires_at', '>', now())->count(),
+                    ->whereNull('accepted_at')->where('expires_at', '>', now())
+                    ->where(fn ($q) => $q->whereNull('portal')->orWhere('portal', '!=', Portal::ClientPortal->value))->count(),
 
             /*
              * ORCH-100 — «Connected Ad Accounts» means ASSIGNED, and counts each account once.

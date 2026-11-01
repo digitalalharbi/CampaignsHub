@@ -25,7 +25,7 @@ use Illuminate\Http\Request;
 final class SubscriptionController extends Controller
 {
     /** The metrics surfaced in the usage summary — mirror the plan `limits` keys. */
-    private const METERED = ['projects', 'clients', 'team_members', 'connections', 'reports_per_month'];
+    private const METERED = ['projects', 'clients', 'team_members', 'ad_accounts', 'connections', 'reports_per_month'];
 
     public function __construct(
         private readonly SubscriptionService $subscriptions,

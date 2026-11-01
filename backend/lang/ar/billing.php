@@ -37,6 +37,11 @@ return [
     'metrics' => [
         'campaigns' => 'الحملات',
         'projects' => 'المشاريع',
+        'clients' => 'العملاء',
+        'team_members' => 'أعضاء الفريق',
+        'ad_accounts' => 'الحسابات الإعلانية',
+        'connections' => 'الربط',
+        'reports_per_month' => 'تقارير هذا الشهر',
     ],
 
     'plan_not_available' => 'هذه الباقة غير متاحة.',

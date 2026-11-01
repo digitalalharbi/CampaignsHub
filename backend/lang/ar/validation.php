@@ -197,7 +197,7 @@ return [
      * came back first, which is how one client's project ends up in another client's portal. A
      * question is the correct outcome here, so the message has to read as one.
      */
-    'client_workspace_required' => 'اختر مساحة العميل التي ينتمي إليها هذا المشروع.',
+    'client_workspace_required' => 'اختر العميل الذي ينتمي إليه هذا المشروع.',
 
     /*
      * RUNTIME-100 §10 — a selection can go stale between rendering and confirming.

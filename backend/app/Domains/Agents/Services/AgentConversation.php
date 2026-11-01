@@ -13,7 +13,6 @@ use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Models\User;
-use Illuminate\Support\Carbon;
 use RuntimeException;
 
 /**
@@ -49,7 +48,8 @@ final class AgentConversation
         $rounds = (int) config('agents.max_tool_rounds', 8);
         for ($i = 0; $i <= $rounds; $i++) {
             // The workspace's own monthly ceiling on its key, checked before EVERY call, not once per turn.
-            if ($limit !== null && $this->tokensThisMonth((string) $thread->tenant_id) >= $limit) {
+            // Measured on THIS key, from the usage ledger — another project's key never spends this one's allowance.
+            if ($limit !== null && $this->usage->usedThisMonth((string) $thread->tenant_id, 'ai_tokens_own_key', $credentialId) >= $limit) {
                 throw new RuntimeException('ai_token_limit_reached');
             }
             $turn = $client->respond($model, $system, $this->history($thread), $tools);
@@ -143,15 +143,6 @@ final class AgentConversation
         }
 
         return $out;
-    }
-
-    /** Input plus output tokens the workspace's agents used since the first of this month (UTC). */
-    private function tokensThisMonth(string $tenantId): int
-    {
-        return (int) AgentMessage::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('role', 'assistant')
-            ->where('created_at', '>=', Carbon::now()->startOfMonth())
-            ->selectRaw("coalesce(sum(coalesce((usage->>'input_tokens')::bigint, 0) + coalesce((usage->>'output_tokens')::bigint, 0)), 0) as used")
-            ->value('used');
     }
 
     private function rulesSummary(Project $project): string

@@ -143,8 +143,8 @@ describe('ConnectionWizard — creating the project the accounts will feed', () 
       response: {
         status: 422,
         data: {
-          message: 'اختر مساحة العميل التي ينتمي إليها هذا المشروع.',
-          errors: { client_workspace_id: ['اختر مساحة العميل التي ينتمي إليها هذا المشروع.'] },
+          message: 'اختر العميل الذي ينتمي إليه هذا المشروع.',
+          errors: { client_workspace_id: ['اختر العميل الذي ينتمي إليه هذا المشروع.'] },
         },
       },
     }
@@ -155,7 +155,7 @@ describe('ConnectionWizard — creating the project the accounts will feed', () 
 
     const picker = await screen.findByTestId('wizard-project-workspace')
     expect(picker).toBeTruthy()
-    expect(screen.getByTestId('wizard-create-project-error').textContent).toContain('اختر مساحة العميل')
+    expect(screen.getByTestId('wizard-create-project-error').textContent).toContain('اختر العميل')
   })
 })
 

@@ -54,7 +54,7 @@ function DriveSummaryCard({ label, value, tone }: { label: string; value: number
 }
 
 const SCOPE_LABEL: Record<DriveScope, { ar: string; en: string }> = {
-  tenant: { ar: 'المستأجر', en: 'Tenant' },
+  tenant: { ar: 'مساحة العمل', en: 'Workspace' },
   client: { ar: 'العميل', en: 'Client' },
   project: { ar: 'المشروع', en: 'Project' },
   campaign: { ar: 'الحملة', en: 'Campaign' },

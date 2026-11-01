@@ -9,7 +9,6 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Agents\Engine\ModelClient;
 use App\Domains\Agents\Engine\ModelTurn;
 use App\Domains\Agents\Models\ActionProposal;
-use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\AI\Models\AIProviderCredential;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -24,6 +23,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Usage\CreditTransaction;
 use App\Domains\Subscriptions\Usage\UsageEvent;
+use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -235,15 +235,28 @@ final class AgentEngineTest extends TestCase
     {
         AIProviderCredential::withoutGlobalScopes()->update(['monthly_token_limit' => 10]);
         $this->model->script([$this->toolTurn('get_rules', []), $this->textTurn('never reached')]);
-        // Every scripted turn reports usage; push this month over the ceiling with one earlier reply.
-        $old = AgentThread::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'agent_key' => 'analyst']);
-        AgentMessage::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'thread_id' => $old->getKey(), 'role' => 'assistant', 'content' => [], 'usage' => ['input_tokens' => 8, 'output_tokens' => 4]]);
+        // Push THIS key over its ceiling for the month — measured from the usage ledger, per key (PRICING-USAGE-CREDITS-001).
+        $key = (string) AIProviderCredential::withoutGlobalScopes()->value('id');
+        app(UsageLedger::class)->record((string) $this->tenant->id, 'ai_tokens_own_key', 12, 'earlier-reply', scope: $key);
 
         $thread = $this->thread($this->send('Hello'));
 
         $this->assertSame('failed', $thread['status']);
         $this->assertSame('ai_token_limit_reached', $thread['error']);
         $this->assertCount(0, $this->model->calls);
+    }
+
+    /** Another key's usage never spends this key's allowance. */
+    public function test_another_key_s_usage_does_not_stop_this_key(): void
+    {
+        AIProviderCredential::withoutGlobalScopes()->update(['monthly_token_limit' => 10]);
+        app(UsageLedger::class)->record((string) $this->tenant->id, 'ai_tokens_own_key', 50, 'other-key-reply', scope: 'some-other-key');
+        $this->model->script([$this->textTurn('Still answering.')]);
+
+        $thread = $this->thread($this->send('Hello'));
+
+        $this->assertSame('idle', $thread['status']);
+        $this->assertCount(1, $this->model->calls);
     }
 
     /** PRICING-USAGE-CREDITS-001 — each model call on the workspace's own key is metered once, against that key, and costs no credits. */
