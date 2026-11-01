@@ -142,7 +142,8 @@ final class ConnectionHubController extends Controller
 
             // «Discovered» excludes an account whose access the provider has withdrawn: it is not one
             // of the things this authorisation can still reach, and counting it inflates the sentence.
-            $discovered = $mine->filter(fn (ExternalAccount $a): bool => $a->access_lost_at === null);
+            // ACCOUNT-COUNTS-001 — the same definition as the wizard: reachable now, or already selected.
+            $discovered = $mine->filter(fn (ExternalAccount $a): bool => $a->access_lost_at === null || $selectedIds->contains((string) $a->getKey()));
             $chosen = $discovered->filter(
                 fn (ExternalAccount $a): bool => $selectedIds->contains((string) $a->getKey()),
             );
