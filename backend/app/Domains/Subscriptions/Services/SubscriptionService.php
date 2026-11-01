@@ -64,9 +64,21 @@ final class SubscriptionService
             return null;
         }
 
-        return $this->subscriptionFor($tenant)?->isTrialing()
+        $cap = $this->subscriptionFor($tenant)?->isTrialing()
             ? $plan->trialLimitFor($metric)
             : $plan->limitFor($metric);
+
+        // PRICING-ADDONS-001 — active capacity add-ons extend a capped metric; an uncapped one stays uncapped.
+        return $cap === null ? null : $cap + $this->addonCapacity($tenant, $metric);
+    }
+
+    /** What this workspace's ACTIVE add-ons add to a metric (quantity × the add-on's grant). Requested ones add nothing. */
+    public function addonCapacity(Tenant $tenant, string $metric): int
+    {
+        return (int) DB::table('tenant_addons')->join('addons', 'addons.id', '=', 'tenant_addons.addon_id')
+            ->where('tenant_addons.tenant_id', $tenant->getKey())->where('tenant_addons.status', 'active')
+            ->get(['tenant_addons.quantity', 'addons.grants'])
+            ->sum(fn ($row) => (int) $row->quantity * (int) ((json_decode((string) $row->grants, true)['limits'][$metric] ?? 0)));
     }
 
     /**
