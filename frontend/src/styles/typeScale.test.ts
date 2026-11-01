@@ -55,6 +55,9 @@ const BASELINED = {
   'src/features/auth': 'carries the auth visual baselines, same reason',
 }
 
+/** Counted on 2026-11-01 with the whole pricing stack included. It may only be lowered. */
+const MAX_ARBITRARY_SIZES = 1135
+
 describe('TYPOGRAPHY-PRODUCT-POLISH-001 — no half-pixel type sizes', () => {
   it('finds none outside the two areas that carry visual baselines', () => {
     const offenders = sourceFiles()
@@ -68,6 +71,19 @@ describe('TYPOGRAPHY-PRODUCT-POLISH-001 — no half-pixel type sizes', () => {
       )
 
     expect(offenders, 'half a pixel is invisible, and every one of these is a precedent for the next').toEqual([])
+  })
+
+  /**
+   * The ratchet (Owner, 2026-11-01): type moves onto the scale gradually, through the shared components, and never by hand-editing
+   * a thousand screens. So the number only goes down: new work uses the scale, and whoever converts a surface lowers this figure.
+   * `text-xs` is not a drop-in for `text-[13px]` (it also sets a line height), so a conversion is a per-surface change with its checks.
+   */
+  it('never gains an arbitrary font size', () => {
+    const count = sourceFiles()
+      .filter(([relative]) => !/\.test\.tsx?$/.test(relative))
+      .reduce((n, [, source]) => n + (source.match(/text-\[\d+(?:\.\d+)?px\]/g) ?? []).length, 0)
+
+    expect(count, 'use the type scale (text-xs, text-sm, …) rather than a new text-[Npx]; if you removed some, lower MAX_ARBITRARY_SIZES').toBeLessThanOrEqual(MAX_ARBITRARY_SIZES)
   })
 
   /** The scanner reads the tree, and the exemptions are real rather than a way to pass. */
