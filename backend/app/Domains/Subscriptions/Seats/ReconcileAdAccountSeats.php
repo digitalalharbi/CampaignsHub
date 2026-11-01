@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Seats;
 
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ final class ReconcileAdAccountSeats extends Command
 
     public function handle(AdAccountSeats $seats): int
     {
+        $before = DB::table('ad_account_seat_events')->count();
         $ids = DB::table('ad_account_seats')->distinct()->pluck('tenant_id')
             ->merge(DB::table('project_integration_bindings')->where('is_active', true)->distinct()->pluck('tenant_id'))
             ->unique()->values();
@@ -34,7 +36,10 @@ final class ReconcileAdAccountSeats extends Command
                 }
             });
         }
-        $this->info('Reconciled '.$ids->count().' workspace(s).');
+        // Rows touched = seat events written (claimed, released, reactivated); history is append-only, so the difference is exact.
+        $written = DB::table('ad_account_seat_events')->count() - $before;
+        app(ScheduledRunRows::class)->report($written);
+        $this->info('Reconciled '.$ids->count().' workspace(s); '.$written.' seat event(s) written.');
 
         return self::SUCCESS;
     }
