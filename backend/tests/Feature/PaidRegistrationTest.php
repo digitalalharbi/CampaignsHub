@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Subscriptions\Models\Subscription;
+use App\Domains\Subscriptions\Models\SubscriptionInvoice;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Models\Membership;
@@ -229,14 +230,24 @@ final class PaidRegistrationTest extends TestCase
         $this->getJson('/api/v1/plans/solo/quote?interval=annual')->assertOk()
             ->assertJsonPath('data.quote.due_now', $annual)
             // Bought outright: the annual term does not pass through the introductory month.
-            ->assertJsonPath('data.quote.due_later', null);
+            ->assertJsonPath('data.quote.due_later', null)
+            // The VAT is shown before anybody is asked for a card.
+            ->assertJsonPath('data.quote.vat.now.tax', '298.50')
+            ->assertJsonPath('data.quote.vat.now.gross', '2288.50')
+            ->assertJsonPath('data.quote.vat.now.prices_include_vat', false);
 
         ['registration' => $registration] = $this->applyAndVerify([
             'email' => 'annual@a.test', 'tenant_name' => 'Annual Co', 'billing_interval' => 'annual',
         ]);
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $registration->getKey())->firstOrFail();
-        $this->assertSame($annual, (string) $payment->amount);
+        // PRICING-VAT-001 — the 2026-11 catalogue is VAT-exclusive: the charge is the price plus 15%, and the split is kept.
+        $this->assertSame('2288.50', (string) $payment->amount);
+        $this->assertSame($annual, (string) $payment->net_amount);
+        $this->assertSame('298.50', (string) $payment->tax_amount);
+        $invoice = SubscriptionInvoice::query()->where('subscription_payment_id', $payment->getKey())->firstOrFail();
+        $this->assertSame($annual, (string) $invoice->subtotal);
+        $this->assertSame('2288.50', (string) $invoice->total, 'the invoice total is exactly what is charged');
 
         $subscription = Subscription::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $registration->tenant_id)->firstOrFail();

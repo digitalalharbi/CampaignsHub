@@ -167,6 +167,17 @@ export interface Plan {
   trial_limits: Record<string, number | null> | null
 }
 
+/** PRICING-VAT-001 — a charge's VAT, as the server will take it. `gross` is what the card is asked for. */
+export interface VatSplit {
+  net: string
+  tax: string
+  gross: string
+  treatment: string
+  rate: number
+  /** true for the launch catalogue (all-in prices); false for the 2026-11 catalogue, where VAT is added. */
+  prices_include_vat: boolean
+}
+
 export interface PlanQuote {
   plan_code: string
   currency: string
@@ -188,6 +199,8 @@ export interface PlanQuote {
   remaining_committed_payments: number
   /** The date money moves again, as a date rather than «in 30 days». */
   next_payment_on: string
+  /** Today's and the later charge with their VAT. */
+  vat?: { now: VatSplit; later: VatSplit | null }
 }
 
 export function fetchPlans(): Promise<{ plans: Plan[] }> {
