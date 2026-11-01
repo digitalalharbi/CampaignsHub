@@ -34,6 +34,17 @@ export function TenantCreditsPanel({ tenantId, ar }: { tenantId: string; ar: boo
           <p className="mt-2 text-sm text-text-primary">
             <span data-testid="tenant-credits-balance" className="font-semibold"><Num>{credits.data.balance}</Num> {credits.data.currency}</span>
           </p>
+          {credits.data.seats && (
+            <p data-testid="tenant-credits-seats" className="mt-1 text-[13px] text-text-secondary">
+              {ar ? 'مقاعد الحسابات الإعلانية:' : 'Ad-account seats:'} <Num>{credits.data.seats.active}</Num>
+              {credits.data.seats.cap !== null && <> / <Num>{credits.data.seats.cap}</Num></>}
+              {credits.data.seats.replacements_allowed !== null && (
+                <span className="ms-2 text-[12px] text-text-muted">
+                  {ar ? 'استبدالات 30 يومًا' : 'replacements (30d)'} <Num>{credits.data.seats.replacements_used}</Num>/<Num>{credits.data.seats.replacements_allowed}</Num>
+                </span>
+              )}
+            </p>
+          )}
           <ul className="mt-2 grid gap-1 text-[13px]">
             {credits.data.meters.map((m) => (
               <li key={m.code} data-testid={`tenant-credits-meter-${m.code}`} className="flex flex-wrap gap-2 rounded-lg bg-surface-secondary px-3 py-1.5">

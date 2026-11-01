@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Subscriptions\Seats\AdAccountSeats;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Subscriptions\Usage\CreditTransaction;
 use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Domains\Subscriptions\Usage\UsageMeter;
@@ -80,6 +82,7 @@ final class PlatformUsageController extends Controller
             'balance' => $this->ledger->balance($id),
             'currency' => 'SAR',
             'meters' => $this->ledger->summary($model),
+            'seats' => app(AdAccountSeats::class)->summary($model) + ['cap' => app(SubscriptionService::class)->effectiveLimit($model, 'ad_accounts')],
             'transactions' => CreditTransaction::query()->where('tenant_id', $id)->orderByDesc('id')->limit(50)->get()
                 ->map(fn (CreditTransaction $t) => [
                     'id' => $t->id, 'kind' => $t->kind, 'amount' => bcadd((string) $t->amount, '0', 2),

@@ -1305,6 +1305,7 @@ export interface AdminUsageMeter {
 }
 
 export interface WorkspaceCredits {
+  seats?: { active: number; holding: number; replacements_used: number; replacements_allowed: number | null; next_replacement_at: string | null; cap: number | null }
   balance: string
   currency: string
   meters: { code: string; name: string; name_ar: string; used: number; included: number | null; cost: string; credits_charged: string; uncovered: string; funded_by: 'platform' | 'customer' }[]

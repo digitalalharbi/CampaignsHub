@@ -23,6 +23,7 @@ describe('UsageCard', () => {
       ],
       own_keys: [{ id: 'k1', provider: 'anthropic', key: '••••1234', monthly_token_limit: 5000, used: 4500, scope: 'project', scope_name: 'Spring' }],
       credits: { balance: '0.00', currency: 'SAR', recent: [] },
+      seats: { active: 18, holding: 1, replacements_used: 2, replacements_allowed: 3, next_replacement_at: null, cap: 20 },
     })
     renderWithProviders(<UsageCard ar={false} />, { locale: 'en' })
 
@@ -33,5 +34,7 @@ describe('UsageCard', () => {
     expect(screen.getByTestId('usage-meter-sms_verifications')).toHaveTextContent('18 / 20')
     expect(screen.queryByTestId('usage-meter-ai_tokens_own_key')).not.toBeInTheDocument()
     expect(screen.getByTestId('usage-credits')).toHaveTextContent('0.00 SAR')
+    expect(screen.getByTestId('usage-seats')).toHaveTextContent('18 / 20')
+    expect(screen.getByTestId('usage-seats')).toHaveTextContent('Replacements in 30 days: 2 / 3')
   })
 })

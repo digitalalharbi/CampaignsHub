@@ -43,6 +43,23 @@ export function UsageCard({ ar }: { ar: boolean }) {
         <span className="ms-auto font-semibold text-text-primary"><Num>{credits.balance}</Num> {credits.currency}</span>
       </div>
 
+      {usage.data.seats && (
+        <div data-testid="usage-seats" className="mt-3 rounded-xl border border-border px-3 py-2 text-[13px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-text-primary">{ar ? 'مقاعد الحسابات الإعلانية' : 'Ad-account seats'}</span>
+            <span className="ms-auto text-text-secondary">
+              <Num>{fmt(usage.data.seats.active)}</Num>{usage.data.seats.cap !== null && <> / <Num>{fmt(usage.data.seats.cap)}</Num></>}
+            </span>
+          </div>
+          <Meter used={usage.data.seats.active} cap={usage.data.seats.cap} testId="usage-seats-bar" />
+          {usage.data.seats.replacements_allowed !== null && (
+            <p className="mt-1 text-[12px] text-text-muted">
+              {ar ? 'الاستبدالات خلال 30 يومًا:' : 'Replacements in 30 days:'} <Num>{usage.data.seats.replacements_used}</Num> / <Num>{usage.data.seats.replacements_allowed}</Num>
+            </p>
+          )}
+        </div>
+      )}
+
       <ul className="mt-3 grid gap-2">
         {keys.map((k) => <OwnKey key={k.id} k={k} ar={ar} />)}
         {platform.map((m) => <PlatformMeter key={m.code} m={m} ar={ar} />)}

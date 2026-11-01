@@ -266,10 +266,20 @@ export interface OwnKeyUsage {
   used: number
 }
 
+export interface SeatSummary {
+  active: number
+  holding: number
+  replacements_used: number
+  replacements_allowed: number | null
+  next_replacement_at: string | null
+  cap: number | null
+}
+
 export interface UsageSummary {
   period: string
   meters: UsageMeterRow[]
   own_keys: OwnKeyUsage[]
+  seats?: SeatSummary
   credits: { balance: string; currency: string; recent: { kind: string; amount: string; balance_after: string; reason: string | null; at: string | null }[] }
   prices_exclude_vat: boolean
 }

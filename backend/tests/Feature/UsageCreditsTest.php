@@ -220,6 +220,7 @@ final class UsageCreditsTest extends TestCase
         $this->assertSame(5000, $data['own_keys'][0]['monthly_token_limit']);
         $this->assertSame('••••1234', $data['own_keys'][0]['key']);
         $this->assertSame('0.00', $data['credits']['balance']);
+        $this->assertSame(['active' => 0, 'cap' => 20], array_intersect_key($data['seats'], ['active' => 0, 'cap' => 0]), 'Team: 20 ad-account seats');
     }
 
     public function test_a_code_the_platform_pays_twilio_to_send_for_a_workspace_is_metered_once(): void

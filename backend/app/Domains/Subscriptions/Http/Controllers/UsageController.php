@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Http\Controllers;
 
 use App\Domains\AI\Models\AIProviderCredential;
+use App\Domains\Subscriptions\Seats\AdAccountSeats;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Subscriptions\Usage\CreditTransaction;
 use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -48,6 +50,8 @@ final class UsageController extends Controller
             'period' => now()->utc()->format('Y-m'),
             'meters' => $this->ledger->summary($tenant),
             'own_keys' => $keys,
+            // PRICING-SEATS-001 — ad-account seats against the cap, and the 30-day replacement allowance.
+            'seats' => app(AdAccountSeats::class)->summary($tenant) + ['cap' => app(SubscriptionService::class)->effectiveLimit($tenant, 'ad_accounts')],
             'credits' => [
                 'balance' => $this->ledger->balance($tenantId),
                 'currency' => 'SAR',
