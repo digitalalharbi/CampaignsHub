@@ -145,7 +145,8 @@ const GROUPS: ComparisonGroup[] = [
     ar: 'الاستخدام',
     en: 'Usage',
     rows: [
-      { key: 'connections', ar: 'الحسابات الإعلانية المرتبطة', en: 'Connected ad accounts', value: cap('connections') },
+      // PRICING-CATALOGUE-001 — plans are sold on ad accounts (5 / 20 / 80), not on connections, which are uncapped.
+      { key: 'ad_accounts', ar: 'الحسابات الإعلانية', en: 'Ad accounts', value: cap('ad_accounts') },
       { key: 'projects', ar: 'المشاريع', en: 'Projects', value: cap('projects') },
       { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members', value: cap('team_members') },
       // Agency work only — see `comparisonFor`.
@@ -226,7 +227,7 @@ export function comparisonFor(plans: Plan[], journey: Journey | null): Compariso
 export const COMPARISON: ComparisonRow[] = [
   { key: 'projects', ar: 'المشاريع', en: 'Projects', value: cap('projects') },
   { key: 'clients', ar: 'العملاء', en: 'Clients', value: cap('clients') },
-  { key: 'connections', ar: 'الحسابات الإعلانية المرتبطة', en: 'Ad account connections', value: cap('connections') },
+  { key: 'ad_accounts', ar: 'الحسابات الإعلانية', en: 'Ad accounts', value: cap('ad_accounts') },
   { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members', value: cap('team_members') },
   { key: 'reports_per_month', ar: 'التقارير شهريًا', en: 'Reports per month', value: cap('reports_per_month') },
   { key: 'ai_assist', ar: 'المساعد الذكي', en: 'AI assist', value: flag('ai_assist') },
@@ -288,7 +289,7 @@ export function whyUpgrade(plan: Plan, previous: Plan | undefined, ar: boolean):
 
     if (now === before) continue
 
-    const isCap = ['projects', 'clients', 'connections', 'team_members', 'reports_per_month'].includes(row.key)
+    const isCap = ['projects', 'clients', 'ad_accounts', 'team_members', 'reports_per_month'].includes(row.key)
 
     if (isCap) {
       const label = ar ? row.ar : row.en
