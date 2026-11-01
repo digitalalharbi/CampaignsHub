@@ -238,6 +238,9 @@ final class ConfirmAccountSelection
              * transaction, the same quota lock and the same client-workspace fence.
              */
             ->whereIn('account_type', ['ad_account', 'store'])
+            // SYNC-GATE-001 — an account the credential no longer lists cannot be selected: it would
+            // claim a seat and then never sync, because the gate refuses it.
+            ->whereNull('access_lost_at')
             ->get();
 
         if ($accounts->count() !== count($accountIds)) {

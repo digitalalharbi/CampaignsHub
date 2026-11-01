@@ -94,6 +94,12 @@ final class Ga4PropertySync
 
         $projectId = $this->assignment->projectIdFor($account);
 
+        // SYNC-GATE-001 — the manual button gets the whole gate the scheduled sweep gets: a lost
+        // credential, a paused or archived project or a switched-off binding is not «selected» either.
+        if ($projectId !== null && ! $this->assignment->isActivelyAssigned($account)) {
+            $projectId = null;
+        }
+
         if ($projectId === null) {
             /*
              * `awaiting_assignment`, the same word the commerce sweep uses for the same situation:
