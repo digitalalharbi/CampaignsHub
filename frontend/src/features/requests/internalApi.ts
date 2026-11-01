@@ -30,7 +30,7 @@ export interface RequestRow {
 
 export interface RequestListResult {
   data: RequestRow[]
-  meta: { total: number; per_page: number; current_page: number; last_page: number; summary?: RequestSummary; breakdown?: RequestBreakdown }
+  meta: { total: number; per_page: number; current_page: number; last_page: number; summary?: RequestSummary; breakdown?: RequestBreakdown; inflow?: { date: string; count: number }[] }
 }
 
 export interface RequestComment { id: number; visibility: 'internal' | 'client'; author: string; body: string; at: string | null }

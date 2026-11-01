@@ -13,6 +13,7 @@ import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT, type TranslationKey } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { StatCard } from '@/components/ui/StatCard'
+import { InflowTrend } from '@/components/patterns/InflowTrend'
 
 // Board-column layout order (a request-workflow layout constant, not a select's option source — those now come
 // from the taxonomy engine). Terminal states (rejected/cancelled/archived) are intentionally not columns.
@@ -107,6 +108,9 @@ export function RequestsDashboardPage() {
           }
         />
       </div>
+
+      {/* UX-COMPACT-CHARTS-001 — requests that arrived per day, under the cards, not inside them. */}
+      <InflowTrend series={query.data?.meta?.inflow} label={{ ar: 'الطلبات الواردة', en: 'Requests received' }} ar={ar} testId="requests-inflow" />
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2.5">

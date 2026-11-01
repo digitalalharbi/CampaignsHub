@@ -1,4 +1,7 @@
+import type { CSSProperties } from 'react'
 import { Link, Outlet } from 'react-router-dom'
+import { getData } from '@/lib/api/client'
+import { agencyAccentFor } from '@/features/requests/portal/useClientBranding'
 import { productName } from '@/lib/brand'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -139,7 +142,23 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
   )
 }
 
+/**
+ * BRANDING-HIERARCHY-001 — the agency's accent in its own portal, once it has chosen one and white text can be read on it.
+ * A workspace on the default changes nothing, and a branding request that fails leaves the product's accent in place.
+ */
+function useAgencyAccent(): CSSProperties | undefined {
+  const branding = useQuery({
+    queryKey: ['settings', 'branding'],
+    queryFn: () => getData<{ branding: { primary_color?: string } }>('/settings/branding'),
+    retry: false,
+    staleTime: 300_000,
+  })
+
+  return agencyAccentFor(branding.data?.branding?.primary_color) as CSSProperties | undefined
+}
+
 export function AgencyShell() {
+  const agencyAccent = useAgencyAccent()
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
@@ -149,6 +168,7 @@ export function AgencyShell() {
 
   return (
     <PortalFrame
+      style={agencyAccent}
       testId="agency-shell"
       railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
       tabs={AGENCY_TABS}

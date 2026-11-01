@@ -13,6 +13,7 @@ use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Support\RequestLabels;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Support\DailyInflow;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +75,7 @@ final class RequestsController
                 'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(),
                 'summary' => $this->summary(clone $query),
                 'breakdown' => $this->breakdown(clone $query),
+                'inflow' => DailyInflow::series($query, 'submitted_at'),
             ],
         ]);
     }

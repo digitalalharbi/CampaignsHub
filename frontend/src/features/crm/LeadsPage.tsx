@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { InflowTrend } from '@/components/patterns/InflowTrend'
 import { Plus } from 'lucide-react'
 import { convertLead, listLeads } from './api'
 import { LeadAttributionTrail } from './LeadAttributionTrail'
@@ -295,6 +296,9 @@ export function LeadsPage() {
       </div>
 
       {convertError && <Alert severity="danger" title={convertError.message} />}
+
+      {/* UX-COMPACT-CHARTS-001 — leads that arrived per day: a real trend, in its own strip. */}
+      <InflowTrend series={leadsQuery.data?.inflow} label={{ ar: 'العملاء المحتملون الواردون', en: 'Leads received' }} ar={locale === 'ar'} testId="leads-inflow" />
 
       {/*
         Both figures, always, side by side.
