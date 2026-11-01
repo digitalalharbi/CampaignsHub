@@ -234,3 +234,38 @@ export const getAddons = () => getData<{ addons: ShopAddon[]; prices_exclude_vat
 
 export const requestAddon = (code: string, quantity = 1) =>
   postData<{ request_id: string; status: string }>(`/subscriptions/addons/${code}/request`, { quantity })
+
+// PRICING-USAGE-CREDITS-001 — this month's usage, own-key caps and the credit balance.
+export interface UsageMeterRow {
+  code: string
+  name: string
+  name_ar: string
+  unit: string
+  funded_by: 'platform' | 'customer'
+  charges_credits: boolean
+  unit_cost: string | null
+  currency: string
+  used: number
+  included: number | null
+  cost: string
+  credits_charged: string
+  uncovered: string
+}
+
+export interface OwnKeyUsage {
+  id: string
+  provider: string
+  key: string
+  monthly_token_limit: number | null
+  used: number
+}
+
+export interface UsageSummary {
+  period: string
+  meters: UsageMeterRow[]
+  own_keys: OwnKeyUsage[]
+  credits: { balance: string; currency: string; recent: { kind: string; amount: string; balance_after: string; reason: string | null; at: string | null }[] }
+  prices_exclude_vat: boolean
+}
+
+export const getUsage = () => getData<UsageSummary>('/subscriptions/usage')
