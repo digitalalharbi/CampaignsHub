@@ -53,10 +53,11 @@ final class SubscriptionService
      */
     public function effectiveLimit(Tenant $tenant, string $metric): ?int
     {
-        // SUPERADMIN-LIMITS-001 — a cap the console set for THIS workspace wins over its plan's, trial or not.
+        // SUPERADMIN-LIMITS-001 — a cap the console set for THIS workspace replaces its plan's, trial or not. Capacity add-ons the
+        // workspace holds still add on top: an override is the operator's base cap, never a way to lose what was paid for.
         [$overridden, $cap] = $this->override($tenant, $metric);
         if ($overridden) {
-            return $cap;
+            return $cap === null ? null : $cap + $this->addonCapacity($tenant, $metric);
         }
 
         $plan = $this->currentPlan($tenant);
