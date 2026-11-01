@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Building2, LayoutDashboard, Loader2, Sparkles, Users } from 'lucide-react'
 import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { PORTAL_LABELS, fetchMemberships, switchMembership, type Membership, type PortalKey } from './memberships'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { Button } from '@/components/ui/Button'
 import { AccessRecovery } from './AccessRecovery'
+import { clearStaleWorkspaceSelection } from './signOut'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { clients as countedClients } from '@/lib/counted'
@@ -39,9 +40,23 @@ export function WorkspaceSwitcherPage() {
 
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships() })
 
+  const queryClient = useQueryClient()
+
   const pick = useMutation({
     mutationFn: switchMembership,
-    onSuccess: (result) => navigate(result.destination, { replace: true }),
+    /*
+     * SECURITY CLUSTER 5 — nothing the previous workspace left in the browser may be shown under the new one.
+     *
+     * The shared QueryClient holds tenant-level lists whose keys carry no tenant (projects, stores, settings), and the persisted
+     * project id belongs to the workspace just left. An in-app navigation kept both, so the first render under the new workspace drew
+     * the old one's cached lists and project data. Cleared, the persisted selection dropped, and the page reloaded so the in-memory
+     * stores start empty too — the same full reload the invitation flow does after it switches membership.
+     */
+    onSuccess: (result) => {
+      queryClient.clear()
+      clearStaleWorkspaceSelection()
+      window.location.assign(result.destination)
+    },
   })
 
   /*
