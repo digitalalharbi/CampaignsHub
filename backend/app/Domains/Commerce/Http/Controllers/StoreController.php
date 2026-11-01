@@ -16,8 +16,12 @@ use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -176,9 +180,34 @@ final class StoreController extends Controller
             abort_if($project === null, 404, 'Project not found.');
         }
 
+        /*
+         * SEC-3 — the project in the body is a claim, not an authorisation. `integrations.connect` is a
+         * tenant permission; what it may touch is decided per project (integrations.manage there) and
+         * under the caller's client ceiling — on the project the store goes TO and on the one it comes
+         * FROM, so a restricted user can neither push a store into a project they cannot reach nor
+         * detach one from a project they cannot reach.
+         */
+        $user = $request->user();
+        $currentId = app(AccountAssignment::class)->projectIdFor($model);
+        $current = $currentId === null ? null : Project::withoutGlobalScopes()->find($currentId);
+        foreach ([$project, $current] as $involved) {
+            abort_unless($involved === null || $this->mayManage($user, $involved), 403, 'You cannot manage this project\'s integrations.');
+        }
+        abort_unless($model->client_workspace_id === null || app(ClientScopeResolver::class)->canReach($user, (string) $model->client_workspace_id), 403, 'You cannot manage this client\'s stores.');
+
         app(StoreAssignment::class)->assign($model, $project);
 
         return ApiResponse::success($this->storeArray($model->fresh() ?? $model), 'Store updated.');
+    }
+
+    private function mayManage(User $user, Project $project): bool
+    {
+        if (! app(ProjectAbilities::class)->allows($user, (string) $project->getKey(), ProjectCapability::INTEGRATIONS_MANAGE)) {
+            return false;
+        }
+
+        return $project->client_workspace_id === null
+            || app(ClientScopeResolver::class)->canReach($user, (string) $project->client_workspace_id);
     }
 
     /** @return array<string,mixed> */

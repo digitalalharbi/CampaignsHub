@@ -14,6 +14,7 @@ use App\Domains\Commerce\Models\CommerceCustomer;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -181,7 +182,13 @@ final class StoreFunnelTest extends TestCase
     public function test_a_connected_store_awaiting_its_first_sync_is_named_rather_than_ignored(): void
     {
         $this->holdingTenant((string) $this->tenant->id);
-        $this->account('zid', 'store');
+        $zid = $this->account('zid', 'store');
+        // SEC-3 — «awaiting its first sync» is said of a store ASSIGNED to this project; an unassigned (or another
+        // project's) store is nobody's pending store, and this test used to expect the tenant's every store.
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'client_workspace_id' => $this->project->client_workspace_id,
+            'external_account_id' => $zid->getKey(), 'provider' => 'zid', 'purpose' => 'ecommerce', 'is_active' => true, 'is_primary' => true,
+        ]);
         app(TenantContext::class)->forget();
 
         $coverage = $this->funnel()->json('data.coverage');
