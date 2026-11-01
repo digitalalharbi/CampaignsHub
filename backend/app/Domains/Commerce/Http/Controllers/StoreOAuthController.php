@@ -19,6 +19,7 @@ use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -105,6 +106,13 @@ final class StoreOAuthController extends Controller
                 ->where('tenant_id', $tenant->tenantId())
                 ->whereNull('deleted_at')],
         ]);
+
+        abort_unless(
+            ($validated['client_workspace_id'] ?? null) === null
+                || app(ClientScopeResolver::class)->canReach($request->user(), (string) $validated['client_workspace_id']),
+            403,
+            'You cannot connect a store for this client.',
+        );
 
         /*
          * X-PKCE-001 — neither Salla nor Zid publishes PKCE, so this is null for both today. It is
@@ -253,7 +261,19 @@ final class StoreOAuthController extends Controller
     public function installClaim(Request $request, string $claim, TenantContext $tenant, AuditLogger $audit): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.connect'), 403);
-        $validated = $request->validate(['client_workspace_id' => ['nullable', 'uuid']]);
+        // SEC-3 — the same tenant-scoped rule as `start`, plus the caller's client ceiling: a bare uuid let a
+        // claim stamp another company's (or another client's) workspace on the credential and the store.
+        $validated = $request->validate([
+            'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')
+                ->where('tenant_id', $tenant->tenantId())
+                ->whereNull('deleted_at')],
+        ]);
+        abort_unless(
+            ($validated['client_workspace_id'] ?? null) === null
+                || app(ClientScopeResolver::class)->canReach($request->user(), (string) $validated['client_workspace_id']),
+            403,
+            'You cannot connect a store for this client.',
+        );
 
         try {
             $result = app(SallaInstalls::class)->claim(
