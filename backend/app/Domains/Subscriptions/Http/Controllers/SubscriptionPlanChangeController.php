@@ -141,6 +141,8 @@ final class SubscriptionPlanChangeController extends Controller
          */
         $plan = $this->catalogue->byCode($data['plan_code']);
         abort_if($plan === null || ! $this->catalogue->isOffered($data['plan_code']), 404, __('billing.plan_not_available'));
+        // PRICING-MIGRATION-001 — a quote across currencies would credit one currency against the other.
+        abort_if(SubscriptionLifecycle::crossesCurrency($subscription, $plan), 422, SubscriptionLifecycle::CROSS_CURRENCY);
 
         return [$subscription, $plan, $data['billing_interval']];
     }

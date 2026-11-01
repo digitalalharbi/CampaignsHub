@@ -1241,3 +1241,50 @@ export function grantWorkspaceAddon(tenantId: string, code: string, quantity: nu
 export function decideWorkspaceAddon(id: string, decision: 'approve' | 'decline' | 'cancel', reason: string): Promise<{ addons: WorkspaceAddon[] }> {
   return patchData(`/admin/tenant-addons/${id}`, { decision, reason })
 }
+
+// ── PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue ─────────────────────────────
+
+export interface MigrationMetric {
+  metric: 'projects' | 'clients' | 'team_members' | 'ad_accounts'
+  usage: number
+  current_limit: number | null
+  new_limit: number | null
+  fits: boolean
+}
+
+export interface MigrationTarget {
+  plan: string
+  plan_name: string
+  amount: string | null
+  currency: string
+  interval: string
+  fits: boolean
+  metrics: MigrationMetric[]
+}
+
+export interface MigrationWorkspace {
+  tenant_id: string
+  tenant_name: string
+  tenant_slug: string
+  status: string
+  current_period_end: string | null
+  from: { plan: string | null; plan_name: string | null; amount: string | null; currency: string | null; interval: string | null }
+  suggested: MigrationTarget | null
+  scheduled: { plan: string; plan_name: string; amount: string | null; currency: string; effective_at: string | null } | null
+}
+
+export function fetchPlanMigration(): Promise<{ workspaces: MigrationWorkspace[]; catalogue: { currency: string; plans: { code: string; name: string }[] } }> {
+  return getData('/admin/plan-migration')
+}
+
+export function schedulePlanMigration(tenantId: string, body: { plan_code: string; reason: string; confirm: string }): Promise<{ workspace: MigrationWorkspace }> {
+  return postData(`/admin/tenants/${tenantId}/plan-migration`, body)
+}
+
+export function withdrawPlanMigration(tenantId: string, reason: string): Promise<{ workspace: MigrationWorkspace }> {
+  return deleteData(`/admin/tenants/${tenantId}/plan-migration`, { reason })
+}
+
+export function bulkPlanMigration(body: { tenant_ids: string[]; reason: string; confirm: string }): Promise<{ scheduled: string[]; skipped: { tenant_id: string; reason: string }[] }> {
+  return postData('/admin/plan-migration/bulk', body)
+}
