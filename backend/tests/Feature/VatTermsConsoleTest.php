@@ -83,7 +83,10 @@ final class VatTermsConsoleTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')->patchJson($url, ['tax_treatment' => 'historical_5', 'prices_include_vat' => false, 'reason' => 'Legacy rate'])->assertStatus(422);
         $this->actingAs($this->admin, 'sanctum')->patchJson($url, ['tax_treatment' => '0.10', 'prices_include_vat' => false, 'reason' => 'Free rate'])->assertStatus(422);
         $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/tax')->assertOk()
-            ->assertJsonPath('data.treatments.0.key', 'basic_15')->assertJsonCount(4, 'data.treatments');
+            ->assertJsonPath('data.treatments.0.key', 'basic_15')->assertJsonCount(1, 'data.treatments')
+            ->assertJsonPath('data.needs_customer_eligibility', ['zero_rated', 'exempt', 'out_of_scope']);
+        // Zero-rating depends on the customer, never on a whole edition.
+        $this->actingAs($this->admin, 'sanctum')->patchJson($url, ['tax_treatment' => 'zero_rated', 'prices_include_vat' => false, 'reason' => 'Export'])->assertStatus(422);
 
         $owner = User::create(['name' => 'O', 'email' => 'o@t.test', 'password' => 'secret1234']);
         $this->actingAs($owner, 'sanctum')->patchJson($url, ['tax_treatment' => 'exempt', 'prices_include_vat' => false, 'reason' => 'Sneaky'])->assertForbidden();

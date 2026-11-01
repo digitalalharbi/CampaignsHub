@@ -1357,7 +1357,7 @@ export interface InvoiceReviewRow {
   issues: string[]
 }
 
-export function fetchTax(): Promise<{ treatments: { key: string; rate: number }[]; editions: TaxEdition[] }> {
+export function fetchTax(): Promise<{ treatments: { key: string; rate: number }[]; needs_customer_eligibility?: string[]; editions: TaxEdition[] }> {
   return getData('/admin/tax')
 }
 

@@ -16,7 +16,7 @@ describe('TaxPage', () => {
 
   it('saves an edition with a reason, says existing subscriptions keep their terms, and lists invoices for review', async () => {
     vi.mocked(fetchTax).mockResolvedValue({
-      treatments: [{ key: 'basic_15', rate: 0.15 }, { key: 'zero_rated', rate: 0 }, { key: 'exempt', rate: 0 }, { key: 'out_of_scope', rate: 0 }],
+      treatments: [{ key: 'basic_15', rate: 0.15 }], needs_customer_eligibility: ['zero_rated', 'exempt', 'out_of_scope'],
       editions: [{ id: 'v2', number: 2, label: '2026-11 catalogue (SAR)', currency: 'SAR', status: 'published', tax_treatment: 'basic_15', rate: 0.15,
         prices_include_vat: false, subscriptions_keeping_their_terms: 4 }],
     })
@@ -29,6 +29,8 @@ describe('TaxPage', () => {
 
     expect(await screen.findByTestId('tax-edition-2')).toHaveTextContent('4 existing subscriptions keep their terms')
     expect(screen.queryByRole('option', { name: '5% (historical)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Zero-rated' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('tax-eligibility-note')).toHaveTextContent(/Zero-rated.*customer’s eligibility/)
     expect(await screen.findByTestId('tax-review-CH-1')).toHaveTextContent('Total differs from the charge')
     expect(screen.getByTestId('tax-review-summary')).toHaveTextContent('Checked 12 · need review 1')
 

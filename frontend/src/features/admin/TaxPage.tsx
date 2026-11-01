@@ -49,6 +49,14 @@ export function TaxPage() {
           {tax.data.editions.map((e) => <EditionRow key={e.id} e={e} ar={ar} treatments={tax.data.treatments.map((t) => t.key)} />)}
         </ul>
       )}
+      {(tax.data?.needs_customer_eligibility ?? []).length > 0 && (
+        <p data-testid="tax-eligibility-note" className="mt-3 max-w-2xl text-[12px] text-text-muted">
+          {ar ? 'غير متاحة على مستوى الإصدار: ' : 'Not available for a whole edition: '}
+          {(tax.data?.needs_customer_eligibility ?? []).map((t) => (ar ? TREATMENT[t]?.ar : TREATMENT[t]?.en) ?? t).join('، ')}
+          {ar ? ' — تعتمد على أهلية العميل (إقامته وإثباتها) ولا تُطبَّق على كتالوج كامل.'
+            : ' — each depends on the customer’s eligibility (residence and evidence of it) and never applies to a whole catalogue.'}
+        </p>
+      )}
 
       <section data-testid="tax-review" className="mt-8">
         <h2 className="font-heading text-lg font-bold text-text-primary">{ar ? 'فواتير تحتاج مراجعة محاسبية' : 'Invoices for accounting review'}</h2>

@@ -34,6 +34,8 @@ final class PlatformTaxController extends Controller
     {
         return ApiResponse::success([
             'treatments' => array_map(fn (string $t) => ['key' => $t, 'rate' => TaxTreatment::rate($t)], SubscriptionTax::OFFERED),
+            // Shown, not selectable: each needs per-customer eligibility evidence the product does not record.
+            'needs_customer_eligibility' => SubscriptionTax::NEEDS_CUSTOMER_ELIGIBILITY,
             'editions' => PlanCatalogueVersion::query()->orderBy('number')->get()->map(fn (PlanCatalogueVersion $v) => $this->shape($v))->values()->all(),
         ], 'Tax.');
     }

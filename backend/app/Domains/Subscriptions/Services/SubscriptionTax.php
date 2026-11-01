@@ -17,8 +17,16 @@ use App\Domains\Subscriptions\Models\SubscriptionPlan;
  */
 final class SubscriptionTax
 {
-    /** Treatments the console may set for new sales. The legacy 5% exists only on old documents. */
-    public const OFFERED = ['basic_15', 'zero_rated', 'exempt', 'out_of_scope'];
+    /**
+     * Treatments the console may set for a whole catalogue edition. Legal eligibility (PRICING-VAT-002): a subscription sold in
+     * the Kingdom is a standard-rated supply. Zero-rating (export of services), exemption and out-of-scope depend on the CUSTOMER
+     * — their residence and evidence of it — and the product records no such per-customer eligibility, so none of them may be
+     * applied to an edition. The legacy 5% exists only on old documents.
+     */
+    public const OFFERED = ['basic_15'];
+
+    /** Treatments that exist but need per-customer eligibility evidence; listed so the console can say why they are not offered. */
+    public const NEEDS_CUSTOMER_ELIGIBILITY = ['zero_rated', 'exempt', 'out_of_scope'];
 
     /**
      * @return array{net: string, tax: string, gross: string, treatment: string, rate: float, prices_include_vat: bool}
