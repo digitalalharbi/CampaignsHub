@@ -86,6 +86,8 @@ Route::middleware(['auth:sanctum', 'platform'])
         // SUPERADMIN-FEATURES-001 — capabilities on or off for every workspace, and one workspace's own switch.
         Route::get('/capabilities', [PlatformCapabilityController::class, 'index'])->name('capabilities.index');
         Route::put('/capabilities/{module}', [PlatformCapabilityController::class, 'setPlatform'])->middleware('throttle:30,1')->name('capabilities.platform');
+        Route::get('/plans/capabilities', [PlatformCapabilityController::class, 'plans'])->name('plans.capabilities');
+        Route::put('/plans/{plan}/capabilities/{module}', [PlatformCapabilityController::class, 'setPlan'])->middleware('throttle:30,1')->name('plans.capabilities.set');
         Route::get('/tenants/{tenant}/capabilities', [PlatformCapabilityController::class, 'tenant'])->name('tenants.capabilities');
         Route::put('/tenants/{tenant}/capabilities/{module}', [PlatformCapabilityController::class, 'setTenant'])->middleware('throttle:30,1')->name('tenants.capabilities.set');
         // SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace; and the way back.

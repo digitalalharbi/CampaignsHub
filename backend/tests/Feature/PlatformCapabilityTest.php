@@ -7,6 +7,8 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Subscriptions\Models\Subscription;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -124,5 +126,51 @@ final class PlatformCapabilityTest extends TestCase
         $this->actingAs($admin, 'sanctum')->putJson('/api/v1/admin/capabilities/smart_links', ['disabled' => true])->assertStatus(422);
         $this->actingAs($admin, 'sanctum')->putJson("/api/v1/admin/tenants/{$tenant->id}/capabilities/smart_links", ['enabled' => false])->assertStatus(422);
         $this->actingAs($admin, 'sanctum')->putJson('/api/v1/admin/capabilities/no_such_module', ['disabled' => true, 'reason' => 'nothing at all'])->assertNotFound();
+    }
+
+    /** Plan level: a plan carries a module or not; its active subscribers gain or lose it through the same resolver. */
+    public function test_a_plan_carrying_a_module_entitles_its_subscribers_and_leaves_price_and_currency_alone(): void
+    {
+        [$tenant] = $this->workspace();
+        [$other] = $this->workspace();
+        $plan = SubscriptionPlan::create(['code' => 'growth', 'name' => 'Growth', 'price_monthly' => 499, 'currency' => 'USD', 'is_active' => true]);
+        Subscription::create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'seats' => 1]);
+        $admin = $this->admin();
+        $entitled = fn (Tenant $t) => collect($this->actingAs($admin, 'sanctum')->getJson("/api/v1/admin/tenants/{$t->id}/capabilities")->assertOk()
+            ->json('data.capabilities'))->firstWhere('module', 'influencer_intelligence')['entitled'];
+
+        $this->assertFalse($entitled($tenant));
+
+        $data = $this->actingAs($admin, 'sanctum')->putJson("/api/v1/admin/plans/{$plan->id}/capabilities/influencer_intelligence", ['enabled' => true, 'reason' => 'Growth now includes influencers'])
+            ->assertOk()->json('data');
+        $row = collect($data['plans'])->firstWhere('code', 'growth');
+        $this->assertTrue($row['modules']['influencer_intelligence']);
+        $this->assertSame(1, $row['workspaces']);
+
+        $this->assertTrue($entitled($tenant));
+        $this->assertFalse($entitled($other), 'a workspace on no plan is untouched');
+        $fresh = $plan->fresh();
+        $this->assertSame('499.00', (string) $fresh->price_monthly);
+        $this->assertSame('USD', $fresh->currency);
+
+        $audit = AuditLog::withoutGlobalScopes()->where('action', 'platform.plan.capability_set')->sole();
+        $this->assertSame(['module' => 'influencer_intelligence', 'carried' => true, 'workspaces' => 1], $audit->after);
+        $this->assertSame('Growth now includes influencers', $audit->reason);
+
+        $this->actingAs($admin, 'sanctum')->putJson("/api/v1/admin/plans/{$plan->id}/capabilities/influencer_intelligence", ['enabled' => false, 'reason' => 'Withdrawn from Growth'])->assertOk();
+        $this->assertFalse($entitled($tenant));
+    }
+
+    public function test_plan_switches_need_an_admin_a_reason_and_a_real_module(): void
+    {
+        [, $member] = $this->workspace();
+        $plan = SubscriptionPlan::create(['code' => 'starter', 'name' => 'Starter', 'price_monthly' => 99, 'currency' => 'USD', 'is_active' => true]);
+
+        $this->actingAs($member, 'sanctum')->putJson("/api/v1/admin/plans/{$plan->id}/capabilities/link_in_bio", ['enabled' => true, 'reason' => 'trying it'])->assertForbidden();
+        $this->app['auth']->forgetGuards();
+        $admin = $this->admin();
+        $this->actingAs($admin, 'sanctum')->putJson("/api/v1/admin/plans/{$plan->id}/capabilities/link_in_bio", ['enabled' => true])->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->putJson("/api/v1/admin/plans/{$plan->id}/capabilities/no_such_module", ['enabled' => true, 'reason' => 'nothing at all'])->assertNotFound();
+        $this->assertNull($plan->fresh()->features);
     }
 }
