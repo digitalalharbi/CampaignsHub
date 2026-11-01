@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace App\Domains\Tasks\Http\Controllers;
 
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tasks\Resources\TaskResource;
 use App\Domains\Tasks\Services\TaskSources;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Rules\UserInCurrentTenant;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 final class TaskController extends Controller
 {
@@ -145,10 +149,12 @@ final class TaskController extends Controller
             'priority' => ['sometimes', Rule::in(['low', 'normal', 'high', 'urgent'])],
             'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
-            'assignee_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'assignee_id' => ['nullable', 'integer', new UserInCurrentTenant],
             'due_date' => ['nullable', 'date'],
             'checklist' => ['nullable', 'array'],
         ]);
+
+        $validated = $this->placeInReach($request->user(), $validated);
 
         $task = Task::create(array_merge($validated, ['created_by' => Auth::id()]));
 
@@ -172,7 +178,7 @@ final class TaskController extends Controller
             'description' => ['nullable', 'string'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
             'priority' => ['sometimes', Rule::in(['low', 'normal', 'high', 'urgent'])],
-            'assignee_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'assignee_id' => ['nullable', 'integer', new UserInCurrentTenant],
             'due_date' => ['nullable', 'date'],
             'checklist' => ['nullable', 'array'],
         ]);
@@ -180,5 +186,50 @@ final class TaskController extends Controller
         $task->update($validated);
 
         return ApiResponse::success(new TaskResource($task), 'Task updated.');
+    }
+
+    /**
+     * Where the task is filed has to be somewhere the creator reaches, and the pair has to agree.
+     *
+     * The ceiling is applied with the same resolver the list and update use. A project or client outside it answers
+     * exactly like one that does not exist (422), so the exists-rule is no longer a probe for ids beyond the ceiling;
+     * a project fixes its client, and a client that disagrees with it is refused rather than half-honoured.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private function placeInReach(User $user, array $data): array
+    {
+        $projectId = $data['project_id'] ?? null;
+        $clientId = $data['client_workspace_id'] ?? null;
+
+        if ($projectId !== null) {
+            $projectClient = Project::query()->whereKey($projectId)->value('client_workspace_id');
+            $projectClient = $projectClient !== null ? (string) $projectClient : null;
+
+            if ($clientId !== null && $projectClient !== $clientId) {
+                throw ValidationException::withMessages(['client_workspace_id' => 'The project does not belong to this client.']);
+            }
+            $clientId = $projectClient;
+            if ($projectClient === null) {
+                // A project with no client cannot be reached through the ceiling — only an unrestricted caller files there.
+                $this->refuseUnlessUnrestricted($user, 'project_id');
+            }
+        }
+
+        if ($clientId !== null && ! $this->scopes->canReach($user, (string) $clientId)) {
+            throw ValidationException::withMessages([$projectId !== null ? 'project_id' : 'client_workspace_id' => 'The selected value is invalid.']);
+        }
+
+        $data['client_workspace_id'] = $clientId;
+
+        return $data;
+    }
+
+    private function refuseUnlessUnrestricted(User $user, string $field): void
+    {
+        if ($this->scopes->reachableClientIds($user) !== null) {
+            throw ValidationException::withMessages([$field => 'The selected value is invalid.']);
+        }
     }
 }
