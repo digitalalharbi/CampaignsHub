@@ -9,6 +9,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
 use App\Domains\Commerce\Models\PendingStoreInstall;
 use App\Domains\Commerce\Services\StoreAssignment;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -166,9 +167,14 @@ final class SallaOnboarding
     {
         $this->context->setTenantId((string) $tenant->id);
 
-        $client = ClientWorkspace::query()->orderBy('created_at')->first() ?? ClientWorkspace::create([
+        /*
+         * The store's container (TENANCY-UNIFY-001): the account's own canonical one where it has one, otherwise a client of
+         * its own named for the store — never «the oldest client», which on an agency files the store, and its sales, under a
+         * client whose portal users can then read them.
+         */
+        $client = app(CanonicalWorkspace::class)->ensureFor($tenant) ?? ClientWorkspace::create([
             'tenant_id' => $tenant->id,
-            'name' => $tenant->name,
+            'name' => $this->storeName($install),
             'slug' => Str::slug($tenant->name.'-'.Str::random(4)),
             'mode' => 'managed',
             'status' => 'active',

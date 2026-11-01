@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Http\Controllers;
 use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Accounts\Services\AccountEntitlements;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -19,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Resumable onboarding wizard. Steps advance a single onboarding_step on the tenant, so a user can leave and
@@ -176,8 +178,10 @@ final class OnboardingController extends Controller
         $this->requireVerified($request);
         $data = $request->validate(['name' => ['required', 'string', 'min:2', 'max:120']]);
         $tenant = $this->tenant();
-        $this->makeClient($tenant, $data['name']);
-        $tenant->forceFill(['onboarding_step' => 'first_project'])->save();
+        $client = $this->makeClient($tenant, $data['name']);
+        // The next step files the first project under THIS client — the one the person just named.
+        $tenant->forceFill(['onboarding_step' => 'first_project',
+            'settings' => array_replace((array) ($tenant->settings ?? []), ['onboarding_client_id' => (string) $client->id])])->save();
 
         return $this->ok($tenant);
     }
@@ -195,15 +199,26 @@ final class OnboardingController extends Controller
         // Company accounts have no client picker — ensure one implicit client (their own brand) exists.
         $client = null;
         if ($data['client_id'] ?? null) {
-            $client = ClientWorkspace::where('id', $data['client_id'])->first();
+            $client = ClientWorkspace::where('tenant_id', $tenant->id)->where('id', $data['client_id'])->first();
         }
-        // Ordered TOTALLY, by `id` after `created_at`. Workspaces provisioned in one request share a
-        // `created_at` to the second, and an ordering with ties resolves from physical row order — so
-        // two identical calls could file the projects under two different client spaces, with nothing
-        // in the request to explain the difference.
-        $client ??= ClientWorkspace::where('tenant_id', $tenant->id)
-            ->orderBy('created_at')->orderBy('id')->first()
-            ?? $this->makeClient($tenant, $tenant->name);
+        /*
+         * Never «the oldest client» (TENANCY-UNIFY-001). With none named: the client the previous step created, the only
+         * client there is, the company's own canonical container, or — among several — ask, rather than file a project under
+         * whichever client sorts first (which was the container registration provisioned, not the client just named).
+         */
+        $named = ((array) ($tenant->settings ?? []))['onboarding_client_id'] ?? null;
+        if ($client === null && is_string($named)) {
+            $client = ClientWorkspace::where('tenant_id', $tenant->id)->where('id', $named)->first();
+        }
+        if ($client === null) {
+            $existing = ClientWorkspace::where('tenant_id', $tenant->id)->get();
+            $client = match (true) {
+                $existing->count() === 1 => $existing->first(),
+                $existing->count() === 0 => app(CanonicalWorkspace::class)->ensureFor($tenant) ?? $this->makeClient($tenant, $tenant->name),
+                default => app(CanonicalWorkspace::class)->ensureFor($tenant)
+                    ?? throw ValidationException::withMessages(['client_id' => __('validation.client_workspace_required')]),
+            };
+        }
 
         Project::create([
             'tenant_id' => $tenant->id,

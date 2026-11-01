@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -169,6 +171,9 @@ final class RegistrationOnboardingTest extends TestCase
         $this->assertDatabaseHas('projects', [
             'tenant_id' => $user->currentTenant()?->id, 'name' => 'First Project',
         ]);
+        // Filed under the client the person just named, not whichever container sorts first (TENANCY-UNIFY-001).
+        $this->assertSame('First Client', ClientWorkspace::withoutGlobalScopes()
+            ->whereKey(Project::withoutGlobalScopes()->where('name', 'First Project')->value('client_workspace_id'))->value('name'));
 
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/complete')
             ->assertOk()->assertJsonPath('data.account.onboarding.completed', true);

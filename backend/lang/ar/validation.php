@@ -198,6 +198,10 @@ return [
      * question is the correct outcome here, so the message has to read as one.
      */
     'client_workspace_required' => 'اختر العميل الذي ينتمي إليه هذا المشروع.',
+    'ai_scope_tenant_ids' => 'مفتاح مساحة العمل لا يُحدَّد له عميل أو مشروع.',
+    'ai_scope_client_ids' => 'مفتاح العميل يحتاج العميل نفسه، دون مشروع.',
+    'ai_scope_project_ids' => 'مفتاح المشروع يحتاج المشروع نفسه.',
+    'ai_scope_project_client' => 'هذا المشروع يتبع عميلًا آخر.',
 
     /*
      * RUNTIME-100 §10 — a selection can go stale between rendering and confirming.
