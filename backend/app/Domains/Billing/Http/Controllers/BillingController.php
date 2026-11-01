@@ -6,6 +6,7 @@ namespace App\Domains\Billing\Http\Controllers;
 
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Quote;
+use App\Domains\Billing\Services\BillingReach;
 use App\Domains\Billing\Services\BillingService;
 use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -26,14 +27,14 @@ final class BillingController extends Controller
     /** The most rows either list returns; `meta.total` says how many there are. */
     private const MAX_ROWS = 200;
 
-    public function __construct(private readonly BillingService $billing) {}
+    public function __construct(private readonly BillingService $billing, private readonly BillingReach $reach) {}
 
     public function quotes(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('billing.view'), 403);
 
         /* OPS-LEDGER-001 — the bound is real, and the response says what it left out. */
-        $query = Quote::query()->latest('created_at');
+        $query = $this->reach->constrain(Quote::query(), $request->user())->latest('created_at');
         $total = (clone $query)->count();
         $rows = $query->limit(self::MAX_ROWS)->get()->all();
 
@@ -62,8 +63,13 @@ final class BillingController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        $tenantId = app(TenantContext::class)->tenantId();
+        $data['client_workspace_id'] = $this->reach->resolveQuoteClient(
+            $request->user(), (string) $tenantId, $data['client_workspace_id'] ?? null, $data['project_id'] ?? null, $data['request_id'] ?? null,
+        );
+
         $quote = $this->billing->createQuote(array_merge($data, [
-            'tenant_id' => app(TenantContext::class)->tenantId(),
+            'tenant_id' => $tenantId,
             'created_by' => $request->user()->id, // guaranteed by the billing.manage guard above
         ]));
 
@@ -73,6 +79,7 @@ final class BillingController extends Controller
     public function approveQuote(Request $request, Quote $quote): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('billing.manage'), 403);
+        $this->reach->assertCanActOn($request->user(), $quote->client_workspace_id !== null ? (string) $quote->client_workspace_id : null);
 
         return ApiResponse::success(
             $this->billing->approveQuote($quote),
@@ -85,7 +92,7 @@ final class BillingController extends Controller
     {
         abort_unless($request->user()?->hasPermission('billing.view'), 403);
 
-        $query = Invoice::query()->latest('created_at');
+        $query = $this->reach->constrain(Invoice::query(), $request->user())->latest('created_at');
         if ($status = $request->string('status')->toString()) {
             if (in_array($status, ['draft', 'reviewed', 'issued', 'sent', 'paid', 'partially_paid', 'void', 'refunded'], true)) {
                 $query->where('status', $status);
@@ -111,6 +118,7 @@ final class BillingController extends Controller
     public function startPayment(Request $request, Invoice $invoice): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('billing.manage'), 403);
+        $this->reach->assertCanActOn($request->user(), $invoice->client_workspace_id !== null ? (string) $invoice->client_workspace_id : null);
 
         $data = $request->validate([
             'provider' => ['nullable', 'string', 'max:64'],
