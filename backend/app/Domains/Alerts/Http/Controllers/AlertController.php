@@ -124,7 +124,11 @@ final class AlertController extends Controller
         return $projectScope === [] ? $ofClients : array_values(array_intersect($ofClients, $projectScope));
     }
 
-    /** @param  Builder<Model>  $query */
+    /**
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     */
     private function narrow(Builder $query, User $user): void
     {
         $reach = $this->reach($user);
