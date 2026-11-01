@@ -38,9 +38,9 @@ trait AppliesToRegister
          * `plan_code` is required since PLAN-PAID-001, and it is validated against what is actually on
          * sale — so a test with an empty `subscription_plans` table cannot register at all. Seeding
          * here rather than in thirty `setUp()` methods keeps the requirement in the one place that
-         * introduced it. The seeder upserts by code, so calling it twice is free.
+         * introduced it. The seeder only creates what is missing, so calling it twice is free.
          */
-        if (! SubscriptionPlan::query()->where('code', 'starter')->exists()) {
+        if (! SubscriptionPlan::query()->where('code', 'solo')->exists()) {
             $this->seed(SubscriptionPlanSeeder::class);
         }
 
@@ -53,11 +53,11 @@ trait AppliesToRegister
             /*
              * A plan and a term, because since PLAN-PAID-001 there is no unpriced way in.
              *
-             * «البداية» is the cheapest thing on sale and the plan most real applicants pick, which
+             * Solo is the cheapest thing on sale in the 2026-11 catalogue (PRICING-CATALOGUE-001), which
              * makes it the right default for a helper whose job is to be the ordinary journey. A test
              * about a different plan overrides it, as several do.
              */
-            'plan_code' => 'starter',
+            'plan_code' => 'solo',
             'billing_interval' => 'monthly',
             /*
              * A mobile number, because PHONE-VERIFY-001 made one mandatory.

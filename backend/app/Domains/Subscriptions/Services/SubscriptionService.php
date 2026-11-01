@@ -361,14 +361,26 @@ final class SubscriptionService
      */
     public function mostPermissivePlan(): ?SubscriptionPlan
     {
-        /** @var SubscriptionPlan|null $plan */
-        $plan = SubscriptionPlan::query()
+        /*
+         * By CAPS, not by price — PRICING-CATALOGUE-001.
+         *
+         * This took the most expensive plan as the most generous, which held while one currency priced everything. With the
+         * launch catalogue in USD and the 2026-11 one in SAR, «most expensive» compared 1,799 SAR with 99 USD and picked a plan
+         * capped at 20 projects — capping every workspace that has no subscription. The most permissive plan is the one with
+         * the most uncapped metrics, then the highest caps.
+         */
+        return SubscriptionPlan::query()
             ->where('is_active', true)
             ->where('contact_sales', false)
-            ->orderByDesc('price_monthly')
-            ->first();
+            ->get()
+            ->sortByDesc(function (SubscriptionPlan $p): array {
+                $limits = (array) ($p->limits ?? []);
+                $uncapped = count(array_filter($limits, static fn ($v) => $v === null));
+                $total = array_sum(array_map(static fn ($v) => (int) $v, array_filter($limits, static fn ($v) => $v !== null)));
 
-        return $plan;
+                return [$uncapped, $total];
+            })
+            ->first();
     }
 
     /** Monthly metrics roll over each calendar month; everything else is a cumulative 'total'. */

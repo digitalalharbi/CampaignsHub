@@ -272,4 +272,18 @@ describe('SubscriptionsPage — mid-term plan change', () => {
 
     await waitFor(() => expect(detachPaymentMethod).toHaveBeenCalled())
   })
+
+  /** PRICING-CATALOGUE-001 — a launch subscriber sees their withdrawn plan as theirs, marked as kept at their price. */
+  it('marks a grandfathered plan as kept at the subscriber’s own price', async () => {
+    signInWith(['subscriptions.view'])
+    vi.mocked(getPlans).mockResolvedValue([
+      { ...plans[1], is_current: true, grandfathered: true },
+      { code: 'solo', name: 'Solo', price_monthly: '199.00', currency: 'SAR', features: {}, limits: { projects: 1 } },
+    ])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('plan-grandfathered-growth')).toHaveTextContent(/kept for you at your price/i)
+    expect(screen.queryByTestId('plan-grandfathered-solo')).not.toBeInTheDocument()
+  })
 })
+

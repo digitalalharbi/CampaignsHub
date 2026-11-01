@@ -427,7 +427,7 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
    * removed.
    */
   await registerAndVerify(page, `agency.${tag}@example.com`.toLowerCase(), `Agency ${tag}`, {
-    journey: 'multi-client', plan: 'agency',
+    journey: 'multi-client', plan: 'agency_2026',
   })
 
   await page.getByLabel(/Workspace name|اسم مساحة العمل/).fill('My Agency')
@@ -460,7 +460,7 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   const tag = `${testInfo.project.name}-${Date.now()}`
   // A brand runs its own campaigns, so it is the self-managed path with «Brand» as the account type.
   await registerAndVerify(page, `brand.${tag}@example.com`.toLowerCase(), `Brand ${tag}`, {
-    journey: 'self-service', plan: 'starter', selfType: 'brand',
+    journey: 'self-service', plan: 'solo', selfType: 'brand',
   })
 
   await page.getByLabel(/Workspace name|اسم مساحة العمل/).fill('BrandCo')
@@ -510,18 +510,15 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
    * somebody edits from /admin, and a test that writes one down is testing the seeder.
    */
   const priced = await page.request.get('/api/v1/plans').then((r) => r.json())
-  const starterPlan = priced.data.plans.find((p: { code: string }) => p.code === 'starter')
+  const soloPlan = priced.data.plans.find((p: { code: string }) => p.code === 'solo')
 
-  await expect(page.getByTestId('plan-starter')).toBeEnabled()
-  await expect(page.getByTestId('plan-starter')).toContainText(String(Number(starterPlan.price_monthly)))
-  await expect(page.getByTestId('plan-growth-intro')).toBeVisible()
+  await expect(page.getByTestId('plan-solo')).toBeEnabled()
+  await expect(page.getByTestId('plan-solo')).toContainText(String(Number(soloPlan.price_monthly)))
 
   // The annual term quotes the WHOLE annual amount, not a monthly one — stated before payment.
   await page.getByTestId('plan-interval-annual').click()
-  await expect(page.getByTestId('plan-starter')).toBeEnabled()
-  await expect(page.getByTestId('plan-starter')).toContainText(String(Number(starterPlan.price_annual)))
-  // …and the introductory month is NOT advertised beside a year, because the year is bought outright.
-  await expect(page.getByTestId('plan-growth-intro')).toHaveCount(0)
+  await expect(page.getByTestId('plan-solo')).toBeEnabled()
+  await expect(page.getByTestId('plan-solo')).toContainText(String(Number(soloPlan.price_annual)))
   await page.getByTestId('plan-interval-monthly').click()
 
   // Applying without choosing one is refused — there is no free plan to fall through to.
@@ -530,8 +527,8 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
   await expect(page).toHaveURL(/\/register/)
 
   // A chosen plan travels with the application.
-  await page.getByTestId('plan-growth').click()
-  await expect(page.getByTestId('plan-growth')).toHaveAttribute('data-selected', 'true')
+  await page.getByTestId('plan-team').click()
+  await expect(page.getByTestId('plan-team')).toHaveAttribute('data-selected', 'true')
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
   await expect(page).toHaveURL(/\/signup\/status/)
 })
@@ -602,36 +599,32 @@ test('the signup path decides which plans exist, and every price is USD', async 
 
   // No path, no price list — three plans for two different products is the thing being removed.
   await expect(page.getByTestId('register-journey-required')).toBeVisible()
-  await expect(page.getByTestId('plan-starter')).toHaveCount(0)
-  await expect(page.getByTestId('plan-agency')).toHaveCount(0)
+  await expect(page.getByTestId('plan-solo')).toHaveCount(0)
+  await expect(page.getByTestId('plan-agency_2026')).toHaveCount(0)
 
-  // «I run my own campaigns» — Starter and Growth, and never Agency.
+  // «I run my own campaigns» — Solo and Team, and never Agency. Which path a plan serves is the catalogue's own data.
   await page.getByTestId('journey-self-service').click()
-  await expect(page.getByTestId('plan-starter')).toBeVisible()
-  await expect(page.getByTestId('plan-growth')).toBeVisible()
-  await expect(page.getByTestId('plan-agency')).toHaveCount(0)
-  // Growth is the recommended one, and it is the only plan carrying the introductory offer.
-  await expect(page.getByTestId('plan-growth-recommended')).toBeVisible()
-  await expect(page.getByTestId('plan-growth-commitment')).toBeVisible()
-  await expect(page.getByTestId('plan-starter-intro')).toHaveCount(0)
+  await expect(page.getByTestId('plan-solo')).toBeVisible()
+  await expect(page.getByTestId('plan-team')).toBeVisible()
+  await expect(page.getByTestId('plan-agency_2026')).toHaveCount(0)
+  // Team is the one the catalogue recommends.
+  await expect(page.getByTestId('plan-team-recommended')).toBeVisible()
 
-  // «I run campaigns for several clients» — Agency alone. Growth does not carry agency work.
+  // «I run campaigns for several clients» — Team and Agency; Solo is one advertiser's plan.
   await page.getByTestId('journey-multi-client').click()
-  await expect(page.getByTestId('plan-agency')).toBeVisible()
-  await expect(page.getByTestId('plan-starter')).toHaveCount(0)
-  await expect(page.getByTestId('plan-growth')).toHaveCount(0)
+  await expect(page.getByTestId('plan-agency_2026')).toBeVisible()
+  await expect(page.getByTestId('plan-team')).toBeVisible()
+  await expect(page.getByTestId('plan-solo')).toHaveCount(0)
 
   /*
-   * Every figure on this step is USD — SUB-USD-001.
-   *
-   * Read from the rendered card rather than from the API, because the defect this guards against was
-   * a page showing SAR while the catalogue said USD. And asserted as «no SAR» as well as «USD», so a
-   * card that showed both would not pass.
+   * Every figure on this step is SAR — the 2026-11 catalogue (PRICING-CATALOGUE-001; it replaced SUB-USD-001 for new
+   * sign-ups). Read from the rendered card rather than from the API, and asserted as «no USD» as well as «SAR», so a card
+   * carrying the withdrawn launch currency cannot pass.
    */
   await page.getByTestId('journey-self-service').click()
-  for (const code of ['starter', 'growth']) {
-    await expect(page.getByTestId(`plan-${code}`)).toContainText('USD')
-    await expect(page.getByTestId(`plan-${code}`)).not.toContainText('SAR')
+  for (const code of ['solo', 'team']) {
+    await expect(page.getByTestId(`plan-${code}`)).toContainText(/SAR|ر\.س|ريال/)
+    await expect(page.getByTestId(`plan-${code}`)).not.toContainText('USD')
   }
 
   // The whole comparison is one press away, and it reads from the same catalogue.
@@ -645,6 +638,6 @@ test('the signup path decides which plans exist, and every price is USD', async 
    * need they do not have. The assertion was pinning the behaviour that was removed on purpose, so
    * it moves to a row this reader is actually shown.
    */
-  await expect(page.getByTestId('compare-connections-starter')).toBeVisible()
-  await expect(page.getByTestId('compare-connections-growth')).toBeVisible()
+  await expect(page.getByTestId('compare-ad_accounts-solo')).toBeVisible()
+  await expect(page.getByTestId('compare-ad_accounts-team')).toBeVisible()
 })

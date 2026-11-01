@@ -48,13 +48,26 @@ final class SubscriptionController extends Controller
          * onto it either — there is no price to charge — so listing it offers a button that cannot
          * work.
          */
+        /*
+         * PRICING-CATALOGUE-001 — what is on sale now, plus the plan this workspace is already on.
+         *
+         * A withdrawn (grandfathered) plan is no longer sold, but its subscriber must still see it as theirs, at the price they
+         * pay — never replaced by a new edition's figure, and never offered to anyone else.
+         */
+        $currentPlanId = $this->context->hasTenant()
+            ? Subscription::query()->withoutGlobalScopes()->where('tenant_id', $this->context->tenantId())->value('plan_id')
+            : null;
         $plans = SubscriptionPlan::query()
             ->where('is_active', true)
             ->where('contact_sales', false)
+            ->where(fn ($q) => $q->where('is_public', true)->when($currentPlanId, fn ($q) => $q->orWhere('id', $currentPlanId)))
             ->orderBy('sort_order')
             ->orderBy('price_monthly')
             ->get()
-            ->map(fn (SubscriptionPlan $p) => $this->planShape($p));
+            ->map(fn (SubscriptionPlan $p) => $this->planShape($p) + [
+                'is_current' => $p->getKey() === $currentPlanId,
+                'grandfathered' => ! $p->is_public,
+            ]);
 
         return ApiResponse::success($plans->all(), 'Plans.');
     }
@@ -241,6 +254,10 @@ final class SubscriptionController extends Controller
             'currency' => $plan->currency,
             'features' => $plan->features ?? [],
             'limits' => $plan->limits ?? [],
+            'price_annual' => $plan->price_annual === null ? null : (string) $plan->price_annual,
+            'name_ar' => $plan->name_ar,
+            'summary_ar' => $plan->summary_ar,
+            'summary_en' => $plan->summary_en,
         ];
     }
 }

@@ -152,7 +152,8 @@ export interface Plan {
   summary_ar: string | null
   summary_en: string | null
   currency: string
-  price_monthly: string
+  /** Null only for a plan sold by conversation (`contact_sales`), which publishes no price. */
+  price_monthly: string | null
   /** Null means the plan is not sold on an annual term — never a reason to show the monthly price. */
   price_annual: string | null
   trial_days: number

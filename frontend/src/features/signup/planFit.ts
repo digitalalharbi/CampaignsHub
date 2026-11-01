@@ -51,22 +51,27 @@ export type Journey = 'self-service' | 'multi-client'
  * `Enterprise` is in neither list, and no longer needs excluding here — it is `is_public: false`
  * server-side, so the signup catalogue never contains it.
  */
-const OFFERED: Record<Journey, string[]> = {
-  'self-service': ['starter', 'growth'],
-  'multi-client': ['agency'],
+/**
+ * PRICING-CATALOGUE-001 — which journey a plan serves is the CATALOGUE's to say (`features.journeys`, editable in /admin), not a
+ * list of codes in React: a new catalogue edition must not need a frontend release to be sold on the right path.
+ */
+function journeysOf(plan: Plan): string[] {
+  const raw = (plan.features ?? {}).journeys
+  return Array.isArray(raw) ? raw.filter((j): j is string => typeof j === 'string') : []
 }
 
-/** The plans this journey can actually buy, in the order they step up. */
+/** The plans this journey can actually buy, in the catalogue's own order (the API sorts by sort_order, then price). */
 export function plansForJourney(plans: Plan[], journey: Journey | null): Plan[] {
   const buyable = plans.filter((p) => p.contact_sales !== true)
 
   if (journey === null) return buyable
 
-  const offered = OFFERED[journey]
+  return buyable.filter((p) => journeysOf(p).includes(journey))
+}
 
-  return buyable
-    .filter((p) => offered.includes(p.code))
-    .sort((a, b) => offered.indexOf(a.code) - offered.indexOf(b.code))
+/** The plan the catalogue marks as recommended (`features.recommended`), if any. */
+export function isRecommended(plan: Plan): boolean {
+  return (plan.features ?? {}).recommended === true
 }
 
 /** A capped number, or null for «no ceiling». Reads the catalogue's own shape. */
@@ -140,7 +145,8 @@ const GROUPS: ComparisonGroup[] = [
     ar: 'الاستخدام',
     en: 'Usage',
     rows: [
-      { key: 'connections', ar: 'الحسابات الإعلانية المرتبطة', en: 'Connected ad accounts', value: cap('connections') },
+      // PRICING-CATALOGUE-001 — plans are sold on ad accounts (5 / 20 / 80), not on connections, which are uncapped.
+      { key: 'ad_accounts', ar: 'الحسابات الإعلانية', en: 'Ad accounts', value: cap('ad_accounts') },
       { key: 'projects', ar: 'المشاريع', en: 'Projects', value: cap('projects') },
       { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members', value: cap('team_members') },
       // Agency work only — see `comparisonFor`.
@@ -221,7 +227,7 @@ export function comparisonFor(plans: Plan[], journey: Journey | null): Compariso
 export const COMPARISON: ComparisonRow[] = [
   { key: 'projects', ar: 'المشاريع', en: 'Projects', value: cap('projects') },
   { key: 'clients', ar: 'العملاء', en: 'Clients', value: cap('clients') },
-  { key: 'connections', ar: 'الحسابات الإعلانية المرتبطة', en: 'Ad account connections', value: cap('connections') },
+  { key: 'ad_accounts', ar: 'الحسابات الإعلانية', en: 'Ad accounts', value: cap('ad_accounts') },
   { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members', value: cap('team_members') },
   { key: 'reports_per_month', ar: 'التقارير شهريًا', en: 'Reports per month', value: cap('reports_per_month') },
   { key: 'ai_assist', ar: 'المساعد الذكي', en: 'AI assist', value: flag('ai_assist') },
@@ -283,7 +289,7 @@ export function whyUpgrade(plan: Plan, previous: Plan | undefined, ar: boolean):
 
     if (now === before) continue
 
-    const isCap = ['projects', 'clients', 'connections', 'team_members', 'reports_per_month'].includes(row.key)
+    const isCap = ['projects', 'clients', 'ad_accounts', 'team_members', 'reports_per_month'].includes(row.key)
 
     if (isCap) {
       const label = ar ? row.ar : row.en

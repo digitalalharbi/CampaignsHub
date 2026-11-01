@@ -514,7 +514,7 @@ final class SubscriptionCheckout
             'plan_code' => $planCode,
             'provider' => $this->providers->defaultKey(),
             'amount' => '0.00',
-            'currency' => (string) config('subscriptions.currency'),
+            'currency' => $this->catalogue->byCode($planCode)->currency ?? $this->catalogue->currency(),
             'status' => 'refused',
             'idempotency_key' => 'refused:'.$request->getKey().':'.$planCode,
             'error' => 'A trial has already been used by this customer.',
