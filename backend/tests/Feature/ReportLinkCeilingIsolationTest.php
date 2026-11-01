@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -178,5 +181,43 @@ final class ReportLinkCeilingIsolationTest extends TestCase
         event(new JobProcessing('redis', \Mockery::mock(Job::class, ['payload' => []])));
 
         $this->assertFalse(app(ProjectContext::class)->hasProject());
+    }
+
+    /** Ad sets and ads under every fixture campaign, named after it, so a leaked name says whose it is. */
+    private function seedAdSetsAndAds(): void
+    {
+        foreach (ExternalCampaign::withoutGlobalScopes()->where('project_id', $this->project->id)->get() as $external) {
+            $set = ExternalAdSet::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_campaign_id' => $external->getKey(),
+                'unified_campaign_id' => $external->unified_campaign_id, 'provider' => $external->provider,
+                'external_id' => 'as-'.uniqid(), 'name' => $external->name.' set', 'status' => 'active',
+            ]);
+            ExternalAd::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_ad_set_id' => $set->getKey(),
+                'external_campaign_id' => $external->getKey(), 'unified_campaign_id' => $external->unified_campaign_id,
+                'provider' => $external->provider, 'external_id' => 'ad-'.uniqid(), 'name' => $external->name.' ad', 'status' => 'active',
+            ]);
+        }
+    }
+
+    public function test_the_scope_pickers_never_name_entities_of_an_account_the_project_does_not_show(): void
+    {
+        $this->seedAdSetsAndAds();
+        $base = "/api/v1/projects/{$this->project->id}/reports/scope/options";
+
+        $bodies = [$this->actingAs($this->operator, 'sanctum')->getJson($base)->assertOk()->getContent()];
+        foreach (['campaigns', 'ad_sets', 'ads', 'creatives'] as $axis) {
+            $bodies[] = $this->actingAs($this->operator, 'sanctum')->getJson("{$base}?axis={$axis}")->assertOk()->getContent();
+        }
+        $bodies[] = $this->actingAs($this->operator, 'sanctum')->getJson("/api/v1/projects/{$this->project->id}/reports/live/options")->assertOk()->getContent();
+
+        foreach ($bodies as $n => $body) {
+            $this->assertStringNotContainsString('Meta Elsewhere', $body, "picker response #{$n} named an entity of the deselected account");
+        }
+        // The project's own entities are still offered.
+        $this->assertStringContainsString('Meta Summer set', $bodies[2]);
+        $this->assertStringContainsString('Meta Summer ad', $bodies[3]);
+        $this->assertStringContainsString('Meta Summer creative', $bodies[4]);
+        $this->assertStringContainsString('Meta Summer', $bodies[1]);
     }
 }

@@ -140,6 +140,8 @@ final class ReportScopeController extends Controller
         [$campaigns, $campaignsMore] = $this->bounded(
             UnifiedCampaign::query()
                 ->where('project_id', $project)
+                // SECURITY CLUSTER 5 — a campaign of a deselected account is not the project's to name.
+                ->tap(fn ($q) => BoundAccountVisibility::unifiedCampaigns($q))
                 ->when($fObjectives !== [], fn ($q) => $q->whereIn('objective', $fObjectives))
                 ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->where(fn ($w) => $w->whereIn(
                     'id',
@@ -277,7 +279,7 @@ final class ReportScopeController extends Controller
         }
 
         [$adSets, $adSetsMore] = $this->bounded(
-            ExternalAdSet::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
+            ExternalAdSet::query()->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_ad_sets.external_campaign_id', 'external_ad_sets.project_id'))->orderBy('name')->orderBy('id'),
             ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
             fn (ExternalAdSet $s): array => [
                 'id' => (string) $s->getKey(),
@@ -288,7 +290,7 @@ final class ReportScopeController extends Controller
         );
 
         [$ads, $adsMore] = $this->bounded(
-            ExternalAd::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
+            ExternalAd::query()->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_ads.external_campaign_id', 'external_ads.project_id'))->orderBy('name')->orderBy('id'),
             ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
             fn (ExternalAd $a): array => [
                 'id' => (string) $a->getKey(),
@@ -439,6 +441,14 @@ final class ReportScopeController extends Controller
 
         /** @var Builder $query */
         $query = $spec['model']::query()->where('project_id', $project);
+
+        // SECURITY CLUSTER 5 — the search reads the same rows the full list does: an entity of a deselected account is not named.
+        match ($axis) {
+            'campaigns' => BoundAccountVisibility::unifiedCampaigns($query),
+            'ad_sets' => BoundAccountVisibility::applyThroughCampaign($query, 'external_ad_sets.external_campaign_id', 'external_ad_sets.project_id'),
+            'ads' => BoundAccountVisibility::applyThroughCampaign($query, 'external_ads.external_campaign_id', 'external_ads.project_id'),
+            default => BoundAccountVisibility::applyThroughCampaign($query, 'external_creatives.external_campaign_id', 'external_creatives.project_id'),
+        };
 
         if ($term !== '') {
             $query->where(function ($q) use ($spec, $term): void {
