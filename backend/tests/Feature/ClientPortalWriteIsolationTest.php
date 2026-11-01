@@ -24,8 +24,10 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -201,6 +203,24 @@ final class ClientPortalWriteIsolationTest extends TestCase
 
         $this->postJson("/api/v1/client/requests/{$own['reference']}/reply", ['message' => 'hello own request'], $this->spa)->assertSuccessful();
         $this->assertSame(1, DB::table('request_comments')->whereIn('request_id', ExternalRequest::query()->where('reference', $own['reference'])->pluck('id'))->where('visibility', 'client')->count());
+    }
+
+    /** CP-REQ-ONE-001 — a client files a NEW request with a file: uploaded into a temporary session, claimed by the request. */
+    public function test_a_new_request_carries_the_files_uploaded_for_it(): void
+    {
+        Storage::fake((string) config('requests.uploads.disk', 'local'));
+        $this->signInAsAlpha();
+        $token = (string) $this->postJson('/api/v1/requests/uploads/start', [], $this->spa)->assertCreated()->json('data.upload_token');
+        $this->post('/api/v1/requests/uploads', ['upload_token' => $token, 'file' => UploadedFile::fake()->create('brief.pdf', 12, 'application/pdf')],
+            $this->spa + ['Accept' => 'application/json'])->assertCreated();
+
+        $ref = (string) $this->postJson('/api/v1/client/requests', ['type' => RequestType::query()->value('key'), 'message' => 'brief attached', 'upload_token' => $token], $this->spa)
+            ->assertCreated()->assertJsonPath('data.files', 1)->json('data.reference');
+
+        $req = ExternalRequest::withoutGlobalScopes()->where('reference', $ref)->firstOrFail();
+        $this->assertSame((string) $this->alpha->id, (string) $req->client_id, 'filed in the session\'s own client space');
+        $this->assertSame(['brief.pdf'], DB::table('request_files')->where('request_id', $req->id)->where('is_client_visible', true)->pluck('original_name')->all());
+        $this->assertSame(0, DB::table('request_upload_sessions')->count(), 'the session is spent');
     }
 
     public function test_the_write_probe_knows_every_client_write_endpoint(): void

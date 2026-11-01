@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { ClientNewRequestPage } from './ClientNewRequestPage'
 import { renderWithProviders } from '@/test/utils'
 
-vi.mock('../clientPortalApi', async (orig) => ({ ...(await orig<typeof import('../clientPortalApi')>()), createPortalRequest: vi.fn() }))
+vi.mock('../clientPortalApi', async (orig) => ({ ...(await orig<typeof import('../clientPortalApi')>()), createPortalRequest: vi.fn(), portalStartUpload: vi.fn(), portalUploadFile: vi.fn() }))
 vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), getRequestMeta: vi.fn() }))
 vi.mock('./portalOverviewApi', async (orig) => ({
   ...(await orig<typeof import('./portalOverviewApi')>()),
@@ -17,7 +17,7 @@ vi.mock('./portalAccountApi', async (orig) => ({
   listPortalInvoices: vi.fn(),
 }))
 
-import { createPortalRequest } from '../clientPortalApi'
+import { createPortalRequest, portalStartUpload, portalUploadFile } from '../clientPortalApi'
 import { getRequestMeta } from '../api'
 import { fetchPortalOverview, fetchPortalVisibility } from './portalOverviewApi'
 import { listClientReports, listPortalInvoices } from './portalAccountApi'
@@ -53,6 +53,27 @@ describe('ClientNewRequestPage', () => {
     expect(vi.mocked(createPortalRequest).mock.calls[0][0]).toEqual({
       type: 'consulting', message: 'Please review the June plan.', priority: 'medium', project_id: 'p1',
     })
+  })
+
+  /** CP-REQ-ONE-001 — a file goes with the new request: uploaded first, claimed by the request through its session token. */
+  it('attaches a file to the new request', async () => {
+    vi.mocked(fetchPortalVisibility).mockResolvedValue(space(true))
+    vi.mocked(portalStartUpload).mockResolvedValue({ upload_token: 'tok-1', expires_at: '2026-11-02T00:00:00Z' })
+    vi.mocked(portalUploadFile).mockResolvedValue({ id: 7, original_name: 'brief.pdf' })
+    vi.mocked(createPortalRequest).mockResolvedValue({ reference: 'REQ-2026-ABC124', status: 'new', submitted_at: null })
+    renderWithProviders(<ClientNewRequestPage />, { locale: 'en', route: '/portal/razzah/requests/new' })
+
+    await screen.findByRole('option', { name: 'Consulting' })
+    fireEvent.change(screen.getByTestId('new-request-type'), { target: { value: 'consulting' } })
+    fireEvent.change(screen.getByTestId('new-request-message'), { target: { value: 'Brief attached for June.' } })
+    fireEvent.change(screen.getByTestId('new-request-attach'), { target: { files: [new File(['x'], 'brief.pdf', { type: 'application/pdf' })] } })
+
+    expect(await screen.findByTestId('new-request-attached')).toHaveTextContent('brief.pdf')
+    // Sending waits for the upload to finish — a request must never leave without the file the client chose.
+    await waitFor(() => expect(screen.getByTestId('new-request-submit')).toBeEnabled())
+    fireEvent.click(screen.getByTestId('new-request-submit'))
+    await waitFor(() => expect(createPortalRequest).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createPortalRequest).mock.calls[0][0]).toMatchObject({ upload_token: 'tok-1', message: 'Brief attached for June.' })
   })
 
   it('attaches the report or invoice the request is about, and offers no campaign picker', async () => {

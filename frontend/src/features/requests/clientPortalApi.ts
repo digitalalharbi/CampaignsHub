@@ -42,6 +42,8 @@ export interface NewPortalRequest {
   priority?: 'low' | 'medium' | 'high'
   project_id?: string
   related?: { kind: 'campaign' | 'report' | 'invoice'; id: string }
+  /** CP-REQ-ONE-001 — the temporary upload session holding the files to attach. */
+  upload_token?: string
 }
 export const createPortalRequest = (body: NewPortalRequest) =>
   postData<{ reference: string; status: string; submitted_at: string | null }>('/client/requests', body)
