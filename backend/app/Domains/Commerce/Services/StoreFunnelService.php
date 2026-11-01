@@ -147,7 +147,7 @@ final class StoreFunnelService
          * said ABOUT them was wrong, which is the harder kind to spot.
          */
         $stores = $this->projectStores->forProject($tenantId, $projectId);
-        $pendingStores = $stores->isEmpty() ? $this->projectStores->unsynced($tenantId) : collect();
+        $pendingStores = $stores->isEmpty() ? $this->projectStores->unsyncedFor($tenantId, $projectId) : collect();
 
         /*
          * REPORT-OBJECTIVE-005 — one sale, counted once.
@@ -235,15 +235,20 @@ final class StoreFunnelService
          * `measured` whenever such a store is present. Reporting it as complete would show a checkout
          * rate close to a hundred percent for a merchant losing carts every day.
          */
-        $abandoned = CommerceAbandonedCart::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereBetween('abandoned_at', [$from, $to])
-            ->count();
+        // SEC-3 — carts and customers obey the same selected-store rule as the orders (BoundAccountVisibility).
+        $abandoned = BoundAccountVisibility::apply(
+            CommerceAbandonedCart::withoutGlobalScopes()
+                ->where('project_id', $projectId)
+                ->whereBetween('abandoned_at', [$from, $to]),
+            'commerce_abandoned_carts',
+        )->count();
 
-        $newCustomers = CommerceCustomer::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereBetween('first_seen_at', [$from, $to])
-            ->count();
+        $newCustomers = BoundAccountVisibility::apply(
+            CommerceCustomer::withoutGlobalScopes()
+                ->where('project_id', $projectId)
+                ->whereBetween('first_seen_at', [$from, $to]),
+            'commerce_customers',
+        )->count();
 
         return [
             'has_store' => $stores->isNotEmpty(),
