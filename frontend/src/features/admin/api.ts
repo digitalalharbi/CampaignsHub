@@ -1326,3 +1326,45 @@ export function fetchWorkspaceCredits(tenantId: string): Promise<WorkspaceCredit
 export function adjustWorkspaceCredits(tenantId: string, amount: number, reason: string, idempotencyKey: string): Promise<{ balance: string; transaction_id: number }> {
   return postData(`/admin/tenants/${tenantId}/credits`, { amount, reason, idempotency_key: idempotencyKey })
 }
+
+// PRICING-VAT-002 — VAT treatment and price basis per catalogue edition (new sales only), and the read-only invoice review.
+export interface TaxEdition {
+  id: string
+  number: number
+  label: string
+  currency: string
+  status: string
+  tax_treatment: string
+  rate: number
+  prices_include_vat: boolean
+  subscriptions_keeping_their_terms: number
+}
+
+export interface InvoiceReviewRow {
+  invoice_id: string
+  number: string
+  tenant: string | null
+  status: string
+  currency: string
+  subtotal: string
+  tax_total: string
+  total: string
+  amount_paid: string
+  charged: string | null
+  charge_status: string | null
+  tax_treatment: string | null
+  issued_at: string | null
+  issues: string[]
+}
+
+export function fetchTax(): Promise<{ treatments: { key: string; rate: number }[]; editions: TaxEdition[] }> {
+  return getData('/admin/tax')
+}
+
+export function updateTaxEdition(id: string, body: { tax_treatment: string; prices_include_vat: boolean; reason: string }): Promise<{ edition: TaxEdition }> {
+  return patchData(`/admin/tax/editions/${id}`, body)
+}
+
+export function fetchInvoiceReview(): Promise<{ checked: number; flagged: number; by_issue: Record<string, number>; rows: InvoiceReviewRow[] }> {
+  return getData('/admin/tax/invoice-review')
+}

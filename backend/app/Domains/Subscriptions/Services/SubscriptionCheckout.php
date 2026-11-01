@@ -262,7 +262,7 @@ final class SubscriptionCheckout
          * with VAT added; an all-in one charges it as it always has. The split is kept on the payment so the invoice states what
          * was asked for rather than adding tax on top of it.
          */
-        $vat = $this->tax->split($planCode, $amount);
+        $vat = $this->tax->split($planCode, $amount, $subscription);
         $amount = $vat['gross'];
 
         $existing = SubscriptionPayment::query()->where('idempotency_key', $idempotencyKey)->first();

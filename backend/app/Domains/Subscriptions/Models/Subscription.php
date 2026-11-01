@@ -38,7 +38,7 @@ final class Subscription extends Model
         'tenant_id', 'plan_id', 'status', 'billing_interval', 'unit_amount', 'currency',
         'current_period_start', 'current_period_end', 'trial_ends_at', 'grace_ends_at',
         'auto_convert_consent_at', 'commitment_consent_at', 'commitment_ends_at',
-        'cancel_at_period_end', 'seats',
+        'cancel_at_period_end', 'seats', 'tax_treatment', 'prices_include_vat',
     ];
 
     /*
@@ -52,6 +52,7 @@ final class Subscription extends Model
         'current_period_end' => 'datetime',
         'scheduled_change_at' => 'datetime',
         'scheduled_unit_amount' => 'decimal:2',
+        'prices_include_vat' => 'boolean',
         'trial_ends_at' => 'datetime',
         'grace_ends_at' => 'datetime',
         'auto_convert_consent_at' => 'datetime',

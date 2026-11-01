@@ -882,6 +882,8 @@ final class SubscriptionLifecycle
             'unit_amount' => $plan->priceFor($interval),
             // The price and its currency move together: a SAR price left labelled USD is a different amount of money.
             'currency' => $plan->currency,
+            // …and its VAT terms (PRICING-VAT-002), agreed with the new plan.
+            ...app(SubscriptionTax::class)->termsFor($plan->loadMissing('catalogueVersion')),
             'scheduled_plan_id' => null,
             'scheduled_billing_interval' => null,
             'scheduled_unit_amount' => null,

@@ -108,6 +108,7 @@ import { AuditPage } from '@/features/admin/AuditPage'
 import { AddonsPage } from '@/features/admin/AddonsPage'
 import { PlanMigrationPage } from '@/features/admin/PlanMigrationPage'
 import { UsageMetersPage } from '@/features/admin/UsageMetersPage'
+import { TaxPage } from '@/features/admin/TaxPage'
 import { EmailOperationsPage } from '@/features/admin/EmailOperationsPage'
 import { CutoverPage } from '@/features/admin/CutoverPage'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
@@ -542,6 +543,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'addons', element: <AddonsPage /> },
             { path: 'plan-migration', element: <PlanMigrationPage /> },
             { path: 'usage', element: <UsageMetersPage /> },
+            { path: 'tax', element: <TaxPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.

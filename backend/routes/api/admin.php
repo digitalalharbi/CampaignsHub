@@ -25,6 +25,7 @@ use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
+use App\Domains\Platform\Http\Controllers\PlatformTaxController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PlatformUsageController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
@@ -118,6 +119,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
         Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
         Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
+
+        // PRICING-VAT-002 — VAT treatment and price basis per catalogue edition (new sales only), and the read-only invoice review.
+        Route::get('/tax', [PlatformTaxController::class, 'index'])->name('tax.index');
+        Route::patch('/tax/editions/{edition}', [PlatformTaxController::class, 'update'])->middleware('throttle:30,1')->name('tax.editions.update');
+        Route::get('/tax/invoice-review', [PlatformTaxController::class, 'review'])->name('tax.review');
 
         // PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
         Route::get('/usage/meters', [PlatformUsageController::class, 'meters'])->name('usage.meters');

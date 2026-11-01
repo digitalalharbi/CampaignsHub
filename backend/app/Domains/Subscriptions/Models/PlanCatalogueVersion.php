@@ -17,12 +17,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $currency
  * @property string $status draft|published|retired
  * @property bool $prices_include_vat
+ * @property string $tax_treatment
  */
 final class PlanCatalogueVersion extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['number', 'label', 'currency', 'status', 'published_at', 'published_by', 'notes', 'prices_include_vat'];
+    protected $fillable = ['number', 'label', 'currency', 'status', 'published_at', 'published_by', 'notes', 'prices_include_vat', 'tax_treatment'];
 
     protected $casts = ['number' => 'integer', 'published_at' => 'datetime', 'prices_include_vat' => 'boolean'];
 

@@ -134,6 +134,8 @@ final class SubscriptionService
             'billing_interval' => $interval,
             'unit_amount' => $plan->priceFor($interval) ?? $plan->price_monthly,
             'currency' => $plan->currency,
+            // PRICING-VAT-002 — the VAT terms are captured with the price: a console change re-taxes nobody already sold.
+            ...app(SubscriptionTax::class)->termsFor($plan->loadMissing('catalogueVersion')),
             'current_period_end' => $currentPeriodEnd ?? $subscription->current_period_end,
             'seats' => $seats ?? $subscription->seats ?? 1,
         ])->save();

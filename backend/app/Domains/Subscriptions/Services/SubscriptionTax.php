@@ -5,25 +5,28 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Billing\Support\TaxTreatment;
+use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 
 /**
- * PRICING-VAT-001 — the VAT on a subscription charge, decided in one place.
+ * PRICING-VAT-001/002 — the VAT on a subscription charge, decided in one place.
  *
- * A plan's catalogue edition says whether its prices include VAT. A VAT-exclusive price (the 2026-11 SAR catalogue) is charged
- * with 15% added; an all-in price (the launch catalogue) is charged exactly as before and its VAT is the part of it the invoice
- * shows as included. Either way `gross` is what the customer is asked to pay and the invoice total equals it.
+ * The terms are (treatment, whether the price includes VAT). A subscription carries the terms it was sold under; a new sale takes
+ * its plan's catalogue edition's, which the console manages. A VAT-exclusive price is charged with the VAT added; an all-in price
+ * is charged as it is, its VAT shown as included. Either way `gross` is what the customer is asked for and the invoice total.
  */
 final class SubscriptionTax
 {
+    /** Treatments the console may set for new sales. The legacy 5% exists only on old documents. */
+    public const OFFERED = ['basic_15', 'zero_rated', 'exempt', 'out_of_scope'];
+
     /**
      * @return array{net: string, tax: string, gross: string, treatment: string, rate: float, prices_include_vat: bool}
      */
-    public function split(?string $planCode, string $amount): array
+    public function split(?string $planCode, string $amount, ?Subscription $subscription = null): array
     {
-        $treatment = TaxTreatment::DEFAULT;
+        ['tax_treatment' => $treatment, 'prices_include_vat' => $inclusive] = $this->terms($planCode, $subscription);
         $rate = TaxTreatment::rate($treatment);
-        $inclusive = $this->pricesIncludeVat($planCode);
         $value = round((float) $amount, 2);
 
         if ($inclusive) {
@@ -42,15 +45,42 @@ final class SubscriptionTax
         ];
     }
 
-    /** Unknown plan or edition: all-in — never add a tax nobody priced in. */
+    /**
+     * The terms for a charge: the subscription's own when it is charged for the plan it holds, else the plan's edition's.
+     *
+     * @return array{tax_treatment: string, prices_include_vat: bool}
+     */
+    public function terms(?string $planCode, ?Subscription $subscription = null): array
+    {
+        if ($subscription !== null && $subscription->tax_treatment !== null
+            && ($planCode === null || $subscription->plan?->code === $planCode)) {
+            return ['tax_treatment' => (string) $subscription->tax_treatment, 'prices_include_vat' => (bool) ($subscription->prices_include_vat ?? true)];
+        }
+        $plan = $planCode === null ? null : SubscriptionPlan::query()->with('catalogueVersion')->where('code', $planCode)->first();
+
+        return $this->termsFor($plan);
+    }
+
+    /**
+     * What a sale of this plan is made under. Unknown plan or edition: all-in at the standard rate — never a tax nobody priced in.
+     *
+     * @return array{tax_treatment: string, prices_include_vat: bool}
+     */
+    public function termsFor(?SubscriptionPlan $plan): array
+    {
+        $edition = $plan?->catalogueVersion;
+        if ($edition === null) {
+            return ['tax_treatment' => TaxTreatment::DEFAULT, 'prices_include_vat' => true];
+        }
+        $treatment = TaxTreatment::isValid($edition->tax_treatment ?? null) ? (string) $edition->tax_treatment : TaxTreatment::DEFAULT;
+
+        return ['tax_treatment' => $treatment, 'prices_include_vat' => (bool) $edition->prices_include_vat];
+    }
+
+    /** Kept for callers that only ask the question. */
     public function pricesIncludeVat(?string $planCode): bool
     {
-        if ($planCode === null) {
-            return true;
-        }
-        $plan = SubscriptionPlan::query()->with('catalogueVersion')->where('code', $planCode)->first();
-
-        return $plan?->catalogueVersion === null || (bool) $plan->catalogueVersion->prices_include_vat;
+        return $this->terms($planCode)['prices_include_vat'];
     }
 
     private function money(float $v): string
