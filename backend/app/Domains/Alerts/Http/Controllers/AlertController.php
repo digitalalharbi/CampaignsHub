@@ -7,13 +7,19 @@ namespace App\Domains\Alerts\Http\Controllers;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -80,11 +86,59 @@ final class AlertController extends Controller
     /** How many rules one response carries. Newest first, so the cap never hides a fresh one. */
     private const RULE_PAGE_SIZE = 100;
 
+    public function __construct(private readonly ClientScopeResolver $scopes, private readonly MembershipContext $membership) {}
+
+    /**
+     * The projects this reader may be shown alerts for, or null when nothing narrows them (ADR 0002).
+     *
+     * The membership's client ceiling — via the canonical {@see ClientScopeResolver} — gives the clients, their
+     * projects are the reach; a membership that also names projects narrows that further. Alerts with no project
+     * (a connection's token, say) belong to the workspace rather than to a client, so a capped reader is not
+     * shown them: it cannot be proved they are theirs. An unrestricted reader sees everything, as before.
+     *
+     * @return list<string>|null
+     */
+    private function reach(User $user): ?array
+    {
+        $clientScope = $this->membership->clientScopeIds();
+        $projectScope = $this->membership->projectScopeIds();
+
+        /*
+         * Only a membership that NAMES clients or projects narrows the ledger. A member who names none keeps the
+         * workspace-wide view this screen has always given — the alerts roles are tenant-level, and the rule that
+         * an empty scope reaches nothing is the resolver's for CLIENT surfaces, not a reason to blank an alerts
+         * screen for a role that was never confined.
+         */
+        if ($clientScope === [] && $projectScope === []) {
+            return null;
+        }
+
+        if ($clientScope === []) {
+            return $projectScope;
+        }
+
+        // The resolver is the one place that turns a membership into reachable clients (a named list outranks any permission).
+        $clients = $this->scopes->reachableClientIds($user) ?? $clientScope;
+        $ofClients = Project::query()->whereIn('client_workspace_id', $clients)->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+
+        return $projectScope === [] ? $ofClients : array_values(array_intersect($ofClients, $projectScope));
+    }
+
+    /** @param  Builder<Model>  $query */
+    private function narrow(Builder $query, User $user): void
+    {
+        $reach = $this->reach($user);
+        if ($reach !== null) {
+            $query->whereIn('project_id', $reach);
+        }
+    }
+
     public function rules(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.view'), 403);
 
         $query = AlertRule::query()->latest('created_at');
+        $this->narrow($query, $request->user());
 
         return ApiResponse::success(
             (clone $query)->limit(self::RULE_PAGE_SIZE)->get()->all(),
@@ -128,7 +182,7 @@ final class AlertController extends Controller
         $data = $request->validate([
             'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
             'name' => ['required', 'string', 'min:2', 'max:120'],
-            'project_id' => ['nullable', 'uuid'],
+            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             /*
              * EMAIL-SETTINGS-DEPTH-001 — a threshold that would SILENCE the alert is refused.
              *
@@ -163,6 +217,18 @@ final class AlertController extends Controller
             'severity' => ['nullable', 'string', 'in:info,warning,critical'],
             'active' => ['nullable', 'boolean'],
         ]);
+
+        // A rule files alerts into the ledger under its project: it has to be one the author reaches, and a
+        // capped author cannot make a workspace-wide rule.
+        $reach = $this->reach($request->user());
+        if ($reach !== null) {
+            if (($data['project_id'] ?? null) === null) {
+                abort(403, 'A rule must name one of your projects.');
+            }
+            if (! in_array((string) $data['project_id'], $reach, true)) {
+                throw ValidationException::withMessages(['project_id' => 'The selected project id is invalid.']);
+            }
+        }
 
         $rule = AlertRule::create([
             'tenant_id' => app(TenantContext::class)->tenantId(),
@@ -217,6 +283,7 @@ final class AlertController extends Controller
         abort_unless($request->user()?->hasPermission('alerts.view'), 403);
 
         $query = AlertEvent::query();
+        $this->narrow($query, $request->user());
 
         /*
          * ANALYTICS-FILTER-TRUTH-001 — the ledger answers for the project the reader is standing in.
@@ -237,6 +304,8 @@ final class AlertController extends Controller
          * would come to sit above everybody's alerts.
          */
         $project = $request->string('project')->toString();
+        // A project outside the reader's reach is answered like one that does not exist.
+        abort_if($project !== '' && ($reach = $this->reach($request->user())) !== null && ! in_array($project, $reach, true), 404);
         if ($project !== '') {
             $query->where(fn ($q) => $q->where('project_id', $project)->orWhereNull('project_id'));
         }
@@ -293,6 +362,7 @@ final class AlertController extends Controller
     public function resolve(Request $request, AlertEvent $alertEvent, AlertEvaluator $evaluator): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReaches($request, $alertEvent);
 
         return ApiResponse::success($evaluator->resolve($alertEvent), 'Alert resolved.');
     }
@@ -300,11 +370,20 @@ final class AlertController extends Controller
     public function snooze(Request $request, AlertEvent $alertEvent, AlertEvaluator $evaluator): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReaches($request, $alertEvent);
         $data = $request->validate(['minutes' => ['required', 'integer', 'min:5', 'max:20160']]);
 
         return ApiResponse::success(
             $evaluator->snooze($alertEvent, Carbon::now()->addMinutes($data['minutes'])),
             'Alert snoozed.',
         );
+    }
+
+    /** An event of a project outside the reader's reach does not exist for them. */
+    private function assertReaches(Request $request, AlertEvent $event): void
+    {
+        $reach = $this->reach($request->user());
+
+        abort_unless($reach === null || ($event->project_id !== null && in_array((string) $event->project_id, $reach, true)), 404);
     }
 }
