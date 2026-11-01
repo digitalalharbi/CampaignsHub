@@ -48,6 +48,9 @@ final class ContributorCoverage
      * Every provider expected to contribute to this scope, with the state each is actually in.
      *
      * @param  list<string>|null  $providers  restrict to these providers, or null for all in scope
+     * @param  list<string>|null  $projectIds  SEC-CLUSTER-2 — the projects a multi-project reader may see. When given it
+     *                                         replaces `$projectId`; an empty list means «no scope» and names no contributor.
+     *                                         Null with a null `$projectId` is the explicit whole-tenant read (internal sweeps only).
      */
     public function forWindow(
         string $tenantId,
@@ -55,7 +58,13 @@ final class ContributorCoverage
         Carbon $from,
         Carbon $to,
         ?array $providers = null,
+        ?array $projectIds = null,
     ): AggregateCoverage {
+        if ($projectIds !== null && $projectIds === []) {
+            return AggregateCoverage::complete();
+        }
+        $scope = $projectIds ?? ($projectId === null ? null : [$projectId]);
+
         /*
          * Nobody can report a day that has not happened.
          *
@@ -71,14 +80,14 @@ final class ContributorCoverage
         $expectedThrough = Carbon::yesterday()->startOfDay();
         $to = $to->copy()->startOfDay()->gt($expectedThrough) ? $expectedThrough : $to->copy()->startOfDay();
 
-        $expected = $this->expectedProviders($tenantId, $projectId, $from, $to, $providers);
+        $expected = $this->expectedProviders($tenantId, $scope, $from, $to, $providers);
 
         if ($expected === []) {
             return AggregateCoverage::complete();
         }
 
-        $reported = $this->providersWithFigures($tenantId, $projectId, $from, $to);
-        $runs = $this->latestRuns($tenantId, array_keys($expected));
+        $reported = $this->providersWithFigures($tenantId, $scope, $from, $to);
+        $runs = $this->latestRuns($tenantId, array_keys($expected), $scope);
 
         $states = [];
         $reasons = [];
@@ -186,7 +195,7 @@ final class ContributorCoverage
      */
     private function expectedProviders(
         string $tenantId,
-        ?string $projectId,
+        ?array $projectIds,
         Carbon $from,
         Carbon $to,
         ?array $providers,
@@ -195,8 +204,8 @@ final class ContributorCoverage
             ->where('tenant_id', $tenantId)
             ->select('provider', 'status', 'starts_at', 'ends_at');
 
-        if ($projectId !== null) {
-            $q->where('project_id', $projectId);
+        if ($projectIds !== null) {
+            $q->whereIn('project_id', $projectIds);
         }
         if ($providers !== null) {
             $q->whereIn('provider', $providers);
@@ -268,15 +277,15 @@ final class ContributorCoverage
     }
 
     /** Providers that actually put figures in this window. Proves presence only — never absence. */
-    private function providersWithFigures(string $tenantId, ?string $projectId, Carbon $from, Carbon $to): array
+    private function providersWithFigures(string $tenantId, ?array $projectIds, Carbon $from, Carbon $to): array
     {
         $q = DB::table('daily_metrics')
             ->where('tenant_id', $tenantId)
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
 
-        if ($projectId !== null) {
-            $q->where('project_id', $projectId);
+        if ($projectIds !== null) {
+            $q->whereIn('project_id', $projectIds);
         }
 
         return $q->distinct()->pluck('provider')->map(static fn ($p): string => (string) $p)->all();
@@ -287,14 +296,24 @@ final class ContributorCoverage
      *
      * @return array<string, object>
      */
-    private function latestRuns(string $tenantId, array $providers): array
+    private function latestRuns(string $tenantId, array $providers, ?array $projectIds): array
     {
         if ($providers === []) {
             return [];
         }
 
+        /*
+         * SEC-CLUSTER-2 — only the runs of the projects in scope.
+         *
+         * This read the newest run per provider for the whole TENANT, so a reader of project P1 got the
+         * `error` text, the window end and the failed/stale verdict of a run that belonged to project P2
+         * (another client's) whenever both used the same provider. A run is also only evidence while its
+         * account is still bound to the project the run was made for — the same rule the figures obey.
+         */
         $rows = DB::table('metric_sync_runs')
             ->where('tenant_id', $tenantId)
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
             ->whereIn('provider', $providers)
             ->orderByDesc('window_end')
             ->orderByDesc('created_at')
