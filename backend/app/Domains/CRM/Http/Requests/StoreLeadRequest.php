@@ -6,6 +6,7 @@ namespace App\Domains\CRM\Http\Requests;
 
 use App\Domains\CRM\Enums\LeadSource;
 use App\Domains\CRM\Enums\LeadStatus;
+use App\Domains\CRM\Rules\LeadOwnerRule;
 use App\Rules\PhoneNumberRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,7 +32,7 @@ final class StoreLeadRequest extends FormRequest
             'notes' => ['nullable', 'string'],
             'company_id' => ['nullable', 'uuid', Rule::exists('companies', 'id')->where('tenant_id', $this->tenantId())],
             'contact_id' => ['nullable', 'uuid', Rule::exists('contacts', 'id')->where('tenant_id', $this->tenantId())],
-            'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'owner_id' => ['nullable', 'integer', new LeadOwnerRule],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['string', 'max:40'],
         ];
