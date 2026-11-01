@@ -114,7 +114,7 @@ function PlanModules({ ar }: { ar: boolean }) {
                 <tbody>
                   {data.data.modules.map((m) => (
                     <tr key={m.module} className="border-t border-border">
-                      <td className="px-3 py-2 font-mono text-[13px] text-text-primary" dir="ltr">{m.module}</td>
+                      <td className="px-3 py-2 font-mono text-[13px] text-text-primary"><span dir="ltr">{m.module}</span></td>
                       {data.data!.plans.map((p) => {
                         const carried = p.modules[m.module] === true
                         return (
