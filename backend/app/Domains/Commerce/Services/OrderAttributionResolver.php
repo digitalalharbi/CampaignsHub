@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Commerce\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Influencers\Models\InfluencerCollaboration;
 use App\Domains\Influencers\Models\InfluencerTrackingAsset;
+use App\Domains\Projects\Models\Project;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -134,7 +137,15 @@ final class OrderAttributionResolver
         return $order;
     }
 
-    /** The active discount code this order was placed with, if a creator holds one by that code. */
+    /**
+     * The active discount code this order was placed with, if a creator holds one by that code FOR THIS ORDER'S PROJECT.
+     *
+     * SEC-3 — a code string alone is not evidence: the same word ("SAVE10") is used by every merchant, and the
+     * lookup used to take whichever tenant asset carried it, so a code issued for client B stamped B's campaign on
+     * client A's order. The collaboration must belong to the order's project — through its campaign (which decides
+     * when it names one) or, with no campaign, through its client workspace. A collaboration that names neither
+     * cannot prove whom it is for, and "cannot prove" is no match.
+     */
     private function couponAsset(CommerceOrder $order): ?InfluencerTrackingAsset
     {
         $code = trim((string) $order->coupon_code);
@@ -142,21 +153,80 @@ final class OrderAttributionResolver
             return null;
         }
 
-        return InfluencerTrackingAsset::query()
+        $project = Project::withoutGlobalScopes()->whereKey($order->project_id)->first(['id', 'tenant_id', 'client_workspace_id']);
+        if ($project === null || (string) $project->tenant_id !== (string) $order->tenant_id) {
+            return null;
+        }
+
+        $eligible = InfluencerTrackingAsset::query()
+            ->where('tenant_id', $order->tenant_id)
             ->where('kind', 'discount_code')
             ->where('is_active', true)
             ->whereRaw('lower(code) = ?', [mb_strtolower($code)])
             ->with('collaboration')
-            ->first();
+            ->get()
+            ->filter(fn (InfluencerTrackingAsset $a): bool => $this->isForProject($a->collaboration, $project))
+            ->values();
+
+        // Two live codes for one project is ambiguous, not a coin to toss.
+        return $eligible->count() === 1 ? $eligible->first() : null;
+    }
+
+    private function isForProject(?InfluencerCollaboration $collaboration, Project $project): bool
+    {
+        if ($collaboration === null || (string) $collaboration->tenant_id !== (string) $project->tenant_id) {
+            return false;
+        }
+
+        if ($collaboration->campaign_id !== null) {
+            return UnifiedCampaign::withoutGlobalScopes()
+                ->whereKey($collaboration->campaign_id)
+                ->where('tenant_id', $project->tenant_id)
+                ->where('project_id', $project->getKey())
+                ->exists();
+        }
+
+        return $collaboration->client_workspace_id !== null
+            && $project->client_workspace_id !== null
+            && (string) $collaboration->client_workspace_id === (string) $project->client_workspace_id;
+    }
+
+    /** The projects a collaboration's orders can come from: its campaign's project, else its client's projects. */
+    private function projectIdsOf(?InfluencerCollaboration $collaboration): array
+    {
+        if ($collaboration === null) {
+            return [];
+        }
+
+        if ($collaboration->campaign_id !== null) {
+            return UnifiedCampaign::withoutGlobalScopes()
+                ->whereKey($collaboration->campaign_id)->where('tenant_id', $collaboration->tenant_id)
+                ->pluck('project_id')->map(fn ($id): string => (string) $id)->all();
+        }
+
+        if ($collaboration->client_workspace_id === null) {
+            return [];
+        }
+
+        return Project::withoutGlobalScopes()
+            ->where('tenant_id', $collaboration->tenant_id)
+            ->where('client_workspace_id', $collaboration->client_workspace_id)
+            ->pluck('id')->map(fn ($id): string => (string) $id)->all();
     }
 
     /**
      * ATTR-EVIDENCE-INFLUENCER-COUPON-001 — redemptions from the store's own orders: confirmed, not cancelled,
      * carrying the code. Source `platform`, which the asset reserved for exactly this.
+     *
+     * SEC-3 — counted over the orders of the project(s) the code was issued for, never the tenant's whole ledger.
      */
     public function recountRedemptions(InfluencerTrackingAsset $asset): InfluencerTrackingAsset
     {
-        $count = CommerceOrder::query()
+        $projectIds = $this->projectIdsOf($asset->collaboration);
+
+        $count = $projectIds === [] ? 0 : CommerceOrder::query()
+            ->where('tenant_id', $asset->tenant_id)
+            ->whereIn('project_id', $projectIds)
             ->whereRaw('lower(coupon_code) = ?', [mb_strtolower((string) $asset->code)])
             ->whereNull('cancelled_at')
             ->count();
