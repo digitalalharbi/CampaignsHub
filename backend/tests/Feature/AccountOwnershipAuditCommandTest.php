@@ -146,6 +146,28 @@ final class AccountOwnershipAuditCommandTest extends TestCase
         $this->assertSame($before, $this->digestOfEveryTable());
     }
 
+    /** The dry run is what the Owner approves: counts and spend per project, and not one byte written. */
+    public function test_the_dry_run_prints_the_plan_and_writes_nothing(): void
+    {
+        $before = $this->digestOfEveryTable();
+
+        $output = $this->audit(['--dry-run' => true, '--keep-account' => $this->accountB->id]);
+
+        $this->assertStringContainsString('DRY RUN', $output);
+        $this->assertStringContainsString('external_campaigns', $output);
+        $this->assertMatchesRegularExpression('/project '.preg_quote($this->projectA->id, '/').'\s+account '.preg_quote($this->accountA->id, '/').'\s+campaigns leaving 1\s+spend 375\.46 → 0\.00/', $output);
+        $this->assertStringContainsString('the named owner (account '.$this->accountB->id.') is not touched: 1 campaigns', $output);
+        $this->assertDoesNotMatchRegularExpression('/batch [0-9a-f-]{36}/', $output);
+
+        $this->assertSame($before, $this->digestOfEveryTable(), 'the dry run changed a table');
+        $this->assertSame(0, DB::table('isolation_quarantines')->count());
+    }
+
+    public function test_the_dry_run_needs_a_named_owner_too(): void
+    {
+        $this->assertSame(1, Artisan::call('integrations:account-ownership-audit', ['--dry-run' => true]));
+    }
+
     /** One provider account active in two projects is printed for a person to judge. */
     public function test_a_provider_account_active_in_two_projects_is_reported(): void
     {
