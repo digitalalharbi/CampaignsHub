@@ -55,6 +55,9 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
    * tests all run there.
    */
   E2E_RELAX_RATE_LIMITS: 'true',
+  // The mobile gate already issues a challenge on entry. E2E has no SMS inbox, so it immediately
+  // resends to retrieve the local-only dev code; deployed environments retain the 60-second default.
+  REGISTRATION_MOBILE_RESEND_COOLDOWN_SECONDS: '0',
   DB_DATABASE: 'mediabuying_e2e',
   APP_URL: E2E_API_TARGET,
   // Sessions, cache and queues all live in Redis and are all keyed by this prefix. Without its own,

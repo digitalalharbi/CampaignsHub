@@ -90,4 +90,12 @@ return [
      */
     'resend_throttle_per_application_local' => (int) env('REGISTRATION_RESEND_PER_APPLICATION_LOCAL', 60),
     'resend_throttle_per_address_local' => (int) env('REGISTRATION_RESEND_PER_ADDRESS_LOCAL', 600),
+
+    /*
+     * The provider-level resend cooldown is separate from the rolling abuse limits above. Keeping
+     * it configurable lets deterministic test environments receive the automatically issued local
+     * code and then exercise a resend without sleeping, while every deployed environment keeps the
+     * sixty-second default unless it deliberately chooses a stricter value.
+     */
+    'mobile_resend_cooldown_seconds' => (int) env('REGISTRATION_MOBILE_RESEND_COOLDOWN_SECONDS', 60),
 ];
