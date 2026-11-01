@@ -673,16 +673,9 @@ final class ReportScopeController extends Controller
          */
         $shared = (bool) ($data['shared'] ?? false);
         if ($shared) {
-            $projectSpecific = array_values(array_intersect(
-                $scope->boundAxes(),
-                ['campaign_ids', 'ad_set_ids', 'ad_ids', 'creative_ids', 'account_ids', 'project_ids', 'client_ids'],
-            ));
-
-            abort_if(
-                $projectSpecific !== [],
-                422,
-                'A shared template cannot name project-specific selections: '.implode(', ', $projectSpecific),
-            );
+            // SECURITY CLUSTER 5 — a row every project reads is the workspace administrator's to create.
+            abort_unless((new ReportScopeTemplate(['project_id' => null]))->mayBeChangedBy($request->user()), 403, 'Only a workspace administrator can save a tenant-wide template.');
+            $this->refuseProjectSpecificAxes($scope);
         }
 
         $template = ReportScopeTemplate::create([
@@ -709,6 +702,7 @@ final class ReportScopeController extends Controller
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
         $model = $this->findTemplate($project, $template);
+        abort_unless($model->mayBeChangedBy($request->user()), 403, 'Only a workspace administrator can change a tenant-wide template.');
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:120'],
@@ -716,7 +710,12 @@ final class ReportScopeController extends Controller
         ]);
 
         if ($request->has('scope')) {
-            $data['scope'] = $this->validated($request, $project)->toArray();
+            $scope = $this->validated($request, $project);
+            // The same refusal storeTemplate makes: one project's ids do not belong in a row every project reads.
+            if ($model->project_id === null) {
+                $this->refuseProjectSpecificAxes($scope);
+            }
+            $data['scope'] = $scope->toArray();
         }
 
         $model->update($data);
@@ -728,9 +727,25 @@ final class ReportScopeController extends Controller
     {
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
-        $this->findTemplate($project, $template)->delete();
+        $model = $this->findTemplate($project, $template);
+        abort_unless($model->mayBeChangedBy($request->user()), 403, 'Only a workspace administrator can remove a tenant-wide template.');
+        $model->delete();
 
         return ApiResponse::success(null, 'Scope template removed.');
+    }
+
+    private function refuseProjectSpecificAxes(ReportScope $scope): void
+    {
+        $projectSpecific = array_values(array_intersect(
+            $scope->boundAxes(),
+            ['campaign_ids', 'ad_set_ids', 'ad_ids', 'creative_ids', 'account_ids', 'project_ids', 'client_ids'],
+        ));
+
+        abort_if(
+            $projectSpecific !== [],
+            422,
+            'A shared template cannot name project-specific selections: '.implode(', ', $projectSpecific),
+        );
     }
 
     private function findTemplate(string $project, string $template): ReportScopeTemplate

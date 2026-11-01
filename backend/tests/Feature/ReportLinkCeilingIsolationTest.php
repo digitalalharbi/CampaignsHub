@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -11,11 +12,16 @@ use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\ProjectMembership;
+use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportBreakdowns;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Models\User;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Queue\Events\JobProcessing;
@@ -219,5 +225,57 @@ final class ReportLinkCeilingIsolationTest extends TestCase
         $this->assertStringContainsString('Meta Summer ad', $bodies[3]);
         $this->assertStringContainsString('Meta Summer creative', $bodies[4]);
         $this->assertStringContainsString('Meta Summer', $bodies[1]);
+    }
+
+    /** A person whose reach is ONE project: a tenant role that reads reports, and a manager membership on this project only. */
+    private function projectManager(): User
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'RM', 'slug' => 'rm-'.uniqid()]);
+        $role->givePermissionTo('reports.view', 'projects.view');
+        $user = User::create(['name' => 'PM', 'email' => 'pm-'.uniqid().'@a.test', 'password' => 'secret123', 'email_verified_at' => now()]);
+        $this->grantMembership($user, $this->tenant);
+        $user->assignRole($role);
+        ProjectMembership::create(['project_id' => $this->project->id, 'user_id' => $user->id, 'role' => ProjectRole::MARKETING_MANAGER, 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        return $user;
+    }
+
+    private function sharedTemplate(): ReportScopeTemplate
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $template = ReportScopeTemplate::create(['project_id' => null, 'name' => 'Tenant-wide', 'scope' => ['providers' => ['meta']]]);
+        app(TenantContext::class)->forget();
+
+        return $template;
+    }
+
+    public function test_a_project_restricted_manager_cannot_change_or_remove_a_tenant_wide_template(): void
+    {
+        $template = $this->sharedTemplate();
+        $manager = $this->projectManager();
+        $base = "/api/v1/projects/{$this->project->id}/reports/scope-templates";
+
+        $this->actingAs($manager, 'sanctum')->patchJson("{$base}/{$template->id}", ['name' => 'Renamed'])->assertForbidden();
+        $this->actingAs($manager, 'sanctum')->putJson("{$base}/{$template->id}/sections", ['sections' => []])->assertForbidden();
+        $this->actingAs($manager, 'sanctum')->deleteJson("{$base}/{$template->id}")->assertForbidden();
+        $this->actingAs($manager, 'sanctum')->postJson($base, ['name' => 'Mine for everyone', 'shared' => true, 'scope' => ['providers' => ['meta']]])->assertForbidden();
+
+        $this->assertSame('Tenant-wide', ReportScopeTemplate::withoutGlobalScopes()->find($template->id)->name);
+
+        // Their own project's templates are still theirs to manage.
+        $this->actingAs($manager, 'sanctum')->postJson($base, ['name' => 'Mine', 'scope' => ['providers' => ['meta']]])->assertCreated();
+    }
+
+    public function test_a_tenant_administrator_edits_a_shared_template_but_cannot_put_one_projects_ids_in_it(): void
+    {
+        $template = $this->sharedTemplate();
+        $base = "/api/v1/projects/{$this->project->id}/reports/scope-templates/{$template->id}";
+
+        $this->actingAs($this->operator, 'sanctum')->patchJson($base, ['name' => 'Renamed'])->assertOk();
+        $this->actingAs($this->operator, 'sanctum')
+            ->patchJson($base, ['scope' => ['campaign_ids' => [$this->campaigns[0]]]])
+            ->assertUnprocessable();
     }
 }
