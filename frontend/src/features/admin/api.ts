@@ -103,6 +103,24 @@ export interface AuditEntry {
   created_at: string | null
 }
 
+/** SUPERADMIN-LIMITS-001 — one workspace's plan limits: the plan's, its own override, what is used and what applies. */
+export interface TenantLimit {
+  metric: string
+  plan_limit: number | null
+  override: { limit: number | null; expires_at: string | null; reason: string | null } | null
+  lapsed: boolean
+  effective_limit: number | null
+  usage: number
+}
+
+export function fetchTenantLimits(tenantId: string): Promise<{ limits: TenantLimit[] }> {
+  return getData(`/admin/tenants/${tenantId}/limits`)
+}
+
+export function setTenantLimit(tenantId: string, metric: string, body: { mode: 'cap' | 'unlimited' | 'inherit'; limit?: number; expires_at?: string | null; reason: string }): Promise<{ limits: TenantLimit[] }> {
+  return putData(`/admin/tenants/${tenantId}/limits/${metric}`, body)
+}
+
 export function fetchOverview(): Promise<PlatformOverview> {
   return getData<PlatformOverview>('/admin/overview')
 }
