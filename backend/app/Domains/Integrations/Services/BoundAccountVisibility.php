@@ -107,6 +107,34 @@ final class BoundAccountVisibility
     }
 
     /**
+     * Narrow a query on `unified_campaigns` to the campaigns this project may NAME.
+     *
+     * A unified campaign has no account of its own: it is the roll-up of external campaigns (and of metric rows) that do. It is
+     * visible when it has no account link at all (a campaign nothing has synced into yet is nobody's but the project's), or when at
+     * least one of its links is a visible one. A campaign whose every link belongs to a deselected account is that account's, and
+     * its name is not the project's to show — a figure-less picker would otherwise list it.
+     *
+     * @template T of BuilderContract
+     *
+     * @param  T  $query
+     * @param  string  $idColumn  the column naming `unified_campaigns.id`, e.g. `unified_campaigns.id` or `id`
+     * @return T
+     */
+    public static function unifiedCampaigns(BuilderContract $query, string $idColumn = 'unified_campaigns.id'): BuilderContract
+    {
+        return $query->where(function ($q) use ($idColumn): void {
+            $q->whereNotExists(fn (Builder $b) => $b->selectRaw('1')->from('external_campaigns as uvc')->whereColumn('uvc.unified_campaign_id', $idColumn))
+                ->whereNotExists(fn (Builder $b) => $b->selectRaw('1')->from('daily_metrics as uvm')->whereColumn('uvm.unified_campaign_id', $idColumn))
+                ->orWhereExists(fn (Builder $b) => $b->selectRaw('1')->from('external_campaigns as vc')
+                    ->whereColumn('vc.unified_campaign_id', $idColumn)
+                    ->tap(fn (Builder $w) => self::apply($w, 'vc')))
+                ->orWhereExists(fn (Builder $b) => $b->selectRaw('1')->from('daily_metrics as vm')
+                    ->whereColumn('vm.unified_campaign_id', $idColumn)
+                    ->tap(fn (Builder $w) => self::apply($w, 'vm')));
+        });
+    }
+
+    /**
      * Narrow a query on `entity_daily_metrics`, whose own account column is nullable and falls back to
      * the campaign the row names.
      *

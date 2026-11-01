@@ -9,6 +9,7 @@ use App\Domains\Reports\Sections\SectionSettings;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -37,6 +38,22 @@ final class ReportScopeTemplate extends Model
     public function sectionSettings(): SectionSettings
     {
         return SectionSettings::fromArray($this->section_settings, app(ReportSectionRegistry::class));
+    }
+
+    /**
+     * Whether this person may change or remove it — SECURITY CLUSTER 5.
+     *
+     * A tenant-wide template (no project) is read by EVERY project of the workspace. A person whose reach is one project holds the
+     * `reports.manage` capability for that project only, and that is not the authority to rewrite what the other projects read.
+     * Those rows are the workspace administrator's; a project's own templates stay with its managers.
+     */
+    public function mayBeChangedBy(?User $user): bool
+    {
+        if ($this->project_id !== null) {
+            return true;
+        }
+
+        return $user !== null && ($user->is_platform_admin || $user->hasPermission('settings.manage'));
     }
 
     /** The stored shape as the object every surface reads. */

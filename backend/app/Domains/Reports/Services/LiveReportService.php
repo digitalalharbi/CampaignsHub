@@ -206,10 +206,7 @@ final class LiveReportService
      */
     private function contentFilters(ReportShare $share, array $applied, array $scope): array
     {
-        $shareList = static fn (string $key): array => array_values(array_filter(
-            (array) ($share->scope[$key] ?? []),
-            static fn ($v): bool => is_scalar($v) && trim((string) $v) !== '',
-        ));
+        $shareList = fn (string $key): array => $this->shareList($share, $key);
 
         return [
             'project_ids' => $scope['project_id'] === '' ? [ReportScope::IMPOSSIBLE] : [$scope['project_id']],
@@ -233,6 +230,15 @@ final class LiveReportService
             // CREATIVE-DISPLAY-001 — read by `ReportAds`; null for a link made before the policy existed.
             'creative_display' => $share->creativeDisplay()?->toArray(),
         ];
+    }
+
+    /** @return list<mixed> */
+    private function shareList(ReportShare $share, string $key): array
+    {
+        return array_values(array_filter(
+            (array) ($share->scope[$key] ?? []),
+            static fn ($v): bool => is_scalar($v) && trim((string) $v) !== '',
+        ));
     }
 
     /**
@@ -504,7 +510,7 @@ final class LiveReportService
              * them: a format comparison is a statement about those creatives, and leaving it behind
              * would describe the ads a reader was not shown.
              */
-            'content_formats' => $this->contentFormats($share, $scope, $from, $to),
+            'content_formats' => $this->contentFormats($share, $scope, $applied, $from, $to),
             'ads_groups' => ClientEntityBoundary::ads($built['groups']),
             /*
              * REPORT-DETAIL-PARITY-001 — the same ads on the platform axis, past the same boundary.
@@ -1028,7 +1034,7 @@ final class LiveReportService
             'business_streams' => $this->businessStreams($share, $engine, $applied, $scope, $from, $to, $totals),
             'business_streams_cover_total' => ($streamSet = $this->streamSettings($share)) !== []
                 && app(BusinessStreams::class)->coversTotal($engine, $streamSet, $from, $to),
-            'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
+            'store_funnel' => $this->storeFunnel($share, $scope, $from, $to),
             /*
              * GA4-INTEGRATION-001 — the client's own site, measured by their own Analytics.
              *
@@ -1335,7 +1341,7 @@ final class LiveReportService
      * @param  array<string, mixed>  $scope
      * @return array<string, mixed>|null
      */
-    private function contentFormats(ReportShare $share, array $scope, Carbon $from, Carbon $to): ?array
+    private function contentFormats(ReportShare $share, array $scope, array $applied, Carbon $from, Carbon $to): ?array
     {
         $projectId = (string) ($scope['project_id'] ?? '');
 
@@ -1343,7 +1349,23 @@ final class LiveReportService
             return null;
         }
 
-        $answer = app(CreativeFormatIntelligence::class)->forScope($projectId, $from, $to);
+        /*
+         * SECURITY CLUSTER 5 — the comparison is bounded by the LINK'S ceiling, like every other list on the page.
+         *
+         * It was read for the whole project, so a link narrowed to one account counted (and printed the spend mix of) every other
+         * account's creatives; blanking `accounts[]` below hid their names, not their figures. The account axis travels through each
+         * creative's campaign; the campaigns are the ones the share NAMES (or the reader narrowed to), because a link that follows its
+         * accounts is already bounded by them.
+         */
+        $named = array_values(array_filter((array) ($share->scope['campaign_ids'] ?? [])));
+        $answer = app(CreativeFormatIntelligence::class)->forScope($projectId, $from, $to, ceiling: [
+            'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
+            'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $named,
+            'creative_ids' => $this->shareList($share, 'creative_ids'),
+            'creative_group_ids' => $this->shareList($share, 'creative_group_ids'),
+            'excluded_creative_ids' => $this->shareList($share, 'excluded_creative_ids'),
+        ]);
 
         // The accounts are the agency's own arrangement, never a client's business.
         $answer['accounts'] = [];
@@ -1353,6 +1375,31 @@ final class LiveReportService
         }
 
         return $answer;
+    }
+
+    /**
+     * The bounds a link's FILES read with — SECURITY CLUSTER 5.
+     *
+     * The PDF's platform drill-down used to be rebuilt from the REPORT's own scope. A live-builder report has none (the ceiling lives only
+     * on the share), and a saved report's link may be narrower than the report; either way the file widened the link back to the whole
+     * project. One statement of the ceiling, the page's own, serves the file too: the engine, the objective bounds and the content filters
+     * are the ones `platform()` reads, so the drawer, the page and the PDF cannot disagree about what the link covers.
+     *
+     * @return array{project_id: string, engine: MetricsAggregator, campaign_ids: list<string>, account_ids: list<string>, providers: list<string>, content_filters: array<string, mixed>}
+     */
+    public function printCeiling(ReportShare $share): array
+    {
+        $scope = $this->ceiling($share);
+        $applied = $this->intersect($scope, []);
+
+        return [
+            'project_id' => $scope['project_id'],
+            'engine' => $this->scopedEngine($share, $scope, $scope['providers']),
+            'campaign_ids' => $scope['campaign_ids'],
+            'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            'providers' => $scope['providers'],
+            'content_filters' => $this->contentFilters($share, ['campaigns' => [], 'providers' => []] + $applied, $scope),
+        ];
     }
 
     private function scopedEngine(ReportShare $share, array $scope, array $providers): MetricsAggregator
@@ -1888,9 +1935,14 @@ final class LiveReportService
         return $measured;
     }
 
-    private function storeFunnel(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
+    /** @param array{project_id: string, campaign_ids: list<string>} $scope */
+    private function storeFunnel(ReportShare $share, array $scope, Carbon $from, Carbon $to): ?array
     {
-        $funnel = app(StoreFunnelService::class)->build((string) $share->tenant_id, $projectId, $from, $to);
+        // SECURITY CLUSTER 5 — the ad side (spend, ROAS, per-platform spend) is the LINK'S accounts and campaigns, not the whole project's.
+        $funnel = app(StoreFunnelService::class)->build((string) $share->tenant_id, $scope['project_id'], $from, $to, [
+            'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            'campaign_ids' => $scope['campaign_ids'],
+        ]);
 
         if (($funnel['coverage']['stores'] ?? 0) === 0) {
             return null;
