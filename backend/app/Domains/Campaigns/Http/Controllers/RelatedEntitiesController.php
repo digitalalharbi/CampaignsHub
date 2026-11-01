@@ -37,7 +37,9 @@ final class RelatedEntitiesController extends Controller
 
         $model = UnifiedCampaign::query()->with('clientWorkspace:id,name')->findOrFail($campaign);
 
-        $externals = ExternalCampaign::query()->where('unified_campaign_id', $model->id)->get();
+        $externals = ExternalCampaign::query()->where('unified_campaign_id', $model->id)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns')) // SEC-CLUSTER-2
+            ->get();
         $accountIds = $externals->pluck('external_account_id')->filter()->unique();
         $adSetIds = ExternalAdSet::query()->whereIn('external_campaign_id', $externals->pluck('id'))->pluck('id');
 

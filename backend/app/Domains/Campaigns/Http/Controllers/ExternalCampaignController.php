@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Http\Controllers;
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Resources\ExternalCampaignResource;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -23,7 +24,9 @@ final class ExternalCampaignController extends Controller
     {
         abort_unless($request->user()->hasPermission('campaigns.view'), 403);
 
-        $query = ExternalCampaign::query()->latest('last_synced_at');
+        // SEC-CLUSTER-2 — only the campaigns of accounts this project is bound to NOW; filed history of a detached account stays stored, not shown.
+        $query = ExternalCampaign::query()->latest('last_synced_at')
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'));
 
         if ($provider = $request->string('provider')->toString()) {
             $query->where('provider', $provider);

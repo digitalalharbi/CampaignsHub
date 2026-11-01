@@ -739,6 +739,13 @@ final class MetricsAggregator
             return AggregateCoverage::complete()->toArray();
         }
 
+        $scope = $this->coverageScope();
+
+        if ($scope === 'none') {
+            // SEC-CLUSTER-2 — a scope that cannot be stated names no contributor, rather than reading the tenant.
+            return AggregateCoverage::complete()->toArray();
+        }
+
         return app(ContributorCoverage::class)->forWindow(
             $tenantId,
             /*
@@ -748,13 +755,36 @@ final class MetricsAggregator
              * the coverage scope-wide for the tenant rather than silently attributing one project's
              * gaps to another's total.
              */
-            $this->projectIds !== null && count($this->projectIds) === 1
-                ? $this->projectIds[0]
-                : app(ProjectContext::class)->projectId(),
+            $scope['single'],
             $from,
             $to,
             $this->providers,
+            $scope['list'],
         )->toArray();
+    }
+
+    /**
+     * SEC-CLUSTER-2 — which projects the coverage block may speak about.
+     *
+     * The explicit list when the read carries one (a client across its projects: its OWN projects, not the
+     * tenant's), else the active project, else — only for an explicit `acrossProjects()` internal read —
+     * the whole tenant. Anything else cannot state a scope and says nothing.
+     *
+     * @return array{single: ?string, list: ?list<string>}|'none'
+     */
+    private function coverageScope(): array|string
+    {
+        if ($this->projectIds !== null) {
+            return ['single' => null, 'list' => array_values($this->projectIds)];
+        }
+
+        $active = app(ProjectContext::class)->projectId();
+
+        if ($active !== null) {
+            return ['single' => $active, 'list' => null];
+        }
+
+        return $this->acrossProjects ? ['single' => null, 'list' => null] : 'none';
     }
 
     /**
@@ -1745,15 +1775,17 @@ final class MetricsAggregator
             return $series;
         }
 
-        $projectId = $this->projectIds !== null && count($this->projectIds) === 1
-            ? $this->projectIds[0]
-            : app(ProjectContext::class)->projectId();
+        $scope = $this->coverageScope();
+
+        if ($scope === 'none') {
+            return $series;
+        }
 
         $coverage = app(ContributorCoverage::class);
 
-        return array_map(function (array $point) use ($coverage, $tenantId, $projectId): array {
+        return array_map(function (array $point) use ($coverage, $tenantId, $scope): array {
             $day = Carbon::parse((string) $point['date']);
-            $onThatDay = $coverage->forWindow($tenantId, $projectId, $day, $day, $this->providers);
+            $onThatDay = $coverage->forWindow($tenantId, $scope['single'], $day, $day, $this->providers, $scope['list']);
 
             return $point + [
                 'expected_contributors' => $onThatDay->toArray()['expected_contributors'],

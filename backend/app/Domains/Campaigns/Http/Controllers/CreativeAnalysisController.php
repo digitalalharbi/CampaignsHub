@@ -22,6 +22,7 @@ use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -723,9 +724,9 @@ final class CreativeAnalysisController extends Controller
         );
     }
 
-    private function applyReach(mixed $query, Request $request): void
+    private function applyReach(mixed $query, Request $request, string $capability = ProjectCapability::CAMPAIGNS_VIEW): void
     {
-        $this->rows->applyReach($query, $request->user());
+        $this->rows->applyReach($query, $request->user(), $capability);
     }
 
     private function applyFilters(mixed $query, Request $request): void
@@ -1188,7 +1189,8 @@ final class CreativeAnalysisController extends Controller
             'name' => ['nullable', 'string', 'max:200'],
         ]);
 
-        $this->applyReach($scope, $request);
+        // SEC-CLUSTER-2 — changing a group needs the project's manage capability, as the project route requires.
+        $this->applyReach($scope, $request, ProjectCapability::CAMPAIGNS_MANAGE);
         // ACCOUNT-SCOPE-ISOLATION-001 — a creative the reader cannot see (its account is deselected) cannot be grouped.
         BoundAccountVisibility::applyThroughCampaign($scope, 'external_creatives.external_campaign_id', 'external_creatives.project_id');
 
@@ -1266,7 +1268,7 @@ final class CreativeAnalysisController extends Controller
     {
         abort_unless($request->user()?->hasPermission('campaigns.link'), 403);
 
-        $this->applyReach($scope, $request);
+        $this->applyReach($scope, $request, ProjectCapability::CAMPAIGNS_MANAGE);
         BoundAccountVisibility::applyThroughCampaign($scope, 'external_creatives.external_campaign_id', 'external_creatives.project_id');
 
         $model = $scope->whereKey($creative)->first();

@@ -173,11 +173,31 @@ final class IngestProviderLeads
             return null;
         }
 
-        return ExternalAccount::withoutGlobalScopes()
+        $rows = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('external_id', $lead->externalAccountId)
             ->where('provider', $lead->provider)
-            ->first();
+            ->where('status', '!=', 'superseded')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        /*
+         * SEC-CLUSTER-2 — one real account can be held by several rows (one per connection that listed it).
+         * An unordered `first()` filed the lead under whichever twin Postgres returned. Now: the rows that
+         * are ACTIVELY bound decide; if they all agree on one project the lead goes there, and if they name
+         * more than one project the answer is «unfiled» — a lead is never guessed into a client's inbox.
+         */
+        $assignment = app(AccountAssignment::class);
+        $bound = $rows->filter(fn (ExternalAccount $a): bool => $assignment->projectIdFor($a) !== null)->values();
+
+        if ($bound->isEmpty()) {
+            return $rows->first();
+        }
+
+        return $bound->map(fn (ExternalAccount $a): ?string => $assignment->projectIdFor($a))->unique()->count() === 1
+            ? $bound->first()
+            : null;
     }
 
     /**
