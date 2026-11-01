@@ -127,7 +127,7 @@ function MigrationRow({ row, plans, ar, selected, onSelect }: {
           onChange={(e) => onSelect(e.target.checked)}
           className="size-4 accent-brand-600"
         />
-        <span className="min-w-0 flex-1">
+        <span className="min-w-[12rem] flex-1">
           <span className="block truncate font-semibold text-text-primary">{row.tenant_name}</span>
           <span className="block text-[12px] text-text-muted">
             <bdi dir="ltr">{row.tenant_slug}</bdi> · {ar ? 'تنتهي الفترة' : 'period ends'} <Num>{fmtDate(row.current_period_end)}</Num>
