@@ -121,7 +121,16 @@ final class ConnectionWizardState
          * one that has never run. The rows are still there and still bound; what they are not is a current
          * answer to «what can be selected right now».
          */
-        $everDiscovered = (clone $accounts)->count();
+        /*
+         * ONE DEFINITION — ACCOUNT-COUNTS-001. «Discovered» is what this authorisation can reach NOW, plus
+         * whatever is already selected (so a selection is always part of what it is chosen from). The hub
+         * counted it this way and this method counted every row ever catalogued, so the same connection
+         * read «565 available» in the wizard and «548» on its card.
+         */
+        $activeBindings = ProjectIntegrationBinding::withoutGlobalScopes()->where('is_active', true)->select('external_account_id');
+        $everDiscovered = (clone $accounts)
+            ->where(fn ($q) => $q->whereNull('access_lost_at')->orWhereIn('id', $activeBindings))
+            ->count();
         $blocked = $connection->discovery_blocked_reason !== null;
         $discovered = $blocked ? 0 : $everDiscovered;
 
