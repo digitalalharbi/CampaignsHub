@@ -1,3 +1,24 @@
+# CURRENT STATE — 2026-11-01 (afternoon) — landing chain, VAT option A, usage and credits, tenancy audit
+
+- **Deployed today:** #909 console home (`11b1fbd5`, run 41269705307, health 200); #910 member management (`15e65991`, run 41285384063, health 200).
+- **Restack:** #907 and #910 were squash-merged, so every branch after them carried their pre-squash commits and merging main failed lint. The stack was rebuilt on main with each branch's own commits (`ch-scripts/restack-pricing.sh`, `union_resolve.py` keeps only add-only conflicts and never de-duplicates non-import lines). The full backend suite on the rebuilt top passed (5,914). Old heads are kept as `backup/2026-11-01/*`.
+- **Landing order** (`ch-scripts/chain-pricing.sh` → `chain-vat.sh` → `chain-unify2.sh`; each step resets the local branch to origin, then CI → merge → deploy → health and bundle):
+  - #911 plan features, then evidence, tenant limits, SAR catalogue, seats, add-ons and migration;
+  - then usage-credits, pricing-console (VAT-001 and limits), tenancy-scope and #905 docs;
+  - then vat-console (VAT-002), then tenancy-unify-2.
+- **VAT (Owner: option A):**
+  - launch subscribers keep the totals they agreed, with VAT shown as included;
+  - 2026-11 SAR prices exclude VAT and are charged with VAT added, shown before payment;
+  - invoices equal what was charged;
+  - VAT terms are captured per subscription, and the console changes new sales only (standard 15% only at edition level; customer-dependent treatments are not selectable);
+  - historical invoices are never rewritten — `subscriptions:vat-review` flags them for an accountant.
+- **Usage and credits:** built. Own-key AI usage is never charged. Platform meters charge only once the Super Admin prices them and switches charging on.
+- **Tenancy audit (27 findings):** fixed and tested — limits counted on every create path, client-portal users are not team seats, AI key scope, onboarding and Salla filing, alert scoping, wording. Recorded as decisions: findings 20, 25 and 29–31.
+- **Open matrix rows triaged (51):**
+  - 8 need code: CP-REQ-ONE-001 portal attachments, CAMPAIGN-INTELLIGENCE-HUB parity test, BRANDING-HIERARCHY-001, FORMS-DISPATCH-001, UX-COMPACT-CHARTS-001, TYPOGRAPHY-PRODUCT-POLISH-001, FUNNEL-ANALYTICAL-PATTERN-001, GATE-WK-ENGINE-FAULT-001;
+  - 15 need credentials, 25 need production evidence, 3 need an Owner decision.
+- **Guarantees kept:** no real collection, no renewal run (SUBSCRIPTION_LIFECYCLE_ENABLED off), no bulk plan move, no historical invoice changed.
+
 # CURRENT STATE — 2026-11-01 — Super Admin completed in code; pricing programme phases 1–3; deploys unblocked
 
 - **Deploys were blocked** from 2026-10-31 20:26: contributor PR #877 (Twilio OTP) added uncommented keys to the production env example, so env-contract refused every deploy and Production stayed on 45c08f07. Fix #908 comments them out and adds `EnvContractNewKeyTest`, which fails a PR that adds a new uncommented key.
