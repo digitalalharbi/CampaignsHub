@@ -1,3 +1,34 @@
+# CURRENT STATE — 2026-11-01 (evening) — the launchd lander, the open-row code items, decisions waiting
+
+- **Landing runs without a Claude session.**
+  - A launchd agent (`~/Library/LaunchAgents/com.campaignshub.lander.plist`) runs `ch-scripts/lander/lander.sh` at login and every 10 minutes.
+  - A lock admits one runner. State lives in `lander/queue.tsv`; evidence in `lander/state/evidence/`; blocked reports in `lander/state/blocked-*.log`.
+  - Commands: `status`, `logs`, `show <branch>`, `resume <branch>`.
+  - Verified: a restart resumes without redoing anything; a merged PR is only re-verified, never merged or deployed twice; an outage never blocks a row.
+- **Landed and deployed by the lander:**
+  - #911 `d959b374`;
+  - #912 `0d56e351` (readiness: SUPERADMIN-FEATURES / MEMBERS / CONSOLE-HOME / SUPPORT-ACCESS = DEPLOYED from inside production);
+  - #913 `c4debd76`.
+- **#914 was blocked by the gate** — four real failures. Fixed: comparison rows on ad accounts, no catalogue data printed as features, plan cards fit 390px, the login E2E picks Solo. The fix is cascaded down the whole stack, then the row resumed.
+- **Queue after #914:** seats → add-ons → migration → usage-credits → pricing-console → tenancy-scope → vat-console → tenancy-unify-2 → portal-request-attachments → #905 docs (last, so it can cite every test named in the matrix).
+- **From the end-to-end walk** of console and subscriber (fixed on tenancy-unify-2):
+  - a superseded scheduled move is now cleared on assignment;
+  - the current-plan card shows the price actually paid, with its VAT;
+  - the displayed plan follows the subscription;
+  - the drawer refreshes caps after an add-on change;
+  - add-ons stack on overrides;
+  - edition VAT is limited to standard 15%;
+  - seats are shown to the subscriber and in the console.
+- **Open-row code items:**
+  - built: CP-REQ-ONE-001 (portal attachments), CAMPAIGN-INTELLIGENCE-HUB (parity test + deep-link E2E), GATE-WK-ENGINE-FAULT-001 (connection log);
+  - already done: FUNNEL data-quality.
+- **Owner decisions waiting:**
+  - UX-COMPACT-CHARTS-001 — spark on the inflow card only / a separate chart / none;
+  - BRANDING-HIERARCHY-001 — font source;
+  - FORMS-DISPATCH-001 — TikTok Events and LinkedIn CAPI need their official specs before payload builders (no invented formats);
+  - TYPOGRAPHY-PRODUCT-POLISH-001 is large (1,122 arbitrary sizes) and still to do.
+- **Guarantees kept:** no collection, no renewal run, no bulk move, no existing subscription or invoice changed.
+
 # CURRENT STATE — 2026-11-01 (afternoon) — landing chain, VAT option A, usage and credits, tenancy audit
 
 - **Deployed today:** #909 console home (`11b1fbd5`, run 41269705307, health 200); #910 member management (`15e65991`, run 41285384063, health 200).
