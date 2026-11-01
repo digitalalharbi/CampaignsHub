@@ -29,6 +29,12 @@ use App\Models\User;
  */
 final class ProjectReach
 {
+    /** @var array<string, list<string>|null> one answer per reader for the life of this instance */
+    private array $memo = [];
+
+    /** @var array<string, list<string>> */
+    private array $keys = [];
+
     public function __construct(private readonly MembershipContext $context) {}
 
     /**
@@ -67,6 +73,18 @@ final class ProjectReach
      */
     public function ceilingProjectIds(): ?array
     {
+        $key = 'ceiling:'.$this->context->membership()?->getKey();
+
+        if (! array_key_exists($key, $this->memo)) {
+            $this->memo[$key] = $this->computeCeiling();
+        }
+
+        return $this->memo[$key];
+    }
+
+    /** @return list<string>|null */
+    private function computeCeiling(): ?array
+    {
         $projects = $this->context->projectScopeIds();
         $clients = $this->context->clientScopeIds();
 
@@ -99,7 +117,7 @@ final class ProjectReach
     {
         $ceiling = $this->ceilingProjectIds();
 
-        if ($user->hasPermission('projects.view.all')) {
+        if ($this->holds($user, 'projects.view.all')) {
             return $ceiling;
         }
 
@@ -111,6 +129,42 @@ final class ProjectReach
             ->all();
 
         return $ceiling === null ? $own : array_values(array_intersect($own, $ceiling));
+    }
+
+    /**
+     * The projects whose DATA this reader may be answered about without naming one, or NULL for «all».
+     *
+     * Same as {@see self::idsFor()} except for `settings.manage`: `ProjectAbilities` makes a tenant
+     * administrator the owner of every project in the tenant, so a list that asks «which projects» must
+     * agree with it — only the membership ceiling narrows them.
+     *
+     * @return list<string>|null
+     */
+    public function dataIdsFor(User $user): ?array
+    {
+        $key = 'data:'.$user->getKey().':'.$this->context->membership()?->getKey();
+
+        if (! array_key_exists($key, $this->memo)) {
+            $this->memo[$key] = $this->holds($user, 'settings.manage') ? $this->ceilingProjectIds() : $this->idsFor($user);
+        }
+
+        return $this->memo[$key];
+    }
+
+    /**
+     * `User::hasPermission()` reads the roles from the database on every call; one reader asks this three
+     * times per list, so the keys are read once per instance.
+     */
+    private function holds(User $user, string $permission): bool
+    {
+        if ($user->is_platform_admin) {
+            return true;
+        }
+
+        $key = 'keys:'.$user->getKey().':'.$this->context->tenantId();
+        $this->keys[$key] ??= $user->permissionKeys()->all();
+
+        return in_array($permission, $this->keys[$key], true);
     }
 
     public function canReach(User $user, string $projectId): bool

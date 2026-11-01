@@ -176,7 +176,13 @@ final class LeadDedupVisibilityTest extends TestCase
          * the reader's memberships, one per distinct project in the page. The budget must stay a
          * constant that does not grow with the page size, which is the property being defended.
          */
-        $this->assertLessThan(18, $queries, "listing 16 leads took {$queries} queries");
+        /*
+         * Raised from 18 to 20 by SEC-1: the list is now confined to the projects the reader reaches
+         * (`ProjectReach`), which reads the reader's roles and permissions once (two queries) to know
+         * whether they hold `projects.view.all` / `settings.manage`. It is memoised per request, so it is
+         * a constant — the budget still does not grow with the page, which is what the guard defends.
+         */
+        $this->assertLessThan(20, $queries, "listing 16 leads took {$queries} queries");
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
