@@ -36,6 +36,7 @@ final class SubscriptionInvoiceController extends Controller
     /** GET /api/v1/subscriptions/invoices */
     public function index(Request $request): JsonResponse
     {
+        abort_unless($request->user()?->hasPermission('subscriptions.view'), 403);
         $tenantId = $this->tenants->tenantId();
 
         $invoices = SubscriptionInvoice::query()
@@ -53,6 +54,7 @@ final class SubscriptionInvoiceController extends Controller
     /** GET /api/v1/subscriptions/invoices/{invoice} */
     public function show(Request $request, SubscriptionInvoice $invoice): JsonResponse
     {
+        abort_unless($request->user()?->hasPermission('subscriptions.view'), 403);
         $this->assertBelongsToCaller($invoice);
 
         return ApiResponse::success(['invoice' => $this->present($invoice->load('lines'))], 'Subscription invoice.');
@@ -113,6 +115,7 @@ final class SubscriptionInvoiceController extends Controller
      */
     public function download(Request $request, SubscriptionInvoice $invoice): Response
     {
+        abort_unless($request->user()?->hasPermission('subscriptions.view'), 403);
         $this->assertBelongsToCaller($invoice);
 
         return response($this->asText($invoice->load('lines')), 200, [

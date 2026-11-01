@@ -14,6 +14,8 @@ use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Campaigns\Support\Relevance;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -88,8 +90,19 @@ final class CreativeRows
      * shape of leak that shows up in a total, a chart axis or a page count even when the list looks
      * right.
      */
-    public function applyReach(mixed $query, ?User $user): void
+    public function applyReach(mixed $query, ?User $user, string $capability = ProjectCapability::CAMPAIGNS_VIEW): void
     {
+        /*
+         * SEC-CLUSTER-2 — and the PROJECT ceiling, which the client ceiling below cannot express.
+         *
+         * A client scope says «this client»; it does not say which of that client's projects a person may
+         * open. A member of project P1 asking the tenant-level library for `project_ids[]=P2` received P2's
+         * creatives, spend and group data although `/projects/P2/creatives` refused them. The set comes from
+         * `ProjectAbilities` — the same answer the project routes use — and merge/split ask for the stronger
+         * `campaigns.manage`, exactly as the project route does.
+         */
+        app(ReachableProjects::class)->constrain($query, $user, 'project_id', $capability);
+
         $reach = app(ClientScopeResolver::class)->reachableClientIds($user);
 
         if ($reach === null) {

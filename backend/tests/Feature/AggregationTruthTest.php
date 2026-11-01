@@ -348,6 +348,8 @@ final class AggregationTruthTest extends TestCase
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
+            // SEC-CLUSTER-2 — a run carries the project it was made for, and coverage reads only the reader's projects.
+            'project_id' => $this->project->id,
             'provider' => $provider,
             'status' => $status,
             'window_start' => $from,

@@ -179,7 +179,7 @@ final class AccountMetricsSyncer
             $connection->forceFill(['insights_denied_at' => null])->save();
         }
 
-        [$upserted, $skipped] = $this->ingest($account, $result->records);
+        [$upserted, $skipped, $misfiled] = $this->ingest($account, $result->records, (string) $run->project_id);
 
         /*
          * REACH-PERIOD-001 — a stored window reach that this sync may have changed is asked for again.
@@ -379,14 +379,27 @@ final class AccountMetricsSyncer
         }
 
         if ($skipped > 0) {
+            /*
+             * SEC-CLUSTER-2 — rows for a campaign still filed under ANOTHER project are not stored.
+             *
+             * The account is bound to this run's project, but the campaign row says a different one
+             * (the structure sync that re-files it has not run, or failed). Stamping the row with the
+             * campaign's project would put this account's data into the project it left; stamping it
+             * with the binding's would pair it with a campaign filed elsewhere. Neither: it is
+             * counted here and lands on the first sync after the structure sync re-files the campaign.
+             */
+            $note = $misfiled > 0
+                ? " {$misfiled} of them named a campaign still filed under another project (the account was re-bound and its structure has not been re-filed yet)."
+                : '';
+
             return $this->finish(
                 $run,
                 SyncRunStatus::PartialMapping,
                 $upserted,
-                "{$skipped} of {$parsed} row(s) named a campaign that has not been discovered yet, so they were not stored.",
+                "{$skipped} of {$parsed} row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.{$note}",
                 $account,
                 $counts,
-                'unmapped_rows',
+                $misfiled > 0 ? 'campaign_not_refiled' : 'unmapped_rows',
             );
         }
 
@@ -612,6 +625,9 @@ final class AccountMetricsSyncer
             ];
         }
 
+        // SEC-CLUSTER-2 — only entities filed under the project the account is bound to are written to.
+        $knownSquads = $this->filedUnder($knownSquads, (string) $run->project_id);
+
         $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
@@ -653,6 +669,8 @@ final class AccountMetricsSyncer
             ];
         }
 
+        $knownAds = $this->filedUnder($knownAds, (string) $run->project_id);
+
         $adResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
         );
@@ -690,6 +708,20 @@ final class AccountMetricsSyncer
         ])->save();
 
         return $squadFailure ?? $adFailure;
+    }
+
+    /**
+     * SEC-CLUSTER-2 — drop discovered entities still filed under a project other than the account's binding.
+     *
+     * Their rows would otherwise be stamped with the project the account left. They are skipped (and
+     * counted as skipped by the upsert), and land once the structure sync re-files them.
+     *
+     * @param  array<string,array{id:string,project_id:string,tenant_id:string,campaign_id:?string,ad_set_id:?string}>  $known
+     * @return array<string,array{id:string,project_id:string,tenant_id:string,campaign_id:?string,ad_set_id:?string}>
+     */
+    private function filedUnder(array $known, string $projectId): array
+    {
+        return array_filter($known, static fn (array $e): bool => $e['project_id'] === $projectId);
     }
 
     /**
@@ -757,19 +789,19 @@ final class AccountMetricsSyncer
      * Map provider insight rows onto normalized metrics.
      *
      * @param  array<int,array<string,mixed>>  $records
-     * @return array{0:int,1:int} [upserted metric rows, skipped records]
+     * @return array{0:int,1:int,2:int} [upserted metric rows, skipped records, of which: campaign still filed under another project]
      */
-    private function ingest(ExternalAccount $account, array $records): array
+    private function ingest(ExternalAccount $account, array $records, string $projectId): array
     {
         // Mapping lives in its own class (FX-001): this method is pipeline plumbing, and what a row
         // MEANS — including which currency its money is in — is a separate question with its own tests.
-        [$metrics, $skipped] = $this->normaliser->normalise($account, $records, self::carriedKeys());
+        [$metrics, $skipped, $misfiled] = $this->normaliser->normalise($account, $records, self::carriedKeys(), $projectId);
 
         if ($metrics !== []) {
             $this->upsert->handle($metrics);
         }
 
-        return [count($metrics), $skipped];
+        return [count($metrics), $skipped, $misfiled];
     }
 
     /**

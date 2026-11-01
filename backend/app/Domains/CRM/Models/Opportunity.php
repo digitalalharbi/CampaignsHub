@@ -39,6 +39,12 @@ final class Opportunity extends Model
         return $this->belongsTo(PipelineStage::class, 'stage_id');
     }
 
+    /** @return BelongsTo<Lead, $this> */
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);

@@ -12,6 +12,7 @@ use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Requests\Services\RequestConversionService;
 use App\Domains\Requests\Services\RequestNotifier;
+use App\Domains\Requests\Services\RequestReach;
 use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Services\RequestStatusMachine;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -35,6 +36,7 @@ final class RequestActionsController
         private readonly RequestSla $sla,
         private readonly RequestStatusMachine $machine,
         private readonly ClientNotifier $clientNotifier,
+        private readonly RequestReach $reach,
     ) {}
 
     /** PATCH /app/requests/{request}/assign */
@@ -175,6 +177,9 @@ final class RequestActionsController
             'idempotency_key' => ['nullable', 'string', 'max:100'],
         ]);
 
+        // Filing under an existing client puts the request in that client's portal — the actor must reach it.
+        abort_if(! empty($data['client_id']) && ! $this->reach->canFileUnder($request->user(), (string) $data['client_id']), 403);
+
         $conversion = app(RequestConversionService::class)->convert($req, $data, $request->user());
 
         return response()->json(['data' => [
@@ -235,7 +240,10 @@ final class RequestActionsController
     private function find(string $id): ExternalRequest
     {
         /** @var ExternalRequest */
-        return ExternalRequest::query()->where('tenant_id', $this->tenant->tenantId())->with(['type', 'status'])->findOrFail($id);
+        return $this->reach->constrain(
+            ExternalRequest::query()->where('external_requests.tenant_id', $this->tenant->tenantId()),
+            request()->user(),
+        )->with(['type', 'status'])->findOrFail($id);
     }
 
     private function event(ExternalRequest $req, string $type, ?string $from = null, ?string $to = null, bool $clientVisible = false, ?string $message = null): void

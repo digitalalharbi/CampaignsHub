@@ -9,9 +9,11 @@ use App\Domains\Notifications\Services\NotificationAudience;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -59,6 +61,7 @@ final class NotificationRecipientController extends Controller
         private readonly NotificationAudience $audience,
         private readonly DigestScope $scope,
         private readonly TenantContext $tenants,
+        private readonly ClientScopeResolver $ceiling,
     ) {}
 
     /** GET — every arrangement in this workspace, each with whether it is actually doing anything. */
@@ -67,8 +70,7 @@ final class NotificationRecipientController extends Controller
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $tenantId = (string) $this->tenants->tenantId();
 
-        $rows = DB::table('notification_recipients')
-            ->where('tenant_id', $tenantId)
+        $rows = $this->visibleRows($request->user(), $tenantId)
             ->orderBy('created_at')
             ->get();
 
@@ -176,6 +178,10 @@ final class NotificationRecipientController extends Controller
         $projectId = $data['project_id'] ?? null;
         $mine = $this->scope->projectIdsFor($request->user(), $tenantId);
 
+        // A blanket arrangement («every project of this person») spans projects the actor may not reach: only an
+        // unrestricted actor makes one.
+        abort_if($projectId === null && $this->ceiling->reachableClientIds($request->user()) !== null, 403, 'Name one of your projects.');
+
         // The actor's own reach. A scoped operator must not learn a project exists by being told they
         // cannot use it — but 403 here is about the project they NAMED, which they already knew.
         abort_if($projectId !== null && ! in_array($projectId, $mine, true), 403, 'That project is outside your access.');
@@ -212,10 +218,29 @@ final class NotificationRecipientController extends Controller
 
         // Bounded by tenant in the WHERE, not by a lookup and a check — an id from another workspace
         // finds nothing rather than being found and then refused.
-        DB::table('notification_recipients')
-            ->where('tenant_id', $tenantId)->where('id', $recipient)->delete();
+        $this->visibleRows($request->user(), $tenantId)->where('id', $recipient)->delete();
 
         return $this->index($request);
+    }
+
+    /**
+     * The arrangements this actor may see and remove: every one for an unrestricted actor, otherwise those on a
+     * project they reach, and their own blanket rows. A row on a sibling client's project is not theirs to list
+     * or delete, and an id outside this set finds nothing, exactly like an id from another workspace.
+     *
+     * @return Builder
+     */
+    private function visibleRows(User $actor, string $tenantId)
+    {
+        $query = DB::table('notification_recipients')->where('tenant_id', $tenantId);
+
+        if ($this->ceiling->reachableClientIds($actor) === null) {
+            return $query;
+        }
+
+        $mine = $this->scope->projectIdsFor($actor, $tenantId);
+
+        return $query->where(fn ($q) => $q->whereIn('project_id', $mine)->orWhere(fn ($own) => $own->whereNull('project_id')->where('created_by', $actor->getKey())));
     }
 
     /**

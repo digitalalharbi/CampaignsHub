@@ -6,6 +6,7 @@ namespace App\Domains\CRM\Http\Requests;
 
 use App\Domains\CRM\Enums\LeadSource;
 use App\Domains\CRM\Enums\LeadStatus;
+use App\Domains\CRM\Rules\LeadOwnerRule;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Rules\PhoneNumberRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -32,7 +33,7 @@ final class UpdateLeadRequest extends FormRequest
             'notes' => ['nullable', 'string'],
             'company_id' => ['nullable', 'uuid', Rule::exists('companies', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'contact_id' => ['nullable', 'uuid', Rule::exists('contacts', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
-            'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'owner_id' => ['nullable', 'integer', new LeadOwnerRule($this->route('lead')?->project_id === null ? null : (string) $this->route('lead')->project_id)],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['string', 'max:40'],
         ];

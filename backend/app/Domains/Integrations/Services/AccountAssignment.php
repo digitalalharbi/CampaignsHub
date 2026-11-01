@@ -54,6 +54,42 @@ final class AccountAssignment
     }
 
     /**
+     * SEC-CLUSTER-2 — the ACTIVE binding that stops this account being bound to `$projectId`, or null.
+     *
+     * RULE (decided here, once): a real provider account — `(tenant, provider, external_id,
+     * account_type)` — has at most ONE active project binding, whichever `external_accounts` row
+     * represents it. The check used to compare the row's own uuid, so the same real account
+     * discovered twice (authorised under two clients' connections, under a tenant-level connection,
+     * or under the Live and SaaS Meta apps) was a different row each time, each passed
+     * `mayAssign()` for its own client, and the one advertiser fed two projects — a client seeing
+     * another client's spend. There is no recorded, explicit sharing in this product (ORCH-100 §I),
+     * so none is allowed: detach it where it is first, then bind it.
+     *
+     * A twin the Meta app move retired (`superseded`) never syncs and is not a holder.
+     * Callers run this under the tenant row lock, so two concurrent binds serialise.
+     */
+    public function activeBindingElsewhere(ExternalAccount $account, string $projectId): ?ProjectIntegrationBinding
+    {
+        $twins = ExternalAccount::withoutGlobalScopes()
+            ->where('tenant_id', $account->tenant_id)
+            ->where('provider', $account->provider)
+            ->where('external_id', $account->external_id)
+            ->where('account_type', $account->account_type)
+            ->where('status', '!=', 'superseded')
+            ->select('id');
+
+        return ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->where('project_id', '!=', $projectId)
+            ->where(fn ($q) => $q
+                ->where('external_account_id', $account->getKey())
+                ->orWhereIn('external_account_id', $twins))
+            ->orderByDesc('is_primary')
+            ->orderBy('created_at')
+            ->first();
+    }
+
+    /**
      * Whether this account may be assigned to this project.
      *
      * Two fences, and they answer different questions:

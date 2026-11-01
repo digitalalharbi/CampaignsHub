@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Actions;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Support\GroupedUpsert;
 use Illuminate\Support\Carbon;
@@ -101,9 +102,22 @@ final class UpsertCreativeDailyMetrics
             array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows),
         )));
 
+        /*
+         * SEC-CLUSTER-2 — and scoped to the project the account is bound to NOW.
+         *
+         * `external_creatives` is keyed by project, so when an account moves from A to B the structure
+         * sync adds a second row for each creative id (B's) beside A's. Without this filter that pair
+         * read as «ambiguous» and B never received a figure; with it, only the row under the active
+         * binding is a candidate, so the project the account left is not written to either. Ambiguity
+         * INSIDE one project still fails closed, below. No binding (a direct caller; the sync refuses an
+         * unassigned account before it gets here) keeps the account-scoped behaviour.
+         */
+        $boundProject = app(AccountAssignment::class)->projectIdFor($account);
+
         $scoped = ExternalCreative::withoutGlobalScopes()
             ->where('provider', $account->provider)
             ->where('tenant_id', $account->tenant_id)
+            ->when($boundProject !== null, fn ($q) => $q->where('project_id', $boundProject))
             ->whereIn('external_creative_id', $ids)
             ->where(fn ($q) => $q
                 ->where('external_account_id', $account->getKey())

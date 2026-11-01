@@ -13,6 +13,7 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Support\AdPlatforms;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -107,7 +108,12 @@ final class StoreFunnelService
         return round((float) $orders->sum(fn (CommerceOrder $o) => (float) $o->refunded_total), 2);
     }
 
-    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to): array
+    /**
+     * @param  array{account_ids?: list<string>, campaign_ids?: list<string>}|null  $ceiling  a public link's grant (SECURITY CLUSTER 5):
+     *                                                                                        the AD side — spend, clicks, per-platform spend, per-campaign sales — is read for these
+     *                                                                                        accounts and campaigns only. The store's own ledger is the client's and is not narrowed.
+     */
+    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, ?array $ceiling = null): array
     {
         /*
          * The window covers whole DAYS, whoever asked and whatever time they put on it.
@@ -147,7 +153,7 @@ final class StoreFunnelService
          * said ABOUT them was wrong, which is the harder kind to spot.
          */
         $stores = $this->projectStores->forProject($tenantId, $projectId);
-        $pendingStores = $stores->isEmpty() ? $this->projectStores->unsynced($tenantId) : collect();
+        $pendingStores = $stores->isEmpty() ? $this->projectStores->unsyncedFor($tenantId, $projectId) : collect();
 
         /*
          * REPORT-OBJECTIVE-005 — one sale, counted once.
@@ -162,7 +168,7 @@ final class StoreFunnelService
         $orders = $loaded['orders'];
 
         $store = $this->storeMeasurements($tenantId, $projectId, $orders, $stores, $from, $to);
-        $ads = $this->adMeasurements($projectId, $window['from_date'], $window['to_date']);
+        $ads = $this->adMeasurements($projectId, $window['from_date'], $window['to_date'], $ceiling);
 
         $stages = [];
 
@@ -207,8 +213,8 @@ final class StoreFunnelService
             ],
             'derived' => $this->derived($ads, $store),
             'comparisons' => [
-                'platforms' => $this->byPlatform($projectId, $orders, $window['from_date'], $window['to_date']),
-                'campaigns' => $this->byCampaign($orders),
+                'platforms' => $this->byPlatform($projectId, $orders, $window['from_date'], $window['to_date'], $ceiling),
+                'campaigns' => $this->byCampaign($orders, $ceiling),
                 'products' => $this->byProduct($orders),
             ],
             'coverage' => $coverage,
@@ -235,15 +241,20 @@ final class StoreFunnelService
          * `measured` whenever such a store is present. Reporting it as complete would show a checkout
          * rate close to a hundred percent for a merchant losing carts every day.
          */
-        $abandoned = CommerceAbandonedCart::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereBetween('abandoned_at', [$from, $to])
-            ->count();
+        // SEC-3 — carts and customers obey the same selected-store rule as the orders (BoundAccountVisibility).
+        $abandoned = BoundAccountVisibility::apply(
+            CommerceAbandonedCart::withoutGlobalScopes()
+                ->where('project_id', $projectId)
+                ->whereBetween('abandoned_at', [$from, $to]),
+            'commerce_abandoned_carts',
+        )->count();
 
-        $newCustomers = CommerceCustomer::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereBetween('first_seen_at', [$from, $to])
-            ->count();
+        $newCustomers = BoundAccountVisibility::apply(
+            CommerceCustomer::withoutGlobalScopes()
+                ->where('project_id', $projectId)
+                ->whereBetween('first_seen_at', [$from, $to]),
+            'commerce_customers',
+        )->count();
 
         return [
             'has_store' => $stores->isNotEmpty(),
@@ -291,15 +302,35 @@ final class StoreFunnelService
     }
 
     /**
+     * Bound the ad rows to a public link's accounts and campaigns. No ceiling (the operator's own reading) narrows nothing.
+     *
+     * @param  Builder<DailyMetric>  $query
+     * @param  array{account_ids?: list<string>, campaign_ids?: list<string>}|null  $ceiling
+     */
+    private function withinCeiling($query, ?array $ceiling): void
+    {
+        if ($ceiling === null) {
+            return;
+        }
+        if (($accounts = array_values(array_filter((array) ($ceiling['account_ids'] ?? [])))) !== []) {
+            $query->whereIn('daily_metrics.external_account_id', $accounts);
+        }
+        if (($campaigns = array_values(array_filter((array) ($ceiling['campaign_ids'] ?? [])))) !== []) {
+            $query->whereIn('daily_metrics.unified_campaign_id', $campaigns);
+        }
+    }
+
+    /**
      * What the AD PLATFORMS reported, pixel and all.
      *
      * @return array<string,float>
      */
-    private function adMeasurements(string $projectId, string $fromDate, string $toDate): array
+    private function adMeasurements(string $projectId, string $fromDate, string $toDate, ?array $ceiling = null): array
     {
         $rows = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->tap(fn ($q) => $this->withinCeiling($q, $ceiling))
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->selectRaw('metric_key, SUM(value) AS total')
             ->groupBy('metric_key')
@@ -506,11 +537,12 @@ final class StoreFunnelService
      * @param  Collection<int,CommerceOrder>  $orders
      * @return list<array<string,mixed>>
      */
-    private function byPlatform(string $projectId, Collection $orders, string $fromDate, string $toDate): array
+    private function byPlatform(string $projectId, Collection $orders, string $fromDate, string $toDate, ?array $ceiling = null): array
     {
         $spendByProvider = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->tap(fn ($q) => $this->withinCeiling($q, $ceiling))
             ->where('metric_key', 'spend')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->selectRaw('provider, SUM(value) AS total')
@@ -558,10 +590,13 @@ final class StoreFunnelService
      * @param  Collection<int,CommerceOrder>  $orders
      * @return list<array<string,mixed>>
      */
-    private function byCampaign(Collection $orders): array
+    private function byCampaign(Collection $orders, ?array $ceiling = null): array
     {
+        $campaigns = array_values(array_filter((array) ($ceiling['campaign_ids'] ?? [])));
+
         return $orders
             ->filter(fn (CommerceOrder $o) => $o->cancelled_at === null && $o->external_campaign_id !== null)
+            ->filter(fn (CommerceOrder $o) => $campaigns === [] || in_array((string) $o->unified_campaign_id, $campaigns, true))
             ->groupBy('external_campaign_id')
             ->map(fn (Collection $group) => [
                 'external_campaign_id' => (string) $group->first()->external_campaign_id,

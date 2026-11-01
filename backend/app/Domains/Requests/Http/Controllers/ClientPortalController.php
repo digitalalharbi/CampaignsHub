@@ -1455,7 +1455,9 @@ final class ClientPortalController
         $session->forceFill([
             'tenant_id' => $membership->tenant_id,
             'contact_email' => $user->email,
-            'contact_phone' => $user->phone,
+            // Only a number the person PROVED they hold. The profile saves any number and merely clears its proof, so an
+            // unverified one would match another contact's unconverted requests by their phone and open their thread.
+            'contact_phone' => $user->phone_verified_at !== null ? $user->phone : null,
             'expires_at' => null,
             'revoked_at' => null,
         ]);

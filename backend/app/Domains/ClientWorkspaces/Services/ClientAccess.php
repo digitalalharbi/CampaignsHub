@@ -78,6 +78,48 @@ final class ClientAccess
             ->exists();
     }
 
+    /**
+     * The projects of this client the user is limited to, or null when nothing limits them there.
+     *
+     * A roster member (`client_workspace_user`) can be granted a client with a project allow-list. The list was
+     * stored and shown but nothing read it, so a member limited to one project read the whole client. It binds
+     * only when the roster is what grants the access: a holder of `clients.view_all`, a membership that names
+     * the client, and the client's owner are reached by other, wider grants and are not narrowed by a row.
+     *
+     * @return list<string>|null
+     */
+    public function projectRestriction(User $user, ClientWorkspace $client): ?array
+    {
+        if ($this->canViewAll($user)) {
+            return null;
+        }
+
+        $scoped = $this->scopes->reachableClientIds($user);
+        if ($scoped !== null && $scoped !== []) {
+            return null;
+        }
+
+        if ($client->owner_id !== null && (int) $client->owner_id === (int) $user->id) {
+            return null;
+        }
+
+        $row = DB::table('client_workspace_user')
+            ->where('client_workspace_id', $client->id)->where('user_id', $user->id)->first();
+        if ($row === null || $row->project_ids === null) {
+            return null;
+        }
+
+        $ids = json_decode((string) $row->project_ids, true);
+
+        // Present but unreadable is a ceiling of NOTHING, the same answer `projectCeilings()` gives; a
+        // well-formed empty list is «no restriction».
+        if (! is_array($ids)) {
+            return [];
+        }
+
+        return $ids !== [] ? array_values(array_map('strval', $ids)) : null;
+    }
+
     /** Assert the user may SEE this client at all (membership-gated). Aborts 403 otherwise. */
     public function assertView(User $user, ClientWorkspace $client): void
     {
@@ -119,5 +161,56 @@ final class ClientAccess
         return $query->where(function (Builder $q) use ($user, $memberIds): void {
             $q->where('owner_id', $user->id)->orWhereIn('id', $memberIds);
         });
+    }
+
+    /**
+     * SEC-3 — the projects of each client this user's TEAM ROW confines them to.
+     *
+     * `client_workspace_user.project_ids` is saved (and validated against the client) by ClientTeamService as a
+     * restriction, but the readers only asked whether a row exists, so a member confined to P1 read P2's spend,
+     * budget and campaigns. client id => the project ids they may read; a client absent from the map is
+     * unrestricted for this user. A holder of `clients.view_all` and the client's owner are never narrowed by it,
+     * and a value that is present but unreadable (malformed JSON, not a list) means NO project, never all.
+     *
+     * @return array<string, list<string>>
+     */
+    public function projectCeilings(User $user): array
+    {
+        if ($this->canViewAll($user)) {
+            return [];
+        }
+
+        $owned = DB::table('client_workspaces')->where('owner_id', $user->id)->pluck('id')->map(fn ($id): string => (string) $id)->all();
+        $ceilings = [];
+
+        foreach (DB::table('client_workspace_user')->where('user_id', $user->id)->whereNotNull('project_ids')->get(['client_workspace_id', 'project_ids']) as $row) {
+            $client = (string) $row->client_workspace_id;
+            if (in_array($client, $owned, true)) {
+                continue;
+            }
+
+            $decoded = is_string($row->project_ids) ? json_decode($row->project_ids, true) : $row->project_ids;
+            $list = is_array($decoded) ? array_values(array_filter(array_map(static fn ($v): string => is_scalar($v) ? (string) $v : '', $decoded), static fn (string $v): bool => $v !== '')) : [];
+
+            // A well-formed EMPTY list is «no restriction» (ClientTeamService::updateAccess stores it as NULL);
+            // anything present but unreadable is a ceiling of nothing.
+            if (is_array($decoded) && $decoded === []) {
+                continue;
+            }
+
+            $ceilings[$client] = $list;
+        }
+
+        return $ceilings;
+    }
+
+    /**
+     * Whether a project is inside the user's team-row ceiling for its client.
+     *
+     * @param  array<string, list<string>>  $ceilings  from {@see projectCeilings()}
+     */
+    public function projectAllowed(array $ceilings, string $clientId, string $projectId): bool
+    {
+        return ! array_key_exists($clientId, $ceilings) || in_array($projectId, $ceilings[$clientId], true);
     }
 }

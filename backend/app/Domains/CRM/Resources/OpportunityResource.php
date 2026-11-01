@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\CRM\Resources;
 
+use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Opportunity;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -14,9 +15,19 @@ final class OpportunityResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
+        /*
+         * SEC-1 — `ConvertLead` names the opportunity after the lead, which carried the lead's identity past
+         * `LeadVisibility`. A reader who may not see that lead's identity gets no name that equals it.
+         */
+        $lead = $this->relationLoaded('lead') ? $this->lead : null;
+        $withheld = $lead !== null
+            && $lead->name === $this->name
+            && ! app(LeadVisibility::class)->maySeeIdentity($request->user(), $lead);
+
         return [
             'id' => $this->id,
-            'name' => $this->name,
+            'identity_withheld' => $withheld,
+            'name' => $withheld ? null : $this->name,
             'amount' => (float) $this->amount,
             'currency' => $this->currency,
             'probability' => $this->probability,

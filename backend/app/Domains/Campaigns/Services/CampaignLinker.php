@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -96,6 +97,8 @@ final class CampaignLinker
     {
         return ExternalCampaign::query()
             ->whereNull('unified_campaign_id')
+            // SEC-CLUSTER-2 — never suggest a campaign of an account this project no longer has.
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
             ->get()
             ->map(function (ExternalCampaign $ec) use ($unified): array {
                 similar_text(

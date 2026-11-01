@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Touchpoints\OrderJourneys;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -70,12 +71,15 @@ final class AttributionModelComparison
         $customerIds = $live->pluck('commerce_customer_id')->filter()->unique()->values()->all();
         $history = $customerIds === []
             ? collect()
-            : CommerceOrder::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('project_id', $projectId)
-                ->whereIn('commerce_customer_id', $customerIds)
-                ->whereNull('cancelled_at')
-                ->where('placed_at', '<=', $to)
+            : BoundAccountVisibility::apply(
+                CommerceOrder::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->where('project_id', $projectId)
+                    ->whereIn('commerce_customer_id', $customerIds)
+                    ->whereNull('cancelled_at')
+                    ->where('placed_at', '<=', $to),
+                'commerce_orders',
+            )
                 ->orderBy('placed_at')
                 ->orderBy('id')
                 ->get(['id', 'external_id', 'external_account_id', 'commerce_customer_id', 'external_campaign_id', 'attribution_method', 'click_id_provider', 'utm_source', 'coupon_code', 'placed_at']);
