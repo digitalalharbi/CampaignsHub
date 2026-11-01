@@ -10,6 +10,7 @@ use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * RUNTIME-100 §5 §32 — cataloguing what an authorisation can reach, and keeping that catalogue true.
@@ -108,46 +109,88 @@ final class AccountDiscovery
         $created = 0;
         $named = 0;
         $seen = [];
+        $now = Carbon::now();
 
+        /*
+         * PERF-INTEGRATIONS-001 — the connection's rows are read ONCE, not once per discovered account.
+         *
+         * This asked for each account, then upserted it: a select and an update for every one of the 565
+         * accounts of a large organisation, inside the OAuth callback request, and an update even when
+         * nothing about the account had changed. Now one read, one bulk insert per 200 new accounts, one
+         * bulk touch for the unchanged, and a row of its own only for an account whose name, currency,
+         * timezone, status or organisation actually changed.
+         */
+        $existing = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('account_type', 'ad_account')
+            ->get()
+            ->keyBy(fn (ExternalAccount $row): string => (string) $row->external_id);
+
+        $discovered = [];
         foreach ($accounts as $account) {
-            $seen[] = (string) $account['external_id'];
+            $discovered[(string) $account['external_id']] = $account;
+        }
 
-            $existing = ExternalAccount::withoutGlobalScopes()
-                ->where('provider_connection_id', $connection->getKey())
-                ->where('external_id', $account['external_id'])
-                ->where('account_type', 'ad_account')
-                ->first();
+        $inserts = [];
+        $unchanged = [];
 
-            if ($existing === null) {
+        foreach ($discovered as $externalId => $account) {
+            $seen[] = $externalId;
+
+            $fields = [
+                'tenant_id' => $connection->tenant_id,
+                'client_workspace_id' => $connection->client_workspace_id,
+                'provider' => $connection->provider,
+                'name' => $account['name'],
+                'currency' => $account['currency'],
+                'timezone' => $account['timezone'],
+                'status' => $account['status'],
+                'parent_external_id' => $account['parent_external_id'] ?? null,
+                'parent_name' => $account['parent_name'] ?? null,
+            ];
+
+            $row = $existing->get($externalId);
+
+            if ($row === null) {
                 $created++;
-            } elseif ($existing->parent_name === null && ($account['parent_name'] ?? null) !== null) {
+                $inserts[] = $fields + [
+                    'id' => (string) Str::uuid(),
+                    'provider_connection_id' => $connection->getKey(),
+                    'external_id' => $externalId,
+                    'account_type' => 'ad_account',
+                    'discovered_at' => $now,
+                    'access_lost_at' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                continue;
+            }
+
+            if ($row->parent_name === null && ($account['parent_name'] ?? null) !== null) {
                 // Counted so the interface can say «12 organisation names filled in» rather than
                 // «refreshed», which tells somebody staring at UUIDs nothing about whether it worked.
                 $named++;
             }
 
-            ExternalAccount::withoutGlobalScopes()->updateOrCreate(
-                [
-                    'provider_connection_id' => $connection->getKey(),
-                    'external_id' => $account['external_id'],
-                    'account_type' => 'ad_account',
-                ],
-                [
-                    'tenant_id' => $connection->tenant_id,
-                    'client_workspace_id' => $connection->client_workspace_id,
-                    'provider' => $connection->provider,
-                    'name' => $account['name'],
-                    'currency' => $account['currency'],
-                    'timezone' => $account['timezone'],
-                    'status' => $account['status'],
-                    'parent_external_id' => $account['parent_external_id'] ?? null,
-                    'parent_name' => $account['parent_name'] ?? null,
-                    'discovered_at' => Carbon::now(),
-                    // Reachable again. An account that came back is no longer lost, whatever it was
-                    // last time — this is the only place that clears the mark.
-                    'access_lost_at' => null,
-                ],
-            );
+            $row->fill($fields);
+
+            if ($row->isDirty()) {
+                // Reachable again. An account that came back is no longer lost, whatever it was
+                // last time — this is the only place that clears the mark.
+                $row->forceFill(['discovered_at' => $now, 'access_lost_at' => null])->save();
+            } else {
+                $unchanged[] = (string) $row->getKey();
+            }
+        }
+
+        foreach (array_chunk($inserts, 200) as $chunk) {
+            ExternalAccount::withoutGlobalScopes()->insert($chunk);
+        }
+
+        foreach (array_chunk($unchanged, 500) as $chunk) {
+            ExternalAccount::withoutGlobalScopes()->whereIn('id', $chunk)
+                ->update(['discovered_at' => $now, 'access_lost_at' => null, 'updated_at' => $now]);
         }
 
         /*
