@@ -277,10 +277,15 @@ final class TeamController extends Controller
         return self::inTenant($this->tenantId())->where('uuid', $uuid)->with('roles:id,name,slug')->firstOrFail();
     }
 
-    /** Whether the person holds an active membership in any OTHER tenant. */
+    /**
+     * Whether the person holds a membership in any OTHER tenant — of ANY status.
+     *
+     * A membership that tenant B has suspended is still B's record of that person: deleting the account here
+     * would take it with it. Only «none at all» makes the account this team's to delete.
+     */
     private function belongsElsewhere(User $target): bool
     {
-        return DB::table('memberships')->where('user_id', $target->id)->where('tenant_id', '!=', $this->tenantId())->where('status', 'active')->exists();
+        return DB::table('memberships')->where('user_id', $target->id)->where('tenant_id', '!=', $this->tenantId())->exists();
     }
 
     private function ownerCount(): int
