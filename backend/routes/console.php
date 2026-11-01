@@ -222,3 +222,6 @@ Schedule::command('agents:run-routines weekly_report')->cron('0 14 * * 4')->time
  * frequency and timezone). Changes go through the approval gateway; nothing here bypasses it.
  */
 Schedule::command('automation:evaluate')->everyFiveMinutes()->withoutOverlapping();
+
+// PERF-RECOVERY-001 — logs an error when a route's p95 or a queue backlog passes its limit.
+Schedule::command('ops:perf-check')->everyFiveMinutes()->withoutOverlapping();

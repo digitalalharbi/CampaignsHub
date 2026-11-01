@@ -24,6 +24,7 @@
              of test cases the process has built; this is headroom, not a licence for a test to hold more. -->
         <ini name="memory_limit" value="1024M"/>
         <env name="APP_ENV" value="testing"/>
+        <env name="PERF_RECORDING" value="false"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

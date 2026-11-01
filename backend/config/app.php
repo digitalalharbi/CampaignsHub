@@ -19,6 +19,9 @@ return [
     |
     */
 
+    // PERF-RECOVERY-001 — hourly request and slow-query counters in Redis. Off in the test suite.
+    'perf_recording' => (bool) env('PERF_RECORDING', true),
+
     'name' => env('APP_NAME', 'Laravel'),
 
     /*

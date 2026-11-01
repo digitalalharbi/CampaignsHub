@@ -1,0 +1,41 @@
+name: Production Performance
+
+# PERF-RECOVERY-001 — asks Production what it is slow at. Manual only. Reads the server's load and
+# `ops:perf-snapshot`, which writes nothing, calls no provider and prints no customer value.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: 'Hours of request and query counters to read'
+        required: false
+        default: '24'
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Snapshot on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          HOURS: ${{ inputs.hours }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: HOURS
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
+            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
+            echo "── app"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
