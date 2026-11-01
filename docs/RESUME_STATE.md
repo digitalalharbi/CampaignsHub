@@ -22,11 +22,11 @@
 - **Open-row code items:**
   - built: CP-REQ-ONE-001 (portal attachments), CAMPAIGN-INTELLIGENCE-HUB (parity test + deep-link E2E), GATE-WK-ENGINE-FAULT-001 (connection log);
   - already done: FUNNEL data-quality.
-- **Owner decisions waiting:**
-  - UX-COMPACT-CHARTS-001 — spark on the inflow card only / a separate chart / none;
-  - BRANDING-HIERARCHY-001 — font source;
-  - FORMS-DISPATCH-001 — TikTok Events and LinkedIn CAPI need their official specs before payload builders (no invented formats);
-  - TYPOGRAPHY-PRODUCT-POLISH-001 is large (1,122 arbitrary sizes) and still to do.
+- **Owner decisions (2026-11-01), acted on:**
+  - sparklines: a separate small strip below the cards — built on requests and leads;
+  - branding: system fonts kept, contrast guard and agency accent built; report-email identity still open;
+  - forms: TikTok Events and LinkedIn Conversions built from the current official references; live sending blocked on each customer's credentials; Google Ads and X not built;
+  - typography: a ratchet at 1,135 arbitrary sizes, converted surface by surface from here.
 - **Guarantees kept:** no collection, no renewal run, no bulk move, no existing subscription or invoice changed.
 
 # CURRENT STATE — 2026-11-01 (afternoon) — landing chain, VAT option A, usage and credits, tenancy audit
