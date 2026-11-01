@@ -106,7 +106,7 @@ function PlanModules({ ar }: { ar: boolean }) {
                     {data.data.plans.map((p) => (
                       <th key={p.id} className="px-3 py-2 text-start font-semibold">
                         {(ar ? p.name_ar : null) ?? p.name}
-                        <span className="tnum block font-normal" dir="ltr">{p.workspaces} {ar ? 'مساحة' : 'workspaces'}</span>
+                        <span className="tnum block font-normal">{p.workspaces} {ar ? 'مساحة' : 'workspaces'}</span>
                       </th>
                     ))}
                   </tr>
