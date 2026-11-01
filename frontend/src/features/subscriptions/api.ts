@@ -1,4 +1,5 @@
 import { deleteData, getData, postData } from '@/lib/api/client'
+import type { VatSplit } from '@/features/signup/api'
 
 /**
  * Subscriptions API layer (Operations Console, internal). Mirrors the backend
@@ -119,6 +120,8 @@ export interface ProrationQuote {
   prorated_new: string
   /** What is owed right now. `0.00` on a downgrade — nothing is taken and nothing is refunded. */
   due_now: string
+  /** PRICING-VAT-001 — `due_now` with its VAT, as it will be charged. */
+  vat?: VatSplit
   currency: string
   effective: 'immediate' | 'period_end'
   effective_at: string | null

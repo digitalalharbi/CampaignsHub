@@ -39,11 +39,15 @@ final class SubscriptionInvoiceTest extends TestCase
      * 8.99 × 1.15 rounds to 10.34. A money literal in a test is a price somebody has to remember to
      * edit — and this is the third time in one day that a commercial decision broke one.
      */
-    private function introPlusVat(string $code = 'growth'): string
+    /**
+     * What the customer is charged for the launch-catalogue introductory month — all-in (PRICING-VAT-001): the launch catalogue
+     * was sold at prices that include VAT, so the invoice shows the VAT inside this amount and its total is exactly the charge.
+     */
+    private function introCharged(string $code = 'growth'): string
     {
         $fee = (float) SubscriptionPlan::query()->where('code', $code)->firstOrFail()->trial_fee;
 
-        return number_format(round($fee * 1.15, 2), 2, '.', '');
+        return number_format($fee, 2, '.', '');
     }
 
     use AppliesToRegister;
@@ -146,8 +150,8 @@ final class SubscriptionInvoiceTest extends TestCase
         $this->assertSame('issued', $invoice->status);
         $this->assertSame((string) $payment->getKey(), $invoice->subscription_payment_id);
         $this->assertNotNull($invoice->due_at);
-        // The whole of it, tax included — 9.00 plus 15%.
-        $this->assertSame($this->introPlusVat(), $invoice->outstanding());
+        // The whole of what was asked for, VAT included in it — never more than the charge.
+        $this->assertSame($this->introCharged(), $invoice->outstanding());
     }
 
     /** VAT is computed once and stored — not derived at read time from whatever the rate is now. */
@@ -158,12 +162,13 @@ final class SubscriptionInvoiceTest extends TestCase
         $invoice = SubscriptionInvoice::query()->firstOrFail();
 
         $this->assertSame('basic_15', $invoice->tax_treatment);
-        $this->assertSame('1.35', (string) $invoice->tax_total, '15% of 9.00');
-        $this->assertSame($this->introPlusVat(), (string) $invoice->total);
+        $this->assertSame('1.17', (string) $invoice->tax_total, 'the 15% inside 9.00');
+        $this->assertSame('7.83', (string) $invoice->subtotal);
+        $this->assertSame($this->introCharged(), (string) $invoice->total);
 
         // A later change to the treatment must not rewrite a document already issued.
         config(['billing.tax.default' => 'zero_rated']);
-        $this->assertSame('1.35', (string) $invoice->refresh()->tax_total);
+        $this->assertSame('1.17', (string) $invoice->refresh()->tax_total);
     }
 
     /** A retried checkout resolves to one charge, so it must resolve to ONE document. */
@@ -201,7 +206,7 @@ final class SubscriptionInvoiceTest extends TestCase
         $invoice = SubscriptionInvoice::query()->firstOrFail();
 
         $this->assertSame('paid', $invoice->status);
-        $this->assertSame($this->introPlusVat(), (string) $invoice->amount_paid);
+        $this->assertSame($this->introCharged(), (string) $invoice->amount_paid);
         $this->assertSame('0.00', $invoice->outstanding());
         $this->assertNotNull($invoice->paid_at);
     }
@@ -261,7 +266,7 @@ final class SubscriptionInvoiceTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/subscriptions/invoices')->assertOk()
             ->assertJsonPath('data.invoices.0.status', 'paid')
-            ->assertJsonPath('data.invoices.0.total', $this->introPlusVat())
+            ->assertJsonPath('data.invoices.0.total', $this->introCharged())
             ->assertJsonPath('data.invoices.0.tax_treatment', 'basic_15');
 
         $invoice = SubscriptionInvoice::query()->firstOrFail();

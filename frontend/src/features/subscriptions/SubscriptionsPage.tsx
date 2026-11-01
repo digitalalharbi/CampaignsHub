@@ -41,6 +41,8 @@ export const COPY = {
     new_price: 'سعر الباقة الجديدة للدورة',
     prorated: 'قيمة الباقة الجديدة للمدة المتبقية',
     due_now: 'المستحق الآن',
+    vat_added: 'ضريبة القيمة المضافة 15%',
+    total_now: 'الإجمالي المدفوع الآن',
     upgrade_note: 'لن تُفعَّل الباقة الجديدة إلا بعد تأكيد الدفع من بوابة الدفع.',
     downgrade_note: 'لن يُخصم أو يُسترد أي مبلغ. تحتفظ بباقتك الحالية حتى نهاية الدورة المدفوعة، ثم يبدأ التغيير.',
     confirm_upgrade: 'المتابعة إلى الدفع',
@@ -86,6 +88,8 @@ export const COPY = {
     new_price: 'New plan, per period',
     prorated: 'New plan for the days that remain',
     due_now: 'Due now',
+    vat_added: 'VAT 15%',
+    total_now: 'Total charged now',
     upgrade_note: 'The new plan starts only once the gateway confirms the payment.',
     downgrade_note: 'Nothing is charged and nothing is refunded. You keep your current plan until the period you paid for ends.',
     confirm_upgrade: 'Continue to payment',
@@ -577,6 +581,18 @@ function ProrationReview({
                 <Num>{money(quote.due_now, quote.currency)}</Num>
               </dd>
             </div>
+            {/* PRICING-VAT-001 — on a VAT-exclusive plan the card is asked for the difference plus VAT; say so first. */}
+            {owes && quote.vat && !quote.vat.prices_include_vat && (
+              <>
+                <Row label={c.vat_added} value={money(quote.vat.tax, quote.currency)} />
+                <div className="flex items-center justify-between">
+                  <dt className="text-sm font-bold text-text-primary">{c.total_now}</dt>
+                  <dd data-testid="due-now-total" className="tnum text-base font-extrabold text-text-primary">
+                    <Num>{money(quote.vat.gross, quote.currency)}</Num>
+                  </dd>
+                </div>
+              </>
+            )}
           </dl>
 
           {/* The honest sentence, and it differs by direction. */}

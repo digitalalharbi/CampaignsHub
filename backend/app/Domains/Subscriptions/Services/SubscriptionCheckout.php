@@ -41,6 +41,7 @@ final class SubscriptionCheckout
         private readonly TrialEligibility $trials,
         private readonly SubscriptionInvoicing $invoices,
         private readonly RecurringBilling $recurring,
+        private readonly SubscriptionTax $tax,
     ) {}
 
     /**
@@ -254,6 +255,16 @@ final class SubscriptionCheckout
          */
         $idempotencyKey = $this->idempotencyKeyFor($purpose, $registration, $subscription, $planCode, $interval);
 
+        /*
+         * PRICING-VAT-001 — the amount the customer is asked for includes VAT.
+         *
+         * Callers pass the PRICE (the quote's `due_now`, a subscription's `unit_amount`). A VAT-exclusive catalogue charges it
+         * with VAT added; an all-in one charges it as it always has. The split is kept on the payment so the invoice states what
+         * was asked for rather than adding tax on top of it.
+         */
+        $vat = $this->tax->split($planCode, $amount);
+        $amount = $vat['gross'];
+
         $existing = SubscriptionPayment::query()->where('idempotency_key', $idempotencyKey)->first();
 
         if ($existing !== null) {
@@ -268,7 +279,7 @@ final class SubscriptionCheckout
 
         $payment = DB::transaction(function () use (
             $purpose, $amount, $currency, $planCode, $interval, $providerKey, $idempotencyKey,
-            $registration, $tenant, $subscription
+            $registration, $tenant, $subscription, $vat
         ): SubscriptionPayment {
             $payment = new SubscriptionPayment;
             $payment->forceFill([
@@ -280,6 +291,9 @@ final class SubscriptionCheckout
                 'billing_interval' => $interval,
                 'provider' => $providerKey,
                 'amount' => $amount,
+                'net_amount' => $vat['net'],
+                'tax_amount' => $vat['tax'],
+                'tax_treatment' => $vat['treatment'],
                 'currency' => $currency,
                 'status' => 'pending',
                 'idempotency_key' => $idempotencyKey,
