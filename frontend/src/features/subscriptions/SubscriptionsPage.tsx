@@ -21,7 +21,9 @@ export const COPY = {
     no_permission: 'لا تملك صلاحية عرض الاشتراكات.',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل بيانات الاشتراك.',
     current_plan: 'الخطة الحالية', default_plan: 'الخطة الافتراضية (بدون اشتراك مُسجَّل)',
-    per_month: '/ شهرياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
+    per_month: '/ شهرياً', per_year: '/ سنوياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
+    vat_plus: (tax: string, total: string, cur: string) => `+ ضريبة القيمة المضافة ${tax} = ${total} ${cur} لكل تجديد`,
+    vat_in: (tax: string, cur: string) => `يشمل ضريبة القيمة المضافة ${tax} ${cur}`,
     usage_title: 'الاستهلاك والحدود', metric: 'المقياس', used: 'المُستهلك', remaining: 'المتبقّي', limit: 'الحد',
     unlimited: 'غير محدود', catalogue: 'الخطط المتاحة', change: 'التبديل إلى هذه الخطة',
     current_badge: 'خطتك الحالية', grandfathered: 'باقة سابقة — محفوظة لك بسعرك وحدودك', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
@@ -68,7 +70,9 @@ export const COPY = {
     no_permission: 'You do not have permission to view subscriptions.',
     loading: 'Loading…', error: 'Could not load subscription data.',
     current_plan: 'Current plan', default_plan: 'Default plan (no explicit subscription)',
-    per_month: '/ month', seats: 'Seats', period_end: 'Period ends',
+    per_month: '/ month', per_year: '/ year', seats: 'Seats', period_end: 'Period ends',
+    vat_plus: (tax: string, total: string, cur: string) => `+ VAT ${tax} = ${total} ${cur} per renewal`,
+    vat_in: (tax: string, cur: string) => `Includes VAT of ${tax} ${cur}`,
     usage_title: 'Usage & limits', metric: 'Metric', used: 'Used', remaining: 'Remaining', limit: 'Limit',
     unlimited: 'Unlimited', catalogue: 'Available plans', change: 'Switch to this plan',
     current_badge: 'Your current plan', grandfathered: 'Earlier plan — kept for you at your price and limits', changing: 'Switching…', changed: 'Subscription updated',
@@ -395,7 +399,17 @@ function CurrentPlanCard({ current, c }: { current: CurrentSubscription; c: Copy
         {sub && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[sub.status] ?? 'bg-surface-secondary text-text-muted'}`}>{statusLabel(sub.status, c)}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-text-secondary">
-        {plan && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>}
+        {/* What THIS subscriber pays (their captured price and term), not the catalogue's current monthly price. */}
+        {sub?.unit_amount ? (
+          <span data-testid="current-price" className="tnum font-bold text-text-primary">
+            <Num>{sub.unit_amount} {sub.currency ?? plan?.currency}</Num> <span className="text-xs font-normal text-text-muted">{sub.billing_interval === 'annual' ? c.per_year : c.per_month}</span>
+          </span>
+        ) : plan && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>}
+        {sub?.vat && Number(sub.vat.tax) > 0 && (
+          <span data-testid="current-vat" className="text-xs text-text-muted">
+            {sub.vat.prices_include_vat ? c.vat_in(sub.vat.tax, sub.currency ?? '') : c.vat_plus(sub.vat.tax, sub.vat.gross, sub.currency ?? '')}
+          </span>
+        )}
         {sub && <span>{c.seats}: <span className="tnum font-semibold text-text-primary">{num(sub.seats, c.unlimited)}</span></span>}
         {sub?.current_period_end && <span>{c.period_end}: <span className="tnum font-semibold text-text-primary">{fmtDate(sub.current_period_end)}</span></span>}
       </div>

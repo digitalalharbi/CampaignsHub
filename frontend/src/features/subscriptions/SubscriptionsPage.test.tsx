@@ -63,6 +63,17 @@ describe('SubscriptionsPage', () => {
     expect(screen.getByText('Scale')).toBeInTheDocument()
   })
 
+  /** PRICING-VAT-001/002 — the card states what THIS subscriber pays per renewal, with its VAT, not the catalogue price. */
+  it('shows the subscriber’s own price and term with the VAT each renewal carries', async () => {
+    vi.mocked(getCurrent).mockResolvedValue({ ...current, subscription: { ...current.subscription!, unit_amount: '6990.00', currency: 'SAR', billing_interval: 'annual',
+      vat: { net: '6990.00', tax: '1048.50', gross: '8038.50', treatment: 'basic_15', rate: 0.15, prices_include_vat: false } } })
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('current-price')).toHaveTextContent('6990.00 SAR / year')
+    expect(screen.getByTestId('current-vat')).toHaveTextContent('+ VAT 1048.50 = 8038.50 SAR per renewal')
+  })
+
   it('hides the change-plan action without subscriptions.manage and shows the honest note', async () => {
     signInWith(['subscriptions.view'])
     renderWithProviders(<SubscriptionsPage />, { locale: 'en' })

@@ -889,6 +889,7 @@ final class SubscriptionLifecycle
             'scheduled_unit_amount' => null,
             'scheduled_change_at' => null,
         ])->save();
+        Tenant::withoutGlobalScopes()->whereKey($subscription->tenant_id)->update(['subscription_plan' => $plan->code]);
 
         $tenant = $this->tenantOf($subscription);
 

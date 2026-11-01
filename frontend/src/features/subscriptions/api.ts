@@ -60,6 +60,8 @@ export interface SubscriptionSummary {
   seats: number
   billing_interval?: string | null
   unit_amount?: string | null
+  /** PRICING-VAT-001/002 — each renewal on this subscription's own VAT terms. */
+  vat?: VatSplit | null
   currency?: string | null
   current_period_start?: string | null
   current_period_end: string | null

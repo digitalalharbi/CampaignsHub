@@ -237,6 +237,31 @@ final class PlanMigrationTest extends TestCase
             ->assertStatus(422);
     }
 
+    /** TENANCY-UNIFY-001 — the plan the console and onboarding display follows the subscription, not the plan at provisioning. */
+    public function test_the_workspace_s_displayed_plan_follows_its_subscription(): void
+    {
+        $this->assertSame('growth', $this->tenant->refresh()->subscription_plan);
+        $lifecycle = app(SubscriptionLifecycle::class);
+        $lifecycle->scheduleMigration($this->subscription, SubscriptionPlan::where('code', 'team')->firstOrFail(), 'monthly');
+        $lifecycle->applyDueScheduledChanges(Carbon::now()->addDays(13));
+        $this->assertSame('team', $this->tenant->refresh()->subscription_plan);
+    }
+
+    /** A plan assigned outright supersedes a move booked earlier: a scheduled downgrade never fires against the new plan. */
+    public function test_assigning_another_plan_clears_a_scheduled_move_but_reassigning_the_same_plan_keeps_it(): void
+    {
+        $lifecycle = app(SubscriptionLifecycle::class);
+        $service = app(SubscriptionService::class);
+        $lifecycle->scheduleMigration($this->subscription, SubscriptionPlan::where('code', 'solo')->firstOrFail(), 'monthly');
+
+        $service->assignPlan($this->tenant, SubscriptionPlan::where('code', 'growth')->firstOrFail());
+        $this->assertNotNull($this->subscription->refresh()->scheduled_plan_id, 'the same plan again keeps the booked move');
+
+        $service->assignPlan($this->tenant, SubscriptionPlan::where('code', 'team')->firstOrFail());
+        $this->assertNull($this->subscription->refresh()->scheduled_plan_id, 'a different plan supersedes it');
+        $this->assertNull($this->subscription->scheduled_change_at);
+    }
+
     public function test_only_a_platform_admin_reaches_the_migration_console(): void
     {
         $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/admin/plan-migration')->assertForbidden();

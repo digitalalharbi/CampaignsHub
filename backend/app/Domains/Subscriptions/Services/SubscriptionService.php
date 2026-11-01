@@ -128,6 +128,15 @@ final class SubscriptionService
          * are quoted; this column governs what an existing one owes, and changing one does not move
          * the other.
          */
+        /*
+         * A plan assigned outright supersedes a change booked for later (TENANCY-UNIFY-001): a downgrade scheduled while the
+         * workspace was on another plan must not fire against the plan it is on now. Re-assigning the SAME plan keeps it.
+         */
+        if ($subscription->exists && $subscription->plan_id !== null && $subscription->plan_id !== $plan->id) {
+            $subscription->forceFill(['scheduled_plan_id' => null, 'scheduled_billing_interval' => null,
+                'scheduled_unit_amount' => null, 'scheduled_change_at' => null]);
+        }
+
         $subscription->fill([
             'tenant_id' => $tenant->id,
             'plan_id' => $plan->id,
@@ -140,6 +149,8 @@ final class SubscriptionService
             'current_period_end' => $currentPeriodEnd ?? $subscription->current_period_end,
             'seats' => $seats ?? $subscription->seats ?? 1,
         ])->save();
+        // The plan the console, the overview and onboarding display is the one the workspace is on (TENANCY-UNIFY-001).
+        $tenant->forceFill(['subscription_plan' => $plan->code])->save();
 
         return $subscription->refresh()->load('plan');
     }
