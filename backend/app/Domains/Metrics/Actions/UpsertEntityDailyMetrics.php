@@ -148,7 +148,8 @@ final class UpsertEntityDailyMetrics
         GroupedUpsert::run(
             'entity_daily_metrics',
             $payload,
-            ['entity_type', 'entity_id', 'metric_date', 'attribution_window'],
+            // project_id is in the key (SEC-CLUSTER-2): a re-bound account writes the new project's row, never A's.
+            ['entity_type', 'entity_id', 'metric_date', 'attribution_window', 'project_id'],
             [
                 ...self::MEASURES, ...self::MONEY,
                 'spend_original', 'revenue_original', 'original_currency', 'project_currency',
