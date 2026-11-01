@@ -130,11 +130,7 @@ final class ProjectIntegrationController extends Controller
          *
          * The refusal names where it already lives, so the operator can act instead of guessing.
          */
-        $activeElsewhere = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
-            ->where('external_account_id', $account->id)
-            ->where('is_active', true)
-            ->where('project_id', '!=', $project->id)
-            ->first();
+        $activeElsewhere = $this->assignment->activeBindingElsewhere($account, (string) $project->id);
 
         if ($activeElsewhere !== null) {
             return ApiResponse::error(
@@ -163,11 +159,8 @@ final class ProjectIntegrationController extends Controller
                  * `AccountAssignment::projectIdFor()` then picked one of them silently for every sync.
                  * Re-asked here it is serialised on the tenant row, and the second writer is refused.
                  */
-                $elsewhere = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
-                    ->where('external_account_id', $account->id)
-                    ->where('is_active', true)
-                    ->where('project_id', '!=', $project->id)
-                    ->exists();
+                // SEC-CLUSTER-2 — by the REAL account, so a twin row of the same provider account counts.
+                $elsewhere = $this->assignment->activeBindingElsewhere($account, (string) $project->id) !== null;
 
                 abort_if($elsewhere, 409, 'This account is already connected to another project. Detach it there first.');
 
