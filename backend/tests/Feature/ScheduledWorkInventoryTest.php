@@ -74,6 +74,8 @@ final class ScheduledWorkInventoryTest extends TestCase
          * inventory is for.
          */
         'measurement:sync',
+        // PERF-RECOVERY-001 — logs an error when a route p95 or a queue backlog passes its limit.
+        'ops:perf-check',
         'notifications:send-alerts',
         'notifications:send-digests',
         'reports:dispatch-scheduled',

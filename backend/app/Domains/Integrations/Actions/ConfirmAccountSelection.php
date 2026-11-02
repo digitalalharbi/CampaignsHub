@@ -112,6 +112,11 @@ final class ConfirmAccountSelection
             foreach ($accounts as $account) {
                 $binding = $existing->get($account->getKey());
 
+                // SEC-CLUSTER-2 — an account this project does not hold yet is also «elsewhere» when the same REAL
+                // account is held by another project through a twin row. An account already bound HERE keeps
+                // being idempotent, so re-saving a selection never fails on a double that predates this rule.
+                $binding ??= $this->assignment->activeBindingElsewhere($account, (string) $project->getKey());
+
                 if ($binding !== null && (string) $binding->project_id !== (string) $project->getKey()) {
                     throw new AccountAssignedElsewhere(
                         (string) $account->getKey(),
@@ -238,6 +243,9 @@ final class ConfirmAccountSelection
              * transaction, the same quota lock and the same client-workspace fence.
              */
             ->whereIn('account_type', ['ad_account', 'store'])
+            // SYNC-GATE-001 — an account the credential no longer lists cannot be selected: it would
+            // claim a seat and then never sync, because the gate refuses it.
+            ->whereNull('access_lost_at')
             ->get();
 
         if ($accounts->count() !== count($accountIds)) {

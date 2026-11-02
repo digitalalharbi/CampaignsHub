@@ -63,4 +63,8 @@ RUN composer dump-autoload --optimize \
 USER www-data
 
 EXPOSE 8000
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# PERF-RECOVERY-001 — without workers `artisan serve` handles ONE request at a time, for every customer:
+# one slow report held the whole API behind it (Production 2026-11-01: `/live` 21 s, `/branding` timing
+# out at 75 s behind it). `--no-reload` is not optional: Laravel ignores the worker count without it.
+ENV PHP_CLI_SERVER_WORKERS=8
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000", "--no-reload"]

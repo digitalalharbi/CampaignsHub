@@ -109,6 +109,8 @@ final class LiveReportBuilderController extends Controller
 
         $campaigns = UnifiedCampaign::query()
             ->where('project_id', $project)
+            // SECURITY CLUSTER 5 — a campaign of a deselected account is not the project's to name.
+            ->tap(fn ($q) => BoundAccountVisibility::unifiedCampaigns($q))
             ->orderBy('name')
             ->get(['id', 'name', 'client_display_name', 'status', 'platforms', 'objective'])
             ->map(fn (UnifiedCampaign $c): array => [

@@ -389,4 +389,19 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
             ->assertStatus(422)
             ->assertJsonFragment(['message' => 'Choose at least one creative, or pick another ad display policy.']);
     }
+
+    /** PERF-RECOVERY-001 — the read-only profiler splits a live build into database, Redis, external, PHP and render time. */
+    public function test_the_live_report_profiler_splits_the_time_and_changes_nothing(): void
+    {
+        $this->campaign($this->account, 'Host', 10.0);
+        $this->createLink(['creatives' => ['creatives' => true]])->assertCreated();
+
+        $before = [DB::table('report_shares')->count(), DB::table('daily_metrics')->count()];
+        $this->artisan('ops:profile-live-report', ['--links' => 1, '--top' => 3])
+            ->expectsOutputToContain('BUILD')
+            ->expectsOutputToContain('SERIALIZE/RENDER')
+            ->assertSuccessful();
+
+        $this->assertSame($before, [DB::table('report_shares')->count(), DB::table('daily_metrics')->count()]);
+    }
 }

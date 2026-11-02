@@ -21,9 +21,14 @@ final class DailyMetric extends Model
     use BelongsToTenant;
     use HasUuidKey;
 
-    /** Columns forming the idempotency key (one row per combination). */
+    /**
+     * Columns forming the idempotency key (one row per combination).
+     *
+     * `project_id` is part of it (SEC-CLUSTER-2): an account moved from project A to project B
+     * writes B's rows beside A's instead of overwriting them, so the old project keeps its history.
+     */
     public const NATURAL_KEY = [
-        'external_account_id', 'external_campaign_id', 'metric_key', 'metric_date', 'attribution_window',
+        'external_account_id', 'external_campaign_id', 'metric_key', 'metric_date', 'attribution_window', 'project_id',
     ];
 
     protected $fillable = [

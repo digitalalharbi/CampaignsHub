@@ -56,18 +56,30 @@ final class ReportPlatformDrilldowns
             return [];
         }
 
+        /*
+         * SECURITY CLUSTER 5 — a link WITH a ceiling prints inside it. The report's own scope is the operator's; the link is narrower
+         * or, for a live-builder report, the only place a scope exists at all.
+         */
+        $ceiling = $share !== null && is_array($share->scope) && $share->scope !== []
+            ? app(LiveReportService::class)->printCeiling($share)
+            : null;
+
         app(TenantContext::class)->setTenantId((string) $report->tenant_id);
-        app(ProjectContext::class)->setProjectId((string) $report->project_id);
+        app(ProjectContext::class)->setProjectId($ceiling !== null && $ceiling['project_id'] !== '' ? $ceiling['project_id'] : (string) $report->project_id);
 
         $period = (array) ($data['period'] ?? []);
         $to = Carbon::parse((string) ($period['to'] ?? $report->period_end ?? Carbon::today()));
         $from = Carbon::parse((string) ($period['from'] ?? $report->period_start ?? $to->copy()->subDays(29)));
 
-        $scope = ReportScope::fromReport($report->scope);
-        $engine = $scope->applyTo($this->metrics);
+        $scope = ReportScope::fromReport($ceiling === null ? $report->scope : null, (string) $report->project_id);
+        $engine = $ceiling['engine'] ?? $scope->applyTo($this->metrics);
         $whole = $engine->byProvider($from, $to);
 
-        $projectIds = $scope->projectIds !== [] ? $scope->projectIds : [(string) $report->project_id];
+        $projectIds = $ceiling !== null
+            ? [$ceiling['project_id'] !== '' ? $ceiling['project_id'] : ReportScope::IMPOSSIBLE]
+            : ($scope->projectIds !== [] ? $scope->projectIds : [(string) $report->project_id]);
+        $campaignIds = $ceiling !== null ? $ceiling['campaign_ids'] : $scope->resolvedCampaignIds();
+        $accountIds = $ceiling !== null ? ($ceiling['account_ids'] === [] ? null : $ceiling['account_ids']) : ($scope->accountIds === [] ? null : $scope->accountIds);
         $lens = new ReportObjectiveLens((string) ($report->campaign_objective ?? $data['objective'] ?? 'custom'));
         $form = ReportComposition::for($report->form);
 
@@ -81,12 +93,14 @@ final class ReportPlatformDrilldowns
             // The section's own content lists: part of the platform drill-down on paper, and gone with a
             // hidden ads section — a document never prints content its operator took out.
             $content = ! ReportBreakdowns::reportSlideHidden($report, 'ads')
-                ? $this->ads->for($lens->value(), $from, $to, [
-                    'project_ids' => $projectIds,
-                    'providers' => [$provider],
-                    'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
-                    'creative_ids' => $scope->creativeIds,
-                ], $form->form, liveMedia: true)
+                ? $this->ads->for($lens->value(), $from, $to, $ceiling !== null
+                    ? ['providers' => [$provider]] + $ceiling['content_filters']
+                    : [
+                        'project_ids' => $projectIds,
+                        'providers' => [$provider],
+                        'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+                        'creative_ids' => $scope->creativeIds,
+                    ], $form->form, liveMedia: true)
                 : null;
 
             $blocks[] = $form->apply($this->builder->build(
@@ -95,9 +109,9 @@ final class ReportPlatformDrilldowns
                 engine: $engine->forProviders([$provider]),
                 objectives: new ObjectivePerformance(
                     projectIds: $projectIds,
-                    campaignIds: $scope->resolvedCampaignIds(),
+                    campaignIds: $campaignIds,
                     providers: [$provider],
-                    accountIds: $scope->accountIds === [] ? null : $scope->accountIds,
+                    accountIds: $accountIds,
                 ),
                 lens: $lens,
                 from: $from,

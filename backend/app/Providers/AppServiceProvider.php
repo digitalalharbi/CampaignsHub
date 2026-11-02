@@ -22,6 +22,7 @@ use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
+use App\Domains\Ops\Performance\PerformanceRecorder;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
@@ -41,8 +42,11 @@ use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -60,6 +64,8 @@ class AppServiceProvider extends ServiceProvider
          * letting whichever scenario ran first pay for a check the second then read for free.
          */
         $this->app->scoped(CreativeDemoPolicy::class);
+        // PERF-RECOVERY-001 — the query count belongs to one request or one job.
+        $this->app->scoped(PerformanceRecorder::class);
         // CAMPAIGN-INTELLIGENCE-HUB — the reach reader memoises per (account, window) for one request.
         $this->app->scoped(PeriodReachReader::class);
         $this->app->scoped(PresentationAudience::class);
@@ -159,6 +165,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // PERF-RECOVERY-001 — every query counted, the slow ones filed by their placeholdered SQL.
+        DB::listen(static function (QueryExecuted $query): void {
+            app(PerformanceRecorder::class)->noteQuery($query->sql, (float) $query->time, app()->runningInConsole() ? 'job' : 'http');
+        });
+
         // Stable, short morph aliases stored in polymorphic columns (non-enforcing, so framework
         // morphs like Sanctum's tokenable keep working).
         Relation::morphMap([
@@ -166,6 +177,20 @@ class AppServiceProvider extends ServiceProvider
             'opportunity' => Opportunity::class,
             'company' => Company::class,
         ]);
+
+        /*
+         * SECURITY CLUSTER 5 — a long-lived queue worker starts every job with NO current project.
+         *
+         * ProjectContext is a singleton (it must outlive a request's middleware chain), so unlike the scoped TenantContext the worker's
+         * between-jobs flush never reaches it: a job that set a project and died before its own forget() handed that project to the next
+         * job, whose creating hook then stamped its rows with a project that was never theirs. Cleared before each real queue job; the
+         * `sync` connection runs inside its caller's request, which owns its context.
+         */
+        Event::listen(JobProcessing::class, static function (JobProcessing $event): void {
+            if ($event->connectionName !== 'sync') {
+                app(ProjectContext::class)->forget();
+            }
+        });
 
         // Audit authentication lifecycle events.
         /*

@@ -23,6 +23,7 @@ use App\Domains\Delivery\Console\RemindDeliveryReviewers;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
+use App\Domains\Integrations\Console\AccountOwnershipAuditCommand;
 use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
@@ -36,6 +37,7 @@ use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\ResyncWindowCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\ScopeCleanupCommand;
+use App\Domains\Integrations\Console\SpendReconcileCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
@@ -44,6 +46,10 @@ use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
+use App\Domains\Ops\Console\PerfCheckCommand;
+use App\Domains\Ops\Console\PerfSnapshotCommand;
+use App\Domains\Ops\Console\ProfileLiveReportCommand;
+use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
@@ -141,6 +147,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
         // rows belong to, classified against the project's bindings. Writes nothing.
         ScopeAuditCommand::class,
+        SpendReconcileCommand::class,
+        // PERF-RECOVERY-001 — read-only: Production's load in one place, and the check that logs a degradation.
+        PerfSnapshotCommand::class,
+        PerfCheckCommand::class,
+        ProfileLiveReportCommand::class,
+        AccountOwnershipAuditCommand::class,
         // ACCOUNT-SCOPE-ISOLATION-001 — the two WRITE paths of the cleanup, dry-run unless --apply. Neither
         // is reachable from the read-only diagnostics workflow.
         ScopeCleanupCommand::class,
@@ -245,6 +257,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(NoStoreApiResponses::class);
 
         $middleware->api(prepend: [
+            RecordRequestTiming::class,
             AssignRequestId::class,
             SetLocale::class,
         ]);

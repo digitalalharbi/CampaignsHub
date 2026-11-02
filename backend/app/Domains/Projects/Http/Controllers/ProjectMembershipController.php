@@ -8,7 +8,10 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\ProjectMembership;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Rules\UserInCurrentTenant;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,11 +34,17 @@ final class ProjectMembershipController extends Controller
     {
         abort_unless($request->user()->hasPermission('projects.view'), 403);
 
-        $members = ProjectMembership::with('user:id,name,email')->get()->map(fn (ProjectMembership $m) => [
+        $rows = ProjectMembership::with('user:id,name,email')->get();
+        // A row naming somebody who is not a member of this tenant (written before enrolment was checked) shows
+        // no name and no email: the roster must never be a window onto another tenant's people.
+        $ofThisTenant = User::query()->whereIn('id', $rows->pluck('user_id')->unique()->all())
+            ->inTenant(app(TenantContext::class)->tenantId())->pluck('id')->all();
+
+        $members = $rows->map(fn (ProjectMembership $m) => [
             'id' => $m->id,
             'user_id' => $m->user_id,
-            'name' => $m->user?->name,
-            'email' => $m->user?->email,
+            'name' => in_array($m->user_id, $ofThisTenant, true) ? $m->user?->name : null,
+            'email' => in_array($m->user_id, $ofThisTenant, true) ? $m->user?->email : null,
             'role' => $m->role,
             'status' => $m->status,
             'expires_at' => optional($m->expires_at)->toIso8601String(),
@@ -51,7 +60,7 @@ final class ProjectMembershipController extends Controller
         abort_unless($request->user()->hasPermission('users.invite'), 403);
 
         $validated = $request->validate([
-            'user_id' => ['required', 'integer', Rule::exists('users', 'id')],
+            'user_id' => ['required', 'integer', new UserInCurrentTenant],
             'role' => ['required', Rule::in(self::ROLES)],
             'expires_at' => ['nullable', 'date'],
         ]);

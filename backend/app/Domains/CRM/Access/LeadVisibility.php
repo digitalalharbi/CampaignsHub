@@ -8,6 +8,7 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,7 +38,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class LeadVisibility
 {
-    public function __construct(private readonly ProjectAbilities $abilities) {}
+    public function __construct(private readonly ProjectAbilities $abilities, private readonly ProjectReach $reach) {}
 
     /**
      * May this reader see who this lead IS?
@@ -110,6 +111,25 @@ final class LeadVisibility
         self::boundToItsProject($query);
 
         /*
+         * SEC-1 — whichever project the request names (or none), the rows are confined to the projects
+         * this reader reaches: the membership's client / project ceiling, then `projects.view.all` or a
+         * current project membership. Without it an omitted project_id spanned every client in the tenant.
+         * A lead with no project belongs to no client, so only a reader with no client / project ceiling
+         * keeps it (as before); a confined member never reaches a row outside their named scope.
+         */
+        $reach = $this->reach->dataIdsFor($user);
+        if ($reach !== null) {
+            $column = $query->getModel()->getTable().'.project_id';
+            $withProjectless = $this->reach->ceilingProjectIds() === null;
+            $query->where(static function (Builder $q) use ($column, $reach, $withProjectless): void {
+                $q->whereIn($column, $reach);
+                if ($withProjectless) {
+                    $q->orWhereNull($column);
+                }
+            });
+        }
+
+        /*
          * With a project in hand the question is simple: identities without the pipeline is an agent.
          *
          * Without one, the tenant role cannot answer it. A tenant owner legitimately holds
@@ -171,7 +191,7 @@ final class LeadVisibility
     {
         $projectIds = ProjectMembership::withoutGlobalScopes()
             ->where('user_id', $user->id)
-            ->where('status', 'active')
+            ->current()
             ->pluck('project_id');
 
         foreach ($projectIds as $projectId) {

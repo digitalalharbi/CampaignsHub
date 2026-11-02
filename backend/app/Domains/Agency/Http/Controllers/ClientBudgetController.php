@@ -53,9 +53,13 @@ final class ClientBudgetController extends Controller
          * One query for every project, grouped in memory — a per-client lookup would make this cost
          * grow with the number of clients, which is exactly what an agency has a lot of.
          */
+        $ceilings = $this->access->projectCeilings($user);
         $projects = Project::query()
             ->whereIn('client_workspace_id', $clients->pluck('id')->all())
-            ->get(['id', 'client_workspace_id', 'name']);
+            ->get(['id', 'client_workspace_id', 'name'])
+            // SEC-3 — a team member confined to some of a client's projects reads only those.
+            ->filter(fn (Project $p): bool => $this->access->projectAllowed($ceilings, (string) $p->client_workspace_id, (string) $p->getKey()))
+            ->values();
 
         /*
          * ONE pacing query for the whole screen, grouped by the `project_id` the rows now carry.

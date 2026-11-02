@@ -447,3 +447,12 @@ jobs:
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:scope-audit \
                 --project="${PROJECT}" --lines="200"
+
+            # ACCOUNT-SCOPE-ISOLATION-002 — the same dispatch also reads the CONTENT of each account: a
+            # campaign filed under two accounts, future-dated figures, a provider account in two projects,
+            # and which account each ChatGPT Ads key answers for now (one read per connection, stores
+            # nothing). No new input: this workflow is at GitHub's input cap.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:account-ownership-audit --probe
