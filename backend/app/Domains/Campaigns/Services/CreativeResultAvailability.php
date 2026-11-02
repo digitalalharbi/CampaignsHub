@@ -6,6 +6,8 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\ResultAvailability;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +60,21 @@ use Illuminate\Support\Facades\DB;
  */
 final class CreativeResultAvailability
 {
+    /**
+     * PERF-RECOVERY-001 — one whole-history pass per account per request.
+     *
+     * Measured on Production's slow link: a live build asks this question 11+ times over overlapping account lists, each a full
+     * pass over `entity_daily_metrics`, for about half of the build's database time. The answer cannot change inside one request, so an
+     * account is asked once. This class is `scoped` in the container, so the memo dies with the request or job; the key carries the
+     * tenant and project in force, so one link's answer can never serve another scope.
+     *
+     * @var array<string, array<string, array<string, bool>>>
+     */
+    private array $measuredMemo = [];
+
+    /** @var array<string, array<string, array<string, bool>>> */
+    private array $recordedMemo = [];
+
     /**
      * The RESULT metrics a provider can answer with a fabricated zero, and where each is stored.
      *
@@ -148,10 +165,15 @@ final class CreativeResultAvailability
      */
     public function measuredByAccount(array $accountIds): array
     {
-        if ($accountIds === []) {
-            return [];
-        }
+        return $this->remembered($this->measuredMemo, self::scopeKey(), $accountIds, fn (array $missing): array => $this->measureAccounts($missing));
+    }
 
+    /**
+     * @param  list<string>  $accountIds
+     * @return array<string, array<string, bool>>
+     */
+    private function measureAccounts(array $accountIds): array
+    {
         $out = array_fill_keys($accountIds, array_fill_keys(self::keys(), false));
 
         $this->foldWide(
@@ -208,10 +230,20 @@ final class CreativeResultAvailability
      */
     public function recordedInPeriod(array $accountIds, Carbon $from, Carbon $to): array
     {
-        if ($accountIds === []) {
-            return [];
-        }
+        return $this->remembered(
+            $this->recordedMemo,
+            self::scopeKey().'|'.$from->toDateString().'|'.$to->toDateString(),
+            $accountIds,
+            fn (array $missing): array => $this->recordAccounts($missing, $from, $to),
+        );
+    }
 
+    /**
+     * @param  list<string>  $accountIds
+     * @return array<string, array<string, bool>>
+     */
+    private function recordAccounts(array $accountIds, Carbon $from, Carbon $to): array
+    {
         $out = array_fill_keys($accountIds, array_fill_keys(self::keys(), false));
 
         $this->foldWide(
@@ -229,6 +261,42 @@ final class CreativeResultAvailability
         $this->foldTall($out, $accountIds, $from, $to);
 
         return $out;
+    }
+
+    /**
+     * Asks only for the accounts this scope has not been answered for, and returns the requested accounts in the order asked.
+     *
+     * @param  array<string, array<string, array<string, bool>>>  $memo
+     * @param  list<string>  $accountIds
+     * @param  callable(list<string>): array<string, array<string, bool>>  $ask
+     * @return array<string, array<string, bool>>
+     */
+    private function remembered(array &$memo, string $key, array $accountIds, callable $ask): array
+    {
+        if ($accountIds === []) {
+            return [];
+        }
+
+        $missing = array_values(array_filter(array_unique($accountIds), static fn (string $id): bool => ! isset($memo[$key][$id])));
+
+        if ($missing !== []) {
+            foreach ($ask($missing) as $id => $answer) {
+                $memo[$key][(string) $id] = $answer;
+            }
+        }
+
+        $out = [];
+        foreach ($accountIds as $id) {
+            $out[$id] = $memo[$key][$id] ?? array_fill_keys(self::keys(), false);
+        }
+
+        return $out;
+    }
+
+    /** The scope a remembered answer belongs to: the tenant and project in force when it was asked. */
+    private static function scopeKey(): string
+    {
+        return app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId();
     }
 
     /**

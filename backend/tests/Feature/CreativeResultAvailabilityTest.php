@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\CreativeResultAvailability;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -424,5 +425,36 @@ final class CreativeResultAvailabilityTest extends TestCase
         ]);
 
         return $creative;
+    }
+
+    /** PERF-RECOVERY-001 — one whole-history pass per account per scope, however many times a build asks; same answers as a fresh read. */
+    public function test_availability_is_asked_once_per_account_per_scope(): void
+    {
+        $a = (string) $this->accountA->getKey();
+        $b = (string) $this->accountB->getKey();
+        $service = app(CreativeResultAvailability::class);
+        $this->assertSame($service, app(CreativeResultAvailability::class), 'one instance per request, or the memo is worth nothing');
+
+        $passes = 0;
+        DB::listen(static function ($q) use (&$passes): void {
+            if (str_contains($q->sql, 'MAX(ABS(')) {
+                $passes++;
+            }
+        });
+
+        $first = $service->measuredByAccount([$a, $b]);
+        $afterFirst = $passes;
+        $this->assertGreaterThan(0, $afterFirst);
+
+        $this->assertSame($first, $service->measuredByAccount([$a, $b]));
+        $this->assertSame([$a => $first[$a]], $service->measuredByAccount([$a]), 'a narrower list is answered from what is known');
+        $this->assertSame($afterFirst, $passes, 'nothing is re-scanned for accounts already answered');
+
+        $this->assertSame($first, (new CreativeResultAvailability)->measuredByAccount([$a, $b]), 'the remembered answer is the fresh answer');
+
+        $settled = $passes;
+        app(ProjectContext::class)->setProjectId((string) Str::uuid());
+        $service->measuredByAccount([$a]);
+        $this->assertGreaterThan($settled, $passes, 'another scope never reads this scope\'s answer');
     }
 }
