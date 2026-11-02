@@ -31,10 +31,10 @@ final class PlatformSetting extends Model
         'legal_name_ar', 'legal_name_en', 'trading_name', 'registration_number', 'tax_number',
         'jurisdiction', 'address_ar', 'address_en', 'contact_email', 'support_email',
         'security_email', 'privacy_email', 'phone', 'dpo_name', 'dpo_email', 'updated_by',
-        'payment_primary_gateway', 'payment_primary_set_at', 'payment_primary_set_by',
+        'payment_primary_gateway', 'payment_primary_set_at', 'payment_primary_set_by', 'disabled_capabilities',
     ];
 
-    protected $casts = ['payment_primary_set_at' => 'datetime'];
+    protected $casts = ['payment_primary_set_at' => 'datetime', 'disabled_capabilities' => 'array'];
 
     /**
      * The singleton, created empty on first read.

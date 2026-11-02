@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Http\Controllers\Internal;
 
+use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Drive\Services\DriveReach;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,20 +33,33 @@ final class FilesLibraryController
      */
     private const CAP = 500;
 
-    public function __construct(private readonly TenantContext $tenant) {}
+    public function __construct(
+        private readonly TenantContext $tenant,
+        private readonly ClientScopeResolver $scopes,
+        private readonly DriveReach $driveReach,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('clients.manage_files'), 403);
         $tenantId = (string) $this->tenant->tenantId();
 
-        $clientNames = DB::table('client_workspaces')->where('tenant_id', $tenantId)->pluck('name', 'id');
+        /*
+         * The membership's client ceiling (ADR 0002): `null` = unrestricted, otherwise the clients this caller
+         * reaches — possibly none. File and report names, and the roster of client names, only for those.
+         */
+        $reach = $this->scopes->reachableClientIds($request->user());
+
+        $clientNames = DB::table('client_workspaces')->where('tenant_id', $tenantId)
+            ->when($reach !== null, fn ($q) => $q->whereIn('id', $reach))
+            ->pluck('name', 'id');
 
         // Request attachments across every client of this tenant.
         $requestFiles = DB::table('request_files as f')
             ->join('external_requests as r', 'r.id', '=', 'f.request_id')
             ->leftJoin('users as u', 'u.id', '=', 'f.uploaded_by')
             ->where('r.tenant_id', $tenantId)
+            ->when($reach !== null, fn ($q) => $q->whereIn('r.client_id', $reach))
             ->select('f.id', 'f.original_name', 'f.mime', 'f.size', 'f.is_client_visible',
                 'f.created_at', 'u.name as uploader', 'r.reference as related', 'r.client_id')
             ->orderByDesc('f.created_at')->limit(self::CAP)
@@ -69,6 +85,7 @@ final class FilesLibraryController
             ->join('reports as rp', 'rp.id', '=', 'e.report_id')
             ->join('projects as p', 'p.id', '=', 'rp.project_id')
             ->where('p.tenant_id', $tenantId)->whereNotNull('e.path')
+            ->when($reach !== null, fn ($q) => $q->whereIn('p.client_workspace_id', $reach))
             ->select('e.id', 'e.format', 'e.size', 'e.created_at', 'rp.name as report_name', 'rp.audience',
                 'p.client_workspace_id as client_id')
             ->orderByDesc('e.created_at')->limit(self::CAP)
@@ -89,7 +106,7 @@ final class FilesLibraryController
                     : null,
             ]);
 
-        $driveLinks = DB::table('drive_links')->where('tenant_id', $tenantId)->count();
+        $driveLinks = $this->driveReach->constrainLinks(DriveLink::query()->where('tenant_id', $tenantId), $request->user())->count();
 
         /*
          * Counted with the SAME predicates the lists use, minus the ordering and the cap. A total
@@ -98,12 +115,14 @@ final class FilesLibraryController
         $requestTotal = DB::table('request_files as f')
             ->join('external_requests as r', 'r.id', '=', 'f.request_id')
             ->where('r.tenant_id', $tenantId)
+            ->when($reach !== null, fn ($q) => $q->whereIn('r.client_id', $reach))
             ->count();
 
         $reportTotal = DB::table('report_exports as e')
             ->join('reports as rp', 'rp.id', '=', 'e.report_id')
             ->join('projects as p', 'p.id', '=', 'rp.project_id')
             ->where('p.tenant_id', $tenantId)->whereNotNull('e.path')
+            ->when($reach !== null, fn ($q) => $q->whereIn('p.client_workspace_id', $reach))
             ->count();
 
         $files = $requestFiles->concat($reportFiles)->sortByDesc('uploaded_at')->values();

@@ -163,7 +163,8 @@ async function openAccount(
 
   // The path decides which plans exist, so it is answered first — LAUNCH-PRICING-001.
   await page.getByTestId('journey-self-service').click()
-  await page.getByTestId('plan-starter').click()
+  // PRICING-CATALOGUE-001 — the 2026-11 catalogue sells Solo to a self-managed advertiser; Starter was withdrawn.
+  await page.getByTestId('plan-solo').click()
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
 
   await page.getByTestId('registration-dev-verify').click()
@@ -177,8 +178,8 @@ async function openAccount(
   const code = (await shown.innerText()).match(/(\d{6})/)?.[1]
   expect(code, 'no dev code was issued for the mobile challenge').toBeTruthy()
 
-  await page.getByLabel(/code we sent to your mobile|رمز التحقق المرسل إلى جوالك/i).fill(code!)
-  await page.getByRole('button', { name: /Confirm code|تأكيد الرمز/ }).click()
+  // OtpField submits as soon as the sixth digit lands.
+  await page.getByTestId('registration-otp-0').fill(code!)
 
   await expect(page.getByTestId('registration-payment-sandbox')).toBeVisible({ timeout: 20000 })
   await page.getByTestId('registration-pay').click()

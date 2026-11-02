@@ -11,14 +11,21 @@ vi.mock('./api', async (orig) => {
 
 import { fetchPlans } from './api'
 
-const plan = (over: Partial<Plan>): Plan => ({
-  code: 'growth', name: 'Growth', name_ar: 'النمو',
-  summary_ar: null, summary_en: null, currency: 'SAR',
-  price_monthly: '499.00', price_annual: '4990.00',
-  trial_days: 7, trial_fee: '9.00',
-  features: null, limits: null, trial_limits: null,
-  ...over,
-})
+/** The journey a fixture plan is sold on, as the catalogue states it in `features` (PRICING-CATALOGUE-001). */
+const JOURNEYS: Record<string, string[]> = { starter: ['self-service'], growth: ['self-service'], agency: ['multi-client'] }
+
+const plan = (over: Partial<Plan>): Plan => {
+  const code = over.code ?? 'growth'
+  return {
+    code: 'growth', name: 'Growth', name_ar: 'النمو',
+    summary_ar: null, summary_en: null, currency: 'SAR',
+    price_monthly: '499.00', price_annual: '4990.00',
+    trial_days: 7, trial_fee: '9.00',
+    limits: null, trial_limits: null,
+    ...over,
+    features: { ...(over.features ?? {}), journeys: JOURNEYS[code] ?? [], recommended: code === 'growth' },
+  }
+}
 
 /**
  * The plan chooser (PLAN-001).

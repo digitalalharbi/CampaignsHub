@@ -37,6 +37,24 @@ export interface PlatformOverview {
   }
   /** Counts worth acting on, each with the page that answers it. Zeros included on purpose. */
   attention: Array<{ key: string; count: number; to: string; tone: 'warning' | 'danger' | 'info' }>
+  /** SUPERADMIN-CONSOLE-HOME-001 — what needs the operator across every workspace. Names only; never a provider's error text. */
+  operations: {
+    connections: {
+      total: number
+      items: Array<{
+        id: string
+        tenant_id: string
+        tenant_name: string | null
+        provider: string
+        connection_name: string | null
+        /** refused: the provider invalidated the session; expired: the token passed its expiry. */
+        reason: 'refused' | 'expired'
+        since: string | null
+      }>
+    }
+    alerts: { open: number; by_severity: { critical: number; warning: number; info: number }; tenants: number }
+    recent: Array<{ id: string; action: string; tenant_name: string | null; user_name: string | null; created_at: string | null }>
+  }
 }
 
 export interface PlatformTenant {
@@ -61,6 +79,9 @@ export interface TenantPerson {
   email: string | null
   portal: string
   role: string
+  /** SUPERADMIN-MEMBERS-001 — the roles this person holds in THIS workspace. */
+  roles?: string[]
+  is_platform_admin?: boolean
   status: string
 }
 
@@ -82,6 +103,24 @@ export interface AuditEntry {
   created_at: string | null
 }
 
+/** SUPERADMIN-LIMITS-001 — one workspace's plan limits: the plan's, its own override, what is used and what applies. */
+export interface TenantLimit {
+  metric: string
+  plan_limit: number | null
+  override: { limit: number | null; expires_at: string | null; reason: string | null } | null
+  lapsed: boolean
+  effective_limit: number | null
+  usage: number
+}
+
+export function fetchTenantLimits(tenantId: string): Promise<{ limits: TenantLimit[] }> {
+  return getData(`/admin/tenants/${tenantId}/limits`)
+}
+
+export function setTenantLimit(tenantId: string, metric: string, body: { mode: 'cap' | 'unlimited' | 'inherit'; limit?: number; expires_at?: string | null; reason: string }): Promise<{ limits: TenantLimit[] }> {
+  return putData(`/admin/tenants/${tenantId}/limits/${metric}`, body)
+}
+
 export function fetchOverview(): Promise<PlatformOverview> {
   return getData<PlatformOverview>('/admin/overview')
 }
@@ -94,7 +133,13 @@ export function fetchTenants(params: { q?: string; status?: string } = {}): Prom
   return getData(`/admin/tenants${qs ? `?${qs}` : ''}`)
 }
 
-export function fetchTenant(id: string): Promise<{ tenant: PlatformTenant & { is_default_portal: boolean }; people: TenantPerson[]; client_workspaces: number }> {
+export function fetchTenant(id: string): Promise<{
+  tenant: PlatformTenant & { is_default_portal: boolean }
+  people: TenantPerson[]
+  client_workspaces: number
+  /** SUPERADMIN-MEMBERS-001 — the workspace's own roles. */
+  available_roles?: Array<{ slug: string; name: string }>
+}> {
   return getData(`/admin/tenants/${id}`)
 }
 
@@ -1037,6 +1082,15 @@ export function actOnUserAccess(userUuid: string, body: { action: UserAccessActi
   return postData(`/admin/users/${userUuid}/access`, body)
 }
 
+/** SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace. A reason is always required. */
+export type MembershipAction = 'change_role' | 'suspend' | 'reactivate' | 'remove'
+
+export function actOnMembership(tenantId: string, userUuid: string, body: { action: MembershipAction; role?: string; reason: string }): Promise<{
+  member: { roles: string[]; status: string | null; member: boolean }
+}> {
+  return postData(`/admin/tenants/${tenantId}/members/${userUuid}`, body)
+}
+
 /*
  * SUPERADMIN-WORKSPACE-001 — create a workspace and hand it to its owner.
  *
@@ -1068,4 +1122,72 @@ export function createWorkspace(body: {
 
 export function reissueOwnerInvitation(tenantId: string, ownerEmail: string): Promise<{ owner_has_access: boolean; invitation: OwnerInvitation | null }> {
   return postData(`/admin/tenants/${tenantId}/owner-invitation`, { owner_email: ownerEmail })
+}
+
+/*
+ * SUPERADMIN-FEATURES-001 — capabilities on or off for every workspace, and one workspace's own switch. Enforced by the server's
+ * `module:` checks, not by hiding: every change needs a reason and is audited.
+ */
+export interface PlatformCapability {
+  module: string
+  activation: string
+  platform_disabled: boolean
+  disabled_by_environment: boolean
+}
+
+export interface TenantCapability {
+  module: string
+  entitled: boolean
+  enabled: boolean
+  reason: string | null
+  /** The workspace's own switch: true, false, or null when it inherits. */
+  tenant_switch: boolean | null
+}
+
+export function fetchPlatformCapabilities(): Promise<{ capabilities: PlatformCapability[] }> {
+  return getData('/admin/capabilities')
+}
+
+export function setPlatformCapability(module: string, disabled: boolean, reason: string): Promise<{ capabilities: PlatformCapability[] }> {
+  return putData(`/admin/capabilities/${module}`, { disabled, reason })
+}
+
+/** SUPERADMIN-FEATURES-001 — plan level: which modules each plan carries, and how many workspaces it reaches. */
+export interface PlanCapabilities {
+  modules: Array<{ module: string; default_entitled: boolean }>
+  plans: Array<{ id: string; code: string; name: string; name_ar: string | null; is_active: boolean; workspaces: number; modules: Record<string, boolean> }>
+}
+
+export function fetchPlanCapabilities(): Promise<PlanCapabilities> {
+  return getData('/admin/plans/capabilities')
+}
+
+export function setPlanCapability(planId: string, module: string, enabled: boolean, reason: string): Promise<PlanCapabilities> {
+  return putData(`/admin/plans/${planId}/capabilities/${module}`, { enabled, reason })
+}
+
+export function fetchTenantCapabilities(tenantId: string): Promise<{ capabilities: TenantCapability[] }> {
+  return getData(`/admin/tenants/${tenantId}/capabilities`)
+}
+
+export function setTenantCapability(tenantId: string, module: string, enabled: boolean | null, reason: string): Promise<{ capabilities: TenantCapability[] }> {
+  return putData(`/admin/tenants/${tenantId}/capabilities/${module}`, { enabled, reason })
+}
+
+/*
+ * SUPERADMIN-SUPPORT-ACCESS-001 — «الدخول للدعم»: a 30-minute, read-only visit to one workspace. Needs a reason and the operator's
+ * own password; the server refuses writes, secrets, money and exports for the whole visit.
+ */
+export function startSupportSession(tenantId: string, reason: string, currentPassword: string): Promise<{
+  support_session_id: string
+  tenant: { id: string; name: string }
+  mode: string
+  expires_at: string
+  landing_path: string
+}> {
+  return postData(`/admin/tenants/${tenantId}/support-session`, { reason, current_password: currentPassword })
+}
+
+export function endSupportSession(): Promise<{ ended: boolean; return_path: string }> {
+  return deleteData('/admin/support-session')
 }

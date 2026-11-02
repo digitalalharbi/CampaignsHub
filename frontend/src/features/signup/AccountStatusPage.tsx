@@ -14,7 +14,7 @@ import {
 import { CommitmentDisclosure } from './CommitmentDisclosure'
 import { AuthShell } from '@/features/auth/AuthShell'
 import { Button } from '@/components/ui/Button'
-import { TextInput } from '@/components/ui/form'
+import { OtpField } from '@/features/auth/OtpField'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -40,6 +40,8 @@ const COPY = {
     lookupFailed: 'تعذّر قراءة حالة الطلب. لم يتغيّر شيء في طلبك؛ المشكلة في قراءته الآن.',
     startOver: 'إنشاء حساب',
     awaitingProvider: 'لم يُفعَّل مزوّد الإرسال بعد (بانتظار بيانات الاعتماد)، لذلك لم تُرسل الرسالة فعليًا. استخدم زر التطوير أدناه مؤقتًا.',
+    codeSent: 'أرسلنا رمز تحقق برسالة نصية إلى رقم جوالك.',
+    deliveryFailed: 'تعذّر إرسال الرمز الآن. انتظر انتهاء المهلة ثم حاول مرة أخرى.',
     devVerify: 'تأكيد الآن (تطوير)',
     devCode: 'رمز التطوير',
     resendEmail: 'إعادة إرسال رابط التأكيد',
@@ -72,6 +74,8 @@ const COPY = {
     lookupFailed: 'We could not read the status of your application. Nothing about it has changed — reading it just now is what failed.',
     startOver: 'Create an account',
     awaitingProvider: 'No delivery provider is configured yet (awaiting credentials), so the message was not actually sent. Use the dev button below for now.',
+    codeSent: 'We sent a verification code by SMS to your mobile number.',
+    deliveryFailed: 'We could not send the code right now. Wait for the cooldown, then try again.',
     devVerify: 'Verify now (dev)',
     devCode: 'Dev code',
     resendEmail: 'Resend the confirmation link',
@@ -142,6 +146,7 @@ export function AccountStatusPage() {
   // The freshest challenge we hold, so the dev link/code survives a resend without a reload.
   const [issued, setIssued] = useState<VerificationIssued | null>(handedOver?.verification ?? null)
   const [code, setCode] = useState('')
+  const [cooldown, setCooldown] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { if (id) rememberRegistration(id) }, [id])
@@ -161,7 +166,10 @@ export function AccountStatusPage() {
    */
   const adopt = (envelope: RegistrationEnvelope) => {
     queryClient.setQueryData(['registration', envelope.registration.id], envelope)
-    if (envelope.verification) setIssued(envelope.verification)
+    if (envelope.verification) {
+      setIssued(envelope.verification)
+      setCooldown(envelope.verification.resend_after ?? 0)
+    }
     setError(null)
 
     if (envelope.registration.provisioned) {
@@ -176,6 +184,12 @@ export function AccountStatusPage() {
 
   const failed = (e: unknown) => setError(toApiError(e).message)
 
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = window.setTimeout(() => setCooldown((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [cooldown])
+
   const verify = useMutation({ mutationFn: verifyRegistrationEmail, onSuccess: adopt, onError: failed })
   const resend = useMutation({
     mutationFn: (channel: 'email' | 'mobile') => resendRegistrationChallenge(id as string, channel),
@@ -183,7 +197,7 @@ export function AccountStatusPage() {
     onError: failed,
   })
   const confirmCode = useMutation({
-    mutationFn: () => verifyRegistrationMobile(id as string, code),
+    mutationFn: (value: string) => verifyRegistrationMobile(id as string, value),
     onSuccess: adopt,
     onError: failed,
   })
@@ -196,6 +210,16 @@ export function AccountStatusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
+  const envelope = (queryClient.getQueryData(['registration', id]) as RegistrationEnvelope | undefined) ?? status.data
+  const reg = envelope?.registration
+  const policy = envelope?.policy
+
+  useEffect(() => {
+    if (reg?.state === 'mobile_verification_required') {
+      setCooldown((current) => Math.max(current, reg.mobile_resend_after ?? 0))
+    }
+  }, [reg?.state, reg?.mobile_resend_after])
+
   if (!id && !token) {
     return (
       <AuthShell>
@@ -206,10 +230,6 @@ export function AccountStatusPage() {
       </AuthShell>
     )
   }
-
-  const envelope = (queryClient.getQueryData(['registration', id]) as RegistrationEnvelope | undefined) ?? status.data
-  const reg = envelope?.registration
-  const policy = envelope?.policy
 
   /*
    * A LOOKUP that failed is not a lookup still running.
@@ -262,6 +282,7 @@ export function AccountStatusPage() {
   const { Icon, tone } = TONE[reg.state]
   const devLink = issued?.dev_link ?? null
   const devCode = issued?.dev_code ?? null
+  const mobileDelivery = issued?.channel === 'mobile' ? issued.delivery_status : reg.mobile_delivery_status
 
   return (
     <AuthShell portal={reg.requested_portal === 'agency' ? 'agency' : 'default'}>
@@ -320,32 +341,35 @@ export function AccountStatusPage() {
         {reg.state === 'mobile_verification_required' && (
           <form
             className="flex flex-col gap-3"
-            onSubmit={(e) => { e.preventDefault(); confirmCode.mutate() }}
+            onSubmit={(e) => { e.preventDefault(); confirmCode.mutate(code) }}
           >
-            <p className="text-xs text-text-muted">{c.awaitingProvider}</p>
+            <p className="text-xs text-text-muted">
+              {mobileDelivery === 'sent' || mobileDelivery === 'pending' || mobileDelivery === 'queued'
+                ? c.codeSent
+                : mobileDelivery === 'failed' ? c.deliveryFailed : c.awaitingProvider}
+            </p>
             {devCode && (
               <p data-testid="registration-dev-code" className="text-center text-sm text-text-secondary">
                 {c.devCode}: <span className="font-mono font-bold text-text-primary" dir="ltr">{devCode}</span>
               </p>
             )}
-            <TextInput
-              id="otp"
+            <OtpField
+              testId="registration-otp"
               label={c.codeLabel}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              required
+              onChange={setCode}
+              onComplete={(value) => confirmCode.mutate(value)}
+              disabled={confirmCode.isPending}
             />
             <Button type="submit" loading={confirmCode.isPending} size="lg">{c.submitCode}</Button>
             <button
               type="button"
               data-testid="registration-resend-code"
               onClick={() => resend.mutate('mobile')}
-              disabled={resend.isPending}
+              disabled={resend.isPending || cooldown > 0}
               className="text-sm font-semibold text-brand-600 hover:underline disabled:opacity-60"
             >
-              {c.resendCode}
+              {cooldown > 0 ? `${c.resendCode} (${cooldown}s)` : c.resendCode}
             </button>
           </form>
         )}

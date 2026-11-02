@@ -27,6 +27,12 @@ export interface SubscriptionPlan {
   features: Record<string, string | number | boolean>
   /** Per-metric caps; `null` = unlimited. */
   limits: Record<string, number | null>
+  name_ar?: string | null
+  price_annual?: string | null
+  /** PRICING-CATALOGUE-001 — this workspace's own plan. */
+  is_current?: boolean
+  /** A plan withdrawn from sale that this workspace keeps, at the price it pays (grandfathered). */
+  grandfathered?: boolean
 }
 
 export const getPlans = () => getData<SubscriptionPlan[]>('/subscriptions/plans')

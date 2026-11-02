@@ -10,7 +10,6 @@ use App\Domains\Integrations\Catalogue\ProviderHierarchy;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\ConnectionWizardState;
@@ -53,7 +52,6 @@ use Throwable;
 final class ConnectionWizardController extends Controller
 {
     public function __construct(
-        private readonly AccountAssignment $assignment,
         private readonly SubscriptionService $subscriptions,
         private readonly TenantContext $tenant,
         private readonly ConnectionWizardState $state,
@@ -198,6 +196,8 @@ final class ConnectionWizardController extends Controller
             })
             ->values();
 
+        $wizard = $this->state->for($connection);
+
         return ApiResponse::success([
             'connection' => [
                 'id' => (string) $connection->getKey(),
@@ -212,11 +212,14 @@ final class ConnectionWizardController extends Controller
             'parents' => $parents,
             // Inventory, stated as inventory. The wizard shows «309 available · 0 connected», which
             // is the sentence that was missing.
-            'discovered_count' => (clone $accounts)->count(),
-            'assigned_count' => $this->assignment->assignedCountFor((string) $this->tenant->tenantId()),
+            // ACCOUNT-COUNTS-001 — both numbers come from the connection's own state, the one definition the
+            // hub card uses. `assigned_count` was the TENANT's count across every provider, so a wizard for
+            // one Snapchat connection said «565 available · 14 connected» when this connection had ten.
+            'discovered_count' => $wizard['discovered'],
+            'assigned_count' => $wizard['assigned'],
             // Where this connection has got to, so the wizard opens on the right step rather than
             // at the beginning (ORCH-100 §39).
-            'wizard' => $this->state->for($connection),
+            'wizard' => $wizard,
         ], 'Connection hierarchy retrieved.');
     }
 

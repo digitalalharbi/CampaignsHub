@@ -22,7 +22,7 @@ export const COPY = {
     per_month: '/ شهرياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
     usage_title: 'الاستهلاك والحدود', metric: 'المقياس', used: 'المُستهلك', remaining: 'المتبقّي', limit: 'الحد',
     unlimited: 'غير محدود', catalogue: 'الخطط المتاحة', change: 'التبديل إلى هذه الخطة',
-    current_badge: 'خطتك الحالية', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
+    current_badge: 'خطتك الحالية', grandfathered: 'باقة سابقة — محفوظة لك بسعرك وحدودك', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
     manage_note: 'تبديل الخطة يتطلّب صلاحية subscriptions.manage.',
     st_active: 'نشِط', st_trialing: 'الشهر التمهيدي', st_past_due: 'متأخّر السداد', st_canceled: 'مُلغى',
     features: 'المزايا',
@@ -67,7 +67,7 @@ export const COPY = {
     per_month: '/ month', seats: 'Seats', period_end: 'Period ends',
     usage_title: 'Usage & limits', metric: 'Metric', used: 'Used', remaining: 'Remaining', limit: 'Limit',
     unlimited: 'Unlimited', catalogue: 'Available plans', change: 'Switch to this plan',
-    current_badge: 'Your current plan', changing: 'Switching…', changed: 'Subscription updated',
+    current_badge: 'Your current plan', grandfathered: 'Earlier plan — kept for you at your price and limits', changing: 'Switching…', changed: 'Subscription updated',
     manage_note: 'Changing the plan requires the subscriptions.manage permission.',
     st_active: 'Active', st_trialing: 'Introductory month', st_past_due: 'Past due', st_canceled: 'Canceled',
     features: 'Features',
@@ -286,7 +286,8 @@ export function SubscriptionsPage() {
             <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
             {!canManage && <p className="text-xs text-text-muted">{c.manage_note}</p>}
-            <div className="grid gap-3 md:grid-cols-3">
+            {/* grid-cols-1 + min-w-0 on the cards: a card's badges must never widen a phone's page (sweep @390). */}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {plans.map((plan) => (
                 <PlanCard
                   key={plan.code}
@@ -437,12 +438,16 @@ function PlanCard({
 }: {
   plan: SubscriptionPlan; isCurrent: boolean; canManage: boolean; pending: boolean; onChange: () => void; c: Copy
 }) {
-  const features = Object.entries(plan.features)
+  // What a customer reads as features: switches and named levels. `journeys` / `recommended` steer the signup path and are
+  // the catalogue's own data, never a feature — printed, they leak identifiers (LABEL-LEAK-001).
+  const features = Object.entries(plan.features ?? {})
+    .filter(([key, value]) => !['journeys', 'recommended', 'modules'].includes(key) && (typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number'))
   return (
-    <div className={`flex flex-col gap-3 rounded-2xl border bg-surface p-5 ${isCurrent ? 'border-brand-500 ring-1 ring-brand-500/30' : 'border-border'}`}>
-      <div className="flex items-start justify-between gap-2">
+    <div className={`flex min-w-0 flex-col gap-3 rounded-2xl border bg-surface p-5 ${isCurrent ? 'border-brand-500 ring-1 ring-brand-500/30' : 'border-border'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <span className="font-bold text-text-primary">{plan.name}</span>
         {isCurrent && <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-600"><CheckCircle2 size={12} /> {c.current_badge}</span>}
+        {plan.grandfathered && <span data-testid={`plan-grandfathered-${plan.code}`} className="inline-flex items-center whitespace-nowrap rounded-full bg-info/15 px-2 py-0.5 text-[11px] font-semibold text-info">{c.grandfathered}</span>}
       </div>
       <div className="tnum text-xl font-extrabold text-text-primary"><Num>{plan.price_monthly} {plan.currency}<span className="ms-1 text-xs font-normal text-text-muted">{c.per_month}</span></Num></div>
 

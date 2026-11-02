@@ -6,6 +6,7 @@ namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use App\Domains\Subscriptions\Models\TenantLimitOverride;
 use App\Domains\Subscriptions\Models\UsageCounter;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -51,6 +52,12 @@ final class SubscriptionService
      */
     public function effectiveLimit(Tenant $tenant, string $metric): ?int
     {
+        // SUPERADMIN-LIMITS-001 — a cap the console set for THIS workspace wins over its plan's, trial or not.
+        [$overridden, $cap] = $this->override($tenant, $metric);
+        if ($overridden) {
+            return $cap;
+        }
+
         $plan = $this->currentPlan($tenant);
 
         if ($plan === null) {
@@ -60,6 +67,21 @@ final class SubscriptionService
         return $this->subscriptionFor($tenant)?->isTrialing()
             ? $plan->trialLimitFor($metric)
             : $plan->limitFor($metric);
+    }
+
+    /**
+     * SUPERADMIN-LIMITS-001 — this workspace's own cap for a metric, set from the console: [true, cap] (a null cap is unlimited),
+     * or [false, null] when there is none or it has expired. Read fresh: an override is rare and must take effect at once.
+     *
+     * @return array{0: bool, 1: int|null}
+     */
+    public function override(Tenant $tenant, string $metric): array
+    {
+        $row = TenantLimitOverride::query()->where('tenant_id', $tenant->id)->where('metric', $metric)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->first(['limit_value']);
+
+        return $row === null ? [false, null] : [true, $row->limit_value === null ? null : (int) $row->limit_value];
     }
 
     public function subscriptionFor(Tenant $tenant): ?Subscription
@@ -113,7 +135,7 @@ final class SubscriptionService
     public function withinLimit(Tenant $tenant, string $metric): bool
     {
         $plan = $this->currentPlan($tenant);
-        if ($plan === null) {
+        if ($plan === null && ! $this->override($tenant, $metric)[0]) {
             return true; // no catalogue → do not block
         }
 
@@ -130,7 +152,7 @@ final class SubscriptionService
     public function remaining(Tenant $tenant, string $metric): ?int
     {
         $plan = $this->currentPlan($tenant);
-        if ($plan === null) {
+        if ($plan === null && ! $this->override($tenant, $metric)[0]) {
             return null;
         }
 
@@ -255,8 +277,13 @@ final class SubscriptionService
                 ->where('project_integration_bindings.tenant_id', $id)
                 ->where('project_integration_bindings.is_active', true)
                 ->where('external_accounts.account_type', 'ad_account')
+                // PRICING-SEATS-001 — one REAL account (provider + its id), however many connections reach it.
                 ->distinct()
-                ->count('project_integration_bindings.external_account_id'),
+                ->count(DB::raw("external_accounts.provider || ':' || external_accounts.external_id")),
+
+            // PRICING-SEATS-001 — replacements used in the rolling 30-day window: a different account taking a released seat.
+            'ad_account_replacements' => DB::table('ad_account_seat_events')->where('tenant_id', $id)->where('type', 'replaced')
+                ->where('occurred_at', '>', Carbon::now()->subDays(30))->count(),
 
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.
@@ -339,14 +366,26 @@ final class SubscriptionService
      */
     public function mostPermissivePlan(): ?SubscriptionPlan
     {
-        /** @var SubscriptionPlan|null $plan */
-        $plan = SubscriptionPlan::query()
+        /*
+         * By CAPS, not by price — PRICING-CATALOGUE-001.
+         *
+         * This took the most expensive plan as the most generous, which held while one currency priced everything. With the
+         * launch catalogue in USD and the 2026-11 one in SAR, «most expensive» compared 1,799 SAR with 99 USD and picked a plan
+         * capped at 20 projects — capping every workspace that has no subscription. The most permissive plan is the one with
+         * the most uncapped metrics, then the highest caps.
+         */
+        return SubscriptionPlan::query()
             ->where('is_active', true)
             ->where('contact_sales', false)
-            ->orderByDesc('price_monthly')
-            ->first();
+            ->get()
+            ->sortByDesc(function (SubscriptionPlan $p): array {
+                $limits = (array) ($p->limits ?? []);
+                $uncapped = count(array_filter($limits, static fn ($v) => $v === null));
+                $total = array_sum(array_map(static fn ($v) => (int) $v, array_filter($limits, static fn ($v) => $v !== null)));
 
-        return $plan;
+                return [$uncapped, $total];
+            })
+            ->first();
     }
 
     /** Monthly metrics roll over each calendar month; everything else is a cumulative 'total'. */

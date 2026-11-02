@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Services;
 
+use App\Domains\Subscriptions\Models\PlanCatalogueVersion;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -33,12 +34,35 @@ final class PlanCatalogue
      */
     public function offered(): Collection
     {
+        return $this->listed()->reject(fn (SubscriptionPlan $p) => (bool) $p->contact_sales)->values();
+    }
+
+    /**
+     * What the price list SHOWS: everything on sale plus the plans sold by conversation (Enterprise), which appear as «contact
+     * us» and are never sold through the checkout. PRICING-CATALOGUE-001.
+     *
+     * @return Collection<int, SubscriptionPlan>
+     */
+    public function listed(): Collection
+    {
         return SubscriptionPlan::query()
             ->where('is_active', true)
             ->where('is_public', true)
             ->orderBy('sort_order')
             ->orderBy('price_monthly')
             ->get();
+    }
+
+    /**
+     * PRICING-CATALOGUE-001 — the currency NEW customers are quoted in: the latest published catalogue edition's. Falls back to
+     * `subscriptions.currency`, which stays the fallback for an existing subscription that carries none of its own — so a
+     * legacy USD subscriber is never re-denominated by a new edition.
+     */
+    public function currency(): string
+    {
+        $edition = PlanCatalogueVersion::query()->where('status', 'published')->orderByDesc('number')->value('currency');
+
+        return (string) ($edition ?? config('subscriptions.currency'));
     }
 
     /** Every plan, including withdrawn ones — the platform owner's view. */
@@ -61,7 +85,8 @@ final class PlanCatalogue
     {
         $plan = $this->byCode($code);
 
-        return $plan !== null && $plan->is_active && $plan->is_public;
+        // A plan sold by conversation has no published price: signing up or moving onto it here would cost nothing.
+        return $plan !== null && $plan->is_active && $plan->is_public && ! $plan->contact_sales;
     }
 
     /**
@@ -149,7 +174,7 @@ final class PlanCatalogue
      */
     public function toArray(bool $offeredOnly = true): array
     {
-        return ($offeredOnly ? $this->offered() : $this->all())
+        return ($offeredOnly ? $this->listed() : $this->all())
             ->map(fn (SubscriptionPlan $plan) => [
                 'code' => $plan->code,
                 'name' => $plan->name,
@@ -157,8 +182,9 @@ final class PlanCatalogue
                 'summary_ar' => $plan->summary_ar,
                 'summary_en' => $plan->summary_en,
                 'currency' => $plan->currency,
-                'price_monthly' => (string) $plan->price_monthly,
-                'price_annual' => $plan->price_annual === null ? null : (string) $plan->price_annual,
+                // A plan sold by conversation publishes no price: the stored 0.00 only satisfies NOT NULL and is never shown.
+                'price_monthly' => $plan->contact_sales ? null : (string) $plan->price_monthly,
+                'price_annual' => $plan->contact_sales || $plan->price_annual === null ? null : (string) $plan->price_annual,
                 'trial_days' => $plan->trial_days,
                 'trial_fee' => (string) $plan->trial_fee,
                 // The offer and what stands behind it travel together — SUB-COMMIT-001.

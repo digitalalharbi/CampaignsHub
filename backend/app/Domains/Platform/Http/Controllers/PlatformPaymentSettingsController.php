@@ -8,6 +8,7 @@ use App\Domains\Billing\Gateways\PaymentGatewayCatalogue;
 use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
+use App\Domains\Subscriptions\Services\PlanCatalogue;
 use App\Domains\Subscriptions\Services\RecurringBilling;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -40,7 +41,8 @@ final class PlatformPaymentSettingsController extends Controller
             'default' => $this->settings->primary(),
             'primary' => $this->settings->primary(),
             'primary_source' => $this->settings->primaryIsFromConsole() ? 'console' : 'environment',
-            'currency' => (string) config('subscriptions.currency'),
+            // The currency new customers are quoted in (the published catalogue's); existing subscriptions keep their own.
+            'currency' => app(PlanCatalogue::class)->currency(),
             'providers' => array_map(fn (string $key) => $this->describe($key), PaymentGatewayCatalogue::KEYS),
             'recurring' => $this->recurring->readiness(),
             'mail' => [
@@ -112,7 +114,7 @@ final class PlatformPaymentSettingsController extends Controller
 
         $result = $adapter->createSession([
             'amount' => '1.00',
-            'currency' => (string) config('subscriptions.currency'),
+            'currency' => app(PlanCatalogue::class)->currency(),
             'description' => 'CampaignsHub connection test',
             'reference' => 'connection-test:'.now()->timestamp,
             'return_url' => Frontend::origin().'/admin/settings',

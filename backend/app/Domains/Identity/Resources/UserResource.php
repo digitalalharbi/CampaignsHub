@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Resources;
 
 use App\Domains\Accounts\Services\AccountEntitlements;
+use App\Domains\Platform\Models\SupportSession;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -44,6 +45,8 @@ final class UserResource extends JsonResource
             'role_slug' => $role?->slug,
             'status' => $this->accountStatus(),
             'is_platform_admin' => $this->is_platform_admin,
+            // SUPERADMIN-SUPPORT-ACCESS-001 — the visit this request runs under, for the banner and the way back; null otherwise.
+            'support' => $this->supportVisit(),
             'email_verified' => $this->email_verified_at !== null,
             'two_factor_enabled' => (bool) $this->two_factor_enabled,
             // Personal preferences (distinct from tenant/workspace settings).
@@ -114,5 +117,26 @@ final class UserResource extends JsonResource
         }
 
         return Str::upper(Str::substr($source, 0, 2));
+    }
+
+    /** @return array{session_id: string, tenant_id: string, tenant_name: ?string, mode: string, expires_at: string}|null */
+    private function supportVisit(): ?array
+    {
+        $membership = app(MembershipContext::class)->membership();
+        $id = $membership?->getAttribute('support_session_id');
+
+        if (! is_string($id)) {
+            return null;
+        }
+
+        $visit = SupportSession::query()->find($id);
+
+        return $visit === null ? null : [
+            'session_id' => $visit->id,
+            'tenant_id' => $visit->tenant_id,
+            'tenant_name' => Tenant::query()->whereKey($visit->tenant_id)->value('name'),
+            'mode' => $visit->mode,
+            'expires_at' => $visit->expires_at->toIso8601String(),
+        ];
     }
 }

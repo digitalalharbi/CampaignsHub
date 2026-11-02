@@ -74,11 +74,15 @@ final class ScheduledWorkInventoryTest extends TestCase
          * inventory is for.
          */
         'measurement:sync',
+        // PERF-RECOVERY-001 — logs an error when a route p95 or a queue backlog passes its limit.
+        'ops:perf-check',
         'notifications:send-alerts',
         'notifications:send-digests',
         'reports:dispatch-scheduled',
         'requests:evaluate-sla',
         'requests:prune-uploads',
+        // PRICING-SEATS-001 — hourly; stamps a released ad-account seat near when it was released.
+        'seats:reconcile',
         'subscriptions:lifecycle',
         // PAY-RECONCILE-001 — every fifteen minutes; asks the gateway only about pending payments past their webhook's window.
         'subscriptions:reconcile-payments',

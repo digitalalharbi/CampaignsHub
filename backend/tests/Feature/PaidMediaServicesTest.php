@@ -251,18 +251,23 @@ final class PaidMediaServicesTest extends TestCase
 
     public function test_intake_rejects_forged_unknown_inactive_and_private_service_keys(): void
     {
+        // All three submissions are rejected during service validation, before the verified contact
+        // proof is consumed. Reuse one approved proof so this test does not trip the OTP resend
+        // cooldown by repeatedly starting a challenge for the same email address.
+        $verifiedPayload = $this->intakePayload();
+
         // Unknown / forged key.
-        $this->postJson('/api/v1/requests', $this->intakePayload(['services' => ['new_campaign', 'not_a_real_service']]))
+        $this->postJson('/api/v1/requests', array_merge($verifiedPayload, ['services' => ['new_campaign', 'not_a_real_service']]))
             ->assertStatus(422)->assertJsonValidationErrors('services.1');
 
         // Deactivate a real service → its key is no longer accepted.
         TaxonomyOption::withoutGlobalScopes()->whereNull('tenant_id')->where('key', 'ga4')->update(['is_active' => false]);
-        $this->postJson('/api/v1/requests', $this->intakePayload(['services' => ['ga4']]))
+        $this->postJson('/api/v1/requests', array_merge($verifiedPayload, ['services' => ['ga4']]))
             ->assertStatus(422)->assertJsonValidationErrors('services.0');
 
         // Make a real service private → not accepted either.
         TaxonomyOption::withoutGlobalScopes()->whereNull('tenant_id')->where('key', 'meta_pixel')->update(['is_public' => false]);
-        $this->postJson('/api/v1/requests', $this->intakePayload(['services' => ['meta_pixel']]))
+        $this->postJson('/api/v1/requests', array_merge($verifiedPayload, ['services' => ['meta_pixel']]))
             ->assertStatus(422)->assertJsonValidationErrors('services.0');
 
         $this->assertSame(0, ExternalRequest::count(), 'no request should have been created for a rejected submit');

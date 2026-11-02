@@ -96,6 +96,7 @@ import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
 import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
 import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
+import { PlatformFeaturesPage } from '@/features/admin/PlatformFeaturesPage'
 import { CurrencyRatesPage } from '@/features/admin/CurrencyRatesPage'
 import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
 import { MetaCandidatePage, MetaSaasPage } from '@/features/admin/MetaCandidatePage'
@@ -539,6 +540,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.
             { path: 'settings/integrations/payments', element: <PaymentSettingsPage /> },
+            { path: 'features', element: <PlatformFeaturesPage /> },
             // PROVCFG-001 — the ad and commerce providers' OAuth apps. Its own page rather than a tab
             // inside System settings, because it is the surface an operator opens when a customer
             // cannot connect a platform, and it is the only place these keys can be written.

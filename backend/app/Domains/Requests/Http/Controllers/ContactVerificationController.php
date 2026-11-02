@@ -20,6 +20,8 @@ use Illuminate\Validation\Rule;
  */
 final class ContactVerificationController
 {
+    private const RESEND_COOLDOWN = 60;
+
     public function __construct(
         private readonly ContactVerificationService $service,
         private readonly PortalTenantResolver $portal,
@@ -38,13 +40,22 @@ final class ContactVerificationController
         $this->assertShape($data['channel'], $destination);
 
         $tenant = $this->portal->resolve($request);
-        $result = $this->service->start($data['channel'], $destination, $data['purpose'] ?? 'contact_verify', $tenant ? (string) $tenant->id : null);
+        $result = $this->service->start(
+            $data['channel'],
+            $destination,
+            $data['purpose'] ?? 'contact_verify',
+            $tenant ? (string) $tenant->id : null,
+            cooldownSeconds: self::RESEND_COOLDOWN,
+            invalidatePrevious: true,
+            ownerKey: $this->ownerKey($request),
+        );
 
         return response()->json(['data' => [
             'verification_id' => $result['id'],
             'channel' => $result['channel'],
             'destination' => $result['destination'],
             'delivery_status' => $result['delivery_status'], // awaiting_provider_credentials until a provider is wired
+            'resend_after' => self::RESEND_COOLDOWN,
             'dev_code' => $result['dev_code'],               // non-production only; null otherwise
         ]], 201);
     }
@@ -57,7 +68,7 @@ final class ContactVerificationController
             'code' => ['required', 'string', 'size:6'],
         ]);
 
-        $v = $this->service->verify($data['verification_id'], $data['code']);
+        $v = $this->service->verify($data['verification_id'], $data['code'], $this->ownerKey($request));
 
         return response()->json(['data' => [
             'verification_id' => (string) $v->id,
@@ -99,5 +110,15 @@ final class ContactVerificationController
         // Readable as a phone number, in any of the accepted forms — `normalize()` above has already
         // turned it into E.164, so this rejects only what genuinely is not a number.
         validator(['phone' => $destination], ['phone' => ['required', new PhoneNumberRule]])->validate();
+    }
+
+    private function ownerKey(Request $request): string
+    {
+        $csrf = $request->cookie('XSRF-TOKEN');
+        $identity = is_string($csrf) && $csrf !== ''
+            ? hash('sha256', rawurldecode($csrf))
+            : hash('sha256', (string) $request->ip().'|'.(string) $request->userAgent());
+
+        return 'request-verification:'.$identity;
     }
 }

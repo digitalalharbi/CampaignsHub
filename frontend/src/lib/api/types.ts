@@ -13,6 +13,8 @@ export interface AuthUser {
   email: string
   tenant_id: string | null
   is_platform_admin: boolean
+  /** SUPERADMIN-SUPPORT-ACCESS-001 — the read-only support visit this session runs under, if any. */
+  support?: { session_id: string; tenant_id: string; tenant_name: string | null; mode: string; expires_at: string } | null
   permissions: string[]
   created_at: string | null
   // Profile + menu-header fields (from /api/me and /auth/*). Optional so older payloads still type-check.

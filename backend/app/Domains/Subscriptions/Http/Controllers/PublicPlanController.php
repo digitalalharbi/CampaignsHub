@@ -44,7 +44,8 @@ final class PublicPlanController extends Controller
 
         $plan = $this->catalogue->byCode($code);
 
-        if ($plan === null || ! $plan->is_active || ! $plan->is_public) {
+        // Only a plan that is actually sold has a quote — not a withdrawn one, and not one sold by conversation.
+        if ($plan === null || ! $this->catalogue->isOffered($code)) {
             return ApiResponse::error(__('billing.plan_not_available'), status: 404);
         }
 

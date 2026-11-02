@@ -50,6 +50,7 @@ final class PayTabsAndHyperPayTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
         config(['accounts.registration.plans.growth' => ['requires_payment' => true], 'ad_platforms.redirect_base' => 'https://api.example.test']);
 
         Http::fake(fn (HttpRequest $r) => Http::response(...($this->answer[$this->route($r)] ?? [[], 404])));

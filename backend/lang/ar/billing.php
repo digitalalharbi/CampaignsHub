@@ -21,6 +21,7 @@ return [
      * they can still choose is the one thing they need, so it is the thing that is said.
      */
     'ad_accounts_selection_exceeds_plan' => 'اخترت :requested حسابًا، وباقتك تسمح بـ:remaining حساب إضافي فقط (الحد :limit). قلّل الاختيار أو رقِّ باقتك.',
+    'ad_account_replacements_used' => 'استخدمت حد الاستبدال في باقتك (:allowance كل 30 يومًا). يمكنك ربط حساب مختلف بعد :date، أو ترقية باقتك. إعادة ربط الحسابات نفسها مجانية دائمًا.',
 
     /*
      * The metric, named in Arabic.

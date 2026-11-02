@@ -18,38 +18,38 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     await page.goto('/admin/billing')
     await switchToEnglish(page)
 
-    const annual = page.getByTestId('plan-price-annual-starter')
+    const annual = page.getByTestId('plan-price-annual-solo')
     await expect(annual).toBeVisible()
     const original = await annual.inputValue()
 
     // Save is inert until something changed — an owner opening the screen cannot fill the audit log
     // with a save that changed nothing.
-    await expect(page.getByTestId('plan-save-starter')).toBeDisabled()
+    await expect(page.getByTestId('plan-save-solo')).toBeDisabled()
 
     await annual.fill('950.00')
 
     // A change is not saveable until it is explained — the reason goes on the audit entry.
-    await expect(page.getByTestId('plan-save-starter')).toBeDisabled()
-    await page.getByTestId('plan-reason-starter').fill('Introductory annual price for the quarter.')
-    await expect(page.getByTestId('plan-save-starter')).toBeEnabled()
-    await page.getByTestId('plan-save-starter').click()
+    await expect(page.getByTestId('plan-save-solo')).toBeDisabled()
+    await page.getByTestId('plan-reason-solo').fill('Introductory annual price for the quarter.')
+    await expect(page.getByTestId('plan-save-solo')).toBeEnabled()
+    await page.getByTestId('plan-save-solo').click()
 
     // The figure a visitor is quoted is the figure the owner just set — one catalogue, not two.
     await expect.poll(async () => {
       const res = await page.request.get('/api/v1/plans')
       const body = await res.json()
-      return body.data.plans.find((p: { code: string }) => p.code === 'starter').price_annual
+      return body.data.plans.find((p: { code: string }) => p.code === 'solo').price_annual
     }, { timeout: 15000 }).toBe('950.00')
 
     // Put it back, so the rest of the suite sees the catalogue it expects.
     await page.reload()
-    await page.getByTestId('plan-price-annual-starter').fill(original)
-    await page.getByTestId('plan-reason-starter').fill('Reverting the introductory price.')
-    await page.getByTestId('plan-save-starter').click()
+    await page.getByTestId('plan-price-annual-solo').fill(original)
+    await page.getByTestId('plan-reason-solo').fill('Reverting the introductory price.')
+    await page.getByTestId('plan-save-solo').click()
     await expect.poll(async () => {
       const res = await page.request.get('/api/v1/plans')
       const body = await res.json()
-      return body.data.plans.find((p: { code: string }) => p.code === 'starter').price_annual
+      return body.data.plans.find((p: { code: string }) => p.code === 'solo').price_annual
     }, { timeout: 15000 }).toBe(original)
 
     /*
@@ -82,7 +82,8 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     const res = await page.request.get('/api/v1/plans')
     const body = await res.json()
 
-    for (const plan of body.data.plans) {
+    // A plan sold by conversation (Enterprise) publishes no price and has no checkout; every other plan is priced.
+    for (const plan of body.data.plans.filter((p: { contact_sales?: boolean }) => !p.contact_sales)) {
       expect(Number(plan.price_monthly), `plan [${plan.code}] is offered at no charge`).toBeGreaterThan(0)
       expect(plan.currency, `plan [${plan.code}] states no currency`).toBeTruthy()
 
@@ -95,11 +96,11 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     }
 
     // The entry plan is sold on both terms, and what it is sold ON is data, not marketing copy.
-    const starter = body.data.plans.find((p: { code: string }) => p.code === 'starter')
-    expect(Number(starter.price_monthly)).toBeGreaterThan(0)
-    expect(starter.price_annual, 'the entry plan must publish an annual term').not.toBeNull()
-    expect(starter.features.campaign_tracking).toBe(true)
-    expect(starter.features.reports).toBe(true)
+    const entry = body.data.plans.find((p: { code: string }) => p.code === 'solo')
+    expect(Number(entry.price_monthly)).toBeGreaterThan(0)
+    expect(entry.price_annual, 'the entry plan must publish an annual term').not.toBeNull()
+    expect(entry.features.campaign_tracking).toBe(true)
+    expect(entry.features.reports).toBe(true)
   })
 })
 

@@ -39,6 +39,7 @@ final class PaidRegistrationTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
         $this->assertingAcrossTenants();
     }
 
@@ -205,7 +206,7 @@ final class PaidRegistrationTest extends TestCase
          */
         $subscription = Subscription::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->getKey())->firstOrFail();
-        $plan = SubscriptionPlan::where('code', 'starter')->firstOrFail();
+        $plan = SubscriptionPlan::where('code', 'solo')->firstOrFail();
         $this->assertSame('active', $subscription->status);
         $this->assertNull($subscription->trial_ends_at, 'a plan bought outright has no introductory window');
         $this->assertSame('monthly', $subscription->billing_interval);
@@ -223,9 +224,9 @@ final class PaidRegistrationTest extends TestCase
     /** The annual term charges the annual amount, and says so before anybody pays. */
     public function test_the_annual_term_charges_the_annual_price(): void
     {
-        $annual = (string) SubscriptionPlan::where('code', 'starter')->firstOrFail()->price_annual;
+        $annual = (string) SubscriptionPlan::where('code', 'solo')->firstOrFail()->price_annual;
 
-        $this->getJson('/api/v1/plans/starter/quote?interval=annual')->assertOk()
+        $this->getJson('/api/v1/plans/solo/quote?interval=annual')->assertOk()
             ->assertJsonPath('data.quote.due_now', $annual)
             // Bought outright: the annual term does not pass through the introductory month.
             ->assertJsonPath('data.quote.due_later', null);

@@ -269,6 +269,22 @@ final class AgentApprovalGatewayTest extends TestCase
 
     // ── Helpers ────────────────────────────────────────────────────────────────────────────────
 
+    /** SECURITY CLUSTER 5 — the currency of an account that is not this project's is not read, let alone returned. */
+    public function test_a_proposal_does_not_read_the_currency_of_an_account_outside_the_project(): void
+    {
+        $otherTenant = Tenant::create(['name' => 'Other', 'slug' => 'ot-'.uniqid(), 'status' => 'active']);
+        $foreign = $this->account('meta', 'act_foreign', $otherTenant);
+        $unbound = $this->account('meta', 'act_unbound');
+
+        foreach ([$foreign, $unbound] as $account) {
+            $this->propose(['external_account_id' => $account->id])
+                ->assertCreated()->assertJsonPath('data.status', 'blocked')->assertJsonPath('data.currency', null);
+        }
+
+        // The bound account's own currency is still recorded.
+        $this->propose(['payload' => ['daily_budget' => 105]])->assertCreated()->assertJsonPath('data.currency', 'USD');
+    }
+
     private function member(string $email, Role $role, ?Tenant $tenant = null): User
     {
         $user = User::create(['name' => $email, 'email' => $email, 'password' => 'secret123']);

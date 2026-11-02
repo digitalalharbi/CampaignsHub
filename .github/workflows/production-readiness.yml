@@ -40,6 +40,23 @@ jobs:
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan production:check || true
 
+      # SUPERADMIN-* / PAY-GATEWAY-CONSOLE-001 — the console's schema, routes and state, read from inside the running backend.
+      # States and counts only (configured / enabled / mode / source for a gateway); no key, link, email or customer figure.
+      - name: Super Admin console evidence (states only)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan platform:console-evidence || true
+
       # PAY-MOYASAR-ACTIVATION-001 — the env FILE beside what the running backend loaded, by state only.
       #
       # production:check reads the configuration the backend container booted with. An edit to the env file after the last

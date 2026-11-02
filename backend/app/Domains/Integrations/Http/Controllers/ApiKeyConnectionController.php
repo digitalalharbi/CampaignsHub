@@ -8,9 +8,13 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Catalogue\ProviderAuth;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -58,6 +62,7 @@ final class ApiKeyConnectionController extends Controller
     public function __construct(
         private readonly TokenVault $vault,
         private readonly AccountDiscovery $discovery,
+        private readonly AdvertisingConnectorRegistry $registry,
         private readonly ProviderConfigurationService $settings,
     ) {}
 
@@ -141,7 +146,25 @@ final class ApiKeyConnectionController extends Controller
         $tokens = new OAuthTokens(accessToken: $key, refreshToken: null, expiresAt: null);
 
         try {
-            [$connection, $discovered] = DB::transaction(function () use ($tenant, $definition, $tokens, $validated, $request): array {
+            /*
+             * ACCOUNT-SCOPE-ISOLATION-002 — whose key is this? Asked BEFORE anything is stored.
+             *
+             * The answer decides which connection the key may re-credential: the one already holding
+             * this account, or a new one. Asked of the unbound connector with the pasted tokens alone,
+             * so a refused key is refused here, with nothing written. The same call `refresh()` makes a
+             * moment later, repeated on purpose: that one runs through the vault and catalogues rows,
+             * this one only names the owner.
+             */
+            $connector = $this->registry->get($definition->key);
+            $owner = $connector instanceof ApiAdvertisingConnector
+                ? (string) ($connector->discoverAdAccounts($tokens)[0]['external_id'] ?? '')
+                : '';
+
+            if ($owner === '') {
+                throw new RuntimeException('The key was accepted, but it lists no ad account.');
+            }
+
+            [$connection, $discovered] = DB::transaction(function () use ($tenant, $definition, $tokens, $validated, $request, $owner): array {
                 $connection = $this->vault->open(
                     tenantId: (string) $tenant->tenantId(),
                     provider: $definition->key,
@@ -149,8 +172,11 @@ final class ApiKeyConnectionController extends Controller
                     connectionName: $definition->label,
                     clientWorkspaceId: $validated['client_workspace_id'] ?? null,
                     createdBy: $request->user()->getKey(),
+                    externalOwnerId: $owner,
                     credentialType: 'api_key',
                 );
+
+                $this->reclaimAccountRow($connection, $owner);
 
                 $discovered = $this->discovery->refresh($connection)['discovered'];
 
@@ -200,5 +226,52 @@ final class ApiKeyConnectionController extends Controller
             'key_hint' => mb_substr($key, -4),
             'project_id' => $validated['project_id'] ?? null,
         ], 'Connected.', status: 201);
+    }
+
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-002 — the advertiser's own row comes with their own key.
+     *
+     * A connection from before the one-account rule may hold this account beside others. The new key
+     * opened a connection of its own; without this, discovery would catalogue a SECOND row for the same
+     * account, unbound, while the bound row stayed on a connection that can no longer sync it.
+     *
+     * The provider answering with this id for this key is the proof of ownership, so the row moves with
+     * its bindings and history. Same tenant and workspace only, and never a row already on a connection
+     * that names an owner: that one is somebody's working credential.
+     */
+    private function reclaimAccountRow(ProviderConnection $connection, string $owner): void
+    {
+        $alreadyHere = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('external_id', $owner)
+            ->where('account_type', 'ad_account')
+            ->exists();
+
+        if ($alreadyHere) {
+            return;
+        }
+
+        $row = ExternalAccount::withoutGlobalScopes()
+            ->where('tenant_id', $connection->tenant_id)
+            ->where('provider', $connection->provider)
+            ->where('external_id', $owner)
+            ->where('account_type', 'ad_account')
+            ->when(
+                $connection->client_workspace_id === null,
+                fn ($q) => $q->whereNull('client_workspace_id'),
+                fn ($q) => $q->where('client_workspace_id', $connection->client_workspace_id),
+            )
+            ->whereIn('provider_connection_id', ProviderConnection::withoutGlobalScopes()
+                ->where('tenant_id', $connection->tenant_id)
+                ->where('provider', $connection->provider)
+                ->whereNull('external_owner_id')
+                ->select('id'))
+            ->orderByDesc(ProjectIntegrationBinding::withoutGlobalScopes()
+                ->selectRaw('COUNT(*)')
+                ->whereColumn('project_integration_bindings.external_account_id', 'external_accounts.id')
+                ->where('is_active', true))
+            ->first();
+
+        $row?->forceFill(['provider_connection_id' => $connection->getKey(), 'access_lost_at' => null])->save();
     }
 }

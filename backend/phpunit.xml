@@ -24,6 +24,7 @@
              of test cases the process has built; this is headroom, not a licence for a test to hold more. -->
         <ini name="memory_limit" value="1024M"/>
         <env name="APP_ENV" value="testing"/>
+        <env name="PERF_RECORDING" value="false"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
@@ -33,6 +34,10 @@
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <!-- Registration enters the mobile gate by issuing a code automatically. The broad suite
+             may resend immediately to retrieve the non-production code; dedicated cooldown tests
+             override this to 60 and prove the deployed default. -->
+        <env name="REGISTRATION_MOBILE_RESEND_COOLDOWN_SECONDS" value="0"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

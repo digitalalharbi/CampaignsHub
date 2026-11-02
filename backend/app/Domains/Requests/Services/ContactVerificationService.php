@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Services;
 
+use App\Domains\Identity\Services\TwilioVerifyException;
+use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Requests\Models\ContactVerification;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
@@ -17,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class ContactVerificationService
 {
+    public function __construct(private readonly TwilioVerifyService $twilio) {}
+
     /**
      * Start a challenge. Returns the verification id and, in non-prod only, the dev code.
      *
@@ -52,9 +56,12 @@ final class ContactVerificationService
         int $cooldownSeconds = 0,
         bool $invalidatePrevious = false,
         ?\Closure $deliver = null,
+        ?string $ownerKey = null,
     ): array {
+        $ownerKeyHash = $ownerKey === null ? null : hash('sha256', $ownerKey);
+
         if ($cooldownSeconds > 0) {
-            $this->assertOutOfCooldown($channel, $destination, $purpose, $cooldownSeconds);
+            $this->assertOutOfCooldown($channel, $destination, $purpose, $cooldownSeconds, $ownerKeyHash);
         }
 
         /*
@@ -65,23 +72,33 @@ final class ContactVerificationService
          * code read off somebody's screen stays a key until it times out on its own.
          */
         if ($invalidatePrevious) {
-            ContactVerification::query()
+            $previous = ContactVerification::query()
                 ->where('channel', $channel)
                 ->where('destination', $destination)
                 ->where('purpose', $purpose)
                 ->whereNull('consumed_at')
-                ->where('expires_at', '>', Carbon::now())
-                ->update(['expires_at' => Carbon::now()->subSecond()]);
+                ->where('expires_at', '>', Carbon::now());
+
+            $ownerKeyHash === null
+                ? $previous->whereNull('owner_key_hash')
+                : $previous->where('owner_key_hash', $ownerKeyHash);
+
+            $previous->update(['expires_at' => Carbon::now()->subSecond()]);
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $providerOn = (bool) config("requests.verification.providers.{$this->providerKey($channel)}", false);
+        $twilio = $channel === 'sms' && $this->twilio->configured();
+        $providerOn = $twilio
+            || (bool) config("requests.verification.providers.{$this->providerKey($channel)}", false);
 
         $v = ContactVerification::create([
             'tenant_id' => $tenantId,
             'channel' => $channel,
             'destination' => $destination,
             'purpose' => $purpose,
+            'owner_key_hash' => $ownerKeyHash,
+            'provider' => $twilio ? 'twilio_verify' : 'local',
+            // With Twilio, this hashes an unrelated nonce. Twilio alone creates and retains the OTP.
             'code_hash' => hash('sha256', $code),
             'attempts' => 0,
             // 'sent' is NEVER recorded without a confirmed send. Provider enabled → 'queued' (dispatch is
@@ -101,7 +118,14 @@ final class ContactVerificationService
          * 500 when a mail host is briefly unreachable tells the visitor nothing and loses the code
          * that was already minted for them — they can ask for another, and the ledger says why.
          */
-        if ($deliver !== null) {
+        if ($twilio) {
+            try {
+                $state = $this->twilio->send($destination);
+                $v->forceFill(['delivery_status' => $state === 'pending' ? 'sent' : $state])->save();
+            } catch (TwilioVerifyException) {
+                $v->forceFill(['delivery_status' => 'failed'])->save();
+            }
+        } elseif ($deliver !== null) {
             try {
                 $state = $deliver($code, (string) $v->id);
             } catch (\Throwable $e) {
@@ -117,7 +141,8 @@ final class ContactVerificationService
             'channel' => $channel,
             'destination' => $destination,
             'delivery_status' => $v->delivery_status,
-            'dev_code' => self::exposeDevSecrets() ? $code : null,
+            // A Twilio OTP is never known to CampaignsHub, including in development.
+            'dev_code' => ! $twilio && self::exposeDevSecrets() ? $code : null,
             'resend_after' => $cooldownSeconds,
         ];
     }
@@ -130,10 +155,14 @@ final class ContactVerificationService
      * throttle bounds the volume; this bounds the rate to one destination, which is what stops the
      * sign-in form from being usable as a way to send somebody a message every second.
      */
-    private function assertOutOfCooldown(string $channel, string $destination, string $purpose, int $cooldownSeconds): void
-    {
-        /** @var ContactVerification|null $recent */
-        $recent = ContactVerification::query()
+    private function assertOutOfCooldown(
+        string $channel,
+        string $destination,
+        string $purpose,
+        int $cooldownSeconds,
+        ?string $ownerKeyHash,
+    ): void {
+        $query = ContactVerification::query()
             ->where('channel', $channel)
             ->where('destination', $destination)
             ->where('purpose', $purpose)
@@ -147,9 +176,13 @@ final class ContactVerificationService
              * consuming a challenge requires holding the code, which is precisely what an attacker
              * spamming somebody else's inbox does not have.
              */
-            ->whereNull('consumed_at')
-            ->orderByDesc('last_sent_at')
-            ->first();
+            ->whereNull('consumed_at');
+
+        $ownerKeyHash === null
+            ? $query->whereNull('owner_key_hash')
+            : $query->where('owner_key_hash', $ownerKeyHash);
+
+        $recent = $query->orderByDesc('last_sent_at')->first();
 
         if ($recent === null || $recent->last_sent_at === null) {
             return;
@@ -170,7 +203,7 @@ final class ContactVerificationService
      * Verify a code against a challenge. On success the row is marked verified (single-use on consume).
      * Throws ValidationException on wrong/expired/exhausted code.
      */
-    public function verify(string $verificationId, string $code): ContactVerification
+    public function verify(string $verificationId, string $code, ?string $ownerKey = null): ContactVerification
     {
         /** @var ContactVerification|null $v */
         $v = ContactVerification::find($verificationId);
@@ -180,6 +213,36 @@ final class ContactVerificationService
         if ($v->attempts >= (int) config('requests.verification.max_attempts', 5)) {
             throw ValidationException::withMessages(['code' => __('auth.code_attempts')]);
         }
+
+        if ($v->owner_key_hash !== null) {
+            $suppliedOwner = $ownerKey === null ? '' : hash('sha256', $ownerKey);
+            if (! hash_equals((string) $v->owner_key_hash, $suppliedOwner)) {
+                // Same outward answer as a wrong code: do not disclose that another account owns it.
+                throw ValidationException::withMessages(['code' => __('auth.code_incorrect')]);
+            }
+        }
+
+        if ($v->channel === 'sms' && $v->provider === 'twilio_verify') {
+            try {
+                $status = $this->twilio->check((string) $v->destination, $code);
+            } catch (TwilioVerifyException) {
+                throw ValidationException::withMessages(['code' => __('auth.code_unavailable')]);
+            }
+
+            $v->increment('attempts');
+
+            if ($status !== 'approved') {
+                $message = in_array($status, ['canceled', 'deleted'], true)
+                    ? __('auth.code_expired')
+                    : __('auth.code_incorrect');
+                throw ValidationException::withMessages(['code' => $message]);
+            }
+
+            $v->forceFill(['verified_at' => Carbon::now()])->save();
+
+            return $v;
+        }
+
         $v->increment('attempts');
 
         if (! hash_equals($v->code_hash, hash('sha256', $code))) {

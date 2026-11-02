@@ -45,7 +45,7 @@ test.describe('the portals are different products', () => {
       service: 'paid_media',
       // Required since PLAN-PAID-001 — there is no unpriced way in, so an application that names no
       // plan owes an amount nobody can compute and is refused before it is opened.
-      plan_code: 'starter',
+      plan_code: 'solo',
       billing_interval: 'monthly',
       // Required since PHONE-VERIFY-001 — no account activates without a verified number.
       phone: aFreshSaudiNumber(),

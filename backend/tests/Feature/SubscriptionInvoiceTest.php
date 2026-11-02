@@ -54,6 +54,7 @@ final class SubscriptionInvoiceTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(SubscriptionPlanSeeder::class);
+        $this->offerLaunchCatalogue();
         $this->assertingAcrossTenants();
 
         config([

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Building2, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Building2, LifeBuoy, Plus, Search, ShieldOff, ShieldCheck } from 'lucide-react'
 import { fetchTenant, fetchTenants, reissueOwnerInvitation, setTenantStatus, type PlatformTenant, type TenantPerson } from './api'
 import { UserAccessDialog } from './UserAccessDialog'
+import { MembershipDialog } from './MembershipDialog'
 import { accountTypeLabel, planLabel } from './labels'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -10,6 +11,9 @@ import { Modal } from '@/components/ui/Modal'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { AccountGrantsPanel } from './AccountGrants'
+import { TenantCapabilitiesPanel } from './TenantCapabilitiesPanel'
+import { SupportAccessDialog } from './SupportAccessDialog'
+import { TenantLimitsPanel } from './TenantLimitsPanel'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
@@ -38,6 +42,7 @@ export function TenantsPage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [suspending, setSuspending] = useState<PlatformTenant | null>(null)
   const [reason, setReason] = useState('')
+  const [supporting, setSupporting] = useState<PlatformTenant | null>(null)
   const [creating, setCreating] = useState(false)
 
   const list = useQuery({
@@ -74,6 +79,7 @@ export function TenantsPage() {
             : 'Every workspace on the platform: who they are, how large, and their status. No customer’s work appears here.'}
         </p>
       </header>
+      {supporting && <SupportAccessDialog tenant={supporting} ar={ar} onClose={() => setSupporting(null)} />}
       <CreateWorkspaceDialog open={creating} onClose={() => setCreating(false)} ar={ar} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -150,6 +156,9 @@ export function TenantsPage() {
                 </p>
               </button>
 
+              <Button data-testid={`support-enter-${t.slug}`} size="sm" variant="secondary" onClick={() => setSupporting(t)}>
+                <LifeBuoy size={14} /> {ar ? 'الدخول للدعم' : 'Support access'}
+              </Button>
               {t.status === 'active' ? (
                 <Button size="sm" variant="secondary" onClick={() => setSuspending(t)}>
                   <ShieldOff size={14} /> {ar ? 'إيقاف' : 'Suspend'}
@@ -213,9 +222,13 @@ export function TenantsPage() {
 function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar: boolean }) {
   const detail = useQuery({ queryKey: ['admin', 'tenant', id], queryFn: () => fetchTenant(id) })
   const [managing, setManaging] = useState<TenantPerson | null>(null)
+  const [member, setMember] = useState<TenantPerson | null>(null)
 
   if (managing) {
     return <UserAccessDialog person={managing} ar={ar} onClose={() => setManaging(null)} />
+  }
+  if (member) {
+    return <MembershipDialog tenantId={id} person={member} roles={detail.data?.available_roles ?? []} ar={ar} onClose={() => setMember(null)} />
   }
 
   return (
@@ -243,6 +256,11 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
 
           {/* GRANT-001 — what this account has beyond its plan, and who gave it. */}
           <AccountGrantsPanel tenantId={id} ar={ar} />
+          {/* SUPERADMIN-LIMITS-001 — this workspace's own caps over its plan's. */}
+          <TenantLimitsPanel tenantId={id} ar={ar} />
+
+          {/* SUPERADMIN-FEATURES-001 — this workspace's own switch per capability. */}
+          <TenantCapabilitiesPanel tenantId={id} ar={ar} />
 
           <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}
@@ -261,7 +279,14 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
                   </span>
                   <span className="flex items-center gap-2 text-[12px] text-text-secondary">
                     <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">{p.portal}</span>
-                    <span>{p.role}</span>
+                    <span>{(p.roles ?? []).join(', ') || p.role}</span>
+                    {p.status !== 'active' && <span className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{p.status}</span>}
+                    {p.user_uuid && !p.is_platform_admin && (
+                      <button type="button" data-testid={`membership-${p.user_uuid}`} onClick={() => setMember(p)}
+                        className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">
+                        {ar ? 'العضوية' : 'Membership'}
+                      </button>
+                    )}
                     {p.user_uuid && (
                       <button type="button" data-testid={`user-access-${p.user_uuid}`} onClick={() => setManaging(p)}
                         className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">

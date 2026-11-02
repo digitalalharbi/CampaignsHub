@@ -6,6 +6,7 @@ namespace App\Domains\Subscriptions\Models;
 
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -28,7 +29,7 @@ final class SubscriptionPlan extends Model
         'code', 'name', 'name_ar', 'summary_ar', 'summary_en',
         'price_monthly', 'price_annual', 'currency',
         'trial_fee', 'trial_days', 'trial_limits', 'minimum_commitment_months',
-        'features', 'limits', 'is_active', 'is_public', 'contact_sales', 'sort_order',
+        'features', 'limits', 'is_active', 'is_public', 'contact_sales', 'sort_order', 'catalogue_version_id',
     ];
 
     protected $casts = [
@@ -147,6 +148,12 @@ final class SubscriptionPlan extends Model
         $value = $this->limits[$metric] ?? null;
 
         return $value === null ? null : (int) $value;
+    }
+
+    /** @return BelongsTo<PlanCatalogueVersion, $this> */
+    public function catalogueVersion(): BelongsTo
+    {
+        return $this->belongsTo(PlanCatalogueVersion::class, 'catalogue_version_id');
     }
 
     /** @return HasMany<Subscription, $this> */

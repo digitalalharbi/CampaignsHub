@@ -13,7 +13,7 @@ use App\Domains\Integrations\Services\FirstSync;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
-use App\Domains\Subscriptions\Services\SubscriptionService;
+use App\Domains\Subscriptions\Seats\AdAccountSeats;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +52,7 @@ final class ConfirmAccountSelection
 {
     public function __construct(
         private readonly AccountAssignment $assignment,
-        private readonly SubscriptionService $subscriptions,
+        private readonly AdAccountSeats $seats,
         private readonly FirstSync $firstSync,
     ) {}
 
@@ -112,6 +112,11 @@ final class ConfirmAccountSelection
             foreach ($accounts as $account) {
                 $binding = $existing->get($account->getKey());
 
+                // SEC-CLUSTER-2 — an account this project does not hold yet is also «elsewhere» when the same REAL
+                // account is held by another project through a twin row. An account already bound HERE keeps
+                // being idempotent, so re-saving a selection never fails on a double that predates this rule.
+                $binding ??= $this->assignment->activeBindingElsewhere($account, (string) $project->getKey());
+
                 if ($binding !== null && (string) $binding->project_id !== (string) $project->getKey()) {
                     throw new AccountAssignedElsewhere(
                         (string) $account->getKey(),
@@ -124,7 +129,11 @@ final class ConfirmAccountSelection
             // selection twice is the same decision, and must not be charged twice.
             $newIds = $accounts->reject(fn (ExternalAccount $a) => $existing->has($a->getKey()));
 
-            $this->guardQuota((string) $connection->tenant_id, $newIds->count(), count($accountIds));
+            // PRICING-SEATS-001 — seats by real account: the same account again is free; a different one may need a replacement.
+            $this->seats->claim(
+                Tenant::withoutGlobalScopes()->findOrFail((string) $connection->tenant_id),
+                $newIds->values(), count($accountIds), auth()->id() === null ? null : (int) auth()->id(),
+            );
 
             /*
              * RUNTIME-100 §13 — the first sync is a consequence of the commit, not a race with it.
@@ -234,6 +243,9 @@ final class ConfirmAccountSelection
              * transaction, the same quota lock and the same client-workspace fence.
              */
             ->whereIn('account_type', ['ad_account', 'store'])
+            // SYNC-GATE-001 — an account the credential no longer lists cannot be selected: it would
+            // claim a seat and then never sync, because the gate refuses it.
+            ->whereNull('access_lost_at')
             ->get();
 
         if ($accounts->count() !== count($accountIds)) {
@@ -243,38 +255,5 @@ final class ConfirmAccountSelection
         }
 
         return $accounts;
-    }
-
-    /** The cap, counted under the lock this method is called inside. */
-    private function guardQuota(string $tenantId, int $adding, int $requested): void
-    {
-        if ($adding === 0) {
-            return;
-        }
-
-        $tenant = Tenant::withoutGlobalScopes()->findOrFail($tenantId);
-        $limit = $this->subscriptions->effectiveLimit($tenant, 'ad_accounts');
-
-        if ($limit === null) {
-            return;
-        }
-
-        $used = $this->subscriptions->usage($tenant, 'ad_accounts');
-
-        if ($used + $adding <= $limit) {
-            return;
-        }
-
-        throw new PlanLimitReached(
-            'ad_accounts',
-            $used,
-            $limit,
-            __('billing.ad_accounts_selection_exceeds_plan', [
-                'requested' => $requested,
-                'remaining' => max(0, $limit - $used),
-                'limit' => $limit,
-            ]),
-            requested: $requested,
-        );
     }
 }

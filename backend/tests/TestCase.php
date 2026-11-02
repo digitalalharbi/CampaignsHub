@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Tests\Concerns\GrantsMemberships;
@@ -101,5 +102,16 @@ abstract class TestCase extends BaseTestCase
         }
 
         return $response;
+    }
+
+    /**
+     * PRICING-CATALOGUE-001 — put the launch catalogue (Starter, Growth, Agency) back on sale, for a test whose subject is a
+     * mechanism those plans carry (the introductory month, the minimum commitment) rather than what is sold today. Production has
+     * them withdrawn; PlanCatalogueTest asserts that.
+     */
+    protected function offerLaunchCatalogue(): void
+    {
+        SubscriptionPlan::query()
+            ->whereIn('code', ['starter', 'growth', 'agency'])->update(['is_public' => true]);
     }
 }
