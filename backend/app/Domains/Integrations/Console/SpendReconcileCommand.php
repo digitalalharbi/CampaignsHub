@@ -133,7 +133,7 @@ final class SpendReconcileCommand extends Command
         return self::SUCCESS;
     }
 
-    /** @return Collection<int, object> */
+    /** @return Collection<int, \stdClass> */
     private function storedRows(ExternalAccount $account, string $from, string $to)
     {
         return DB::table('daily_metrics as m')
