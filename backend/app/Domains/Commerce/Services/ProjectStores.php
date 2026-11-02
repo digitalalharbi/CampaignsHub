@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Commerce\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -68,22 +69,26 @@ final class ProjectStores
     }
 
     /**
-     * Stores connected to the tenant that have filed nothing anywhere yet.
+     * SEC-3 — the stores awaiting their first read FOR THIS PROJECT: actively bound to it, nothing filed yet.
      *
-     * Reported separately rather than folded in, because «no store is connected» and «a store is
-     * connected and has not been read yet» are different sentences, and the funnel says the wrong one
-     * if it cannot tell them apart. Such a store belongs to no project because nobody has assigned it
-     * to one yet — which is a decision waiting to be made, not an answer waiting to be computed.
+     * `unsynced()` returned every unfiled store of the tenant, so a project with no rows yet was told the
+     * names of stores bound to other projects and other clients.
      *
      * @return Collection<int, ExternalAccount>
      */
-    public function unsynced(string $tenantId): Collection
+    public function unsyncedFor(string $tenantId, string $projectId): Collection
     {
-        $filed = $this->filedAccountIds();
+        $bound = BoundAccountVisibility::activeAccountIds($projectId);
+        $filed = $this->filedAccountIds($projectId);
+
+        if ($bound === []) {
+            return collect();
+        }
 
         return ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('account_type', 'store')
+            ->whereIn('id', $bound)
             ->when($filed !== [], fn ($q) => $q->whereNotIn('id', $filed))
             ->get(['id', 'name', 'provider', 'currency', 'last_synced_at']);
     }
@@ -106,8 +111,8 @@ final class ProjectStores
         $out = [];
 
         foreach (self::COMMERCE_TABLES as $table) {
-            $rows = DB::table($table)
-                ->whereIn('project_id', $projectIds)
+            // SEC-3 — a store the project no longer selects is not one of its stores, whatever it once filed here.
+            $rows = BoundAccountVisibility::apply(DB::table($table)->whereIn('project_id', $projectIds), $table)
                 ->select('project_id', 'external_account_id')
                 ->distinct()
                 ->get();
@@ -120,13 +125,13 @@ final class ProjectStores
         return array_map(static fn (array $set): array => array_keys($set), $out);
     }
 
-    /** @return list<string> every store id that has filed data under any project. */
-    private function filedAccountIds(): array
+    /** @return list<string> every store id that has filed data under this project. */
+    private function filedAccountIds(string $projectId): array
     {
         $ids = [];
 
         foreach (self::COMMERCE_TABLES as $table) {
-            foreach (DB::table($table)->distinct()->pluck('external_account_id') as $id) {
+            foreach (DB::table($table)->where('project_id', $projectId)->distinct()->pluck('external_account_id') as $id) {
                 $ids[(string) $id] = true;
             }
         }

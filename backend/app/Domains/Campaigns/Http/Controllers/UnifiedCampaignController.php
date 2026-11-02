@@ -431,7 +431,10 @@ final class UnifiedCampaignController extends Controller
         abort_unless($request->user()->hasPermission('campaigns.view'), 403);
         $model = $this->find($campaign);
 
-        $externals = ExternalCampaign::query()->where('unified_campaign_id', $model->id)->latest()->get();
+        // SEC-CLUSTER-2 — a detached account's campaign is hidden here exactly as link() hides it.
+        $externals = ExternalCampaign::query()->where('unified_campaign_id', $model->id)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
+            ->latest()->get();
 
         return ApiResponse::success(ExternalCampaignResource::collection($externals), 'Linked external campaigns retrieved.');
     }

@@ -45,7 +45,12 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
+<<<<<<< HEAD
 use Illuminate\Support\Facades\DB;
+||||||| 7e9191ee0
+=======
+use Illuminate\Queue\Events\JobProcessing;
+>>>>>>> origin/main
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -176,6 +181,20 @@ class AppServiceProvider extends ServiceProvider
             'opportunity' => Opportunity::class,
             'company' => Company::class,
         ]);
+
+        /*
+         * SECURITY CLUSTER 5 — a long-lived queue worker starts every job with NO current project.
+         *
+         * ProjectContext is a singleton (it must outlive a request's middleware chain), so unlike the scoped TenantContext the worker's
+         * between-jobs flush never reaches it: a job that set a project and died before its own forget() handed that project to the next
+         * job, whose creating hook then stamped its rows with a project that was never theirs. Cleared before each real queue job; the
+         * `sync` connection runs inside its caller's request, which owns its context.
+         */
+        Event::listen(JobProcessing::class, static function (JobProcessing $event): void {
+            if ($event->connectionName !== 'sync') {
+                app(ProjectContext::class)->forget();
+            }
+        });
 
         // Audit authentication lifecycle events.
         /*

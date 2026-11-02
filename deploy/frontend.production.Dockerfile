@@ -22,6 +22,9 @@ FROM nginx:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY infrastructure/nginx/frontend.conf /etc/nginx/conf.d/default.conf
+# PERF-RECOVERY-001 — compressed once here instead of on every request; served by `gzip_static`.
+RUN find /usr/share/nginx/html -type f \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) \
+    -exec sh -c 'gzip -9 -c "$1" > "$1.gz"' _ {} \;
 
 EXPOSE 5173
 CMD ["nginx", "-g", "daemon off;"]

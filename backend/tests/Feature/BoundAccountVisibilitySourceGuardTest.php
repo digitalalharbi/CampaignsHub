@@ -29,6 +29,7 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
     private const SEES_EVERY_ROW = [
         // The cleanup acts on the rows the rule HIDES, so it must see them all; it refuses a selected account itself.
         'Domains/Integrations/Console/ScopeCleanupCommand.php' => 'the cleanup, which acts on hidden rows and refuses selected ones',
+        'Domains/Integrations/Console/AccountOwnershipAuditCommand.php' => 'audit and quarantine of every stored row, including hidden ones; serves no reader',
         // Writers and the sync pipeline resolve ids against everything the account holds.
         'Domains/Metrics/Services/AccountMetricsSyncer.php' => 'writer',
         'Domains/Metrics/Actions/UpsertDailyMetrics.php' => 'writer',
@@ -66,6 +67,8 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Campaigns/Services/CreativePresenter.php' => 'presents one creative it was handed',
         'Domains/Campaigns/Support/CreativeDemoPolicy.php' => 'the demo policy predicate, applied beside this one',
         'Domains/Reports/Services/ReportCreativeMedia.php' => 'resolves media for creatives a report already names',
+        // SEC-CLUSTER-4 — proves a Drive attachment target is a creative of this tenant inside the caller's client ceiling; reads the creative's project id only.
+        'Domains/Drive/Services/DriveReach.php' => 'resolves which project a creative belongs to so an attach target can be checked against the caller\'s reach; returns no figure',
     ];
 
     public function test_every_reader_of_a_figure_table_asks_the_one_visibility_rule(): void

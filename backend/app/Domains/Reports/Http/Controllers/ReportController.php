@@ -233,7 +233,9 @@ final class ReportController extends Controller
              * «no choice» used to mean every account the project binds — several clients' in one case.
              * Reports saved before this keep the scope they have; only creating or editing asks.
              */
-            'scope' => ($scope = ReportScope::fromReport(ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? []))))->isUnbounded() ? null : $scope->toArray(),
+            // SEC-3 — `project_ids` is not the caller's to choose: `verifyFlat` hands unknown keys back untouched, and a stored
+            // project id lifted the generator's project scope onto another project's rows. The report's own project, or none.
+            'scope' => ($scope = ReportScope::fromReport(self::pinnedToProject($project, ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? [])))))->isUnbounded() ? null : $scope->toArray(),
             'created_by' => $request->user()->id,
         ]);
 
@@ -241,6 +243,17 @@ final class ReportController extends Controller
         $audit->log(action: 'report.created', entityType: Report::class, entityId: (string) $report->id, after: ['type' => $report->type, 'form' => $report->form]);
 
         return ApiResponse::success($this->shape($report), 'Report queued for generation.', status: 201);
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return array<string, mixed>
+     */
+    private static function pinnedToProject(string $project, array $scope): array
+    {
+        $scope['project_ids'] = (array) ($scope['project_ids'] ?? []) === [] ? [] : [$project];
+
+        return $scope;
     }
 
     public function show(Request $request, string $project, string $report): JsonResponse
