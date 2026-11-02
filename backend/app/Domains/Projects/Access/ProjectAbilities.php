@@ -34,6 +34,8 @@ use App\Models\User;
  */
 final class ProjectAbilities
 {
+    public function __construct(private readonly ProjectReach $reach) {}
+
     /**
      * One answer per (reader, project) for the life of the request.
      *
@@ -105,6 +107,14 @@ final class ProjectAbilities
     {
         if ($user->is_platform_admin) {
             return ProjectCapability::ALL;
+        }
+
+        /*
+         * SEC-1 — the membership's named client / project ceiling outranks every permission below,
+         * `settings.manage` included. A project outside it yields nothing.
+         */
+        if (! $this->reach->withinCeiling($projectId)) {
+            return [];
         }
 
         /*

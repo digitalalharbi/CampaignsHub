@@ -1,0 +1,46 @@
+name: Production DB Backup
+
+# Takes a custom-format pg_dump of the production database before a data repair, then PROVES it is
+# readable: the archive's table of contents is listed and the row count of the tables a repair will
+# touch is printed next to the dump size. Nothing is written to the database. Manual only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Short label for the file name (letters, digits, dash)'
+        required: false
+        default: 'pre-repair'
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Dump and verify on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          LABEL: ${{ inputs.label }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: LABEL
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            L=$(printf '%s' "${LABEL:-pre-repair}" | tr -cd 'A-Za-z0-9-')
+            F="backups/campaignshub-$(date -u +%Y%m%dT%H%M%SZ)-${L}.dump"
+            mkdir -p backups
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            $DC exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$F"
+            ls -l "$F"
+            $DC exec -T db pg_restore --list < "$F" | wc -l | xargs echo "TOC entries:"
+            $DC exec -T db pg_restore --list < "$F" | grep -c "TABLE DATA" | xargs echo "TABLE DATA sections:"
+            sha256sum "$F"
+            echo "BACKUP_FILE=$F"

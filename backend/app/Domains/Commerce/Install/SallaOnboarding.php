@@ -7,6 +7,7 @@ namespace App\Domains\Commerce\Install;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Models\PendingStoreInstall;
@@ -105,6 +106,13 @@ final class SallaOnboarding
             return ['outcome' => 'claim', 'user' => null, 'store' => $merchant];
         }
 
+        // SEC-3 — a client is never picked for the merchant: with several (or an agency's one) the install
+        // waits on the claim page for a person with integrations.connect to place it.
+        $this->context->setTenantId((string) $tenant->id);
+        if (! $this->mayPlaceWithoutAsking($tenant)) {
+            return ['outcome' => 'claim', 'user' => null, 'store' => $merchant];
+        }
+
         $this->connect($install, $claimCode, $tenant, $user);
 
         return ['outcome' => 'attached', 'user' => $this->mayEnter($user) ? $user : null, 'store' => $merchant];
@@ -166,7 +174,8 @@ final class SallaOnboarding
     {
         $this->context->setTenantId((string) $tenant->id);
 
-        $client = ClientWorkspace::query()->orderBy('created_at')->first() ?? ClientWorkspace::create([
+        // At most one client exists here (see `mayPlaceWithoutAsking`): the only one, or a fresh one.
+        $client = ClientWorkspace::query()->first() ?? ClientWorkspace::create([
             'tenant_id' => $tenant->id,
             'name' => $tenant->name,
             'slug' => Str::slug($tenant->name.'-'.Str::random(4)),
@@ -196,6 +205,22 @@ final class SallaOnboarding
             // The assignment is what queues the first backfill (products, orders, carts, store profile).
             $this->assignment->assign($store, $project);
         }
+    }
+
+    /**
+     * Whether a new store may be filed without asking where: the tenant has no client yet (one is made
+     * for it) or is an advertiser with exactly one. Several clients, or an agency's, is a human choice —
+     * guessing the oldest client filed one merchant's orders and customers under an unrelated client.
+     */
+    private function mayPlaceWithoutAsking(Tenant $tenant): bool
+    {
+        $clients = ClientWorkspace::query()->limit(2)->count();
+
+        if ($clients === 0) {
+            return true;
+        }
+
+        return $clients === 1 && $tenant->account_type !== AccountType::Agency->value;
     }
 
     private function memberOf(string $tenantId, string $email): ?User

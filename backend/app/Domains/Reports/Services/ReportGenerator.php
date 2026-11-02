@@ -61,6 +61,17 @@ final class ReportGenerator
 
     public function generate(Report $report): array
     {
+        try {
+            return $this->snapshot($report);
+        } finally {
+            // SECURITY CLUSTER 5 — a failed generation must not leave its project behind in the worker (ProjectContext is a singleton).
+            app(ProjectContext::class)->forget();
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function snapshot(Report $report): array
+    {
         app(TenantContext::class)->setTenantId((string) $report->tenant_id);
         app(ProjectContext::class)->setProjectId((string) $report->project_id);
 
@@ -79,7 +90,7 @@ final class ReportGenerator
          * An unbounded scope returns the singleton unchanged, so a report that names no scope behaves
          * exactly as it did before this existed.
          */
-        $scope = ReportScope::fromReport($report->scope);
+        $scope = ReportScope::fromReport($report->scope, (string) $report->project_id);
         // Historical reports stored the objective choice inside the scope. It is the report's measurement template, never a data bound:
         // moved to the report, the stored scope loses it, and an explicit «filter campaigns by objective» (flagged) is left exactly as chosen.
         if (($template = $scope->objectiveTemplate()) !== null) {

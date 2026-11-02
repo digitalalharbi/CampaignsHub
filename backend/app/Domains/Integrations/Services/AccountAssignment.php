@@ -36,6 +36,15 @@ use Illuminate\Database\Eloquent\Builder;
 final class AccountAssignment
 {
     /**
+     * SYNC-GATE-001 — a project in one of these states fetches nothing.
+     *
+     * `draft`, `onboarding`, `active` and `completed` sync: a project being set up needs its first
+     * numbers and a finished one still reconciles its last days. A paused or archived project is one
+     * its owner stopped, and a sweep that carried on spent the provider's rate limit on it.
+     */
+    public const PROJECT_STATUSES_THAT_DO_NOT_SYNC = ['paused', 'archived'];
+
+    /**
      * The project an account is assigned to, or null when nobody has assigned it.
      *
      * Null is an answer, not a failure — and it must never be replaced by a guess. Callers refuse
@@ -51,6 +60,42 @@ final class AccountAssignment
             ->value('project_id');
 
         return is_string($projectId) && $projectId !== '' ? $projectId : null;
+    }
+
+    /**
+     * SEC-CLUSTER-2 — the ACTIVE binding that stops this account being bound to `$projectId`, or null.
+     *
+     * RULE (decided here, once): a real provider account — `(tenant, provider, external_id,
+     * account_type)` — has at most ONE active project binding, whichever `external_accounts` row
+     * represents it. The check used to compare the row's own uuid, so the same real account
+     * discovered twice (authorised under two clients' connections, under a tenant-level connection,
+     * or under the Live and SaaS Meta apps) was a different row each time, each passed
+     * `mayAssign()` for its own client, and the one advertiser fed two projects — a client seeing
+     * another client's spend. There is no recorded, explicit sharing in this product (ORCH-100 §I),
+     * so none is allowed: detach it where it is first, then bind it.
+     *
+     * A twin the Meta app move retired (`superseded`) never syncs and is not a holder.
+     * Callers run this under the tenant row lock, so two concurrent binds serialise.
+     */
+    public function activeBindingElsewhere(ExternalAccount $account, string $projectId): ?ProjectIntegrationBinding
+    {
+        $twins = ExternalAccount::withoutGlobalScopes()
+            ->where('tenant_id', $account->tenant_id)
+            ->where('provider', $account->provider)
+            ->where('external_id', $account->external_id)
+            ->where('account_type', $account->account_type)
+            ->where('status', '!=', 'superseded')
+            ->select('id');
+
+        return ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->where('project_id', '!=', $projectId)
+            ->where(fn ($q) => $q
+                ->where('external_account_id', $account->getKey())
+                ->orWhereIn('external_account_id', $twins))
+            ->orderByDesc('is_primary')
+            ->orderBy('created_at')
+            ->first();
     }
 
     /**
@@ -99,7 +144,15 @@ final class AccountAssignment
             fn ($sub) => $sub->selectRaw('1')
                 ->from('project_integration_bindings')
                 ->whereColumn('project_integration_bindings.external_account_id', 'external_accounts.id')
-                ->where('project_integration_bindings.is_active', true),
+                ->where('project_integration_bindings.is_active', true)
+                // SYNC-GATE-001 — a binding the Owner switched off does not sync, and neither does a
+                // binding into a project that is paused, archived or deleted.
+                ->where('project_integration_bindings.sync_enabled', true)
+                ->whereExists(fn ($project) => $project->selectRaw('1')
+                    ->from('projects')
+                    ->whereColumn('projects.id', 'project_integration_bindings.project_id')
+                    ->whereNull('projects.deleted_at')
+                    ->whereNotIn('projects.status', self::PROJECT_STATUSES_THAT_DO_NOT_SYNC)),
         );
     }
 
@@ -117,6 +170,17 @@ final class AccountAssignment
         // META-SAAS-APP-001 — a twin retired by a connection move is never synced again, even if a binding is later
         // pointed at it: its account now lives on the moved row, and a second fetch would count the same spend twice.
         if ($account->status === 'superseded') {
+            return false;
+        }
+
+        /*
+         * SYNC-GATE-001 — the job's gate is the sweep's gate.
+         *
+         * The sweeps only queue an ad account whose status is `active`; the first sync, a backfill, a
+         * webhook and the manual button reached `isActivelyAssigned` instead and did not ask, so an
+         * account the provider reports as disabled was fetched whenever somebody pressed a button.
+         */
+        if ($account->account_type === 'ad_account' && $account->status !== 'active') {
             return false;
         }
 
@@ -152,9 +216,27 @@ final class AccountAssignment
          */
         $project = Project::withoutGlobalScopes()
             ->whereKey($projectId)
-            ->first(['id', 'tenant_id', 'client_workspace_id']);
+            ->first(['id', 'tenant_id', 'client_workspace_id', 'status', 'deleted_at']);
 
         if ($project === null || (string) $project->tenant_id !== (string) $account->tenant_id) {
+            return false;
+        }
+
+        // SYNC-GATE-001 — `withoutGlobalScopes()` above also strips the soft-delete scope, so a deleted
+        // project was still «found». The comment on this method promised «deleted, archived»; this keeps it.
+        if ($project->deleted_at !== null || in_array($project->status, self::PROJECT_STATUSES_THAT_DO_NOT_SYNC, true)) {
+            return false;
+        }
+
+        // SYNC-GATE-001 — the binding that names this project must still allow syncing.
+        $syncs = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->where('project_id', $projectId)
+            ->where('is_active', true)
+            ->where('sync_enabled', true)
+            ->exists();
+
+        if (! $syncs) {
             return false;
         }
 

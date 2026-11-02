@@ -7,6 +7,7 @@ namespace App\Domains\Billing\Http\Controllers;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
+use App\Domains\Billing\Services\BillingReach;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -29,6 +30,8 @@ final class FinanceCenterController extends Controller
     /** Invoice states that still owe money (a draft has not been issued, a cancelled one is void). */
     private const OWING_STATES = ['issued', 'sent', 'partially_paid', 'overdue'];
 
+    public function __construct(private readonly BillingReach $reach) {}
+
     /** GET billing/overview — the consolidated KPI picture across quotes, invoices and payments. */
     public function overview(Request $request): JsonResponse
     {
@@ -36,23 +39,25 @@ final class FinanceCenterController extends Controller
 
         $now = Carbon::now();
 
-        $quotes = Quote::query()
+        $user = $request->user();
+
+        $quotes = $this->reach->constrain(Quote::query(), $user)
             ->select('status')
             ->selectRaw('COUNT(*) AS count, COALESCE(SUM(total), 0) AS total')
             ->groupBy('status')->get();
 
-        $invoices = Invoice::query()
+        $invoices = $this->reach->constrain(Invoice::query(), $user)
             ->select('status')
             ->selectRaw('COUNT(*) AS count, COALESCE(SUM(total), 0) AS total, COALESCE(SUM(amount_paid), 0) AS paid')
             ->groupBy('status')->get();
 
-        $payments = Payment::query()
+        $payments = $this->reach->constrainPayments(Payment::query(), $user)
             ->select('status')
             ->selectRaw('COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total')
             ->groupBy('status')->get();
 
         // Outstanding = what issued invoices still owe. Computed from the invoices themselves.
-        $open = Invoice::query()->whereIn('status', self::OWING_STATES)->get(['id', 'number', 'total', 'amount_paid', 'due_date', 'status', 'currency', 'client_workspace_id']);
+        $open = $this->reach->constrain(Invoice::query(), $user)->whereIn('status', self::OWING_STATES)->get(['id', 'number', 'total', 'amount_paid', 'due_date', 'status', 'currency', 'client_workspace_id']);
 
         $outstanding = 0.0;
         $aging = ['current' => 0.0, 'd1_30' => 0.0, 'd31_60' => 0.0, 'd61_90' => 0.0, 'd90_plus' => 0.0];
@@ -127,7 +132,7 @@ final class FinanceCenterController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $rows = Payment::query()
+        $rows = $this->reach->constrainPayments(Payment::query(), $request->user())
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($filters['provider'] ?? null, fn ($q, $v) => $q->where('provider', $v))
             ->when($filters['search'] ?? null, fn ($q, $v) => $q->where(fn ($w) => $w
@@ -166,7 +171,7 @@ final class FinanceCenterController extends Controller
 
         $now = Carbon::now();
 
-        $rows = Invoice::query()
+        $rows = $this->reach->constrain(Invoice::query(), $request->user())
             ->whereIn('status', self::OWING_STATES)
             ->with('clientWorkspace:id,name')
             ->orderByRaw('due_date NULLS LAST')

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use Illuminate\Support\Carbon;
@@ -89,15 +90,23 @@ final class AccountHealth
 
     public function __construct(private readonly AccountAssignment $assignment) {}
 
-    public function for(ExternalAccount $account): string
+    /**
+     * @param  array{bound?:bool, connection_status?:?string, latest?:?object}|null  $known  facts the caller has
+     *                                                                                       already read for many accounts at once — PERF-INTEGRATIONS-001. Omitted, each one is asked of the database, as before.
+     */
+    public function for(ExternalAccount $account, ?array $known = null): string
     {
-        if ($this->assignment->projectIdFor($account) === null) {
+        $bound = $known['bound'] ?? ($this->assignment->projectIdFor($account) !== null);
+
+        if (! $bound) {
             return self::NOT_CONNECTED;
         }
 
-        $connectionStatus = ProviderConnection::withoutGlobalScopes()
-            ->whereKey($account->provider_connection_id)
-            ->value('status');
+        $connectionStatus = $known !== null && array_key_exists('connection_status', $known)
+            ? $known['connection_status']
+            : ProviderConnection::withoutGlobalScopes()
+                ->whereKey($account->provider_connection_id)
+                ->value('status');
 
         if (in_array($connectionStatus, ['revoked', 'disconnected', 'error'], true)) {
             return self::REVOKED;
@@ -142,10 +151,12 @@ final class AccountHealth
          * PENDING_FIRST_SYNC above — which keeps «we have never asked» and «we asked and there was
          * nothing» as the two different sentences they are.
          */
-        $latest = MetricSyncRun::withoutGlobalScopes()
-            ->where('external_account_id', $account->getKey())
-            ->orderByDesc('started_at')
-            ->first(['status', 'metrics_upserted']);
+        $latest = $known !== null && array_key_exists('latest', $known)
+            ? $known['latest']
+            : MetricSyncRun::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->orderByDesc('started_at')
+                ->first(['status', 'metrics_upserted']);
 
         if ($latest !== null && ($latest->status === 'no_data' || (int) $latest->metrics_upserted === 0)) {
             return self::NO_DATA;
@@ -169,22 +180,44 @@ final class AccountHealth
      */
     public function summarise(string $connectionId): array
     {
+        /*
+         * PERF-INTEGRATIONS-001 — only the accounts somebody SELECTED are read at all.
+         *
+         * This hydrated every discovered account of the connection and asked three questions of the
+         * database for each one, to count them and then discard everyone who was not selected. A
+         * connection with 565 discovered accounts and ten selected cost about 1,700 queries every time
+         * the wizard, the hub or the connection list was opened. Discovered inventory is not part of
+         * this connection's operating health, so it is left out in the query, and what remains is
+         * read with three queries in total whatever its size.
+         */
         $accounts = ExternalAccount::withoutGlobalScopes()
             ->where('provider_connection_id', $connectionId)
             ->where('account_type', 'ad_account')
+            ->whereIn('id', ProjectIntegrationBinding::withoutGlobalScopes()
+                ->where('is_active', true)
+                ->whereNotNull('project_id')
+                ->select('external_account_id'))
             ->get();
+
+        $connectionStatus = ProviderConnection::withoutGlobalScopes()->whereKey($connectionId)->value('status');
+
+        $latest = $accounts->isEmpty() ? collect() : MetricSyncRun::withoutGlobalScopes()
+            ->whereIn('external_account_id', $accounts->modelKeys())
+            ->selectRaw('DISTINCT ON (external_account_id) external_account_id, status, metrics_upserted')
+            ->orderBy('external_account_id')
+            ->orderByDesc('started_at')
+            ->get()
+            ->keyBy(fn ($run): string => (string) $run->external_account_id);
 
         $states = [];
         $connected = 0;
 
         foreach ($accounts as $account) {
-            $state = $this->for($account);
-
-            if ($state === self::NOT_CONNECTED) {
-                // Discovered inventory is counted as inventory elsewhere; it is not part of this
-                // connection's operating health, and folding it in would drown the real numbers.
-                continue;
-            }
+            $state = $this->for($account, [
+                'bound' => true,
+                'connection_status' => $connectionStatus,
+                'latest' => $latest->get((string) $account->getKey()),
+            ]);
 
             $connected++;
             $states[$state] = ($states[$state] ?? 0) + 1;

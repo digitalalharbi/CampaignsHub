@@ -1,3 +1,16 @@
+# CURRENT STATE — 2026-11-01 (night) — P0 isolation incident: #917 deployed, data repair waiting on the Owner's approval
+
+- **Incident:** ChatGPT Ads spend of another advertiser (Razzah Avenue) appeared in the Nasel Riwaq client report.
+- **Root cause (proved from Production, read-only):** the ChatGPT Ads connector ignored `$adAccountId` and read whatever its key answered for. A pasted key re-credentialed the single connection per (tenant, workspace, provider), so every account row on it synced the last key's data into its own project. Evidence: identical sync runs (92/14/14/70) on four accounts; the same campaigns (187.73 / 17,954 impressions) under Nasel and ReSano.
+- **Deployed:** #917 `89c630785` (Deploy Production run 41342760534). It stops the cause. It does not repair stored rows, and the Nasel report still showed the foreign 375.56 after it: stored history, not a query or cache leak.
+- **Production audit (run 41343190384):** 260 provider campaign ids sit under more than one account. 244 are the same provider account authorised in two tenants (a decision for the Owner, not a mix of advertisers). 7 are not explained: ChatGPT Ads 3 (this incident) and Snapchat 4 (not yet investigated).
+- **In the queue:** #918 (dry-run plan, provider-confirmed ownership, incident regression test), then the observability PR, then the code split. The feature chain (#916 …) waits behind them.
+- **Owner:**
+  - the public link for the Nasel report answered 200 with data after being suspended; it was not re-enabled by us. Check its state;
+  - after #918 is deployed the dry run is read and shown with its numbers; nothing is moved until the Owner approves the final plan;
+  - decide whether one advertiser's account authorised in two tenants is intended.
+- **Do not:** enter a new ChatGPT Ads key until #917 is live in every worker (it is), and never name a quarantine owner by guess: the provider confirms.
+
 # CURRENT STATE — 2026-10-31 (morning) — #897/#898/#899/#854 deployed; X joins the reconnect fix; billing lifecycle registered (gated)
 
 - **Deployed:**
