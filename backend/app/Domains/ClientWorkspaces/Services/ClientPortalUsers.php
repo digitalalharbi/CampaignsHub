@@ -44,6 +44,7 @@ final class ClientPortalUsers
         private readonly ManageMembershipScopes $scopes,
         private readonly InvitationService $invitations,
         private readonly AuditLogger $audit,
+        private readonly ClientAccess $access,
     ) {}
 
     /**
@@ -58,6 +59,8 @@ final class ClientPortalUsers
         $user = User::query()->whereRaw('lower(email) = ?', [$email])->first();
 
         if ($user !== null) {
+            $this->assertNotChangingAccessElsewhere($user, $workspace, $role, $projectIds, $by);
+
             $membership = $this->grant->execute(new MembershipGrant(
                 user: $user,
                 tenant: Tenant::query()->findOrFail($workspace->tenant_id),
@@ -130,6 +133,46 @@ final class ClientPortalUsers
             }
         });
         $this->audit->log('client_portal.user_revoked', 'client_workspace', (string) $workspace->getKey(), null, ['membership_id' => $membershipId]);
+    }
+
+    /**
+     * One membership per person per portal is SHARED across the clients it names, so its role and project ceiling
+     * are not this client's to rewrite. A grant that would change either while the person also holds a client the
+     * granting actor cannot reach would widen (or silently strip) their access there — made by someone with no
+     * authority over that client. Asking for exactly what the person already holds is harmless and still adds this
+     * client; an actor who reaches every client the person holds may change them, as before.
+     *
+     * The store keeps ONE role and ONE project list per person (not per client): a different role for a second
+     * client needs a per-client model, which is a product decision, so until then it is refused rather than guessed.
+     *
+     * @param  list<string>|null  $projectIds
+     */
+    private function assertNotChangingAccessElsewhere(User $user, ClientWorkspace $workspace, string $role, ?array $projectIds, User $by): void
+    {
+        $existing = Membership::query()->where('user_id', $user->getKey())->where('tenant_id', $workspace->tenant_id)
+            ->where('portal', Portal::ClientPortal->value)->with('scopes')->first();
+        if ($existing === null) {
+            return;
+        }
+
+        $others = array_values(array_diff($existing->clientScopeIds(), [(string) $workspace->getKey()]));
+        if ($others === []) {
+            return;
+        }
+
+        $held = $existing->projectScopeIds();
+        $asked = array_values($projectIds ?? []);
+        sort($held);
+        sort($asked);
+        if ($existing->role === $role && $held === $asked) {
+            return;
+        }
+
+        foreach (ClientWorkspace::query()->whereIn('id', $others)->get() as $other) {
+            if (! $this->access->canAccessClient($by, $other)) {
+                throw ValidationException::withMessages(['role' => 'This person already has portal access to another client with a different role or project limit. Their role and projects are shared across clients, so they cannot be changed from here.']);
+            }
+        }
     }
 
     /** @param list<string>|null $projectIds */

@@ -154,20 +154,19 @@ final class ReportBuilderAdAccountPickerTest extends TestCase
     /**
      * ACCOUNT-SCOPE-ISOLATION-001 — a DESELECTED account is not this project's to name.
      *
-     * The campaign is still listed: it is the project's campaign and hiding it would silently drop it
-     * from a report. What the picker may not do is attribute it to an account the operator has said
-     * is not part of this project — and the deselected account may not appear in the filter either,
+     * The campaign is NOT listed (SECURITY CLUSTER 5): a project shows only the accounts actively
+     * selected for it, and a campaign of a deselected account is not part of that. The picker may not
+     * name the account the operator has said is not part of this project — and the deselected account may not appear in the filter either,
      * because a filter entry that matches nothing visible is a control that empties the list.
      */
-    public function test_a_deselected_accounts_campaign_is_listed_without_naming_that_account(): void
+    public function test_a_deselected_accounts_campaign_is_not_listed_or_named(): void
     {
         $old = $this->campaignOn('Last year', [$this->deselectedAccount]);
 
         $options = $this->builderOptions();
         $rows = collect($options['campaigns'])->keyBy('id');
 
-        $this->assertArrayHasKey((string) $old->id, $rows, 'the campaign itself must still be listed');
-        $this->assertSame([], $rows[(string) $old->id]['accounts']);
+        $this->assertArrayNotHasKey((string) $old->id, $rows, 'a campaign of a deselected account is not the project\'s to name or list');
         $this->assertNotContains('Old agency — Meta', array_column($options['ad_accounts'], 'name'));
     }
 
@@ -198,15 +197,14 @@ final class ReportBuilderAdAccountPickerTest extends TestCase
 
         /*
          * Filed under THIS project — the shape of a sync that ran before the account was re-bound.
-         * The campaign stays listed; the account it points at does not become this project's to name.
+         * The campaign is not listed here and the account it points at is not named.
          */
         $stale = $this->campaignOn('Filed here, owned elsewhere', [$elsewhere]);
 
         $options = $this->builderOptions();
         $rows = collect($options['campaigns'])->keyBy('id');
 
-        $this->assertArrayHasKey((string) $stale->id, $rows);
-        $this->assertSame([], $rows[(string) $stale->id]['accounts']);
+        $this->assertArrayNotHasKey((string) $stale->id, $rows, 'a campaign of an account bound elsewhere is not listed here');
         $this->assertNotContains('Somebody else — Meta', array_column($options['ad_accounts'], 'name'));
     }
 

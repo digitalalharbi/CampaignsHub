@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use Illuminate\Support\Carbon;
 
@@ -30,12 +31,27 @@ final class InsightRowNormaliser
     /**
      * @param  array<int,array<string,mixed>>  $records
      * @param  list<string>  $carriedKeys  every metric key this pipeline stores
-     * @return array{0: list<NormalizedMetric>, 1: int} [metrics, records that matched no campaign]
+     * @param  string|null  $projectId  the project the account is ACTIVELY bound to, as the caller already resolved it
+     *                                  for the run; null asks `AccountAssignment` now. Never taken from a campaign row.
+     * @return array{0: list<NormalizedMetric>, 1: int, 2: int} [metrics, records that stored nothing, of which: matched a
+     *                                                          campaign still filed under another project]
      */
-    public function normalise(ExternalAccount $account, array $records, array $carriedKeys): array
+    public function normalise(ExternalAccount $account, array $records, array $carriedKeys, ?string $projectId = null): array
     {
         $metrics = [];
         $skipped = 0;
+        $misfiled = 0;
+
+        /*
+         * SEC-CLUSTER-2 — a metric belongs to the project the account is bound to RIGHT NOW.
+         *
+         * This used to stamp `$link->project_id`, the campaign row's project. That row is only re-filed
+         * when the structure sync succeeds, so for a while after a re-bind (or for ever, if the campaign
+         * step fails or the provider stopped returning the campaign) the account's new spend was written
+         * under the project it had just left. The binding is the authority; a campaign still filed
+         * elsewhere is not stamped and not guessed at — it is counted and the run says so.
+         */
+        $projectId ??= app(AccountAssignment::class)->projectIdFor($account);
 
         // Provider campaign id → the external campaign row we already know about.
         $known = ExternalCampaign::withoutGlobalScopes()
@@ -54,6 +70,13 @@ final class InsightRowNormaliser
                 continue;
             }
 
+            if ($projectId === null || (string) $link->project_id !== $projectId) {
+                $skipped++;
+                $misfiled++;
+
+                continue;
+            }
+
             $date = Carbon::parse((string) ($row['date'] ?? Carbon::now()->toDateString()));
 
             /*
@@ -65,7 +88,7 @@ final class InsightRowNormaliser
              * reporting currency stand in — treating an unlabelled figure as already converted, which
              * is what the old code did unconditionally and without saying so.
              */
-            $reporting = $this->currency->forProject((string) $link->project_id);
+            $reporting = $this->currency->forProject($projectId);
             $source = strtoupper((string) ($row['currency'] ?? $account->currency ?? $reporting));
 
             /*
@@ -98,7 +121,7 @@ final class InsightRowNormaliser
                  * be nonsense that still looks like a number — precisely the kind that survives review.
                  */
                 if (! $this->currency->isMonetary($key)) {
-                    $metrics[] = $this->metric($account, $link, $key, $date, $amount, $window);
+                    $metrics[] = $this->metric($account, $link, $projectId, $key, $date, $amount, $window);
 
                     continue;
                 }
@@ -106,7 +129,7 @@ final class InsightRowNormaliser
                 $money = $this->currency->normalise($amount, $source, $reporting, $date);
 
                 $metrics[] = $this->metric(
-                    $account, $link, $key, $date,
+                    $account, $link, $projectId, $key, $date,
                     // Null when no rate could be vouched for. NOT zero, and not the unconverted
                     // figure — see the FX-001 migration for why both alternatives are worse.
                     $money['value'],
@@ -116,7 +139,7 @@ final class InsightRowNormaliser
             }
         }
 
-        return [$metrics, $skipped];
+        return [$metrics, $skipped, $misfiled];
     }
 
     /**
@@ -143,6 +166,7 @@ final class InsightRowNormaliser
     private function metric(
         ExternalAccount $account,
         ExternalCampaign $link,
+        string $projectId,
         string $key,
         Carbon $date,
         ?float $value,
@@ -151,7 +175,7 @@ final class InsightRowNormaliser
     ): NormalizedMetric {
         return new NormalizedMetric(
             tenantId: $account->tenant_id,
-            projectId: $link->project_id,
+            projectId: $projectId,
             externalAccountId: $account->id,
             externalCampaignId: $link->id,
             provider: $account->provider,

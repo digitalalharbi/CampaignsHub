@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -348,6 +349,14 @@ final class MetaAttributionWindowTest extends TestCase
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'name' => $name, 'objective' => 'sales', 'status' => 'active',
         ]);
+
+        // SEC-CLUSTER-2 — a metric is stamped with the project the account is actively bound to.
+        if (! ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $account->id)->exists()) {
+            ProjectIntegrationBinding::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id,
+                'provider' => $account->provider, 'purpose' => 'advertising', 'is_active' => true,
+            ]);
+        }
 
         ExternalCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,

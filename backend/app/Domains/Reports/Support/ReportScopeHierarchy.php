@@ -108,6 +108,10 @@ final class ReportScopeHierarchy
      */
     public static function verifyFlat(string $project, array $scope): array
     {
+        // SECURITY CLUSTER 5 — the project axis can only name the project the report is being made in.
+        $projects = array_values(array_unique(array_filter((array) ($scope['project_ids'] ?? []), 'is_string')));
+        abort_unless(array_diff($projects, [$project]) === [], 422, 'A report scope can only name its own project.');
+
         $accounts = array_values(array_unique(array_filter((array) ($scope['account_ids'] ?? []), 'is_string')));
         $byAccount = self::campaignsByAccount($project, $accounts);
         $within = array_values(array_unique(array_merge(...array_values($byAccount))));

@@ -16,12 +16,15 @@ use App\Domains\CRM\Http\Requests\UpdateLeadRequest;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Resources\LeadResource;
 use App\Domains\CRM\Resources\OpportunityResource;
+use App\Domains\CRM\Rules\LeadOwnerRule;
 use App\Domains\CRM\Services\ExecutiveOperations;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Membership;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -61,6 +64,13 @@ final class LeadController extends Controller
         $projectId = app(ProjectContext::class)->projectId() ?? ($request->string('project_id')->toString() ?: null);
 
         if ($projectId !== null) {
+            // SEC-1 — a request-supplied project is authorised on the server, like the workspace and the
+            // executive dashboard below: the capability on THAT project, behind the membership ceiling.
+            abort_unless(
+                app(ProjectAbilities::class)->allows($request->user(), $projectId, ProjectCapability::LEADS_VIEW),
+                403,
+                'You do not have this permission on this project.',
+            );
             $query->where('project_id', $projectId);
         }
 
@@ -319,7 +329,7 @@ final class LeadController extends Controller
         $this->assertMayWork($request, $lead, ProjectCapability::LEADS_ASSIGN, 'leads.assign');
 
         $data = $request->validate([
-            'owner_id' => ['present', 'nullable', 'integer', 'exists:users,id'],
+            'owner_id' => ['present', 'nullable', 'integer', new LeadOwnerRule($lead->project_id === null ? null : (string) $lead->project_id)],
         ]);
 
         return ApiResponse::success(
@@ -444,8 +454,12 @@ final class LeadController extends Controller
      */
     private function named(array $rows): array
     {
+        // SEC-1 — names only of members of THIS tenant: a legacy owner id from elsewhere prints as unknown.
         $names = User::query()
-            ->whereIn('id', array_values(array_filter(array_column($rows, 'owner_id'))))
+            ->whereIn('id', Membership::withoutGlobalScopes()
+                ->where('tenant_id', app(TenantContext::class)->tenantId())
+                ->whereIn('user_id', array_values(array_filter(array_column($rows, 'owner_id'))))
+                ->select('user_id'))
             ->pluck('name', 'id');
 
         return array_map(

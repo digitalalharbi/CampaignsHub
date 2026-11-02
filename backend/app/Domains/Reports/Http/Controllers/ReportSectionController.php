@@ -247,6 +247,8 @@ final class ReportSectionController extends Controller
         $this->authorise($request, $project, 'reports.manage');
 
         $model = $this->findTemplate($project, $template);
+        // SECURITY CLUSTER 5 — a template every project reads is changed by the workspace administrator, not by one project's manager.
+        abort_unless($model->mayBeChangedBy($request->user()), 403, 'Only a workspace administrator can change a tenant-wide template.');
         $before = $model->sectionSettings()->toArray();
 
         $model->section_settings = SectionSettings::fromArray([

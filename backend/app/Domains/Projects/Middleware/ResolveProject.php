@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Projects\Middleware;
 
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
-use App\Domains\Projects\Models\ProjectMembership;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class ResolveProject
 {
-    public function __construct(private readonly ProjectContext $context) {}
+    public function __construct(private readonly ProjectContext $context, private readonly ProjectReach $reach) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -33,17 +33,11 @@ final class ResolveProject
         $user = $request->user();
         abort_unless($user?->hasPermission('projects.view'), 403);
 
-        // Agency-wide viewers (projects.view.all) may access any project in their tenant. Project-scoped
-        // users (e.g. client viewers) may only access projects they are an active member of — checked
-        // before the project context is set so the membership lookup itself spans projects.
-        if (! $user->hasPermission('projects.view.all')) {
-            $isMember = ProjectMembership::query()
-                ->where('project_id', $project->id)
-                ->where('user_id', $user->id)
-                ->where('status', 'active')
-                ->exists();
-            abort_unless($isMember, 403, 'You do not have access to this project.');
-        }
+        // SEC-1 — one answer, shared with the listing and the portfolio: the membership's named client /
+        // project ceiling first (it outranks `projects.view.all`), then `projects.view.all` or a CURRENT
+        // project membership (active, `expires_at` not past). Checked before the project context is set so
+        // the membership lookup itself spans projects.
+        abort_unless($this->reach->canReach($user, (string) $project->id), 403, 'You do not have access to this project.');
 
         $this->context->setProjectId((string) $project->id);
 

@@ -6,6 +6,7 @@ namespace App\Domains\Drive\Http\Controllers;
 
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Drive\Services\DriveReach;
 use App\Domains\Drive\Services\DriveService;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -25,14 +26,14 @@ final class DriveController extends Controller
     /** The most rows this list returns; `meta.total` says how many there are. */
     private const MAX_ROWS = 200;
 
-    public function __construct(private readonly DriveService $drive) {}
+    public function __construct(private readonly DriveService $drive, private readonly DriveReach $reach) {}
 
     public function links(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('drive.view'), 403);
 
         /* OPS-LEDGER-001 — the bound is real, and the response says what it left out. */
-        $query = DriveLink::query()->latest('created_at');
+        $query = $this->reach->constrainLinks(DriveLink::query(), $request->user())->latest('created_at');
         $total = (clone $query)->count();
         $rows = $query->limit(self::MAX_ROWS)->get()->all();
 
@@ -54,6 +55,11 @@ final class DriveController extends Controller
             'connection_id' => ['nullable', 'uuid'],
         ]);
 
+        // The scope id must be a real target in THIS tenant, inside the caller's client ceiling — it is the key the
+        // link is re-pointed by, so an unchecked one overwrites a sibling client's folder.
+        $this->reach->assertCanLinkScope($request->user(), $data['scope'], $data['scope_id'] ?? null);
+        $this->reach->assertCanUseConnection($request->user(), $data['connection_id'] ?? null);
+
         $link = $this->drive->linkFolder(
             $data['scope'],
             $data['scope_id'] ?? null,
@@ -71,6 +77,7 @@ final class DriveController extends Controller
     public function files(Request $request, DriveLink $link): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('drive.view'), 403);
+        $this->reach->assertCanReachLink($request->user(), $link);
 
         $result = $this->drive->listFiles($link);
 
@@ -90,6 +97,11 @@ final class DriveController extends Controller
             'attached_to_id' => ['required', 'uuid'],
         ]);
 
+        $link = DriveLink::query()->find($file->drive_link_id);
+        abort_if($link === null, 404);
+        $this->reach->assertCanReachLink($request->user(), $link);
+        $this->reach->assertCanAttachTo($request->user(), $data['attached_to_type'], $data['attached_to_id']);
+
         return ApiResponse::success(
             $this->drive->attachFile($file, $data['attached_to_type'], $data['attached_to_id']),
             'Drive file attached.',
@@ -99,6 +111,7 @@ final class DriveController extends Controller
     public function unlink(Request $request, DriveLink $link): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('drive.manage'), 403);
+        $this->reach->assertCanReachLink($request->user(), $link);
 
         $this->drive->unlink($link);
 

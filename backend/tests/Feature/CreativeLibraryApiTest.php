@@ -16,8 +16,10 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -629,6 +631,14 @@ final class CreativeLibraryApiTest extends TestCase
         $this->grantMembership(
             $confined, $this->tenant, clientIds: [(string) $this->project->client_workspace_id],
         );
+        // SEC-CLUSTER-2 — the tenant-level library also stops at the PROJECT ceiling: a manager reaches the projects
+        // they are a member of (or all of them with projects.view.all). This fixture used to read the whole client
+        // with no project access at all, which is the behaviour the project ceiling closes; the client ceiling this
+        // test is about is unchanged and still asserted below.
+        ProjectMembership::create([
+            'project_id' => $this->project->getKey(), 'user_id' => $confined->id,
+            'role' => ProjectRole::MARKETING_MANAGER, 'status' => 'active',
+        ]);
 
         app(ProjectContext::class)->forget();
 

@@ -90,6 +90,21 @@ final class ReportsTest extends TestCase
         Queue::assertPushed(GenerateReportJob::class);
     }
 
+    /** SEC-3 — a report's `scope.project_ids` is the report's own project or nothing; naming another project is refused outright. */
+    public function test_a_report_cannot_be_created_with_another_projects_id_in_its_scope(): void
+    {
+        Queue::fake();
+        $scope = $this->reportScopeFor((string) $this->projectA->id) + ['project_ids' => [(string) $this->projectB->id]];
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->projectA->id}/reports", ['name' => 'Sneaky', 'type' => 'weekly', 'scope' => $scope])
+            ->assertStatus(422);
+
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $this->assertSame(0, Report::query()->where('name', 'Sneaky')->count(), 'nothing is stored for a scope that names another project');
+        Queue::assertNothingPushed();
+    }
+
     public function test_generation_snapshots_real_metrics(): void
     {
         $report = $this->report();

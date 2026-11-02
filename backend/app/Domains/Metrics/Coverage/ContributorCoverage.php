@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Coverage;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -48,6 +49,9 @@ final class ContributorCoverage
      * Every provider expected to contribute to this scope, with the state each is actually in.
      *
      * @param  list<string>|null  $providers  restrict to these providers, or null for all in scope
+     * @param  list<string>|null  $projectIds  SEC-CLUSTER-2 — the projects a multi-project reader may see. When given it
+     *                                         replaces `$projectId`; an empty list means «no scope» and names no contributor.
+     *                                         Null with a null `$projectId` is the explicit whole-tenant read (internal sweeps only).
      */
     public function forWindow(
         string $tenantId,
@@ -55,7 +59,13 @@ final class ContributorCoverage
         Carbon $from,
         Carbon $to,
         ?array $providers = null,
+        ?array $projectIds = null,
     ): AggregateCoverage {
+        if ($projectIds !== null && $projectIds === []) {
+            return AggregateCoverage::complete();
+        }
+        $scope = $projectIds ?? ($projectId === null ? null : [$projectId]);
+
         /*
          * Nobody can report a day that has not happened.
          *
@@ -71,15 +81,107 @@ final class ContributorCoverage
         $expectedThrough = Carbon::yesterday()->startOfDay();
         $to = $to->copy()->startOfDay()->gt($expectedThrough) ? $expectedThrough : $to->copy()->startOfDay();
 
-        $expected = $this->expectedProviders($tenantId, $projectId, $from, $to, $providers);
+        $expected = $this->expectedProviders($tenantId, $scope, $from, $to, $providers);
 
         if ($expected === []) {
             return AggregateCoverage::complete();
         }
 
-        $reported = $this->providersWithFigures($tenantId, $projectId, $from, $to);
-        $runs = $this->latestRuns($tenantId, array_keys($expected));
+        $reported = $this->providersWithFigures($tenantId, $scope, $from, $to);
+        $runs = $this->latestRuns($tenantId, array_keys($expected), $scope);
 
+        return $this->decide($expected, $reported, $runs, $to);
+    }
+
+    /**
+     * The same per-day answer as calling {@see forWindow()} once for each day in [$from, $to]
+     * (`forWindow($t, $p, $day, $day, $providers)`), from THREE queries for the whole window instead
+     * of three per day. Keyed by `Y-m-d`.
+     *
+     * Same tenant, project and bound-account filters as the per-day lookups; the per-day parts of the
+     * rule (campaign overlap, figures on that day, the yesterday clamp) are evaluated in PHP over
+     * rows fetched once. Nothing is cached beyond this call.
+     *
+     * @param  list<string>|null  $providers
+     * @return array<string, AggregateCoverage>
+     */
+    public function forDays(
+        string $tenantId,
+        ?string $projectId,
+        Carbon $from,
+        Carbon $to,
+        ?array $providers = null,
+        ?array $projectIds = null,
+    ): array {
+        $expectedThrough = Carbon::yesterday()->startOfDay();
+        $scope = $projectIds ?? ($projectId === null ? null : [$projectId]);
+
+        $days = [];
+        for ($d = $from->copy()->startOfDay(); ! $d->gt($to->copy()->startOfDay()); $d = $d->copy()->addDay()) {
+            $days[] = $d;
+        }
+
+        if ($days === []) {
+            return [];
+        }
+
+        $campaigns = $projectIds !== null && $projectIds === [] ? [] : $this->campaignRows($tenantId, $scope, $providers);
+
+        if ($campaigns === []) {
+            $out = [];
+            foreach ($days as $day) {
+                $out[$day->toDateString()] = AggregateCoverage::complete();
+            }
+
+            return $out;
+        }
+
+        $providerKeys = array_values(array_unique(array_map(static fn (array $c): string => $c['provider'], $campaigns)));
+
+        // Figures: one grouped query over the part of the window that can hold any (≤ yesterday).
+        $figuresTo = $to->copy()->startOfDay()->gt($expectedThrough) ? $expectedThrough : $to->copy()->startOfDay();
+        $figures = [];
+        if (! $from->copy()->startOfDay()->gt($figuresTo)) {
+            $q = DB::table('daily_metrics')
+                ->where('tenant_id', $tenantId)
+                ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+                ->whereBetween('metric_date', [$from->copy()->startOfDay()->toDateString(), $figuresTo->toDateString()]);
+
+            if ($scope !== null) {
+                $q->whereIn('project_id', $scope);
+            }
+
+            foreach ($q->select('metric_date', 'provider')->groupBy('metric_date', 'provider')->get() as $row) {
+                $figures[Carbon::parse((string) $row->metric_date)->toDateString()][] = (string) $row->provider;
+            }
+        }
+
+        $runs = $this->latestRuns($tenantId, $providerKeys, $scope);
+
+        $out = [];
+        foreach ($days as $day) {
+            $dayTo = $day->gt($expectedThrough) ? $expectedThrough : $day->copy();
+
+            $expected = $this->lifecycleFor($campaigns, $day, $dayTo);
+
+            $out[$day->toDateString()] = $this->decide(
+                $expected,
+                $figures[$day->toDateString()] ?? [],
+                $runs,
+                $dayTo,
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, array{active: bool, reason: string}>  $expected
+     * @param  list<string>  $reported
+     * @param  array<string, object>  $runs
+     */
+    private function decide(array $expected, array $reported, array $runs, Carbon $to): AggregateCoverage
+    {
         $states = [];
         $reasons = [];
         /** @var array<string, string> $through contributor → last covered date (Y-m-d) */
@@ -186,17 +288,23 @@ final class ContributorCoverage
      */
     private function expectedProviders(
         string $tenantId,
-        ?string $projectId,
+        ?array $projectIds,
         Carbon $from,
         Carbon $to,
         ?array $providers,
     ): array {
+        return $this->lifecycleFor($this->campaignRows($tenantId, $projectIds, $providers), $from, $to);
+    }
+
+    /** @param  list<string>|null  $providers */
+    private function campaignQuery(string $tenantId, ?array $projectIds, ?array $providers): Builder
+    {
         $q = DB::table('external_campaigns')
             ->where('tenant_id', $tenantId)
             ->select('provider', 'status', 'starts_at', 'ends_at');
 
-        if ($projectId !== null) {
-            $q->where('project_id', $projectId);
+        if ($projectIds !== null) {
+            $q->whereIn('project_id', $projectIds);
         }
         if ($providers !== null) {
             $q->whereIn('provider', $providers);
@@ -237,18 +345,51 @@ final class ContributorCoverage
          */
         $q->whereRaw("COALESCE((raw->'sandbox')::jsonb, 'false'::jsonb) <> 'true'::jsonb");
 
+        return $q;
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return list<array{provider: string, starts_at: ?Carbon, ends_at: ?Carbon}>
+     */
+    private function normalise(array $rows): array
+    {
+        return array_map(static fn (object $row): array => [
+            'provider' => (string) $row->provider,
+            'starts_at' => $row->starts_at !== null ? Carbon::parse((string) $row->starts_at) : null,
+            'ends_at' => $row->ends_at !== null ? Carbon::parse((string) $row->ends_at) : null,
+        ], $rows);
+    }
+
+    /**
+     * The campaign rows of {@see expectedProviders()}, fetched once for a whole series.
+     *
+     * @param  list<string>|null  $providers
+     * @return list<array{provider: string, starts_at: ?Carbon, ends_at: ?Carbon}>
+     */
+    private function campaignRows(string $tenantId, ?array $projectIds, ?array $providers): array
+    {
+        return $this->normalise($this->campaignQuery($tenantId, $projectIds, $providers)->get()->all());
+    }
+
+    /**
+     * @param  list<array{provider: string, starts_at: ?Carbon, ends_at: ?Carbon}>  $campaigns
+     * @return array<string, array{active: bool, reason: string}>
+     */
+    private function lifecycleFor(array $campaigns, Carbon $from, Carbon $to): array
+    {
         $out = [];
 
-        foreach ($q->get() as $row) {
-            $provider = (string) $row->provider;
+        foreach ($campaigns as $row) {
+            $provider = $row['provider'];
 
             /*
              * A campaign is alive for this window if it overlaps it at all. `ends_at` before the
              * window opens is the stopped case; `starts_at` after it closes is the not-yet case. Both
              * are absences that cost the total nothing.
              */
-            $endedBefore = $row->ends_at !== null && Carbon::parse((string) $row->ends_at)->lt($from);
-            $startedAfter = $row->starts_at !== null && Carbon::parse((string) $row->starts_at)->gt($to);
+            $endedBefore = $row['ends_at'] !== null && $row['ends_at']->lt($from);
+            $startedAfter = $row['starts_at'] !== null && $row['starts_at']->gt($to);
             $alive = ! $endedBefore && ! $startedAfter;
 
             // One live campaign is enough to make the provider expected; keep the strongest evidence.
@@ -268,15 +409,15 @@ final class ContributorCoverage
     }
 
     /** Providers that actually put figures in this window. Proves presence only — never absence. */
-    private function providersWithFigures(string $tenantId, ?string $projectId, Carbon $from, Carbon $to): array
+    private function providersWithFigures(string $tenantId, ?array $projectIds, Carbon $from, Carbon $to): array
     {
         $q = DB::table('daily_metrics')
             ->where('tenant_id', $tenantId)
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
 
-        if ($projectId !== null) {
-            $q->where('project_id', $projectId);
+        if ($projectIds !== null) {
+            $q->whereIn('project_id', $projectIds);
         }
 
         return $q->distinct()->pluck('provider')->map(static fn ($p): string => (string) $p)->all();
@@ -287,14 +428,24 @@ final class ContributorCoverage
      *
      * @return array<string, object>
      */
-    private function latestRuns(string $tenantId, array $providers): array
+    private function latestRuns(string $tenantId, array $providers, ?array $projectIds): array
     {
         if ($providers === []) {
             return [];
         }
 
+        /*
+         * SEC-CLUSTER-2 — only the runs of the projects in scope.
+         *
+         * This read the newest run per provider for the whole TENANT, so a reader of project P1 got the
+         * `error` text, the window end and the failed/stale verdict of a run that belonged to project P2
+         * (another client's) whenever both used the same provider. A run is also only evidence while its
+         * account is still bound to the project the run was made for — the same rule the figures obey.
+         */
         $rows = DB::table('metric_sync_runs')
             ->where('tenant_id', $tenantId)
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
             ->whereIn('provider', $providers)
             ->orderByDesc('window_end')
             ->orderByDesc('created_at')
