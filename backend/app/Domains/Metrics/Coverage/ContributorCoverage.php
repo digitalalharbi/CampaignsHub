@@ -442,14 +442,22 @@ final class ContributorCoverage
          * (another client's) whenever both used the same provider. A run is also only evidence while its
          * account is still bound to the project the run was made for — the same rule the figures obey.
          */
+        /*
+         * PERF — the newest run per provider, chosen by Postgres. This used to fetch EVERY matching run
+         * (1,875 rows per call on Production, five calls per report build) ordered by window_end and keep the
+         * first per provider in PHP. DISTINCT ON keeps one row per provider with the very same ordering, so the
+         * selection is identical and the wire carries at most one row per provider.
+         */
         $rows = DB::table('metric_sync_runs')
+            ->selectRaw('distinct on ("metric_sync_runs"."provider") "metric_sync_runs"."provider", "metric_sync_runs"."status", "metric_sync_runs"."window_end", "metric_sync_runs"."error"')
             ->where('tenant_id', $tenantId)
             ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
             ->whereIn('provider', $providers)
+            ->orderBy('provider')
             ->orderByDesc('window_end')
             ->orderByDesc('created_at')
-            ->get(['provider', 'status', 'window_end', 'error']);
+            ->get();
 
         $out = [];
         foreach ($rows as $row) {
