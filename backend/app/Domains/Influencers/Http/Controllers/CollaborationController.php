@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Influencers\Http\Controllers;
 
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Influencers\Models\InfluencerCollaboration;
 use App\Domains\Influencers\Models\InfluencerDeliverable;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -14,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Collaborations and their deliverables (INFL-001).
@@ -72,7 +75,8 @@ final class CollaborationController extends Controller
         $data = $request->validate([
             'influencer_id' => ['required', 'string', Rule::exists('influencers', 'id')],
             'client_workspace_id' => ['nullable', 'string', Rule::exists('client_workspaces', 'id')],
-            'campaign_id' => ['nullable', 'string', Rule::exists('unified_campaigns', 'id')],
+            // SEC-3 — a campaign of THIS tenant only; a bare exists() accepted any company's campaign id.
+            'campaign_id' => ['nullable', 'string', Rule::exists('unified_campaigns', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'title' => ['required', 'string', 'max:255'],
             'status' => ['nullable', 'string', 'max:64'],
             'currency' => ['nullable', 'string', 'size:3'],
@@ -92,6 +96,20 @@ final class CollaborationController extends Controller
                 ClientWorkspace::query()->whereKey($clientId)->exists(),
                 404,
             );
+        }
+
+        // SEC-3 — the campaign fixes which project (and so which client) this collaboration's codes attribute for:
+        // it must sit under the client named here, and under a client the caller can reach.
+        if (($campaignId = $data['campaign_id'] ?? null) !== null) {
+            $campaignClient = UnifiedCampaign::withoutGlobalScopes()
+                ->join('projects', 'projects.id', '=', 'unified_campaigns.project_id')
+                ->where('unified_campaigns.id', $campaignId)
+                ->value('projects.client_workspace_id');
+
+            if (($data['client_workspace_id'] ?? null) !== null && (string) $campaignClient !== (string) $data['client_workspace_id']) {
+                throw ValidationException::withMessages(['campaign_id' => ['This campaign belongs to a different client.']]);
+            }
+            abort_unless($campaignClient === null || $this->scopes->canReach($user, (string) $campaignClient), 403);
         }
 
         $collaboration = InfluencerCollaboration::create($data);

@@ -8,6 +8,7 @@ use App\Domains\Requests\Journey\InvalidStageTransitionException;
 use App\Domains\Requests\Journey\RequestStage;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Services\RequestJourneyService;
+use App\Domains\Requests\Services\RequestReach;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ final class RequestJourneyController
     public function __construct(
         private readonly TenantContext $tenant,
         private readonly RequestJourneyService $journey,
+        private readonly RequestReach $reach,
     ) {}
 
     /** PATCH /app/requests/{id}/journey */
@@ -37,9 +39,10 @@ final class RequestJourneyController
         ]);
 
         /** @var ExternalRequest $req */
-        $req = ExternalRequest::query()
-            ->where('tenant_id', $this->tenant->tenantId())
-            ->findOrFail($id);
+        $req = $this->reach->constrain(
+            ExternalRequest::query()->where('external_requests.tenant_id', $this->tenant->tenantId()),
+            $request->user(),
+        )->findOrFail($id);
 
         try {
             $this->journey->transition($req, RequestStage::from($data['stage']), $request->user(), $data['reason'] ?? null);
