@@ -96,13 +96,21 @@ final class SpendReconcileCommand extends Command
             ->whereBetween('m.metric_date', [$from, $to])
             ->get(['m.metric_date', 'm.project_id', 'm.value', 'm.original_amount', 'm.original_currency', 'm.project_currency', 'c.external_id as campaign']);
 
+        /*
+         * Like with like: the provider answers in the ACCOUNT's currency, and `original_amount` is that same figure as stored.
+         * `value` is the project-currency conversion — comparing it to the provider read a SAR account's TikTok and Google spend
+         * as 73% «missing» when every riyal was there (1 ÷ 3.75). The converted total is printed beside it, never compared.
+         */
         $stored = [];
         $projects = [];
-        $orig = 0.0;
+        $converted = 0.0;
+        $currencies = [];
         foreach ($rows as $r) {
-            $stored[] = ['campaign_id' => (string) $r->campaign, 'date' => substr((string) $r->metric_date, 0, 10), 'spend' => (float) $r->value];
+            $original = $r->original_amount !== null ? (float) $r->original_amount : (float) $r->value;
+            $stored[] = ['campaign_id' => (string) $r->campaign, 'date' => substr((string) $r->metric_date, 0, 10), 'spend' => $original];
             $projects[(string) $r->project_id] = ($projects[(string) $r->project_id] ?? 0) + 1;
-            $orig += (float) $r->original_amount;
+            $converted += (float) $r->value;
+            $currencies[(string) ($r->original_currency ?? '?')] = true;
         }
 
         $cmp = SpendReconciliation::compare($provider, $stored);
@@ -111,7 +119,7 @@ final class SpendReconcileCommand extends Command
         $this->line('  SPEND RECONCILE — read-only; nothing is stored by this command.');
         $this->line(sprintf('  %s [%s]  window %s → %s  account currency %s  timezone %s', substr((string) $account->getKey(), 0, 8), $account->provider, $from, $to, $account->currency ?? '?', $account->timezone ?? '?'));
         $this->line(sprintf('  provider rows %d · stored rows %d · projects holding stored rows: %s', count($provider), count($stored), json_encode(array_map(static fn ($p) => substr($p, 0, 8), array_keys($projects)))));
-        $this->line(sprintf('  PROVIDER TOTAL %.2f · STORED TOTAL %.2f (project currency) · difference %+.2f (%s%%) · stored original-currency sum %.2f', $cmp['provider_total'], $cmp['stored_total'], $cmp['diff'], $cmp['diff_pct'] === null ? 'n/a' : sprintf('%+.2f', $cmp['diff_pct']), $orig));
+        $this->line(sprintf('  PROVIDER TOTAL %.2f · STORED TOTAL %.2f (both in the account currency %s) · difference %+.2f (%s%%) · stored converted to the project currency: %.2f', $cmp['provider_total'], $cmp['stored_total'], implode('/', array_keys($currencies)) ?: '?', $cmp['diff'], $cmp['diff_pct'] === null ? 'n/a' : sprintf('%+.2f', $cmp['diff_pct']), $converted));
         $this->line('');
         $this->line(sprintf('  %-12s %12s %12s %12s', 'day', 'provider', 'stored', 'diff'));
         foreach ($cmp['days'] as $d) {

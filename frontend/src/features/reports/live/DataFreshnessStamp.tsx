@@ -19,7 +19,7 @@ const WARN = new Set<DataStatus>(['delayed', 'stale', 'failed'])
 export function riyadhClock(iso: string, reference?: string): string {
   const at = new Date(iso)
   const time = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(at)
-  const day = (d: Date) => new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  const day = (d: Date) => new Intl.DateTimeFormat('sv-SE-u-nu-latn', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
   if (reference && day(new Date(reference)) === day(at)) return time
 
   return `${day(at)} ${time}`
