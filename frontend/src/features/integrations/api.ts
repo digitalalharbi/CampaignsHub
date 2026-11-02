@@ -125,6 +125,18 @@ export async function startPlatformOAuth(
   })
 }
 
+/**
+ * META-MULTI-APP-001 — reconnect an EXISTING Meta connection through the primary app, all-or-nothing.
+ *
+ * Starting writes nothing. `keeps_own_app` + `reason` say why the connection stays on its own app while the SaaS app is not primary.
+ */
+export async function startMetaReconnect(
+  connectionId: string,
+): Promise<{ authorization_url: string; app_profile: 'live' | 'saas'; keeps_own_app: boolean; reason: string | null }> {
+  await ensureCsrfCookie()
+  return postData(`/integrations/meta/connections/${connectionId}/reconnect`, {})
+}
+
 /** META-SAAS-APP-001 — which Meta apps a new connection may be issued by (no credential is named). */
 /** META-SAAS-APP-001 — `test_workspace`: this tenant is the isolated SaaS test workspace, which connects through the SaaS app only. */
 export interface MetaApps { default: 'live' | 'saas'; test_workspace?: boolean; apps: Array<{ key: 'live' | 'saas'; available: boolean; reason?: string | null }> }

@@ -91,9 +91,33 @@ final class PlatformCredentials
      */
     public static function forConnection(ProviderConnection $connection): self
     {
-        return $connection->provider === 'meta'
-            ? self::forMeta(MetaCredentialProfile::ofConnection($connection->app_profile ?? null))
-            : self::for($connection->provider);
+        if ($connection->provider !== 'meta') {
+            return self::for($connection->provider);
+        }
+
+        $own = self::forMeta(MetaCredentialProfile::ofConnection($connection->app_profile ?? null));
+
+        /*
+         * META-MULTI-APP-001 — the recorded ISSUING app is the source of truth for the credentials, not the profile label.
+         *
+         * Normally the two agree and nothing changes. They differ only when a verified check (`integrations:meta-app-audit --apply`)
+         * proved the token belongs to the other registered app: its secret is then the only one that can refresh or debug that token.
+         * When the recorded issuer matches no registered customer app (for example an App ID the Live app has since moved away from)
+         * the profile's credentials are kept, exactly as before.
+         */
+        $issuer = is_string($connection->issuing_app_id ?? null) && $connection->issuing_app_id !== '' ? $connection->issuing_app_id : null;
+        if ($issuer === null || $own->get('client_id') === $issuer) {
+            return $own;
+        }
+
+        foreach ([MetaCredentialProfile::Live, MetaCredentialProfile::Saas] as $profile) {
+            $candidate = self::forMeta($profile);
+            if ($candidate->get('client_id') === $issuer && $candidate->isConfigured()) {
+                return $candidate;
+            }
+        }
+
+        return $own;
     }
 
     /**

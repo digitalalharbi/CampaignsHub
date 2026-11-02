@@ -3,7 +3,7 @@ import { UnlinkAccountButton } from './UnlinkAccountButton'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, RefreshCw, X } from 'lucide-react'
 import {
-  getAccountLogs, listAccounts, refreshDiscoveredAccounts, revokeConnection, startPlatformOAuth,
+  getAccountLogs, listAccounts, refreshDiscoveredAccounts, revokeConnection, startMetaReconnect, startPlatformOAuth,
   syncConnector, type AccountRow, type HubConnection,
 } from './api'
 import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
@@ -68,7 +68,8 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
   const refresh = useMutation({ mutationFn: () => refreshDiscoveredAccounts(connection.id), onSettled: invalidate })
   const revoke = useMutation({ mutationFn: () => revokeConnection(connection.id), onSettled: () => { invalidate(); onClose() } })
   const reauthorise = useMutation({
-    mutationFn: () => startPlatformOAuth(connection.provider),
+    // META-MULTI-APP-001 — a Meta connection reconnects atomically through the primary app; every other provider is unchanged.
+    mutationFn: () => (connection.provider === 'meta' ? startMetaReconnect(connection.id) : startPlatformOAuth(connection.provider)),
     onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
   })
 

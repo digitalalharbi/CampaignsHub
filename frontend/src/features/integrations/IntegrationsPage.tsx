@@ -19,6 +19,23 @@ import { platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 
+type Bilingual = { ar: string; en: string }
+const RECONNECT_COPY: { reconnected: Bilingual; untouched: Bilingual; reasons: Record<string, Bilingual> } = {
+  reconnected: { ar: 'تمت إعادة المصادقة بنجاح عبر التطبيق الأساسي، وبقيت حساباتك وارتباطاتها كما هي.', en: 'Reconnected through the primary app. Your accounts and their links are unchanged.' },
+  untouched: { ar: 'لم يتغيّر شيء: اتصالك الحالي ما زال يعمل بمصادقته السابقة.', en: 'Nothing changed: your existing connection keeps working with its previous authorisation.' },
+  reasons: {
+    denied: { ar: 'لم تتم الموافقة على الصلاحيات.', en: 'The permissions were not approved.' },
+    permissions_missing: { ar: 'لم تُمنح صلاحية قراءة الإعلانات المطلوبة.', en: 'The required ads-read permission was not granted.' },
+    accounts_missing: { ar: 'المصادقة الجديدة لا ترى كل الحسابات الإعلانية المرتبطة حاليًا. اختر نفس الحسابات عند الموافقة.', en: 'The new authorisation cannot see every ad account currently linked. Select the same accounts when approving.' },
+    app_mismatch: { ar: 'تعذّر التأكد من أن الرمز صادر عن التطبيق الأساسي.', en: 'Could not confirm the token was issued by the primary app.' },
+    token_exchange_failed: { ar: 'رفضت ميتا رمز التفويض. أعد المحاولة.', en: 'Meta rejected the authorisation code. Try again.' },
+    meta_unreachable: { ar: 'تعذّر الوصول إلى ميتا الآن. أعد المحاولة لاحقًا.', en: 'Meta could not be reached. Try again later.' },
+    target_app_changed: { ar: 'تغيّر التطبيق الأساسي أثناء العملية. ابدأ من جديد.', en: 'The primary app changed meanwhile. Start again.' },
+    invalid_state: { ar: 'انتهت صلاحية رابط الموافقة أو استُخدم سابقًا.', en: 'The approval link expired or was already used.' },
+    reconnect_failed: { ar: 'تعذّرت إعادة المصادقة.', en: 'The reconnect could not be completed.' },
+  },
+}
+
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §§17, 22 — the Connection Hub is the page.
  *
@@ -109,8 +126,28 @@ export function IntegrationsPage() {
     void queryClient.invalidateQueries({ queryKey: ['connectors'] })
   }
 
+  // META-MULTI-APP-001 — the answer to an atomic Meta reconnect, in the reader's language. A refusal changed nothing.
+  const outcome = params.get('outcome')
+  const reconnectReason = params.get('reason') ?? ''
+  const reconnectBanner = outcome === 'reconnected' || outcome === 'reconnect_failed'
+    ? (outcome === 'reconnected' ? RECONNECT_COPY.reconnected : RECONNECT_COPY.reasons[reconnectReason] ?? RECONNECT_COPY.reasons.reconnect_failed)[ar ? 'ar' : 'en']
+    : null
+
   return (
     <div className="flex flex-col gap-6">
+      {reconnectBanner !== null && (
+        <div
+          role="status"
+          data-testid="meta-reconnect-banner"
+          data-outcome={outcome}
+          className={`rounded-lg p-3 text-sm ${outcome === 'reconnected' ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'}`}
+        >
+          {reconnectBanner}
+          {outcome === 'reconnect_failed' && (
+            <span className="mt-1 block text-xs text-text-secondary">{RECONNECT_COPY.untouched[ar ? 'ar' : 'en']}</span>
+          )}
+        </div>
+      )}
       {/* INTEGRATION-ESTATE-001 — client first: what feeds each project, with linking and removing on the row. */}
       <ProjectsEstate
         connectable={hub.data?.connectable ?? []}

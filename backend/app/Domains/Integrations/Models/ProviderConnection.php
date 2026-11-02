@@ -38,6 +38,8 @@ final class ProviderConnection extends Model
         'last_discovery_succeeded_at' => 'datetime',
         /* META-INSIGHTS-GRANT-001 — when the provider last refused to read insights, or null. */
         'insights_denied_at' => 'datetime',
+        /* META-MULTI-APP-001 — when Meta confirmed the issuing app via debug_token; NULL = unverified. */
+        'issuing_app_verified_at' => 'datetime',
     ];
 
     /** @return HasMany<ExternalAccount, $this> */

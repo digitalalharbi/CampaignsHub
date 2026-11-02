@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountDiscovery;
@@ -63,9 +64,13 @@ final class MetaSyncProbeCommand extends Command
 
     public function handle(): int
     {
-        $creds = PlatformCredentials::for('meta');
+        // META-MULTI-APP-001 — «is any Meta app configured», asked of every registered customer app; never of Live alone.
+        $anyApp = false;
+        foreach ([MetaCredentialProfile::Live, MetaCredentialProfile::Saas] as $profile) {
+            $anyApp = $anyApp || PlatformCredentials::forMeta($profile)->get('client_id') !== null;
+        }
 
-        if ($creds->get('client_id') === null) {
+        if (! $anyApp) {
             $this->error('BLOCKED_EXTERNAL_CREDENTIALS — no Meta client is configured on this install.');
             $this->line('Nothing here can reach Meta, so any verdict about syncing would be invented.');
 

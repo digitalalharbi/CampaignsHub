@@ -10,6 +10,7 @@ import {
 import { MetaSaasReadiness } from './MetaSaasReadiness'
 import { MetaSaasTestWorkspace } from './MetaSaasTestWorkspace'
 import { MetaSaasModes } from './MetaSaasModes'
+import { MetaSaasRegistry } from './MetaSaasRegistry'
 import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
@@ -270,6 +271,8 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
       {saas && query.data.readiness && <MetaSaasReadiness items={query.data.readiness} ar={ar} />}
 
       {saas && query.data.test_workspace && <MetaSaasTestWorkspace state={query.data.test_workspace} ar={ar} />}
+
+      {saas && query.data.registry && <MetaSaasRegistry registry={query.data.registry} ar={ar} />}
 
       {saas && query.data.modes && <MetaSaasModes modes={query.data.modes} ar={ar} />}
     </div>

@@ -77,6 +77,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         // number written here.
         // META-SAAS-APP-001 — which Meta app a new connection may use (declared before `{provider}` routes; GET, so no overlap).
         Route::get('meta/apps', [AdPlatformOAuthController::class, 'metaApps'])->name('meta.apps');
+        // META-MULTI-APP-001 — atomic reconnect of an existing Meta connection through the primary app (writes nothing at start).
+        Route::post('meta/connections/{connection}/reconnect', [AdPlatformOAuthController::class, 'reconnectMeta'])->middleware('throttle:10,1')->name('meta.reconnect');
         Route::post('{provider}/oauth/start', [AdPlatformOAuthController::class, 'start'])->name('oauth.start');
 
         /*
