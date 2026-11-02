@@ -36,6 +36,7 @@ use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
+use App\Domains\Reports\Support\ReportSpendReconciliation;
 use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
@@ -1046,7 +1047,7 @@ final class LiveReportService
              * Never blended with the ad figures above — see `SiteMeasurementService`.
              */
             'site_measurement' => $this->siteMeasurement($share, $scope['project_id'], $from, $to),
-            'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
+            'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
              *
@@ -1995,7 +1996,7 @@ final class LiveReportService
      * @param  list<string>  $providers
      * @return list<array<string, mixed>>
      */
-    private function freshness(string $tenantId, string $projectId, array $providers): array
+    private function freshness(string $tenantId, string $projectId, array $providers, ?array $accountIds = null): array
     {
         /*
          * An empty ceiling means NOTHING, never everything — the same rule {@see ceiling()} states.
@@ -2029,12 +2030,24 @@ final class LiveReportService
          * clock goes. `name` stays too — the page needs something to call the platform other than a
          * database key.
          */
+        /*
+         * SPEND-RECONCILE-RECORD-001 — «آخر مطابقة مؤكدة مع المصدر», beside (never instead of) the sync facts.
+         *
+         * A client CAN act on this one: it says whether the platform's own figure for the account was
+         * checked against the figures on the page, when, and whether the two agreed. Scoped exactly as
+         * the freshness entry is — this project, its still-bound accounts, the link's account ceiling —
+         * so another project's check never confirms this link. Sources that are not ad platforms carry
+         * no reconciliation (`never`).
+         */
+        $reconciled = app(ReportSpendReconciliation::class)->forProviders($tenantId, $projectId, $providers, $accountIds);
+        $never = ['last_reconciled_at' => null, 'reconcile_status' => ReportSpendReconciliation::NEVER, 'reconcile_diff_pct' => null];
+
         return array_values(array_map(static fn (array $source): array => [
             'kind' => $source['kind'],
             'provider' => $source['provider'],
             'name' => $source['name'],
             'state' => $source['state'] === 'awaiting_credentials' ? 'awaiting_credentials' : 'synced',
-        ], $sources));
+        ] + ($source['kind'] === 'ad_platform' ? ($reconciled[$source['provider']] ?? $never) : $never), $sources));
     }
 
     private function iso(mixed $value): ?string

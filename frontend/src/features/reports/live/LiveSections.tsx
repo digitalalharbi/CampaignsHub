@@ -11,6 +11,7 @@ import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 import { resultWords } from './leadResults'
+import { SpendReconciliationStamp } from './SpendReconciliationStamp'
 
 /*
  * The sections a live link composes its modes from — lifted out of the single long page so each mode
@@ -485,24 +486,34 @@ export function FreshnessStrip({
    */
   const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
 
-  if (excluded.length === 0) return null
+  /*
+   * SPEND-RECONCILE-RECORD-001 — the one clock a client CAN act on: when the platform's own total was last checked against
+   * these figures, and whether it matched. A sibling stamp the strip mounts beside whatever else it says; it renders nothing
+   * for a payload that predates it.
+   */
+  const reconciled = <SpendReconciliationStamp freshness={freshness} ar={ar} />
+
+  if (excluded.length === 0) return reconciled
 
   const names = excluded
     .map((f) => providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en'))
     .join(ar ? '، ' : ', ')
 
   return (
-    <p
-      data-testid="live-freshness"
-      className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
-    >
-      <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-      <span>
-        {ar
-          ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
-          : `The figures in this report do not include: ${names}.`}
-      </span>
-    </p>
+    <>
+      {reconciled}
+      <p
+        data-testid="live-freshness"
+        className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
+      >
+        <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+        <span>
+          {ar
+            ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
+            : `The figures in this report do not include: ${names}.`}
+        </span>
+      </p>
+    </>
   )
 }
 

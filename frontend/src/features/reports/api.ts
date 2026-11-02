@@ -415,6 +415,9 @@ export interface LiveCampaignRow {
   landing_leads: number | null
 }
 
+/** SPEND-RECONCILE-RECORD-001 */
+export type ReconcileStatus = 'matched' | 'drifted' | 'failed' | 'never'
+
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
@@ -714,6 +717,12 @@ export interface LivePayload {
     provider: string
     name?: string | null
     state: 'synced' | 'awaiting_credentials'
+    /** SPEND-RECONCILE-RECORD-001 — when the platform's own total was last CHECKED against the stored one (UTC ISO); never a sync time. */
+    last_reconciled_at?: string | null
+    /** `never` where no check was ever recorded for this project's bound accounts. */
+    reconcile_status?: ReconcileStatus
+    /** Stored minus provider, as a share of the provider total; carried only with the status. */
+    reconcile_diff_pct?: number | null
   }>
   available: {
     providers: string[]
