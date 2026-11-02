@@ -252,6 +252,15 @@ final class MailGallery
                 invitedBy: $ar ? 'محمد الحربي' : 'Mohammed Alharbi',
             ),
 
+            // `admin/tenants/{tenant}/owner-invitation` — the platform operator inviting a workspace's first owner.
+            // Sent with the slug the provisioner really passes, so the preview shows what the owner receives.
+            'account-owner-invitation' => new InvitationMail(
+                workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
+                roleSlug: 'tenant-owner',
+                acceptUrl: "{$app}/invite/accept?token={$token}",
+                lang: $locale,
+            ),
+
             /*
              * An invitation to a role the map does not carry.
              *

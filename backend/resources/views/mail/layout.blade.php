@@ -51,16 +51,22 @@
             .ch-stack { display: block !important; width: 100% !important; }
             .ch-kpi { display: block !important; width: 100% !important; padding-bottom: 12px !important; }
         }
+        /* Progressive only: the button is already a centred, 44px-tall cell without this. */
+        @media only screen and (max-width: 480px) {
+            .ch-btn-wrap { width: 100% !important; }
+            .ch-btn { display: block !important; text-align: center !important; }
+        }
     </style>
 </head>
-<body style="margin:0; padding:0; background-color:#f7f5f0; -webkit-text-size-adjust:100%;">
+@php($align = $dir === 'rtl' ? 'right' : 'left')
+<body dir="{{ $dir }}" style="margin:0; padding:0; background-color:#f7f5f0; -webkit-text-size-adjust:100%; direction:{{ $dir }};">
     {{-- The preview line email clients show beside the subject. Hidden in the body itself. --}}
     <div style="display:none; max-height:0; overflow:hidden; opacity:0;">{{ $preheader ?? '' }}</div>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7f5f0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f7f5f0" dir="{{ $dir }}" style="background-color:#f7f5f0;">
         <tr>
             <td align="center" style="padding:24px 12px;">
-                <table role="presentation" class="ch-wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
+                <table role="presentation" class="ch-wrap" align="center" width="600" cellpadding="0" cellspacing="0" border="0" dir="{{ $dir }}" style="margin:0 auto; width:600px; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
 
                     {{--
                       Header: the official lockup on the dark ground — EMAIL-BRAND-001.
@@ -73,11 +79,11 @@
                       (Outlook does not draw them).
                     --}}
                     <tr>
-                        <td class="ch-pad" style="background-color:#0b1a16; padding:18px 24px 14px 24px; border-bottom:3px solid #0d8a6f;">
-                            <a href="{{ $urls['home'] }}" style="text-decoration:none;">
-                                <img src="{{ $logoUrl }}" width="220" alt="{{ $brand }}" style="display:block; border:0; outline:none; text-decoration:none; width:220px; max-width:100%; height:auto; color:#f7f5f0; font-family:{!! $font !!}; font-size:18px; font-weight:800;" />
+                        <td class="ch-pad" align="center" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; padding:20px 24px 16px 24px; border-bottom:3px solid #0d8a6f; text-align:center;">
+                            <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; text-align:center;">
+                                <img src="{{ $logoUrl }}" width="220" alt="{{ $brand }}" style="display:block; margin:0 auto; border:0; outline:none; text-decoration:none; width:220px; max-width:100%; height:auto; color:#f7f5f0; font-family:{!! $font !!}; font-size:18px; font-weight:800;" />
                             </a>
-                            <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:8px;">
+                            <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:8px; text-align:center; line-height:1.6;">
                                 {{ $headerNote }}
                             </div>
                             {{--
@@ -89,7 +95,7 @@
                                 every digest is a caveat nobody reads.
                             --}}
                             @if (!empty($scopeNote ?? ''))
-                                <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:4px;">
+                                <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:4px; text-align:center;">
                                     {{ $scopeNote }}
                                 </div>
                             @endif
@@ -97,7 +103,7 @@
                     </tr>
 
                     <tr>
-                        <td class="ch-pad" style="padding:24px;">
+                        <td class="ch-pad" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#ffffff" style="padding:28px 24px; background-color:#ffffff; text-align:{{ $align }}; direction:{{ $dir }}; font-family:{!! $font !!}; font-size:14px; line-height:1.8; color:#0b1a16;">
                             {!! $slot !!}
                         </td>
                     </tr>
@@ -116,7 +122,7 @@
                       plainly why the message cannot be switched off instead.
                     --}}
                     <tr>
-                        <td class="ch-pad" style="padding:16px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6;">
+                        <td class="ch-pad" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#faf8f3" style="padding:18px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6; text-align:{{ $align }}; direction:{{ $dir }};">
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; line-height:1.7;">
                                 @if (($showPreferences ?? true) === true)
                                     <a href="{{ $urls['preferences'] }}" style="color:#0d8a6f; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
@@ -131,12 +137,12 @@
                                 <a href="{{ $urls['support'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['support'] }}</a>
                             </div>
                             @if (($footerNote ?? '') !== '')
-                                <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px; line-height:1.7;">
+                                <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; padding-top:8px; line-height:1.7;">
                                     {{ $footerNote }}
                                 </div>
                             @endif
-                            <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px;">
-                                © {{ $year }} {{ $brand }} · <a href="{{ $urls['home'] }}" style="color:#8b9a97; text-decoration:underline;">{{ $urls['host'] }}</a>
+                            <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; padding-top:8px; line-height:1.7;">
+                                © {{ $year }} {{ $brand }} · <a href="{{ $urls['home'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $urls['host'] }}</a>
                                 <br />{{ $t['sender'] }}
                             </div>
                         </td>

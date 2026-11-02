@@ -44,6 +44,7 @@ use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
+use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
@@ -129,6 +130,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.
         RenderMailPreviews::class,
+        // EMAIL-RTL-001 — one mailable, one language, one file.
+        MailPreviewCommand::class,
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,

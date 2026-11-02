@@ -1,0 +1,131 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature;
+
+use App\Domains\Notifications\Support\MailGallery;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
+use Tests\TestCase;
+
+/**
+ * EMAIL-RTL-001 — the account emails are centred and aligned by locale, not left-leaning.
+ *
+ * Gmail drops `dir` from <html>, so alignment has to be on the cells themselves; these assertions
+ * pin the cells, the centred CTA, the bidi island around the raw URL and the Latin digits.
+ */
+final class EmailLayoutRtlTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const MIGRATED = [
+        'account-email-verification', 'account-password-reset', 'account-member-setup',
+        'account-sign-in-code', 'account-security-sign-in', 'account-invitation', 'account-owner-invitation',
+    ];
+
+    /** @return array<string, array{string,string}> */
+    public static function cases(): array
+    {
+        $out = [];
+        foreach (self::MIGRATED as $key) {
+            foreach (['ar', 'en'] as $locale) {
+                $out["{$key} {$locale}"] = [$key, $locale];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @dataProvider cases */
+    public function test_layout_is_aligned_by_locale(string $key, string $locale): void
+    {
+        $html = (string) MailGallery::render($key, $locale);
+        $ar = $locale === 'ar';
+        $align = $ar ? 'right' : 'left';
+
+        $this->assertStringContainsString('lang="'.$locale.'" dir="'.($ar ? 'rtl' : 'ltr').'"', $html);
+        $this->assertMatchesRegularExpression('/<body dir="'.($ar ? 'rtl' : 'ltr').'"/', $html);
+        // Header lockup is centred; body and footer cells carry the locale's alignment.
+        $this->assertMatchesRegularExpression('/<td class="ch-pad" align="center"[^>]*bgcolor="#0b1a16"/', $html);
+        $this->assertMatchesRegularExpression('/<td class="ch-pad" dir="'.($ar ? 'rtl' : 'ltr').'" align="'.$align.'"[^>]*text-align:'.$align.'/', $html);
+        $this->assertSame(2, preg_match_all('/<td class="ch-pad" dir="[a-z]+" align="'.$align.'"/', $html));
+        $this->assertStringNotContainsString('align="'.($ar ? 'left' : 'right').'" bgcolor', $html);
+        $this->assertDoesNotMatchRegularExpression('/[٠-٩]/u', $html);
+        $this->assertStringContainsString('Segoe UI', $html);
+        $this->assertStringContainsString('sans-serif', $html);
+        // Wrapper is a centred 600px table.
+        $this->assertMatchesRegularExpression('/<table role="presentation" class="ch-wrap" align="center" width="600"/', $html);
+    }
+
+    /** @dataProvider cases */
+    public function test_cta_is_centred_and_raw_url_is_an_ltr_island(string $key, string $locale): void
+    {
+        $html = (string) MailGallery::render($key, $locale);
+
+        if (str_contains($key, 'sign-in-code')) {
+            $this->assertStringNotContainsString('class="ch-btn"', $html, 'a code message has no button');
+
+            return;
+        }
+
+        $this->assertMatchesRegularExpression('/<td align="center" bgcolor="#0b7a62"[^>]*>\s*<a class="ch-btn"[^>]*min-height:44px/', $html);
+
+        if (str_contains($key, 'security')) {
+            return; // the security alert's action is "this was not me"; it carries no token URL
+        }
+
+        $this->assertMatchesRegularExpression('/<span class="ch-url" dir="ltr" style="[^"]*unicode-bidi:embed[^"]*word-break:break-all/', $html);
+        $align = $locale === 'ar' ? 'right' : 'left';
+        $this->assertMatchesRegularExpression('/<td dir="'.($locale === 'ar' ? 'rtl' : 'ltr').'" align="'.$align.'" style="padding-top:14px/', $html);
+    }
+
+    public function test_footer_links_follow_reading_order(): void
+    {
+        // Only the footer's own links: the body copy can use the same words earlier.
+        $tail = fn (string $html) => substr($html, (int) strrpos($html, 'Privacy') ?: (int) strrpos($html, 'الخصوصية'));
+        $ar = $tail((string) MailGallery::render('account-password-reset', 'ar'));
+        $en = $tail((string) MailGallery::render('account-password-reset', 'en'));
+
+        $this->assertLessThan(strpos($ar, 'الشروط'), strpos($ar, 'الخصوصية'));
+        $this->assertLessThan(strpos($ar, 'الأمان'), strpos($ar, 'الشروط'));
+        $this->assertLessThan(strpos($ar, 'الدعم'), strpos($ar, 'الأمان'));
+        $this->assertLessThan(strpos($en, 'Terms'), strpos($en, 'Privacy'));
+        $this->assertLessThan(strpos($en, 'Support'), strpos($en, 'Security'));
+    }
+
+    public function test_every_gallery_message_renders_in_both_locales_without_arabic_indic_digits(): void
+    {
+        foreach (['ar', 'en'] as $locale) {
+            foreach (MailGallery::keys() as $key) {
+                $html = (string) MailGallery::render($key, $locale);
+                $this->assertStringContainsString('dir="'.($locale === 'ar' ? 'rtl' : 'ltr').'"', $html, $key);
+                $this->assertDoesNotMatchRegularExpression('/[٠-٩]/u', $html, "{$key} {$locale}");
+            }
+        }
+    }
+
+    public function test_sending_still_uses_the_same_subject_and_recipient(): void
+    {
+        Mail::fake();
+
+        foreach (['ar', 'en'] as $locale) {
+            foreach (MailGallery::messages($locale) as $key => $mailable) {
+                $subject = $mailable->envelope()->subject;
+                Mail::to('person@example.com')->send($mailable);
+                Mail::assertSent($mailable::class, fn ($m) => $m->hasTo('person@example.com') && $m->envelope()->subject === $subject);
+            }
+        }
+    }
+
+    public function test_mail_preview_command_writes_one_file(): void
+    {
+        $out = storage_path('framework/testing/mail-preview-one.html');
+        @unlink($out);
+
+        $this->artisan('mail:preview', ['mailable' => 'verification', '--locale' => 'en', '--out' => $out])->assertSuccessful();
+        $this->assertStringContainsString('dir="ltr"', (string) file_get_contents($out));
+        $this->artisan('mail:preview', ['mailable' => 'nope'])->assertFailed();
+        @unlink($out);
+    }
+}

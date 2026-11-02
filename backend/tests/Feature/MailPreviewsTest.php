@@ -70,8 +70,8 @@ final class MailPreviewsTest extends TestCase
             $this->assertArrayHasKey("{$kind}.en.html", $files, "{$kind} has no English preview");
         }
 
-        // 21 messages × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
-        $this->assertCount(42, $files);
+        // 22 messages (the owner invitation joined in EMAIL-RTL-001) × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
+        $this->assertCount(44, $files);
     }
 
     /**

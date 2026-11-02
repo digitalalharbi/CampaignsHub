@@ -12,7 +12,7 @@
 @php($tone = ['good' => '#0d8a6f', 'warn' => '#b45309', 'bad' => '#b91c1c', 'neutral' => '#5b6b68'])
 @php($toneBg = ['good' => '#e8f5f1', 'warn' => '#fffbeb', 'bad' => '#fef2f2', 'neutral' => '#faf8f3'])
 
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
     <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
     @php($singleProject = $singleProject ?? false)
@@ -233,7 +233,7 @@
     {{-- One button, and it says where it lands. --}}
     <div style="margin:10px 0 18px; text-align:center;">
         <a href="{{ $portfolio[0]['url'] ?? '#' }}" data-block="cta"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
+           style="display:inline-block; background-color:#0b7a62; color:#ffffff; font-size:14px; font-weight:700;
                   text-decoration:none; padding:11px 22px; border-radius:10px;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a>
     </div>
 

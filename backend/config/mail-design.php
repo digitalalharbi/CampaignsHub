@@ -37,6 +37,7 @@ return [
      */
     'colour' => [
         'brand' => '#0d8a6f',
+        'brand_action' => '#0b7a62', // a button's fill: white on it is 5.3:1; brand itself is 4.3:1 and fails AA
         'brand_ink' => '#c9d2cc',   // on the brand background, in the header
         'ink' => '#0b1a16',         // body text
         'ink_soft' => '#3d4742',    // secondary body text
