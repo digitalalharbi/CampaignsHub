@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Ops\Console;
 
 use App\Domains\Ops\Performance\PerformanceRecorder;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -30,7 +31,10 @@ final class PerfCheckCommand extends Command
 
     public function handle(PerformanceRecorder $recorder): int
     {
+        $findings = 0;
+
         foreach (self::degraded($recorder->requests(1)) as $route => $p95) {
+            $findings++;
             Log::error('PERF-RECOVERY-001: route over its latency limit', ['route' => $route, 'p95_ms_at_most' => $p95, 'limit_ms' => self::P95_LIMIT_MS]);
             $this->line("over limit: {$route} p95<={$p95}");
         }
@@ -39,10 +43,14 @@ final class PerfCheckCommand extends Command
             $size = Queue::size($queue);
 
             if ($size > self::QUEUE_LIMIT) {
+                $findings++;
                 Log::error('PERF-RECOVERY-001: queue backlog over its limit', ['queue' => $queue, 'waiting' => $size, 'limit' => self::QUEUE_LIMIT]);
                 $this->line("backlog: {$queue} {$size}");
             }
         }
+
+        // The count the ops page states: how many routes or queues were over their limit this pass (0 = healthy, not «did nothing»).
+        app(ScheduledRunRows::class)->report($findings);
 
         return self::SUCCESS;
     }
