@@ -10,6 +10,10 @@ on:
         description: 'Hours of request and query counters to read'
         required: false
         default: '24'
+      tokens:
+        description: 'Optional: comma-separated link tokens to explain read-only (state + recent access log)'
+        required: false
+        default: ''
 
 concurrency:
   group: production-diagnostics
@@ -24,12 +28,13 @@ jobs:
         uses: appleboy/ssh-action@v1.2.2
         env:
           HOURS: ${{ inputs.hours }}
+          TOKENS: ${{ inputs.tokens }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: HOURS
+          envs: HOURS,TOKENS
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -41,7 +46,7 @@ jobs:
               exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
             echo "── live report build"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=2 --top=20
+              exec -T backend php artisan ops:profile-live-report --links=2 --top=20 $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done)
             echo "── postgres top statements"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
               exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available"

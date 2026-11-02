@@ -20,12 +20,16 @@ use Illuminate\Support\Facades\DB;
  */
 final class ProfileLiveReportCommand extends Command
 {
-    protected $signature = 'ops:profile-live-report {--links=2 : Live links to profile} {--top=20 : Statements to print}';
+    protected $signature = 'ops:profile-live-report {--links=2 : Live links to profile} {--top=20 : Statements to print} {--token=* : Explain why this link answers as it does (state and recent access log); read-only}';
 
     protected $description = 'Read-only: time, query count and heaviest queries of the public live report build.';
 
     public function handle(LiveReportService $live): int
     {
+        foreach ((array) $this->option('token') as $raw) {
+            $this->explain((string) $raw);
+        }
+
         $shares = ReportShare::withoutGlobalScopes()->get()
             ->filter(static fn (ReportShare $s): bool => $s->isActive() && $s->isLive())
             ->sortByDesc(static fn (ReportShare $s) => $s->updated_at)
@@ -76,5 +80,36 @@ final class ProfileLiveReportCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /** Why a link answers 404, from the row itself: revoked, paused, expired or not live. Changes nothing. */
+    private function explain(string $raw): void
+    {
+        $share = ReportShare::withoutGlobalScopes()->where('token_hash', hash('sha256', $raw))->first();
+        $label = substr($raw, 0, 4).'…';
+
+        if (! $share) {
+            $this->line("LINK {$label}: no row for this token");
+
+            return;
+        }
+
+        $this->line(sprintf(
+            'LINK %s: id %s · mode %s · live %s · active %s · revoked_at %s · paused_at %s · expires_at %s · views %d · last viewed %s',
+            $label,
+            substr((string) $share->id, 0, 8),
+            $share->mode,
+            $share->isLive() ? 'yes' : 'no',
+            $share->isActive() ? 'yes' : 'no',
+            $share->revoked_at?->toIso8601String() ?? '-',
+            $share->paused_at?->toIso8601String() ?? '-',
+            $share->expires_at?->toIso8601String() ?? '-',
+            (int) $share->view_count,
+            $share->last_viewed_at?->toIso8601String() ?? '-',
+        ));
+
+        foreach ($share->logs()->latest()->limit(5)->get() as $log) {
+            $this->line(sprintf('    %s  %s  %s', $log->created_at?->toIso8601String(), $log->action, substr((string) $log->detail, 0, 80)));
+        }
     }
 }
