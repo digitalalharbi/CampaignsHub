@@ -98,21 +98,26 @@ final class ContributorCoverageSeriesTest extends TestCase
         $from = $this->today()->copy()->subDays(35);
         $to = $this->today()->copy()->addDays(3); // runs past today: exercises the yesterday clamp
 
-        foreach ([null, ['snapchat', 'tiktok'], ['google']] as $providers) {
-            foreach ([(string) $this->project->id, (string) $this->other->id, null] as $projectId) {
-                $series = $service->forDays((string) $this->tenant->id, $projectId, $from, $to, $providers);
+        // SEC-CLUSTER-2 — a multi-project reader passes the list; an empty list names nothing.
+        $lists = [null, [(string) $this->project->id], [(string) $this->project->id, (string) $this->other->id], []];
 
-                $this->assertCount(39, $series);
-                $states = [];
-                for ($d = $from->copy(); ! $d->gt($to); $d->addDay()) {
-                    $day = $d->copy();
-                    $expected = $service->forWindow((string) $this->tenant->id, $projectId, $day, $day, $providers)->toArray();
-                    $this->assertSame($expected, $series[$day->toDateString()]->toArray(), 'diverged on '.$day->toDateString());
-                    $states[$expected['state']] = true;
-                }
-                if ($projectId === (string) $this->project->id && $providers === null) {
-                    // The world is not vacuous: more than one distinct outcome occurs.
-                    $this->assertGreaterThan(1, count($states));
+        foreach ([null, ['snapchat', 'tiktok'], ['google']] as $providers) {
+            foreach ($lists as $list) {
+                foreach ([(string) $this->project->id, (string) $this->other->id, null] as $projectId) {
+                    $series = $service->forDays((string) $this->tenant->id, $projectId, $from, $to, $providers, $list);
+
+                    $this->assertCount(39, $series);
+                    $states = [];
+                    for ($d = $from->copy(); ! $d->gt($to); $d->addDay()) {
+                        $day = $d->copy();
+                        $expected = $service->forWindow((string) $this->tenant->id, $projectId, $day, $day, $providers, $list)->toArray();
+                        $this->assertSame($expected, $series[$day->toDateString()]->toArray(), 'diverged on '.$day->toDateString());
+                        $states[$expected['state']] = true;
+                    }
+                    if ($projectId === (string) $this->project->id && $providers === null && $list === null) {
+                        // The world is not vacuous: more than one distinct outcome occurs.
+                        $this->assertGreaterThan(1, count($states));
+                    }
                 }
             }
         }

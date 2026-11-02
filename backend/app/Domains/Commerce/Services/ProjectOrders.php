@@ -6,6 +6,7 @@ namespace App\Domains\Commerce\Services;
 
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -67,9 +68,14 @@ final class ProjectOrders
      */
     public function forWindow(string $tenantId, string $projectId, Carbon $from, Carbon $to): array
     {
-        $orders = CommerceOrder::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereBetween('placed_at', [$from, $to])
+        // SEC-3 — only the orders of a store that is still SELECTED for this project (BoundAccountVisibility):
+        // detaching or moving a store takes its orders out of this project's figures, as it does for ad rows.
+        $orders = BoundAccountVisibility::apply(
+            CommerceOrder::withoutGlobalScopes()
+                ->where('project_id', $projectId)
+                ->whereBetween('placed_at', [$from, $to]),
+            'commerce_orders',
+        )
             ->orderBy('created_at')
             ->orderBy('id')
             ->get();

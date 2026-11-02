@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Domains\Commerce\Services;
 
+use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Audit\AuditLogger;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Actions\ConfirmAccountSelection;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -104,6 +107,19 @@ final class StoreAssignment
             return null;
         }
 
+        /*
+         * SEC-3 — «exactly one project» is a choice only when the store says whose it is.
+         *
+         * A store with no client workspace is a TENANT-LEVEL connection: nobody named a client. Where the
+         * tenant is an agency, or holds more than one client, the only project in the tenant may well be a
+         * different client's, and filing the store there would put one client's orders under another's
+         * reports. That case is parked as unassigned until a person chooses (PATCH /commerce/stores/{id}).
+         * A store that names its client, or an advertiser with a single client, keeps the shortcut.
+         */
+        if ($store->client_workspace_id === null && $this->tenantHasSeveralWhoseStoreItMightBe((string) $store->tenant_id)) {
+            return null;
+        }
+
         $candidates = Project::withoutGlobalScopes()
             ->where('tenant_id', $store->tenant_id)
             ->where('status', 'active')
@@ -120,6 +136,17 @@ final class StoreAssignment
         $only = $candidates->first();
 
         return $this->assign($store, $only);
+    }
+
+    private function tenantHasSeveralWhoseStoreItMightBe(string $tenantId): bool
+    {
+        $agency = Tenant::withoutGlobalScopes()->whereKey($tenantId)->value('account_type') === AccountType::Agency->value;
+
+        return $agency || ClientWorkspace::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->limit(2)
+            ->count() > 1;
     }
 
     private function detach(ExternalAccount $store): void

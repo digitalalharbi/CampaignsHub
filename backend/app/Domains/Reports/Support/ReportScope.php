@@ -184,8 +184,19 @@ final class ReportScope
      *
      * @param  array<string, mixed>|null  $input
      */
-    public static function fromReport(?array $input): self
+    public static function fromReport(?array $input, ?string $projectId = null): self
     {
+        /*
+         * SECURITY CLUSTER 5 — a report's `project_ids` is a statement of ITS OWN project, never a way to read another.
+         *
+         * The objective-performance readers lift the active-project scope when they are handed project ids, so a stored id of another
+         * project (reports saved before creation verified it) read that project's figures. Given the report's project, whatever is stored
+         * on this axis collapses to it.
+         */
+        if ($projectId !== null && ($input['project_ids'] ?? []) !== []) {
+            $input['project_ids'] = [$projectId];
+        }
+
         return self::fromArray($input, objectivesFilterByDefault: false);
     }
 
