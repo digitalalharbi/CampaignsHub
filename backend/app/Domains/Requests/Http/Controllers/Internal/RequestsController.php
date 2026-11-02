@@ -9,6 +9,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
+use App\Domains\Requests\Services\RequestReach;
 use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Support\RequestLabels;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
@@ -28,6 +29,7 @@ final class RequestsController
         private readonly TenantContext $tenant,
         private readonly RequestSla $sla,
         private readonly PaidServiceCatalog $paidServices,
+        private readonly RequestReach $reach,
     ) {}
 
     /** GET /api/v1/app/requests — filtered, sorted, paginated list for the current tenant. */
@@ -298,7 +300,11 @@ final class RequestsController
     /** @return \Illuminate\Database\Eloquent\Builder<ExternalRequest> */
     private function scoped(): \Illuminate\Database\Eloquent\Builder
     {
-        return ExternalRequest::query()->where('tenant_id', $this->tenant->tenantId());
+        // The tenant first, then the caller's client ceiling — the inbox, its counts and the detail share this one query.
+        return $this->reach->constrain(
+            ExternalRequest::query()->where('external_requests.tenant_id', $this->tenant->tenantId()),
+            request()->user(),
+        );
     }
 
     public function find(string $id): ExternalRequest

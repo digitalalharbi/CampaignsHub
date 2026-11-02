@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Models\CurrencyRate;
@@ -116,6 +117,13 @@ final class ReportingCurrencyTest extends TestCase
             'currency' => $currency,
             'status' => 'active',
         ])->save();
+
+        // SEC-CLUSTER-2 — metrics are stamped with the project the account is ACTIVELY bound to, so a fixture
+        // that skips the deliberate act of binding it would (correctly) store nothing.
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id,
+            'provider' => 'meta', 'purpose' => 'advertising', 'is_active' => true,
+        ]);
 
         $campaign = new ExternalCampaign;
         $campaign->forceFill([

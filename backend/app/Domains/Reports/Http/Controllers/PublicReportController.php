@@ -316,9 +316,10 @@ final class PublicReportController extends Controller
      */
     public function attribution(Request $request, string $token, AttributionTransparency $transparency): JsonResponse
     {
-        $share = $this->shares->resolveActive($token);
-        if (! $share) {
-            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        // SECURITY CLUSTER 5 — the same gate every other content endpoint passes: a password-protected link answers nothing without it.
+        [$share, $denied] = $this->open($request, $token);
+        if ($denied !== null) {
+            return $denied;
         }
 
         // Fail-closed: an older link, a link that never asked, and a malformed settings blob all

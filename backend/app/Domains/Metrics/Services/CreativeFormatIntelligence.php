@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
@@ -81,6 +83,11 @@ final class CreativeFormatIntelligence
     /**
      * The canonical answer for one scope.
      *
+     * `$ceiling` is a public link's grant (SECURITY CLUSTER 5): `account_ids` narrows through each creative's
+     * campaign, and every other key is a {@see CreativeRows::applyFilters()} filter (providers, campaign_ids,
+     * creative_ids, excluded_creative_ids ...). Null — the operator's own reading — narrows nothing.
+     *
+     * @param  array<string, mixed>|null  $ceiling
      * @return array<string, mixed>
      */
     public function forScope(
@@ -89,8 +96,9 @@ final class CreativeFormatIntelligence
         Carbon $to,
         ?string $accountId = null,
         ?string $campaignId = null,
+        ?array $ceiling = null,
     ): array {
-        $creatives = $this->creatives($projectId, $accountId, $campaignId);
+        $creatives = $this->creatives($projectId, $accountId, $campaignId, $ceiling);
 
         $ids = array_map(static fn (array $c): string => $c['id'], $creatives);
         $figures = $ids === [] ? [] : $this->metrics->forCreatives($ids, $from, $to);
@@ -239,7 +247,7 @@ final class CreativeFormatIntelligence
      *
      * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string}>
      */
-    private function creatives(string $projectId, ?string $accountId, ?string $campaignId): array
+    private function creatives(string $projectId, ?string $accountId, ?string $campaignId, ?array $ceiling = null): array
     {
         $rows = ExternalCreative::query()
             ->where('external_creatives.project_id', $projectId)
@@ -250,6 +258,14 @@ final class CreativeFormatIntelligence
             ))
             ->when($accountId !== null, fn ($q) => $q->where('external_creatives.external_account_id', $accountId))
             ->when($campaignId !== null, fn ($q) => $q->where('external_creatives.campaign_id', $campaignId))
+            ->when($ceiling !== null, function ($q) use ($ceiling): void {
+                $accounts = array_values(array_filter((array) ($ceiling['account_ids'] ?? []), 'is_string'));
+                if ($accounts !== []) {
+                    // A creative belongs to an account through its campaign: the same road the visibility predicate takes.
+                    $q->whereIn('external_creatives.external_campaign_id', ExternalCampaign::query()->select('id')->whereIn('external_account_id', $accounts));
+                }
+                app(CreativeRows::class)->applyFilters($q, array_diff_key((array) $ceiling, ['account_ids' => true]));
+            })
             ->get(['id', 'format', 'campaign_id', 'external_account_id']);
 
         $objectives = UnifiedCampaign::query()

@@ -15,6 +15,8 @@ use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\Support\IntegrationTruth;
 use App\Domains\Integrations\Support\NextScheduledSync;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -60,7 +62,23 @@ final class ConnectionHubController extends Controller
     public function __construct(
         private readonly TenantContext $tenant,
         private readonly ProviderConfigurationService $settings,
+        private readonly ReachableProjects $reach,
     ) {}
+
+    /** @return list<string>|null null = every project of the tenant */
+    private function reachableProjectIds(Request $request, string $tenantId): ?array
+    {
+        $reach = $this->reach->for($request->user(), ProjectCapability::DASHBOARD_VIEW);
+
+        if ($reach['only'] === null && $reach['except'] === []) {
+            return null;
+        }
+
+        $q = Project::withoutGlobalScopes()->where('tenant_id', $tenantId);
+        $this->reach->constrain($q, $request->user(), 'id', ProjectCapability::DASHBOARD_VIEW);
+
+        return $q->pluck('id')->map(static fn (mixed $id): string => (string) $id)->all();
+    }
 
     public function __invoke(Request $request): JsonResponse
     {
@@ -106,14 +124,49 @@ final class ConnectionHubController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('account_type', 'ad_account')
             ->whereIn('provider_connection_id', $connections->modelKeys())
-            ->get(['id', 'provider_connection_id', 'last_synced_at', 'access_lost_at', 'last_sync_error_category'])
+            ->get(['id', 'provider_connection_id', 'client_workspace_id', 'last_synced_at', 'access_lost_at', 'last_sync_error_category'])
             ->groupBy(fn (ExternalAccount $a): string => (string) $a->provider_connection_id);
+
+        /*
+         * SEC-CLUSTER-2 — a restricted reader sees only the projects they reach, and the authorisations that
+         * serve them. The hub named every connection of the tenant, its accounts and the projects they feed;
+         * a teammate confined to one client read the whole agency. `$reach` is the same set the inventory
+         * uses; null = every project (agency-wide readers keep the page as it was).
+         */
+        $reachable = $this->reachableProjectIds($request, $tenantId);
 
         $selected = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->whereNotNull('project_id')
+            ->when($reachable !== null, fn ($q) => $q->whereIn('project_id', $reachable ?: ['00000000-0000-0000-0000-000000000000']))
             ->get(['project_id', 'external_account_id']);
+
+        if ($reachable !== null) {
+            $clients = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $reachable)
+                ->pluck('client_workspace_id')->filter()->map(strval(...))->unique()->all();
+            $boundHere = $selected->pluck('external_account_id')->map(strval(...))->unique()->all();
+            $held = ProjectIntegrationBinding::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('is_active', true)->pluck('external_account_id')->map(strval(...))->all();
+
+            // Authorisations whose accounts belong to projects the reader cannot reach: not theirs to see or name.
+            $heldAway = $accounts->filter(fn ($rows) => $rows->contains(
+                fn (ExternalAccount $a): bool => in_array((string) $a->getKey(), $held, true) && ! in_array((string) $a->getKey(), $boundHere, true),
+            ))->keys()->all();
+
+            // Accounts the reader may see: bound to a project they reach, or bound to none and tenant-level / their client's.
+            $accounts = $accounts->map(fn ($rows) => $rows->filter(
+                fn (ExternalAccount $a): bool => in_array((string) $a->getKey(), $boundHere, true)
+                    || (! in_array((string) $a->getKey(), $held, true)
+                        && ($a->client_workspace_id === null || in_array((string) $a->client_workspace_id, $clients, true))),
+            ))->filter(fn ($rows) => $rows->isNotEmpty());
+
+            $servesReader = $accounts->filter(fn ($rows) => $rows->contains(fn (ExternalAccount $a): bool => in_array((string) $a->getKey(), $boundHere, true)))->keys()->all();
+            $connections = $connections->filter(
+                fn (ProviderConnection $c): bool => in_array((string) $c->getKey(), $servesReader, true)
+                    || (! in_array((string) $c->getKey(), $heldAway, true)
+                        && ($c->client_workspace_id === null || in_array((string) $c->client_workspace_id, $clients, true))),
+            )->values();
+        }
 
         $selectedIds = $selected->pluck('external_account_id')->map(strval(...))->unique();
 

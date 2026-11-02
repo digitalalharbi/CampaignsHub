@@ -60,7 +60,7 @@ final class InfluencerAttribution
             'collaboration_id' => $collaboration->getKey(),
             'deliverable_id' => $data['deliverable_id'] ?? null,
             'kind' => $kind,
-            'code' => $this->mintCode($collaboration, $data['code'] ?? null),
+            'code' => $this->mintCode($collaboration, $data['code'] ?? null, $kind),
             'destination_url' => $data['destination_url'] ?? null,
             'discount_type' => $kind === 'discount_code' ? ($data['discount_type'] ?? 'percent') : null,
             'discount_value' => $kind === 'discount_code' ? ($data['discount_value'] ?? null) : null,
@@ -212,12 +212,12 @@ final class InfluencerAttribution
      * so a collision would send one brand's traffic into another's report — the one failure mode
      * here that is worse than an error.
      */
-    private function mintCode(InfluencerCollaboration $collaboration, ?string $preferred): string
+    private function mintCode(InfluencerCollaboration $collaboration, ?string $preferred, string $kind): string
     {
         if ($preferred !== null && trim($preferred) !== '') {
             $code = Str::upper(preg_replace('/[^A-Za-z0-9-]/', '', $preferred) ?? '');
 
-            if ($code !== '' && ! $this->codeTaken($code)) {
+            if ($code !== '' && ! $this->codeTaken($code, $kind, (string) $collaboration->tenant_id)) {
                 return $code;
             }
 
@@ -229,7 +229,7 @@ final class InfluencerAttribution
         for ($attempt = 0; $attempt < 12; $attempt++) {
             $code = $prefix.'-'.$this->randomBlock(6);
 
-            if (! $this->codeTaken($code)) {
+            if (! $this->codeTaken($code, $kind, (string) $collaboration->tenant_id)) {
                 return $code;
             }
         }
@@ -237,11 +237,23 @@ final class InfluencerAttribution
         throw new RuntimeException('A unique tracking code could not be generated.');
     }
 
-    private function codeTaken(string $code): bool
+    /**
+     * SEC-3 — where a code must be unique depends on where it is read.
+     *
+     * A served LINK code is resolved by a stranger with no tenant in context, so it is unique across the whole
+     * platform. A DISCOUNT code is redeemed in the merchant's own store and read inside the merchant's tenant,
+     * so it only has to be unique there: a global check refused tenant B the coupon tenant A happens to use
+     * ("SAVE10") and, by refusing, told B that some other company holds it.
+     */
+    private function codeTaken(string $code, string $kind, string $tenantId): bool
     {
         return InfluencerTrackingAsset::query()
             ->withoutGlobalScope(TenantScope::class)
-            ->where('code', $code)
+            ->when(
+                $kind === 'discount_code',
+                fn ($q) => $q->where('tenant_id', $tenantId)->where('kind', 'discount_code')->whereRaw('lower(code) = ?', [mb_strtolower($code)]),
+                fn ($q) => $q->where('kind', 'link')->where('code', $code),
+            )
             ->exists();
     }
 

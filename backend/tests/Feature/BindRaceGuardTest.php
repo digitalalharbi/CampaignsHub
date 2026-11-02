@@ -27,7 +27,7 @@ final class BindRaceGuardTest extends TestCase
         $bind = substr($bind, 0, (int) strpos($bind, 'public function bindBatch('));
 
         $lock = strpos($bind, '->lockForUpdate()');
-        $recheck = strpos($bind, "->where('project_id', '!=', \$project->id)\n                    ->exists();");
+        $recheck = strpos($bind, 'activeBindingElsewhere($account, (string) $project->id) !== null;');
         $write = strpos($bind, 'ProjectIntegrationBinding::create([');
 
         $this->assertNotFalse($lock, 'bind() no longer locks the tenant row');
