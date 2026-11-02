@@ -1,7 +1,8 @@
 name: Owner Approval Gate
 
-# A pull request that must wait for the Owner's explicit approval carries the label
-# `hold:owner-approval-meta` (and `HOLD` in its title). This check FAILS while either is present, so
+# A pull request that must wait for the Owner's explicit approval — a Meta credential migration, any other
+# credential migration, an irreversible Production change — carries a label starting `hold:owner-approval`
+# (e.g. `hold:owner-approval-meta`) and `HOLD` in its title. This check FAILS while either is present, so
 # the PR cannot satisfy the required status checks — whoever tries to merge it, the Lander included.
 # It runs on every pull request and passes when neither marker is there, so it never blocks other work.
 # Lifting the hold takes two deliberate edits by the Owner: remove the label and drop `HOLD` from the title.
@@ -25,7 +26,7 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           held=0
-          case ",${LABELS}," in *",hold:owner-approval-meta,"*) echo "Held: label hold:owner-approval-meta is on this PR."; held=1;; esac
+          case ",${LABELS}," in *",hold:owner-approval"*) echo "Held: a hold:owner-approval* label is on this PR."; held=1;; esac
           case "${TITLE}" in *"(HOLD"*|*"HOLD —"*|*"[HOLD]"*) echo "Held: the title carries HOLD."; held=1;; esac
           if [ "$held" = 1 ]; then
             echo "This change waits for the Owner's explicit approval. Remove the label and the HOLD marker only when they approve."
