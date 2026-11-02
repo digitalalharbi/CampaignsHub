@@ -52,6 +52,9 @@ services:
       dockerfile: deploy/backend.production.Dockerfile
     restart: unless-stopped
     command: php artisan horizon
+    # PERF-SYNC-ISOLATION-001 — one CPU shared with the web tier and other products: under contention the
+    # queue gets a quarter of the backend's share (default 1024), so provider syncs yield to requests.
+    cpu_shares: 256
     env_file:
       - ./backend.production.env
     volumes:

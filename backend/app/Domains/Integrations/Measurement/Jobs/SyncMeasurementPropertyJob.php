@@ -52,7 +52,10 @@ final class SyncMeasurementPropertyJob implements ShouldBeUnique, ShouldQueue
     public function __construct(
         private readonly string $accountId,
         private readonly int $days,
-    ) {}
+    ) {
+        // PERF-SYNC-ISOLATION-001 — provider syncs run on their own, serialised queue, never beside a user's request.
+        $this->onQueue('sync');
+    }
 
     public function handle(Ga4PropertySync $sync, TenantContext $tenant, AccountAssignment $assignment): void
     {
