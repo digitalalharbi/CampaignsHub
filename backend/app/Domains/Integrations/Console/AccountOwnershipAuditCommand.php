@@ -42,7 +42,13 @@ use Illuminate\Support\Str;
  *      inferred: the current key cannot prove it, and the wrong guess takes a customer's own data out
  *      of their own project. A copy under the same provider account (another row of the same
  *      advertiser) is left alone and reported. Nothing is moved to another project and nothing merged.
- *   6. `--restore=<batch>` puts a batch back, row for row.
+ *      The provider has the last word: before anything is selected the owner's own credential is asked,
+ *      read-only, for that account's campaigns, and only a campaign it lists is ever quarantined. A
+ *      key that answers for a different account, or a provider that cannot be reached, selects nothing.
+ *   6. `--dry-run` (with `--keep-account`) prints the plan `--apply` would execute: per project the
+ *      campaigns, the rows of every table, and the stored spend before and after. It is what an Owner
+ *      approves; `--apply` runs the same selection.
+ *   7. `--restore=<batch>` puts a batch back, row for row.
  *
  * Without `--apply` or `--restore` the command writes nothing (`AccountOwnershipAuditCommandTest`
  * holds a digest of every table). It prints internal ids, provider keys, counts and dates — never an
@@ -55,6 +61,7 @@ final class AccountOwnershipAuditCommand extends Command
         {--probe : Ask each ChatGPT Ads connection which account its key answers for (read-only provider call)}
         {--apply : With --keep-account: quarantine the other copies of that account\'s campaigns (copied to isolation_quarantines, then removed)}
         {--keep-account= : Our id of the account a person has established as the owner of its campaigns}
+        {--dry-run : With --keep-account: print exactly what --apply would quarantine, with before/after spend per project. Writes nothing}
         {--restore= : Put a quarantine batch back, by batch id}';
 
     protected $description = 'Read-only unless --apply/--restore: campaigns filed under an account their credential does not answer for.';
@@ -95,14 +102,14 @@ final class AccountOwnershipAuditCommand extends Command
             $this->probeKeyOwnership($provider);
         }
 
-        if (! $this->option('apply')) {
+        if (! $this->option('apply') && ! $this->option('dry-run')) {
             return self::SUCCESS;
         }
 
         $keep = $this->option('keep-account');
 
         if (! is_string($keep) || $keep === '') {
-            $this->error('  --apply needs --keep-account: nothing is quarantined on a guess about who owns a campaign.');
+            $this->error('  --apply and --dry-run need --keep-account: nothing is quarantined on a guess about who owns a campaign.');
 
             return self::FAILURE;
         }
@@ -128,11 +135,12 @@ final class AccountOwnershipAuditCommand extends Command
 
         foreach ($keys as $key) {
             $copies = DB::table('external_campaigns AS c')
+                ->join('external_accounts AS a', 'a.id', '=', 'c.external_account_id')
                 ->leftJoin('daily_metrics AS m', 'm.external_campaign_id', '=', 'c.id')
                 ->where('c.provider', $key->provider)
                 ->where('c.external_id', $key->external_id)
-                ->groupBy('c.id', 'c.external_account_id', 'c.project_id', 'c.provider', 'c.external_id', 'c.unified_campaign_id')
-                ->selectRaw('c.id, c.external_account_id, c.project_id, c.provider, c.external_id, c.unified_campaign_id, COUNT(m.id) AS figures, MIN(m.metric_date) AS first_day, MAX(m.metric_date) AS last_day')
+                ->groupBy('c.id', 'c.external_account_id', 'c.project_id', 'c.provider', 'c.external_id', 'c.unified_campaign_id', 'a.external_id')
+                ->selectRaw('a.external_id AS provider_account, c.id, c.external_account_id, c.project_id, c.provider, c.external_id, c.unified_campaign_id, COUNT(m.id) AS figures, MIN(m.metric_date) AS first_day, MAX(m.metric_date) AS last_day')
                 ->orderBy('c.external_account_id')
                 ->get()
                 ->all();
@@ -158,10 +166,11 @@ final class AccountOwnershipAuditCommand extends Command
 
             foreach ($copies as $copy) {
                 $this->line(sprintf(
-                    '         account %s  project %s  row %s  figures %d  %s → %s',
+                    '         account %s  project %s  row %s  provider account %s  figures %d  %s → %s',
                     $copy->external_account_id,
                     $copy->project_id ?? '—',
                     $copy->id,
+                    $this->short((string) $copy->provider_account),
                     (int) $copy->figures,
                     $copy->first_day ?? '—',
                     $copy->last_day ?? '—',
@@ -343,8 +352,16 @@ final class AccountOwnershipAuditCommand extends Command
         $campaignIds = array_values(array_unique($campaignIds));
         $this->line("     copies under the same provider account, left alone : {$sameAdvertiser}");
 
+        $campaignIds = $this->confirmedByProvider($owner, $campaignIds);
+
         if ($campaignIds === []) {
             $this->line('     nothing to quarantine: no other account holds a copy of this account\'s campaigns.');
+
+            return self::SUCCESS;
+        }
+
+        if ($this->option('dry-run')) {
+            $this->plan($keepAccountId, $campaignIds);
 
             return self::SUCCESS;
         }
@@ -368,7 +385,7 @@ final class AccountOwnershipAuditCommand extends Command
 
             // A unified campaign that was only ever the shell of a foreign copy goes with it; one still carrying this project's own rows stays.
             $orphans = array_values(array_filter($unified, static fn ($u): bool => DB::table('external_campaigns')->where('unified_campaign_id', $u)->doesntExist()
-                && DB::table('influencer_collaborations')->where('unified_campaign_id', $u)->doesntExist()));
+                && DB::table('influencer_collaborations')->where('campaign_id', $u)->doesntExist()));
             $counts['unified_campaigns'] = $this->moveOut('unified_campaigns', fn ($q) => $q->whereIn('id', $orphans), $batch, $reason);
         });
 
@@ -381,6 +398,129 @@ final class AccountOwnershipAuditCommand extends Command
         $this->line("     restore with: php artisan integrations:account-ownership-audit --restore={$batch}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The provider's own answer: which of these campaigns does the owner's account really list?
+     *
+     * Asked with the credential of the connection that holds the owner's account, and only when that
+     * credential answers for the owner's provider account — a key for another account would list
+     * another account's campaigns and confirm nothing. Read-only: nothing is stored.
+     *
+     * @param  list<string>  $campaignIds  our campaign row ids
+     * @return list<string> the ones the provider lists under the owner
+     */
+    private function confirmedByProvider(ExternalAccount $owner, array $campaignIds): array
+    {
+        $connection = ProviderConnection::withoutGlobalScopes()->find($owner->provider_connection_id);
+        $connector = $this->registry->get($owner->provider);
+
+        if ($connection === null || ! $connector instanceof ApiAdvertisingConnector) {
+            $this->line('     PROVIDER CHECK: the owner has no connection that can be asked. Nothing is selected.');
+
+            return [];
+        }
+
+        $bound = $connector->withConnection($connection);
+
+        try {
+            $answers = (string) ($bound->listAdAccounts()[0]['external_id'] ?? '');
+
+            if ($answers !== $owner->external_id) {
+                $this->line('     PROVIDER CHECK: the credential on the owner\'s connection answers for '.($answers === '' ? 'no account' : $this->short($answers))
+                    .', not for '.$this->short($owner->external_id).'. It cannot confirm the owner\'s campaigns. Nothing is selected.');
+                $this->line('       Name the account row whose connection holds the owner\'s own key (the probe above shows OWNED rows).');
+
+                return [];
+            }
+
+            $listed = $bound->syncCampaigns($owner->external_id);
+        } catch (\Throwable $e) {
+            $this->line('     PROVIDER CHECK: could not ask the provider ('.ProviderErrorText::forDisplay($e->getMessage()).'). Nothing is selected.');
+
+            return [];
+        }
+
+        if (! $listed->success) {
+            $this->line('     PROVIDER CHECK: the provider refused the campaign list. Nothing is selected.');
+
+            return [];
+        }
+
+        $theirs = array_flip(array_map(static fn (array $c): string => (string) $c['external_id'], $listed->records));
+        $mine = DB::table('external_campaigns')->whereIn('id', $campaignIds)->pluck('external_id', 'id');
+        $confirmed = [];
+
+        foreach ($campaignIds as $id) {
+            $external = (string) ($mine[$id] ?? '');
+            $isListed = isset($theirs[$external]);
+            $this->line(sprintf('       %-10s campaign %s  provider id %s', $isListed ? 'CONFIRMED' : 'NOT LISTED', $id, $this->short($external)));
+
+            if ($isListed) {
+                $confirmed[] = $id;
+            }
+        }
+
+        $this->line(sprintf('     PROVIDER CHECK: the owner\'s account lists %d campaign(s); %d of the %d candidate copies are confirmed as its own.',
+            count($theirs), count($confirmed), count($campaignIds)));
+
+        return $confirmed;
+    }
+
+    /**
+     * DRY RUN — exactly what `--apply` would take out, and what each project's stored spend becomes.
+     * Reads only. The selection is the one `quarantine()` made, passed in rather than recomputed.
+     *
+     * @param  list<string>  $campaignIds
+     */
+    private function plan(string $keepAccountId, array $campaignIds): void
+    {
+        $this->line('     DRY RUN — nothing is written. This is what --apply would do.');
+
+        $creativeIds = DB::table('external_creatives')->whereIn('external_campaign_id', $campaignIds)->pluck('id')->all();
+        $rows = [
+            'external_campaigns' => DB::table('external_campaigns')->whereIn('id', $campaignIds)->count(),
+            'external_ad_sets' => DB::table('external_ad_sets')->whereIn('external_campaign_id', $campaignIds)->count(),
+            'external_ads' => DB::table('external_ads')->whereIn('external_campaign_id', $campaignIds)->count(),
+            'external_creatives' => count($creativeIds),
+            'creative_daily_metrics' => DB::table('creative_daily_metrics')->whereIn('creative_id', $creativeIds)->count(),
+            'daily_metrics' => DB::table('daily_metrics')->whereIn('external_campaign_id', $campaignIds)->count(),
+            'entity_daily_metrics' => DB::table('entity_daily_metrics')->whereIn('external_campaign_id', $campaignIds)->count(),
+        ];
+
+        $this->line('     rows that would move to isolation_quarantines (then leave the live tables):');
+
+        foreach ($rows as $table => $n) {
+            $this->line(sprintf('       %-28s %d', $table, $n));
+        }
+
+        $this->line('     per project — stored spend of this provider, before → after, and the campaigns leaving:');
+
+        $byProject = DB::table('external_campaigns')->whereIn('id', $campaignIds)
+            ->selectRaw('project_id, external_account_id, COUNT(*) AS campaigns')
+            ->groupBy('project_id', 'external_account_id')->get();
+
+        $provider = (string) DB::table('external_campaigns')->whereIn('id', $campaignIds)->value('provider');
+
+        foreach ($byProject as $row) {
+            $before = (float) DB::table('daily_metrics')->where('project_id', $row->project_id)->where('provider', $provider)->where('metric_key', 'spend')->sum('value');
+            $leaving = (float) DB::table('daily_metrics')->where('project_id', $row->project_id)->where('external_account_id', $row->external_account_id)
+                ->whereIn('external_campaign_id', $campaignIds)->where('metric_key', 'spend')->sum('value');
+            $this->line(sprintf('       project %s  account %s  campaigns leaving %d  spend %.2f → %.2f  (leaving %.2f, as stored)',
+                $row->project_id ?? '—', $row->external_account_id, $row->campaigns, $before, $before - $leaving, $leaving));
+
+            foreach (DB::table('external_campaigns')->whereIn('id', $campaignIds)->where('project_id', $row->project_id)->where('external_account_id', $row->external_account_id)->orderBy('id')->get(['id', 'external_id', 'status']) as $c) {
+                $this->line("         campaign {$c->id}  provider id ".$this->short((string) $c->external_id)."  {$c->status}");
+            }
+        }
+
+        $owner = DB::table('external_campaigns')->where('external_account_id', $keepAccountId);
+        $this->line(sprintf('     the named owner (account %s) is not touched: %d campaigns, spend %.2f, %d figure rows kept.',
+            $keepAccountId, (clone $owner)->count(),
+            (float) DB::table('daily_metrics')->where('external_account_id', $keepAccountId)->where('metric_key', 'spend')->sum('value'),
+            DB::table('daily_metrics')->where('external_account_id', $keepAccountId)->count()));
+        $this->line('     the backup is the quarantine itself: every row is copied whole before it is removed, in one transaction,');
+        $this->line('     and --restore=<batch> puts the batch back.');
     }
 
     /** Copy the matching rows into the quarantine, then delete them. Returns how many. */
