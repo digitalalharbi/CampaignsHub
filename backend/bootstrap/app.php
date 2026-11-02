@@ -46,6 +46,7 @@ use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Ops\Console\PerfCheckCommand;
 use App\Domains\Ops\Console\PerfSnapshotCommand;
+use App\Domains\Ops\Console\ProfileLiveReportCommand;
 use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
@@ -147,6 +148,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // PERF-RECOVERY-001 — read-only: Production's load in one place, and the check that logs a degradation.
         PerfSnapshotCommand::class,
         PerfCheckCommand::class,
+        ProfileLiveReportCommand::class,
         // ACCOUNT-SCOPE-ISOLATION-001 — the two WRITE paths of the cleanup, dry-run unless --apply. Neither
         // is reachable from the read-only diagnostics workflow.
         ScopeCleanupCommand::class,

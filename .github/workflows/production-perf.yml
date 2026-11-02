@@ -39,3 +39,13 @@ jobs:
             echo "── app"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
               exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
+            echo "── live report build"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan ops:profile-live-report --links=2 --top=20
+            echo "── postgres top statements"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available"
+            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms,
+                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
+              from pg_stat_statements order by total_exec_time desc limit 20;
+            SQL
