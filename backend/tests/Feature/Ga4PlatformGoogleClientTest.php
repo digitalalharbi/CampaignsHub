@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Integrations\OAuth\PlatformCredentials;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -13,6 +14,8 @@ use Tests\TestCase;
  */
 final class Ga4PlatformGoogleClientTest extends TestCase
 {
+    use RefreshDatabase;
+
     /** @var array<string, string|false> */
     private array $saved = [];
 
@@ -72,8 +75,17 @@ final class Ga4PlatformGoogleClientTest extends TestCase
 
     public function test_sign_in_and_google_ads_keep_their_own_keys_and_ga4_keeps_its_callback(): void
     {
-        $this->assertSame(env('GOOGLE_CLIENT_ID'), config('services.google.client_id'));
-        $this->assertSame(env('GOOGLE_ADS_CLIENT_ID'), config('ad_platforms.platforms.google.client_id'));
+        $this->setEnv('GOOGLE_CLIENT_ID', 'sign-in.apps.googleusercontent.com');
+        $this->setEnv('GOOGLE_ADS_CLIENT_ID', 'ads.apps.googleusercontent.com');
+        $this->setEnv('GA4_CLIENT_ID', null);
+
+        $services = require base_path('config/services.php');
+        $ads = require base_path('config/ad_platforms.php');
+        $measurement = require base_path('config/measurement_platforms.php');
+
+        $this->assertSame('sign-in.apps.googleusercontent.com', $services['google']['client_id'], 'sign-in reads its own key');
+        $this->assertSame('ads.apps.googleusercontent.com', $ads['platforms']['google']['client_id'], 'Google Ads reads its own key');
+        $this->assertSame('sign-in.apps.googleusercontent.com', $measurement['platforms']['ga4']['client_id'], 'GA4 follows sign-in, not Ads');
         $this->assertStringEndsWith('/api/v1/oauth/measurement/ga4/callback', PlatformCredentials::for('ga4')->redirectUri());
     }
 }
