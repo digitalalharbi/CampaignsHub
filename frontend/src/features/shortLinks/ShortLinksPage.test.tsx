@@ -172,3 +172,31 @@ describe('the short-link utility', () => {
     expect(row).toHaveTextContent('12')
   })
 })
+
+describe('first link does not shift the result card (layout stability)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInWith(['campaigns.view', 'campaigns.update'])
+  })
+  afterEach(() => signOut())
+
+  it('keeps the KPI row in the same slot, with placeholders while empty and numbers after', async () => {
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [], meta: {} } as never)
+    const first = renderWithProviders(<ShortLinksPage />, { locale: 'ar' })
+    const empty = await screen.findByTestId('short-links-kpi-total')
+    expect(empty).toHaveTextContent('—')
+    expect(screen.getByTestId('short-links-kpi-clicks')).toHaveTextContent('—')
+    const parentBefore = empty.parentElement
+    const order = (root: HTMLElement) => Array.from(root.querySelectorAll('[data-testid]')).map((n) => n.getAttribute('data-testid'))
+    const beforeOrder = order(first.container)
+    first.unmount()
+
+    vi.mocked(listShortLinksWithMeta).mockResolvedValue({ data: [LINK], meta: {} } as never)
+    const second = renderWithProviders(<ShortLinksPage />, { locale: 'ar' })
+    await waitFor(() => expect(screen.getByTestId('short-links-kpi-total')).toHaveTextContent('1'))
+    expect(screen.getByTestId('short-links-kpi-total').parentElement?.className).toBe(parentBefore?.className)
+    const afterOrder = order(second.container)
+    expect(afterOrder.indexOf('short-links-kpi-total')).toBe(beforeOrder.indexOf('short-links-kpi-total'))
+    expect(afterOrder.indexOf('short-links-kpi-clicks')).toBe(beforeOrder.indexOf('short-links-kpi-clicks'))
+  })
+})
