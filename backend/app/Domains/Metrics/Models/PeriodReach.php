@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Models;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * REACH-PERIOD-001 — one provider-deduplicated reach for one entity over one exact window.
@@ -20,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $frequency
  * @property string|null $impressions
  * @property string $state
+ * @property Carbon|null $stale_at
  */
 final class PeriodReach extends Model
 {
@@ -41,12 +43,12 @@ final class PeriodReach extends Model
     /** @var list<string> */
     protected $fillable = [
         'tenant_id', 'external_account_id', 'provider', 'grain', 'external_entity_id', 'external_campaign_id',
-        'date_from', 'date_to', 'reach', 'frequency', 'impressions', 'state', 'fetched_at',
+        'date_from', 'date_to', 'reach', 'frequency', 'impressions', 'state', 'fetched_at', 'stale_at',
     ];
 
     /** @return array<string,string> */
     protected function casts(): array
     {
-        return ['date_from' => 'date', 'date_to' => 'date', 'fetched_at' => 'datetime'];
+        return ['date_from' => 'date', 'date_to' => 'date', 'fetched_at' => 'datetime', 'stale_at' => 'datetime'];
     }
 }

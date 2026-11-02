@@ -117,6 +117,7 @@ final class PeriodReachFetcher
                 'impressions' => $row['impressions'],
                 'state' => $row['reach'] === null ? PeriodReach::NOT_REPORTED : PeriodReach::REPORTED,
                 'fetched_at' => Carbon::now(),
+                'stale_at' => null,
             ],
         );
     }

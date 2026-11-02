@@ -12,11 +12,14 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\FetchPeriodReachJob;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\PeriodReach;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\PeriodReachFetcher;
+use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -28,9 +31,11 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -227,15 +232,62 @@ final class PeriodReachOnTheCardsTest extends TestCase
         $this->assertSame(2.0, (float) $res->json('data.totals.frequency'));
     }
 
-    public function test_a_sync_re_requests_the_stored_windows_it_may_have_changed_and_no_others(): void
+    public function test_a_sync_marks_overlapping_windows_stale_and_dispatches_nothing(): void
     {
-        $this->providerAnswered(PeriodReach::ACCOUNT, 'act_9', 6_000, '2026-07-01', '2026-07-14');
+        for ($i = 1; $i <= 20; $i++) {
+            $this->providerAnswered(PeriodReach::ACCOUNT, 'act_9', 6_000, sprintf('2026-07-%02d', 1 + ($i % 10)), sprintf('2026-07-%02d', 11 + $i));
+        }
         $this->providerAnswered(PeriodReach::ACCOUNT, 'act_9', 3_000, '2026-06-01', '2026-06-30');
         Http::fake(['graph.facebook.com/*' => Http::response(['data' => []])]);
 
         app(AccountMetricsSyncer::class)->sync($this->account, Carbon::parse('2026-07-10'), Carbon::parse('2026-07-11'));
 
-        Queue::assertPushed(FetchPeriodReachJob::class, fn (FetchPeriodReachJob $job): bool => $job->from === '2026-07-01' && $job->to === '2026-07-14');
-        Queue::assertNotPushed(FetchPeriodReachJob::class, fn (FetchPeriodReachJob $job): bool => $job->from === '2026-06-01');
+        Queue::assertNotPushed(FetchPeriodReachJob::class);
+        $this->assertSame(1, PeriodReach::withoutGlobalScopes()->whereNull('stale_at')->count(), 'only the June window is untouched');
+        $this->assertSame(20, PeriodReach::withoutGlobalScopes()->whereNotNull('stale_at')->count());
+    }
+
+    public function test_a_stale_window_is_served_and_requested_once_across_reads(): void
+    {
+        $this->providerAnswered(PeriodReach::ACCOUNT, 'act_9', 6_000);
+        PeriodReach::withoutGlobalScopes()->update(['stale_at' => Carbon::now()]);
+
+        $this->assertSame(6_000.0, (float) $this->engine()->totals($this->windowFrom(), $this->windowTo())['reach']);
+        app()->forgetInstance(PeriodReachReader::class);
+        $this->engine()->totals($this->windowFrom(), $this->windowTo());
+
+        Queue::assertPushed(FetchPeriodReachJob::class, 1);
+    }
+
+    public function test_a_fresh_window_dispatches_nothing(): void
+    {
+        $this->providerAnswered(PeriodReach::ACCOUNT, 'act_9', 6_000);
+
+        $this->engine()->totals($this->windowFrom(), $this->windowTo());
+
+        Queue::assertNotPushed(FetchPeriodReachJob::class);
+    }
+
+    public function test_a_refused_window_is_never_requested(): void
+    {
+        Cache::put(PeriodReachReader::refusedKey($this->account->id, '2026-07-10', '2026-07-11'), 1, Carbon::now()->addDays(7));
+
+        $this->assertNull($this->engine()->totals($this->windowFrom(), $this->windowTo())['reach']);
+
+        Queue::assertNotPushed(FetchPeriodReachJob::class);
+    }
+
+    public function test_the_job_remembers_a_provider_refusal_and_rethrows(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'E9001: response too large']], 400)]);
+
+        try {
+            (new FetchPeriodReachJob($this->account->id, '2026-07-10', '2026-07-11'))->handle(
+                app(PeriodReachFetcher::class), app(TenantContext::class), app(AccountAssignment::class),
+            );
+            $this->fail('the refusal must still propagate');
+        } catch (RuntimeException) {
+            $this->assertTrue(Cache::has(PeriodReachReader::refusedKey($this->account->id, '2026-07-10', '2026-07-11')));
+        }
     }
 }
