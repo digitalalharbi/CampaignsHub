@@ -456,3 +456,10 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:account-ownership-audit --probe
+
+            # SYNC-CENSUS-001 — who actually synced in the last 24 h against who is actively assigned, per
+            # provider, with any account that synced without being assigned. Read-only; counts and short ids.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:sync-census --hours=24
