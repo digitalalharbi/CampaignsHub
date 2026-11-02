@@ -87,6 +87,15 @@ test('the short links are ranked by the clicks they were given', async ({ page, 
   }
 
   const busier = await mint('https://example.com/ops-drawn-busier')
+
+  /*
+    The page re-fetches the list after a link is minted, and its first link is what makes the KPI
+    row appear ABOVE the result card — pushing «Create another» down while it is being clicked. In
+    Firefox the click landed on the spot the button had just left, the card stayed, and the next
+    `short-link-kind-link` never came (CI run 41537049045). The KPI row is the page's own signal that
+    the list has landed and the layout is final; wait on it, not on time.
+  */
+  await expect(page.getByTestId('short-links-kpi-total')).toBeVisible({ timeout: 30000 })
   await page.getByRole('button', { name: 'Create another' }).click()
   const quieter = await mint('https://example.com/ops-drawn-quieter')
 
