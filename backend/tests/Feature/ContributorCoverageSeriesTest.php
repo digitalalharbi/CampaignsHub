@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -29,6 +30,7 @@ use Tests\TestCase;
  */
 final class ContributorCoverageSeriesTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -183,6 +185,7 @@ final class ContributorCoverageSeriesTest extends TestCase
 
     private function campaign(Project $project, ExternalAccount $account, string $label, ?string $startsAt, ?string $endsAt): void
     {
+        $this->bindSeededAccount($project->id, $account->id);
         (new ExternalCampaign)->forceFill([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
             'external_account_id' => $account->id, 'provider' => $account->provider,
@@ -193,6 +196,7 @@ final class ContributorCoverageSeriesTest extends TestCase
 
     private function metric(Project $project, ExternalAccount $account, string $provider, string $date): void
     {
+        $this->bindSeededAccount($project->id, $account->id);
         $campaign = ExternalCampaign::withoutGlobalScopes()->where('external_account_id', $account->id)->first();
         DailyMetric::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id, 'project_id' => $project->id,

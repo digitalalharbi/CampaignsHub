@@ -25,6 +25,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -42,6 +43,7 @@ use Tests\TestCase;
  */
 final class AttributionTransparencyTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -758,6 +760,7 @@ final class AttributionTransparencyTest extends TestCase
         ?ExternalCampaign $campaign = null,
     ): CommerceOrder {
         $account ??= $this->storeAccount();
+        $this->bindSeededAccount($this->project->id, $account->getKey());
 
         return CommerceOrder::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
@@ -811,7 +814,7 @@ final class AttributionTransparencyTest extends TestCase
             connectionName: $provider.'-'.uniqid(),
         );
 
-        return $this->adAccounts[$provider] = ExternalAccount::withoutGlobalScopes()->create([
+        $account = $this->adAccounts[$provider] = ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $connection->getKey(),
             'provider' => $provider,
@@ -821,6 +824,9 @@ final class AttributionTransparencyTest extends TestCase
             'currency' => 'SAR',
             'status' => 'active',
         ]);
+        $this->bindSeededAccount($this->project->id, $account->getKey());
+
+        return $account;
     }
 
     private function unifiedCampaign(?string $model): UnifiedCampaign

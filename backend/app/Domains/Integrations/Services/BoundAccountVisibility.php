@@ -57,8 +57,13 @@ final class BoundAccountVisibility
      * — or a leak with no binding to catch it. `integrations:scope-audit` counts them as `unbound`
      * per project, provider and month; this is the one line to flip once that count has been read,
      * and `BoundAccountVisibilityTest` pins whichever reading is in force.
+     *
+     * READ on 2026-11-02 from the Production inventory (run 41493369348): exactly one such account exists — a Snapchat account of the
+     * same tenant, 2026-08/09 history under one project, last synced 2026-09-23, never bound. The Owner's rule is deny by default along
+     * Tenant -> Workspace -> Project -> Authorised Account, so a row with no binding is stored and inventoried, not read. Selecting the
+     * account makes it readable again. Nothing is moved or removed.
      */
-    public const UNBOUND_ROWS_VISIBLE = true;
+    public const UNBOUND_ROWS_VISIBLE = false;
 
     /**
      * Narrow a query on a table that carries `external_account_id` and `project_id` itself.

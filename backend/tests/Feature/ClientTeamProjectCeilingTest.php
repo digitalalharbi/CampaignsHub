@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -28,6 +29,7 @@ use Tests\TestCase;
  */
 final class ClientTeamProjectCeilingTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $agency;
@@ -121,6 +123,7 @@ final class ClientTeamProjectCeilingTest extends TestCase
     private function spend(UnifiedCampaign $campaign, float $spend): void
     {
         $uid = fn (string $s) => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, $s.$campaign->id);
+        $this->bindSeededAccount($campaign->project_id, $uid('acc'));
         $m = fn (string $k, float $v) => new NormalizedMetric(
             tenantId: $this->agency->id, projectId: $campaign->project_id, externalAccountId: $uid('acc'),
             externalCampaignId: $uid('camp'), provider: 'meta', metricKey: $k, metricDate: Carbon::parse('2026-06-10'),

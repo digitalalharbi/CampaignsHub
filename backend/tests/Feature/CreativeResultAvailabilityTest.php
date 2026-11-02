@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -63,6 +64,7 @@ use Tests\TestCase;
  */
 final class CreativeResultAvailabilityTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -352,6 +354,8 @@ final class CreativeResultAvailabilityTest extends TestCase
 
     private function campaign(ExternalAccount $account, string $externalId): ExternalCampaign
     {
+        $this->bindSeededAccount($this->project->getKey(), $account->getKey());
+
         return ExternalCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(),
             'project_id' => $this->project->getKey(),
