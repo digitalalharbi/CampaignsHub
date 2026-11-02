@@ -1783,9 +1783,23 @@ final class MetricsAggregator
 
         $coverage = app(ContributorCoverage::class);
 
-        return array_map(function (array $point) use ($coverage, $tenantId, $scope): array {
-            $day = Carbon::parse((string) $point['date']);
-            $onThatDay = $coverage->forWindow($tenantId, $scope['single'], $day, $day, $this->providers, $scope['list']);
+        if ($series === []) {
+            return $series;
+        }
+
+        // One set of lookups for the whole window (not three queries per point); same per-day answer.
+        $dates = array_map(static fn (array $p): Carbon => Carbon::parse((string) $p['date']), $series);
+        $perDay = $coverage->forDays(
+            $tenantId,
+            $scope['single'],
+            Carbon::createFromTimestamp(min(array_map(static fn (Carbon $c): int => $c->copy()->startOfDay()->getTimestamp(), $dates))),
+            Carbon::createFromTimestamp(max(array_map(static fn (Carbon $c): int => $c->copy()->startOfDay()->getTimestamp(), $dates))),
+            $this->providers,
+            $scope['list'],
+        );
+
+        return array_map(function (array $point) use ($perDay): array {
+            $onThatDay = $perDay[Carbon::parse((string) $point['date'])->toDateString()];
 
             return $point + [
                 'expected_contributors' => $onThatDay->toArray()['expected_contributors'],

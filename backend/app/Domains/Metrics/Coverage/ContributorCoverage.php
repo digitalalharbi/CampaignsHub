@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Coverage;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -89,6 +90,98 @@ final class ContributorCoverage
         $reported = $this->providersWithFigures($tenantId, $scope, $from, $to);
         $runs = $this->latestRuns($tenantId, array_keys($expected), $scope);
 
+        return $this->decide($expected, $reported, $runs, $to);
+    }
+
+    /**
+     * The same per-day answer as calling {@see forWindow()} once for each day in [$from, $to]
+     * (`forWindow($t, $p, $day, $day, $providers)`), from THREE queries for the whole window instead
+     * of three per day. Keyed by `Y-m-d`.
+     *
+     * Same tenant, project and bound-account filters as the per-day lookups; the per-day parts of the
+     * rule (campaign overlap, figures on that day, the yesterday clamp) are evaluated in PHP over
+     * rows fetched once. Nothing is cached beyond this call.
+     *
+     * @param  list<string>|null  $providers
+     * @return array<string, AggregateCoverage>
+     */
+    public function forDays(
+        string $tenantId,
+        ?string $projectId,
+        Carbon $from,
+        Carbon $to,
+        ?array $providers = null,
+        ?array $projectIds = null,
+    ): array {
+        $expectedThrough = Carbon::yesterday()->startOfDay();
+        $scope = $projectIds ?? ($projectId === null ? null : [$projectId]);
+
+        $days = [];
+        for ($d = $from->copy()->startOfDay(); ! $d->gt($to->copy()->startOfDay()); $d = $d->copy()->addDay()) {
+            $days[] = $d;
+        }
+
+        if ($days === []) {
+            return [];
+        }
+
+        $campaigns = $projectIds !== null && $projectIds === [] ? [] : $this->campaignRows($tenantId, $scope, $providers);
+
+        if ($campaigns === []) {
+            $out = [];
+            foreach ($days as $day) {
+                $out[$day->toDateString()] = AggregateCoverage::complete();
+            }
+
+            return $out;
+        }
+
+        $providerKeys = array_values(array_unique(array_map(static fn (array $c): string => $c['provider'], $campaigns)));
+
+        // Figures: one grouped query over the part of the window that can hold any (≤ yesterday).
+        $figuresTo = $to->copy()->startOfDay()->gt($expectedThrough) ? $expectedThrough : $to->copy()->startOfDay();
+        $figures = [];
+        if (! $from->copy()->startOfDay()->gt($figuresTo)) {
+            $q = DB::table('daily_metrics')
+                ->where('tenant_id', $tenantId)
+                ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+                ->whereBetween('metric_date', [$from->copy()->startOfDay()->toDateString(), $figuresTo->toDateString()]);
+
+            if ($scope !== null) {
+                $q->whereIn('project_id', $scope);
+            }
+
+            foreach ($q->select('metric_date', 'provider')->groupBy('metric_date', 'provider')->get() as $row) {
+                $figures[Carbon::parse((string) $row->metric_date)->toDateString()][] = (string) $row->provider;
+            }
+        }
+
+        $runs = $this->latestRuns($tenantId, $providerKeys, $scope);
+
+        $out = [];
+        foreach ($days as $day) {
+            $dayTo = $day->gt($expectedThrough) ? $expectedThrough : $day->copy();
+
+            $expected = $this->lifecycleFor($campaigns, $day, $dayTo);
+
+            $out[$day->toDateString()] = $this->decide(
+                $expected,
+                $figures[$day->toDateString()] ?? [],
+                $runs,
+                $dayTo,
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, array{active: bool, reason: string}>  $expected
+     * @param  list<string>  $reported
+     * @param  array<string, object>  $runs
+     */
+    private function decide(array $expected, array $reported, array $runs, Carbon $to): AggregateCoverage
+    {
         $states = [];
         $reasons = [];
         /** @var array<string, string> $through contributor → last covered date (Y-m-d) */
@@ -200,6 +293,12 @@ final class ContributorCoverage
         Carbon $to,
         ?array $providers,
     ): array {
+        return $this->lifecycleFor($this->campaignRows($tenantId, $projectIds, $providers), $from, $to);
+    }
+
+    /** @param  list<string>|null  $providers */
+    private function campaignQuery(string $tenantId, ?array $projectIds, ?array $providers): Builder
+    {
         $q = DB::table('external_campaigns')
             ->where('tenant_id', $tenantId)
             ->select('provider', 'status', 'starts_at', 'ends_at');
@@ -246,18 +345,51 @@ final class ContributorCoverage
          */
         $q->whereRaw("COALESCE((raw->'sandbox')::jsonb, 'false'::jsonb) <> 'true'::jsonb");
 
+        return $q;
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return list<array{provider: string, starts_at: ?Carbon, ends_at: ?Carbon}>
+     */
+    private function normalise(array $rows): array
+    {
+        return array_map(static fn (object $row): array => [
+            'provider' => (string) $row->provider,
+            'starts_at' => $row->starts_at !== null ? Carbon::parse((string) $row->starts_at) : null,
+            'ends_at' => $row->ends_at !== null ? Carbon::parse((string) $row->ends_at) : null,
+        ], $rows);
+    }
+
+    /**
+     * The campaign rows of {@see expectedProviders()}, fetched once for a whole series.
+     *
+     * @param  list<string>|null  $providers
+     * @return list<array{provider: string, starts_at: ?Carbon, ends_at: ?Carbon}>
+     */
+    private function campaignRows(string $tenantId, ?array $projectIds, ?array $providers): array
+    {
+        return $this->normalise($this->campaignQuery($tenantId, $projectIds, $providers)->get()->all());
+    }
+
+    /**
+     * @param  list<array{provider: string, starts_at: ?Carbon, ends_at: ?Carbon}>  $campaigns
+     * @return array<string, array{active: bool, reason: string}>
+     */
+    private function lifecycleFor(array $campaigns, Carbon $from, Carbon $to): array
+    {
         $out = [];
 
-        foreach ($q->get() as $row) {
-            $provider = (string) $row->provider;
+        foreach ($campaigns as $row) {
+            $provider = $row['provider'];
 
             /*
              * A campaign is alive for this window if it overlaps it at all. `ends_at` before the
              * window opens is the stopped case; `starts_at` after it closes is the not-yet case. Both
              * are absences that cost the total nothing.
              */
-            $endedBefore = $row->ends_at !== null && Carbon::parse((string) $row->ends_at)->lt($from);
-            $startedAfter = $row->starts_at !== null && Carbon::parse((string) $row->starts_at)->gt($to);
+            $endedBefore = $row['ends_at'] !== null && $row['ends_at']->lt($from);
+            $startedAfter = $row['starts_at'] !== null && $row['starts_at']->gt($to);
             $alive = ! $endedBefore && ! $startedAfter;
 
             // One live campaign is enough to make the provider expected; keep the strongest evidence.
