@@ -363,17 +363,9 @@ export interface NextStep {
 }
 export interface Meta { reportName: string; clientName?: string; agencyName?: string; agencyLogoUrl?: string | null; clientLogoUrl?: string | null; platforms: string[]; isDemo?: boolean }
 
-/**
- * Whether this document is addressed to a CLIENT — CLIENT-DIAGNOSTIC-SEPARATION-001.
- *
- * `executive` is a client audience for this purpose: it is the shorter document a client's own
- * management reads, and nobody in that room can act on a connector state either. `internal` and an
- * absent audience are the operator's, because an unlabelled report is one somebody generated for
- * themselves.
- */
-export function isClientAudience(audience: string | undefined): boolean {
-  return audience === 'client' || audience === 'executive'
-}
+// The audience test lives in `reportAudience.ts` (no renderer) and is re-exported here for every existing import.
+export { isClientAudience } from './reportAudience'
+import { isClientAudience } from './reportAudience'
 
 /** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
 export function SlideBody({ slide, data, meta, paged = false }: {

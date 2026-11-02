@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { cutColumns } from './reportColumns'
 import { AdPoster } from '@/features/content/AdPoster'
 import { DataMetricTable, type Column, type Row } from '@/components/ui/MetricTable'
@@ -143,8 +143,21 @@ export function ReportCreativeRoster({
 
   const summary = form === 'executive_summary' || countOnly
   const left = Math.max(0, withheld ?? 0)
-  const visible = rows.slice(0, shown)
+  const visible = useMemo(() => rows.slice(0, shown), [rows, shown])
   const remaining = rows.length - visible.length
+  /*
+   * PERF-RENDER-001 — the table's inputs keep their identity between renders.
+   *
+   * `DataMetricTable` memoises its cells on `[columns, rows]`; built inline, both were new arrays on
+   * every render of this section, so every parent re-render formatted every figure of every visible
+   * row again. Memoised on what actually changes — the rows shown, the language, the currency and
+   * the owner's column choice — a re-render that changed none of them draws the same cells.
+   */
+  const tableColumns = useMemo(
+    () => cutColumns(chosen, columns(ar, currency ?? null), { provider: 'platform', spend: 'spend', impressions: 'impressions', clicks: 'clicks', conversions: 'results' }),
+    [chosen, ar, currency],
+  )
+  const tableRows = useMemo(() => visible.map((row, i) => line(row, i, locale, onOpen)), [visible, locale, onOpen])
 
   return (
     <section data-testid="report-roster" data-state={summary ? 'counted' : 'listed'} className="mt-6 flex flex-col gap-2">
@@ -187,8 +200,8 @@ export function ReportCreativeRoster({
         : (
           <DataMetricTable
             /* REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's content-table choice, on the saved page as on the print. */
-            columns={cutColumns(chosen, columns(ar, currency ?? null), { provider: 'platform', spend: 'spend', impressions: 'impressions', clicks: 'clicks', conversions: 'results' })}
-            rows={visible.map((row, i) => line(row, i, locale, onOpen))}
+            columns={tableColumns}
+            rows={tableRows}
             /* Spend descending: the money is what a reader scans this list for first. */
             initialSort={{ column: 2, dir: 'desc' }}
           />

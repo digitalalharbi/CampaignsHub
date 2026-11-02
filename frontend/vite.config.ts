@@ -101,6 +101,16 @@ export default defineConfig({
   preview: {
     proxy: HOPS,
   },
+  /*
+   * PERF-RECOVERY-001 — the import graph, written out, so a route's real weight can be measured.
+   *
+   * `scripts/route-bytes.mjs` follows it from the entry and from a route's chunk and sums every
+   * static import either pulls; that figure, not the route chunk's own size, is what a visitor
+   * downloads. The plugin below holds the same figure to a ceiling on every build.
+   */
+  build: {
+    manifest: true,
+  },
 
   test: {
     environment: 'jsdom',

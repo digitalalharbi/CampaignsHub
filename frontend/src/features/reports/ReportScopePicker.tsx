@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { isClientAudience } from './InteractiveReport'
+import { isClientAudience } from './reportAudience'
 import { ScopeCheckList } from './ScopeCheckList'
 import { orderByReportability } from '@/features/campaigns/campaignRelevance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'

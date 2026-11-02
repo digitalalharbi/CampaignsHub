@@ -8,6 +8,19 @@ import { upgradeRefusalFrom, useUpgrade } from '@/stores/upgrade'
 import { UpgradeRequiredDialog } from '@/components/UpgradeRequiredDialog'
 import { OverlayBoundary } from '@/components/OverlayBoundary'
 
+/**
+ * How long an answer is reused by a second asker — PERF-REFETCH-001.
+ *
+ * React Query dedupes requests that are IN FLIGHT; it does not dedupe a request that has just
+ * landed. With the default `staleTime: 0`, a component mounting a moment after its sibling resolved
+ * the same key asks again — and the dashboard asks the same freshness, drivers and summary keys from
+ * the header, the KPI strip and a tab. Measured on the analytics page: three `/freshness` requests
+ * for one screen, identical in every byte. Thirty seconds is shorter than any figure on these screens
+ * changes, long enough to cover a page's mount, and every mutation still invalidates its keys on
+ * success, which refetches regardless of this.
+ */
+export const QUERY_STALE_TIME_MS = 30_000
+
 const queryClient = new QueryClient({
   /*
    * Every commercial refusal, caught in one place — PAY-AUDIT-004.
@@ -42,6 +55,7 @@ const queryClient = new QueryClient({
         return failureCount < 1
       },
       refetchOnWindowFocus: false,
+      staleTime: QUERY_STALE_TIME_MS,
     },
   },
 })

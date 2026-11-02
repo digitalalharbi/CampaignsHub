@@ -5,17 +5,28 @@ import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
-import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { clientBlurb } from './reportProduct'
-import { SharedAttributionSection } from './SharedAttributionSection'
 import { SharedWidgetsSection } from '@/features/widgets/SharedWidgetsSection'
-import { SharedCreativeSection } from './SharedCreativeSection'
+import { lazyPage } from '@/app/lazyPage'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { CampaignsHubBrandFooter } from '@/components/brand/CampaignsHubBrandFooter'
 import { ReportWatermark } from './ReportWatermark'
+
+/*
+ * PERF-RECOVERY-001 — the live link loads only what the live dashboard draws.
+ *
+ * `/r/:token` serves two products: a SNAPSHOT (the generated document, `InteractiveReport`, with its
+ * creative library and attribution appendix) and a LIVE dashboard (`LiveSharedReport`). Statically,
+ * the page imported both, so a client opening a live link downloaded the whole slide renderer and
+ * the carousel before a single number. The snapshot halves arrive when `report.mode` says so; the
+ * live half stays static because it is what the route is for. `routeBudget` holds the figure.
+ */
+const InteractiveReport = lazyPage(() => import('./InteractiveReport'), 'InteractiveReport')
+const SharedAttributionSection = lazyPage(() => import('./SharedAttributionSection'), 'SharedAttributionSection')
+const SharedCreativeSection = lazyPage(() => import('./SharedCreativeSection'), 'SharedCreativeSection')
 
 interface Shared {
   name: string

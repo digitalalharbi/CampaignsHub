@@ -1,3 +1,5 @@
+import { numberFormatter } from '@/lib/numerals'
+
 /**
  * MONEY-TRUTH-001 — the ONE place the withheld-money rules live.
  *
@@ -479,7 +481,7 @@ export function formatMoneyReading(
   if (reading.amount === null) return '—'
 
   if (reading.kind === 'withheld') {
-    const amount = reading.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const amount = numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reading.amount)
     return `${amount} ${reading.currency ?? ''}`.trim()
   }
 

@@ -1,6 +1,6 @@
-import { forwardRef, type ComponentType, type ReactNode } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, RefreshCw, Search, X } from 'lucide-react'
-import * as LucideIcons from 'lucide-react'
+import { LucideByName } from '@/components/icons/LucideByName'
 import { controlClass } from '@/components/ui/Field'
 import { failureKind } from '@/components/ui/QueryFailure'
 import { toApiError } from '@/lib/api/client'
@@ -41,28 +41,23 @@ export function OptionSwatch({ option }: { option: Option }) {
 
   if (!option.icon) return null
 
-  const pascal = option.icon.split(/[-_ ]/).filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join('')
-  const Resolved = (LucideIcons as unknown as Record<string, unknown>)[pascal]
-  // Lucide icons are forwardRef objects, not plain functions — checking only for `function` silently
-  // dropped every icon to the fallback glyph.
-  const isComponent =
-    typeof Resolved === 'function' ||
-    (typeof Resolved === 'object' && Resolved !== null && '$$typeof' in (Resolved as object))
-
-  if (isComponent) {
-    const Icon = Resolved as ComponentType<{ size?: number }>
-    return (
-      <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-text-muted">
-        <Icon size={14} />
-      </span>
-    )
-  }
-
   // Not an icon name — render at most one character (an emoji or a single glyph).
-  return (
+  const glyph = (
     <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden text-[13px] leading-none">
       {[...option.icon][0] ?? ''}
     </span>
+  )
+
+  return (
+    <LucideByName
+      name={option.icon}
+      fallback={glyph}
+      render={(Icon) => (
+        <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-text-muted">
+          <Icon size={14} />
+        </span>
+      )}
+    />
   )
 }
 
