@@ -37,6 +37,7 @@ use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\ResyncWindowCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\ScopeCleanupCommand;
+use App\Domains\Integrations\Console\SpendReconcileCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
@@ -146,6 +147,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
         // rows belong to, classified against the project's bindings. Writes nothing.
         ScopeAuditCommand::class,
+        SpendReconcileCommand::class,
         // PERF-RECOVERY-001 — read-only: Production's load in one place, and the check that logs a degradation.
         PerfSnapshotCommand::class,
         PerfCheckCommand::class,

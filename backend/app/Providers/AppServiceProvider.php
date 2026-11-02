@@ -45,12 +45,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
-<<<<<<< HEAD
-use Illuminate\Support\Facades\DB;
-||||||| 7e9191ee0
-=======
 use Illuminate\Queue\Events\JobProcessing;
->>>>>>> origin/main
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;

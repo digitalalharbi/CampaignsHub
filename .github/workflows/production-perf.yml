@@ -10,6 +10,18 @@ on:
         description: 'Hours of request and query counters to read'
         required: false
         default: '24'
+      reconcile_account:
+        description: 'Optional: an ad account (ours or the provider''s id) to reconcile — provider spend vs stored spend, read-only'
+        required: false
+        default: ''
+      reconcile_from:
+        description: 'Reconcile window start, YYYY-MM-DD'
+        required: false
+        default: ''
+      reconcile_to:
+        description: 'Reconcile window end, YYYY-MM-DD'
+        required: false
+        default: ''
       tokens:
         description: 'Optional: comma-separated link tokens to explain read-only (state + recent access log)'
         required: false
@@ -29,12 +41,15 @@ jobs:
         env:
           HOURS: ${{ inputs.hours }}
           TOKENS: ${{ inputs.tokens }}
+          RACCOUNT: ${{ inputs.reconcile_account }}
+          RFROM: ${{ inputs.reconcile_from }}
+          RTO: ${{ inputs.reconcile_to }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: HOURS,TOKENS
+          envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -54,3 +69,8 @@ jobs:
                    left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
               from pg_stat_statements order by total_exec_time desc limit 20;
             SQL
+            if [ -n "${RACCOUNT}" ]; then
+              echo "── spend reconcile"
+              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"}
+            fi
