@@ -222,13 +222,25 @@ final class DataDeletionController extends Controller
      */
     public function callback(Request $request, string $provider): JsonResponse
     {
-        $secret = $this->appSecretFor($provider);
+        $secrets = $this->appSecretsFor($provider);
 
-        if ($secret === null || $secret === '') {
+        if ($secrets === []) {
             return ApiResponse::error(__('api.data_deletion_callback_unconfigured'), status: 503);
         }
 
-        $payload = $this->verifiedPayload((string) $request->input('signed_request'), $secret);
+        // META-MULTI-APP-001 — tried against EACH registered Meta app's secret; exactly one must validate.
+        $signed = (string) $request->input('signed_request');
+        $payloads = [];
+        foreach ($secrets as $app => $secret) {
+            $candidate = $this->verifiedPayload($signed, $secret);
+            if ($candidate !== null) {
+                $payloads[$app] = $candidate;
+            }
+        }
+        $payload = count($payloads) === 1 ? reset($payloads) : null;
+        // The request is filed under the app whose secret validated it, not the URL it arrived on: a person has a different app-scoped
+        // id in each Meta app, so the key must follow the proof.
+        $provider = count($payloads) === 1 ? (array_key_first($payloads) === 'saas' ? 'meta-saas' : 'meta') : $provider;
 
         if ($payload === null) {
             return ApiResponse::error(__('api.unauthenticated'), status: 401);
@@ -341,16 +353,21 @@ final class DataDeletionController extends Controller
      * keyed by that provider, because the same person has a different app-scoped id in each app. The Candidate app issues no
      * customer connections and has no callback.
      */
-    private function appSecretFor(string $provider): ?string
+    /**
+     * @return array<string, string> app profile => App Secret, for every configured registered Meta app. Empty for any other provider.
+     */
+    private function appSecretsFor(string $provider): array
     {
-        return match ($provider) {
-            // The Live App Secret where the platform keeps it: the stored provider settings, then the environment. The two keys read
-            // here before (`services.meta_ads.app_secret`, `ad_platforms.meta.client_secret`) exist in no config file, so Production
-            // answered 503 to every Live deletion callback.
-            'meta' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_secret'),
-            'meta-saas' => app(MetaSaasCredentials::class)->value('client_secret'),
-            default => null,
-        };
+        if (! in_array($provider, ['meta', 'meta-saas'], true)) {
+            return [];
+        }
+
+        // META-MULTI-APP-001 — the Live App Secret where the platform keeps it (stored settings, then the environment), the SaaS app's
+        // secret from its own store (the Candidate app issues no customer connections and has no deletion callback). A callback is accepted when exactly one of them validates it.
+        return array_filter([
+            'live' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_secret'),
+            'saas' => app(MetaSaasCredentials::class)->value('client_secret'),
+        ], static fn ($v) => is_string($v) && $v !== '');
     }
 
     /** Deliver the code, and report what actually happened rather than what was intended. */

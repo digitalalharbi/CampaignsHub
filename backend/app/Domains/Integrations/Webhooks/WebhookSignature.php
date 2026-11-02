@@ -7,6 +7,8 @@ namespace App\Domains\Integrations\Webhooks;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\WebhookSupport;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
+use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 
 /**
  * WEBHOOK-001 — is this delivery really from the provider?
@@ -41,7 +43,7 @@ final class WebhookSignature
     public function __construct(private readonly ProviderConfigurationService $settings) {}
 
     /**
-     * @return array{verified: bool, reason: ?string}
+     * @return array{verified: bool, reason: ?string, app?: string} `app` (Meta only): which registered app's secret validated
      */
     public function check(string $provider, string $rawBody, ?string $presented): array
     {
@@ -62,9 +64,10 @@ final class WebhookSignature
             return $this->basic($provider, $presented);
         }
 
-        $secret = $this->secretFor($provider);
+        // META-MULTI-APP-001 — Meta has one signing secret PER registered app; every other provider has one.
+        $secrets = $provider === 'meta' ? $this->metaSecrets() : array_filter(['default' => $this->secretFor($provider)], static fn ($v) => $v !== null);
 
-        if ($secret === null) {
+        if ($secrets === []) {
             return ['verified' => false, 'reason' => 'No webhook secret is configured for this provider.'];
         }
 
@@ -72,37 +75,45 @@ final class WebhookSignature
             return ['verified' => false, 'reason' => 'The delivery carried no signature.'];
         }
 
-        $expected = hash_hmac('sha256', $rawBody, $secret);
-
         // Meta prefixes the digest; the others send it bare. Stripping a prefix that is not there is
         // harmless, and NOT stripping one that is there fails every legitimate Meta delivery.
         $offered = str_starts_with($presented, 'sha256=') ? substr($presented, 7) : $presented;
 
-        return hash_equals($expected, $offered)
-            ? ['verified' => true, 'reason' => null]
-            : ['verified' => false, 'reason' => 'The signature did not match.'];
+        $matched = [];
+        foreach ($secrets as $app => $secret) {
+            if (hash_equals(hash_hmac('sha256', $rawBody, $secret), $offered)) {
+                $matched[] = $app;
+            }
+        }
+
+        // Exactly one app must validate: two apps sharing a secret cannot say whose delivery this is, so it is refused, not guessed.
+        if (count($matched) !== 1) {
+            return ['verified' => false, 'reason' => $matched === [] ? 'The signature did not match.' : 'The signature matched more than one app.'];
+        }
+
+        return $provider === 'meta'
+            ? ['verified' => true, 'reason' => null, 'app' => $matched[0]]
+            : ['verified' => true, 'reason' => null];
     }
 
     /**
-     * ZID-WEBHOOK-001 — HTTP Basic, which is the only authentication Zid publishes for webhooks.
+     * META-MULTI-APP-001 — the signing secret of every CONFIGURED registered Meta app, keyed by profile (live, saas, candidate).
      *
-     * From Zid's Create Webhook reference: «If username and password are provided when creating a
-     * webhook, Zid will include a Basic Authentication header when sending webhook requests … This
-     * allows partners to verify that the webhook request is coming from Zid.» There is no signature,
-     * no digest, and no header to compute one into — which is why the previous `x-zid-signature` HMAC
-     * refused every real delivery.
+     * Live keeps its established rule (`webhook_secret`, else the App Secret); the others sign with their App Secret.
      *
-     * The whole header is compared in one `hash_equals` rather than the username and password
-     * separately. Two comparisons leak which half was wrong through their timing, and a username is
-     * usually the easier half to guess; one comparison over the expected credential answers only the
-     * question we are willing to answer.
-     *
-     * The three rules at the top of this class are unchanged by the different scheme. A missing
-     * credential still REFUSES — an endpoint that cannot verify is not an endpoint that lets things
-     * through — and the comparison is still timing-safe.
-     *
-     * @return array{verified: bool, reason: ?string}
+     * @return array<string, string>
      */
+    private function metaSecrets(): array
+    {
+        $secrets = array_filter([
+            'live' => $this->secretFor('meta'),
+            'saas' => app(MetaSaasCredentials::class)->value('client_secret'),
+            'candidate' => app(MetaCandidateCredentials::class)->value('client_secret'),
+        ], static fn ($v) => is_string($v) && $v !== '');
+
+        return $secrets;
+    }
+
     private function basic(string $provider, ?string $presented): array
     {
         $values = $this->settings->values($provider);

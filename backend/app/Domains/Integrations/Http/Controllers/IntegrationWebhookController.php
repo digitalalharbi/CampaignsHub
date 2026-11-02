@@ -105,6 +105,11 @@ final class IntegrationWebhookController extends Controller
             return response('', 401);
         }
 
+        // META-MULTI-APP-001 — which registered Meta app's secret validated this delivery, for anything downstream of the request.
+        if (isset($check['app'])) {
+            $request->attributes->set('meta_app', $check['app']);
+        }
+
         /** @var array<string,mixed> $payload */
         $payload = json_decode($raw, true) ?: [];
 
