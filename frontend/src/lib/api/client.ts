@@ -185,8 +185,33 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/** The prime in flight, so two callers in the same tick share one request instead of opening two sessions. */
+let priming: Promise<void> | null = null
+
 /** Prime the CSRF cookie before the first unsafe (POST/PUT/DELETE) request. */
 export async function ensureCsrfCookie(): Promise<void> {
+  /*
+   * WEBKIT-CSRF-RACE-002 — a token that is already readable is not primed again.
+   *
+   * The sign-in flow primes twice in sequence: the account lookup, then `login()`. On WebKit the
+   * second `/sanctum/csrf-cookie` GET could leave before the first response's session cookie had
+   * committed, so the server opened a SECOND session and answered with its token — and the browser
+   * then held one session cookie and the other session's XSRF cookie. The login POST carried a token
+   * the session did not know: 419 «انتهت صلاحية الصفحة», on the first sign-in of a run, on one
+   * browser, in under a second. Every later response re-sets XSRF-TOKEN for the current session, so
+   * a readable token is a current one; only its absence calls for a prime.
+   */
+  if (typeof document !== 'undefined' && document.cookie.includes('XSRF-TOKEN=')) return
+  if (priming) return priming
+
+  priming = primeCsrfCookie().finally(() => {
+    priming = null
+  })
+
+  return priming
+}
+
+async function primeCsrfCookie(): Promise<void> {
   await axios.get('/sanctum/csrf-cookie', { withCredentials: true })
 
   /*

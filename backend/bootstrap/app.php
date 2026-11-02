@@ -40,6 +40,7 @@ use App\Domains\Integrations\Console\ScopeCleanupCommand;
 use App\Domains\Integrations\Console\SpendReconcileCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
@@ -152,6 +153,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PerfSnapshotCommand::class,
         PerfCheckCommand::class,
         ProfileLiveReportCommand::class,
+        SyncCensusCommand::class,
         AccountOwnershipAuditCommand::class,
         // ACCOUNT-SCOPE-ISOLATION-001 — the two WRITE paths of the cleanup, dry-run unless --apply. Neither
         // is reachable from the read-only diagnostics workflow.
