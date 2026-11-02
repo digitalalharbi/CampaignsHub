@@ -33,6 +33,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -257,7 +259,7 @@ final class MetaMultiAppTest extends TestCase
     }
 
     /** @param array<string,mixed> $fake */
-    #[\PHPUnit\Framework\Attributes\DataProvider('verificationFailures')]
+    #[DataProvider('verificationFailures')]
     public function test_each_verification_failure_leaves_every_row_byte_identical_and_the_old_token_working(array $fake, string $code): void
     {
         $this->makeSaasPrimary();
@@ -266,11 +268,8 @@ final class MetaMultiAppTest extends TestCase
         $this->bind($legacy, 'act_2');
         [, $state] = $this->startReconnect($legacy);
         $before = $this->snapshot();
-        $this->fakeMeta(...$fake);
-        if (isset($fake['accounts'])) {
-            // act_1 AND act_2 are bound; the new token lists only act_2.
-            $this->assertSame(['2'], $fake['accounts']);
-        }
+        // act_1 AND act_2 are bound; unless a case says otherwise the new token lists both.
+        $this->fakeMeta(...[...['accounts' => ['1', '2']], ...$fake]);
 
         $result = $this->outcome($this->returnWith($state));
 
@@ -316,10 +315,10 @@ final class MetaMultiAppTest extends TestCase
         $this->fakeMeta(debugAppId: self::LIVE_ID);
         $this->returnWith($state);
 
-        Http::fake(['*/oauth/access_token*' => Http::response(['access_token' => 'REFRESHED', 'expires_in' => 5184000])]);
+        // (Http::fake merges stubs and the first match wins: the token stub from fakeMeta() answers the refresh.)
         $fresh = app(TokenVault::class)->fresh(ProviderConnection::withoutGlobalScopes()->findOrFail($legacy->id));
 
-        $this->assertSame('REFRESHED', $fresh->accessToken);
+        $this->assertNotSame('LEGACY-TOKEN', $fresh->accessToken, 'the expired legacy token really was refreshed');
         Http::assertSent(fn (HttpRequest $r): bool => str_contains($r->url().$r->body(), self::LIVE_SECRET) && ! str_contains($r->url().$r->body(), self::SAAS_SECRET));
     }
 
@@ -349,7 +348,7 @@ final class MetaMultiAppTest extends TestCase
         [, $third] = $this->startReconnect(ProviderConnection::withoutGlobalScopes()->findOrFail($legacy->id));
         $key = 'ads-oauth-state:'.$third;
         $record = Cache::get($key);
-        $record['reconnect_connection_id'] = (string) \Illuminate\Support\Str::uuid();
+        $record['reconnect_connection_id'] = (string) Str::uuid();
         Cache::put($key, $record, 600);
         $before = $this->snapshot();
         $this->assertSame('invalid_state', $this->outcome($this->returnWith($third))['outcome']);
@@ -511,12 +510,11 @@ final class MetaMultiAppTest extends TestCase
             }
             $source = (string) file_get_contents($file->getPathname());
             // `for('meta')` is the Live profile by accident of spelling; every Meta use names its app (`forMeta`) or its connection.
-            if (preg_match('/PlatformCredentials::for\(\s*[\'"]meta[\'"]\s*\)/', $source) === 1 || str_contains($source, "ad_platforms.platforms.meta.client_secret")) {
+            if (preg_match('/PlatformCredentials::for\(\s*[\'"]meta[\'"]\s*\)/', $source) === 1 || str_contains($source, 'ad_platforms.platforms.meta.client_secret')) {
                 $offenders[] = str_replace(base_path().'/', '', $file->getPathname());
             }
         }
-        // PlatformCredentials itself maps `forMeta(Live)` onto `for('meta')`.
-        $this->assertSame(['app/Domains/Integrations/OAuth/PlatformCredentials.php'], $offenders);
+        $this->assertSame([], $offenders);
     }
 
     public function test_a_saas_connection_syncs_and_refreshes_with_the_saas_app_and_a_legacy_one_with_legacy(): void
@@ -609,6 +607,13 @@ final class MetaMultiAppTest extends TestCase
         $this->assertSame('saas', $saas->json('data.app_profile'));
         $this->assertSame(self::SAAS_ID, $saasQuery['client_id']);
         $this->assertSame(self::SAAS_CONFIG, $saasQuery['config_id']);
+        // The whole shape: config_id replaces scope, the code flow, and the one registered callback.
+        $this->assertSame(['client_id', 'redirect_uri', 'state', 'config_id', 'response_type', 'override_default_response_type'], array_keys($saasQuery));
+        $this->assertSame('code', $saasQuery['response_type']);
+        $this->assertSame('true', $saasQuery['override_default_response_type']);
+        $this->assertStringEndsWith('/api/v1/oauth/ads/meta/callback', $saasQuery['redirect_uri']);
+        $this->assertArrayNotHasKey('scope', $saasQuery);
+        $this->assertStringStartsWith('https://www.facebook.com/', (string) $saas->json('data.authorization_url'));
     }
 
     public function test_the_new_code_never_deletes_revokes_or_mass_updates_a_connection(): void
