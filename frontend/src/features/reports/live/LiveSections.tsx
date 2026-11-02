@@ -11,6 +11,7 @@ import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 import { resultWords } from './leadResults'
+import { DataFreshnessStamp } from './DataFreshnessStamp'
 
 /*
  * The sections a live link composes its modes from — lifted out of the single long page so each mode
@@ -466,9 +467,11 @@ export function StoreFunnelSection({ payload, ar }: { payload: LivePayload; ar: 
 
 export function FreshnessStrip({
   freshness,
+  summary,
   ar,
 }: {
   freshness: LivePayload['freshness']
+  summary?: LivePayload['freshness_summary']
   ar: boolean
 }) {
   /*
@@ -485,24 +488,30 @@ export function FreshnessStrip({
    */
   const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
 
-  if (excluded.length === 0) return null
+  // REPORT-FRESHNESS-STAMP-001 — the owner's P0 reverses the earlier «no clock» ruling for ONE fact: when the data was last confirmed.
+  const stamp = <DataFreshnessStamp freshness={freshness} summary={summary} ar={ar} />
+
+  if (excluded.length === 0) return stamp
 
   const names = excluded
     .map((f) => providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en'))
     .join(ar ? '، ' : ', ')
 
   return (
-    <p
-      data-testid="live-freshness"
-      className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
-    >
-      <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-      <span>
-        {ar
-          ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
-          : `The figures in this report do not include: ${names}.`}
-      </span>
-    </p>
+    <>
+      {stamp}
+      <p
+        data-testid="live-freshness"
+        className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
+      >
+        <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+        <span>
+          {ar
+            ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
+            : `The figures in this report do not include: ${names}.`}
+        </span>
+      </p>
+    </>
   )
 }
 
