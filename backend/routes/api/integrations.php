@@ -53,6 +53,18 @@ Route::prefix('webhooks/{kind}')->name('webhooks.')->group(function (): void {
         ->middleware('throttle:600,1')->name('receive');
 });
 
+/*
+ * META-MULTI-APP-001 — the SaaS Meta app's OWN callback URL (`/webhooks/ads/meta/saas`). Meta lets every app configure its own, so the
+ * endpoint — not the set of known secrets — says which app a delivery is for: the original `/webhooks/ads/meta` stays bound to the Live
+ * app exactly as before, and this one verifies against the SaaS app's secret ONLY. Same handler, throttles and CSRF exemption.
+ */
+Route::get('webhooks/ads/meta/saas', [IntegrationWebhookController::class, 'verify'])
+    ->defaults('kind', 'ads')->defaults('provider', 'meta')->defaults('app', 'saas')
+    ->middleware('throttle:60,1')->name('webhooks.saas.verify');
+Route::post('webhooks/ads/meta/saas', [IntegrationWebhookController::class, 'receive'])
+    ->defaults('kind', 'ads')->defaults('provider', 'meta')->defaults('app', 'saas')
+    ->middleware('throttle:600,1')->name('webhooks.saas.receive');
+
 // Tenant-level connector status board + provider connections.
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::prefix('integrations')->name('integrations.')->group(function (): void {

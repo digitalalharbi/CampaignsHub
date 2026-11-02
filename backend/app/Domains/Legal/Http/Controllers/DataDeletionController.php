@@ -47,6 +47,15 @@ use Illuminate\Validation\Rule;
  */
 final class DataDeletionController extends Controller
 {
+    /**
+     * A signed_request whose `issued_at` is older than this is a replay; 24 hours. `issued_at` sits INSIDE the signed payload, so it
+     * cannot be altered without breaking the signature; Meta does not guarantee it, so an absent one means no window (the
+     * (provider, user id) idempotency below still protects). Inbound webhooks have no signed timestamp and get no age limit.
+     */
+    public const SIGNED_REQUEST_MAX_AGE_SECONDS = 86400;
+
+    public const SIGNED_REQUEST_CLOCK_SKEW_SECONDS = 300;
+
     public function __construct(
         private readonly DeletionVerification $verification,
         private readonly DeletionBlockers $blockers,
@@ -222,27 +231,15 @@ final class DataDeletionController extends Controller
      */
     public function callback(Request $request, string $provider): JsonResponse
     {
-        $secrets = $this->appSecretsFor($provider);
+        $secret = $this->appSecretFor($provider);
 
-        if ($secrets === []) {
+        if ($secret === null || $secret === '') {
             return ApiResponse::error(__('api.data_deletion_callback_unconfigured'), status: 503);
         }
 
-        // META-MULTI-APP-001 — tried against EACH registered Meta app's secret; exactly one must validate.
-        $signed = (string) $request->input('signed_request');
-        $payloads = [];
-        foreach ($secrets as $app => $secret) {
-            $candidate = $this->verifiedPayload($signed, $secret);
-            if ($candidate !== null) {
-                $payloads[$app] = $candidate;
-            }
-        }
-        $payload = count($payloads) === 1 ? reset($payloads) : null;
-        // The request is filed under the app whose secret validated it, not the URL it arrived on: a person has a different app-scoped
-        // id in each Meta app, so the key must follow the proof.
-        $provider = count($payloads) === 1 ? (array_key_first($payloads) === 'saas' ? 'meta-saas' : 'meta') : $provider;
+        $payload = $this->verifiedPayload((string) $request->input('signed_request'), $secret);
 
-        if ($payload === null) {
+        if ($payload === null || ! $this->payloadIsCurrentAndFor($payload, $provider)) {
             return ApiResponse::error(__('api.unauthenticated'), status: 401);
         }
 
@@ -332,6 +329,44 @@ final class DataDeletionController extends Controller
         return is_array($payload) ? $payload : null;
     }
 
+    /**
+     * META-MULTI-APP-001 — what the SIGNED payload itself must agree with, beyond its signature.
+     *
+     * - `issued_at` (Meta supplies it as a unix time): a request older than {@see self::SIGNED_REQUEST_MAX_AGE_SECONDS}, or issued in the
+     *   future, is a replay or a forgery. Absent, it is not enforced — only what Meta sends can be required.
+     * - `algorithm`, when present, must be HMAC-SHA256.
+     * - `app_id`, when present, must be THIS endpoint's app: the secret already bound the endpoint to one app, and this refuses a payload
+     *   that names another.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    private function payloadIsCurrentAndFor(array $payload, string $provider): bool
+    {
+        if (isset($payload['algorithm']) && strtoupper((string) $payload['algorithm']) !== 'HMAC-SHA256') {
+            return false;
+        }
+
+        if (isset($payload['issued_at'])) {
+            if (! is_numeric($payload['issued_at'])) {
+                return false;
+            }
+            $age = time() - (int) $payload['issued_at'];
+            if ($age > self::SIGNED_REQUEST_MAX_AGE_SECONDS || $age < -self::SIGNED_REQUEST_CLOCK_SKEW_SECONDS) {
+                return false;
+            }
+        }
+
+        if (isset($payload['app_id'])) {
+            $appId = $provider === 'meta-saas'
+                ? app(MetaSaasCredentials::class)->value('client_id')
+                : PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_id');
+
+            return is_string($appId) && hash_equals($appId, (string) $payload['app_id']);
+        }
+
+        return true;
+    }
+
     private function base64UrlDecode(string $value): ?string
     {
         $decoded = base64_decode(strtr($value, '-_', '+/'), true);
@@ -353,21 +388,16 @@ final class DataDeletionController extends Controller
      * keyed by that provider, because the same person has a different app-scoped id in each app. The Candidate app issues no
      * customer connections and has no callback.
      */
-    /**
-     * @return array<string, string> app profile => App Secret, for every configured registered Meta app. Empty for any other provider.
-     */
-    private function appSecretsFor(string $provider): array
+    private function appSecretFor(string $provider): ?string
     {
-        if (! in_array($provider, ['meta', 'meta-saas'], true)) {
-            return [];
-        }
-
-        // META-MULTI-APP-001 — the Live App Secret where the platform keeps it (stored settings, then the environment), the SaaS app's
-        // secret from its own store (the Candidate app issues no customer connections and has no deletion callback). A callback is accepted when exactly one of them validates it.
-        return array_filter([
-            'live' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_secret'),
-            'saas' => app(MetaSaasCredentials::class)->value('client_secret'),
-        ], static fn ($v) => is_string($v) && $v !== '');
+        return match ($provider) {
+            // The Live App Secret where the platform keeps it: the stored provider settings, then the environment. The two keys read
+            // here before (`services.meta_ads.app_secret`, `ad_platforms.meta.client_secret`) exist in no config file, so Production
+            // answered 503 to every Live deletion callback.
+            'meta' => PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_secret'),
+            'meta-saas' => app(MetaSaasCredentials::class)->value('client_secret'),
+            default => null,
+        };
     }
 
     /** Deliver the code, and report what actually happened rather than what was intended. */

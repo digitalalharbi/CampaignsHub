@@ -7,7 +7,6 @@ namespace App\Domains\Integrations\Webhooks;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\WebhookSupport;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
-use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 
 /**
@@ -43,9 +42,9 @@ final class WebhookSignature
     public function __construct(private readonly ProviderConfigurationService $settings) {}
 
     /**
-     * @return array{verified: bool, reason: ?string, app?: string} `app` (Meta only): which registered app's secret validated
+     * @return array{verified: bool, reason: ?string, app?: string} `app` (Meta only): the app the ENDPOINT is bound to
      */
-    public function check(string $provider, string $rawBody, ?string $presented): array
+    public function check(string $provider, string $rawBody, ?string $presented, ?string $app = null): array
     {
         $definition = ProviderCatalogue::get($provider);
 
@@ -64,10 +63,9 @@ final class WebhookSignature
             return $this->basic($provider, $presented);
         }
 
-        // META-MULTI-APP-001 — Meta has one signing secret PER registered app; every other provider has one.
-        $secrets = $provider === 'meta' ? $this->metaSecrets() : array_filter(['default' => $this->secretFor($provider)], static fn ($v) => $v !== null);
+        $secret = $provider === 'meta' ? $this->metaSecretFor($app) : $this->secretFor($provider);
 
-        if ($secrets === []) {
+        if ($secret === null || $secret === '') {
             return ['verified' => false, 'reason' => 'No webhook secret is configured for this provider.'];
         }
 
@@ -75,43 +73,34 @@ final class WebhookSignature
             return ['verified' => false, 'reason' => 'The delivery carried no signature.'];
         }
 
+        $expected = hash_hmac('sha256', $rawBody, $secret);
+
         // Meta prefixes the digest; the others send it bare. Stripping a prefix that is not there is
         // harmless, and NOT stripping one that is there fails every legitimate Meta delivery.
         $offered = str_starts_with($presented, 'sha256=') ? substr($presented, 7) : $presented;
 
-        $matched = [];
-        foreach ($secrets as $app => $secret) {
-            if (hash_equals(hash_hmac('sha256', $rawBody, $secret), $offered)) {
-                $matched[] = $app;
-            }
-        }
-
-        // Exactly one app must validate: two apps sharing a secret cannot say whose delivery this is, so it is refused, not guessed.
-        if (count($matched) !== 1) {
-            return ['verified' => false, 'reason' => $matched === [] ? 'The signature did not match.' : 'The signature matched more than one app.'];
+        if (! hash_equals($expected, $offered)) {
+            return ['verified' => false, 'reason' => 'The signature did not match.'];
         }
 
         return $provider === 'meta'
-            ? ['verified' => true, 'reason' => null, 'app' => $matched[0]]
+            ? ['verified' => true, 'reason' => null, 'app' => $app ?? 'live']
             : ['verified' => true, 'reason' => null];
     }
 
     /**
-     * META-MULTI-APP-001 — the signing secret of every CONFIGURED registered Meta app, keyed by profile (live, saas, candidate).
+     * META-MULTI-APP-001 — the ONE secret a Meta endpoint verifies with, chosen by the ENDPOINT and never by trying secrets.
      *
-     * Live keeps its established rule (`webhook_secret`, else the App Secret); the others sign with their App Secret.
-     *
-     * @return array<string, string>
+     * Each Meta app has its own callback URL, so the route says which app a delivery is for: `null` (the original route) is the Live
+     * app exactly as before, `saas` is the SaaS app. A body signed by the other app's secret is refused on either route.
      */
-    private function metaSecrets(): array
+    private function metaSecretFor(?string $app): ?string
     {
-        $secrets = array_filter([
-            'live' => $this->secretFor('meta'),
+        return match ($app) {
+            null, 'live' => $this->secretFor('meta'),
             'saas' => app(MetaSaasCredentials::class)->value('client_secret'),
-            'candidate' => app(MetaCandidateCredentials::class)->value('client_secret'),
-        ], static fn ($v) => is_string($v) && $v !== '');
-
-        return $secrets;
+            default => null,
+        };
     }
 
     private function basic(string $provider, ?string $presented): array
