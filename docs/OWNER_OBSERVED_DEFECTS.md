@@ -282,3 +282,10 @@ The CSV exported from the NASEL live report printed « → » for its period, no
 **Fix:** #881. Files render from the page's own builder, in memory, under the report's KPIs, period and currency. Unreported metrics are empty, never zero. A link that hides spend ships none.
 
 **Status:** IMPLEMENTED_NOT_VERIFIED until #881 deploys and the NASEL CSV is re-exported and compared with its page.
+
+## 2026-11-02 — client objection on report y5i0… (Nasel Riwaq)
+
+| 116 | P0 | Snapchat spend in the report lower than Ads Manager | Provider 927.01 vs report 827.58 for 25 Oct → 2 Nov (USD): 25 Oct (97.31) was filed only under the account's former project and the sweep re-asks 7 days; repaired through the ordinary sync (`resync-window` 25–26 Oct, run 41491189998). After: completed days 846.43 = provider 846.43; residual = the accruing day. The −73% TikTok/Google readings were the tool comparing SAR with USD (fixed in #932). | SPEND-ACCURACY-001 | Repaired on Production; VERIFIED once a recorded «last confirmed against the source» exists per account |
+| 117 | P0 | «أفضل المحتوى أداءً» shows 70, the content detail shows 1 | Card = `verified_result` (project lead event); detail fell back to generic `conversions`. One marking for both; fail-first parity tests. | RESULT-PARITY-001 | #932 — IMPLEMENTED_NOT_VERIFIED until re-read on the same link after deploy |
+| 118 | P0 | Public report 7Ctk… takes 20–35 s | Measured on Production: 25.2 s build, ≈24.4 s database; top cost whole-history availability scans run 11× per build. Memo per account per request in #932. #929 alone changed nothing measurable. | PERF-RECOVERY-001 | PARTIAL — measured after #932 deploys |
+
