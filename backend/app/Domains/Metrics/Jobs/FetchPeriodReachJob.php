@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Jobs;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Services\PeriodReachFetcher;
+use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -15,6 +16,8 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
  * REACH-PERIOD-001 — fetch one account's provider-deduplicated reach for one requested window.
@@ -62,6 +65,15 @@ final class FetchPeriodReachJob implements ShouldBeUnique, ShouldQueue
 
         $tenant->setTenantId($account->tenant_id);
 
-        $fetcher->fetch($account, Carbon::parse($this->from), Carbon::parse($this->to));
+        try {
+            $fetcher->fetch($account, Carbon::parse($this->from), Carbon::parse($this->to));
+        } catch (Throwable $e) {
+            // Dispatch-side memory only: a refusal that retrying cannot fix is remembered for 7 days so no reader re-asks.
+            if (str_contains($e->getMessage(), 'E9001') || stripos($e->getMessage(), 'too large') !== false) {
+                Cache::put(PeriodReachReader::refusedKey($this->accountId, $this->from, $this->to), 1, Carbon::now()->addDays(7));
+            }
+
+            throw $e;
+        }
     }
 }
