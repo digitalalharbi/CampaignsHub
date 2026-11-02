@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Jobs;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Services\PeriodReachFetcher;
+use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -15,6 +16,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -120,6 +122,8 @@ final class FetchPeriodReachJob implements ShouldBeUnique, ShouldQueue
         $context = ['account' => $this->accountId, 'from' => $this->from, 'to' => $this->to, 'reason' => $e->getMessage()];
 
         if ($kind === 'too_large') {
+            // Dispatch-side memory: a refusal retrying cannot fix is remembered for 7 days so no reader re-asks (REACH-STORM-001).
+            Cache::put(PeriodReachReader::refusedKey($this->accountId, $this->from, $this->to), 1, Carbon::now()->addDays(7));
             Log::warning('period reach: the provider refused the window as too large; not retried', $context);
 
             return;
