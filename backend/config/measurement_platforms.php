@@ -43,8 +43,16 @@ return [
              * different scopes, and sharing one would mean a customer connecting Analytics is asked
              * for advertising access — or worse, that revoking one silently breaks the other.
              */
-            'client_id' => env('GA4_CLIENT_ID'),
-            'client_secret' => env('GA4_CLIENT_SECRET'),
+            /*
+             * GA4-PLATFORM-GOOGLE-CLIENT-001 — one Google OAuth client for sign-in, Google Ads and GA4.
+             *
+             * The Owner unified the three on the sign-in client (2026-11-02): the callback above is registered on it
+             * and the scope stays `analytics.readonly`, asked for this flow only. `GA4_*` keys still win when set, so a
+             * separate client remains possible; absent, GA4 reads the sign-in client. A value stored on the provider's
+             * admin row wins over both, as for every provider — clearing that row is what makes this take effect.
+             */
+            'client_id' => env('GA4_CLIENT_ID') ?: env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GA4_CLIENT_SECRET') ?: env('GOOGLE_CLIENT_SECRET'),
         ],
     ],
 ];
