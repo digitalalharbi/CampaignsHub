@@ -7,8 +7,16 @@ namespace App\Domains\Ops\Console;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\LiveReportService;
+use App\Domains\Reports\Services\ShareService;
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Redis;
 
 /**
  * PERF-RECOVERY-001 — where a public live report spends its time. Read-only.
@@ -24,7 +32,7 @@ final class ProfileLiveReportCommand extends Command
 
     protected $description = 'Read-only: time, query count and heaviest queries of the public live report build.';
 
-    public function handle(LiveReportService $live): int
+    public function handle(LiveReportService $live, ShareService $shareService): int
     {
         foreach ((array) $this->option('token') as $raw) {
             $this->explain((string) $raw);
@@ -45,6 +53,11 @@ final class ProfileLiveReportCommand extends Command
             $stats = [];
             $total = 0;
             $count = 0;
+            $redisMs = 0.0;
+            $redisN = 0;
+            $extMs = 0.0;
+            $extN = 0;
+            $cache = ['hit' => 0, 'miss' => 0, 'write' => 0];
 
             DB::listen(static function ($q) use (&$stats, &$total, &$count): void {
                 $sql = preg_replace('/\s+/', ' ', $q->sql);
@@ -54,26 +67,53 @@ final class ProfileLiveReportCommand extends Command
                 $total += $q->time;
                 $count++;
             });
+            try {
+                Redis::connection()->listen(static function (CommandExecuted $e) use (&$redisMs, &$redisN): void {
+                    $redisMs += $e->time;
+                    $redisN++;
+                });
+            } catch (\Throwable) {
+                // The configured cache/queue store may not be Redis; nothing to time then.
+            }
+            Event::listen(CacheHit::class, static function () use (&$cache): void {
+                $cache['hit']++;
+            });
+            Event::listen(CacheMissed::class, static function () use (&$cache): void {
+                $cache['miss']++;
+            });
+            Event::listen(KeyWritten::class, static function () use (&$cache): void {
+                $cache['write']++;
+            });
+            Event::listen(ResponseReceived::class, static function (ResponseReceived $e) use (&$extMs, &$extN): void {
+                $extMs += (float) ($e->response->transferStats?->getTransferTime() ?? 0) * 1000;
+                $extN++;
+            });
 
             $t = microtime(true);
             $payload = $live->build($share, [], (string) $report->currency);
             $wall = (microtime(true) - $t) * 1000;
 
+            // The controller's own remaining work: the hide-flag sanitising and the JSON the client receives.
+            $t2 = microtime(true);
+            $sanitised = $shareService->sanitizeLive($payload, $share);
+            $json = (string) json_encode($sanitised);
+            $render = (microtime(true) - $t2) * 1000;
+
+            $php = max(0.0, $wall - $total - $redisMs - $extMs);
             $this->line(sprintf(
-                'LINK %s  wall %.0f ms · %d queries · db %.0f ms · json %d B · peak mem %d MB',
-                substr((string) $share->id, 0, 8),
-                $wall,
-                $count,
-                $total,
-                strlen((string) json_encode($payload)),
-                memory_get_peak_usage(true) / 1048576,
+                'LINK %s  BUILD %.0f ms = DB %.0f ms (%d queries) + REDIS %.0f ms (%d cmds) + EXTERNAL %.0f ms (%d calls) + PHP/other %.0f ms',
+                substr((string) $share->id, 0, 8), $wall, $total, $count, $redisMs, $redisN, $extMs, $extN, $php,
+            ));
+            $this->line(sprintf(
+                '  SERIALIZE/RENDER (sanitise + json_encode) %.0f ms · json %d B · cache hit %d miss %d write %d · peak mem %d MB · TOTAL (build+render) %.0f ms',
+                $render, strlen($json), $cache['hit'], $cache['miss'], $cache['write'], memory_get_peak_usage(true) / 1048576, $wall + $render,
             ));
 
             uasort($stats, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
-            $this->line(sprintf('  %-6s %-9s %-9s %s', 'runs', 'total ms', 'max ms', 'statement'));
+            $this->line(sprintf('  %-6s %-9s %-9s %-9s %-9s %s', 'runs', 'total ms', 'mean ms', 'max ms', 'finger', 'statement'));
 
             foreach (array_slice($stats, 0, max(1, (int) $this->option('top')), true) as $sql => $s) {
-                $this->line(sprintf('  %-6d %-9.1f %-9.1f %s', $s['n'], $s['ms'], $s['max'], substr($sql, 0, 260)));
+                $this->line(sprintf('  %-6d %-9.1f %-9.2f %-9.1f %-9s %s', $s['n'], $s['ms'], $s['ms'] / max(1, $s['n']), $s['max'], substr(md5((string) $sql), 0, 8), substr((string) $sql, 0, 260)));
             }
 
             $this->newLine();

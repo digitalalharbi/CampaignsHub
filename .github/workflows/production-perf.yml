@@ -65,7 +65,7 @@ jobs:
             echo "── postgres top statements"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
               exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms,
+            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
                    left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
               from pg_stat_statements order by total_exec_time desc limit 20;
             SQL
