@@ -415,6 +415,9 @@ export interface LiveCampaignRow {
   landing_leads: number | null
 }
 
+/** REPORT-FRESHNESS-STAMP-001 */
+export type DataStatus = 'fresh' | 'delayed' | 'stale' | 'failed' | 'unknown'
+
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
@@ -714,7 +717,20 @@ export interface LivePayload {
     provider: string
     name?: string | null
     state: 'synced' | 'awaiting_credentials'
+    /** REPORT-FRESHNESS-STAMP-001 — completion time (UTC ISO) of the latest SUCCESSFUL sync; never a request/start time. */
+    last_success_at?: string | null
+    last_attempt_at?: string | null
+    last_attempt_status?: 'success' | 'failed' | 'running' | 'none'
+    age_minutes?: number | null
+    /** null for a source that is not an ad platform. */
+    data_status?: DataStatus | null
   }>
+  freshness_summary?: {
+    oldest_success_at: string | null
+    worst_status: DataStatus
+    timezone: string
+    generated_at: string
+  }
   available: {
     providers: string[]
     /** Empty on a client payload — the picker it filled offered «كل الحملات» over internal names. */

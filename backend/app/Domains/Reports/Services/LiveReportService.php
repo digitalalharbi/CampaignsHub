@@ -34,6 +34,7 @@ use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportDataFreshness;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ResultEvents;
@@ -1104,7 +1105,9 @@ final class LiveReportService
              * Never blended with the ad figures above — see `SiteMeasurementService`.
              */
             'site_measurement' => $this->siteMeasurement($share, $scope['project_id'], $from, $to),
-            'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
+            'freshness' => $freshness = $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
+            // REPORT-FRESHNESS-STAMP-001 — the page-level stamp: oldest confirmed sync, worst platform status, Riyadh clock.
+            'freshness_summary' => app(ReportDataFreshness::class)->summary($freshness),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
              *
@@ -2053,7 +2056,7 @@ final class LiveReportService
      * @param  list<string>  $providers
      * @return list<array<string, mixed>>
      */
-    private function freshness(string $tenantId, string $projectId, array $providers): array
+    private function freshness(string $tenantId, string $projectId, array $providers, ?array $accountIds = null): array
     {
         /*
          * An empty ceiling means NOTHING, never everything — the same rule {@see ceiling()} states.
@@ -2087,12 +2090,22 @@ final class LiveReportService
          * clock goes. `name` stays too — the page needs something to call the platform other than a
          * database key.
          */
+        /*
+         * REPORT-FRESHNESS-STAMP-001 — the one fact a client CAN act on and was missing: when the platform's figures were last
+         * CONFIRMED by a finished sync. Completion time only, scoped like `ContributorCoverage::latestRuns`, one grouped read.
+         * No account name or id: the stamp is per platform. Sources that are not ad platforms carry `data_status: null`.
+         */
+        $stamps = app(ReportDataFreshness::class)->forProviders($tenantId, $projectId, $providers, $accountIds);
+        $noStamp = ['last_success_at' => null, 'last_attempt_at' => null, 'last_attempt_status' => 'none', 'age_minutes' => null, 'data_status' => null];
+
+        $unknown = array_replace($noStamp, ['data_status' => 'unknown']);
+
         return array_values(array_map(static fn (array $source): array => [
             'kind' => $source['kind'],
             'provider' => $source['provider'],
             'name' => $source['name'],
             'state' => $source['state'] === 'awaiting_credentials' ? 'awaiting_credentials' : 'synced',
-        ], $sources));
+        ] + ($source['kind'] === 'ad_platform' ? ($stamps[$source['provider']] ?? $unknown) : $noStamp), $sources));
     }
 
     private function iso(mixed $value): ?string
