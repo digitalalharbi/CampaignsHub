@@ -307,7 +307,7 @@ export function LiveSharedReport({
         </div>
       </div>
 
-      <FreshnessStrip freshness={payload.freshness} ar={ar} />
+      <FreshnessStrip freshness={payload.freshness} summary={payload.freshness_summary} ar={ar} />
 
       {refreshError && (
         <p data-testid="live-refresh-failed" className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">

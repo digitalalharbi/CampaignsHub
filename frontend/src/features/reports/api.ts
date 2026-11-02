@@ -415,6 +415,9 @@ export interface LiveCampaignRow {
   landing_leads: number | null
 }
 
+/** REPORT-FRESHNESS-STAMP-001 */
+export type DataStatus = 'fresh' | 'delayed' | 'stale' | 'failed' | 'unknown'
+
 /** SPEND-RECONCILE-RECORD-001 */
 export type ReconcileStatus = 'matched' | 'drifted' | 'failed' | 'never'
 
@@ -717,6 +720,13 @@ export interface LivePayload {
     provider: string
     name?: string | null
     state: 'synced' | 'awaiting_credentials'
+    /** REPORT-FRESHNESS-STAMP-001 — completion time (UTC ISO) of the latest SUCCESSFUL sync; never a request/start time. */
+    last_success_at?: string | null
+    last_attempt_at?: string | null
+    last_attempt_status?: 'success' | 'failed' | 'running' | 'none'
+    age_minutes?: number | null
+    /** null for a source that is not an ad platform. */
+    data_status?: DataStatus | null
     /** SPEND-RECONCILE-RECORD-001 — when the platform's own total was last CHECKED against the stored one (UTC ISO); never a sync time. */
     last_reconciled_at?: string | null
     /** `never` where no check was ever recorded for this project's bound accounts. */
@@ -724,6 +734,12 @@ export interface LivePayload {
     /** Stored minus provider, as a share of the provider total; carried only with the status. */
     reconcile_diff_pct?: number | null
   }>
+  freshness_summary?: {
+    oldest_success_at: string | null
+    worst_status: DataStatus
+    timezone: string
+    generated_at: string
+  }
   available: {
     providers: string[]
     /** Empty on a client payload — the picker it filled offered «كل الحملات» over internal names. */

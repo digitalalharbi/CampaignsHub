@@ -11,6 +11,7 @@ import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 import { resultWords } from './leadResults'
+import { DataFreshnessStamp } from './DataFreshnessStamp'
 import { SpendReconciliationStamp } from './SpendReconciliationStamp'
 
 /*
@@ -467,9 +468,11 @@ export function StoreFunnelSection({ payload, ar }: { payload: LivePayload; ar: 
 
 export function FreshnessStrip({
   freshness,
+  summary,
   ar,
 }: {
   freshness: LivePayload['freshness']
+  summary?: LivePayload['freshness_summary']
   ar: boolean
 }) {
   /*
@@ -486,14 +489,13 @@ export function FreshnessStrip({
    */
   const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
 
-  /*
-   * SPEND-RECONCILE-RECORD-001 — the one clock a client CAN act on: when the platform's own total was last checked against
-   * these figures, and whether it matched. A sibling stamp the strip mounts beside whatever else it says; it renders nothing
-   * for a payload that predates it.
-   */
+  // REPORT-FRESHNESS-STAMP-001 — the owner's P0 reverses the earlier «no clock» ruling for ONE fact: when the data was last confirmed.
+  const stamp = <DataFreshnessStamp freshness={freshness} summary={summary} ar={ar} />
+
+  // SPEND-RECONCILE-RECORD-001 — the sibling clock: when the platform's own total was last CHECKED against these figures.
   const reconciled = <SpendReconciliationStamp freshness={freshness} ar={ar} />
 
-  if (excluded.length === 0) return reconciled
+  if (excluded.length === 0) return <>{stamp}{reconciled}</>
 
   const names = excluded
     .map((f) => providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en'))
@@ -501,6 +503,7 @@ export function FreshnessStrip({
 
   return (
     <>
+      {stamp}
       {reconciled}
       <p
         data-testid="live-freshness"

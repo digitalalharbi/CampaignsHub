@@ -34,6 +34,7 @@ use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportDataFreshness;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportSpendReconciliation;
@@ -187,12 +188,70 @@ final class LiveReportService
                 + ($figures ?? []);
         }
 
+        /*
+         * RESULT-PARITY-001 — the opened content states the SAME «Results» as the card it was opened from.
+         *
+         * The page build marks every content row with `verified_result` (the project's configured lead event) or `result_defined: false`;
+         * this single-content read did neither, so the detail fell back to the platform's generic `conversions` — 1 beside a card that read
+         * 70 for the same ad over the same period. The row is marked here, while its campaign name is still on it, by the same rules.
+         */
+        $row = $this->markResults($share, $scope, [$row])[0];
+
         return [
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days],
             'granularity' => $step === 1 ? 'day' : 'week',
             'content' => ClientEntityBoundary::roster(ContentCopy::rows(ContentKey::attach([$row], $share), $share->creativeVisibility()))[0],
             'trend' => $trend,
         ];
+    }
+
+    /**
+     * The verified-Results marking of {@see adsFor()}, for a flat list of content rows (the single-content drill-down).
+     *
+     * Configured Results → `verified_result` from the link's lead events (the label is the link's own word for Results); no configured
+     * Results → `result_defined: false`, so no surface prints a generic conversion as a result. Same calls, same rules as the page build.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function markResults(ReportShare $share, array $scope, array $rows): array
+    {
+        $settings = (array) ($share->settings ?? []);
+        $project = $scope['project_id'] === '' ? null : Project::withoutGlobalScopes()->find($scope['project_id']);
+        $resultsConfigured = ($settings['results_off'] ?? false) !== true && ResultEvents::forProject($project, 'result_events', (array) ($settings['result_events'] ?? []) ?: null)->configured();
+
+        if (! $resultsConfigured) {
+            return array_values(array_map(static function (array $row): array {
+                if (isset($row['provider'])) {
+                    $row['result_defined'] = false;
+                }
+
+                return $row;
+            }, $rows));
+        }
+
+        $leads = ResultEvents::forProject($project, 'lead_events', (array) ($settings['lead_events'] ?? []) ?: null);
+        if (! $leads->configured()) {
+            return $rows;
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map(static fn (array $r): string => (string) ($r['id'] ?? ''), $rows), static fn (string $id): bool => Str::isUuid($id))));
+        $campaignOf = ExternalCreative::withoutGlobalScopes()->whereIn('id', $ids)->pluck('campaign_id', 'id')->all();
+        $campaignIds = array_values(array_unique(array_filter(array_map('strval', array_values($campaignOf)), static fn (string $id): bool => Str::isUuid($id))));
+        $nameOf = UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $campaignIds)->pluck('name', 'id')->all();
+        $label = is_string($settings['results_label'] ?? null) && trim($settings['results_label']) !== '' ? trim($settings['results_label']) : null;
+
+        return array_values(array_map(static function (array $row) use ($leads, $campaignOf, $nameOf, $label): array {
+            if (isset($row['id'], $row['provider'])) {
+                $campaignId = (string) ($row['campaign_id'] ?? ($campaignOf[(string) $row['id']] ?? ''));
+                $campaign = (string) ($nameOf[$campaignId] ?? ($row['campaign_name'] ?? ''));
+                $verified = $leads->contentResult(['campaign_name' => $campaign] + $row);
+                $row['verified_result'] = $verified === null ? null : $verified + ['label' => $label];
+            }
+
+            return $row;
+        }, $rows));
     }
 
     /**
@@ -1047,7 +1106,9 @@ final class LiveReportService
              * Never blended with the ad figures above — see `SiteMeasurementService`.
              */
             'site_measurement' => $this->siteMeasurement($share, $scope['project_id'], $from, $to),
-            'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
+            'freshness' => $freshness = $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
+            // REPORT-FRESHNESS-STAMP-001 — the page-level stamp: oldest confirmed sync, worst platform status, Riyadh clock.
+            'freshness_summary' => app(ReportDataFreshness::class)->summary($freshness),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
              *
@@ -2031,6 +2092,16 @@ final class LiveReportService
          * database key.
          */
         /*
+         * REPORT-FRESHNESS-STAMP-001 — the one fact a client CAN act on and was missing: when the platform's figures were last
+         * CONFIRMED by a finished sync. Completion time only, scoped like `ContributorCoverage::latestRuns`, one grouped read.
+         * No account name or id: the stamp is per platform. Sources that are not ad platforms carry `data_status: null`.
+         */
+        $stamps = app(ReportDataFreshness::class)->forProviders($tenantId, $projectId, $providers, $accountIds);
+        $noStamp = ['last_success_at' => null, 'last_attempt_at' => null, 'last_attempt_status' => 'none', 'age_minutes' => null, 'data_status' => null];
+
+        $unknown = array_replace($noStamp, ['data_status' => 'unknown']);
+
+        /*
          * SPEND-RECONCILE-RECORD-001 — «آخر مطابقة مؤكدة مع المصدر», beside (never instead of) the sync facts.
          *
          * A client CAN act on this one: it says whether the platform's own figure for the account was
@@ -2047,7 +2118,9 @@ final class LiveReportService
             'provider' => $source['provider'],
             'name' => $source['name'],
             'state' => $source['state'] === 'awaiting_credentials' ? 'awaiting_credentials' : 'synced',
-        ] + ($source['kind'] === 'ad_platform' ? ($reconciled[$source['provider']] ?? $never) : $never), $sources));
+        ] + ($source['kind'] === 'ad_platform' ? ($stamps[$source['provider']] ?? $unknown) : $noStamp)
+            // SPEND-RECONCILE-RECORD-001 — appended beside the sync stamp, scoped identically.
+            + ($source['kind'] === 'ad_platform' ? ($reconciled[$source['provider']] ?? $never) : $never), $sources));
     }
 
     private function iso(mixed $value): ?string

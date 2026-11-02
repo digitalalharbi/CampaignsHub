@@ -28,9 +28,12 @@ use Illuminate\Support\Facades\Redis;
  */
 final class ProfileLiveReportCommand extends Command
 {
-    protected $signature = 'ops:profile-live-report {--links=2 : Live links to profile} {--top=20 : Statements to print} {--token=* : Explain why this link answers as it does (state and recent access log); read-only}';
+    protected $signature = 'ops:profile-live-report {--links=2 : Live links to profile} {--top=20 : Statements to print} {--explain=0 : EXPLAIN ANALYZE the N heaviest SELECTs (reads only)} {--token=* : Explain why this link answers as it does (state and recent access log); read-only}';
 
     protected $description = 'Read-only: time, query count and heaviest queries of the public live report build.';
+
+    /** @var array<string, mixed> the current link's counters */
+    private array $m = [];
 
     public function handle(LiveReportService $live, ShareService $shareService): int
     {
@@ -43,6 +46,38 @@ final class ProfileLiveReportCommand extends Command
             ->sortByDesc(static fn (ReportShare $s) => $s->updated_at)
             ->take(max(1, (int) $this->option('links')));
 
+        // Registered ONCE, writing to the current link's counters: registered per link they stack, and every figure after the first doubles.
+        DB::listen(function ($q): void {
+            $sql = preg_replace('/\s+/', ' ', $q->sql);
+            $this->m['stats'][$sql]['n'] = ($this->m['stats'][$sql]['n'] ?? 0) + 1;
+            $this->m['stats'][$sql]['ms'] = ($this->m['stats'][$sql]['ms'] ?? 0.0) + $q->time;
+            $this->m['stats'][$sql]['max'] = max($this->m['stats'][$sql]['max'] ?? 0.0, $q->time);
+            $this->m['stats'][$sql]['bindings'] ??= $q->bindings;
+            $this->m['db'] = ($this->m['db'] ?? 0.0) + $q->time;
+            $this->m['queries'] = ($this->m['queries'] ?? 0) + 1;
+        });
+        try {
+            Redis::connection()->listen(function (CommandExecuted $e): void {
+                $this->m['redis'] = ($this->m['redis'] ?? 0.0) + $e->time;
+                $this->m['redisN'] = ($this->m['redisN'] ?? 0) + 1;
+            });
+        } catch (\Throwable) {
+            // The configured cache/queue store may not be Redis; nothing to time then.
+        }
+        Event::listen(CacheHit::class, function (): void {
+            $this->m['hit'] = ($this->m['hit'] ?? 0) + 1;
+        });
+        Event::listen(CacheMissed::class, function (): void {
+            $this->m['miss'] = ($this->m['miss'] ?? 0) + 1;
+        });
+        Event::listen(KeyWritten::class, function (): void {
+            $this->m['write'] = ($this->m['write'] ?? 0) + 1;
+        });
+        Event::listen(ResponseReceived::class, function (ResponseReceived $e): void {
+            $this->m['ext'] = ($this->m['ext'] ?? 0.0) + (float) ($e->response->transferStats?->getTransferTime() ?? 0) * 1000;
+            $this->m['extN'] = ($this->m['extN'] ?? 0) + 1;
+        });
+
         foreach ($shares as $share) {
             $report = Report::withoutGlobalScopes()->find($share->report_id);
 
@@ -50,44 +85,7 @@ final class ProfileLiveReportCommand extends Command
                 continue;
             }
 
-            $stats = [];
-            $total = 0;
-            $count = 0;
-            $redisMs = 0.0;
-            $redisN = 0;
-            $extMs = 0.0;
-            $extN = 0;
-            $cache = ['hit' => 0, 'miss' => 0, 'write' => 0];
-
-            DB::listen(static function ($q) use (&$stats, &$total, &$count): void {
-                $sql = preg_replace('/\s+/', ' ', $q->sql);
-                $stats[$sql]['n'] = ($stats[$sql]['n'] ?? 0) + 1;
-                $stats[$sql]['ms'] = ($stats[$sql]['ms'] ?? 0.0) + $q->time;
-                $stats[$sql]['max'] = max($stats[$sql]['max'] ?? 0.0, $q->time);
-                $total += $q->time;
-                $count++;
-            });
-            try {
-                Redis::connection()->listen(static function (CommandExecuted $e) use (&$redisMs, &$redisN): void {
-                    $redisMs += $e->time;
-                    $redisN++;
-                });
-            } catch (\Throwable) {
-                // The configured cache/queue store may not be Redis; nothing to time then.
-            }
-            Event::listen(CacheHit::class, static function () use (&$cache): void {
-                $cache['hit']++;
-            });
-            Event::listen(CacheMissed::class, static function () use (&$cache): void {
-                $cache['miss']++;
-            });
-            Event::listen(KeyWritten::class, static function () use (&$cache): void {
-                $cache['write']++;
-            });
-            Event::listen(ResponseReceived::class, static function (ResponseReceived $e) use (&$extMs, &$extN): void {
-                $extMs += (float) ($e->response->transferStats?->getTransferTime() ?? 0) * 1000;
-                $extN++;
-            });
+            $this->m = ['stats' => [], 'db' => 0.0, 'queries' => 0, 'redis' => 0.0, 'redisN' => 0, 'ext' => 0.0, 'extN' => 0, 'hit' => 0, 'miss' => 0, 'write' => 0];
 
             $t = microtime(true);
             $payload = $live->build($share, [], (string) $report->currency);
@@ -99,16 +97,18 @@ final class ProfileLiveReportCommand extends Command
             $json = (string) json_encode($sanitised);
             $render = (microtime(true) - $t2) * 1000;
 
-            $php = max(0.0, $wall - $total - $redisMs - $extMs);
+            $php = max(0.0, $wall - $this->m['db'] - $this->m['redis'] - $this->m['ext']);
             $this->line(sprintf(
                 'LINK %s  BUILD %.0f ms = DB %.0f ms (%d queries) + REDIS %.0f ms (%d cmds) + EXTERNAL %.0f ms (%d calls) + PHP/other %.0f ms',
-                substr((string) $share->id, 0, 8), $wall, $total, $count, $redisMs, $redisN, $extMs, $extN, $php,
+                substr((string) $share->id, 0, 8), $wall, $this->m['db'], $this->m['queries'], $this->m['redis'], $this->m['redisN'], $this->m['ext'], $this->m['extN'], $php,
             ));
             $this->line(sprintf(
                 '  SERIALIZE/RENDER (sanitise + json_encode) %.0f ms · json %d B · cache hit %d miss %d write %d · peak mem %d MB · TOTAL (build+render) %.0f ms',
-                $render, strlen($json), $cache['hit'], $cache['miss'], $cache['write'], memory_get_peak_usage(true) / 1048576, $wall + $render,
+                $render, strlen($json), $this->m['hit'], $this->m['miss'], $this->m['write'], memory_get_peak_usage(true) / 1048576, $wall + $render,
             ));
 
+            /** @var array<string, array{n: int, ms: float, max: float, bindings: array<int, mixed>}> $stats */
+            $stats = $this->m['stats'];
             uasort($stats, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
             $this->line(sprintf('  %-6s %-9s %-9s %-9s %-9s %s', 'runs', 'total ms', 'mean ms', 'max ms', 'finger', 'statement'));
 
@@ -116,10 +116,32 @@ final class ProfileLiveReportCommand extends Command
                 $this->line(sprintf('  %-6d %-9.1f %-9.2f %-9.1f %-9s %s', $s['n'], $s['ms'], $s['ms'] / max(1, $s['n']), $s['max'], substr(md5((string) $sql), 0, 8), substr((string) $sql, 0, 260)));
             }
 
+            $this->explainTop($stats, max(0, (int) $this->option('explain')));
+
             $this->newLine();
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The plans of the heaviest statements, as Postgres ran them. SELECTs only, with the bindings they really ran with.
+     *
+     * @param  array<string, array{n: int, ms: float, max: float, bindings: array<int, mixed>}>  $stats  heaviest first
+     */
+    private function explainTop(array $stats, int $count): void
+    {
+        foreach (array_slice($stats, 0, $count, true) as $sql => $s) {
+            if (! str_starts_with(strtolower(ltrim((string) $sql)), 'select')) {
+                continue;
+            }
+
+            $this->line('  EXPLAIN '.substr(md5((string) $sql), 0, 8));
+
+            foreach (DB::select('EXPLAIN (ANALYZE, BUFFERS) '.$sql, $s['bindings']) as $row) {
+                $this->line('    '.substr((string) (array_values((array) $row)[0] ?? ''), 0, 200));
+            }
+        }
     }
 
     /** Why a link answers 404, from the row itself: revoked, paused, expired or not live. Changes nothing. */

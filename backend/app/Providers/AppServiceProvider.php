@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
+use App\Domains\Campaigns\Services\CreativeResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Campaigns\Support\RefusedCreativeAccess;
@@ -64,6 +65,8 @@ class AppServiceProvider extends ServiceProvider
          * letting whichever scenario ran first pay for a check the second then read for free.
          */
         $this->app->scoped(CreativeDemoPolicy::class);
+        // PERF-RECOVERY-001 — whole-history availability is asked once per account per request.
+        $this->app->scoped(CreativeResultAvailability::class);
         // PERF-RECOVERY-001 — the query count belongs to one request or one job.
         $this->app->scoped(PerformanceRecorder::class);
         // CAMPAIGN-INTELLIGENCE-HUB — the reach reader memoises per (account, window) for one request.
