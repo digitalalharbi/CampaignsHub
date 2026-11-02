@@ -16,6 +16,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { accountHealthLabel, accountHealthTone } from './accountHealth'
+import { ACCOUNT_SET_COPY, selectedOfDiscovered } from './connectionCopy'
 
 /**
  * ORCH-100 §3 §5 §6 — choosing what to connect, after the provider has said what exists.
@@ -592,43 +593,15 @@ export function ConnectionWizard({
               </ul>
 
               {/*
-                Select-all applies to the PAGE, and says so.
-                A control that ticked all three hundred accounts behind one press would commit a
-                decision nobody could review — and on a plan with room for five it would fail at the
-                confirm step having looked like it worked.
+                INTEGRATIONS-CENTRE-001 §3 — every tick is one account, chosen by name.
+                There is no «select all» and no «select this page»: a control that ticked twenty-five
+                accounts behind one press commits a decision nobody reviewed, and on a plan with room
+                for five it fails at the confirm step having looked like it worked. The count below is
+                the whole feedback: what is chosen, out of what this authorisation can see.
               */}
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Button
-                  variant="secondary" size="sm"
-                  data-testid="wizard-select-page"
-                  onClick={() => setSelected((prev) => {
-                    const next = new Set(prev)
-                    for (const a of accounts.data?.accounts ?? []) {
-                      if (!(a.assigned && !(managing && a.assigned_project_id === manageProjectId))) next.add(a.id)
-                    }
-                    return next
-                  })}
-                >
-                  {ar ? 'تحديد هذه الصفحة' : 'Select this page'}
-                </Button>
-                <Button
-                  variant="ghost" size="sm"
-                  data-testid="wizard-clear-page"
-                  onClick={() => setSelected((prev) => {
-                    const next = new Set(prev)
-                    for (const a of accounts.data?.accounts ?? []) next.delete(a.id)
-                    return next
-                  })}
-                >
-                  {ar ? 'إلغاء تحديد الصفحة' : 'Clear this page'}
-                </Button>
-              </div>
-
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span data-testid="wizard-selected-count">
-                  {ar
-                    ? `تم اختيار ${selected.size} من ${accounts.data?.meta.total ?? 0}`
-                    : `${selected.size} of ${accounts.data?.meta.total ?? 0} selected`}
+                  {selectedOfDiscovered(selected.size, accounts.data?.meta.total ?? 0, ar)}
                 </span>
                 {(accounts.data?.meta.last_page ?? 1) > 1 && (
                   <span className="flex items-center gap-2">
@@ -765,7 +738,7 @@ export function ConnectionWizard({
               </div>
             )}
             <div className="flex justify-between gap-3">
-              <dt className="text-text-muted">{ar ? 'الحسابات المختارة' : 'Accounts'}</dt>
+              <dt className="text-text-muted">{ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}</dt>
               <dd className="font-medium">{selected.size}</dd>
             </div>
             <div className="flex justify-between gap-3">

@@ -95,7 +95,7 @@ describe('the Connection Hub', () => {
 
     renderWithProviders(<IntegrationsPage />)
 
-    expect(await screen.findByTestId('hub-accounts-c-1')).toHaveTextContent('1 of 17 accounts')
+    expect(await screen.findByTestId('hub-accounts-c-1')).toHaveTextContent('1 of 17 selected')
   })
 
   it('names who authorised it rather than the connection record', async () => {

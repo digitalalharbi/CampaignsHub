@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, Plus } from 'lucide-react'
 import { fetchConnectionHub, type HubConnection } from './api'
-import { CONNECTION_COPY, SYNC_COPY } from './connectionCopy'
+import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, selectedOfDiscovered } from './connectionCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
-import { Num } from '@/components/ui/Num'
 import { platformColor } from '@/features/analytics/components'
 import { adAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
@@ -127,7 +126,7 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
               testid="hub-kpi-reauth"
             />
             <StatCard
-              label={ar ? 'الحسابات المختارة' : 'Selected accounts'}
+              label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}
               value={selectedAccounts.toLocaleString('en-US')}
               hint={`${ar ? 'من' : 'of'} ${adAccounts(discoveredAccounts, locale)}`}
               tone="neutral"
@@ -244,11 +243,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction }: {
         data-testid={`hub-accounts-${connection.id}`}
         className="inline-flex w-fit items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-text-primary underline-offset-4 hover:bg-surface-secondary hover:underline"
       >
-        {ar ? (
-          <><Num>{connection.selected_accounts}</Num> من <Num>{connection.discovered_accounts}</Num> حساب</>
-        ) : (
-          <><Num>{connection.selected_accounts}</Num> of <Num>{connection.discovered_accounts}</Num> accounts</>
-        )}
+        <span className="tnum">{selectedOfDiscovered(connection.selected_accounts, connection.discovered_accounts, ar)}</span>
       </button>
 
       <div className="flex flex-wrap items-center gap-1.5">

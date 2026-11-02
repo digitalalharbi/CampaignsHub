@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -15,6 +16,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -86,6 +88,34 @@ final class BindingSyncHonoursTheSelectionTest extends TestCase
             ->assertJsonPath('data.status', 'success');
 
         $this->assertGreaterThan(0, ExternalCampaign::withoutGlobalScopes()->where('project_id', $this->project->id)->count());
+    }
+
+    /**
+     * INTEGRATIONS-CENTRE-001 §4 — the second press inside two minutes is refused, and told when the
+     * first one was. The time named is the time of the REQUEST; `last_synced_at` is not it.
+     */
+    public function test_a_second_manual_sync_of_the_same_binding_within_two_minutes_is_refused_with_the_time_of_the_first(): void
+    {
+        $bindingId = $this->bindTheSandboxAccount();
+        $url = "/api/v1/projects/{$this->project->id}/integrations/bindings/{$bindingId}/sync";
+
+        Carbon::setTestNow('2026-11-02 10:00:00');
+        $this->actingAs($this->user, 'sanctum')->postJson($url)->assertOk();
+        $runsAfterFirst = IntegrationSyncRun::withoutGlobalScopes()->where('binding_id', $bindingId)->count();
+
+        Carbon::setTestNow('2026-11-02 10:00:45');
+        $refused = $this->actingAs($this->user, 'sanctum')->postJson($url)
+            ->assertStatus(429)
+            ->assertHeader('Retry-After', '75')
+            ->assertJsonPath('errors.last_requested_at', Carbon::parse('2026-11-02 10:00:00')->toIso8601String())
+            ->assertJsonPath('errors.retry_after_seconds', 75);
+        $this->assertStringContainsString('10:00:00', (string) $refused->json('message'));
+        $this->assertSame($runsAfterFirst, IntegrationSyncRun::withoutGlobalScopes()->where('binding_id', $bindingId)->count(), 'the refused press opened a run');
+
+        Carbon::setTestNow('2026-11-02 10:02:01');
+        $this->actingAs($this->user, 'sanctum')->postJson($url)->assertOk();
+
+        Carbon::setTestNow();
     }
 
     private function bindTheSandboxAccount(): string

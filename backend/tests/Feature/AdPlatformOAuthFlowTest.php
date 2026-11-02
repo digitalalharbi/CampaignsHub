@@ -8,10 +8,13 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -20,6 +23,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -156,6 +160,44 @@ final class AdPlatformOAuthFlowTest extends TestCase
         $this->assertSame($this->tenant->id, $connection->tenant_id);
         $this->assertSame('connected', $connection->status);
         $this->assertSame(2, ExternalAccount::withoutGlobalScopes()->count());
+    }
+
+    /**
+     * INTEGRATIONS-CENTRE-001 §1 — consent catalogues; it selects nothing, binds nothing, fetches nothing.
+     *
+     * The Owner's path is OAuth → organisation → the exact accounts → the project → confirm → sync
+     * those. The first live Snapchat consent catalogued 309 accounts, and the only acceptable number of
+     * bindings, structure jobs, metrics jobs and provider metrics calls after a callback is zero —
+     * however many accounts came back. Asserted on the queue, the bindings table and the HTTP fake.
+     */
+    public function test_a_callback_that_discovers_300_accounts_selects_nothing_binds_nothing_and_queues_nothing(): void
+    {
+        Queue::fake();
+        $this->configure('meta');
+        $this->fakeMeta(array_map(
+            static fn (int $i): array => ['id' => "act_{$i}", 'name' => "Account {$i}", 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
+            range(1, 300),
+        ));
+
+        $state = $this->startAndTakeState('meta');
+
+        $this->get("/api/v1/oauth/ads/meta/callback?code=abc&state={$state}")
+            ->assertRedirectContains('outcome=connected')
+            ->assertRedirectContains('accounts=300');
+
+        $this->assertSame(300, ExternalAccount::withoutGlobalScopes()->count());
+        $this->assertSame(0, ProjectIntegrationBinding::withoutGlobalScopes()->count(), 'the callback bound an account nobody chose');
+        Queue::assertNotPushed(SyncAccountMetricsJob::class);
+        Queue::assertNotPushed(SyncAccountStructureJob::class);
+        Queue::assertNothingPushed();
+
+        // The token exchange and the catalogue edges are the whole conversation: nothing per account.
+        Http::assertNotSent(fn (HttpRequest $request): bool => str_contains($request->url(), '/insights'));
+        Http::assertNotSent(fn (HttpRequest $request): bool => str_contains($request->url(), '/campaigns'));
+        Http::assertNotSent(fn (HttpRequest $request): bool => (bool) preg_match('#/act_\d+#', $request->url()));
+        foreach (Http::recorded() as [$request]) {
+            $this->assertMatchesRegularExpression('#/oauth/access_token|/me/adaccounts|/me/businesses#', $request->url());
+        }
     }
 
     /**

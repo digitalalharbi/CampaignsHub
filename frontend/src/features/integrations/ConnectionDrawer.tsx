@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plug, RefreshCw, X } from 'lucide-react'
+import { Pencil, Plug, X } from 'lucide-react'
 import {
-  getAccountLogs, listAccounts, revokeConnection, syncConnector,
+  getAccountLogs, listAccounts, revokeConnection,
   type HubConnection,
 } from './api'
 import { SelectedAccounts } from './SelectedAccounts'
-import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
+import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { syncStatusMeaning } from '@/lib/syncStatus'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -66,7 +66,6 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
     void queryClient.invalidateQueries({ queryKey: ['integration-accounts'] })
   }
 
-  const sync = useMutation({ mutationFn: () => syncConnector(connection.provider), onSettled: invalidate })
   const revoke = useMutation({ mutationFn: () => revokeConnection(connection.id), onSettled: () => { invalidate(); onClose() } })
 
   return (
@@ -151,11 +150,7 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
             <Settings
               ar={ar}
               connection={connection}
-              busy={{
-                sync: sync.isPending,
-                revoke: revoke.isPending,
-              }}
-              onSync={() => sync.mutate()}
+              busy={{ revoke: revoke.isPending }}
               onRevoke={() => revoke.mutate()}
               onReauthorise={() => onReauthorise(connection)}
             />
@@ -169,7 +164,7 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
 function Overview({ connection, ar }: { connection: HubConnection; ar: boolean }) {
   return (
     <dl className="flex flex-col gap-3 text-sm" data-testid="drawer-overview">
-      <Fact label={ar ? 'الحسابات المختارة' : 'Selected accounts'}>
+      <Fact label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}>
         {ar
           ? <><Num>{connection.selected_accounts}</Num> من <Num>{connection.discovered_accounts}</Num></>
           : <><Num>{connection.selected_accounts}</Num> of <Num>{connection.discovered_accounts}</Num></>}
@@ -313,11 +308,10 @@ function History({ connection, ar }: { connection: HubConnection; ar: boolean })
   )
 }
 
-function Settings({ ar, connection, busy, onSync, onRevoke, onReauthorise }: {
+function Settings({ ar, connection, busy, onRevoke, onReauthorise }: {
   ar: boolean
   connection: HubConnection
-  busy: { sync: boolean; revoke: boolean }
-  onSync: () => void
+  busy: { revoke: boolean }
   onRevoke: () => void
   onReauthorise: () => void
 }) {
@@ -336,8 +330,11 @@ function Settings({ ar, connection, busy, onSync, onRevoke, onReauthorise }: {
 
       <div className="flex flex-col gap-2">
         {/*
-          Re-authorising first when it is needed, because it is the only act that can succeed; a
-          «Sync now» beside it would be a button whose whole job is to fail.
+          INTEGRATIONS-CENTRE-001 §4 — one control per action. «Sync now» lives on each SELECTED
+          account (`SelectedAccounts`), where the server can say which binding it is for and refuse a
+          second press inside two minutes. The connection-wide button that sat here called the legacy
+          `/integrations/{key}/sync` — a second way to start the same work, answering to a different
+          gate — so it is gone rather than hidden.
         */}
         <Button
           variant={reauth ? 'secondary' : 'ghost'}
@@ -351,12 +348,6 @@ function Settings({ ar, connection, busy, onSync, onRevoke, onReauthorise }: {
             ? 'تُجدّد المصادقة فقط. لا تتغيّر الحسابات المختارة ولا ارتباطها بالعملاء.'
             : 'Renews the authorisation only. Your selected accounts and their clients are untouched.'}
         </p>
-
-        {!reauth && (
-          <Button variant="ghost" loading={busy.sync} onClick={onSync} data-testid="drawer-sync-now">
-            <RefreshCw size={14} /> {ar ? 'مزامنة الآن' : 'Sync now'}
-          </Button>
-        )}
       </div>
 
       <div className="border-t border-border pt-4">
@@ -400,7 +391,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 const TABS = {
   overview: { ar: 'نظرة عامة', en: 'Overview' },
-  accounts: { ar: 'الحسابات المختارة', en: 'Selected accounts' },
+  accounts: ACCOUNT_SET_COPY.selected,
   history: { ar: 'سجل المزامنة', en: 'Sync history' },
   settings: { ar: 'الإعدادات', en: 'Settings' },
 } as const

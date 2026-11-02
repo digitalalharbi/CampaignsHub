@@ -170,6 +170,45 @@ describe('SelectedAccounts', () => {
     fireEvent.click(screen.getByTestId('selected-account-manage'))
     expect(onManage).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1', assigned_project_id: 'p-1' }))
   })
+
+  /**
+   * INTEGRATIONS-CENTRE-001 §4 — a press is a REQUEST. «Last sync» is written by the worker when
+   * figures land, so the cell keeps saying what the server said and never takes the time of the
+   * press as the time of a sync.
+   */
+  it('never shows the request time as the last sync after pressing sync now', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true, assigned_project_id: 'p-1', last_synced_at: null })]))
+    vi.mocked(syncAccountNow).mockResolvedValue({ queued: true, will_fetch: true })
+
+    renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('selected-account-sync'))
+    expect(await screen.findByRole('status')).toHaveTextContent('queued')
+
+    expect(screen.getByTestId('selected-account-last-sync')).toHaveTextContent('None')
+    expect(screen.getByTestId('selected-account-last-sync')).not.toHaveTextContent(/\d{4}/)
+  })
+
+  /** The server's two-minute window is reported in the server's words, with the time it names. */
+  it('shows the refusal of a second press within two minutes, naming the first request', async () => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true, assigned_project_id: 'p-1' })]))
+    vi.mocked(syncAccountNow).mockRejectedValue(Object.assign(new Error('Too Many Requests'), {
+      response: {
+        status: 429,
+        data: {
+          message: 'A sync for this account was already requested at 2026-11-02T10:00:00+00:00. It can be requested again in 75 seconds.',
+          errors: { last_requested_at: '2026-11-02T10:00:00+00:00', retry_after_seconds: 75 },
+        },
+      },
+    }))
+
+    renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('selected-account-sync'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already requested at 2026-11-02T10:00:00+00:00')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
 })
 
 /**

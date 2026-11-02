@@ -429,7 +429,7 @@ describe('ConnectionWizard — server-side search and pages, nothing pre-selecte
     const boxes = await screen.findAllByRole('checkbox')
     expect(boxes.length).toBeGreaterThan(1)
     boxes.forEach((box) => expect(box).not.toBeChecked())
-    expect(screen.getByTestId('wizard-selected-count')).toHaveTextContent(/^0 of|^تم اختيار 0/)
+    expect(screen.getByTestId('wizard-selected-count')).toHaveTextContent(/^0 of|^اختير 0/)
   })
 
   it('searches on the server and returns to page one', async () => {

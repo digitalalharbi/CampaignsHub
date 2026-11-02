@@ -153,11 +153,6 @@ export async function connectWithApiKey(
   )
 }
 
-export async function syncConnector(key: string): Promise<{ success: boolean; count: number }> {
-  await ensureCsrfCookie()
-  return postData<{ success: boolean; count: number }>(`/integrations/${key}/sync`)
-}
-
 /*
  * ORCH-100 — the connection wizard's reads.
  *

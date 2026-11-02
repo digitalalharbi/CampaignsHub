@@ -7,6 +7,8 @@ import { fmtDateTime } from '@/lib/datetime'
 import { accounts } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { SelectedAccounts } from './SelectedAccounts'
+import { accountHealthLabel } from './accountHealth'
+import { SYNC_COPY } from './connectionCopy'
 import { fetchEstate, type AccountRow, type ConnectableProvider, type EstateProject } from './api'
 
 /**
@@ -96,14 +98,14 @@ function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, o
             {accounts(project.accounts, ar ? 'ar' : 'en')}
           </span>
           <span className="text-[11px] text-text-muted">
-            {project.last_synced_at === null ? (ar ? 'لم تتم مزامنة بعد' : 'Not synced yet') : `${ar ? 'آخر مزامنة' : 'Last sync'} ${fmtDateTime(project.last_synced_at)}`}
+            {project.last_synced_at === null ? (ar ? SYNC_COPY.NEVER_SYNCED.ar : SYNC_COPY.NEVER_SYNCED.en) : `${ar ? 'آخر مزامنة' : 'Last sync'} ${fmtDateTime(project.last_synced_at)}`}
           </span>
           {project.needs_attention > 0 ? (
             <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning" data-testid="estate-attention">
               {ar ? `${project.needs_attention} تحتاج انتباهًا` : `${project.needs_attention} need attention`}
             </span>
           ) : (
-            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">{ar ? 'سليم' : 'Healthy'}</span>
+            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">{accountHealthLabel('healthy', ar)}</span>
           )}
         </button>
 
