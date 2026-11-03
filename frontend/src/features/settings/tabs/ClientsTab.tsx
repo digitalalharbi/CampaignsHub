@@ -1,3 +1,4 @@
+import { useInAdvertiserPortal } from '@/app/portalPath'
 import { useState } from 'react'
 import { Archive, Building2, Plus } from 'lucide-react'
 import { useClients, useClientActions, type ClientRow } from '../api'
@@ -17,7 +18,28 @@ const MODES = [
   { value: 'self_service', ar: 'خدمة ذاتية', en: 'Self-service' },
 ]
 
+/*
+ * ENSURE-PORTAL-SESSION-001 — `/client-workspaces` is agency-scoped and is served from the AGENCY's tenant. From the
+ * advertiser portal it answers 403 to somebody holding only that, and to somebody holding both it would list, and accept
+ * writes to, another workspace's clients on a page naming this one. So the page does not ask.
+ */
 export function ClientsTab() {
+  const ar = useUi((u) => u.locale) === 'ar'
+
+  if (useInAdvertiserPortal()) {
+    return (
+      <div data-testid="settings-clients-agency-only">
+        <Alert severity="info" title={ar ? 'العملاء من بوابة الوكالة' : 'Clients belong to the agency portal'}>
+          {ar ? 'تُدار قائمة العملاء من بوابة الوكالة، وليست جزءًا من مساحة العمل هذه.' : 'The client list is managed from the agency portal and is not part of this workspace.'}
+        </Alert>
+      </div>
+    )
+  }
+
+  return <AgencyClients />
+}
+
+function AgencyClients() {
   const ar = useUi((u) => u.locale) === 'ar'
   const { data, error, isLoading, isError } = useClients()
   const { create, update, archive } = useClientActions()

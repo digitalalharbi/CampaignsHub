@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Services;
 
+use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Support\ReviewAccess;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -36,18 +38,60 @@ final class PortalResolver
      *
      * The rows are untouched and still active. Nothing was revoked: the day the flag flips back, the
      * same membership resolves again with no migration and no re-grant.
+     *
+     * So are memberships of a workspace the person has LOST (WORKSPACE-SWITCH-001) — see {@see isUsable()}.
      */
     public function membershipsFor(User $user): Collection
     {
         return Membership::query()
             ->forUser($user->id)
             ->active()
-            ->with(['tenant:id,name,slug,account_type', 'scopes'])
+            ->with(['tenant:id,name,slug,account_type,status,settings', 'scopes'])
             ->orderByDesc('is_default')
             ->orderByDesc('last_used_at')
             ->get()
-            ->filter(fn (Membership $m) => $m->portal->isEnabled())
+            ->filter(fn (Membership $m) => $this->isUsable($m))
             ->values();
+    }
+
+    /**
+     * May this membership be worked in right now? (WORKSPACE-SWITCH-001)
+     *
+     * The membership row says the person belongs; this says the workspace is still there to belong to. A portal that
+     * is withdrawn, a workspace that was deleted, one that is suspended or not operating, and a review workspace whose
+     * access has ended all answer no.
+     *
+     * `AccountSuspension` has always said «the person loses THAT workspace», and enforced it only when it was the LAST
+     * one: holding a second workspace kept a suspended one fully reachable, as the default or by a switch. And the
+     * reverse hole: an ended review workspace, as the default, refused every request — the chooser included — however
+     * many live workspaces the person also held. One rule, asked at every door, closes both.
+     */
+    public function isUsable(Membership $membership): bool
+    {
+        if (! $membership->portal->isEnabled()) {
+            return false;
+        }
+
+        // Read without setting the relation: a resolved membership's `tenant` may otherwise carry only a few columns.
+        $tenant = $membership->relationLoaded('tenant')
+            ? $membership->getRelation('tenant')
+            : Tenant::query()->select(['id', 'status', 'settings'])->find($membership->tenant_id);
+
+        return $tenant instanceof Tenant
+            && ! AccountSuspension::isBlockedStatus($tenant->status)
+            && ! ReviewAccess::hasEnded($tenant);
+    }
+
+    /**
+     * The review workspace whose end is the reason this person has nowhere left to go.
+     *
+     * Only asked once nothing usable remains. Without it they would fall through with no scope at all, which is safe
+     * but says nothing; with it, `ResolveMembership` answers `review_ended` and the person is told why.
+     */
+    public function endedReviewMembership(User $user): ?Membership
+    {
+        return Membership::query()->forUser($user->id)->active()->get()
+            ->first(fn (Membership $m) => $m->tenant instanceof Tenant && ReviewAccess::hasEnded($m->tenant));
     }
 
     /**

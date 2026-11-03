@@ -47,6 +47,7 @@ use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
 use App\Domains\Requests\Services\RequestUploadAttacher;
+use App\Domains\Requests\Support\PortalIdShape;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
@@ -1343,7 +1344,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Quote|null $quote */
-        $quote = $ids === [] ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $quote = $ids === [] || ! PortalIdShape::number($id) ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($quote === null, 404);
 
         return $quote;
@@ -1353,7 +1354,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
-        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
+        $invoice = $ids === [] || ! PortalIdShape::number($id) ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
         abort_if($invoice === null, 404);
 
         return $invoice;
@@ -1363,7 +1364,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         /** @var MessageThread|null $thread */
-        $thread = $ids === [] ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $thread = $ids === [] || ! PortalIdShape::uuid($id) ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($thread === null, 404);
 
         return $thread;
@@ -1677,7 +1678,13 @@ final class ClientPortalController
      */
     private function selectedSpaceId(ClientPortalToken $token): ?string
     {
-        $slug = trim((string) (request()->header('X-Client-Space') ?? request()->query('space', '')));
+        $raw = request()->header('X-Client-Space') ?? request()->query('space', '');
+
+        // `?space[]=a&space[]=b` is an array. It is no slug of this contact's, and casting it would be a 500 («Array to string»), which is a
+        // different answer from the 404 every other slug that is not theirs gets.
+        abort_unless(is_string($raw), 404);
+
+        $slug = trim($raw);
 
         if ($slug === '') {
             return null;

@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/stores/auth'
+import { SessionUnreachable } from './WorkspaceFailure'
 
 /**
  * Gate for authenticated routes. Waits for the initial session probe, then redirects guests to
@@ -19,6 +20,9 @@ export function RequireAuth() {
       </div>
     )
   }
+
+  // The server could not say who this is. Not a sign-out: sending them to /login would blame the wrong thing.
+  if (status === 'unreachable') return <SessionUnreachable />
 
   if (status === 'guest') {
     const intended = `${location.pathname}${location.search}${location.hash}`

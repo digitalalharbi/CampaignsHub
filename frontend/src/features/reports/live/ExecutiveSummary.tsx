@@ -203,10 +203,11 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
         aria-selected={on}
         data-testid={`exec-platform-card-${key ?? 'all'}`}
         onClick={() => onSelect(key === null || on ? null : key)}
-        className={`min-w-0 overflow-hidden rounded-2xl border bg-surface text-start transition-colors ${on ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-border hover:border-brand-400'}`}
+        // A flex column: a button centres shorter content vertically, which pushed a card's colour bar down from its top edge.
+        className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-surface text-start transition-colors ${on ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-border hover:border-brand-400'}`}
       >
-        <span className="block h-1.5" style={{ background: color }} aria-hidden />
-        <span className="flex flex-col gap-1 p-3">
+        <span className="block h-1.5 w-full shrink-0" data-testid="exec-platform-card-bar" style={{ background: color }} aria-hidden />
+        <span className="flex w-full flex-1 flex-col gap-1 p-3">
           {/* The platform's logo and name (Owner, 2026-10-19); «all platforms» is a word, not a platform. */}
           <span className="flex min-w-0 text-sm font-bold text-text-primary">
             {key === null ? <span className="truncate">{title}</span> : <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={20} />}
@@ -218,7 +219,7 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
             {rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{rate}</Num></span>}
           </span>
           {share !== null && (
-            <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
+            <span className="mt-auto block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
               <span className="block h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: color }} />
             </span>
           )}
@@ -243,7 +244,7 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
         className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(var(--cards-md),minmax(0,1fr))] xl:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
         style={{ '--cards': Math.min(cards, 6), '--cards-md': cards <= 4 ? cards : 3 } as React.CSSProperties}
       >
-        {rows.length > 1 && card(null, ar ? 'كل المنصات' : 'All platforms', source.total, count(payload.totals?.impressions), ctr(payload.totals ?? {}), null, 'var(--brand-600)')}
+        {rows.length > 1 && card(null, ar ? 'كل المنصات' : 'All platforms', source.total, count(payload.totals?.impressions), ctr(payload.totals ?? {}), total > 0 ? 1 : null, 'var(--brand-600)')}
         {rows.map((p) => {
           const key = canonicalPlatform(p.provider)
           return card(key, providerLabel(key, ar ? 'ar' : 'en'), source.of(p), count(p.impressions), ctr(p), total > 0 ? Number(source.of(p) ?? 0) / total : null, platformColor(key))

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { PhoneField, phoneFieldValue, DEFAULT_DIAL_CODE } from '@/components/ui/PhoneField'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { recallRegistration } from '@/features/signup/api'
 import { useAuth } from '@/stores/auth'
 
 /**
@@ -151,6 +152,7 @@ export function LoginPage() {
    */
   const phoneCompat = import.meta.env.DEV && params.get('e2e') === 'phone'
 
+  const [registrationId] = useState(recallRegistration)
   const [step, setStep] = useState<Step>('credentials')
 
   const [email, setEmail] = useState('')
@@ -180,6 +182,12 @@ export function LoginPage() {
    */
   useEffect(() => {
     if (status !== 'authenticated') return
+    /*
+     * WORKSPACE-SWITCH-001 — the switcher sent this person here because the server refused the session. If the boot probe
+     * still answers 200, bouncing onward returns them to the switcher, which sends them back here, with no end to it.
+     * Here the chain stops and the form waits for a person.
+     */
+    if (params.get('reason') === 'session') return
 
     let cancelled = false
     resolvePostAuthOutcome(params, null)
@@ -299,6 +307,25 @@ export function LoginPage() {
     <AuthShell portal="default">
       {/* AUTH-LOGIN-UX-002 — the sign-in column is at most 440px wide, so every way in reads as one narrow, deliberate stack. */}
       <div data-testid="login-column" className="mx-auto w-full max-w-[440px]">
+      {/* WORKSPACE-SWITCH-001 — sent here because the session ended, so say so; nothing they did was refused. */}
+      {params.get('reason') === 'session' && (
+        <p data-testid="login-session-ended" role="status" className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-secondary">
+          {locale === 'ar' ? 'انتهت جلستك. سجّل الدخول مرة أخرى وستعود إلى حيث كنت.' : 'Your session has ended. Sign in again and you will return to where you were.'}
+        </p>
+      )}
+      {/*
+        An applicant has no account until the workspace exists, so this form cannot admit them. This browser kept the
+        id of their own application; the screen that can actually help them is one link away.
+      */}
+      {registrationId !== null && (
+        <Link
+          data-testid="login-registration-status"
+          to={`/signup/status?request=${encodeURIComponent(registrationId)}`}
+          className="mb-4 block rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold text-brand-600 hover:underline"
+        >
+          {locale === 'ar' ? 'لديك طلب تسجيل قيد المتابعة — اعرض حالته' : 'You have a registration in progress — view its status'}
+        </Link>
+      )}
       <h2 className="font-heading text-[26px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[30px]">
         {step === 'code' ? c.codeTitle : c.title}
       </h2>

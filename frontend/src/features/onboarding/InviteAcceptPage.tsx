@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, LogIn, UserPlus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { acceptExistingInvite, acceptInvite, previewInvite } from './inviteApi'
@@ -9,9 +9,11 @@ import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { resolvePostAuthDestination } from '@/features/auth/postAuthDestination'
+import { completeWorkspaceSwitch } from '@/features/auth/workspaceSwitch'
 
 /** Accept a workspace invitation: set name + password → join the existing workspace → dashboard. */
 export function InviteAcceptPage() {
+  const queryClient = useQueryClient()
   const ar = useUi((s) => s.locale) === 'ar'
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -38,8 +40,8 @@ export function InviteAcceptPage() {
   const signedIn = useAuth((s) => s.user)
   const claim = useMutation({
     mutationFn: () => acceptExistingInvite(token),
-    // A full reload: every cached query belongs to the agency they were in a moment ago.
-    onSuccess: () => { window.location.assign('/') },
+    // Every cached query and the persisted project belong to the workspace they were in a moment ago.
+    onSuccess: () => completeWorkspaceSwitch(queryClient, '/'),
     onError: (e) => setError(toApiError(e).message),
   })
 
