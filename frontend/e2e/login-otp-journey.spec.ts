@@ -125,11 +125,12 @@ test.describe('a session the server recognises', () => {
   })
 })
 
+// Addresses of their own: the same step for anybody, and one contact shared across these would meet the resend window, or a mail transport.
 test.describe('what the code step does when things go wrong', () => {
   test('a wrong code is refused, in the same design, and signs nobody in', async ({ page }) => {
     await page.goto('/portal/login')
     await switchToEnglish(page)
-    await requestCode(page, DEMO_CLIENT_CONTACT)
+    await requestCode(page, 'wrong-code-probe@example.test')
 
     // Clear the pre-filled code and type six digits that are not it.
     for (let i = 5; i >= 0; i--) {
@@ -149,7 +150,7 @@ test.describe('what the code step does when things go wrong', () => {
   /** The resend is closed while the server's own window is closed. */
   test('the resend is disabled and counts down', async ({ page }) => {
     await page.goto('/portal/login')
-    await requestCode(page, DEMO_CLIENT_CONTACT)
+    await requestCode(page, 'cooldown-probe@example.test')
 
     const resend = page.getByTestId('portal-login-resend')
     await expect(resend).toBeDisabled()
@@ -159,12 +160,12 @@ test.describe('what the code step does when things go wrong', () => {
   /** A mistyped address is correctable without a reload, and the card comes back intact. */
   test('changing the address returns to the card', async ({ page }) => {
     await page.goto('/portal/login')
-    await requestCode(page, DEMO_CLIENT_CONTACT)
+    await requestCode(page, 'typo@example.test')
 
     await page.getByTestId('portal-login-change').click()
 
     await expect(page.getByTestId('portal-login-email-form')).toBeVisible()
-    await expect(page.getByTestId('portal-login-email')).toHaveValue(DEMO_CLIENT_CONTACT)
+    await expect(page.getByTestId('portal-login-email')).toHaveValue('typo@example.test')
     await expect(page.getByTestId('portal-login-code')).toHaveCount(0)
   })
 
@@ -197,7 +198,7 @@ test.describe('what the code step does when things go wrong', () => {
      * is not one that means «it arrived», and stays quiet exactly when it is.
      */
     const answered = page.waitForResponse((r) => r.url().includes('/client/login/start') && r.status() === 201)
-    await requestCode(page, DEMO_CLIENT_CONTACT)
+    await requestCode(page, 'delivery-probe@example.test')
     const state = String((await (await answered).json()).data.delivery_status)
 
     /*
