@@ -9,6 +9,9 @@ use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Support\ReportReadMemo;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -739,6 +742,25 @@ final class ObjectivePerformance
     }
 
     private function rows(Carbon $from, Carbon $to): Collection
+    {
+        /*
+         * PERF-RECOVERY-001 — one read per (scope, window) inside a report build.
+         *
+         * The path totals, the strongest-and-weakest, the family split and the attention findings each read these same rows, and the
+         * read is a join and a grouped scan of `daily_metrics` apiece. Everything it depends on is in the key: the constructor's four
+         * bounds, the window, and the tenant and project the global scopes read from. Callers only iterate it.
+         */
+        $ambient = app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId();
+        $bound = static fn (?array $list): string => $list === null ? '*' : implode(',', array_map('strval', $list));
+
+        return ReportReadMemo::remember(
+            'objective-performance|'.$ambient.'|p='.$bound($this->projectIds).'|c='.$bound($this->campaignIds).'|v='.$bound($this->providers).'|a='.$bound($this->accountIds)
+                .'|'.$from->toDateString().'|'.$to->toDateString(),
+            fn (): Collection => $this->readRows($from, $to),
+        );
+    }
+
+    private function readRows(Carbon $from, Carbon $to): Collection
     {
         $query = DailyMetric::query()
             ->when($this->projectIds !== null, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))

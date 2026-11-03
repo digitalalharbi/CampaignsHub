@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Services;
 use App\Domains\Campaigns\Enums\ResultAvailability;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -126,6 +127,19 @@ final class CreativeResultAvailability
             return [];
         }
 
+        // PERF-RECOVERY-001 — who served a creative does not depend on the window, so each distinct list is asked once per build.
+        return ReportReadMemo::remember(
+            'creative-accounts|'.self::scopeKey().'|'.md5(implode(',', $creativeIds)),
+            fn (): array => $this->readAccountsFor($creativeIds),
+        );
+    }
+
+    /**
+     * @param  list<string>  $creativeIds
+     * @return array<string, list<string>>
+     */
+    private function readAccountsFor(array $creativeIds): array
+    {
         $out = [];
 
         $own = DB::table('external_creatives')
