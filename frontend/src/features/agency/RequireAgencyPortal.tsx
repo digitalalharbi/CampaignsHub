@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { AccessRecovery } from '@/features/auth/AccessRecovery'
+import { PortalEntryChoice } from '@/features/auth/PortalEntryChoice'
+import { usePortalEntry } from '@/features/auth/usePortalEntry'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -20,8 +22,9 @@ import { useUi } from '@/stores/ui'
 export function RequireAgencyPortal() {
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
+  const entry = usePortalEntry('agency', state.data)
 
-  if (state.isLoading) {
+  if (state.isLoading || entry.kind === 'moving') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -54,6 +57,8 @@ export function RequireAgencyPortal() {
       </div>
     )
   }
+
+  if (entry.kind === 'choose') return <PortalEntryChoice portal="agency" current={entry.current} targets={entry.targets} />
 
   return <Outlet />
 }

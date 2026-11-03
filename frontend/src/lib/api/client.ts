@@ -4,6 +4,7 @@ import type { InternalAxiosRequestConfig } from 'axios'
 import type { ApiEnvelope } from './types'
 import { describeFailure, isTimeout, Refusal } from './errors'
 import { useUi } from '@/stores/ui'
+import { claimedMembership, leaveChangedWorkspace } from './workspaceClaim'
 
 /**
  * Central Axios client for the SPA. Uses Sanctum cookie-session auth (ADR 0001):
@@ -45,8 +46,19 @@ api.interceptors.response.use((response) => {
   return response
 })
 
+api.interceptors.response.use(undefined, (error: AxiosError<{ code?: string }>) => {
+  // The session moved under this tab. Nothing ran; the screen it is drawing belongs to a workspace it is no longer in.
+  if (error.response?.status === 409 && error.response.data?.code === 'workspace_changed') leaveChangedWorkspace()
+
+  return Promise.reject(error)
+})
+
 api.interceptors.request.use((config) => {
   config.headers.set('Accept-Language', useUi.getState().locale)
+
+  // ENSURE-PORTAL-SESSION-001 — which workspace this tab's screen is drawn for. Only ever gets a request refused.
+  const claim = claimedMembership()
+  if (claim !== null) config.headers.set('X-Workspace-Membership', claim)
 
   return config
 })
@@ -353,8 +365,8 @@ export function toApiError(error: unknown): ApiError {
   }
 }
 
-export async function getData<T>(url: string): Promise<T> {
-  const response = await api.get<ApiEnvelope<T>>(url)
+export async function getData<T>(url: string, config?: { timeout?: number }): Promise<T> {
+  const response = await api.get<ApiEnvelope<T>>(url, config)
   return response.data.data
 }
 

@@ -73,6 +73,12 @@ final class ReviewAccess
         return $review !== null && $review['active'] && ($review['expires_at'] === null || Carbon::parse($review['expires_at'])->isFuture());
     }
 
+    /** A review workspace whose access is over. An ordinary workspace has not «ended»: it was never a review. */
+    public static function hasEnded(?Tenant $tenant): bool
+    {
+        return self::settingsOf($tenant) !== null && ! self::isLive($tenant);
+    }
+
     /** Whether this person belongs to any review workspace at all (live or ended): such a person is never issued an API token. */
     public static function isReviewer(User $user): bool
     {

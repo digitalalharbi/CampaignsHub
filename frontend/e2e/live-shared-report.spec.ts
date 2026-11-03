@@ -38,6 +38,22 @@ test.describe('a client opens their live report', () => {
     await expect(page.getByTestId('live-computed-at')).toHaveCount(0)
   })
 
+  // LIVE-PLATFORM-CARD-ALIGN-001 — every card's colour bar sits on its top edge and every figure on one line, whichever card is selected.
+  test('the platform cards line up, the selected one included', async ({ page }) => {
+    await page.goto(URL)
+    await expect(page.getByTestId('exec-platform-card-all')).toBeVisible({ timeout: 20000 })
+
+    const offsets = await page.getByTestId('exec-platform-cards').locator('[role="tab"]').evaluateAll((cards) => cards.map((card) => {
+      const box = card.getBoundingClientRect()
+
+      return [card.children[0].getBoundingClientRect().top - box.top, card.querySelector('.tnum')!.getBoundingClientRect().top - box.top].map(Math.round)
+    }))
+
+    expect(offsets.length).toBeGreaterThan(1)
+    offsets.forEach((offset) => expect(offset).toEqual(offsets[0]))
+    expect(offsets[0][0]).toBeLessThanOrEqual(1)
+  })
+
   /**
    * The requirement in the brief, stated as a test: filters update the data **without reloading**.
    *
