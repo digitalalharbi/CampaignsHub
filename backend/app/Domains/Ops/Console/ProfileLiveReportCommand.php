@@ -138,8 +138,13 @@ final class ProfileLiveReportCommand extends Command
 
             $this->line('  EXPLAIN '.substr(md5((string) $sql), 0, 8));
 
-            foreach (DB::select('EXPLAIN (ANALYZE, BUFFERS) '.$sql, $s['bindings']) as $row) {
-                $this->line('    '.substr((string) (array_values((array) $row)[0] ?? ''), 0, 200));
+            // One statement that will not explain (timeout, lock, a binding that no longer fits) must not end the profile.
+            try {
+                foreach (DB::select('EXPLAIN (ANALYZE, BUFFERS) '.$sql, $s['bindings']) as $row) {
+                    $this->line('    '.substr((string) (array_values((array) $row)[0] ?? ''), 0, 200));
+                }
+            } catch (\Throwable $e) {
+                $this->line('  EXPLAIN FAILED '.substr(md5((string) $sql), 0, 8).' — '.substr(preg_replace('/\s+/', ' ', $e->getMessage()) ?? '', 0, 160));
             }
         }
     }

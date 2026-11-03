@@ -80,6 +80,11 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes();
  */
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
 
+// PERF-SYNC-ISOLATION-001 — the half-hourly sweep above asks 3 days back; this daily pass re-asks the
+// fortnight in which providers restate (late attribution, corrected spend). Same command, same
+// ledger rows (`scheduled_runs.command` is the artisan name), same assigned-accounts-only gate.
+Schedule::command('integrations:sync --days=14')->dailyAt('03:50')->timezone('Asia/Riyadh')->withoutOverlapping();
+
 // SALLA-ONBOARD-001 — a store uninstalled 30 days ago has its synced data removed (the retention the merchant is promised).
 Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverlapping();
 

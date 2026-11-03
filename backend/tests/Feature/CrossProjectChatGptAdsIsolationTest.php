@@ -17,6 +17,7 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -105,6 +106,9 @@ final class CrossProjectChatGptAdsIsolationTest extends TestCase
 
     public function test_riwaqs_report_carries_no_avenue_spend_after_the_approved_repair_and_avenues_is_unchanged(): void
     {
+        // The live payload stamps `freshness_summary.generated_at` to the second; two reads a second apart are not «changed».
+        Carbon::setTestNow(Carbon::now());
+
         $riwaqBefore = $this->spendOf($this->riwaq, [$this->riwaqOwn, $this->riwaqLeaked]);
         $avenueBefore = $this->payload($this->avenue, [$this->avenueCampaign]);
 
