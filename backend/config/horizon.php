@@ -228,7 +228,10 @@ return [
     'defaults' => [
         'supervisor-1' => [
             'connection' => 'redis',
-            'queue' => ['reports', 'default'],
+            // PERF-SYNC-ISOLATION-001 — `default` only; `reports` and `sync` have their own supervisors
+            // in production (below), and `local` lists all three. Horizon merges environment overrides
+            // with array_replace_recursive, so a SHORTER override list would not replace this one.
+            'queue' => ['default'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,
@@ -242,16 +245,57 @@ return [
     ],
 
     'environments' => [
+        /*
+         * PERF-SYNC-ISOLATION-001 — three supervisors on a one-CPU host shared with other products.
+         *
+         * Measured 2026-11-02: six Snapchat and two TikTok metric syncs ran at once (160 s average,
+         * 361 s max) and starved the web requests beside them (a live report took 66 s, 64 of them in
+         * SQL). Ten workers on one core is not parallelism, it is contention. So:
+         *
+         *   - `sync`    one provider sync at a time, niced, never balanced. Timeout 900 covers the 361 s
+         *               maximum and the structure job's own 900; retry_after (1200) stays above it.
+         *   - `default` two workers for mail, notifications, exports and everything interactive.
+         *   - `reports` one worker, so a report someone is waiting for never queues behind either.
+         *
+         * `supervisor-1` keeps its name (and the defaults above) but now serves `default` only.
+         */
         'production' => [
             'supervisor-1' => [
-                'maxProcesses' => 10,
+                'maxProcesses' => 2,
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
+                'timeout' => 900,
+            ],
+            'supervisor-reports' => [
+                'connection' => 'redis',
+                'queue' => ['reports'],
+                'balance' => false,
+                'maxProcesses' => 1,
+                'maxTime' => 0,
+                'maxJobs' => 0,
+                'memory' => 128,
+                'tries' => 3,
+                'timeout' => 900,
+                'nice' => 0,
+            ],
+            'supervisor-sync' => [
+                'connection' => 'redis',
+                'queue' => ['sync'],
+                'balance' => false,
+                'maxProcesses' => 1,
+                'maxTime' => 0,
+                'maxJobs' => 0,
+                'memory' => 256,
+                'tries' => 3,
+                'timeout' => 900,
+                'nice' => 10,
             ],
         ],
 
         'local' => [
+            // Local: one supervisor watches every queue (including `sync`) so nothing sits unprocessed.
             'supervisor-1' => [
+                'queue' => ['reports', 'default', 'sync'],
                 'maxProcesses' => 3,
             ],
         ],

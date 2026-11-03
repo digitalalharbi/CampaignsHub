@@ -30,12 +30,17 @@ use Illuminate\Support\Carbon;
  *
  * Every platform restates recent days — conversions attribute late, spend is corrected, fraud is
  * refunded. A sweep that only ever asked for today would freeze each day's numbers at their most
- * wrong. Seven days back, re-upserted idempotently, is the shortest window that lets a figure settle.
+ * wrong. Re-upserted idempotently, a window lets a figure settle.
+ *
+ * PERF-SYNC-ISOLATION-001 — the half-hourly sweep asks THREE days back, and a daily pass at 03:50
+ * (`--days=14`, see routes/console.php) re-asks the fortnight in which providers restate. Seven days
+ * every half hour was 48 sweeps a day re-reading days that had already settled, on a one-CPU host
+ * where eight concurrent syncs starved the web requests. Accuracy is kept; the repeated reads are not.
  */
 final class SyncAdPlatformsCommand extends Command
 {
     protected $signature = 'integrations:sync
-        {--days=7 : How many days back to re-ask for, so late attribution can settle}
+        {--days=3 : How many days back to re-ask for, so late attribution can settle}
         {--provider= : Limit the sweep to one platform}';
 
     protected $description = 'Queue a metrics sync for every ad account behind a connected provider.';

@@ -24,7 +24,6 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
-use App\Domains\Metrics\Jobs\FetchPeriodReachJob;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\PeriodReach;
@@ -182,25 +181,20 @@ final class AccountMetricsSyncer
         [$upserted, $skipped, $misfiled] = $this->ingest($account, $result->records, (string) $run->project_id);
 
         /*
-         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is asked for again.
+         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is marked stale.
          *
          * A window's reach is the provider's answer at the moment it was fetched. Once new delivery for
          * any day inside that window has arrived, the old answer describes fewer days than the cards
-         * now show, so every stored window overlapping the synced range is re-requested (queued, one
-         * per window). Windows entirely before the sync are untouched: their delivery did not change.
+         * now show. Nothing is fetched here — a sweep over many accounts and stored windows used to
+         * queue hundreds of jobs. One UPDATE marks the overlapping windows `stale_at`; PeriodReachReader
+         * re-requests a stale window lazily, only when a report actually reads it. Windows entirely
+         * before the sync are untouched: their delivery did not change.
          */
         PeriodReach::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->whereDate('date_to', '>=', $from->toDateString())
             ->whereDate('date_from', '<=', $to->toDateString())
-            ->select('date_from', 'date_to')
-            ->distinct()
-            ->get()
-            ->each(static fn (PeriodReach $w) => FetchPeriodReachJob::dispatch(
-                (string) $account->getKey(),
-                Carbon::parse($w->getRawOriginal('date_from'))->toDateString(),
-                Carbon::parse($w->getRawOriginal('date_to'))->toDateString(),
-            ));
+            ->update(['stale_at' => Carbon::now()]);
 
         /*
          * SNAP-CREATIVE-METRICS-001 — the same window, asked again at the creative level.
