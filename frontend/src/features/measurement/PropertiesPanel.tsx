@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInAdvertiserPortal } from '@/app/portalPath'
 import { BarChart3, Clock, Loader2, RefreshCw } from 'lucide-react'
 import {
   listMeasurementProviders, startMeasurementOAuth, syncMeasurementProperty,
@@ -174,7 +175,12 @@ export function PropertiesPanel() {
 
   const query = useQuery({ queryKey: ['measurement-properties'], queryFn: listMeasurementProviders })
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), enabled: maySeeProjects })
-  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
+  /*
+   * ENSURE-PORTAL-SESSION-001 — agency-scoped, and served from the AGENCY's tenant whatever this screen is in. Asked from
+   * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
+   */
+  const inAdvertiserPortal = useInAdvertiserPortal()
+  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
 
   /*
    * The reader's own project first, then an explicit choice, and never a silent guess.

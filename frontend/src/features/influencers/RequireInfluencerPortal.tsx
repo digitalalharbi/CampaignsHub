@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { AccessRecovery } from '@/features/auth/AccessRecovery'
+import { PortalEntryFailed } from '@/features/auth/PortalEntryFailed'
+import { useEnterPortal } from '@/features/auth/useEnterPortal'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -21,8 +23,9 @@ export function RequireInfluencerPortal() {
   const location = useLocation()
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
+  const entry = useEnterPortal('influencers', state.data)
 
-  if (state.isLoading) {
+  if (state.isLoading || entry === 'moving') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -52,6 +55,8 @@ export function RequireInfluencerPortal() {
       </div>
     )
   }
+
+  if (entry === 'failed') return <PortalEntryFailed memberships={held} />
 
   /*
    * A creator arriving at the portal root goes to their own side (INFL-002).

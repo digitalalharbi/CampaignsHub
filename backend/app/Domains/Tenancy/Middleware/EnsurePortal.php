@@ -7,8 +7,9 @@ namespace App\Domains\Tenancy\Middleware;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
-use App\Domains\Tenancy\Services\MembershipSelector;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\PortalResolver;
+use App\Domains\Tenancy\Support\ReviewAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,15 +23,20 @@ use Symfony\Component\HttpFoundation\Response;
  * identifiers gains nothing that the interface would have hidden.
  *
  * If the active membership is for a different portal but the user genuinely holds one for the portal
- * being requested, we switch to it rather than refusing: following a link into a portal you belong to
- * should just work. Everything else is a 403.
+ * being requested, THIS REQUEST is served from it rather than refused. Everything else is a 403.
+ *
+ * ENSURE-PORTAL-SESSION-001 — and that is all that happens. The session is not touched, and neither is `last_used_at`.
+ * The tabs of a browser share one session and the client sends no workspace of its own, so the session's choice is the
+ * tenant of every request from every tab. This used to write the membership it found back into the session: one call
+ * from one tab re-pointed the requests of all the others, and a write from a screen naming one workspace landed in
+ * another. Only somebody choosing moves the session, through `POST /auth/memberships/switch`. Opening another portal
+ * by link is such a choice, and the SPA's guard (`useEnterPortal`) makes it before that portal's screens ask anything.
  */
 final class EnsurePortal
 {
     public function __construct(
         private readonly MembershipContext $memberships,
         private readonly PortalResolver $resolver,
-        private readonly MembershipSelector $selector,
         private readonly TenantContext $tenants,
     ) {}
 
@@ -74,13 +80,18 @@ final class EnsurePortal
         foreach ($allowed as $portal) {
             $held = $this->resolver->resolve($user, $portal);
             if ($held !== null && $held->portal === $portal) {
-                $this->selector->select($request, $user, (string) $held->getKey());
                 $this->memberships->set($held);
                 // The tenant scope must move with the membership. Leaving it on the previous tenant
                 // would run this request's queries against data the new membership cannot see.
                 $this->tenants->setTenantId($held->tenant_id);
 
-                return $next($request);
+                /*
+                 * `ResolveMembership` applied SALLA-REVIEW-001 to the tenant it resolved, which is not this one. The next
+                 * request can no longer be relied on to catch it, because the session is staying where it is.
+                 */
+                $denied = app(ReviewAccess::class)->deny($request, $user, Tenant::query()->find($held->tenant_id));
+
+                return $denied ?? $next($request);
             }
         }
 

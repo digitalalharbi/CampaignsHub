@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships, type PortalKey } from './memberships'
 import { AccessRecovery } from './AccessRecovery'
+import { PortalEntryFailed } from './PortalEntryFailed'
+import { useEnterPortal } from './useEnterPortal'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -32,8 +34,9 @@ import { useUi } from '@/stores/ui'
 export function RequirePortal({ portal }: { portal: PortalKey }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
+  const entry = useEnterPortal(portal, state.data)
 
-  if (state.isLoading) {
+  if (state.isLoading || entry === 'moving') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -45,6 +48,8 @@ export function RequirePortal({ portal }: { portal: PortalKey }) {
   // Fail-OPEN here on purpose: the server is fail-closed, so a network blip must not lock someone
   // out of a portal they legitimately hold.
   const holds = state.data ? state.data.memberships.some((m) => m.portal === portal) : true
+
+  if (entry === 'failed') return <PortalEntryFailed memberships={state.data?.memberships ?? []} />
 
   if (holds) return <Outlet />
 
