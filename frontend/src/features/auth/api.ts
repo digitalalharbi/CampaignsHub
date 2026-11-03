@@ -120,6 +120,29 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
+/**
+ * The same probe, saying WHICH «no user» this is (WORKSPACE-SWITCH-001).
+ *
+ * `fetchCurrentUser` answers null for a guest and for a server that could not say; the callers refreshing an existing
+ * session want that. The boot probe does not: «you are not signed in» and «we could not tell» lead to different screens.
+ */
+export async function probeSession(): Promise<{ user: AuthUser | null; unreachable: boolean }> {
+  try {
+    const { user } = await getData<UserEnvelope>('/auth/me')
+    return { user, unreachable: false }
+  } catch (error) {
+    if (isDefinitelyGuest(error)) return { user: null, unreachable: false }
+
+    try {
+      await ensureCsrfCookie()
+      const { user } = await getData<UserEnvelope>('/auth/me')
+      return { user, unreachable: false }
+    } catch (second) {
+      return { user: null, unreachable: !isDefinitelyGuest(second) }
+    }
+  }
+}
+
 /** Only the server's own "not authenticated" counts. 401 and 403 are answers; everything else is noise. */
 function isDefinitelyGuest(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status

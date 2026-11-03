@@ -27,7 +27,7 @@ import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/Pag
 import { StatCard } from '@/components/ui/StatCard'
 import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
-import { usePortalPath } from '@/app/portalPath'
+import { useInAdvertiserPortal, usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
 import { adAccounts, campaigns as countedCampaigns, days as countedDays, hours as countedHours, members } from '@/lib/counted'
 import { useAuth } from '@/stores/auth'
@@ -223,7 +223,12 @@ export function ProjectsPage() {
     queryKey: ['projects', { showArchived }],
     queryFn: () => listProjects(showArchived),
   })
-  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
+  /*
+   * ENSURE-PORTAL-SESSION-001 — agency-scoped, and served from the AGENCY's tenant whatever this screen is in. Asked from
+   * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
+   */
+  const inAdvertiserPortal = useInAdvertiserPortal()
+  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
   const wsById = new Map<string, ClientWorkspace>((workspaces.data ?? []).map((w) => [w.id, w]))
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['projects'] })
