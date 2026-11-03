@@ -499,6 +499,9 @@ export interface AdminRegistration {
   plan_code: string | null
   email_verified: boolean
   mobile_verified: boolean
+  /** `not_required_by_policy` means nobody asked, never that it was proved. Absent on an older payload. */
+  verification?: { email: 'verified' | 'required' | 'not_required_by_policy'; mobile: 'verified' | 'required' | 'not_required_by_policy' }
+  effective_policy?: { switches?: { email?: boolean; mobile?: boolean }; settings_version?: number; taken_at?: string } | null
   next_step: string | null
   reason: string | null
   provisioned: boolean
@@ -512,6 +515,7 @@ export interface AdminRegistration {
 }
 
 export interface RegistrationGates {
+  requires_email?: boolean
   requires_mobile: boolean
   requires_approval: boolean
   requires_payment: boolean
@@ -573,6 +577,68 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
   policy: RegistrationGates
 }> {
   return patchData(`/admin/registrations/${id}`, terms)
+}
+
+/** SIGNUP-VERIFY-POLICY-001 — move one application to the current verification policy, with a reason. */
+export function reevaluateRegistrationVerification(id: string, reason: string): Promise<{
+  registration: AdminRegistration
+  policy: RegistrationGates
+}> {
+  return postData(`/admin/registrations/${id}/reevaluate-verification`, { reason })
+}
+
+export interface RegistrationVerificationPolicy {
+  email_enabled: boolean
+  mobile_enabled: boolean
+  email_daily_cap: number | null
+  sms_daily_cap: number | null
+  per_application_daily_cap: number | null
+  email_unit_cost: string | null
+  sms_unit_cost: string | null
+  cost_currency: string | null
+  budget_alert_percent: number
+  unverified_signups_daily_cap: number
+  version: number
+}
+
+export interface RegistrationVerificationChannel {
+  gate: 'enabled' | 'disabled'
+  /** A separate question from the gate: a disabled gate is a decision, a missing provider is a fault. */
+  provider: 'configured' | 'not_configured'
+  last_24h: { attempted: number; delivered: number; blocked: number }
+  delivered_30d: number
+  cap: number | null
+  alert: 'ok' | 'near_cap' | 'at_cap' | 'no_cap'
+  unit_cost: string | null
+  currency: string | null
+  /** Null means unknown, because no rate was entered. Never read it as zero. */
+  estimated_cost_30d: string | null
+  cost_known: boolean
+}
+
+export interface RegistrationVerificationOverview {
+  policy: RegistrationVerificationPolicy
+  channels: { email: RegistrationVerificationChannel; mobile: RegistrationVerificationChannel }
+  open_applications: { at_email_gate: number; at_mobile_gate: number }
+  unverified_signups_last_24h: number
+  counted_since: string | null
+  changes: Array<{
+    at: string | null
+    user_id: number | null
+    reason: string | null
+    before: Partial<RegistrationVerificationPolicy> | null
+    after: Partial<RegistrationVerificationPolicy> | null
+  }>
+}
+
+export function fetchRegistrationVerificationPolicy(): Promise<RegistrationVerificationOverview> {
+  return getData('/admin/registration-verification-policy')
+}
+
+export function saveRegistrationVerificationPolicy(
+  policy: Omit<RegistrationVerificationPolicy, 'version'> & { reason: string; expected_version: number; confirm_risk: boolean },
+): Promise<RegistrationVerificationOverview> {
+  return putData('/admin/registration-verification-policy', policy)
 }
 
 /*

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Activity, Clock, FileText, Globe, Layers, MessageSquareQuote, Plug, ShieldCheck } from 'lucide-react'
+import { Activity, Clock, FileText, Globe, Layers, MailCheck, MessageSquareQuote, Plug, ShieldCheck } from 'lucide-react'
 import { PublicPagesSettingsPage } from '@/features/settings/PublicPagesSettingsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
+import { RegistrationPolicyTab } from './RegistrationPolicyTab'
 import { IntegrationsTab, PermissionsTab, ScheduledWorkTab, StatusTab } from './PlatformOpsTabs'
 import { useUi } from '@/stores/ui'
 
@@ -20,9 +21,11 @@ import { useUi } from '@/stores/ui'
  * The engines behind each tab are the existing ones, mounted here — not reimplemented.
  */
 
-type TabKey = 'public-site' | 'portals' | 'taxonomies' | 'services' | 'permissions' | 'integrations' | 'status' | 'scheduled'
+type TabKey = 'registration' | 'public-site' | 'portals' | 'taxonomies' | 'services' | 'permissions' | 'integrations' | 'status' | 'scheduled'
 
 const TABS: { key: TabKey; ar: string; en: string; icon: typeof Globe }[] = [
+  // SIGNUP-VERIFY-POLICY-001 — a platform policy, so it lives with the platform's settings rather than on a page of its own.
+  { key: 'registration', ar: 'التسجيل والتحقق', en: 'Registration & verification', icon: MailCheck },
   { key: 'public-site', ar: 'الموقع العام', en: 'Public site', icon: Globe },
   { key: 'portals', ar: 'ملاحظات البوابات', en: 'Portal notes', icon: MessageSquareQuote },
   { key: 'taxonomies', ar: 'التصنيفات', en: 'Taxonomies', icon: Layers },
@@ -80,6 +83,7 @@ export function SystemSettingsPage() {
       </div>
 
       <div role="tabpanel">
+        {tab === 'registration' && <RegistrationPolicyTab />}
         {tab === 'public-site' && <PublicPagesSettingsPage />}
         {tab === 'portals' && (
           <SettingsPage

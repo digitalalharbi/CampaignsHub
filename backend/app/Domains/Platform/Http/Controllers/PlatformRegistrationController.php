@@ -8,6 +8,7 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
 use App\Domains\Accounts\Services\RegistrationPolicy;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
@@ -17,6 +18,7 @@ use App\Support\ApiResponse;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -39,6 +41,7 @@ final class PlatformRegistrationController extends Controller
         private readonly RegistrationPolicy $policy,
         private readonly AuditLogger $audit,
         private readonly SubscriptionNotifier $notify,
+        private readonly RegistrationVerificationSettings $verificationSettings,
     ) {}
 
     /** GET /api/v1/admin/registrations */
@@ -205,6 +208,13 @@ final class PlatformRegistrationController extends Controller
 
         $this->refuseIfSettled($registration);
 
+        // A mobile gate with no number on file is a step nobody could ever finish.
+        abort_if(
+            ($data['requires_mobile'] ?? false) === true && $registration->phone === null,
+            422,
+            __('accounts.no_mobile_on_file'),
+        );
+
         $concessions = $registration->review_concessions ?? [];
         $overrides = (array) ($concessions['policy'] ?? []);
 
@@ -246,6 +256,44 @@ final class PlatformRegistrationController extends Controller
     }
 
     /**
+     * POST /api/v1/admin/registrations/{registration}/reevaluate-verification
+     *
+     * An application keeps the verification policy it was opened under (SIGNUP-VERIFY-POLICY-001). This is the one way
+     * to move it to today's, for this application only and with a reason: a global switch never does it silently.
+     */
+    public function reevaluateVerification(Request $request, RegistrationRequest $registration): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:2000']]);
+
+        $this->refuseIfSettled($registration);
+
+        $snapshot = $this->verificationSettings->snapshot();
+
+        $registration = DB::transaction(function () use ($registration, $snapshot, $data, $request): RegistrationRequest {
+            /** @var RegistrationRequest $locked */
+            $locked = RegistrationRequest::query()->lockForUpdate()->findOrFail($registration->getKey());
+            $this->refuseIfSettled($locked);
+
+            // A mobile gate with no number on file is a step nobody could ever finish, so it is refused rather than made.
+            $probe = clone $locked;
+            $probe->effective_policy = $snapshot;
+            abort_if(
+                $locked->phone === null && $this->policy->for($probe)['requires_mobile'],
+                422,
+                __('accounts.no_mobile_on_file'),
+            );
+
+            return $this->advance->reevaluateVerification($locked, $snapshot, $data['reason'], $request->user()?->id);
+        });
+
+        return ApiResponse::success(
+            ['registration' => $this->row($registration, $request), 'policy' => $this->policy->for($registration)],
+            'This application now follows the current verification policy.',
+        );
+    }
+
+    /**
      * A decided application is not re-decidable here.
      *
      * Approving something that already has a workspace would run the whole path again; rejecting one
@@ -282,6 +330,7 @@ final class PlatformRegistrationController extends Controller
             'reviewed_at' => $registration->reviewed_at?->toIso8601String(),
             'reviewed_by' => $registration->reviewed_by,
             'concessions' => $registration->review_concessions,
+            'effective_policy' => $registration->effective_policy,
             'created_at' => $registration->created_at?->toIso8601String(),
             'tenant_id' => $registration->tenant_id,
         ];

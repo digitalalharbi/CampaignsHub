@@ -14,11 +14,13 @@ vi.mock('./api', async (orig) => {
     rejectRegistration: vi.fn(),
     requestRegistrationInfo: vi.fn(),
     updateRegistrationTerms: vi.fn(),
+    reevaluateRegistrationVerification: vi.fn(),
   }
 })
 
 import {
-  approveRegistration, fetchRegistration, fetchRegistrations, rejectRegistration, updateRegistrationTerms,
+  approveRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
+  updateRegistrationTerms,
 } from './api'
 
 const application = (over: Partial<AdminRegistration> = {}): AdminRegistration => ({
@@ -167,5 +169,33 @@ describe('RegistrationsPage', () => {
     fireEvent.click(await screen.findByTestId('registration-row'))
 
     expect(await screen.findByTestId('registration-history')).toHaveTextContent('registration.started')
+  })
+
+  /* SIGNUP-VERIFY-POLICY-001 */
+  it('says an unasked verification is unverified, and moves one application only with a reason', async () => {
+    vi.mocked(fetchRegistrations).mockResolvedValue({
+      registrations: [application()], meta: { total: 1, per_page: 25, current_page: 1 }, counts: {},
+    })
+    vi.mocked(fetchRegistration).mockResolvedValue(detail({
+      email_verified: false, verification: { email: 'not_required_by_policy', mobile: 'required' },
+    }))
+    vi.mocked(reevaluateRegistrationVerification).mockResolvedValue({
+      registration: application(), policy: { requires_mobile: false, requires_approval: true, requires_payment: false },
+    })
+
+    renderWithProviders(<RegistrationsPage />)
+    fireEvent.click(await screen.findByTestId('registration-row'))
+
+    const standing = await screen.findByTestId('registration-standing-email')
+    expect(standing).toHaveAttribute('data-done', 'false')
+    expect(standing).toHaveAttribute('data-standing', 'not_required_by_policy')
+
+    fireEvent.click(screen.getByTestId('registration-reevaluate-open'))
+    fireEvent.click(screen.getByTestId('registration-reevaluate-confirm'))
+    expect(reevaluateRegistrationVerification).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText(/Why|سبب/), { target: { value: 'Mail provider outage' } })
+    fireEvent.click(screen.getByTestId('registration-reevaluate-confirm'))
+    await waitFor(() => expect(reevaluateRegistrationVerification).toHaveBeenCalledWith('reg-1', 'Mail provider outage'))
   })
 })
