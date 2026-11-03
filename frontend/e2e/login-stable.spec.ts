@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test'
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
-const LANDMARKS = ['login-email', 'login-password', 'login-methods', 'login-foot-link']
+const LANDMARKS = ['login-email', 'login-password', 'login-methods', 'login-help-open']
 
 const boxes = (page: Page) => page.evaluate((ids) => Object.fromEntries(ids.map((id) => {
   const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
@@ -42,7 +42,7 @@ for (const [width, height] of [[390, 844], [1366, 768]]) {
 
         release()
         await expect(page.getByTestId('login-google-reserved')).toHaveCount(0, { timeout: 45_000 })
-        await expect(page.getByTestId(outcome === 'says Google is unavailable' ? 'login-client-door' : 'login-google')).toBeVisible()
+        await expect(page.getByTestId(outcome === 'says Google is unavailable' ? 'login-home' : 'login-google')).toBeVisible()
         expect(await boxes(page)).toEqual(before)
         await expect(page.getByTestId('login-request-code')).toHaveCount(0)
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
