@@ -11,6 +11,14 @@
    broken by this. What was broken is the sentence: it invited the next author to write the
    form that renders nothing. `ThemeTokenCoverageTest` now refuses that form. */
 @theme {
+  /*
+   * UX-MOTION-TOKENS-001 — every bare `transition`, `transition-colors` and `transition-opacity`
+   * utility now takes the product's control duration and curve, so the ~200 call sites that never
+   * named a number move in one voice without being edited one by one. (Tailwind's own default was
+   * 150ms on an ease-in-out curve.)
+   */
+  --default-transition-duration: var(--motion-control);
+  --default-transition-timing-function: var(--motion-ease);
   /* Color */
   --color-background: var(--background);
   --color-surface: var(--surface);
