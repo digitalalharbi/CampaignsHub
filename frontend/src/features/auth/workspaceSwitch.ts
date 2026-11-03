@@ -18,14 +18,18 @@ import { useAuth } from '@/stores/auth'
 
 const SIGNAL_KEY = 'chub:workspace-switched'
 
-/** Every path that has just changed workspace ends here. */
-export function completeWorkspaceSwitch(queryClient: QueryClient, destination: string): void {
+/**
+ * Every path that has just changed workspace ends here.
+ *
+ * `othersGoTo` is for a switch made on the way to one specific page: that page means something to this tab only.
+ */
+export function completeWorkspaceSwitch(queryClient: QueryClient, destination: string, othersGoTo: string = destination): void {
   queryClient.clear()
   clearStaleWorkspaceSelection()
 
   try {
     // A fresh timestamp, so moving twice to the same place still fires `storage` in the other tabs.
-    window.localStorage.setItem(SIGNAL_KEY, JSON.stringify({ destination, at: Date.now() }))
+    window.localStorage.setItem(SIGNAL_KEY, JSON.stringify({ destination: othersGoTo, at: Date.now() }))
   } catch {
     /* private mode: this tab still moves; the others re-scope on their next load */
   }
