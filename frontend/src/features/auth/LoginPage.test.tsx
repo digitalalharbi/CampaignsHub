@@ -145,18 +145,16 @@ describe('LoginPage — the sign-in card', () => {
     expect(await screen.findByTestId('login-error')).toBeInTheDocument()
   })
 
-  it('fills Google’s row with the client portal when the server says Google cannot work, leaving no gap', async () => {
+  it('fills Google’s row with the way home when the server says Google cannot work, leaving no gap', async () => {
     vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
     ])
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await waitFor(() => expect(screen.getByTestId('login-client-door').tagName).toBe('BUTTON'))
+    await waitFor(() => expect(screen.getByTestId('login-home')).toBeInTheDocument())
     expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
     expect(screen.queryByTestId('login-google-reserved')).not.toBeInTheDocument()
-    expect(screen.getByTestId('login-methods')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to the home page' })).toHaveAttribute('href', '/')
   })
 
   it('hands a link aimed at the portal to the contact’s own door, with its destination', () => {
@@ -166,11 +164,13 @@ describe('LoginPage — the sign-in card', () => {
     expect(screen.queryByTestId('login-identify')).not.toBeInTheDocument()
   })
 
-  it('points a client contact at their own door', () => {
+  it('offers no client portal link and no choice of account type, in either language', () => {
     signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
 
-    expect(screen.getByTestId('login-client-door')).toHaveAttribute('href', '/portal/login')
+    expect(screen.queryByTestId('login-client-door')).not.toBeInTheDocument()
+    expect(screen.queryByText(/بوابة العملاء/)).not.toBeInTheDocument()
+    expect(document.querySelector('a[href="/portal/login"]')).toBeNull()
   })
 
   it('words the Google route in Arabic as «الدخول عبر Google»', async () => {
