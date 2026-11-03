@@ -15,7 +15,7 @@ describe('the report footer', () => {
     expect(screen.getByTestId('report-footer-note')).toHaveTextContent(REPORT_NOTE.ar)
     expect(REPORT_NOTE.ar).toBe('ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.')
     const meta = screen.getByTestId('report-footer-meta').textContent ?? ''
-    const order = ['آخر تحديث', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة'].map((l) => meta.indexOf(l))
+    const order = ['آخر تحديث للتقرير', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة'].map((l) => meta.indexOf(l))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
@@ -23,7 +23,18 @@ describe('the report footer', () => {
   it('leaves out a fact that has no value instead of printing a dash', () => {
     const labels = reportFooterItems({ ...facts, objective: null, timezone: null }, 'ar').map(([k]) => k)
 
-    expect(labels).toEqual(['آخر تحديث', 'الفترة', 'العملة'])
+    expect(labels).toEqual(['آخر تحديث للتقرير', 'الفترة', 'العملة'])
+  })
+
+  it('states the time in the report’s zone with Latin digits, whatever the reader’s clock, in both languages', () => {
+    // 21:30Z is already the next day in Riyadh (UTC+3).
+    const at = { updatedAt: '2026-11-02T21:30:00Z', timezone: 'Asia/Riyadh' }
+
+    expect(reportFooterItems(at, 'ar')[0]).toEqual(['آخر تحديث للتقرير', '2026-11-03 00:30'])
+    expect(reportFooterItems(at, 'en')[0]).toEqual(['Report last updated', '2026-11-03 00:30'])
+    expect(reportFooterItems({ updatedAt: at.updatedAt, timezone: null }, 'en')[0][1]).toBe('2026-11-03 00:30')
+    expect(reportFooterItems({ updatedAt: at.updatedAt, timezone: 'Not/AZone' }, 'en')[0][1]).toBe('2026-11-03 00:30')
+    expect(reportFooterItems({ updatedAt: at.updatedAt, timezone: 'UTC' }, 'en')[0][1]).toBe('2026-11-02 21:30')
   })
 
   it('keeps the long explanation behind «معرفة المزيد» and shows it only when asked', () => {

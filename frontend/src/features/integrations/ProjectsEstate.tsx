@@ -82,9 +82,9 @@ function EstateRow({ project, ar, open, onToggle, menuOpen, onMenu, providers, o
   return (
     <li className="rounded-2xl border border-border bg-surface" data-testid="estate-row">
       <div className="flex flex-wrap items-center gap-3 p-3">
-        <button type="button" onClick={onToggle} aria-expanded={open} data-testid={`estate-toggle-${project.project_id}`} className="flex min-w-0 flex-1 items-center gap-3 text-start">
+        <button type="button" onClick={onToggle} aria-expanded={open} data-testid={`estate-toggle-${project.project_id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-start">
           <Chevron size={16} className="shrink-0 text-text-muted" aria-hidden />
-          <span className="truncate text-sm font-bold text-text-primary">{project.project_name}</span>
+          <span className="min-w-0 max-w-full truncate text-sm font-bold text-text-primary">{project.project_name}</span>
           <span className="flex items-center gap-1">
             {project.providers.map((p) => <ProviderMark key={p} provider={p} size={18} />)}
           </span>

@@ -11,7 +11,7 @@ import { DEMO_CLIENT_CONTACT, signIn, signInWithCode } from './helpers'
 test.use({ storageState: { cookies: [], origins: [] } })
 
 /** Every address that used to be its own sign-in page. */
-const OLD_DOORS = ['/admin/login', '/app/login', '/agency/login', '/portal/login', '/influencers/login'] as const
+const OLD_DOORS = ['/admin/login', '/app/login', '/agency/login', '/influencers/login'] as const
 
 test.describe('the portal chooser is gone', () => {
   test('the sign-in page offers no portal to choose', async ({ page }) => {
@@ -46,6 +46,13 @@ test.describe('the old doors', () => {
       await expect(page.getByTestId('login-identify')).toBeVisible()
     })
   }
+
+  // LOGIN-NO-EMAIL-CODE-001 — not an old door any more: it is the client contact's own.
+  test('/portal/login is the client portal door, and no password is asked', async ({ page }) => {
+    await page.goto('/portal/login')
+    await expect(page.getByTestId('portal-login-email')).toBeVisible()
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
+  })
 
   /**
    * Back must work.
@@ -106,11 +113,11 @@ test.describe('the server picks the portal, not the URL', () => {
  */
 test.describe('the code branch of the same door', () => {
   test('a client contact is offered a code, not a password', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByTestId('login-email').fill(DEMO_CLIENT_CONTACT)
-    await page.getByTestId('login-request-code').click()
+    await page.goto('/portal/login')
+    await page.getByTestId('portal-login-email').fill(DEMO_CLIENT_CONTACT)
+    await page.getByTestId('portal-login-send').click()
 
-    await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('portal-login-code')).toBeVisible({ timeout: 20000 })
     // The card it came from is gone, password field and all — one step at a time.
     await expect(page.getByTestId('login-password')).toHaveCount(0)
     await expect(page.locator('input[type="password"]')).toHaveCount(0)
@@ -128,16 +135,16 @@ test.describe('the code branch of the same door', () => {
      * this fail on the second browser of a full run for a reason that had nothing to do with signing
      * in. The claim under test is that a one-time code produces a portal session.
      */
-    await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20000 })
-    await expect(page.getByTestId('login-code')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/portal(\/(?!login)|$)/, { timeout: 20000 })
+    await expect(page.getByTestId('portal-login-code')).toHaveCount(0)
   })
 
   test('the code session survives a reload and a direct link', async ({ page }) => {
     await signInWithCode(page, DEMO_CLIENT_CONTACT)
-    await expect(page).toHaveURL(/\/portal/, { timeout: 20000 })
+    await expect(page).toHaveURL(/\/portal(\/(?!login)|$)/, { timeout: 20000 })
 
     await page.reload()
-    await expect(page).toHaveURL(/\/portal/)
+    await expect(page).toHaveURL(/\/portal(\/(?!login)|$)/)
     await expect(page).not.toHaveURL(/\/login/)
 
     await page.goto('/portal')
@@ -145,8 +152,9 @@ test.describe('the code branch of the same door', () => {
   })
 
   test('a contact who is bounced to the door comes back to where they were going', async ({ page }) => {
-    await page.goto('/portal/login?redirect=%2Fportal%2Frequests')
-    await expect(page).toHaveURL(/\/login\?redirect=/)
+    // Through `/login`, as a stale link does: it is handed on to the contact's own door with its destination.
+    await page.goto('/login?redirect=%2Fportal%2Frequests')
+    await expect(page).toHaveURL(/\/portal\/login\?redirect=/)
 
     await signInWithCode(page, DEMO_CLIENT_CONTACT)
     await expect(page).toHaveURL(/\/portal\/requests/, { timeout: 20000 })

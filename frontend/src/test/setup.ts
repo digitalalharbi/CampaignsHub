@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { forgetClaimedMembership } from '@/lib/api/workspaceClaim'
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>()
@@ -58,4 +59,7 @@ if (!('ResizeObserver' in globalThis)) {
 }
 
 // Unmount React trees between tests so queries don't leak across cases.
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  forgetClaimedMembership()
+})

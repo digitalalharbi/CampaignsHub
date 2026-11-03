@@ -278,10 +278,17 @@ final class OperationalReadinessTest extends TestCase
      */
     public function test_the_horizon_supervisor_watches_every_queue_this_application_uses(): void
     {
-        $queues = config('horizon.defaults.supervisor-1.queue');
+        // PERF-SYNC-ISOLATION-001 — production splits the queues across supervisors; the UNION must still cover all three.
+        $queues = [];
+
+        foreach ((array) config('horizon.environments.production') as $name => $settings) {
+            $merged = array_replace_recursive((array) config("horizon.defaults.{$name}", []), $settings);
+            $queues = array_merge($queues, (array) ($merged['queue'] ?? []));
+        }
 
         $this->assertContains('reports', $queues);
         $this->assertContains('default', $queues);
+        $this->assertContains('sync', $queues);
         // And it keeps the retry guarantee the runbook's `queue:work` line always gave.
         $this->assertSame(3, config('horizon.defaults.supervisor-1.tries'));
 

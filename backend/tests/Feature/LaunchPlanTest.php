@@ -206,6 +206,8 @@ final class LaunchPlanTest extends TestCase
     {
         return ExternalCreative::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'provider' => $provider,
+            // A creative is read only while the account behind it is selected for the project.
+            'external_account_id' => ExternalAccount::withoutGlobalScopes()->where('provider', $provider)->value('id'),
             'external_creative_id' => $externalId, 'name' => 'Hero video', 'format' => 'video', 'status' => 'active',
         ]);
     }

@@ -75,32 +75,6 @@ export async function phoneSignInVerify(verificationId: string, code: string, re
  * configured and NOTHING was sent — the page must not say «check your inbox» as though something
  * were on its way.
  */
-export async function emailCodeStart(email: string): Promise<{
-  verification_id: string
-  delivery_status: string
-  resend_after: number
-  /** AUTH-LOGIN-UX-002 — how long the code lives; the page says when it has expired. */
-  expires_in_minutes?: number
-  dev_code: string | null
-}> {
-  await ensureCsrfCookie()
-  return postData('/auth/email-code/start', { email })
-}
-
-export async function emailCodeVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
-  await ensureCsrfCookie()
-  const { user } = await postData<{ user: AuthUser }>('/auth/email-code/verify', {
-    verification_id: verificationId, code, remember,
-  })
-
-  return user
-}
-
-export async function signInMethod(identifier: string): Promise<{ method: 'password' | 'code'; channel: 'email' | 'sms' }> {
-  await ensureCsrfCookie()
-  return postData<{ method: 'password' | 'code'; channel: 'email' | 'sms' }>('/auth/method', { identifier })
-}
-
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
   const { user } = await postData<UserEnvelope>('/auth/login', input)
@@ -142,6 +116,29 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
       return user
     } catch {
       return null
+    }
+  }
+}
+
+/**
+ * The same probe, saying WHICH «no user» this is (WORKSPACE-SWITCH-001).
+ *
+ * `fetchCurrentUser` answers null for a guest and for a server that could not say; the callers refreshing an existing
+ * session want that. The boot probe does not: «you are not signed in» and «we could not tell» lead to different screens.
+ */
+export async function probeSession(): Promise<{ user: AuthUser | null; unreachable: boolean }> {
+  try {
+    const { user } = await getData<UserEnvelope>('/auth/me')
+    return { user, unreachable: false }
+  } catch (error) {
+    if (isDefinitelyGuest(error)) return { user: null, unreachable: false }
+
+    try {
+      await ensureCsrfCookie()
+      const { user } = await getData<UserEnvelope>('/auth/me')
+      return { user, unreachable: false }
+    } catch (second) {
+      return { user: null, unreachable: !isDefinitelyGuest(second) }
     }
   }
 }
@@ -190,8 +187,6 @@ export interface OAuthProvider {
 }
 
 /** AUTH-LOGIN-UX-002 — which ways in the page may offer right now (a way that cannot work is not shown). */
-export interface SignInMethods { password: { available: boolean }; email_code: { available: boolean } }
-export const fetchSignInMethods = (): Promise<SignInMethods> => getData<SignInMethods>('/auth/methods')
 
 export async function fetchOAuthProviders(): Promise<OAuthProvider[]> {
   const { providers } = await getData<{ providers: OAuthProvider[] }>('/auth/oauth/providers')

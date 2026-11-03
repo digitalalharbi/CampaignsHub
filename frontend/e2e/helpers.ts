@@ -532,11 +532,11 @@ export async function signIn(page: Page, email: string, password = 'password'): 
  * immediately, and submitting before `POST /client/login/start` has answered sends an empty code.
  */
 export async function signInWithCode(page: Page, contact: string): Promise<void> {
-  await openLogin(page)
-  await page.getByTestId('login-email').fill(contact)
-  await page.getByTestId('login-request-code').click()
+  await page.goto(page.url().includes('/portal/login') ? page.url() : '/portal/login')
+  await page.getByTestId('portal-login-email').fill(contact)
+  await page.getByTestId('portal-login-send').click()
 
-  const form = page.getByTestId('login-code')
+  const form = page.getByTestId('portal-login-code')
   await expect(
     form,
     `${contact} was not offered a code step — the server says it signs in another way`,

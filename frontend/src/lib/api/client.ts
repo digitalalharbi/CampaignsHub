@@ -1,8 +1,10 @@
 import { projectIdOf, useVisibility } from '@/stores/visibility'
 import axios, { AxiosError } from 'axios'
+import type { InternalAxiosRequestConfig } from 'axios'
 import type { ApiEnvelope } from './types'
 import { describeFailure, isTimeout, Refusal } from './errors'
 import { useUi } from '@/stores/ui'
+import { claimedMembership, leaveChangedWorkspace } from './workspaceClaim'
 
 /**
  * Central Axios client for the SPA. Uses Sanctum cookie-session auth (ADR 0001):
@@ -44,8 +46,19 @@ api.interceptors.response.use((response) => {
   return response
 })
 
+api.interceptors.response.use(undefined, (error: AxiosError<{ code?: string }>) => {
+  // The session moved under this tab. Nothing ran; the screen it is drawing belongs to a workspace it is no longer in.
+  if (error.response?.status === 409 && error.response.data?.code === 'workspace_changed') leaveChangedWorkspace()
+
+  return Promise.reject(error)
+})
+
 api.interceptors.request.use((config) => {
   config.headers.set('Accept-Language', useUi.getState().locale)
+
+  // ENSURE-PORTAL-SESSION-001 — which workspace this tab's screen is drawn for. Only ever gets a request refused.
+  const claim = claimedMembership()
+  if (claim !== null) config.headers.set('X-Workspace-Membership', claim)
 
   return config
 })
@@ -185,8 +198,33 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/** The prime in flight, so two callers in the same tick share one request instead of opening two sessions. */
+let priming: Promise<void> | null = null
+
 /** Prime the CSRF cookie before the first unsafe (POST/PUT/DELETE) request. */
 export async function ensureCsrfCookie(): Promise<void> {
+  /*
+   * WEBKIT-CSRF-RACE-002 — a token that is already readable is not primed again.
+   *
+   * The sign-in flow primes twice in sequence: the account lookup, then `login()`. On WebKit the
+   * second `/sanctum/csrf-cookie` GET could leave before the first response's session cookie had
+   * committed, so the server opened a SECOND session and answered with its token — and the browser
+   * then held one session cookie and the other session's XSRF cookie. The login POST carried a token
+   * the session did not know: 419 «انتهت صلاحية الصفحة», on the first sign-in of a run, on one
+   * browser, in under a second. Every later response re-sets XSRF-TOKEN for the current session, so
+   * a readable token is a current one; only its absence calls for a prime.
+   */
+  if (typeof document !== 'undefined' && document.cookie.includes('XSRF-TOKEN=')) return
+  if (priming) return priming
+
+  priming = primeCsrfCookie().finally(() => {
+    priming = null
+  })
+
+  return priming
+}
+
+async function primeCsrfCookie(): Promise<void> {
   await axios.get('/sanctum/csrf-cookie', { withCredentials: true })
 
   /*
@@ -212,6 +250,24 @@ export async function ensureCsrfCookie(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
 }
+
+/*
+ * CSRF-SELF-HEAL-001 — a refused token gets one fresh one, once.
+ *
+ * Requests that leave before any session exists can each open their own, and the browser may keep one session's cookie beside another's
+ * token. The sign-in POST then carried a token its session did not know: 419 «This page has expired» on a form the person had just filled
+ * correctly, on any browser the timing favoured. A 419 is refused before anything runs, so sending it again repeats nothing; the token
+ * is still proved by the server, and only a second refusal reaches the page.
+ */
+api.interceptors.response.use(undefined, async (error) => {
+  const config = error?.config as (InternalAxiosRequestConfig & { csrfRetried?: boolean }) | undefined
+  if (error?.response?.status !== 419 || !config || config.csrfRetried) throw error
+
+  config.csrfRetried = true
+  await primeCsrfCookie()
+
+  return api.request(config)
+})
 
 /** Normalized error surfaced to the UI. */
 export interface ApiError {
@@ -309,8 +365,8 @@ export function toApiError(error: unknown): ApiError {
   }
 }
 
-export async function getData<T>(url: string): Promise<T> {
-  const response = await api.get<ApiEnvelope<T>>(url)
+export async function getData<T>(url: string, config?: { timeout?: number }): Promise<T> {
+  const response = await api.get<ApiEnvelope<T>>(url, config)
   return response.data.data
 }
 

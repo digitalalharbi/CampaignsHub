@@ -11,6 +11,7 @@ use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\SpendReconciliation;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -70,17 +71,19 @@ final class SpendReconcileCommand extends Command
             return self::FAILURE;
         }
 
+        $unavailable = null;
+        $result = null;
         try {
             $result = $connector->syncInsights($account->external_id, $from, $to);
+            if (! $result->success) {
+                $unavailable = 'The provider refused: '.($result->message ?? 'no message');
+            }
         } catch (Throwable $e) {
-            $this->error('The provider call threw: '.$e->getMessage());
-
-            return self::FAILURE;
+            $unavailable = 'The provider call threw: '.$e->getMessage();
         }
-        if (! $result->success) {
-            $this->error('The provider refused: '.($result->message ?? 'no message'));
 
-            return self::FAILURE;
+        if ($unavailable !== null) {
+            return $this->providerUnavailable($account, $from, $to, $unavailable);
         }
 
         $provider = [];
@@ -89,20 +92,23 @@ final class SpendReconcileCommand extends Command
             $provider[] = ['campaign_id' => (string) ($r['campaign_id'] ?? ''), 'date' => (string) ($r['date'] ?? ''), 'spend' => $r['spend'] ?? 0];
         }
 
-        $rows = DB::table('daily_metrics as m')
-            ->leftJoin('external_campaigns as c', 'c.id', '=', 'm.external_campaign_id')
-            ->where('m.external_account_id', $account->getKey())
-            ->where('m.metric_key', 'spend')
-            ->whereBetween('m.metric_date', [$from, $to])
-            ->get(['m.metric_date', 'm.project_id', 'm.value', 'm.original_amount', 'm.original_currency', 'm.project_currency', 'c.external_id as campaign']);
+        $rows = $this->storedRows($account, $from, $to);
 
+        /*
+         * Like with like: the provider answers in the ACCOUNT's currency, and `original_amount` is that same figure as stored.
+         * `value` is the project-currency conversion — comparing it to the provider read a SAR account's TikTok and Google spend
+         * as 73% «missing» when every riyal was there (1 ÷ 3.75). The converted total is printed beside it, never compared.
+         */
         $stored = [];
         $projects = [];
-        $orig = 0.0;
+        $converted = 0.0;
+        $currencies = [];
         foreach ($rows as $r) {
-            $stored[] = ['campaign_id' => (string) $r->campaign, 'date' => substr((string) $r->metric_date, 0, 10), 'spend' => (float) $r->value];
+            $original = $r->original_amount !== null ? (float) $r->original_amount : (float) $r->value;
+            $stored[] = ['campaign_id' => (string) $r->campaign, 'date' => substr((string) $r->metric_date, 0, 10), 'spend' => $original];
             $projects[(string) $r->project_id] = ($projects[(string) $r->project_id] ?? 0) + 1;
-            $orig += (float) $r->original_amount;
+            $converted += (float) $r->value;
+            $currencies[(string) ($r->original_currency ?? '?')] = true;
         }
 
         $cmp = SpendReconciliation::compare($provider, $stored);
@@ -111,7 +117,7 @@ final class SpendReconcileCommand extends Command
         $this->line('  SPEND RECONCILE — read-only; nothing is stored by this command.');
         $this->line(sprintf('  %s [%s]  window %s → %s  account currency %s  timezone %s', substr((string) $account->getKey(), 0, 8), $account->provider, $from, $to, $account->currency ?? '?', $account->timezone ?? '?'));
         $this->line(sprintf('  provider rows %d · stored rows %d · projects holding stored rows: %s', count($provider), count($stored), json_encode(array_map(static fn ($p) => substr($p, 0, 8), array_keys($projects)))));
-        $this->line(sprintf('  PROVIDER TOTAL %.2f · STORED TOTAL %.2f (project currency) · difference %+.2f (%s%%) · stored original-currency sum %.2f', $cmp['provider_total'], $cmp['stored_total'], $cmp['diff'], $cmp['diff_pct'] === null ? 'n/a' : sprintf('%+.2f', $cmp['diff_pct']), $orig));
+        $this->line(sprintf('  PROVIDER TOTAL %.2f · STORED TOTAL %.2f (both in the account currency %s) · difference %+.2f (%s%%) · stored converted to the project currency: %.2f', $cmp['provider_total'], $cmp['stored_total'], implode('/', array_keys($currencies)) ?: '?', $cmp['diff'], $cmp['diff_pct'] === null ? 'n/a' : sprintf('%+.2f', $cmp['diff_pct']), $converted));
         $this->line('');
         $this->line(sprintf('  %-12s %12s %12s %12s', 'day', 'provider', 'stored', 'diff'));
         foreach ($cmp['days'] as $d) {
@@ -123,6 +129,41 @@ final class SpendReconcileCommand extends Command
             $this->line(sprintf('  %-38s provider %10.2f stored %10.2f diff %+10.2f', substr($c['campaign_id'], 0, 36), $c['provider'], $c['stored'], $c['diff']));
         }
         $this->line(sprintf('  only at the provider: %d · only in our store: %d', count($cmp['only_provider']), count($cmp['only_stored'])));
+
+        return self::SUCCESS;
+    }
+
+    /** @return Collection<int, \stdClass> */
+    private function storedRows(ExternalAccount $account, string $from, string $to)
+    {
+        return DB::table('daily_metrics as m')
+            ->leftJoin('external_campaigns as c', 'c.id', '=', 'm.external_campaign_id')
+            ->where('m.external_account_id', $account->getKey())
+            ->where('m.metric_key', 'spend')
+            ->whereBetween('m.metric_date', [$from, $to])
+            ->get(['m.metric_date', 'm.project_id', 'm.value', 'm.original_amount', 'm.original_currency', 'm.project_currency', 'c.external_id as campaign']);
+    }
+
+    /**
+     * The provider could not be asked or would not answer. Say so loudly, print the provider's own message and the
+     * STORED side only (clearly labelled), and exit 0 so one refusing platform never fails the whole diagnostics workflow.
+     */
+    private function providerUnavailable(ExternalAccount $account, string $from, string $to, string $message): int
+    {
+        $rows = $this->storedRows($account, $from, $to);
+        $total = 0.0;
+        $currencies = [];
+        foreach ($rows as $r) {
+            $total += $r->original_amount !== null ? (float) $r->original_amount : (float) $r->value;
+            $currencies[(string) ($r->original_currency ?? '?')] = true;
+        }
+
+        $this->line(str_repeat('=', 78));
+        $this->line('  SPEND RECONCILE — PROVIDER UNAVAILABLE; only the stored side is shown, nothing was compared.');
+        $this->line(sprintf('  %s [%s]  window %s → %s', substr((string) $account->getKey(), 0, 8), $account->provider, $from, $to));
+        $this->line('  '.$message);
+        $this->line(sprintf('  STORED TOTAL %.2f (account currency %s) over %d stored rows · PROVIDER TOTAL unknown', $total, implode('/', array_keys($currencies)) ?: '?', count($rows)));
+        $this->line('[reconcile] provider_unavailable');
 
         return self::SUCCESS;
     }

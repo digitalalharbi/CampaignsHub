@@ -25,6 +25,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -39,6 +40,7 @@ use Tests\TestCase;
  */
 final class LiveReportShareTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Report $report;
@@ -87,7 +89,7 @@ final class LiveReportShareTest extends TestCase
         DailyMetric::create([
             'id' => (string) Str::uuid(),
             'project_id' => $this->project->id,
-            'external_account_id' => (string) Str::uuid(),
+            'external_account_id' => $this->bindSeededAccount((string) $this->project->id),
             'external_campaign_id' => (string) Str::uuid(),
             'unified_campaign_id' => $campaignId,
             'provider' => 'meta',

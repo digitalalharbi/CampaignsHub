@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Support\DemoAccountSelection;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -112,7 +113,7 @@ final class DemoIntegrationsSeeder extends Seeder
             );
 
             $account = ExternalAccount::withoutGlobalScopes()->updateOrCreate(
-                ['id' => $this->uuid("acct:{$provider}")],
+                ['id' => self::accountIdFor($provider)],
                 [
                     'tenant_id' => $tenant->id,
                     'client_workspace_id' => $campaigns->first()?->client_workspace_id,
@@ -129,8 +130,31 @@ final class DemoIntegrationsSeeder extends Seeder
                 ],
             );
 
+            // Selected for the project, as an operator would: under deny by default a row is read only through an active binding.
+            DemoAccountSelection::bind((string) $project->id, (string) $account->id, $provider);
+
             $accountsByProvider[$provider] = $account;
         }
+
+        /*
+         * Discovered and selected by nobody: what a connection leaves behind for every account the operator did not choose. No row names it
+         * and no project reads it, and the inventory has to be able to say so now that the accounts above are all selected.
+         */
+        ExternalAccount::withoutGlobalScopes()->updateOrCreate(
+            ['id' => self::accountIdFor('snapchat:unselected')],
+            [
+                'tenant_id' => $tenant->id,
+                'provider_connection_id' => $accountsByProvider['snapchat']->provider_connection_id,
+                'provider' => 'snapchat',
+                'account_type' => 'ad_account',
+                'external_id' => 'snap_900000002',
+                'name' => 'Snapchat Ads — حساب مكتشف (تجريبي)',
+                'currency' => 'SAR',
+                'timezone' => 'Asia/Riyadh',
+                'status' => 'active',
+                'metadata' => ['is_demo' => true],
+            ],
+        );
 
         // Link each demo campaign to the ad account of the platform its name announces.
         foreach ($campaigns as $campaign) {
@@ -200,6 +224,15 @@ final class DemoIntegrationsSeeder extends Seeder
             'tiktok' => '17'.substr($slug, 0, 8),
             default => 'snap-'.$slug,
         };
+    }
+
+    /**
+     * The one identity of a provider's demo account. `DemoAnalyticsSeeder` files its metric rows under it: those rows used to name an
+     * id of their own that no `external_accounts` row carried, so the store project's figures belonged to an account that did not exist.
+     */
+    public static function accountIdFor(string $provider): string
+    {
+        return (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, self::NS.':acct:'.$provider);
     }
 
     private function uuid(string $label): string

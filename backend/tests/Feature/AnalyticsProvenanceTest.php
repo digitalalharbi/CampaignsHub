@@ -14,6 +14,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use Tests\TestCase;
  */
 final class AnalyticsProvenanceTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -260,7 +262,7 @@ final class AnalyticsProvenanceTest extends TestCase
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
             'project_id' => $this->project->id,
-            'external_account_id' => (string) Str::uuid(),
+            'external_account_id' => $this->bindSeededAccount($this->project->id, provider: 'snapchat'),
             'external_campaign_id' => (string) Str::uuid(),
             'provider' => 'snapchat',
             'metric_key' => 'spend',
@@ -278,7 +280,7 @@ final class AnalyticsProvenanceTest extends TestCase
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
             'project_id' => $projectId ?? $this->project->id,
-            'external_account_id' => (string) Str::uuid(),
+            'external_account_id' => $this->bindSeededAccount($projectId ?? $this->project->id, provider: 'snapchat'),
             'external_campaign_id' => (string) Str::uuid(),
             'provider' => 'snapchat',
             'metric_key' => $key,

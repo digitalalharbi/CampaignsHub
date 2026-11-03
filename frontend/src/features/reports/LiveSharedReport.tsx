@@ -5,7 +5,6 @@ import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { useUi } from '@/stores/ui'
-import { Num } from '@/components/ui/Num'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
 import { LiveContentDetail } from './live/LiveContent'
@@ -197,7 +196,6 @@ export function LiveSharedReport({
   }
 
   const { payload, refreshing, refreshError, computedAt } = main.load
-  const stamp = computedAt.toLocaleTimeString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
   const common = { reader, currency: unit, locale, onOpenContent }
 
   return (
@@ -287,14 +285,6 @@ export function LiveSharedReport({
         )}
 
         <div className="ms-auto flex items-center gap-2">
-          {/* «Live» means this system recomputed at this time — not that a platform reported just now. */}
-          <span data-testid="live-computed-at" className="inline-flex items-center gap-1.5 text-xs text-text-muted">
-            <span className="relative flex h-2 w-2" aria-hidden>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60 motion-reduce:hidden" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-            </span>
-            <span className="tabular-nums"><Num>{stamp}</Num></span>
-          </span>
           <button
             type="button"
             data-testid="live-refresh"
@@ -366,7 +356,8 @@ export function LiveSharedReport({
       <ReportFooter
         locale={ar ? 'ar' : 'en'}
         facts={{
-          updatedAt: computedAt.toISOString(),
+          // The server's own computation moment; the reader's clock only when an older payload does not carry it.
+          updatedAt: payload.freshness_summary?.generated_at ?? computedAt.toISOString(),
           period: payload.period,
           currency: unit || null,
           timezone: 'Asia/Riyadh',

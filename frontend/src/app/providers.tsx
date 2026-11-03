@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fetchCurrentUser } from '@/features/auth/api'
+import { probeSession } from '@/features/auth/api'
+import { listenForWorkspaceSwitch } from '@/features/auth/workspaceSwitch'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { applyDocument, useUi } from '@/stores/ui'
@@ -125,10 +126,18 @@ export function Providers({ children }: { children: ReactNode }) {
       return
     }
 
-    void fetchCurrentUser().then((user) => {
-      if (useAuth.getState().status === 'loading') setUser(user)
+    void probeSession().then(({ user, unreachable }) => {
+      if (useAuth.getState().status !== 'loading') return
+      if (unreachable) useAuth.getState().setStatus('unreachable')
+      else setUser(user)
     })
   }, [setUser])
+
+  /*
+   * WORKSPACE-SWITCH-001 — the active workspace belongs to the SESSION, so every tab of this browser has just moved.
+   * A tab left behind would keep drawing the old workspace while its next request runs in the new one.
+   */
+  useEffect(() => listenForWorkspaceSwitch(queryClient), [])
 
   /*
    * The upgrade prompt is mounted ABOVE the router, so a commercial refusal is answered the same way

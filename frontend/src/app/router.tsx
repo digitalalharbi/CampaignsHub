@@ -65,6 +65,7 @@ const ClientFilesPage = lazyPage(() => import('@/features/requests/portal/Client
 const ClientCampaignsPage = lazyPage(() => import('@/features/requests/portal/ClientCampaignsPage'), 'ClientCampaignsPage')
 const ClientReportsPage = lazyPage(() => import('@/features/requests/portal/ClientReportsPage'), 'ClientReportsPage')
 const ClientSpacePickerPage = lazyPage(() => import('@/features/requests/portal/ClientSpacePickerPage'), 'ClientSpacePickerPage')
+const PortalLoginPage = lazyPage(() => import('@/features/requests/portal/PortalLoginPage'), 'PortalLoginPage')
 const ClientPortalHomePage = lazyPage(() => import('@/features/requests/portal/ClientPortalHomePage'), 'ClientPortalHomePage')
 const VerifyEmailPage = lazyPage(() => import('@/features/onboarding/VerifyEmailPage'), 'VerifyEmailPage')
 const OnboardingWizard = lazyPage(() => import('@/features/onboarding/OnboardingWizard'), 'OnboardingWizard')
@@ -220,7 +221,8 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/admin/login', element: <LegacyLoginRedirect /> },
   { path: '/app/login', element: <LegacyLoginRedirect /> },
   { path: '/agency/login', element: <LegacyLoginRedirect /> },
-  { path: '/portal/login', element: <LegacyLoginRedirect /> },
+  // LOGIN-NO-EMAIL-CODE-001 — a client contact holds no password; this page, not `/login`, is their way in.
+  { path: '/portal/login', element: <PortalLoginPage /> },
   { path: '/influencers/login', element: <LegacyLoginRedirect /> },
 
   /*
