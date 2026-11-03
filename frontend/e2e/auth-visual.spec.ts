@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { DEMO_CLIENT_CONTACT } from './helpers'
 
 /**
  * Visual-regression baselines for the auth surface (chromium only — cross-browser pixel diffs are noisy).
@@ -82,8 +83,12 @@ test('login: keyboard-only navigation reaches the address, the code and submit',
   await page.keyboard.type('password')
   await expect(pw).toHaveValue('password')
 
-  await page.getByTestId('login-request-code').click()
-  await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20_000 })
+  // The six boxes now live on the contact's own door (LOGIN-NO-EMAIL-CODE-001).
+  await expect(page.getByTestId('login-request-code')).toHaveCount(0)
+  await page.goto('/portal/login')
+  await page.getByTestId('portal-login-email').fill(DEMO_CLIENT_CONTACT)
+  await page.getByTestId('portal-login-send').click()
+  await expect(page.getByTestId('portal-login-code')).toBeVisible({ timeout: 20_000 })
 
   /*
    * Typing into the first box fills it and moves on, which is the whole point of six boxes.

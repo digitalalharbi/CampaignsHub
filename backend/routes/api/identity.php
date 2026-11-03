@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Identity\Http\Controllers\AuthController;
-use App\Domains\Identity\Http\Controllers\EmailSignInController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
@@ -12,7 +11,6 @@ use App\Domains\Identity\Http\Controllers\OAuthController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
-use App\Domains\Identity\Http\Controllers\SignInMethodsController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Legal\Http\Controllers\ConsentController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
@@ -56,15 +54,6 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
             ->middleware('throttle:registration-resend');
     });
 
-    /*
-     * LOGIN-UNIFIED-001. The single sign-in page asks this which form to render for an identifier,
-     * so the visitor never picks a portal. Throttled like a sign-in attempt because it takes an
-     * identifier and touches the users table — an unthrottled version would be a cheap way to probe
-     * addresses even though the answer is deliberately uninformative.
-     */
-    Route::post('/method', [AuthController::class, 'method'])->name('method')
-        ->middleware('throttle:auth-login');
-
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:auth-login');
 
@@ -84,17 +73,6 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::post('/phone/verify', [PhoneSignInController::class, 'verify'])->name('phone.verify')
         ->middleware('throttle:otp-check');
 
-    /*
-     * LOGIN-OTP-001 — the email path, which is the whole of the production sign-in UI.
-     *
-     * Throttled exactly like the phone pair, and for the same reason: `start` answers identically
-     * for an address nobody holds, which is the property that keeps it from being a directory of
-     * who has an account here, and the throttle is what bounds the cost of that answer.
-     */
-    Route::post('/email-code/start', [EmailSignInController::class, 'start'])->name('email-code.start')
-        ->middleware('throttle:otp-request');
-    Route::post('/email-code/verify', [EmailSignInController::class, 'verify'])->name('email-code.verify')
-        ->middleware('throttle:otp-check');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');
     /*
@@ -115,8 +93,6 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
      * `callback` are public too: they ARE the sign-in.
      */
     Route::get('/oauth/providers', [OAuthController::class, 'providers'])->name('oauth.providers');
-    // AUTH-LOGIN-UX-002 — which ways in the page may offer (a way that cannot work is not shown).
-    Route::get('/methods', SignInMethodsController::class)->middleware('throttle:60,1')->name('methods');
 
     /*
      * `start` and `callback` need a SESSION of their own, stated explicitly here.

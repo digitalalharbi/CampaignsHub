@@ -1,48 +1,40 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
-import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, fetchSignInMethods, login, phoneSignInStart, phoneSignInVerify, signInMethod, startOAuth } from './api'
+import { fetchOAuthProviders, login, phoneSignInStart, phoneSignInVerify, startOAuth } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { AuthShell } from './AuthShell'
 import { OtpField } from './OtpField'
 import { HelpRequestModal } from './HelpRequestModal'
+import { ErrorNote, IconField } from './loginFields'
 import { Button } from '@/components/ui/Button'
 import { PhoneField, phoneFieldValue, DEFAULT_DIAL_CODE } from '@/components/ui/PhoneField'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
-import { portalLoginStart, portalLoginVerify } from '@/features/requests/clientPortalApi'
 
 /**
- * LOGIN-CARD-001 — one card, two ways in, and the server decides where you land.
+ * LOGIN-CARD-001 — one card, and the server decides where you land.
  *
- * ## The shape, and how it got here
+ * The credentials sit in a single card: address, password, «تذكرني», «نسيت كلمة المرور؟», and one primary button. Below a hairline,
+ * Google where the server reports it can work.
  *
- * The credentials sit in a single card: address, password, «تذكرني», «نسيت كلمة المرور؟», and one
- * primary button. Below a hairline, «أو اختر طريقة أخرى للدخول» offers the second route — a code sent
- * to the address that was just typed — as an outlined button that reads as an alternative rather
- * than as a competitor to the green one.
+ * ## LOGIN-NO-EMAIL-CODE-001 (Owner, 2026-11-03, #943)
  *
- * An earlier revision of this page (LOGIN-OTP-001) removed the password from the production UI
- * entirely and made the code the only door. The owner replaced that with the layout above. It is
- * also the more honest arrangement for this environment as it stands: no mail provider is configured
- * yet, so a code-only door would lock every existing account out until one is.
+ * The email code is no longer a way in here. It also carried a client contact, who holds no password, into the request portal; that
+ * door is now its own page, `/portal/login`, and a link aimed at the portal is sent there rather than to a form it cannot pass.
  *
- * ## Both routes end in a session the SERVER chose
+ * ## Nothing moves after the first paint
  *
- * `POST /auth/method` decides which engine sends a code, before anything is sent. A client contact's
- * address opens a PORTAL session through the portal's own engine and lands in `/portal`; every other
- * address opens a platform session through `/auth/email-code/*` and lands wherever real memberships
- * say. The visitor sees one button either way — the difference is not theirs to know or to get right.
+ * Google's row is drawn from the first frame at its final size, as a placeholder until the server answers. A failed lookup keeps the
+ * button, and a click on it reports what went wrong. When the server says Google cannot work, the row carries the client portal instead
+ * and the line under the card links home: every box keeps its size, so nothing moves and no gap is left.
  *
- * **The URL grants nothing.** `portal: null` travels with every sign-in, so there is no preference
- * for the server to honour and no way for a link to request access it does not hold.
+ * **The URL grants nothing.** `portal: null` travels with every sign-in, so there is no preference for the server to honour and no
+ * way for a link to request access it does not hold.
  *
- * ## The visual baseline
- *
- * `AuthShell`, the marketing panel, the header, the two-column split, the type and the palette are
- * approved and untouched. Everything below is inside the form column.
+ * `AuthShell`, the marketing panel, the header, the two-column split, the type and the palette are approved and untouched.
  */
 
 const COPY = {
@@ -58,21 +50,22 @@ const COPY = {
     remember: 'تذكرني',
     forgot: 'نسيت كلمة المرور؟',
     signIn: 'تسجيل الدخول',
-    orPasswordless: 'أو اختر طريقة أخرى للدخول',
-    sendCode: 'المتابعة برمز عبر البريد الإلكتروني',
     noAccount: 'ليس لديك حساب؟',
     register: 'إنشاء حساب',
-    emailRequired: 'أدخل بريدك الإلكتروني أولاً لإرسال الرمز.',
-    codeTitle: 'تحقق من بريدك الإلكتروني',
+    or: 'أو',
+    clientDoor: 'عميل لدى إحدى الوكالات؟ ادخل من بوابة العملاء',
+    clientDoorButton: 'الدخول إلى بوابة العملاء',
+    home: 'العودة إلى الصفحة الرئيسية',
+    codeTitle: 'تحقق من جوالك',
     codeSentTo: 'أرسلنا رمز التحقق إلى:',
     code: 'رمز التحقق',
     resend: 'إعادة إرسال الرمز',
     resendIn: 'إعادة الإرسال بعد :seconds ثانية',
-    changeEmail: 'استخدام بريد إلكتروني آخر',
+    changeNumber: 'استخدام رقم آخر',
     confirmCode: 'تأكيد الرمز والمتابعة',
     codeExpired: 'انتهت صلاحية رمز التحقق. أعد إرسال الرمز للحصول على رمز جديد.',
-    notDelivered: 'لم يُرسل الرمز: خدمة البريد غير مفعّلة بعد على هذه البيئة.',
-    deliveryFailed: 'تعذّر إرسال الرمز إلى بريدك. جرّب إعادة الإرسال بعد قليل.',
+    notDelivered: 'لم يُرسل الرمز: خدمة الرسائل غير مفعّلة بعد على هذه البيئة.',
+    deliveryFailed: 'تعذّر إرسال الرمز إلى جوالك. جرّب إعادة الإرسال بعد قليل.',
     // DEV/E2E only — never rendered in a production build.
     phone: 'رقم الجوال',
     phoneHint: 'سنرسل رمز تحقق إلى هذا الرقم.',
@@ -92,21 +85,22 @@ const COPY = {
     remember: 'Remember me',
     forgot: 'Forgot your password?',
     signIn: 'Sign in',
-    orPasswordless: 'Or sign in without a password',
-    sendCode: 'Continue with an email code',
     noAccount: "Don't have an account?",
     register: 'Create an account',
-    emailRequired: 'Enter your email address first so we know where to send the code.',
-    codeTitle: 'Check your email',
+    or: 'or',
+    clientDoor: 'A client of an agency? Sign in to the client portal',
+    clientDoorButton: 'Sign in to the client portal',
+    home: 'Back to the home page',
+    codeTitle: 'Check your phone',
     codeSentTo: 'We sent your verification code to:',
     code: 'Verification code',
     resend: 'Send the code again',
     resendIn: 'You can ask again in :seconds seconds',
-    changeEmail: 'Use a different email address',
+    changeNumber: 'Use a different number',
     confirmCode: 'Confirm code and continue',
     codeExpired: 'This verification code has expired. Send the code again to get a new one.',
-    notDelivered: 'The code was not sent: email delivery is not configured on this environment yet.',
-    deliveryFailed: 'The code could not be delivered to your inbox. Try sending it again in a moment.',
+    notDelivered: 'The code was not sent: messaging is not configured on this environment yet.',
+    deliveryFailed: 'The code could not be delivered to your phone. Try sending it again in a moment.',
     phone: 'Mobile number',
     phoneHint: 'We will send a verification code to this number.',
     phoneInvalid: 'Enter a valid mobile number.',
@@ -128,9 +122,6 @@ const COPY = {
  */
 const DELIVERED = new Set(['sent', 'queued', 'delivered'])
 
-/** Which engine minted the code being held — the three end in three different kinds of session. */
-type Engine = 'platform' | 'portal' | 'sms'
-
 type Step = 'credentials' | 'code'
 
 export function LoginPage() {
@@ -141,14 +132,9 @@ export function LoginPage() {
   const { locale } = useUi()
   const c = COPY[locale]
   const oauthProviders = useQuery({ queryKey: ['oauth', 'providers'], queryFn: fetchOAuthProviders })
-  /*
-   * AUTH-LOGIN-UX-002 — a way in that cannot work is not shown. The email code is offered only once the server says mail can carry
-   * it (it withdraws it while the mail transport is failing); until it answers, nothing is offered that might not work.
-   */
-  const signInMethods = useQuery({ queryKey: ['auth', 'methods'], queryFn: fetchSignInMethods })
-  const emailCodeAvailable = signInMethods.data?.email_code.available === true
   const google = oauthProviders.data?.find((provider) => provider.provider === 'google')
-  const googleAvailable = google?.available === true
+  // Reserved until the server has answered; a failed lookup keeps the button, because nothing says Google cannot work.
+  const googleRow = oauthProviders.isPending ? 'reserved' : oauthProviders.isError || google?.available === true ? 'button' : 'absent'
   const googleSignIn = useMutation({
     mutationFn: () => startOAuth('google', { redirect: null }),
     onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
@@ -166,13 +152,11 @@ export function LoginPage() {
   const phoneCompat = import.meta.env.DEV && params.get('e2e') === 'phone'
 
   const [step, setStep] = useState<Step>('credentials')
-  const [engine, setEngine] = useState<Engine>('platform')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(false)
-  const [emailMissing, setEmailMissing] = useState(false)
 
   const [phone, setPhone] = useState('')
   const [dialCode, setDialCode] = useState(DEFAULT_DIAL_CODE)
@@ -224,21 +208,11 @@ export function LoginPage() {
     return () => window.clearTimeout(id)
   }, [expiresAt])
 
-  const identifier = engine === 'sms' ? (phoneFieldValue(phone, dialCode) ?? phone) : email.trim()
+  const identifier = phoneFieldValue(phone, dialCode) ?? phone
 
-  /**
-   * Send a code, by whichever engine this identifier belongs to.
-   *
-   * Three of them, because they end in three different sessions. `emailCodeStart` opens a PLATFORM
-   * session for a user; `portalLoginStart` opens a PORTAL session for a client contact;
-   * `phoneSignInStart` is the DEV-only mobile path. Using the portal's for a platform user would
-   * sign them into `/portal`, where they hold nothing, and the page would look like it had worked.
-   */
+  /** The DEV-only mobile path. */
   const startCode = useMutation({
-    mutationFn: ({ via, destination }: { via: Engine; destination: string }) =>
-      via === 'platform' ? emailCodeStart(destination)
-        : via === 'sms' ? phoneSignInStart(destination)
-          : portalLoginStart('email', destination),
+    mutationFn: (destination: string) => phoneSignInStart(destination),
     onSuccess: (r) => {
       setVerificationId(r.verification_id)
       setDelivery(r.delivery_status ?? null)
@@ -247,24 +221,6 @@ export function LoginPage() {
       setExpiresAt('expires_in_minutes' in r && typeof r.expires_in_minutes === 'number' ? Date.now() + r.expires_in_minutes * 60_000 : null)
       // Dev-only: the backend returns `dev_code` ONLY outside production (hard-gated server-side).
       if (r.dev_code) setCode(r.dev_code)
-    },
-  })
-
-  /**
-   * «الدخول بدون كلمة مرور» — ask the server which engine owns this address, then send.
-   *
-   * The question is asked BEFORE anything is sent because the answer decides which endpoint sends
-   * it, and an address belonging to a client contact must not be handed a platform code it could
-   * verify into a workspace it holds nothing in. An unknown address answers `password`, which here
-   * means «the platform engine» — so a stranger gets a code too, and learns nothing.
-   */
-  const requestCode = useMutation({
-    mutationFn: () => signInMethod(email.trim()),
-    onSuccess: (result) => {
-      const via: Engine = result.method === 'code' && result.channel === 'email' ? 'portal' : 'platform'
-      setEngine(via)
-      setStep('code')
-      startCode.mutate({ via, destination: email.trim() })
     },
   })
 
@@ -278,14 +234,7 @@ export function LoginPage() {
     },
   })
 
-  /**
-   * Check the code, and go wherever that code's session belongs.
-   *
-   * A platform code signs in a USER, so the destination comes from memberships. A portal code signs
-   * in a client CONTACT, whose session belongs to the request portal — a `redirect` inside that
-   * space is honoured and anything outside it ignored, because an absolute or protocol-relative URL
-   * there would make this an open redirect.
-   */
+  /** Check the code; the destination comes from memberships. */
   const verifyCode = useMutation({
     /*
      * The code travels as a VARIABLE, not out of the closure.
@@ -295,17 +244,7 @@ export function LoginPage() {
      * fail a perfectly good sign-in. What was typed is passed in.
      */
     mutationFn: async (typed: string) => {
-      if (engine === 'portal') {
-        await portalLoginVerify(verificationId!, typed)
-        const wanted = params.get('redirect') ?? ''
-        const safe = /^\/(portal|client)(\/|$)/.test(wanted) && !wanted.startsWith('//')
-
-        return safe ? wanted : '/portal'
-      }
-
-      const user = engine === 'sms'
-        ? await phoneSignInVerify(verificationId!, typed, remember)
-        : await emailCodeVerify(verificationId!, typed, remember)
+      const user = await phoneSignInVerify(verificationId!, typed, remember)
 
       setUser(user)
       const { destination } = await resolvePostAuthOutcome(params, null)
@@ -316,12 +255,12 @@ export function LoginPage() {
   })
 
   const activeError = signIn.isError ? toApiError(signIn.error)
-    : requestCode.isError ? toApiError(requestCode.error)
+    : googleSignIn.isError ? toApiError(googleSignIn.error)
       : startCode.isError ? toApiError(startCode.error)
         : verifyCode.isError ? toApiError(verifyCode.error)
           : null
 
-  /** Back to the card. Clears the secrets; keeps the address so it need not be retyped. */
+  /** Back to the first step. Clears the secrets. */
   const startOver = () => {
     setStep('credentials')
     setCode('')
@@ -330,17 +269,7 @@ export function LoginPage() {
     setCooldown(0)
     setExpiresAt(null)
     setExpired(false)
-    signIn.reset(); requestCode.reset(); startCode.reset(); verifyCode.reset()
-  }
-
-  /** A code has to go somewhere. Asked for with an empty field, this says so instead of failing. */
-  const askForCode = () => {
-    if (email.trim() === '') {
-      setEmailMissing(true)
-      return
-    }
-    setEmailMissing(false)
-    requestCode.mutate()
+    signIn.reset(); startCode.reset(); verifyCode.reset()
   }
 
   const submitPhone = () => {
@@ -350,16 +279,21 @@ export function LoginPage() {
       return
     }
     setPhoneError(null)
-    setEngine('sms')
     setStep('code')
     // The NORMALISED number travels, so `05…`, `9665…` and `+9665…` are one destination, not three.
-    startCode.mutate({ via: 'sms', destination: e164 })
+    startCode.mutate(e164)
   }
 
   const submitCode = useCallback((typed?: string) => {
     const value = (typed ?? code).trim()
     if (verificationId && value.length === 6 && !verifyCode.isPending && !expired) verifyCode.mutate(value)
   }, [verificationId, code, verifyCode, expired])
+
+  // A link aimed at the request portal belongs to a client contact, who has no password to type here.
+  const wanted = params.get('redirect') ?? ''
+  if (/^\/(portal|client)(\/|\?|$)/.test(wanted) && !wanted.startsWith('//')) {
+    return <Navigate to={`/portal/login?redirect=${encodeURIComponent(wanted)}`} replace />
+  }
 
   return (
     <AuthShell portal="default">
@@ -380,7 +314,7 @@ export function LoginPage() {
       )}
 
       <div className="mt-5 rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">
-        {/* The credentials, and beneath them the way in that needs none. */}
+        {/* The credentials, and beneath them Google where it can work. */}
         {step === 'credentials' && !phoneCompat && (
           <>
             <form
@@ -397,10 +331,10 @@ export function LoginPage() {
                 type="email"
                 placeholder={c.emailPlaceholder}
                 value={email}
-                onChange={(v) => { setEmail(v); setEmailMissing(false) }}
+                onChange={setEmail}
                 autoComplete="username"
                 required
-                error={emailMissing ? c.emailRequired : activeError?.errors?.email?.[0] ?? activeError?.errors?.identifier?.[0]}
+                error={activeError?.errors?.email?.[0] ?? activeError?.errors?.identifier?.[0]}
               />
 
               <div data-testid="login-password">
@@ -451,46 +385,22 @@ export function LoginPage() {
               </Button>
             </form>
 
-            {/*
-              The second route, separated rather than stacked.
-
-              An outlined button under a labelled rule reads as «or», where a second filled button
-              would read as «choose», and the overwhelming majority of people here already know their
-              password and want the green one.
-            */}
-            {(emailCodeAvailable || googleAvailable) && (
+            <div data-testid="login-methods">
               <div className="my-5 flex items-center gap-3">
                 <span className="h-px flex-1 bg-border" />
-                <span className="text-[13px] text-text-secondary">{c.orPasswordless}</span>
+                <span className="text-[13px] text-text-secondary">{c.or}</span>
                 <span className="h-px flex-1 bg-border" />
               </div>
-            )}
-
-            {/*
-              Keep the optional provider in the existing secondary-action row. Adding a second
-              separator and a full-width row pushed the 1366x768 sign-in page below the viewport.
-              An unconfigured provider is omitted: there is no useful action for a visitor to take,
-              and the server remains the authority that decides when the capability is available.
-            */}
-            {/*
-              AUTH-LOGIN-UX-002 — every other way in, one above the other at full width, and only the ones that can work right now.
-            */}
-            <div className="flex flex-col gap-3" data-testid="login-methods">
-              {emailCodeAvailable && (
-                <Button
-                  type="button"
-                  data-testid="login-request-code"
-                  variant="secondary"
-                  className="w-full"
-                  size="lg"
-                  loading={requestCode.isPending || startCode.isPending}
-                  onClick={askForCode}
-                >
-                  <Mail size={17} /> {c.sendCode}
+              {googleRow === 'absent' ? (
+                <Button type="button" data-testid="login-client-door" variant="secondary" className="w-full" size="lg" onClick={() => navigate('/portal/login')}>
+                  {c.clientDoorButton}
                 </Button>
-              )}
-
-              {googleAvailable && (
+              ) : googleRow === 'reserved' ? (
+                // The button's own box and nothing to read, so a Google that turns out unavailable never flashes a label.
+                <Button type="button" data-testid="login-google-reserved" variant="secondary" className="w-full" size="lg" disabled aria-hidden tabIndex={-1}>
+                  <span className="invisible">{c.google}</span>
+                </Button>
+                ) : (
                 <Button
                   type="button"
                   data-testid="login-google"
@@ -584,7 +494,7 @@ export function LoginPage() {
               <button
                 type="button"
                 data-testid="login-resend"
-                onClick={() => startCode.mutate({ via: engine, destination: identifier })}
+                onClick={() => startCode.mutate(identifier)}
                 disabled={startCode.isPending || cooldown > 0}
                 className="font-semibold text-brand-600 hover:underline disabled:cursor-default disabled:text-text-secondary disabled:no-underline"
               >
@@ -597,7 +507,7 @@ export function LoginPage() {
                 onClick={startOver}
                 className="font-semibold text-text-secondary hover:text-text-primary hover:underline"
               >
-                {c.changeEmail}
+                {c.changeNumber}
               </button>
             </div>
           </form>
@@ -615,101 +525,19 @@ export function LoginPage() {
         the code step, because somebody holding a code already on its way to them should not be
         offered a form to fill in instead.
       */}
-      {step === 'credentials' && <HelpRequestModal locale={locale} ar={ar} />}
+      {step === 'credentials' && (
+        <>
+          <HelpRequestModal locale={locale} ar={ar} />
+          <p data-testid="login-foot-link" className="mt-3 text-center text-[13px]">
+            {googleRow === 'absent' ? (
+              <Link to="/" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.home}</Link>
+            ) : (
+              <Link to="/portal/login" data-testid="login-client-door" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.clientDoor}</Link>
+            )}
+          </p>
+        </>
+      )}
       </div>
     </AuthShell>
-  )
-}
-
-/**
- * A labelled input with an icon inside it, laid out the way the page reads.
- *
- * ## A flex row, not an absolutely-positioned icon over a padded input
- *
- * The obvious build — pin the icon with `position: absolute` and reserve room for it with padding —
- * is what put the lock underneath «أدخل كلمة المرور». It only holds while the padding and the
- * icon's offset agree about the icon's width, and they stop agreeing the moment either the icon
- * size, the font or the direction changes. A row cannot overlap: the icon occupies its own track and
- * the field takes what is left.
- *
- * ## Everything sits on the same side as the language
- *
- * The row inherits the page's direction, so in Arabic the icon lands at the right beside its
- * right-aligned label and the reveal control at the left; in English every one of them mirrors.
- * Nothing is pinned to a physical side.
- *
- * ## …but the VALUE still reads left to right
- *
- * `dir="ltr"` on the input, with the alignment set explicitly. An address and a password are Latin
- * strings, and rendering `name@company.com` in a right-to-left context reorders its punctuation —
- * the «.com» ends up in the wrong place and the field looks corrupted. Fixing the direction keeps
- * the string intact; setting the alignment separately keeps it against the same edge as the label.
- * `text-align: start` cannot do this: it resolves against the input's own direction, which is
- * exactly the thing being overridden.
- */
-function IconField({
-  id, label, icon, trailing, error, ar, onChange, ...props
-}: {
-  id: string
-  label: string
-  icon: React.ReactNode
-  trailing?: React.ReactNode
-  error?: string
-  ar: boolean
-  onChange: (value: string) => void
-} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'id'>) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-text-secondary">{label}</label>
-      <div
-        className={`flex min-h-[52px] items-center gap-3 rounded-xl border bg-surface px-4 transition-colors focus-within:ring-[3px] focus-within:ring-brand-500/15 ${
-          error ? 'border-danger focus-within:border-danger' : 'border-border focus-within:border-brand-500'
-        }`}
-      >
-        <span className="shrink-0 text-text-secondary">{icon}</span>
-        <input
-          id={id}
-          dir="ltr"
-          onChange={(e) => onChange(e.target.value)}
-          style={{ textAlign: ar ? 'right' : 'left' }}
-          /*
-           * `self-stretch` and 16px, both load-bearing.
-           *
-           * The input is a flex CHILD now, so without `self-stretch` its own box is only as tall as
-           * its line — the row looked right and the touch target had quietly shrunk to about 46px,
-           * under the 50px this product holds itself to. And 16px is the threshold below which iOS
-           * zooms the whole page on focus, which on a phone throws the layout somebody was reading.
-           */
-          className="min-w-0 flex-1 self-stretch border-0 bg-transparent text-[16px] text-text-primary outline-none placeholder:text-text-secondary/70"
-          aria-invalid={error ? true : undefined}
-          {...props}
-        />
-        {trailing && <span className="shrink-0">{trailing}</span>}
-      </div>
-      {error && <p className="mt-1.5 text-[13px] text-danger">{error}</p>}
-    </div>
-  )
-}
-
-/**
- * The page's one error surface, so a failure never renders twice or in two different shapes.
- *
- * On the code step it also has to carry what a FIELD would normally say. A refused resend comes back
- * as a validation error on `destination` — «الرجاء الانتظار 43 ثانية قبل طلب رمز جديد» — and there
- * is no destination field on that step to render it. Falling back to the envelope's own `message`
- * there would print Laravel's generic «the given data was invalid», which tells somebody waiting out
- * a cooldown nothing at all. The specific sentence wins whenever there is one.
- */
-function ErrorNote({ error, always = false }: { error: ReturnType<typeof toApiError> | null; always?: boolean }) {
-  // Field-level messages are rendered BY the field. Repeating them here would say the same thing
-  // twice — except on the code step, which has no field-level slot of its own.
-  if (!error || (!always && error.errors)) return null
-
-  const specific = error.errors ? Object.values(error.errors).flat().find(Boolean) : undefined
-
-  return (
-    <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">
-      {specific ?? error.message}
-    </p>
   )
 }
