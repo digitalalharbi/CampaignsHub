@@ -54,6 +54,20 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── read-only facts"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | " -v ON_ERROR_STOP=0' <<'SQL'
+            BEGIN READ ONLY; select 'P1 active memberships by portal', portal, count(*) from memberships where status='active' group by portal order by portal; ROLLBACK;
+            BEGIN READ ONLY; select 'P2 portal members with a password set', count(*) from memberships m join users u on u.id=m.user_id where m.status='active' and m.portal='portal' and u.password is not null; ROLLBACK;
+            BEGIN READ ONLY; select 'P3 portal members with an oauth identity', count(distinct m.user_id) from memberships m join oauth_identities o on o.user_id=m.user_id where m.status='active' and m.portal='portal'; ROLLBACK;
+            BEGIN READ ONLY; select 'P4 portal members disabled', count(*) from memberships m join users u on u.id=m.user_id where m.status='active' and m.portal='portal' and u.disabled_at is not null; ROLLBACK;
+            BEGIN READ ONLY; select 'P5 portal members who also hold another portal', count(distinct m.user_id) from memberships m where m.status='active' and m.portal='portal' and exists (select 1 from memberships o where o.user_id=m.user_id and o.status='active' and o.portal<>'portal'); ROLLBACK;
+            BEGIN READ ONLY; select 'P6 portal members last used within 90 days', count(*) from memberships where status='active' and portal='portal' and last_used_at > now() - interval '90 days'; ROLLBACK;
+            BEGIN READ ONLY; select 'P7 users holding more than one active membership', count(*) from (select user_id from memberships where status='active' group by user_id having count(*)>1) x; ROLLBACK;
+            BEGIN READ ONLY; select 'P8 live client portal tokens', count(*) from client_portal_tokens where revoked_at is null and expires_at > now(); ROLLBACK;
+            BEGIN READ ONLY; select 'P9 requests with a contact email', count(*) from external_requests where contact_email is not null; ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
