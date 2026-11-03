@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -53,6 +54,7 @@ use Tests\TestCase;
  */
 final class AggregationTruthTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -296,6 +298,7 @@ final class AggregationTruthTest extends TestCase
             'status' => 'active',
             'currency' => 'USD',
         ])->save();
+        $this->bindSeededAccount($this->project->id, $account->id, $provider);
 
         return $account;
     }
@@ -350,6 +353,8 @@ final class AggregationTruthTest extends TestCase
             'tenant_id' => $this->tenant->id,
             // SEC-CLUSTER-2 — a run carries the project it was made for, and coverage reads only the reader's projects.
             'project_id' => $this->project->id,
+            // A run is made FOR an account, and is evidence only while that account is selected.
+            'external_account_id' => ExternalAccount::withoutGlobalScopes()->where('provider', $provider)->value('id'),
             'provider' => $provider,
             'status' => $status,
             'window_start' => $from,

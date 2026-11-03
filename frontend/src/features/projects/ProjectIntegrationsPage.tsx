@@ -302,10 +302,10 @@ export function ProjectIntegrationsPage() {
               </p>
             )}
             {bindings.data?.map((b) => (
-              <div key={b.id} className="flex items-center justify-between rounded-[9px] border border-border p-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">{b.account?.name ?? '—'}</span>
+              <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[9px] border border-border p-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 break-words text-sm font-bold">{b.account?.name ?? '—'}</span>
                     <Badge tone="info">{b.purpose}</Badge>
                     {b.is_primary && <Badge tone="success">{t('primary')}</Badge>}
                     {!b.is_active && <Badge tone="danger">{t('disabled')}</Badge>}
@@ -327,7 +327,7 @@ export function ProjectIntegrationsPage() {
                       </Badge>
                     )}
                   </div>
-                  <span className="text-xs text-text-muted">
+                  <span className="break-words text-xs text-text-muted">
                     {b.account?.account_type} · <span className="tnum">{b.account?.external_id}</span>
                     {b.account?.last_synced_at && (
                       <>
@@ -338,7 +338,7 @@ export function ProjectIntegrationsPage() {
                     )}
                   </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {/*
                     Offered only where it would change something: an account already primary here has
                     nothing to set, and an inactive binding is not a claim on anything.

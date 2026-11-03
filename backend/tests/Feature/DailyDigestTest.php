@@ -100,7 +100,8 @@ final class DailyDigestTest extends TestCase
             tenantId: (string) $this->tenant->id,
             projectId: $projectId,
             provider: $over['provider'] ?? 'meta',
-            externalAccountId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'acct')->toString(),
+            // One account answers for ONE project (an account is selected for a single project at a time).
+            externalAccountId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'acct'.$projectId)->toString(),
             externalCampaignId: Uuid::uuid5(Uuid::NAMESPACE_URL, $over['camp'] ?? 'c1')->toString(),
             metricKey: $key,
             metricDate: Carbon::parse($date),

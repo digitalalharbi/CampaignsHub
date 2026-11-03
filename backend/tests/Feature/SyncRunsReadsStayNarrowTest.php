@@ -60,11 +60,14 @@ final class SyncRunsReadsStayNarrowTest extends TestCase
     {
         $providers = ['snapchat', 'tiktok', 'meta'];
         $statuses = ['success', 'failed', 'no_data', 'partial_mapping'];
+        // A run names the account it was made for; deny by default reads a run only while that account is selected (the seeded
+        // world selects it, as an operator does), so every provider's runs carry one account.
+        $accounts = array_combine($providers, array_map(fn () => (string) Str::uuid(), $providers));
         $rows = [];
         for ($i = 0; $i < 500; $i++) {
             $created = Carbon::parse('2026-10-01 00:00:00', 'UTC')->addMinutes($i);
             $rows[] = [
-                'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => null,
+                'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $accounts[$providers[$i % 3]],
                 'provider' => $providers[$i % 3], 'status' => $statuses[$i % 4],
                 // Many runs share a window_end, so created_at must break the tie exactly as before.
                 'window_start' => '2026-10-01', 'window_end' => Carbon::parse('2026-10-01')->addDays(intdiv($i, 100))->toDateString(),

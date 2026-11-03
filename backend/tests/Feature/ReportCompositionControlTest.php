@@ -22,6 +22,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -34,6 +35,7 @@ use Tests\TestCase;
  */
 final class ReportCompositionControlTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -66,7 +68,7 @@ final class ReportCompositionControlTest extends TestCase
             'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
             'name' => 'A campaign', 'status' => 'active', 'objective' => 'sales',
         ]);
-        $account = (string) Str::uuid();
+        $account = $this->bindSeededAccount((string) $this->project->getKey());
         $external = (string) Str::uuid();
         foreach ([['spend', 400.0], ['clicks', 90.0], ['impressions', 9000.0], ['conversions', 12.0]] as [$key, $value]) {
             foreach ([2, 3] as $daysAgo) {

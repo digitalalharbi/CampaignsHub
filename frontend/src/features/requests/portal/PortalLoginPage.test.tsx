@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { PortalLoginPage } from './PortalLoginPage'
@@ -34,6 +35,16 @@ describe('PortalLoginPage', () => {
     expect(portalLoginStart).toHaveBeenCalledWith('email', 'client@example.test')
     expect(screen.getByTestId('portal-login-destination')).toHaveTextContent('client@example.test')
     expect(screen.queryByTestId('portal-login-undelivered')).not.toBeInTheDocument()
+  })
+
+  it('states a refusal instead of looking like a button that did nothing', async () => {
+    vi.mocked(portalLoginStart).mockRejectedValue(new axios.AxiosError('refused', undefined, undefined, undefined, { status: 422, statusText: '', headers: {}, config: {} as never, data: { message: 'refused', errors: { channel: ['That is not available.'] } } }))
+    renderWithProviders(<PortalLoginPage />, { route: '/portal/login', locale: 'en' })
+
+    fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value: 'client@example.test' } })
+    fireEvent.click(screen.getByTestId('portal-login-send'))
+
+    expect(await screen.findByTestId('login-error')).toHaveTextContent('That is not available.')
   })
 
   it('says plainly when no code was actually sent', async () => {

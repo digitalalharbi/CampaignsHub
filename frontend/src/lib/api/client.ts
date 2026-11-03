@@ -1,5 +1,6 @@
 import { projectIdOf, useVisibility } from '@/stores/visibility'
 import axios, { AxiosError } from 'axios'
+import type { InternalAxiosRequestConfig } from 'axios'
 import type { ApiEnvelope } from './types'
 import { describeFailure, isTimeout, Refusal } from './errors'
 import { useUi } from '@/stores/ui'
@@ -249,6 +250,24 @@ async function primeCsrfCookie(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
 }
+
+/*
+ * CSRF-SELF-HEAL-001 — a refused token gets one fresh one, once.
+ *
+ * Requests that leave before any session exists can each open their own, and the browser may keep one session's cookie beside another's
+ * token. The sign-in POST then carried a token its session did not know: 419 «This page has expired» on a form the person had just filled
+ * correctly, on any browser the timing favoured. A 419 is refused before anything runs, so sending it again repeats nothing; the token
+ * is still proved by the server, and only a second refusal reaches the page.
+ */
+api.interceptors.response.use(undefined, async (error) => {
+  const config = error?.config as (InternalAxiosRequestConfig & { csrfRetried?: boolean }) | undefined
+  if (error?.response?.status !== 419 || !config || config.csrfRetried) throw error
+
+  config.csrfRetried = true
+  await primeCsrfCookie()
+
+  return api.request(config)
+})
 
 /** Normalized error surfaced to the UI. */
 export interface ApiError {

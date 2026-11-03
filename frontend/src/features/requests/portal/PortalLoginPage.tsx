@@ -170,7 +170,8 @@ export function PortalLoginPage() {
                 required
                 error={activeError?.errors?.destination?.[0]}
               />
-              <ErrorNote error={activeError} />
+              {/* Every refusal is stated: one whose field is not on this step must not read as a button that did nothing. */}
+              {!activeError?.errors?.destination && <ErrorNote error={activeError} always />}
               <Button type="submit" data-testid="portal-login-send" loading={send.isPending} className="w-full" size="lg">{c.send}</Button>
             </form>
           ) : (
