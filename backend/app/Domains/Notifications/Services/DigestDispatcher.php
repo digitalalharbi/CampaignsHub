@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -45,6 +46,9 @@ final class DigestDispatcher
 {
     /** Beyond this a failure is left alone: retrying a broken template every hour is not a fix. */
     private const MAX_ATTEMPTS = 3;
+
+    /** Minutes before the next try, after the first and the second failure. */
+    private const BACKOFF_MINUTES = [15, 60];
 
     /** The daily email reports a WEEK, compared with the week before — see {@see sendDaily()}. */
     public const DAILY_WINDOW_DAYS = 7;
@@ -118,6 +122,63 @@ final class DigestDispatcher
         return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale, $audience);
     }
 
+    /**
+     * Try again every failed digest whose wait is over — EMAIL-DELIVERY-LEDGER-001.
+     *
+     * The class said «the next scheduled run picks it up», which was never true of a digest: the sweep
+     * fires only at the recipient's own hour, and by then the period key has moved on, so a daily that
+     * failed once simply never arrived. This re-sends the stored window through the same `send()`, which
+     * means the same claim, the same scope and the same audience rule: a retry cannot show more than the
+     * first attempt could, and a project lost in the meantime is gone from it. The person's choice is
+     * read again too, so somebody who has since switched the digest off is not mailed.
+     *
+     * @return array<string,int>
+     */
+    public function retryDue(?Carbon $now = null): array
+    {
+        $rows = DB::table('digest_sends')
+            ->where('status', 'failed')
+            ->whereIn('kind', ['daily', 'weekly', 'monthly'])
+            ->whereNotNull('next_attempt_at')
+            ->where('next_attempt_at', '<=', $now ?? Carbon::now())
+            ->whereNotNull('window_from')
+            ->limit(200)
+            ->get();
+
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $state = $this->retryOne($row);
+            $counts[$state] = ($counts[$state] ?? 0) + 1;
+        }
+
+        return $counts;
+    }
+
+    private function retryOne(object $row): string
+    {
+        $preference = DB::table('notification_preferences')->where('tenant_id', $row->tenant_id)->where('user_id', $row->user_id)->first();
+        $chosen = $preference === null ? [] : (array) json_decode((string) ($preference->digests ?? '[]'), true);
+        $user = User::query()->find($row->user_id);
+
+        if ($user === null || $user->email === null || ($chosen[$row->kind] ?? false) !== true) {
+            DB::table('digest_sends')->where('id', $row->id)->update(['next_attempt_at' => null, 'updated_at' => Carbon::now()]);
+
+            return 'no_longer_wanted';
+        }
+
+        return $this->send(
+            $user,
+            (string) $row->tenant_id,
+            (string) $row->kind,
+            (string) $row->period_key,
+            Carbon::parse((string) $row->window_from),
+            Carbon::parse((string) $row->window_to),
+            (string) ($preference->locale ?? 'ar'),
+            $preference->client_workspace_id !== null ? 'client' : 'agency',
+        );
+    }
+
     /** One send, for any of the three rhythms. */
     private function send(
         User $user,
@@ -131,7 +192,7 @@ final class DigestDispatcher
     ): string {
 
         // Claim the period first. A losing race means somebody else is already sending it.
-        if (! $this->claim($tenantId, $user, $kind, $periodKey)) {
+        if (! $this->claim($tenantId, $user, $kind, $periodKey, $from, $to)) {
             return 'already_sent';
         }
 
@@ -195,7 +256,7 @@ final class DigestDispatcher
              */
             $identity = $this->branding->forReport(null, $tenantId, static fn (): string => '');
 
-            Mail::to($user->email)->send(new DailyDigestMail(
+            $sent = Mail::to($user->email)->send(new DailyDigestMail(
                 $digest,
                 $locale,
                 (string) $user->name,
@@ -204,17 +265,23 @@ final class DigestDispatcher
                 $audience,
             ));
 
-            return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now());
+            return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
             /*
-             * The failure is recorded with its message and left visible.
+             * The failure is recorded with its reason and left visible.
              *
-             * It is deliberately NOT retried inside this call. A digest that retries in a loop
-             * turns one broken template into thousands of attempts, and the standing rule in this
-             * repo is that an intermittent failure must never be hidden by a retry — the next
-             * scheduled run picks it up while `attempts` is under the ceiling, and stops after.
+             * It is deliberately NOT retried inside this call: a digest that retries in a loop turns one
+             * broken template into thousands of attempts. `retryDue()` comes back after the backoff,
+             * unless a retry cannot help or the ceiling is reached. The credential a transport may
+             * quote is removed first (MailFailure).
              */
-            return $this->finish($user, $kind, $periodKey, 'failed', 'exception', error: $e->getMessage());
+            $failure = MailFailure::from($e);
+            $attempts = (int) DB::table('digest_sends')->where('user_id', $user->getKey())->where('kind', $kind)->where('period_key', $periodKey)->value('attempts');
+            $next = $attempts < self::MAX_ATTEMPTS && ! MailFailure::isPermanent($failure['code'])
+                ? Carbon::now()->addMinutes(self::BACKOFF_MINUTES[$attempts - 1] ?? 60)
+                : null;
+
+            return $this->finish($user, $kind, $periodKey, 'failed', 'exception', error: $failure['safe'], failureCode: $failure['code'], nextAttemptAt: $next);
         } finally {
             $this->tenants->forget();
         }
@@ -227,7 +294,7 @@ final class DigestDispatcher
      * answer rather than an error. A `failed` row under the attempt ceiling is re-claimed, because
      * a transient failure should be retried by the next run — once.
      */
-    private function claim(string $tenantId, User $user, string $kind, string $periodKey): bool
+    private function claim(string $tenantId, User $user, string $kind, string $periodKey, Carbon $from, Carbon $to): bool
     {
         $existing = DB::table('digest_sends')
             ->where('user_id', $user->getKey())
@@ -242,13 +309,14 @@ final class DigestDispatcher
                 return false;
             }
 
-            DB::table('digest_sends')->where('id', $existing->id)->update([
+            // Conditional, so the sweep and the retry command cannot both win one failed row.
+            return DB::table('digest_sends')->where('id', $existing->id)->where('status', 'failed')->update([
                 'status' => 'claimed',
                 'attempts' => (int) $existing->attempts + 1,
+                'attempted_at' => Carbon::now(),
+                'next_attempt_at' => null,
                 'updated_at' => Carbon::now(),
-            ]);
-
-            return true;
+            ]) === 1;
         }
 
         try {
@@ -260,6 +328,9 @@ final class DigestDispatcher
                 'period_key' => $periodKey,
                 'status' => 'claimed',
                 'attempts' => 1,
+                'attempted_at' => Carbon::now(),
+                'window_from' => $from,
+                'window_to' => $to,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
@@ -280,6 +351,9 @@ final class DigestDispatcher
         ?string $reason = null,
         ?string $error = null,
         ?Carbon $sentAt = null,
+        ?string $messageId = null,
+        ?string $failureCode = null,
+        ?Carbon $nextAttemptAt = null,
     ): string {
         DB::table('digest_sends')
             ->where('user_id', $user->getKey())
@@ -290,6 +364,10 @@ final class DigestDispatcher
                 'reason' => $reason,
                 'last_error' => $error,
                 'sent_at' => $sentAt,
+                'accepted_at' => $status === 'sent' ? $sentAt : null,
+                'provider_message_id' => $messageId,
+                'failure_code' => $failureCode,
+                'next_attempt_at' => $nextAttemptAt,
                 'updated_at' => Carbon::now(),
             ]);
 

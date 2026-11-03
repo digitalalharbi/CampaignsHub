@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Jobs\SendQueuedMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use InvalidArgumentException;
 use Ramsey\Uuid\Uuid;
 use Throwable;
 
@@ -44,15 +48,35 @@ use Throwable;
  * a crash between transport and ledger leaves evidence that an attempt happened rather than a clean
  * slate that invites a repeat. This is the same shape as `DigestDispatcher`, for the same reason.
  *
- * ## Nothing here retries
+ * ## `send()` does not retry; `queue()` does — EMAIL-DELIVERY-LEDGER-001
  *
- * A failure is recorded and left. Retrying a password reset in a loop mails somebody the same link
- * four times; retrying a broken template mails nobody anything, repeatedly. Re-sending is a decision
- * a person makes — «send it again» is a button, not a background job.
+ * A message carrying a secret — a code, a reset link, an invitation token — never goes near a queue.
+ * The payload would sit in Redis and in Horizon's failed-job screen in the clear, and the person
+ * waiting for it can simply ask again. So `send()` is one attempt, recorded, and `queue()` refuses
+ * those kinds outright.
+ *
+ * A notice with nothing secret in it (a welcome, a role change, a reviewer's reminder) goes through
+ * `queue()`: a `queued` row, a job, three tries with a backoff, and exactly one message however often
+ * the queue redelivers the job, because each try must first win the row.
+ *
+ * ## Security mail and optional mail — §17.3.4
+ *
+ * The catalogue says which a kind is. An optional kind honours the person's switches and is recorded
+ * `suppressed`; a mandatory kind never asks, so no preference, channel switch or verification-channel
+ * setting can silence it.
  */
 final class TransactionalMailer
 {
-    public function __construct(private readonly ProviderRegistry $providers) {}
+    /** One try and two retries; the backoff is what separates them. */
+    public const MAX_ATTEMPTS = 3;
+
+    /** Minutes to wait after the first and second failure. */
+    public const BACKOFF_MINUTES = [1, 15];
+
+    public function __construct(
+        private readonly ProviderRegistry $providers,
+        private readonly NotificationChoices $choices,
+    ) {}
 
     /**
      * Send one account message, and record the attempt whatever the outcome.
@@ -78,6 +102,10 @@ final class TransactionalMailer
             return 'already_sent';
         }
 
+        if ($this->switchedOff($kind, $tenantId, $userId)) {
+            return $this->finish($id, 'suppressed');
+        }
+
         /*
          * The channel is asked, not the mail config.
          *
@@ -89,16 +117,173 @@ final class TransactionalMailer
             return $this->finish($id, 'awaiting_credentials');
         }
 
+        DB::table('mail_deliveries')->where('id', $id)->update(['attempted_at' => Carbon::now()]);
+
         try {
-            Mail::to($recipient)->send($mail);
+            $sent = Mail::to($recipient)->send($mail);
         } catch (Throwable $e) {
-            return $this->finish($id, 'failed', $e->getMessage());
+            $failure = MailFailure::from($e);
+
+            return $this->finish($id, 'failed', $failure['safe'], failureCode: $failure['code']);
         }
 
-        // A driver that works and reaches nobody is not a delivery. See the class docblock.
+        return $this->finishAccepted($id, $transport, $sent);
+    }
+
+    /**
+     * A notice with no secret in it, sent by a worker with retries. Returns the row's state now: `queued`
+     * on a real queue, the outcome on the `sync` one.
+     */
+    public function queue(
+        string $recipient,
+        Mailable $mail,
+        string $kind,
+        string $template,
+        string $locale = 'ar',
+        ?string $tenantId = null,
+        ?int $userId = null,
+        ?string $dedupKey = null,
+    ): string {
+        $id = $this->enqueue($recipient, $mail, $kind, $template, $locale, $tenantId, $userId, $dedupKey);
+
+        if ($id === null) {
+            return 'already_sent';
+        }
+
+        $status = (string) DB::table('mail_deliveries')->where('id', $id)->value('status');
+
+        if ($status === 'queued') {
+            SendQueuedMail::dispatch($id, $mail)->afterCommit();
+            $status = (string) DB::table('mail_deliveries')->where('id', $id)->value('status');
+        }
+
+        return $status;
+    }
+
+    /**
+     * Record that this message is waiting, deciding only what can be decided without a worker.
+     *
+     * @return string|null the row's id; null when this exact message was already recorded
+     */
+    public function enqueue(
+        string $recipient,
+        Mailable $mail,
+        string $kind,
+        string $template,
+        string $locale = 'ar',
+        ?string $tenantId = null,
+        ?int $userId = null,
+        ?string $dedupKey = null,
+    ): ?string {
+        if (MessageCatalogue::carriesSecret($kind)) {
+            throw new InvalidArgumentException("«{$kind}» carries a secret and may not be queued; use send().");
+        }
+
+        $id = (string) Uuid::uuid4();
+
+        if (! $this->claim($id, $recipient, $kind, $template, $locale, MailTransportState::current(), $tenantId, $userId, $dedupKey, 'queued', 0)) {
+            return null;
+        }
+
+        if ($this->switchedOff($kind, $tenantId, $userId)) {
+            $this->finish($id, 'suppressed');
+        } elseif (! $this->providers->isConfigured('email')) {
+            $this->finish($id, 'awaiting_credentials');
+        }
+
+        return $id;
+    }
+
+    /**
+     * One try at a queued row: `sent`/`sandbox`/`failed`, `retry` when the queue should come back, or
+     * `already_sent` when another try already finished it.
+     *
+     * The row is WON first, by an update that only matches `queued`. Two workers, or a job the queue
+     * redelivered after a lost acknowledgement, cannot both win, which is what makes a retry safe. A
+     * worker that dies between winning and finishing leaves `claimed`, and that is never re-sent: a
+     * missed notice is recoverable, and a duplicate cannot be recalled.
+     */
+    public function deliverQueued(string $id, Mailable $mail): string
+    {
+        $won = DB::table('mail_deliveries')->where('id', $id)->where('status', 'queued')->update([
+            'status' => 'claimed',
+            'attempts' => DB::raw('attempts + 1'),
+            'attempted_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+
+        if ($won === 0) {
+            return 'already_sent';
+        }
+
+        $row = DB::table('mail_deliveries')->where('id', $id)->first();
+
+        try {
+            $sent = Mail::to((string) $row->recipient)->send($mail);
+        } catch (Throwable $e) {
+            $failure = MailFailure::from($e);
+            $attempts = (int) $row->attempts;
+
+            if ($attempts >= self::MAX_ATTEMPTS || MailFailure::isPermanent($failure['code'])) {
+                return $this->finish($id, 'failed', $failure['safe'], failureCode: $failure['code']);
+            }
+
+            DB::table('mail_deliveries')->where('id', $id)->update([
+                'status' => 'queued',
+                'error' => $failure['safe'],
+                'failure_code' => $failure['code'],
+                'next_attempt_at' => Carbon::now()->addMinutes(self::BACKOFF_MINUTES[$attempts - 1] ?? 15),
+                'updated_at' => Carbon::now(),
+            ]);
+
+            return 'retry';
+        }
+
+        return $this->finishAccepted($id, (string) $row->transport, $sent);
+    }
+
+    /** The worker gave up without an outcome of ours — killed, or out of tries. A waiting row must not wait forever. */
+    public function abandon(string $id, Throwable $e): void
+    {
+        $failure = MailFailure::from($e);
+
+        DB::table('mail_deliveries')->where('id', $id)->whereIn('status', ['queued', 'claimed'])->update([
+            'status' => 'failed',
+            'error' => $failure['safe'],
+            'failure_code' => $failure['code'],
+            'next_attempt_at' => null,
+            'updated_at' => Carbon::now(),
+        ]);
+    }
+
+    /** Has the person this is for switched this kind off? A mandatory or unknown kind never has. */
+    private function switchedOff(string $kind, ?string $tenantId, ?int $userId): bool
+    {
+        $type = MessageCatalogue::typeOfKind($kind);
+
+        if ($type === null || $tenantId === null || $userId === null || MessageCatalogue::isMandatory($type)) {
+            return false;
+        }
+
+        return ! $this->choices->wants($userId, $tenantId, $type, 'email');
+    }
+
+    /** A driver that works and reaches nobody is not a delivery. See the class docblock. */
+    private function finishAccepted(string $id, string $transport, mixed $sent): string
+    {
         return $transport === MailTransportState::SANDBOX
             ? $this->finish($id, 'sandbox', sentAt: Carbon::now())
-            : $this->finish($id, 'sent', sentAt: Carbon::now());
+            : $this->finish($id, 'sent', sentAt: Carbon::now(), acceptedAt: Carbon::now(), messageId: self::messageId($sent));
+    }
+
+    /** The transport's Message-ID, when it gave one. A fake or a mock returns nothing, and that is fine. */
+    public static function messageId(mixed $sent): ?string
+    {
+        if (! is_object($sent) || ! method_exists($sent, 'getMessageId')) {
+            return null;
+        }
+
+        return mb_substr((string) $sent->getMessageId(), 0, 190) ?: null;
     }
 
     /**
@@ -129,6 +314,8 @@ final class TransactionalMailer
         ?string $tenantId,
         ?int $userId,
         ?string $dedupKey,
+        string $status = 'claimed',
+        int $attempts = 1,
     ): bool {
         return DB::table('mail_deliveries')->insertOrIgnore([
             'id' => $id,
@@ -138,9 +325,9 @@ final class TransactionalMailer
             'recipient' => $recipient,
             'locale' => $locale,
             'template' => $template,
-            'status' => 'claimed',
+            'status' => $status,
             'transport' => $transport,
-            'attempts' => 1,
+            'attempts' => $attempts,
             'dedup_key' => $dedupKey,
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
@@ -164,12 +351,23 @@ final class TransactionalMailer
         return $state === 'awaiting_credentials' ? 'awaiting_provider_credentials' : $state;
     }
 
-    private function finish(string $id, string $status, ?string $error = null, ?Carbon $sentAt = null): string
-    {
+    private function finish(
+        string $id,
+        string $status,
+        ?string $error = null,
+        ?Carbon $sentAt = null,
+        ?string $failureCode = null,
+        ?Carbon $acceptedAt = null,
+        ?string $messageId = null,
+    ): string {
         DB::table('mail_deliveries')->where('id', $id)->update([
             'status' => $status,
             'error' => $error,
+            'failure_code' => $failureCode,
             'sent_at' => $sentAt,
+            'accepted_at' => $acceptedAt,
+            'provider_message_id' => $messageId,
+            'next_attempt_at' => null,
             'updated_at' => Carbon::now(),
         ]);
 

@@ -15,6 +15,9 @@ export interface DeliveryRow {
   kind: string
   recipient: string | null
   status: string
+  /** The stage as a reader should hear it. Absent only on a row from an older server. */
+  state?: string
+  failure_code?: string | null
   reason: string | null
   attempts: number
   at: string

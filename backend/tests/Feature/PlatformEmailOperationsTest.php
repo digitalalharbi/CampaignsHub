@@ -50,6 +50,50 @@ final class PlatformEmailOperationsTest extends TestCase
         $this->owner->forceFill(['is_platform_admin' => true])->save();
     }
 
+    /** EMAIL-DELIVERY-LEDGER-001 — the page reads stages, and acceptance is never called delivery. */
+    public function test_the_ledger_reads_in_stages_and_says_why(): void
+    {
+        $this->delivery(['recipient' => 'a@example.com', 'status' => 'sent']);
+        $this->delivery(['recipient' => 'b@example.com', 'status' => 'sent', 'delivered_at' => now(), 'delivery_evidence' => 'Owner read it in Gmail']);
+        $this->delivery(['recipient' => 'c@example.com', 'status' => 'failed', 'failure_code' => 'auth_failed', 'error' => 'Failed to authenticate on SMTP server with username "smtp-login"']);
+        $this->delivery(['recipient' => 'd@example.com', 'status' => 'sandbox']);
+        $this->delivery(['recipient' => 'e@example.com', 'status' => 'queued', 'attempts' => 0]);
+
+        $data = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/admin/email/deliveries')->assertOk()->json('data');
+
+        $this->assertSame(['accepted' => 1, 'delivered' => 1, 'failed' => 1, 'queued' => 1, 'suppressed' => 1], collect($data['by_state'])->sortKeys()->all());
+        $this->assertSame(['queued', 'attempted', 'accepted', 'delivered', 'failed', 'suppressed'], $data['available_states']);
+
+        $by = collect($data['deliveries'])->keyBy('recipient');
+        $this->assertSame('accepted', $by['a@example.com']['state']);
+        $this->assertSame('delivered', $by['b@example.com']['state']);
+        $this->assertSame('Owner read it in Gmail', $by['b@example.com']['evidence']);
+        $this->assertSame('auth_failed', $by['c@example.com']['failure_code']);
+        // A row written before redaction existed is cleaned on the way out as well.
+        $this->assertStringNotContainsString('smtp-login', (string) $by['c@example.com']['reason']);
+        $this->assertSame('sandbox_transport', $by['d@example.com']['suppression_reason']);
+
+        $only = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/admin/email/deliveries?state=accepted')->json('data');
+        $this->assertSame(['a@example.com'], array_column($only['deliveries'], 'recipient'));
+        $this->assertSame(1, $only['total']);
+    }
+
+    /** The billing mail has its own table and was missing from «is mail working?». */
+    public function test_subscription_mail_is_in_the_ledger(): void
+    {
+        DB::table('subscription_notifications')->insert([
+            'id' => (string) Uuid::uuid4(), 'tenant_id' => (string) $this->tenant->id, 'to_email' => 'bill@example.com', 'locale' => 'ar',
+            'event' => 'renewal_failed', 'channel' => 'email', 'subject' => 'x', 'body' => 'x', 'status' => 'queued', 'attempts' => 0,
+            'dedup_key' => 'sub-1', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $rows = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/admin/email/deliveries?source=subscription')->assertOk()->json('data.deliveries');
+
+        $this->assertSame(['bill@example.com'], array_column($rows, 'recipient'));
+        $this->assertSame('queued', $rows[0]['state']);
+        $this->assertSame('subscription', $rows[0]['source']);
+    }
+
     private function delivery(array $over = []): void
     {
         DB::table('mail_deliveries')->insert($over + [
@@ -115,7 +159,7 @@ final class PlatformEmailOperationsTest extends TestCase
         $byState = $this->actingAs($this->owner, 'sanctum')
             ->getJson('/api/v1/admin/email/deliveries')->json('data.by_state');
 
-        $this->assertSame(1, $byState['sent'] ?? 0);
+        $this->assertSame(1, $byState['accepted'] ?? 0);
         $this->assertSame(1, $byState['failed'] ?? 0, 'the failed digest was not counted');
     }
 

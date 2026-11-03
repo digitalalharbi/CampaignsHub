@@ -134,6 +134,8 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
  * Sending is idempotent by database constraint, so an overlapping run cannot double-send.
  */
 Schedule::command('notifications:send-digests')->hourly()->withoutOverlapping();
+// EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
+Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 
 /*
  * The alert sweep (MAIL-006) — four times a day, not hourly.

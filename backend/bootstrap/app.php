@@ -44,8 +44,10 @@ use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
+use App\Domains\Notifications\Console\ConfirmMailDelivery;
 use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
+use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Ops\Console\PerfCheckCommand;
@@ -121,6 +123,8 @@ return Application::configure(basePath: dirname(__DIR__))
         RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
+        RetryFailedDigests::class,
+        ConfirmMailDelivery::class,
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,
         PrepareWeeklyPacks::class,

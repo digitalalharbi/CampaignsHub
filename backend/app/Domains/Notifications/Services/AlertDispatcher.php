@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
@@ -154,6 +155,12 @@ final class AlertDispatcher
                         continue;
                     }
 
+                    if (! $this->choices->meetsImportance($userId, $tenantId, $kind, (string) $note['severity'])) {
+                        $counts['below_importance'] = ($counts['below_importance'] ?? 0) + 1;
+
+                        continue;
+                    }
+
                     /*
                      * «Not now, in the digest.»
                      *
@@ -256,7 +263,7 @@ final class AlertDispatcher
         }
 
         try {
-            Mail::to($user->email)->send(new AlertBundleMail(
+            $sent = Mail::to($user->email)->send(new AlertBundleMail(
                 items: array_map(
                     static fn (array $item): array => [
                         'severity' => $item['severity'],
@@ -270,7 +277,7 @@ final class AlertDispatcher
                 recipientName: (string) $user->name,
             ));
 
-            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, Carbon::now());
+            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
             /*
              * Recorded and left alone, never retried in a loop.
@@ -278,7 +285,8 @@ final class AlertDispatcher
              * The standing rule in this repo is that an intermittent failure must not be hidden by a
              * retry; the next sweep re-claims a failed row and this one stops.
              */
-            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', error: $e->getMessage());
+            $failure = MailFailure::from($e);
+            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', error: $failure['safe'], failureCode: $failure['code']);
         }
 
         return $counts;
@@ -288,10 +296,10 @@ final class AlertDispatcher
      * @param  list<string>  $periodKeys
      * @return int how many findings were finished, which is what the counts report
      */
-    private function finishAll(User $user, array $periodKeys, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null): int
+    private function finishAll(User $user, array $periodKeys, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null, ?string $messageId = null, ?string $failureCode = null): int
     {
         foreach ($periodKeys as $key) {
-            $this->finish($user, $key, $status, $reason, $sentAt, $error);
+            $this->finish($user, $key, $status, $reason, $sentAt, $error, $messageId, $failureCode);
         }
 
         return count($periodKeys);
@@ -362,7 +370,7 @@ final class AlertDispatcher
         }
     }
 
-    private function finish(User $user, string $periodKey, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null): string
+    private function finish(User $user, string $periodKey, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null, ?string $messageId = null, ?string $failureCode = null): string
     {
         DB::table('digest_sends')
             ->where('user_id', $user->getKey())
@@ -373,6 +381,9 @@ final class AlertDispatcher
                 'reason' => $reason,
                 'last_error' => $error,
                 'sent_at' => $sentAt,
+                'accepted_at' => $status === 'sent' ? $sentAt : null,
+                'provider_message_id' => $messageId,
+                'failure_code' => $failureCode,
                 'updated_at' => Carbon::now(),
             ]);
 

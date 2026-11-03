@@ -58,6 +58,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // Notification preferences (per-user).
     Route::get('notifications', [NotificationPreferenceController::class, 'show'])->name('notifications.show');
     Route::match(['put', 'patch'], 'notifications', [NotificationPreferenceController::class, 'update'])->name('notifications.update');
+    // §17.4.5 — a test to one's own address, and a manager's preview of the templates.
+    Route::post('notifications/test', [NotificationPreferenceController::class, 'test'])->middleware('throttle:3,1')->name('notifications.test');
+    Route::get('notifications/previews', [NotificationPreferenceController::class, 'previews'])->name('notifications.previews');
+    Route::get('notifications/previews/{key}', [NotificationPreferenceController::class, 'preview'])->name('notifications.preview');
 
     /*
      * Who a manager wants told — MAIL-010. Distinct from the routes above, which are a person's own

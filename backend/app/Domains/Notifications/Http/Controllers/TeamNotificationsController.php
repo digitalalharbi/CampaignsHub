@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Http\Controllers;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Support\MailDeliveryState;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -206,6 +207,8 @@ final class TeamNotificationsController extends Controller
                 'kind' => (string) $r->kind,
                 'recipient' => null,
                 'status' => (string) $r->status,
+                'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
+                'failure_code' => $r->failure_code ?? null,
                 'reason' => $r->reason === null ? null : (string) $r->reason,
                 'attempts' => (int) ($r->attempts ?? 0),
                 'at' => (string) ($r->sent_at ?? $r->created_at),
@@ -227,8 +230,11 @@ final class TeamNotificationsController extends Controller
                 'kind' => (string) $r->kind,
                 'recipient' => (string) $r->recipient,
                 'status' => (string) $r->status,
-                'reason' => null,
-                'attempts' => 1,
+                'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
+                'failure_code' => $r->failure_code ?? null,
+                // The named reason, not the transport's words: this is a workspace's screen, not the operator's.
+                'reason' => $r->failure_code ?? null,
+                'attempts' => (int) ($r->attempts ?? 1),
                 'at' => (string) ($r->sent_at ?? $r->created_at),
                 'sort' => (string) $r->created_at,
             ]);

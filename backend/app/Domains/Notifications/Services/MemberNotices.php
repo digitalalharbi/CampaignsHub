@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
@@ -102,7 +103,8 @@ final class MemberNotices
     private function send(User $user, Tenant $tenant, string $kind, string $dedup, OperationalMail $mail): string
     {
         try {
-            return $this->mailer->send(
+            // A notice holds no secret, so it gets the queue, a backoff and a retry. EMAIL-DELIVERY-LEDGER-001.
+            return $this->mailer->queue(
                 recipient: (string) $user->email,
                 mail: $mail,
                 kind: $kind,
@@ -114,7 +116,7 @@ final class MemberNotices
             );
         } catch (Throwable $e) {
             // The grant or the role change has already happened; a message about it must not be able to undo it.
-            Log::warning('Member notice could not be sent.', ['kind' => $kind, 'user_id' => $user->id, 'error' => $e->getMessage()]);
+            Log::warning('Member notice could not be sent.', ['kind' => $kind, 'user_id' => $user->id, 'error' => MailFailure::redact($e->getMessage())]);
 
             return 'failed';
         }

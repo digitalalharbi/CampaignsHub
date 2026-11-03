@@ -10,15 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { useUi } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
-
-const STATE_WORDS: Record<string, { ar: string; en: string; tone: string }> = {
-  sent: { ar: 'أُرسلت', en: 'Sent', tone: 'text-success' },
-  failed: { ar: 'فشلت', en: 'Failed', tone: 'text-danger' },
-  awaiting_credentials: { ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials', tone: 'text-warning' },
-  sandbox: { ar: 'وضع الاختبار', en: 'Sandbox', tone: 'text-warning' },
-  skipped: { ar: 'تُخطّيت', en: 'Skipped', tone: 'text-text-muted' },
-  claimed: { ar: 'قيد الإرسال', en: 'In flight', tone: 'text-text-muted' },
-}
+import { FAILURE_WORDS, stageWords, SUPPRESSION_WORDS } from '@/features/settings/deliveryWords'
 
 /**
  * `/admin/email` — what this installation's mail has actually done, and what it looks like (MAIL-014).
@@ -46,18 +38,18 @@ const STATE_WORDS: Record<string, { ar: string; en: string; tone: string }> = {
 export function EmailOperationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
 
-  const [status, setStatus] = useState('')
+  const [state, setState] = useState('')
   const [source, setSource] = useState('')
   const [recipient, setRecipient] = useState('')
   const [days, setDays] = useState(30)
   const [page, setPage] = useState(1)
 
   const ledger = useQuery({
-    queryKey: ['admin', 'email', status, source, recipient, days, page],
-    queryFn: () => fetchEmailLedger({ status, source, recipient, days, page }),
+    queryKey: ['admin', 'email', state, source, recipient, days, page],
+    queryFn: () => fetchEmailLedger({ state, source, recipient, days, page }),
   })
 
-  const word = (s: string) => STATE_WORDS[s] ?? { ar: s, en: s, tone: 'text-text-muted' }
+  const word = stageWords
 
   return (
     <div className="w-full">
@@ -99,7 +91,7 @@ export function EmailOperationsPage() {
           <div className="grid gap-4 rounded-2xl border border-border bg-surface p-5 sm:grid-cols-4">
             <Field label={ar ? 'الحالة' : 'Status'} htmlFor="f-status">
               <Select
-                id="f-status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}
+                id="f-status" value={state} onChange={(e) => { setState(e.target.value); setPage(1) }}
                 options={[
                   { value: '', label: ar ? 'كل الحالات' : 'Every status' },
                   ...ledger.data.available_states.map((s) => ({ value: s, label: ar ? word(s).ar : word(s).en })),
@@ -110,9 +102,10 @@ export function EmailOperationsPage() {
               <Select
                 id="f-source" value={source} onChange={(e) => { setSource(e.target.value); setPage(1) }}
                 options={[
-                  { value: '', label: ar ? 'الكل' : 'Both' },
+                  { value: '', label: ar ? 'الكل' : 'All' },
                   { value: 'transactional', label: ar ? 'رسائل فردية' : 'Transactional' },
                   { value: 'digest', label: ar ? 'ملخصات وتنبيهات' : 'Digests & alerts' },
+                  { value: 'subscription', label: ar ? 'الاشتراك والفوترة' : 'Subscription & billing' },
                 ]}
               />
             </Field>
@@ -163,11 +156,11 @@ export function EmailOperationsPage() {
                     </td>
                     <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
                     <td className="p-3 text-[13px] text-text-primary">{row.tenant_name ?? '—'}</td>
-                    <td className={`p-3 text-[13px] font-semibold ${word(row.status).tone}`}>
-                      {ar ? word(row.status).ar : word(row.status).en}
+                    <td className={`p-3 text-[13px] font-semibold ${word(row.state).tone}`}>
+                      {ar ? word(row.state).ar : word(row.state).en}
                     </td>
                     <td className="p-3 text-[13px] text-text-primary">{row.attempts}</td>
-                    <td className="max-w-[280px] p-3 text-[13px] leading-6 text-text-secondary">{row.reason ?? '—'}</td>
+                    <td className="max-w-[320px] p-3 text-[13px] leading-6 text-text-secondary"><RowReason row={row} ar={ar} /></td>
                   </tr>
                 ))}
                 {ledger.data.deliveries.length === 0 && (
@@ -211,6 +204,29 @@ export function EmailOperationsPage() {
 }
 
 /**
+ * Why the row stands where it stands (§17.4.6): the named reason and its fix first, the transport's own
+ * redacted words under it, the next try if one is waiting, and the evidence when somebody confirmed receipt.
+ */
+function RowReason({ row, ar }: { row: EmailDelivery; ar: boolean }) {
+  const pick = (w?: { ar: string; en: string }) => (w ? (ar ? w.ar : w.en) : null)
+  const named = pick(row.failure_code ? (FAILURE_WORDS[row.failure_code] ?? FAILURE_WORDS.unknown) : undefined)
+    ?? pick(row.suppression_reason ? SUPPRESSION_WORDS[row.suppression_reason] : undefined)
+
+  if (!named && !row.reason && !row.evidence && !row.next_attempt_at) return <>—</>
+
+  return (
+    <>
+      {named && <div>{named}</div>}
+      {row.reason && <div className="text-text-muted" dir="auto">{row.reason}</div>}
+      {row.next_attempt_at && (
+        <div className="text-text-muted">{ar ? 'المحاولة التالية: ' : 'Next try: '}<span dir="ltr">{row.next_attempt_at.slice(0, 16).replace('T', ' ')}</span></div>
+      )}
+      {row.evidence && <div className="text-success" dir="auto">{row.evidence}</div>}
+    </>
+  )
+}
+
+/**
  * What this install can do with an email, said before the table is read.
  *
  * Three states and three different sentences. `sandbox` gets a warning rather than a neutral note
@@ -221,8 +237,8 @@ function TransportBanner({ transport, ar }: { transport: { state: string; provid
     return (
       <Alert severity="positive" title={ar ? 'الإرسال مفعّل' : 'Sending is live'}>
         {ar
-          ? `مزوّد البريد مربوط عبر «${transport.driver}»، والحالات أدناه حقيقية.`
-          : `A mail provider is wired through “${transport.driver}”, and the states below are real.`}
+          ? `مزوّد البريد مربوط عبر «${transport.driver}». «قبلها خادم البريد» لا تعني أنها وصلت إلى صندوق الوارد؛ تأكيد الاستلام يحتاج إلى دليل.`
+          : `A mail provider is wired through “${transport.driver}”. “Accepted” does not mean it reached an inbox; confirming receipt takes evidence.`}
       </Alert>
     )
   }
@@ -231,8 +247,8 @@ function TransportBanner({ transport, ar }: { transport: { state: string; provid
     return (
       <Alert severity="warning" title={ar ? 'وضع الاختبار — لا تصل الرسائل إلى أحد' : 'Sandbox — nothing reaches anybody'}>
         {ar
-          ? `المُرسِل المضبوط هو «${transport.driver}»، وهو ينجح دائمًا ولا يوصل شيئًا. أي «أُرسلت» أدناه تعني «كُتبت في السجل»، لا «وصلت».`
-          : `The configured mailer is “${transport.driver}”, which always succeeds and delivers nothing. Any “sent” below means “written to the log”, not “received”.`}
+          ? `المُرسِل المضبوط هو «${transport.driver}»، وهو ينجح دائمًا ولا يوصل شيئًا. أي رسالة أدناه تعني «كُتبت في السجل»، لا «وصلت».`
+          : `The configured mailer is “${transport.driver}”, which always succeeds and delivers nothing. Nothing below reached a person.`}
       </Alert>
     )
   }
@@ -262,11 +278,12 @@ function MailSettingsCard({ transport, ar }: { transport: EmailLedger['transport
   })
   const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB') : (ar ? 'لم يحدث بعد' : 'Never'))
   const outcome: Record<string, { ar: string; en: string }> = {
-    sent: { ar: 'أُرسلت', en: 'Sent' },
+    sent: { ar: 'قبلها خادم البريد — افحص صندوق الوارد للتأكد', en: 'Accepted by the mail server — check your inbox to be sure' },
+    suppressed: { ar: 'لم تُرسل', en: 'Not sent' },
     sandbox: { ar: 'كُتبت في السجل فقط — لا تصل لأحد', en: 'Written to the log only — it reaches nobody' },
     awaiting_credentials: { ar: 'سُجّلت بانتظار بيانات الاعتماد — لم يغادر شيء', en: 'Recorded as awaiting credentials — nothing left' },
     failed: { ar: 'فشلت', en: 'Failed' },
-    already_sent: { ar: 'أُرسلت قبل لحظات', en: 'Already sent a moment ago' },
+    already_sent: { ar: 'جُرّبت قبل لحظات', en: 'Already tried a moment ago' },
   }
 
   return (
@@ -274,10 +291,10 @@ function MailSettingsCard({ transport, ar }: { transport: EmailLedger['transport
       <dl className="grid gap-2 text-sm">
         <Row label={ar ? 'المُرسِل' : 'Sender'} value={transport.sender?.address ? `${transport.sender.name} <${transport.sender.address}>` : (ar ? 'غير مضبوط' : 'Not set')} ltr />
         <Row label={ar ? 'الرد إلى' : 'Reply-to'} value={transport.reply_to || (ar ? 'غير مضبوط' : 'Not set')} ltr />
-        <Row label={ar ? 'آخر نجاح' : 'Last success'} value={when(transport.last_success_at)} />
+        <Row label={ar ? 'آخر قبول من الخادم' : 'Last accepted'} value={when(transport.last_success_at)} />
         <Row
           label={ar ? 'آخر فشل' : 'Last failure'}
-          value={transport.last_failure ? `${when(transport.last_failure.at)} · ${transport.last_failure.kind}${transport.last_failure.error ? ` — ${transport.last_failure.error}` : ''}` : (ar ? 'لا يوجد' : 'None')}
+          value={transport.last_failure ? `${when(transport.last_failure.at)} · ${transport.last_failure.kind} — ${(() => { const f = transport.last_failure?.failure_code ? FAILURE_WORDS[transport.last_failure.failure_code] : undefined; return f ? (ar ? f.ar : f.en) : (transport.last_failure?.error ?? '') })()}` : (ar ? 'لا يوجد' : 'None')}
         />
       </dl>
       <div className="flex flex-col items-start gap-2">
@@ -320,6 +337,11 @@ function PreviewGallery({ ar }: { ar: boolean }) {
 
   const list = useQuery({ queryKey: ['admin', 'email', 'previews'], queryFn: fetchEmailPreviews })
   const chosen = key !== '' ? key : (list.data?.keys[0] ?? '')
+  const qc = useQueryClient()
+  const sendTest = useMutation({
+    mutationFn: () => sendTestEmail(locale === 'en' ? 'en' : 'ar', chosen),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['admin', 'email'] }) },
+  })
 
   const preview = useQuery({
     queryKey: ['admin', 'email', 'preview', chosen, locale],
@@ -349,6 +371,18 @@ function PreviewGallery({ ar }: { ar: boolean }) {
             options={[{ value: 'ar', label: 'العربية' }, { value: 'en', label: 'English' }]}
           />
         </Field>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button variant="secondary" disabled={chosen === '' || sendTest.isPending} onClick={() => sendTest.mutate()} data-testid="gallery-test-send">
+          {ar ? 'أرسل هذه الرسالة إلى بريدي' : 'Send this message to me'}
+        </Button>
+        <span className="text-xs text-text-muted">{ar ? 'بنصها التجريبي، وإلى بريدك أنت فقط.' : 'With its fixture text, and to your own address only.'}</span>
+        {sendTest.data && (
+          <span data-testid="gallery-test-result" className={`text-sm font-semibold ${stageWords(sendTest.data.delivery_state).tone}`}>
+            {ar ? stageWords(sendTest.data.delivery_state).ar : stageWords(sendTest.data.delivery_state).en}
+          </span>
+        )}
       </div>
 
       {preview.isLoading ? (

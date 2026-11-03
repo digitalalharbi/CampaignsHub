@@ -50,6 +50,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'delivery:remind',
         // FORMS-PDPL-001 — the evidence around a form submission is anonymised past its form's retention (02:30 daily); the consent record is kept.
         'forms:purge-evidence',
+        // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
+        'notifications:retry-failed',
         'fx:rates',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker

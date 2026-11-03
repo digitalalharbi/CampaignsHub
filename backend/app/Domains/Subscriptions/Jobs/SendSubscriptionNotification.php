@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Jobs;
 
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Subscriptions\Models\SubscriptionNotification;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Mail\SentMessage;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
@@ -109,13 +112,15 @@ final class SendSubscriptionNotification implements ShouldQueue
         }
 
         try {
-            $this->deliver($notification);
+            $sent = $this->deliver($notification);
 
             $notification->forceFill([
                 'status' => 'sent',
                 'attempts' => $attempts,
                 'sent_at' => now(),
                 'error' => null,
+                'failure_code' => null,
+                'provider_message_id' => TransactionalMailer::messageId($sent),
             ])->save();
         } catch (Throwable $e) {
             /*
@@ -124,10 +129,13 @@ final class SendSubscriptionNotification implements ShouldQueue
              * Swallowing it would leave a row saying `failed` that nothing will ever try again, which
              * is indistinguishable from a message we decided not to send.
              */
+            $failure = MailFailure::from($e);
+
             $notification->forceFill([
                 'status' => 'failed',
                 'attempts' => $attempts,
-                'error' => mb_substr($e->getMessage(), 0, 1000),
+                'error' => $failure['safe'],
+                'failure_code' => $failure['code'],
             ])->save();
 
             throw $e;
@@ -143,12 +151,12 @@ final class SendSubscriptionNotification implements ShouldQueue
      * to prevent: only the frame around it is shared. The «why you received this» line says it is about
      * the account, not a project the reader follows.
      */
-    private function deliver(SubscriptionNotification $notification): void
+    private function deliver(SubscriptionNotification $notification): ?SentMessage
     {
         $ar = $notification->locale !== 'en';
         $worrying = in_array($notification->event, ['renewal_failed', 'past_due', 'suspended'], true);
 
-        Mail::to($notification->to_email)->send(new OperationalMail(
+        return Mail::to($notification->to_email)->send(new OperationalMail(
             kind: 'billing',
             severity: $worrying ? 'warning' : 'info',
             title: $notification->subject,

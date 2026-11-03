@@ -8,7 +8,9 @@ use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\AlertFigures;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Models\User;
 use App\Support\Frontend;
 use Illuminate\Support\Carbon;
@@ -89,6 +91,11 @@ final class AlertEventMailer
 
                     continue;
                 }
+                if (! $this->choices->meetsImportance($userId, $tenantId, $type, (string) $item['severity'])) {
+                    $counts['below_importance'] = ($counts['below_importance'] ?? 0) + 1;
+
+                    continue;
+                }
                 if ($this->choices->rhythm($userId, $tenantId, $type) !== 'immediate') {
                     $counts['held_for_digest']++;
 
@@ -135,7 +142,7 @@ final class AlertEventMailer
 
         $ar = $locale === 'ar';
         try {
-            Mail::to($user->email)->send(new AlertBundleMail(
+            $sent = Mail::to($user->email)->send(new AlertBundleMail(
                 items: array_map(static fn (array $i): array => [
                     'severity' => (string) $i['severity'],
                     'title' => (string) (($ar ? ($i['title_ar'] ?? null) : null) ?? $i['title']),
@@ -150,9 +157,10 @@ final class AlertEventMailer
                 lang: $locale,
                 recipientName: (string) $user->name,
             ));
-            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, $now, $now);
+            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, $now, $now, messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
-            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', $now, null, $e->getMessage());
+            $failure = MailFailure::from($e);
+            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', $now, null, $failure['safe'], failureCode: $failure['code']);
         }
 
         return $counts;
@@ -185,25 +193,24 @@ final class AlertEventMailer
             if ($existing->status !== 'failed' || (int) $existing->attempts >= 3) {
                 return false;
             }
-            DB::table('digest_sends')->where('id', $existing->id)->update(['attempts' => (int) $existing->attempts + 1, 'updated_at' => $now]);
 
-            return true;
+            // Conditional, so two overlapping sweeps cannot both re-send one failed alert.
+            return DB::table('digest_sends')->where('id', $existing->id)->where('status', 'failed')->update(['status' => 'claimed', 'attempts' => (int) $existing->attempts + 1, 'attempted_at' => $now, 'updated_at' => $now]) === 1;
         }
 
-        DB::table('digest_sends')->insert([
+        // `insertOrIgnore`, because a plain insert threw a unique violation at the loser of a race and took the whole sweep with it.
+        return DB::table('digest_sends')->insertOrIgnore([
             'id' => (string) Str::uuid(), 'tenant_id' => $tenantId, 'user_id' => $user->getKey(), 'kind' => self::KIND,
-            'period_key' => $periodKey, 'status' => 'claimed', 'attempts' => 1, 'created_at' => $now, 'updated_at' => $now,
-        ]);
-
-        return true;
+            'period_key' => $periodKey, 'status' => 'claimed', 'attempts' => 1, 'attempted_at' => $now, 'created_at' => $now, 'updated_at' => $now,
+        ]) > 0;
     }
 
     /** @param  list<string>  $keys */
-    private function finishAll(User $user, array $keys, string $status, ?string $reason, Carbon $now, ?Carbon $sentAt = null, ?string $error = null): int
+    private function finishAll(User $user, array $keys, string $status, ?string $reason, Carbon $now, ?Carbon $sentAt = null, ?string $error = null, ?string $messageId = null, ?string $failureCode = null): int
     {
         DB::table('digest_sends')
             ->where('user_id', $user->getKey())->where('kind', self::KIND)->whereIn('period_key', $keys)
-            ->update(['status' => $status, 'reason' => $reason, 'last_error' => $error, 'sent_at' => $sentAt, 'updated_at' => $now]);
+            ->update(['status' => $status, 'reason' => $reason, 'last_error' => $error, 'sent_at' => $sentAt, 'accepted_at' => $status === 'sent' ? $sentAt : null, 'provider_message_id' => $messageId, 'failure_code' => $failureCode, 'updated_at' => $now]);
 
         return count($keys);
     }

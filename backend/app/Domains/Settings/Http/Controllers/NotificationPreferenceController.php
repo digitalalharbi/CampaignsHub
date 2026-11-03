@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Settings\Http\Controllers;
 
+use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\DigestSchedule;
+use App\Domains\Notifications\Support\MailDeliveryState;
+use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -78,6 +83,7 @@ final class NotificationPreferenceController extends Controller
         private readonly NotificationChoices $choices,
         private readonly DigestScope $scope,
         private readonly TenantContext $tenants,
+        private readonly ProviderRegistry $providers,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -110,6 +116,7 @@ final class NotificationPreferenceController extends Controller
              */
             'digest_scope' => $this->digestScopeOf($row->project_ids),
             'available_categories' => self::LEGACY_CATEGORIES,
+            'available_channels' => $this->availableChannels(),
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
             'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false],
@@ -138,6 +145,89 @@ final class NotificationPreferenceController extends Controller
         ], 'Notification preferences retrieved.');
     }
 
+    /**
+     * The channels this install has, stated rather than implied — §17.4.1.
+     *
+     * SMS and WhatsApp are listed so nobody hunts for them, and marked unavailable while their adapter
+     * is the Null one. A switch for a channel with no provider is a promise the product cannot keep.
+     *
+     * @return list<array{key: string, available: bool}>
+     */
+    private function availableChannels(): array
+    {
+        return [
+            ['key' => 'in_app', 'available' => true],
+            ['key' => 'email', 'available' => $this->providers->isConfigured('email')],
+            ['key' => 'sms', 'available' => $this->providers->isConfigured('sms')],
+            ['key' => 'whatsapp', 'available' => $this->providers->isConfigured('whatsapp')],
+        ];
+    }
+
+    /**
+     * POST /settings/notifications/test — one message to the signed-in person, and to nobody else.
+     *
+     * Any address in the request is ignored: this is a way to check your own inbox, not a way to mail
+     * somebody. A plain test needs no permission; naming a gallery template needs `settings.manage`. The
+     * answer is the ledger's outcome, so `accepted` is never presented as received. Gallery fixtures carry
+     * placeholder text and tokens that open nothing, so no customer's data can leave through this.
+     */
+    public function test(Request $request, TransactionalMailer $mailer): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate(['lang' => ['nullable', 'in:ar,en'], 'key' => ['nullable', 'string', 'max:60']]);
+        $lang = (string) ($data['lang'] ?? 'ar');
+        $key = $data['key'] ?? null;
+
+        if ($key !== null) {
+            abort_unless($user->hasPermission('settings.manage'), 403);
+            abort_unless(MailGallery::has($key), 422, 'There is no such message.');
+        }
+
+        $mail = $key !== null ? MailGallery::messages($lang)[$key] : new OperationalMail(
+            kind: 'message', severity: 'info',
+            title: $lang === 'ar' ? 'رسالة اختبار' : 'A test message',
+            detail: $lang === 'ar' ? 'وصلتك هذه الرسالة لأنك طلبت اختبار البريد من إعدادات الإشعارات.' : 'You received this because you asked to test email from your notification settings.',
+            context: 'CampaignsHub', lang: $lang, recipientName: (string) $user->name, path: '/app/settings',
+        );
+
+        $state = $mailer->send(
+            recipient: (string) $user->email,
+            mail: $mail,
+            kind: 'test',
+            template: $key !== null ? "gallery.{$key}" : 'mail.operational',
+            locale: $lang,
+            tenantId: (string) $this->tenants->tenantId(),
+            userId: (int) $user->id,
+            dedupKey: 'test:'.$user->id.':'.($key ?? 'plain').':'.now()->format('YmdHi'),
+        );
+
+        return ApiResponse::success([
+            'state' => $state,
+            'delivery_state' => MailDeliveryState::of($state),
+            'recipient' => (string) $user->email,
+        ], 'Test message recorded.');
+    }
+
+    /** GET /settings/notifications/previews — the messages a manager may review. Fixtures, never a customer's mail. */
+    public function previews(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('settings.manage'), 403);
+
+        return ApiResponse::success(['keys' => MailGallery::keys(), 'locales' => ['ar', 'en']], 'Available previews retrieved.');
+    }
+
+    /** One rendered fixture as a string, for a sandboxed frame, exactly as the operator console does it. */
+    public function preview(Request $request, string $key): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('settings.manage'), 403);
+
+        $locale = $request->query('locale') === 'en' ? 'en' : 'ar';
+        $html = MailGallery::render($key, $locale);
+        abort_if($html === null, 404, 'There is no such message.');
+
+        return ApiResponse::success(['key' => $key, 'locale' => $locale, 'html' => $html], 'Preview rendered.');
+    }
+
     public function update(Request $request): JsonResponse
     {
         $tenantId = (string) $this->tenants->tenantId();
@@ -153,6 +243,7 @@ final class NotificationPreferenceController extends Controller
             'types.*.email' => ['boolean'],
             'types.*.in_app' => ['boolean'],
             'types.*.rhythm' => ['string'],
+            'types.*.min_severity' => ['nullable', 'string'],
             'quiet_hours' => ['sometimes', 'nullable', 'array'],
             'quiet_hours.enabled' => ['boolean'],
             'quiet_hours.start' => ['nullable', 'date_format:H:i'],
@@ -293,6 +384,10 @@ final class NotificationPreferenceController extends Controller
             }
 
             if (MessageCatalogue::isMandatory($type)) {
+                if (($choice['min_severity'] ?? null) !== null) {
+                    abort(422, "«{$type}» is sent whenever it applies and cannot be narrowed.");
+                }
+
                 foreach (['email', 'in_app'] as $channel) {
                     if (array_key_exists($channel, $choice) && $choice[$channel] !== true) {
                         abort(422, "«{$type}» is sent whenever it applies and cannot be switched off.");
@@ -313,6 +408,11 @@ final class NotificationPreferenceController extends Controller
                 }
 
                 continue;
+            }
+
+            $importance = $choice['min_severity'] ?? null;
+            if ($importance !== null && ! in_array($importance, MessageCatalogue::IMPORTANCE, true)) {
+                abort(422, "«{$importance}» is not an importance level.");
             }
 
             $rhythm = $choice['rhythm'] ?? null;
@@ -364,7 +464,7 @@ final class NotificationPreferenceController extends Controller
     /**
      * What will actually happen, per type, for this person today.
      *
-     * @return array<string, array{email: bool, in_app: bool, rhythm: string}>
+     * @return array<string, array{email: bool, in_app: bool, rhythm: string, min_severity: ?string}>
      */
     private function effectiveTypes(int $userId, string $tenantId): array
     {
@@ -375,6 +475,7 @@ final class NotificationPreferenceController extends Controller
                 'email' => $this->choices->wants($userId, $tenantId, $type, 'email'),
                 'in_app' => $this->choices->wants($userId, $tenantId, $type, 'in_app'),
                 'rhythm' => $this->choices->rhythm($userId, $tenantId, $type),
+                'min_severity' => $this->choices->minSeverity($userId, $tenantId, $type),
             ];
         }
 

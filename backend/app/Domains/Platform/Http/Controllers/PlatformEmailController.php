@@ -7,6 +7,8 @@ namespace App\Domains\Platform\Http\Controllers;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Notifications\Support\MailDeliveryState;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use App\Http\Controllers\Controller;
@@ -59,7 +61,7 @@ final class PlatformEmailController extends Controller
      * options reading «بانتظار بيانات الاعتماد», one of which matched nothing. Found by opening the
      * page.
      */
-    private const STATES = ['failed', 'awaiting_credentials', 'sandbox', 'skipped', 'claimed', 'sent'];
+    private const STATES = ['failed', 'awaiting_credentials', 'sandbox', 'skipped', 'claimed', 'sent', 'queued', 'suppressed'];
 
     public function __construct(private readonly ProviderRegistry $providers) {}
 
@@ -67,9 +69,10 @@ final class PlatformEmailController extends Controller
     {
         $filters = $request->validate([
             'status' => ['nullable', Rule::in(self::STATES)],
+            'state' => ['nullable', Rule::in(MailDeliveryState::ALL)],
             'kind' => ['nullable', 'string', 'max:60'],
             'recipient' => ['nullable', 'string', 'max:190'],
-            'source' => ['nullable', 'in:transactional,digest'],
+            'source' => ['nullable', 'in:transactional,digest,subscription'],
             'days' => ['nullable', 'integer', 'between:1,90'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
@@ -79,6 +82,9 @@ final class PlatformEmailController extends Controller
 
         $rows = $this->transactional($filters, $since)
             ->concat($this->digests($filters, $since))
+            ->concat($this->subscriptions($filters, $since))
+            // Filtered after the translation, because «accepted» and «delivered» share one stored word.
+            ->when($filters['state'] ?? null, fn ($rows, $state) => $rows->where('state', $state))
             ->sortByDesc('at')
             ->values();
 
@@ -89,9 +95,9 @@ final class PlatformEmailController extends Controller
             'per_page' => self::PER_PAGE,
             // Counted over the whole filtered window, not the page — a page of failures out of ten
             // thousand sends is a different situation from ten thousand failures.
-            'by_state' => $rows->groupBy('status')->map->count()->all(),
+            'by_state' => $rows->groupBy('state')->map->count()->all(),
             'transport' => $this->transport(),
-            'available_states' => self::STATES,
+            'available_states' => MailDeliveryState::ALL,
         ], 'Email delivery ledger retrieved.');
     }
 
@@ -168,15 +174,16 @@ final class PlatformEmailController extends Controller
     {
         $a = DB::table('mail_deliveries')->whereIn('status', $states)->max('created_at');
         $b = DB::table('digest_sends')->whereIn('status', $states)->max('created_at');
-        $latest = collect([$a, $b])->filter()->max();
+        $c = DB::table('subscription_notifications')->whereIn('status', $states)->max('created_at');
+        $latest = collect([$a, $b, $c])->filter()->max();
 
         return $latest === null ? null : Carbon::parse((string) $latest)->toIso8601String();
     }
 
-    /** @return array{at: string, kind: string, error: string}|null */
+    /** @return array{at: string, kind: string, error: string, failure_code: ?string}|null */
     private function lastFailure(): ?array
     {
-        $row = DB::table('mail_deliveries')->where('status', 'failed')->orderByDesc('created_at')->first(['created_at', 'kind', 'error']);
+        $row = DB::table('mail_deliveries')->where('status', 'failed')->orderByDesc('created_at')->first(['created_at', 'kind', 'error', 'failure_code']);
         if ($row === null) {
             return null;
         }
@@ -185,7 +192,8 @@ final class PlatformEmailController extends Controller
         return [
             'at' => Carbon::parse((string) $row->created_at)->toIso8601String(),
             'kind' => (string) $row->kind,
-            'error' => Str::limit(preg_replace('/\s+/', ' ', (string) ($row->error ?? '')) ?? '', 80, '…'),
+            'error' => Str::limit(MailFailure::redact((string) ($row->error ?? '')), 80, '…'),
+            'failure_code' => $row->failure_code,
         ];
     }
 
@@ -200,10 +208,13 @@ final class PlatformEmailController extends Controller
     {
         $user = $request->user();
         $lang = in_array($request->input('lang'), ['ar', 'en'], true) ? (string) $request->input('lang') : 'ar';
+        // §17.4.5 — any template, as its fixture. The address is still the operator's own.
+        $key = is_string($request->input('key')) ? (string) $request->input('key') : null;
+        abort_if($key !== null && ! MailGallery::has($key), 422, 'There is no such message.');
 
         $state = $mailer->send(
             recipient: (string) $user->email,
-            mail: new OperationalMail(
+            mail: $key !== null ? MailGallery::messages($lang)[$key] : new OperationalMail(
                 kind: 'message', severity: 'info',
                 title: $lang === 'ar' ? 'رسالة اختبار' : 'A test message',
                 detail: $lang === 'ar' ? 'وصلتك هذه الرسالة لأن مشرف المنصة طلب اختبار إرسال البريد.' : 'You received this because a platform operator asked to test outgoing mail.',
@@ -212,18 +223,18 @@ final class PlatformEmailController extends Controller
                 recipientName: (string) $user->name,
             ),
             kind: 'test',
-            template: 'operational',
+            template: $key !== null ? "gallery.{$key}" : 'operational',
             locale: $lang,
             userId: (int) $user->id,
-            dedupKey: 'test:'.$user->id.':'.now()->format('YmdHi'),
+            dedupKey: 'test:'.$user->id.':'.($key ?? 'plain').':'.now()->format('YmdHi'),
         );
 
-        return ApiResponse::success(['state' => $state, 'recipient' => (string) $user->email], 'Test message recorded.');
+        return ApiResponse::success(['state' => $state, 'delivery_state' => MailDeliveryState::of($state), 'recipient' => (string) $user->email], 'Test message recorded.');
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return Collection<int, array<string, mixed>>
+     * @return Collection<int, non-empty-array<string, mixed>>
      */
     private function transactional(array $filters, Carbon $since)
     {
@@ -242,6 +253,7 @@ final class PlatformEmailController extends Controller
             ->get([
                 'm.id', 'm.kind', 'm.recipient', 'm.locale', 'm.template', 'm.status', 'm.transport',
                 'm.attempts', 'm.error', 'm.sent_at', 'm.created_at', 't.name as tenant_name',
+                'm.failure_code', 'm.delivered_at', 'm.delivery_evidence', 'm.next_attempt_at', 'm.provider_message_id',
             ])
             ->map(static fn (object $r): array => [
                 'id' => (string) $r->id,
@@ -255,13 +267,14 @@ final class PlatformEmailController extends Controller
                 'status' => (string) $r->status,
                 'transport' => (string) $r->transport,
                 'attempts' => (int) $r->attempts,
-                'reason' => $r->error,
-            ]);
+                // Redacted here too: rows written before MailFailure existed still hold the transport's words.
+                'reason' => $r->error === null ? null : MailFailure::redact((string) $r->error),
+            ] + self::stage($r));
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return Collection<int, array<string, mixed>>
+     * @return Collection<int, non-empty-array<string, mixed>>
      */
     private function digests(array $filters, Carbon $since)
     {
@@ -281,6 +294,7 @@ final class PlatformEmailController extends Controller
             ->get([
                 'd.id', 'd.kind', 'd.status', 'd.reason', 'd.attempts', 'd.last_error', 'd.sent_at',
                 'd.created_at', 'd.period_key', 't.name as tenant_name', 'u.email as recipient',
+                'd.failure_code', 'd.delivered_at', 'd.delivery_evidence', 'd.next_attempt_at', 'd.provider_message_id',
             ])
             ->map(static fn (object $r): array => [
                 'id' => (string) $r->id,
@@ -295,7 +309,65 @@ final class PlatformEmailController extends Controller
                 'status' => (string) $r->status,
                 'transport' => null,
                 'attempts' => (int) $r->attempts,
-                'reason' => $r->reason ?? $r->last_error,
-            ]);
+                'reason' => ($r->last_error ?? $r->reason) === null ? null : MailFailure::redact((string) ($r->last_error ?? $r->reason)),
+            ] + self::stage($r));
+    }
+
+    /**
+     * Subscription and account mail — it has its own table and its own queue, and «is mail working?»
+     * could not see it, so an install could fail every renewal notice with this page showing green.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return Collection<int, non-empty-array<string, mixed>>
+     */
+    private function subscriptions(array $filters, Carbon $since)
+    {
+        if (in_array($filters['source'] ?? null, ['transactional', 'digest'], true)) {
+            return collect();
+        }
+
+        return DB::table('subscription_notifications as n')
+            ->leftJoin('tenants as t', 't.id', '=', 'n.tenant_id')
+            ->where('n.created_at', '>=', $since)
+            ->when($filters['status'] ?? null, fn ($q, $s) => $q->where('n.status', $s))
+            ->when($filters['kind'] ?? null, fn ($q, $k) => $q->where('n.event', $k))
+            ->when($filters['recipient'] ?? null, fn ($q, $r) => $q->where('n.to_email', 'ilike', '%'.$r.'%'))
+            ->orderByDesc('n.created_at')
+            ->limit(1000)
+            ->get([
+                'n.id', 'n.event', 'n.to_email', 'n.locale', 'n.status', 'n.attempts', 'n.error', 'n.sent_at', 'n.created_at', 't.name as tenant_name',
+                'n.failure_code', 'n.delivered_at', 'n.delivery_evidence', 'n.provider_message_id',
+            ])
+            ->map(static fn (object $r): array => [
+                'id' => (string) $r->id,
+                'source' => 'subscription',
+                'at' => (string) ($r->sent_at ?? $r->created_at),
+                'kind' => (string) $r->event,
+                'template' => 'mail.operational',
+                'recipient' => (string) $r->to_email,
+                'tenant_name' => $r->tenant_name,
+                'locale' => (string) $r->locale,
+                'status' => (string) $r->status,
+                'transport' => null,
+                'attempts' => (int) $r->attempts,
+                'reason' => $r->error === null ? null : MailFailure::redact((string) $r->error),
+            ] + self::stage($r));
+    }
+
+    /**
+     * What every row adds to its stored status: the stage a reader sees, why it stopped, and the proof.
+     *
+     * @return array<string, mixed>
+     */
+    private static function stage(object $r): array
+    {
+        return [
+            'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at),
+            'suppression_reason' => MailDeliveryState::suppressionReason((string) $r->status),
+            'failure_code' => $r->failure_code,
+            'evidence' => $r->delivery_evidence,
+            'next_attempt_at' => $r->next_attempt_at ?? null,
+            'provider_message_id' => $r->provider_message_id,
+        ];
     }
 }

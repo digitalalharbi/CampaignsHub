@@ -17,20 +17,20 @@ function ledger(over: Partial<EmailLedger> = {}): EmailLedger {
       {
         id: '1', source: 'transactional', at: '2026-08-08T09:00:00Z', kind: 'password_reset',
         template: 'credential', recipient: 'sara@example.com', tenant_name: 'Acme', locale: 'ar',
-        status: 'sent', transport: 'log', attempts: 1, reason: null,
+        status: 'sent', state: 'accepted', transport: 'log', attempts: 1, reason: null,
       },
       {
         id: '2', source: 'digest', at: '2026-08-08T08:00:00Z', kind: 'daily',
         template: 'digest', recipient: 'omar@example.com', tenant_name: 'Acme', locale: null,
-        status: 'failed', transport: null, attempts: 2, reason: 'SMTP 550 mailbox unavailable',
+        status: 'failed', state: 'failed', transport: null, attempts: 2, reason: 'SMTP 550 mailbox unavailable',
       },
     ],
     total: 2,
     page: 1,
     per_page: 50,
-    by_state: { sent: 1, failed: 1 },
+    by_state: { accepted: 1, failed: 1 },
     transport: { state: 'sandbox', provider_configured: false, driver: 'log' },
-    available_states: ['failed', 'awaiting_credentials', 'sandbox', 'sent'],
+    available_states: ['queued', 'attempted', 'accepted', 'delivered', 'failed', 'suppressed'],
     ...over,
   }
 }
@@ -62,6 +62,22 @@ describe('the email operations console', () => {
 
     expect(await screen.findByText(/وضع الاختبار — لا تصل الرسائل إلى أحد/)).toBeInTheDocument()
     expect(screen.getByText(/تعني «كُتبت في السجل»، لا «وصلت»/)).toBeInTheDocument()
+  })
+
+  /** EMAIL-DELIVERY-LEDGER-001 — an SMTP 250 is «accepted», and a failure names its reason and its fix. */
+  it('never calls an accepted message delivered, and names why one failed', async () => {
+    open({
+      deliveries: [
+        { ...ledger().deliveries[0], status: 'sent', state: 'accepted' },
+        { ...ledger().deliveries[1], status: 'failed', state: 'failed', failure_code: 'auth_failed', reason: 'Failed to authenticate' },
+        { ...ledger().deliveries[0], id: '3', status: 'sent', state: 'delivered', evidence: 'Owner read it in Gmail' },
+      ],
+    })
+
+    expect((await screen.findAllByText('قبلها خادم البريد')).length).toBeGreaterThan(0)
+    expect(screen.getByText(/رفض خادم البريد تسجيل الدخول/)).toBeInTheDocument()
+    expect(screen.getByText('Owner read it in Gmail')).toBeInTheDocument()
+    expect(screen.queryByText('أُرسلت')).not.toBeInTheDocument()
   })
 
   it('says plainly when nothing is wired at all', async () => {
@@ -112,7 +128,7 @@ describe('the mail settings card', () => {
         last_success_at: null, last_failure: { at: '2026-10-17T08:00:00Z', kind: 'password_reset', error: 'refused' },
       },
     })
-    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'awaiting_credentials', recipient: 'owner@campaignshub.io' })
+    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'awaiting_credentials', delivery_state: 'suppressed', recipient: 'owner@campaignshub.io' })
 
     const card = await screen.findByTestId('mail-settings')
     expect(card).toHaveTextContent('no-reply@campaignshub.io')
