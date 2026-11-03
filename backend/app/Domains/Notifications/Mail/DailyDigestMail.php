@@ -11,6 +11,7 @@ use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use App\Support\AdPlatforms;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
@@ -128,6 +129,28 @@ final class DailyDigestMail extends Mailable
     }
 
     /** The name this email presents itself under — the agency's, or the product's. */
+    /**
+     * EMAIL-IDENTITY-001 (§17.2.6) — who sent this, when an agency has a name of its own.
+     *
+     * The platform sends it and the agency is who it is for: both are said, neither is impersonated.
+     * The agency comes from the recipient's own tenant through `SharedLinkBranding`, so it cannot name
+     * another customer. Empty on an unbranded install, where the shell's line already says it.
+     *
+     * @return array<string,string>
+     */
+    private function senderLine(bool $ar): array
+    {
+        $agency = trim((string) ($this->senderName ?? ''));
+
+        if ($agency === '' || $agency === (string) config('brand.name')) {
+            return [];
+        }
+
+        return ['sender' => $ar
+            ? "أُرسلت هذه الرسالة عبر كامبينز هب نيابة عن {$agency}."
+            : "Sent through CampaignsHub on behalf of {$agency}."];
+    }
+
     private function brandName(): string
     {
         $name = trim((string) ($this->senderName ?? ''));
@@ -144,24 +167,29 @@ final class DailyDigestMail extends Mailable
         $spend = $p->money($totals['spend'] ?? null);
         $results = number_format((float) ($totals['conversions'] ?? 0));
 
-        // The subject names the period it covers. A monthly report labelled «أمس» is a monthly
-        // report nobody opens, because the subject line says it is yesterday's.
-        $when = match ($this->kind) {
-            'monthly' => $ar ? 'هذا الشهر' : 'this month',
-            'weekly' => $ar ? 'هذا الأسبوع' : 'this week',
-            // EMAIL-DAILY-WINDOW-001 — the daily email reports the last seven days, so «أمس» in the
-            // subject would name a span it does not cover. The rhythm is daily; the period is a week.
-            default => $ar ? 'آخر 7 أيام' : 'the last 7 days',
+        /*
+         * EMAIL-SUBJECT-001 — the product first, then the report, then the answer.
+         *
+         * The Owner's §17.3.1 is the later instruction and it wins over BRANDING-HIERARCHY-001 for the
+         * subject line: the inbox says CampaignsHub on every installation. The agency a white-label
+         * digest goes out for follows the prefix and is named in the footer, so the reader still sees
+         * whose report this is, and nobody is shown a sender the mail did not come from.
+         *
+         * The subject names the rhythm and, for the daily, the span it really covers (EMAIL-DAILY-WINDOW-001):
+         * a monthly labelled «أمس» is wrong in the one place a reader cannot correct by reading on.
+         */
+        $report = match ($this->kind) {
+            'monthly' => $ar ? 'تقريرك الشهري' : 'Your monthly report',
+            'weekly' => $ar ? 'تقريرك الأسبوعي' : 'Your weekly report',
+            default => $ar ? 'تقريرك اليومي (آخر 7 أيام)' : 'Your daily report (last 7 days)',
         };
+        $agency = trim((string) ($this->senderName ?? ''));
+        $lead = $agency !== '' && $agency !== (string) config('brand.name') ? "{$agency}: {$report}" : $report;
 
-        return new Envelope(
-            // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
-            subject: $this->withholdsMoney()
-                ? ($ar ? $this->brandName()." — {$results} نتيجة {$when}" : $this->brandName()." — {$results} results {$when}")
-                : ($ar
-                    ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
-                    : $this->brandName()." — {$spend} {$when}, {$results} results"),
-        );
+        // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
+        return new Envelope(subject: MailSubject::of($this->withholdsMoney()
+            ? ($ar ? "{$lead}: {$results} نتيجة" : "{$lead}: {$results} results")
+            : ($ar ? "{$lead}: {$spend}، {$results} نتيجة" : "{$lead}: {$spend}, {$results} results")));
     }
 
     public function content(): Content
@@ -201,7 +229,8 @@ final class DailyDigestMail extends Mailable
                 'preheader' => match ($this->kind) {
                     'monthly' => $ar ? 'ملخص الشهر عبر مشاريعك ومنصاتك.' : 'The month across your projects and platforms.',
                     'weekly' => $ar ? 'ملخص الأسبوع عبر مشاريعك ومنصاتك.' : 'The week across your projects and platforms.',
-                    default => $ar ? 'ملخص أمس عبر مشاريعك ومنصاتك.' : 'Yesterday across your projects and platforms.',
+                    // EMAIL-DAILY-WINDOW-001 — the daily reports seven days, so «أمس» would name a span it does not cover.
+                    default => $ar ? 'آخر 7 أيام عبر مشاريعك ومنصاتك.' : 'The last 7 days across your projects and platforms.',
                 },
                 'headerNote' => $this->headerNote($ar),
                 'scopeNote' => $this->scopeNote($ar),
@@ -213,7 +242,7 @@ final class DailyDigestMail extends Mailable
                 'wordmark' => MailShell::wordmark($ar),
                 'wordmarkPlain' => MailShell::wordmarkPlain($ar),
                 // The shared footer words (support, sender) under the digest's own copy.
-                't' => array_merge(MailShell::footerStrings($ar), $this->copy($ar)),
+                't' => array_merge(MailShell::footerStrings($ar), $this->copy($ar), $this->senderLine($ar)),
                 'totals' => $this->accountCards($p, $ar),
                 /*
                   EMAIL-DASHBOARD-UX-001 — the two rows a reader acts on, before the project list.
@@ -1064,7 +1093,7 @@ final class DailyDigestMail extends Mailable
             'intro' => match ($this->kind) {
                 'monthly' => 'هذا ما حدث هذا الشهر عبر مشاريعك — والقرارات التي تستحق وقتك.',
                 'weekly' => 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.',
-                default => 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
+                default => 'هذا ما حدث في آخر 7 أيام عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
             },
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
@@ -1115,7 +1144,7 @@ final class DailyDigestMail extends Mailable
             'intro' => match ($this->kind) {
                 'monthly' => 'Here is the month across your projects — and what is worth your time.',
                 'weekly' => 'Here is the week across your projects — and what is worth your time.',
-                default => 'Here is what happened yesterday across your projects — and what is worth your time today.',
+                default => 'Here is what happened in the last 7 days across your projects — and what is worth your time today.',
             },
             'account_total' => 'Account total',
             'spend' => 'Spend',

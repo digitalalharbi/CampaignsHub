@@ -71,7 +71,7 @@ final class MailPreviewsTest extends TestCase
         }
 
         // 22 messages (the owner invitation joined in EMAIL-RTL-001) × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
-        $this->assertCount(44, $files);
+        $this->assertCount(52, $files); // EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder.
     }
 
     /**
@@ -176,8 +176,9 @@ final class MailPreviewsTest extends TestCase
         $this->assertStringNotContainsString('ملخص أمس', $files['digest-weekly.ar.html']);
         $this->assertStringContainsString('The week across your projects', $files['digest-weekly.en.html']);
 
-        // And a daily one still says yesterday, which is what it is.
-        $this->assertStringContainsString('ملخص أمس', $files['digest-daily.ar.html']);
+        // EMAIL-DAILY-WINDOW-001 — the daily reports seven days, so its snippet says so and never «أمس».
+        $this->assertStringContainsString('آخر 7 أيام عبر مشاريعك', $files['digest-daily.ar.html']);
+        $this->assertStringNotContainsString('ملخص أمس', $files['digest-daily.ar.html']);
     }
 
     /** A preview that rendered a blank shell would pass every other assertion here. */

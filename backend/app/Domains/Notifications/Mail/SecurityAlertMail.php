@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Mail;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -54,7 +55,7 @@ final class SecurityAlertMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'CampaignsHub — '.$this->words()['subject']);
+        return new Envelope(subject: MailSubject::of($this->words()['subject']));
     }
 
     public function content(): Content

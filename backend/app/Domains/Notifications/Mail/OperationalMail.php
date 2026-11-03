@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -55,13 +56,7 @@ final class OperationalMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $ar = $this->lang === 'ar';
-
-        return new Envelope(
-            subject: $ar
-                ? sprintf('CampaignsHub — %s', $this->title)
-                : sprintf('CampaignsHub — %s', $this->title),
-        );
+        return new Envelope(subject: MailSubject::of($this->title));
     }
 
     public function content(): Content

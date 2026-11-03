@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -45,9 +46,9 @@ final class InvitationMail extends Mailable
     {
         $ar = $this->lang === 'ar';
 
-        return new Envelope(subject: $ar
-            ? "كامبينز هب — دعوة للانضمام إلى {$this->workspace}"
-            : "CampaignsHub — You have been invited to join {$this->workspace}");
+        return new Envelope(subject: MailSubject::of($ar
+            ? "دعوة للانضمام إلى {$this->workspace}"
+            : "You have been invited to join {$this->workspace}"));
     }
 
     public function content(): Content

@@ -144,10 +144,10 @@ final class DigestMailRenderTest extends TestCase
         unset($digest['projects'][0]['totals']['cpa'], $digest['projects'][0]['totals']['roas']);
         $html = $this->renderOf($digest, 'ar');
         $row = (string) substr($html, (int) strpos($html, 'data-block="portfolio-row"'));
-        $row = (string) substr($row, 0, (int) strpos($row, '</table>', (int) strpos($row, 'ch-kpi')) + 8);
+        $row = (string) substr($row, 0, (int) strpos($row, '</table>', (int) strpos($row, 'ch-strip')) + 8);
         $this->assertStringNotContainsString('ch-kpi-lead', $row, 'no objective block without an objective figure');
         // Two real cells → two equal 50% columns, labels over figures.
-        $this->assertSame(2, substr_count($row, 'class="ch-kpi" width="50%"'), $row);
+        $this->assertSame(2, substr_count($row, 'class="ch-strip" width="50%"'), $row);
 
         // The account line without a results total shows spend and projects only — no «no data» tile.
         $html = $this->html('en', ['totals' => ['projects' => 2, 'spend' => 12400.0]]);
@@ -360,7 +360,9 @@ final class DigestMailRenderTest extends TestCase
         $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))
             ->envelope()->subject;
 
-        $this->assertStringStartsWith('Nakheel Media —', $subject, 'the subject still announced the product');
+        // Owner §17.3.1 is the later instruction: the product opens every subject, and the agency follows it.
+        $this->assertStringStartsWith('CampaignsHub — Nakheel Media:', $subject);
+        $this->assertStringContainsString('on behalf of Nakheel Media', $html);
     }
 
     /**
@@ -376,7 +378,7 @@ final class DigestMailRenderTest extends TestCase
             $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', $absent))
                 ->envelope()->subject;
 
-            $this->assertStringStartsWith((string) config('brand.name').' —', $subject);
+            $this->assertStringStartsWith('CampaignsHub — Your daily report', $subject);
         }
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -57,14 +58,14 @@ final class AlertBundleMail extends Mailable
         $n = count($this->items);
 
         if ($n === 1) {
-            return new Envelope(subject: sprintf('CampaignsHub — %s', $this->items[0]['title']));
+            return new Envelope(subject: MailSubject::of($this->items[0]['title']));
         }
 
-        return new Envelope(subject: $ar
+        return new Envelope(subject: MailSubject::of($ar
             // Arabic counts 3–10 with a plural and 11+ with a singular. Getting this wrong is two
             // mistakes in three characters, which MAIL-007 recorded the first time.
-            ? sprintf('كامبينز هب — %d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
-            : sprintf('CampaignsHub — %d alerts need a decision', $n));
+            ? sprintf('%d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
+            : sprintf('%d alerts need a decision', $n)));
     }
 
     public function content(): Content

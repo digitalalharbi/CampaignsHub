@@ -190,7 +190,8 @@ final class EmailDashboardUxTest extends TestCase
         $cases = [
             'monthly' => ['ar' => 'هذا الشهر', 'en' => 'the month', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
             'weekly' => ['ar' => 'هذا الأسبوع', 'en' => 'the week', 'not_ar' => 'هذا الشهر', 'not_en' => 'the month'],
-            'daily' => ['ar' => 'أمس', 'en' => 'yesterday', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
+            // EMAIL-DAILY-WINDOW-001 — the daily reports seven days; «yesterday» named a span it does not cover.
+            'daily' => ['ar' => 'آخر 7 أيام', 'en' => 'the last 7 days', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
         ];
 
         foreach ($cases as $kind => $expected) {

@@ -62,8 +62,9 @@ final class EmailLayoutRtlTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/[٠-٩]/u', $html);
         $this->assertStringContainsString('Segoe UI', $html);
         $this->assertStringContainsString('sans-serif', $html);
-        // Wrapper is a centred 600px table.
-        $this->assertMatchesRegularExpression('/<table role="presentation" class="ch-wrap" align="center" width="600"/', $html);
+        // EMAIL-LAYOUT-001 — centred and fluid with no media query; the fixed 600 is Outlook's alone.
+        $this->assertMatchesRegularExpression('/<table role="presentation" class="ch-wrap" align="center" width="100%"[^>]*width:100%; max-width:600px/', $html);
+        $this->assertStringContainsString('<!--[if mso]><table role="presentation" align="center" width="600"', $html);
     }
 
     /** @dataProvider cases */

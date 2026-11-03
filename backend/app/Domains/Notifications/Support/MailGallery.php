@@ -60,6 +60,9 @@ final class MailGallery
         return self::accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
+            'digest-monthly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly'),
+            // EMAIL-IDENTITY-001 — a white-label digest: the agency is named, the platform still says who sent it.
+            'digest-agency-branded' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', $ar ? 'وكالة المدى' : 'Almada Agency'),
             // MEMBER-VISIBILITY-001 — the agency member whose membership withholds the money: no spend, cost or spend chart, the agency's own intro and button.
             'digest-restricted-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'ليان' : 'Layan', 'daily', null, 'restricted'),
             // EMAIL-DECISION-REPORT-001 — the CLIENT weekly: no spend anywhere, outcomes first, the portal behind the button.
@@ -126,6 +129,16 @@ final class MailGallery
                         : 'The average person has seen the ad 6 times — worth widening the audience or refreshing the creative.',
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+            ),
+
+            // DELIVERY-REMINDERS-001 — a reviewer's nudge, sent by `MemberNotices`.
+            'delivery-reminder' => new OperationalMail(
+                kind: 'delivery_review_due', severity: 'warning',
+                title: $ar ? 'تقرير بانتظار مراجعتك' : 'A report is waiting for your review',
+                detail: $ar ? 'مسودة تقرير متجر تجريبي للفترة 2026-07 جاهزة للمراجعة والاعتماد.' : 'The draft report for Demo store (2026-07) is ready for your review and approval.',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+                path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
             ),
 
             'report-ready' => new OperationalMail(
@@ -290,6 +303,11 @@ final class MailGallery
              * A facts table where three of four rows are absent is the case that reveals whether
              * omission was implemented or whether the rows quietly became «غير معروف».
              */
+            'account-password-changed' => new SecurityAlertMail(
+                event: SecurityAlertMail::PASSWORD_CHANGED, lang: $locale,
+                recipientName: $ar ? 'محمد' : 'Mohammed', at: '2026-08-07 09:14',
+            ),
+
             'account-security-sparse' => new SecurityAlertMail(
                 event: SecurityAlertMail::PASSWORD_CHANGED, lang: $locale,
                 recipientName: $ar ? 'محمد' : 'Mohammed',

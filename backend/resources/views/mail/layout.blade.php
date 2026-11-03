@@ -21,8 +21,13 @@
     about; stating both the background and the text colour on the same element stops a card turning
     black-on-black in Apple Mail.
 
-  Widths are absolute for the same reason: 600px is what every client has agreed on for twenty
-  years, and the media query below is the only thing that touches it.
+  ## The container is fluid WITHOUT the media query — EMAIL-LAYOUT-001
+
+  It was `width:600px`, narrowed only by a rule in `<style>`. A client that drops `<style>` (Gmail on
+  a non-Google account, a forward, a clip) then showed a phone a 600px page to scroll sideways, which
+  is the «dimensions» complaint. Now `width:100%; max-width:600px` on the table is what every modern
+  client obeys with no help, and the `[if mso]` table is the fixed 600 only Outlook on Windows reads,
+  because Word ignores `max-width`. The media query is left refining padding and stacking.
 --}}
 {{--
   `{!! $font !!}`, not `{{ $font }}`, and it matters.
@@ -46,10 +51,10 @@
     <style>
         /* The only rule that cannot be inlined. Everything it changes is a refinement. */
         @media only screen and (max-width: 620px) {
-            .ch-wrap { width: 100% !important; }
+            .ch-outer { padding: 12px 8px !important; }
             .ch-pad { padding-left: 16px !important; padding-right: 16px !important; }
-            .ch-stack { display: block !important; width: 100% !important; }
-            .ch-kpi { display: block !important; width: 100% !important; padding-bottom: 12px !important; }
+            .ch-stack { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+            .ch-kpi { display: block !important; width: 100% !important; box-sizing: border-box !important; padding-bottom: 12px !important; }
         }
         /* Gmail / Apple Mail dark mode: the band is dark by design and must stay so. */
         @media (prefers-color-scheme: dark) {
@@ -74,8 +79,9 @@
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f7f5f0" dir="{{ $dir }}" style="background-color:#f7f5f0;">
         <tr>
-            <td align="center" style="padding:24px 12px;">
-                <table role="presentation" class="ch-wrap" align="center" width="600" cellpadding="0" cellspacing="0" border="0" dir="{{ $dir }}" style="margin:0 auto; width:600px; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
+            <td class="ch-outer" align="center" style="padding:24px 12px;">
+                <!--[if mso]><table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+                <table role="presentation" class="ch-wrap" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" dir="{{ $dir }}" style="margin:0 auto; width:100%; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
 
                     {{--
                       Header — EMAIL-BRAND-002.
@@ -89,7 +95,7 @@
                     <tr>
                         <td class="ch-hdr ch-pad" align="center" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; padding:28px 24px; border-bottom:3px solid #0b7a62; text-align:center;">
                             <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; text-align:center;">
-                                <img src="{{ $logoUrl }}" width="56" height="56" alt="{{ $brand }}" style="display:block; margin:0 auto; border:0; outline:none; text-decoration:none; width:56px; height:56px; color:#f7f5f0; font-family:{!! $font !!}; font-size:14px;" />
+                                <img src="{{ $logoUrl }}" width="56" height="56" alt="CampaignsHub" style="display:block; margin:0 auto; border:0; outline:none; text-decoration:none; width:56px; height:56px; color:#f7f5f0; font-family:{!! $font !!}; font-size:9px;" />
                             </a>
                             <div class="ch-hdr-name" dir="auto" style="font-family:{!! $font !!}; font-size:22px; line-height:1.4; font-weight:700; color:#f7f5f0; text-align:center; padding-top:12px;">{!! $wordmark !!}</div>
                             <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:13px; line-height:1.6; color:#b7c9c2; text-align:center; padding-top:4px;">{{ $headerNote }}</div>
@@ -145,6 +151,7 @@
                         </td>
                     </tr>
                 </table>
+                <!--[if mso]></td></tr></table><![endif]-->
             </td>
         </tr>
     </table>
