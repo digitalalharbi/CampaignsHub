@@ -28,6 +28,16 @@ test.describe('a client opens their live report', () => {
     await expect(spend).toContainText(/SAR/)
   })
 
+  // REPORT-FOOTER-FRESHNESS-001 (#938) — one time, at the end: no sync clock above the figures, none beside the refresh button.
+  test('states one update time, in the footer, and no per-platform sync clock', async ({ page }) => {
+    await page.goto(`${URL}?view=dashboard`)
+    await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('report-footer')).toBeVisible()
+    await expect(page.getByTestId('report-footer-meta')).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+    await expect(page.getByTestId('data-freshness')).toHaveCount(0)
+    await expect(page.getByTestId('live-computed-at')).toHaveCount(0)
+  })
+
   /**
    * The requirement in the brief, stated as a test: filters update the data **without reloading**.
    *
