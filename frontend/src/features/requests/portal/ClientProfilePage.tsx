@@ -44,7 +44,7 @@ export function ClientProfilePage() {
             <Field icon={Mail} label={t.email} value={q.data?.contact_email} none={t.none} />
             <Field icon={Phone} label={t.phone} value={q.data?.contact_phone} none={t.none} />
           </dl>
-          <p className="mt-5 flex items-start gap-1.5 rounded-xl bg-surface-secondary px-4 py-3 text-[13px] text-text-secondary">
+          <p className="mt-5 flex items-start gap-1.5 rounded-xl bg-surface-secondary px-4 py-3 text-xs text-text-secondary">
             <ShieldCheck size={15} className="mt-0.5 shrink-0 text-success" /> {t.verified}
           </p>
         </div>

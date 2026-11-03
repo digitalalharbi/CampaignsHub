@@ -2500,7 +2500,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
             ? (ar ? 'لا توجد بيانات في هذه الفترة.' : 'There is no data in this period.')
             : windows.map((w) => (
                 <span key={w.window} className="block">
-                  <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-[12px]">{w.window}</code>
+                  <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-xs">{w.window}</code>
                   <span className="ms-2 text-text-muted">{ar ? `${num(w.rows)} صف` : `${num(w.rows)} rows`}</span>
                 </span>
               ))}

@@ -44,13 +44,13 @@ export function PermissionsTab() {
       <ul className="grid gap-3">
         {d.groups.map((g) => (
           <li key={g.group} className="rounded-2xl border border-border bg-surface p-5">
-            <h3 className="font-heading text-[15px] font-bold text-text-primary">{g.group}</h3>
+            <h3 className="font-heading text-sm font-bold text-text-primary">{g.group}</h3>
             <ul className="mt-3 grid gap-1.5">
               {g.permissions.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
                   <span className="font-mono font-semibold text-text-primary" dir="ltr">{p.key}</span>
                   {/* Zero is meaningful: the key is new, or dead. A list without this cannot say which. */}
-                  <span className={`tnum text-[12px] ${p.granted_by_roles === 0 ? 'text-text-muted' : 'text-text-secondary'}`} dir="ltr">
+                  <span className={`tnum text-xs ${p.granted_by_roles === 0 ? 'text-text-muted' : 'text-text-secondary'}`} dir="ltr">
                     {p.granted_by_roles === 0
                       ? (ar ? 'لا يمنحها أي دور' : 'granted by no role')
                       : `${p.granted_by_roles} ${ar ? 'دور' : 'roles'}`}
@@ -92,8 +92,8 @@ export function IntegrationsTab() {
         <ul data-testid="provider-list" className="grid gap-2 sm:grid-cols-2">
           {query.data.providers.map((p) => (
             <li key={p.provider} data-testid={`provider-${p.provider}`} className="rounded-2xl border border-border bg-surface p-5">
-              <p className="font-heading text-[15px] font-bold text-text-primary" dir="ltr">{p.provider}</p>
-              <p className="tnum mt-0.5 text-[12px] text-text-muted">
+              <p className="font-heading text-sm font-bold text-text-primary" dir="ltr">{p.provider}</p>
+              <p className="tnum mt-0.5 text-xs text-text-muted">
                 <Num>{p.tenants} {ar ? 'مستأجرًا' : 'tenants'}</Num>
               </p>
               <ul className="mt-3 flex flex-wrap gap-1.5">
@@ -136,7 +136,7 @@ export function StatusTab() {
       <ul data-testid="status-list" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {services.map(([key, label, state]) => (
           <li key={key} data-testid={`status-${key}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
-            <span className="text-[14px] font-semibold text-text-primary">{label}</span>
+            <span className="text-sm font-semibold text-text-primary">{label}</span>
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
               state === 'running' ? 'bg-success/15 text-success'
                 : state === 'stopped' ? 'bg-danger/15 text-danger'
@@ -148,7 +148,7 @@ export function StatusTab() {
         ))}
       </ul>
 
-      <dl className="mt-4 grid gap-2 rounded-2xl border border-border bg-surface p-5 text-[13px] sm:grid-cols-3">
+      <dl className="mt-4 grid gap-2 rounded-2xl border border-border bg-surface p-5 text-xs sm:grid-cols-3">
         <Fact label={ar ? 'آخر ترحيل' : 'Last migration'} value={d.last_migration ?? '—'} />
         <Fact label={ar ? 'الفرع' : 'Branch'} value={d.branch ?? '—'} />
         <Fact label={ar ? 'الإصدار' : 'Commit'} value={d.commit ?? '—'} />
@@ -259,7 +259,7 @@ export function ScheduledWorkTab() {
           ['never_observed', ar ? 'لم تُرصد قط' : 'Never observed', summary.never_observed, summary.never_observed > 0 ? 'text-warning' : 'text-text-muted'],
         ] as const).map(([key, label, value, tone]) => (
           <li key={key} data-testid={`scheduled-count-${key}`} className="rounded-xl border border-border bg-surface px-4 py-3">
-            <div className="text-[12px] text-text-secondary">{label}</div>
+            <div className="text-xs text-text-secondary">{label}</div>
             <div className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></div>
           </li>
         ))}
@@ -273,11 +273,11 @@ export function ScheduledWorkTab() {
             className="rounded-xl border border-border bg-surface px-4 py-3"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-[13px] font-semibold text-text-primary" dir="ltr">{r.command}</span>
+              <span className="font-mono text-xs font-semibold text-text-primary" dir="ltr">{r.command}</span>
               <ScheduledState row={r} ar={ar} />
             </div>
 
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
               <span dir="ltr" className="font-mono">{r.expression}</span>
               <span>
                 {ar ? 'آخر تشغيل: ' : 'Last run: '}
@@ -312,7 +312,7 @@ export function ScheduledWorkTab() {
               is in and nothing about what to do; the message is the part that ends the guessing.
             */}
             {r.last_outcome === 'failed' && r.failure_message !== null && (
-              <p data-testid={`scheduled-failure-${r.command}`} className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">
+              <p data-testid={`scheduled-failure-${r.command}`} className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
                 {r.failure_class !== null && <span className="font-semibold" dir="ltr">{r.failure_class}: </span>}
                 {r.failure_message}
               </p>

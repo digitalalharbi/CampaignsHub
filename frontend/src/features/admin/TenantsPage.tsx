@@ -136,7 +136,7 @@ export function TenantsPage() {
                 t.status === 'suspended' ? 'border-warning/40' : 'border-border'
               }`}>
               <button type="button" onClick={() => setOpenId(t.id)} className="min-w-0 flex-1 text-start">
-                <p className="flex items-center gap-2 text-[14px] font-bold text-text-primary">
+                <p className="flex items-center gap-2 text-sm font-bold text-text-primary">
                   <Building2 size={15} className="shrink-0 text-text-muted" aria-hidden />
                   {t.name}
                   {t.status === 'suspended' && (
@@ -145,7 +145,7 @@ export function TenantsPage() {
                     </span>
                   )}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-text-muted">
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
                   <span dir="ltr">{t.slug}</span>
                   {/* Named, not printed. `self_serve_company` is a column value, not a word — and
                       rendering it raw made half an Arabic-first page stop being Arabic. */}
@@ -247,7 +247,7 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           </dl>
 
           {detail.data.tenant.is_default_portal && (
-            <p className="mt-3 rounded-xl border border-info/30 bg-info/10 px-3.5 py-2.5 text-[13px] text-text-primary">
+            <p className="mt-3 rounded-xl border border-info/30 bg-info/10 px-3.5 py-2.5 text-xs text-text-primary">
               {ar
                 ? 'هذا المستأجر يخدم بوابة الطلبات العامة — إيقافه يوقف استقبال الطلبات للجميع.'
                 : 'This tenant serves public request intake — suspending it stops the form for everyone.'}
@@ -262,7 +262,7 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           {/* SUPERADMIN-FEATURES-001 — this workspace's own switch per capability. */}
           <TenantCapabilitiesPanel tenantId={id} ar={ar} />
 
-          <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
+          <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}
           </h3>
           {detail.data.people.length === 0 ? (
@@ -272,12 +272,12 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           ) : (
             <ul className="mt-2 grid gap-1.5">
               {detail.data.people.map((p) => (
-                <li key={`${p.user_id}-${p.portal}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+                <li key={`${p.user_id}-${p.portal}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
                   <span className="min-w-0">
                     <span className="font-semibold text-text-primary">{p.name ?? '—'}</span>
                     <span className="ms-2 text-text-muted" dir="ltr">{p.email}</span>
                   </span>
-                  <span className="flex items-center gap-2 text-[12px] text-text-secondary">
+                  <span className="flex items-center gap-2 text-xs text-text-secondary">
                     <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">{p.portal}</span>
                     <span>{(p.roles ?? []).join(', ') || p.role}</span>
                     {p.status !== 'active' && <span className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{p.status}</span>}
@@ -322,7 +322,7 @@ function ReissueOwnerInvitation({ tenantId, ar }: { tenantId: string; ar: boolea
 
   return (
     <section className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوة المالك' : 'Owner invitation'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوة المالك' : 'Owner invitation'}</h3>
       <form data-testid="reissue-owner-form" className="mt-2 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); reissue.mutate() }}>
         <input data-testid="reissue-owner-email" type="email" required dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder={ar ? 'بريد المالك' : 'Owner email'} aria-label={ar ? 'بريد المالك' : 'Owner email'}

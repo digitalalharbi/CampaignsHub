@@ -418,7 +418,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       </FilterBar>
 
       {capped && (
-        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12px] text-text-secondary">
+        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-xs text-text-secondary">
           {/*
             The queue is ordered open → snoozed → resolved, so what a cap drops is the oldest resolved
             events. Saying which end was cut is the difference between a bounded list and a list that
@@ -508,7 +508,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     event and would crowd out the evidence.
                   */}
                   {alertNextAction(e.type, locale) !== null && (
-                    <p data-testid={`alert-action-${e.id}`} className="flex items-center gap-1.5 text-[12px] font-semibold text-brand-700">
+                    <p data-testid={`alert-action-${e.id}`} className="flex items-center gap-1.5 text-xs font-semibold text-brand-700">
                       <ArrowRight size={12} className="shrink-0 rtl:rotate-180" aria-hidden />
                       {alertNextAction(e.type, locale)}
                     </p>
@@ -716,7 +716,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-2">
         {capped && (
-          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12px] text-text-secondary">
+          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-xs text-text-secondary">
             {locale === 'ar'
               ? `تُعرض أحدث ${rules.length} قاعدة من ${total}.`
               : `Showing the most recent ${rules.length} of ${total} rules.`}

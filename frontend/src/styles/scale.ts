@@ -39,7 +39,7 @@ export const METRIC_VALUE = 'tnum text-[28px] font-extrabold leading-none tracki
 export const METRIC_VALUE_DENSE = 'tnum text-2xl font-extrabold leading-none tracking-tight sm:text-[26px]'
 
 /** The name of the figure. One step above caption text, because it names rather than annotates. */
-export const METRIC_LABEL = 'text-[13px] font-semibold leading-tight'
+export const METRIC_LABEL = 'text-xs font-semibold leading-tight'
 
 /** The line under a figure: what it is measured against, what is missing, why it is withheld. */
 export const METRIC_HINT = 'text-xs leading-snug'

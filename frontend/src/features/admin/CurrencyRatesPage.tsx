@@ -126,7 +126,7 @@ export function CurrencyRatesPage() {
         data-testid="fx-feed-state"
         className={`rounded-2xl border p-5 ${ready ? 'border-border bg-surface' : 'border-[var(--warning-border,var(--border))] bg-[var(--warning-background)]'}`}
       >
-        <h2 className="flex items-center gap-2 font-heading text-[15px] font-bold text-text-primary">
+        <h2 className="flex items-center gap-2 font-heading text-sm font-bold text-text-primary">
           <Coins size={16} aria-hidden />
           {t.feedTitle}
         </h2>
@@ -134,7 +134,7 @@ export function CurrencyRatesPage() {
         <p className={`mt-2 text-sm font-semibold ${ready ? 'text-text-primary' : 'text-warning'}`}>
           {feed.state === 'ready' ? (feed.label ?? t.ready) : feed.state === 'driver_not_configured' ? t.unusable : t.awaiting}
         </p>
-        <p className="mt-1 text-[13px] text-text-secondary">
+        <p className="mt-1 text-xs text-text-secondary">
           {feed.state === 'ready' ? '' : feed.state === 'driver_not_configured' ? t.unusableWhy : t.awaitingWhy}
         </p>
 
@@ -152,14 +152,14 @@ export function CurrencyRatesPage() {
 
       {/* What the absence is costing, worst first — the only figure that makes the decision concrete. */}
       <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">{t.unmetTitle}</h2>
+        <h2 className="font-heading text-sm font-bold text-text-primary">{t.unmetTitle}</h2>
 
         {unmet.length === 0 ? (
-          <p data-testid="fx-unmet-empty" className="mt-2 text-[13px] text-text-secondary">{t.unmetEmpty}</p>
+          <p data-testid="fx-unmet-empty" className="mt-2 text-xs text-text-secondary">{t.unmetEmpty}</p>
         ) : (
           <ul data-testid="fx-unmet" className="mt-3 grid gap-2">
             {unmet.map((p) => (
-              <li key={`${p.base}-${p.quote}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-[13px]">
+              <li key={`${p.base}-${p.quote}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-xs">
                 <span className="text-start block font-bold text-text-primary">
                   <Num className="inline-flex items-center gap-2">
                     <AlertTriangle size={14} className="text-warning" aria-hidden />
@@ -181,8 +181,8 @@ export function CurrencyRatesPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">{t.addTitle}</h2>
-        <p className="mt-1 text-[13px] text-text-secondary">{t.addWhy}</p>
+        <h2 className="font-heading text-sm font-bold text-text-primary">{t.addTitle}</h2>
+        <p className="mt-1 text-xs text-text-secondary">{t.addWhy}</p>
 
         <form
           data-testid="fx-rate-form"
@@ -211,10 +211,10 @@ export function CurrencyRatesPage() {
             </Button>
 
             {save.isError && (
-              <p data-testid="fx-error" className="mt-2 text-[13px] text-danger">{toApiError(save.error).message}</p>
+              <p data-testid="fx-error" className="mt-2 text-xs text-danger">{toApiError(save.error).message}</p>
             )}
             {save.isSuccess && !save.isPending && (
-              <p data-testid="fx-saved" className="mt-2 text-[13px] text-success">{t.saved}</p>
+              <p data-testid="fx-saved" className="mt-2 text-xs text-success">{t.saved}</p>
             )}
           </div>
         </form>
@@ -222,10 +222,10 @@ export function CurrencyRatesPage() {
 
       {rates.length > 0 && (
         <section className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="font-heading text-[15px] font-bold text-text-primary">{t.ratesTitle}</h2>
+          <h2 className="font-heading text-sm font-bold text-text-primary">{t.ratesTitle}</h2>
           <ul data-testid="fx-rates-list" className="mt-3 grid gap-1.5">
             {rates.map((r) => (
-              <li key={`${r.base}-${r.quote}-${r.rate_date}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+              <li key={`${r.base}-${r.quote}-${r.rate_date}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
                 <span className="tnum font-semibold text-text-primary" dir="ltr">{r.base} → {r.quote} · {r.rate}</span>
                 {/* The date and the publisher travel with the rate: a number alone cannot be audited. */}
                 <span className="tnum text-text-secondary" dir="ltr">{r.rate_date} · {r.source}</span>

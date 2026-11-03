@@ -257,7 +257,7 @@ function OptionRow({
       )}
 
       <span
-        className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full text-[13px]"
+        className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full text-xs"
         style={{ backgroundColor: (opt.color ?? '#94a3b8') + '22', color: opt.color ?? undefined }}
         aria-hidden
       >

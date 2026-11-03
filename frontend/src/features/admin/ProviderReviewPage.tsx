@@ -84,15 +84,15 @@ export function ProviderReviewPage() {
             */}
             {!item.editable && <Lock size={12} className="text-text-muted" aria-label={ar ? 'يحدده النظام' : 'Determined by the system'} />}
           </p>
-          <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">{ar ? item.why_ar : item.why_en}</p>
+          <p className="mt-1 text-xs leading-relaxed text-text-secondary">{ar ? item.why_ar : item.why_en}</p>
 
           {item.value && (
-            <code className="text-start mt-2 block overflow-x-auto rounded-lg bg-surface-secondary px-2.5 py-1.5 text-[12px] text-text-primary" dir="ltr">
+            <code className="text-start mt-2 block overflow-x-auto rounded-lg bg-surface-secondary px-2.5 py-1.5 text-xs text-text-primary" dir="ltr">
               {item.value}
             </code>
           )}
           {(ar ? item.detail_ar : item.detail_en) && (
-            <p className="mt-1.5 text-[12px] font-semibold text-danger">{ar ? item.detail_ar : item.detail_en}</p>
+            <p className="mt-1.5 text-xs font-semibold text-danger">{ar ? item.detail_ar : item.detail_en}</p>
           )}
         </div>
 
@@ -101,7 +101,7 @@ export function ProviderReviewPage() {
             data-testid={`review-${checklist.provider}-${item.key}-status`}
             value={item.status}
             onChange={(e) => update.mutate({ provider: checklist.provider, requirement: item.key, status: e.target.value as ReviewStatus })}
-            className="h-9 shrink-0 rounded-lg border border-border bg-surface px-2 text-[13px] font-semibold text-text-primary"
+            className="h-9 shrink-0 rounded-lg border border-border bg-surface px-2 text-xs font-semibold text-text-primary"
           >
             {STATUS_ORDER.map((s) => <option key={s} value={s}>{label(s)}</option>)}
           </select>

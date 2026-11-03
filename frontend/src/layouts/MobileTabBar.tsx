@@ -131,7 +131,7 @@ export function MobileTabBar({
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-              <span className="font-heading text-[15px] font-extrabold text-text-primary">{ar ? 'كل الأقسام' : 'All sections'}</span>
+              <span className="font-heading text-sm font-extrabold text-text-primary">{ar ? 'كل الأقسام' : 'All sections'}</span>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -157,7 +157,7 @@ export function MobileTabBar({
                         end={item.end}
                         onClick={() => setOpen(false)}
                         className={({ isActive }) =>
-                          `flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-semibold transition-colors ${
+                          `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors ${
                             isActive
                               ? 'bg-[var(--brand-background)] text-brand-600'
                               : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'

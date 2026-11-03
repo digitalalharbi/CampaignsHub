@@ -86,7 +86,7 @@ export function EmailOperationsPage() {
             {Object.entries(ledger.data.by_state).map(([state, n]) => (
               <div key={state} className="rounded-xl border border-border bg-surface px-4 py-3">
                 <div className={`text-lg font-bold ${word(state).tone}`}>{n}</div>
-                <div className="text-[13px] text-text-secondary">{ar ? word(state).ar : word(state).en}</div>
+                <div className="text-xs text-text-secondary">{ar ? word(state).ar : word(state).en}</div>
               </div>
             ))}
             {Object.keys(ledger.data.by_state).length === 0 && (
@@ -152,22 +152,22 @@ export function EmailOperationsPage() {
               <tbody>
                 {ledger.data.deliveries.map((row: EmailDelivery) => (
                   <tr key={`${row.source}-${row.id}`} className="border-b border-border align-top last:border-0">
-                    <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</span></td>
+                    <td className="p-3 text-xs text-text-primary"><span dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</span></td>
                     <td className="p-3">
                       <div className="text-text-primary">{row.kind}</div>
-                      <div className="text-[13px] text-text-muted">
+                      <div className="text-xs text-text-muted">
                         {row.source === 'digest' ? (ar ? 'ملخص' : 'digest') : row.template}
                         {row.locale ? ` · ${row.locale}` : ''}
                         {row.transport ? ` · ${row.transport}` : ''}
                       </div>
                     </td>
-                    <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
-                    <td className="p-3 text-[13px] text-text-primary">{row.tenant_name ?? '—'}</td>
-                    <td className={`p-3 text-[13px] font-semibold ${word(row.status).tone}`}>
+                    <td className="p-3 text-xs text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
+                    <td className="p-3 text-xs text-text-primary">{row.tenant_name ?? '—'}</td>
+                    <td className={`p-3 text-xs font-semibold ${word(row.status).tone}`}>
                       {ar ? word(row.status).ar : word(row.status).en}
                     </td>
-                    <td className="p-3 text-[13px] text-text-primary">{row.attempts}</td>
-                    <td className="max-w-[280px] p-3 text-[13px] leading-6 text-text-secondary">{row.reason ?? '—'}</td>
+                    <td className="p-3 text-xs text-text-primary">{row.attempts}</td>
+                    <td className="max-w-[280px] p-3 text-xs leading-6 text-text-secondary">{row.reason ?? '—'}</td>
                   </tr>
                 ))}
                 {ledger.data.deliveries.length === 0 && (
@@ -183,7 +183,7 @@ export function EmailOperationsPage() {
 
           {ledger.data.total > ledger.data.per_page && (
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-text-secondary">
+              <span className="text-xs text-text-secondary">
                 {ar
                   ? `صفحة ${ledger.data.page} من ${Math.ceil(ledger.data.total / ledger.data.per_page)}`
                   : `Page ${ledger.data.page} of ${Math.ceil(ledger.data.total / ledger.data.per_page)}`}
@@ -330,7 +330,7 @@ function PreviewGallery({ ar }: { ar: boolean }) {
   return (
     <section className="rounded-2xl border border-border bg-surface p-5">
       <h2 className="text-lg font-bold text-text-primary">{ar ? 'معرض الرسائل' : 'Message gallery'}</h2>
-      <p className="mt-1 max-w-3xl text-[13px] leading-6 text-text-secondary">
+      <p className="mt-1 max-w-3xl text-xs leading-6 text-text-secondary">
         {ar
           ? 'كل رسالة يمكن للمنصة إرسالها، بنص تجريبي لا ببيانات عميل. المعرض والأمر `notifications:preview` يقرآن التعريف نفسه.'
           : 'Every message the platform can send, with fixture text rather than a customer’s data. This gallery and `notifications:preview` read the same definition.'}
