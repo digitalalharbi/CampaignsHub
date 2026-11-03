@@ -46,7 +46,7 @@ test.describe('a session the server recognises', () => {
 
     await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
 
-    await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20_000 })
+    await expect(page).toHaveURL(/\/portal(\/(?!login)|$)/, { timeout: 20_000 })
   })
 
   /** The URL grants nothing: an advertiser session cannot walk into the agency console. */
@@ -196,7 +196,7 @@ test.describe('what the code step does when things go wrong', () => {
      * anything. What must be true either way is that the page warns exactly when the delivery state
      * is not one that means «it arrived», and stays quiet exactly when it is.
      */
-    const answered = page.waitForResponse((r) => r.url().includes('/client/login/start') && r.status() === 200)
+    const answered = page.waitForResponse((r) => r.url().includes('/client/login/start') && r.status() === 201)
     await requestCode(page, DEMO_CLIENT_CONTACT)
     const state = String((await (await answered).json()).data.delivery_status)
 
