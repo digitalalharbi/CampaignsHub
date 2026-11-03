@@ -54,6 +54,27 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── read-only facts"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | "' <<'SQL'
+            BEGIN READ ONLY;
+            select 'A client-scoped memberships active', count(*) from memberships m where m.status='active' and exists (select 1 from membership_scopes s where s.membership_id=m.id and s.scope_type='client_workspace');
+            select 'A of those with no active project membership in the tenant', count(*) from memberships m where m.status='active' and exists (select 1 from membership_scopes s where s.membership_id=m.id and s.scope_type='client_workspace') and not exists (select 1 from project_memberships p where p.user_id=m.user_id and p.tenant_id=m.tenant_id and p.status='active');
+            select 'A distinct tenants among those', count(distinct m.tenant_id) from memberships m where m.status='active' and exists (select 1 from membership_scopes s where s.membership_id=m.id and s.scope_type='client_workspace') and not exists (select 1 from project_memberships p where p.user_id=m.user_id and p.tenant_id=m.tenant_id and p.status='active');
+            select 'B salla-review tenant rows', count(*) from tenants where slug='salla-review';
+            select 'B its metric rows', count(*) from daily_metrics d join tenants t on t.id=d.tenant_id where t.slug='salla-review';
+            select 'C default portal tenants enabled', count(*) from tenants where is_default_portal and portal_enabled;
+            select 'C tenants with portal_domain', count(*) from tenants where portal_domain is not null;
+            select 'D users with an active membership in a closed tenant and another live one', count(distinct m.user_id) from memberships m join tenants t on t.id=m.tenant_id where m.status='active' and t.status in ('inactive','suspended') and exists (select 1 from memberships o join tenants ot on ot.id=o.tenant_id where o.user_id=m.user_id and o.id<>m.id and o.status='active' and ot.status='active');
+            select 'D closed tenants by status', status, count(*) from tenants where status in ('inactive','suspended') group by status;
+            select 'E registration 904ac4d5 state', state, tenant_id is null as no_tenant from registration_requests where id='904ac4d5-f3eb-4d11-862c-966a63be9762';
+            select 'E has a users row', exists (select 1 from users u join registration_requests r on lower(u.email)=lower(r.email) where r.id='904ac4d5-f3eb-4d11-862c-966a63be9762');
+            select 'F users holding memberships in two portals', count(*) from (select user_id from memberships where status='active' group by user_id having count(distinct portal)>1) x;
+            select 'G contacts with a request', count(distinct lower(contact_email)) from external_requests;
+            select 'G client-portal memberships active', count(*) from memberships where status='active' and portal='client_portal';
+            ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
