@@ -53,6 +53,7 @@ use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use App\Models\User;
 use App\Support\PhoneNumber;
@@ -185,6 +186,35 @@ final class ClientPortalController
     }
 
     /**
+     * The agency a contact's session opens in, proven by the code they just spent.
+     *
+     * An agency's own portal domain decides. On the shared domain the default portal would open an empty session for a contact of any
+     * other agency, and with no default a contact could not sign in at all, so the agency that actually holds their record answers. A
+     * contact of several agencies gets their most recent; an address nobody holds gets what the resolver says.
+     */
+    private function portalTenantFor(Request $request, string $email): ?Tenant
+    {
+        $resolved = $this->portal->resolve($request);
+        if ($resolved !== null && Str::lower((string) $resolved->portal_domain) === Str::lower($request->getHost())) {
+            return $resolved;
+        }
+
+        $address = Str::lower($email);
+        $held = Membership::query()->withoutGlobalScopes()
+            ->where('portal', Portal::ClientPortal->value)
+            ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [$address])->select('id'))
+            ->active()->pluck('tenant_id')
+            ->merge(ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [$address])->latest('created_at')->pluck('tenant_id'))
+            ->map(static fn ($id): string => (string) $id)->unique()->values();
+
+        if ($held->isEmpty() || ($resolved !== null && $held->contains((string) $resolved->id))) {
+            return $resolved;
+        }
+
+        return Tenant::query()->whereKey($held->first())->first();
+    }
+
+    /**
      * The security trail: the address and the outcome, never the code and never its hash.
      *
      * @param  array<string, mixed>  $after
@@ -229,7 +259,9 @@ final class ClientPortalController
         $account = $v->channel === 'email' ? User::query()->whereRaw('lower(email) = ?', [Str::lower((string) $v->destination)])->first() : null;
         abort_if($account !== null && ($account->disabled_at !== null || (! $account->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($account))), 403, __('auth.unavailable'));
 
-        $tenant = $this->portal->resolve($request);
+        $tenant = $v->channel === 'email'
+            ? $this->portalTenantFor($request, (string) $v->destination)
+            : $this->portal->resolve($request);
         abort_if($tenant === null, 404);
 
         $plain = Str::random(48);

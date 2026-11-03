@@ -45,10 +45,10 @@ final class PortalEmailSignInTest extends TestCase
         $this->nameOnARequest(self::CONTACT);
     }
 
-    private function nameOnARequest(string $email): void
+    private function nameOnARequest(string $email, ?Tenant $tenant = null): void
     {
         ExternalRequest::create([
-            'tenant_id' => $this->tenant->id, 'reference' => 'REQ-'.uniqid(),
+            'tenant_id' => ($tenant ?? $this->tenant)->id, 'reference' => 'REQ-'.uniqid(),
             'type_id' => RequestType::query()->firstOrFail()->id,
             'status_id' => RequestStatus::query()->where('key', 'new')->firstOrFail()->id,
             'contact_name' => 'Contact', 'contact_email' => $email, 'contact_phone' => '+966500000000', 'submitted_at' => now(),
@@ -137,6 +137,37 @@ final class PortalEmailSignInTest extends TestCase
         ['id' => $id, 'code' => $code] = $this->codeFor();
 
         $this->verify($id, $code)->assertOk()->assertJsonPath('data.authenticated', true);
+    }
+
+    public function test_a_contact_of_another_agency_opens_a_session_in_their_own_agency(): void
+    {
+        $other = Tenant::create(['name' => 'Other', 'slug' => 'other-'.uniqid(), 'status' => 'active']);
+        $this->nameOnARequest('theirs@example.test', $other);
+        ['id' => $id, 'code' => $code] = $this->codeFor('theirs@example.test');
+
+        $this->verify($id, $code)->assertOk();
+
+        $this->assertSame((string) $other->id, (string) DB::table('client_portal_tokens')->where('contact_email', 'theirs@example.test')->value('tenant_id'));
+    }
+
+    public function test_a_contact_signs_in_with_no_default_portal_and_a_stranger_does_not(): void
+    {
+        Tenant::query()->update(['is_default_portal' => false]);
+        ['id' => $id, 'code' => $code] = $this->codeFor();
+        $this->verify($id, $code)->assertOk();
+
+        ['id' => $id, 'code' => $code] = $this->codeFor('nobody@example.test');
+        $this->verify($id, $code)->assertNotFound();
+    }
+
+    public function test_an_agency_domain_decides_over_where_the_contact_is_held(): void
+    {
+        $domain = Tenant::create(['name' => 'Own', 'slug' => 'own-'.uniqid(), 'status' => 'active', 'portal_enabled' => true, 'portal_domain' => 'portal.own.test']);
+        ['id' => $id, 'code' => $code] = $this->codeFor();
+
+        $this->postJson('http://portal.own.test/api/v1/client/login/verify', ['verification_id' => $id, 'code' => $code])->assertOk();
+
+        $this->assertSame((string) $domain->id, (string) DB::table('client_portal_tokens')->where('contact_email', self::CONTACT)->value('tenant_id'));
     }
 
     public function test_a_wrong_code_is_refused(): void
