@@ -37,6 +37,8 @@ for (const [width, height] of [[390, 844], [1366, 768]]) {
         await page.goto('/login')
         await expect(page.getByTestId('login-google-reserved')).toBeVisible()
         await expect(page.getByTestId('login-request-code')).toHaveCount(0)
+        // The webfont swap narrows a centred link by a few pixels whatever the lookup does; this measures the lookup.
+        await page.evaluate(() => document.fonts.ready)
         const before = await boxes(page)
         expect(before['login-methods'], 'Google’s row is not reserved').not.toBeNull()
 
