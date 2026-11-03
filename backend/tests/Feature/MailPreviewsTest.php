@@ -213,10 +213,10 @@ final class MailPreviewsTest extends TestCase
         foreach ($this->render() as $name => $html) {
             // EMAIL-BRAND-001 — the official lockup in the header, and (EMAIL-DECISION-REPORT-001) the static
             // chart PNGs served by opaque token from our own origin, each with its figures in the alt. Nothing else.
-            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-(ar|en)-dark\.png"#', $html, "{$name}'s header image is not the brand lockup");
+            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/mark-cream\.png"#', $html, "{$name}'s header image is not the brand lockup");
             preg_match_all('/<img\b[^>]*>/', $html, $images);
             foreach ($images[0] as $tag) {
-                if (str_contains($tag, '/brand/email/lockup-')) {
+                if (str_contains($tag, '/brand/email/mark-cream.png')) {
                     continue;
                 }
                 $this->assertMatchesRegularExpression('#src="[^"]+/mail/charts/[a-z0-9]{32}\.png"#', $tag, "{$name} loads an image that is neither the lockup nor a chart");
@@ -335,7 +335,8 @@ final class MailPreviewsTest extends TestCase
         );
 
         $unknown = $files['account-invitation-unknown-role.ar.html'];
-        $this->assertStringContainsString('campaign_ops', $unknown, 'the unknown role is not named at all');
+        $this->assertStringContainsString('عضو', $unknown, 'the unknown role falls back to the generic label');
+        $this->assertStringNotContainsString('campaign_ops', $unknown, 'the raw slug leaked');
         $this->assertStringNotContainsString('متابعة المشاريع المسندة إليه', $unknown, 'a description was invented');
     }
 

@@ -58,21 +58,37 @@ final class MailShell
             'startSide' => $ar ? 'right' : 'left',
             'endSide' => $ar ? 'left' : 'right',
             'brand' => 'CampaignsHub',
-            'headerNote' => $ar
-                ? 'مساعدك لمتابعة كل حملاتك الإعلانية المدفوعة من مكان واحد'
-                : 'Your assistant for every paid campaign, in one place',
+            'headerNote' => $ar ? 'منصة إدارة الحملات المدفوعة' : 'Paid media in one place',
+            // Live text, never an image. The em dash is its own left-to-right island so it does not
+            // jump sides when an Arabic and a Latin name share a line. Both are constants, so unescaped is safe.
+            'wordmark' => self::wordmark($ar),
+            'wordmarkPlain' => self::wordmarkPlain($ar),
             'subject' => $subject,
             // The line an inbox shows beside the subject. Never the subject again — that is the only
             // preview a reader gets, and repeating the title wastes it.
             'preheader' => $preheader,
             'urls' => MailLinks::footer(),
-            // EMAIL-BRAND-001 — the official lockup for the reader's language, on the production origin.
-            'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
+            // EMAIL-BRAND-002 — the transparent cream mark (112px, shown at 56), on the app origin.
+            'logoUrl' => MailLinks::to('/brand/email/mark-cream.png'),
             'showPreferences' => $preferences,
             'footerNote' => $footerNote,
             'year' => date('Y'),
             't' => self::footerStrings($ar),
         ];
+    }
+
+    /** The header's name line, in the reader's order. Constant markup: safe to print unescaped. */
+    public static function wordmark(bool $ar): string
+    {
+        return $ar
+            ? 'كامبينز هَب <span dir="ltr">—</span> CampaignsHub'
+            : 'CampaignsHub <span dir="ltr">—</span> كامبينز هَب';
+    }
+
+    /** The footer's name line. */
+    public static function wordmarkPlain(bool $ar): string
+    {
+        return $ar ? 'كامبينز هَب · CampaignsHub' : 'CampaignsHub · كامبينز هَب';
     }
 
     /**

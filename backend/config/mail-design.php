@@ -37,11 +37,13 @@ return [
      */
     'colour' => [
         'brand' => '#0d8a6f',
+        'brand_dark' => '#0b1a16',  // the header band
         'brand_action' => '#0b7a62', // a button's fill: white on it is 5.3:1; brand itself is 4.3:1 and fails AA
         'brand_ink' => '#c9d2cc',   // on the brand background, in the header
         'ink' => '#0b1a16',         // body text
         'ink_soft' => '#3d4742',    // secondary body text
         'muted' => '#5b6b68',       // labels
+        'header_tag' => '#b7c9c2',  // the tagline on the dark band
         'muted_soft' => '#8b9a97',  // footnotes and timestamps
         'canvas' => '#f7f5f0',      // outside the card
         'surface' => '#ffffff',     // the card itself

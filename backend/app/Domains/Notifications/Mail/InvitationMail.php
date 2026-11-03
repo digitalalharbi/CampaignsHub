@@ -114,6 +114,7 @@ final class InvitationMail extends Mailable
     private function role(bool $ar): array
     {
         $roles = $ar ? [
+            'tenant-owner' => ['مالك مساحة العمل', 'صلاحية كاملة على مساحة العمل، بما في ذلك الفريق والاشتراك والفواتير.'],
             'owner' => ['مالك الحساب', 'صلاحية كاملة على مساحة العمل، بما في ذلك الفريق والاشتراك والفواتير.'],
             'admin' => ['مدير', 'إدارة المشاريع والحملات والفريق، دون الوصول إلى إعدادات الاشتراك.'],
             'manager' => ['مدير حسابات', 'متابعة المشاريع المسندة إليه وإدارة حملاتها وتقاريرها.'],
@@ -124,6 +125,7 @@ final class InvitationMail extends Mailable
             'client_approver' => ['معتمِد', 'الاطلاع على الأداء والتقارير، واعتماد العروض والرد على الطلبات والرسائل.'],
             'client_admin' => ['مسؤول العميل', 'كل ما سبق، مع إدارة من يصل إلى بوابتك.'],
         ] : [
+            'tenant-owner' => ['Workspace owner', 'Full control of the workspace, including the team, the subscription and billing.'],
             'owner' => ['Account owner', 'Full control of the workspace, including the team, the subscription and billing.'],
             'admin' => ['Administrator', 'Manages projects, campaigns and the team, without access to subscription settings.'],
             'manager' => ['Account manager', 'Follows their assigned projects and manages the campaigns and reports within them.'],
@@ -137,9 +139,14 @@ final class InvitationMail extends Mailable
 
         $known = $roles[$this->roleSlug] ?? null;
 
-        // An unknown role reads as its own slug, with NO description. See the class docblock.
-        return $known === null
-            ? ['name' => $this->roleSlug, 'note' => '']
-            : ['name' => $known[0], 'note' => $known[1]];
+        // An unknown role never prints its raw slug and is never blank: Arabic gets the generic «عضو»,
+        // English the slug in words. No description — see the class docblock.
+        if ($known === null) {
+            $words = trim((string) preg_replace('/[\s_\-]+/', ' ', $this->roleSlug));
+
+            return ['name' => $ar ? 'عضو' : ($words === '' ? 'Member' : ucfirst(strtolower($words))), 'note' => ''];
+        }
+
+        return ['name' => $known[0], 'note' => $known[1]];
     }
 }

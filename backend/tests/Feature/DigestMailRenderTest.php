@@ -249,7 +249,7 @@ final class DigestMailRenderTest extends TestCase
         $html = $this->html('en');
 
         $this->assertSame(1, substr_count($html, '<img'));
-        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-en-dark\.png" width="220" alt="CampaignsHub"#', $html);
+        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/mark-cream\.png" width="56" height="56" alt="CampaignsHub"#', $html);
         $this->assertStringNotContainsString('data:image', $html);
         $this->assertStringNotContainsString('background-image', $html);
     }

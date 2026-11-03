@@ -51,6 +51,15 @@
             .ch-stack { display: block !important; width: 100% !important; }
             .ch-kpi { display: block !important; width: 100% !important; padding-bottom: 12px !important; }
         }
+        /* Gmail / Apple Mail dark mode: the band is dark by design and must stay so. */
+        @media (prefers-color-scheme: dark) {
+            .ch-hdr { background-color: #0b1a16 !important; }
+            .ch-hdr-name { color: #f7f5f0 !important; }
+            .ch-hdr-tag { color: #b7c9c2 !important; }
+        }
+        [data-ogsc] .ch-hdr { background-color: #0b1a16 !important; }
+        [data-ogsc] .ch-hdr-name { color: #f7f5f0 !important; }
+        [data-ogsc] .ch-hdr-tag { color: #b7c9c2 !important; }
         /* Progressive only: the button is already a centred, 44px-tall cell without this. */
         @media only screen and (max-width: 480px) {
             .ch-btn-wrap { width: 100% !important; }
@@ -69,35 +78,23 @@
                 <table role="presentation" class="ch-wrap" align="center" width="600" cellpadding="0" cellspacing="0" border="0" dir="{{ $dir }}" style="margin:0 auto; width:600px; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
 
                     {{--
-                      Header: the official lockup on the dark ground — EMAIL-BRAND-001.
+                      Header — EMAIL-BRAND-002.
 
-                      An image CAN be blocked, so the lockup is a real <img> with its alt text set to the
-                      name AND the cell carries the dark ground and a type line beneath it: a client that
-                      blocks images shows the brand name on the right colour rather than a grey box. The
-                      file is a plain PNG on the exact ground (#0b1a16) at twice its display width, hosted
-                      on the production origin — never a data: URI (Gmail strips them) and never an SVG
-                      (Outlook does not draw them).
+                      A full-width dark band: the transparent cream MARK as the only image, the wordmark as
+                      LIVE TEXT. The old raster lockup was an opaque dark rectangle; on a pale or inverted
+                      page its hard edges showed. Text always renders, so with images blocked the band still
+                      reads as the brand. `bgcolor` + inline colour + the dark-mode rules keep the band
+                      dark in Gmail dark mode, which otherwise re-inverts plain background colours.
                     --}}
                     <tr>
-                        <td class="ch-pad" align="center" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; padding:20px 24px 16px 24px; border-bottom:3px solid #0d8a6f; text-align:center;">
+                        <td class="ch-hdr ch-pad" align="center" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; padding:28px 24px; border-bottom:3px solid #0b7a62; text-align:center;">
                             <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; text-align:center;">
-                                <img src="{{ $logoUrl }}" width="220" alt="{{ $brand }}" style="display:block; margin:0 auto; border:0; outline:none; text-decoration:none; width:220px; max-width:100%; height:auto; color:#f7f5f0; font-family:{!! $font !!}; font-size:18px; font-weight:800;" />
+                                <img src="{{ $logoUrl }}" width="56" height="56" alt="{{ $brand }}" style="display:block; margin:0 auto; border:0; outline:none; text-decoration:none; width:56px; height:56px; color:#f7f5f0; font-family:{!! $font !!}; font-size:14px;" />
                             </a>
-                            <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:8px; text-align:center; line-height:1.6;">
-                                {{ $headerNote }}
-                            </div>
-                            {{--
-                                PROJECT-DIGEST-SCOPE-001 — said only when the reader narrowed it.
-
-                                A summary covering three of twelve projects otherwise reads exactly
-                                like one covering all twelve, and the client that is missing looks
-                                like a client that was quiet. Absent in the ordinary case: a caveat on
-                                every digest is a caveat nobody reads.
-                            --}}
+                            <div class="ch-hdr-name" dir="auto" style="font-family:{!! $font !!}; font-size:22px; line-height:1.4; font-weight:700; color:#f7f5f0; text-align:center; padding-top:12px;">{!! $wordmark !!}</div>
+                            <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:13px; line-height:1.6; color:#b7c9c2; text-align:center; padding-top:4px;">{{ $headerNote }}</div>
                             @if (!empty($scopeNote ?? ''))
-                                <div style="font-family:{!! $font !!}; font-size:12px; color:#c9d2cc; padding-top:4px; text-align:center;">
-                                    {{ $scopeNote }}
-                                </div>
+                                <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:12px; color:#b7c9c2; padding-top:4px; text-align:center;">{{ $scopeNote }}</div>
                             @endif
                         </td>
                     </tr>
@@ -142,7 +139,7 @@
                                 </div>
                             @endif
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; padding-top:8px; line-height:1.7;">
-                                © {{ $year }} {{ $brand }} · <a href="{{ $urls['home'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $urls['host'] }}</a>
+                                © {{ $year }} {!! $wordmarkPlain !!} · <a href="{{ $urls['home'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $urls['host'] }}</a>
                                 <br />{{ $t['sender'] }}
                             </div>
                         </td>

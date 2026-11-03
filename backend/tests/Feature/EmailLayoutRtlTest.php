@@ -47,7 +47,15 @@ final class EmailLayoutRtlTest extends TestCase
         $this->assertStringContainsString('lang="'.$locale.'" dir="'.($ar ? 'rtl' : 'ltr').'"', $html);
         $this->assertMatchesRegularExpression('/<body dir="'.($ar ? 'rtl' : 'ltr').'"/', $html);
         // Header lockup is centred; body and footer cells carry the locale's alignment.
-        $this->assertMatchesRegularExpression('/<td class="ch-pad" align="center"[^>]*bgcolor="#0b1a16"/', $html);
+        $this->assertMatchesRegularExpression('/<td class="ch-hdr ch-pad" align="center"[^>]*bgcolor="#0b1a16"[^>]*border-bottom:3px solid #0b7a62/', $html);
+        $this->assertStringContainsString($ar ? 'كامبينز هَب <span dir="ltr">—</span> CampaignsHub' : 'CampaignsHub <span dir="ltr">—</span> كامبينز هَب', $html);
+        $this->assertStringContainsString($ar ? 'منصة إدارة الحملات المدفوعة' : 'Paid media in one place', $html);
+        $this->assertStringContainsString($ar ? 'كامبينز هَب · CampaignsHub' : 'CampaignsHub · كامبينز هَب', $html);
+        $this->assertMatchesRegularExpression('/<img src="[^"]*\/brand\/email\/mark-cream\.png" width="56" height="56" alt="CampaignsHub"/', $html);
+        $this->assertDoesNotMatchRegularExpression('/lockup|\.jpe?g/i', $html);
+        $this->assertStringContainsString('<meta name="color-scheme" content="light dark" />', $html);
+        $this->assertStringContainsString('<meta name="supported-color-schemes" content="light dark" />', $html);
+        $this->assertStringContainsString('[data-ogsc] .ch-hdr', $html);
         $this->assertMatchesRegularExpression('/<td class="ch-pad" dir="'.($ar ? 'rtl' : 'ltr').'" align="'.$align.'"[^>]*text-align:'.$align.'/', $html);
         $this->assertSame(2, preg_match_all('/<td class="ch-pad" dir="[a-z]+" align="'.$align.'"/', $html));
         $this->assertStringNotContainsString('align="'.($ar ? 'left' : 'right').'" bgcolor', $html);
@@ -127,5 +135,20 @@ final class EmailLayoutRtlTest extends TestCase
         $this->assertStringContainsString('dir="ltr"', (string) file_get_contents($out));
         $this->artisan('mail:preview', ['mailable' => 'nope'])->assertFailed();
         @unlink($out);
+    }
+
+    public function test_owner_slug_has_a_role_and_unknown_slugs_are_humanised(): void
+    {
+        $owner = (string) MailGallery::render('account-owner-invitation', 'en');
+        $this->assertStringContainsString('Workspace owner', $owner);
+        $this->assertStringNotContainsString('tenant-owner', $owner);
+        $this->assertStringContainsString('مالك مساحة العمل', (string) MailGallery::render('account-owner-invitation', 'ar'));
+
+        $unknownEn = (string) MailGallery::render('account-invitation-unknown-role', 'en');
+        $this->assertStringContainsString('Campaign ops', $unknownEn);
+        $this->assertStringNotContainsString('campaign_ops', $unknownEn);
+        $unknownAr = (string) MailGallery::render('account-invitation-unknown-role', 'ar');
+        $this->assertStringContainsString('عضو', $unknownAr);
+        $this->assertStringNotContainsString('campaign_ops', $unknownAr);
     }
 }

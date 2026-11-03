@@ -206,8 +206,10 @@ final class DailyDigestMail extends Mailable
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
-                // EMAIL-BRAND-001 — the official lockup, same as every other message.
-                'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
+                // EMAIL-BRAND-002 — the transparent mark and the live-text wordmark, same as every other message.
+                'logoUrl' => MailLinks::to('/brand/email/mark-cream.png'),
+                'wordmark' => MailShell::wordmark($ar),
+                'wordmarkPlain' => MailShell::wordmarkPlain($ar),
                 // The shared footer words (support, sender) under the digest's own copy.
                 't' => array_merge(MailShell::footerStrings($ar), $this->copy($ar)),
                 'totals' => $this->accountCards($p, $ar),
