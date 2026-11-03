@@ -34,8 +34,12 @@ final class ClientActivityController
         $this->access->assertView($request->user(), $c);
         $tenantId = (string) $this->tenant->tenantId();
 
-        $projectIds = DB::table('projects')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)->pluck('id')->all();
-        $campaignIds = DB::table('unified_campaigns')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)->pluck('id')->all();
+        // PROJECTS-RBAC-CLOSURE-001 — the history of the projects (and their campaigns) the reader reaches, not the whole client's.
+        $reach = $this->access->reachableProjectIds($request->user(), $c);
+        $projectIds = DB::table('projects')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)
+            ->when($reach !== null, fn ($q) => $q->whereIn('id', $reach))->pluck('id')->all();
+        $campaignIds = DB::table('unified_campaigns')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)
+            ->when($reach !== null, fn ($q) => $q->whereIn('project_id', $reach))->pluck('id')->all();
         $requestIds = DB::table('external_requests')->where('tenant_id', $tenantId)->where('client_id', $c->id)->pluck('id')->all();
 
         $entityIds = array_merge([(string) $c->id], $projectIds, $campaignIds, array_map('strval', $requestIds));

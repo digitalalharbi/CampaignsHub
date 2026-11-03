@@ -15,6 +15,7 @@ use App\Domains\Delivery\Services\DeliveryPackService;
 use App\Domains\Delivery\Services\DeliverySettings;
 use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Delivery\Services\PlatformEvidenceService;
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
@@ -57,6 +58,7 @@ final class DeliveryController extends Controller
             $query->where('status', (string) $request->query('status'));
         }
 
+        app(ProjectReach::class)->constrainRows($query, $request->user());
         $rows = $query->get()->filter(fn (DeliveryPack $p): bool => $this->reachable($request, $p))->values();
         $names = ClientWorkspace::query()->whereIn('id', $rows->pluck('client_workspace_id')->unique()->all())->pluck('name', 'id');
 
@@ -159,6 +161,8 @@ final class DeliveryController extends Controller
         $data = $request->validate(['project_id' => ['required', 'uuid'], 'anchor' => ['nullable', 'date']]);
         $project = Project::query()->findOrFail($data['project_id']);
         $this->authorise($request, (string) $project->client_workspace_id, 'reports.approve');
+        // PROJECTS-RBAC-CLOSURE-001 — a pack is prepared for ONE project, which has to be one the preparer reaches.
+        abort_unless(app(ProjectReach::class)->canReachRow($request->user(), (string) $project->getKey()), 403);
 
         $pack = $this->packs->prepare($project, isset($data['anchor']) ? Carbon::parse($data['anchor']) : null, $request->user());
 
@@ -168,13 +172,13 @@ final class DeliveryController extends Controller
     /** GET /delivery/packs/{pack} */
     public function show(Request $request, DeliveryPack $pack): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.view');
+        $this->authorisePack($request, $pack, 'reports.view');
 
         return ApiResponse::success($this->shape($pack) + [
             'recommendations' => ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)->where('type', 'recommendation')->orderByDesc('priority')
                 ->get(['id', 'annotation_id', 'platform', 'kpi', 'text_ar', 'text_en', 'proposed_action', 'priority', 'status', 'source', 'version'])->all(),
             'notes' => array_map(fn ($n) => $this->noteShape($n), app(PackNotes::class)->list($pack)),
-            'evidence' => PlatformEvidence::query()->where('client_workspace_id', $pack->client_workspace_id)
+            'evidence' => app(ProjectReach::class)->constrainRows(PlatformEvidence::query()->where('client_workspace_id', $pack->client_workspace_id), $request->user())
                 ->whereDate('period_start', '<=', $pack->period_end)->whereDate('period_end', '>=', $pack->period_start)
                 ->get(['id', 'provider', 'period_start', 'period_end', 'original_name', 'mime', 'size', 'captured_at', 'note', 'include_in_report'])->all(),
         ], 'Delivery pack.');
@@ -183,7 +187,7 @@ final class DeliveryController extends Controller
     /** POST /delivery/packs/{pack}/notes — DELIVERY-NOTES-001, the Owner's own note. */
     public function addNote(Request $request, DeliveryPack $pack, PackNotes $notes): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
         $data = $request->validate([
             'kind' => ['required', 'in:'.implode(',', array_keys(PackNotes::KINDS))],
             'text_ar' => ['nullable', 'string', 'max:600'], 'text_en' => ['nullable', 'string', 'max:600'],
@@ -196,7 +200,7 @@ final class DeliveryController extends Controller
     /** PATCH /delivery/packs/{pack}/notes/{note} */
     public function updateNote(Request $request, DeliveryPack $pack, string $note, PackNotes $notes): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
         $data = $request->validate([
             'kind' => ['sometimes', 'in:'.implode(',', array_keys(PackNotes::KINDS))],
             'text_ar' => ['sometimes', 'nullable', 'string', 'max:600'], 'text_en' => ['sometimes', 'nullable', 'string', 'max:600'],
@@ -210,7 +214,7 @@ final class DeliveryController extends Controller
     /** DELETE /delivery/packs/{pack}/notes/{note} */
     public function deleteNote(Request $request, DeliveryPack $pack, string $note, PackNotes $notes): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
         $model = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)->where('id', $note)->firstOrFail();
 
         return $this->guard(function () use ($notes, $pack, $model) {
@@ -223,7 +227,7 @@ final class DeliveryController extends Controller
     /** PUT /delivery/packs/{pack}/notes/order */
     public function reorderNotes(Request $request, DeliveryPack $pack, PackNotes $notes): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
         $data = $request->validate(['ids' => ['required', 'array', 'max:200'], 'ids.*' => ['string']]);
 
         return $this->guard(function () use ($notes, $pack, $data) {
@@ -242,7 +246,7 @@ final class DeliveryController extends Controller
     /** PUT /delivery/packs/{pack}/components */
     public function components(Request $request, DeliveryPack $pack): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
         $data = $request->validate(['components' => ['required', 'array']]);
 
         return $this->guard(fn () => $this->shape($this->packs->setComponents($pack, $data['components'])));
@@ -251,8 +255,8 @@ final class DeliveryController extends Controller
     /** POST /delivery/packs/{pack}/invoice */
     public function invoice(Request $request, DeliveryPack $pack): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
-        $this->authorise($request, (string) $pack->client_workspace_id, 'billing.view');
+        $this->authorisePack($request, $pack, 'reports.approve');
+        $this->authorisePack($request, $pack, 'billing.view');
         $invoice = Invoice::query()->findOrFail($request->validate(['invoice_id' => ['required', 'integer']])['invoice_id']);
 
         return $this->guard(fn () => $this->shape($this->packs->attachInvoice($pack, $invoice)));
@@ -261,7 +265,7 @@ final class DeliveryController extends Controller
     /** POST /delivery/packs/{pack}/approve */
     public function approve(Request $request, DeliveryPack $pack): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
 
         return $this->guard(fn () => $this->shape($this->packs->approve($pack, $request->user())));
     }
@@ -269,7 +273,7 @@ final class DeliveryController extends Controller
     /** POST /delivery/packs/{pack}/sent */
     public function sent(Request $request, DeliveryPack $pack): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
 
         return $this->guard(fn () => $this->shape($this->packs->markSent($pack)));
     }
@@ -277,7 +281,7 @@ final class DeliveryController extends Controller
     /** GET /delivery/packs/{pack}/whatsapp?lang=ar|en&link= */
     public function whatsapp(Request $request, DeliveryPack $pack): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.view');
+        $this->authorisePack($request, $pack, 'reports.view');
         $link = $request->filled('link') ? (string) $request->query('link') : null;
 
         return $this->guard(fn () => ['text' => $this->packs->whatsappSummary($pack, (string) $request->query('lang', 'ar'), $link)]);
@@ -291,7 +295,7 @@ final class DeliveryController extends Controller
      */
     public function editRecommendation(Request $request, DeliveryPack $pack, string $annotation): JsonResponse
     {
-        $this->authorise($request, (string) $pack->client_workspace_id, 'reports.approve');
+        $this->authorisePack($request, $pack, 'reports.approve');
         abort_if($pack->status === 'sent', 409, 'This pack has already been sent.');
 
         $data = $request->validate(['text_ar' => ['nullable', 'string', 'max:600'], 'text_en' => ['nullable', 'string', 'max:600'], 'proposed_action' => ['nullable', 'string', 'max:1200']]);
@@ -330,6 +334,7 @@ final class DeliveryController extends Controller
             'include_in_report' => ['nullable', 'boolean'],
         ]);
         $workspace = $this->authorise($request, $data['client_workspace_id'], 'reports.approve');
+        $this->assertProjectReach($request, $data['project_id'] ?? null);
 
         $evidence = $this->evidence->store(
             (string) $workspace->tenant_id, (string) $workspace->getKey(), $data['project_id'] ?? null, $data['provider'],
@@ -345,6 +350,7 @@ final class DeliveryController extends Controller
     public function deleteEvidence(Request $request, PlatformEvidence $evidence): JsonResponse
     {
         $this->authorise($request, (string) $evidence->client_workspace_id, 'reports.approve');
+        $this->assertProjectReach($request, $evidence->project_id === null ? null : (string) $evidence->project_id);
         $this->evidence->delete($evidence);
 
         return ApiResponse::success(null, 'Evidence removed.');
@@ -354,6 +360,7 @@ final class DeliveryController extends Controller
     public function evidenceFile(Request $request, PlatformEvidence $evidence): StreamedResponse
     {
         $this->authorise($request, (string) $evidence->client_workspace_id, 'reports.view');
+        $this->assertProjectReach($request, $evidence->project_id === null ? null : (string) $evidence->project_id);
 
         return Storage::disk($evidence->disk)->response($evidence->path, $evidence->original_name, ['Content-Type' => $evidence->mime, 'X-Content-Type-Options' => 'nosniff']);
     }
@@ -366,10 +373,28 @@ final class DeliveryController extends Controller
         return $workspace;
     }
 
+    /**
+     * A pack is a client's, and — when it was prepared for one project — that project's. The client check says «may this
+     * operator act for the client»; this adds «may they reach the project», so a member of one project does not read,
+     * approve or send the pack of the client's other project by naming its id.
+     */
+    private function authorisePack(Request $request, DeliveryPack $pack, string $permission): ClientWorkspace
+    {
+        $workspace = $this->authorise($request, (string) $pack->client_workspace_id, $permission);
+        $this->assertProjectReach($request, $pack->project_id === null ? null : (string) $pack->project_id);
+
+        return $workspace;
+    }
+
+    private function assertProjectReach(Request $request, ?string $projectId): void
+    {
+        abort_unless(app(ProjectReach::class)->canReachRow($request->user(), $projectId), 403, 'You do not have access to this project.');
+    }
+
     private function reachable(Request $request, DeliveryPack $pack): bool
     {
         try {
-            $this->authorise($request, (string) $pack->client_workspace_id, 'reports.view');
+            $this->authorisePack($request, $pack, 'reports.view');
 
             return true;
         } catch (\Throwable) {

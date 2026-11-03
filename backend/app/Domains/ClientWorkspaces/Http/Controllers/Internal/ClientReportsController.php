@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Http\Controllers\Internal;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Concerns\ProjectScope;
@@ -15,6 +16,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -41,7 +43,7 @@ final class ClientReportsController
     {
         $c = $this->access->resolve($client);
         $this->access->assert($request->user(), 'clients.view_reports', $c);
-        $projectIds = $this->projectIds((string) $c->id);
+        $projectIds = $this->projectIds($request->user(), $c);
 
         // Bypass the (inactive) ProjectScope and constrain explicitly to the client's projects.
         $reports = Report::withoutGlobalScope(ProjectScope::class)
@@ -58,7 +60,7 @@ final class ClientReportsController
         $c = $this->access->resolve($client);
         $this->access->assert($request->user(), 'clients.create_reports', $c);
 
-        $projectIds = $this->projectIds((string) $c->id);
+        $projectIds = $this->projectIds($request->user(), $c);
         $data = $request->validate([
             'project_id' => ['required', 'string', Rule::in($projectIds)],
             'name' => ['required', 'string', 'max:160'],
@@ -102,7 +104,7 @@ final class ClientReportsController
     {
         $c = $this->access->resolve($client);
         $this->access->assert($request->user(), 'clients.share_reports', $c);
-        $model = $this->resolveReport((string) $c->id, $report);
+        $model = $this->resolveReport($request->user(), $c, $report);
 
         abort_unless($model->status === 'completed', 409, 'Generate the report before sharing.');
         abort_if(($model->audience ?? 'client') === 'internal', 422, 'This report must be a client version before sharing.');
@@ -127,7 +129,7 @@ final class ClientReportsController
     {
         $c = $this->access->resolve($client);
         $this->access->assert($request->user(), 'clients.share_reports', $c);
-        $model = $this->resolveReport((string) $c->id, $report);
+        $model = $this->resolveReport($request->user(), $c, $report);
         $link = ReportShare::where('report_id', $model->id)->where('id', $share)->firstOrFail();
         $link->update(['revoked_at' => Carbon::now()]);
         $audit->log(action: 'client.report_share_revoked', entityType: 'client_workspace', entityId: (string) $c->id, after: ['share_id' => (string) $link->id]);
@@ -135,20 +137,28 @@ final class ClientReportsController
         return response()->json(['data' => ['revoked' => true]]);
     }
 
-    /** @return list<string> */
-    private function projectIds(string $clientId): array
+    /**
+     * The client's projects THIS reader reaches (PROJECTS-RBAC-CLOSURE-001): the client ceiling already decided they may
+     * see the client; their project reach decides which of its projects' reports they list, create under, share and revoke.
+     *
+     * @return list<string>
+     */
+    private function projectIds(User $user, ClientWorkspace $client): array
     {
-        return Project::where('tenant_id', (string) $this->tenant->tenantId())
-            ->where('client_workspace_id', $clientId)->pluck('id')->map(fn ($v) => (string) $v)->all();
+        $all = Project::where('tenant_id', (string) $this->tenant->tenantId())
+            ->where('client_workspace_id', (string) $client->id)->pluck('id')->map(fn ($v) => (string) $v)->all();
+        $reach = $this->access->reachableProjectIds($user, $client);
+
+        return $reach === null ? $all : array_values(array_intersect($all, $reach));
     }
 
-    private function resolveReport(string $clientId, string $reportId): Report
+    private function resolveReport(User $user, ClientWorkspace $client, string $reportId): Report
     {
-        $projectIds = $this->projectIds($clientId);
+        $projectIds = $this->projectIds($user, $client);
 
         return Report::withoutGlobalScope(ProjectScope::class)
             ->whereIn('project_id', $projectIds ?: ['00000000-0000-0000-0000-000000000000'])
-            ->where('id', $reportId)->firstOrFail(); // cross-client / cross-tenant → 404
+            ->where('id', $reportId)->firstOrFail(); // cross-client / cross-tenant / unreachable project → 404
     }
 
     /** @return array<string,mixed> */

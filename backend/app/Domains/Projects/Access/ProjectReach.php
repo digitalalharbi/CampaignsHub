@@ -167,6 +167,76 @@ final class ProjectReach
         return in_array($permission, $this->keys[$key], true);
     }
 
+    /**
+     * The project reach that narrows the CLIENT-LEVEL surfaces (tasks, conversations, delivery packs, the client command
+     * centre) for a reader whose membership is CONFINED — it names clients or projects — or NULL for «no narrowing».
+     *
+     * Those surfaces carry no project in the URL and answer to the client ceiling, so a member confined to one project of a
+     * client read the client's other projects through them (PROJECTS-RBAC-CLOSURE-001). A reader with no ceiling is not
+     * confined: the agency-wide holder of `clients.view_all`, and a client-roster member whose project allow-list is the
+     * authority (`ClientAccess::projectRestriction()`), keep the answer the client layer already gave them.
+     *
+     * Inside a confinement the answer is fail-closed: a removed or expired membership leaves an EMPTY list, not «all».
+     *
+     * @return list<string>|null
+     */
+    public function confinedIdsFor(User $user): ?array
+    {
+        return $this->ceilingProjectIds() === null ? null : $this->dataIdsFor($user);
+    }
+
+    /**
+     * Narrow a list of project ids (a client's projects, say) to the ones a confined reader reaches.
+     *
+     * @param  list<string>  $projectIds
+     * @return list<string>
+     */
+    public function narrow(User $user, array $projectIds): array
+    {
+        $reach = $this->confinedIdsFor($user);
+
+        return $reach === null ? $projectIds : array_values(array_intersect($projectIds, $reach));
+    }
+
+    /**
+     * Whether a row that MAY belong to a project is inside a confined reader's reach.
+     *
+     * A row with no project says nothing about projects, so this answers true for it: the caller's own rule
+     * (client ceiling, authorship) is what decides such a row, exactly as before.
+     */
+    public function canReachRow(User $user, ?string $projectId): bool
+    {
+        if ($projectId === null) {
+            return true;
+        }
+
+        $reach = $this->confinedIdsFor($user);
+
+        return $reach === null || in_array($projectId, $reach, true);
+    }
+
+    /**
+     * The list twin of {@see self::canReachRow()}: project-bound rows only inside a confined reader's reach, project-less
+     * rows untouched.
+     *
+     * @template TQuery of \Illuminate\Database\Eloquent\Builder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public function constrainRows($query, User $user, string $column = 'project_id')
+    {
+        $reach = $this->confinedIdsFor($user);
+
+        if ($reach === null) {
+            return $query;
+        }
+
+        return $query->where(static function ($q) use ($column, $reach): void {
+            $q->whereNull($column)->orWhereIn($column, $reach);
+        });
+    }
+
     public function canReach(User $user, string $projectId): bool
     {
         $ids = $this->idsFor($user);
