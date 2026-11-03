@@ -94,12 +94,12 @@
       ? 'ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.'
       : 'Note: Campaigns are managed on a performance-based methodology; results may vary by period, platform, data source, attribution model and the campaign learning phase.';
     $fLabels = $fLoc === 'ar'
-      ? ['آخر تحديث', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة']
-      : ['Last updated', 'Period', 'Currency', 'Time zone', 'Campaign objective'];
+      ? ['آخر تحديث للتقرير', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة']
+      : ['Report last updated', 'Period', 'Currency', 'Time zone', 'Campaign objective'];
     $fFrom = data_get($data, 'period.from');
     $fTo = data_get($data, 'period.to');
     $fItems = array_filter([
-      $fLabels[0] => optional($report->generated_at)->format('Y-m-d H:i'),
+      $fLabels[0] => $report->generated_at?->copy()->timezone(in_array($report->timezone, timezone_identifiers_list(), true) ? $report->timezone : 'Asia/Riyadh')->format('Y-m-d H:i'),
       $fLabels[1] => $fFrom && $fTo ? ($fFrom === $fTo ? $fFrom : $fFrom.' → '.$fTo) : null,
       $fLabels[2] => $report->currency,
       $fLabels[3] => $report->timezone,

@@ -57,13 +57,13 @@ test('guest submits a verified request then tracks it in the client portal', asy
   expect(reference).toMatch(/REQ-\d{4}-[A-Z0-9]{6}/)
 
   /*
-   * 2) Sign in at the one door there is (LOGIN-UNIFIED-001).
+   * 2) Sign in at the contact's own door (LOGIN-NO-EMAIL-CODE-001).
    *
    * The contact is not asked which portal they want and is never shown a password field: they type
    * the address they filed with, the server recognises it as a contact rather than an operator, and
    * the code step renders. Outside production the issued code is returned and filled for us.
    */
-  await page.goto('/login')
+  await page.goto('/portal/login')
   await switchToEnglish(page)
   await signInWithCode(page, email)
 
