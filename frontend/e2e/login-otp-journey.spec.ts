@@ -125,6 +125,20 @@ test.describe('a session the server recognises', () => {
   })
 })
 
+// The same address twice in one browser, as somebody who signs in again does: the second press must send it.
+test('the same address asked for again still sends on the first press', async ({ page, browser }) => {
+  await page.goto('/portal/login')
+  await requestCode(page, 'twice-probe@example.test')
+
+  const second = await (await browser.newContext({ storageState: { cookies: [], origins: [] } })).newPage()
+  await second.goto('/portal/login')
+  const sent = second.waitForRequest((r) => r.url().includes('/client/login/start'), { timeout: 10_000 })
+  await second.getByTestId('portal-login-email').fill('twice-probe@example.test')
+  await second.getByTestId('portal-login-send').click()
+  await sent
+  await second.context().close()
+})
+
 test.describe('what the code step does when things go wrong', () => {
   test('a wrong code is refused, in the same design, and signs nobody in', async ({ page }) => {
     await page.goto('/portal/login')

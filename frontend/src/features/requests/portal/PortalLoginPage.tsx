@@ -162,7 +162,11 @@ export function PortalLoginPage() {
                 placeholder="name@company.com"
                 value={email}
                 onChange={setEmail}
-                autoComplete="username"
+                /*
+                 * Off, because this form has one field and no credential to remember. Firefox on Linux offers past values in a popup, and a
+                 * click outside that popup closes it and goes no further: the button looked pressed and nothing was sent.
+                 */
+                autoComplete="off"
                 required
                 error={activeError?.errors?.destination?.[0]}
               />
