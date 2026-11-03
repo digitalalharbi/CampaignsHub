@@ -145,14 +145,18 @@ describe('LoginPage — the sign-in card', () => {
     expect(await screen.findByTestId('login-error')).toBeInTheDocument()
   })
 
-  it('leaves no divider and no gap when the server says Google cannot work', async () => {
+  it('fills Google’s row with the client portal when the server says Google cannot work, leaving no gap', async () => {
     vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
     ])
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await waitFor(() => expect(screen.queryByTestId('login-methods')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('login-client-door').tagName).toBe('BUTTON'))
+    expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('login-google-reserved')).not.toBeInTheDocument()
+    expect(screen.getByTestId('login-methods')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to the home page' })).toHaveAttribute('href', '/')
   })
 
   it('hands a link aimed at the portal to the contact’s own door, with its destination', () => {

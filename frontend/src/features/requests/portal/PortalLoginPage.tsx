@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Mail } from 'lucide-react'
 import { AuthShell } from '@/features/auth/AuthShell'
-import { signInMethod } from '@/features/auth/api'
 import { ErrorNote, IconField } from '@/features/auth/loginFields'
 import { OtpField } from '@/features/auth/OtpField'
 import { Button } from '@/components/ui/Button'
@@ -19,8 +18,8 @@ import { portalLoginStart, portalLoginVerify } from '@/features/requests/clientP
  *
  * ## An address that is not a contact's learns nothing and costs nothing
  *
- * `POST /auth/method` answers `code` only for a contact. Everyone else sees the same next step and the same sentence, and no message is
- * sent, so this page neither confirms who is a client nor spends a message on a stranger.
+ * The server decides, and answers everybody the same way: only a contact is mailed, so this page neither confirms who is a client nor
+ * spends a message on a stranger.
  */
 
 const COPY = {
@@ -37,7 +36,6 @@ const COPY = {
     resendIn: 'إعادة الإرسال بعد :seconds ثانية',
     change: 'استخدام بريد إلكتروني آخر',
     expired: 'انتهت صلاحية رمز التحقق. أعد إرسال الرمز للحصول على رمز جديد.',
-    wrong: 'الرمز غير صحيح أو انتهت صلاحيته.',
     notDelivered: 'لم يُرسل الرمز: خدمة البريد غير مفعّلة بعد على هذه البيئة.',
     deliveryFailed: 'تعذّر إرسال الرمز إلى بريدك. جرّب إعادة الإرسال بعد قليل.',
     back: 'تسجيل الدخول بكلمة المرور',
@@ -55,7 +53,6 @@ const COPY = {
     resendIn: 'You can ask again in :seconds seconds',
     change: 'Use a different email address',
     expired: 'This verification code has expired. Send the code again to get a new one.',
-    wrong: 'That code is incorrect or has expired.',
     notDelivered: 'The code was not sent: email delivery is not configured on this environment yet.',
     deliveryFailed: 'The code could not be delivered to your inbox. Try sending it again in a moment.',
     back: 'Sign in with a password',
@@ -81,7 +78,6 @@ export function PortalLoginPage() {
   const [cooldown, setCooldown] = useState(0)
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
   const [expired, setExpired] = useState(false)
-  const [refused, setRefused] = useState(false)
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -100,20 +96,16 @@ export function PortalLoginPage() {
   }, [expiresAt])
 
   const send = useMutation({
-    mutationFn: async () => {
-      const address = email.trim()
-      const { method, channel } = await signInMethod(address)
-
-      return method === 'code' && channel === 'email' ? portalLoginStart('email', address) : null
-    },
+    mutationFn: () => portalLoginStart('email', email.trim()),
     onSuccess: (r) => {
       setStep('code')
-      setCooldown(r !== null && typeof r.resend_after === 'number' ? r.resend_after : COOLDOWN)
-      setVerificationId(r?.verification_id ?? null)
-      setDelivery(r?.delivery_status ?? null)
+      setCooldown(r.resend_after ?? COOLDOWN)
+      setVerificationId(r.verification_id)
+      setDelivery(r.delivery_status)
       setExpired(false)
-      setExpiresAt(r !== null && 'expires_in_minutes' in r && typeof r.expires_in_minutes === 'number' ? Date.now() + r.expires_in_minutes * 60_000 : null)
-      if (r?.dev_code) setCode(r.dev_code)
+      setExpiresAt(r.expires_in_minutes ? Date.now() + r.expires_in_minutes * 60_000 : null)
+      // Dev-only: the backend returns `dev_code` ONLY outside production (hard-gated server-side).
+      if (r.dev_code) setCode(r.dev_code)
     },
   })
 
@@ -130,10 +122,7 @@ export function PortalLoginPage() {
 
   const submitCode = useCallback((typed?: string) => {
     const value = (typed ?? code).trim()
-    if (value.length !== 6 || verify.isPending || expired) return
-    // No code was sent to this address, and the answer must read the same as a wrong code.
-    if (verificationId === null) { setRefused(true); return }
-    verify.mutate(value)
+    if (verificationId && value.length === 6 && !verify.isPending && !expired) verify.mutate(value)
   }, [code, verify, expired, verificationId])
 
   const startOver = () => {
@@ -144,7 +133,6 @@ export function PortalLoginPage() {
     setCooldown(0)
     setExpiresAt(null)
     setExpired(false)
-    setRefused(false)
     send.reset(); verify.reset()
   }
 
@@ -176,14 +164,14 @@ export function PortalLoginPage() {
                 onChange={setEmail}
                 autoComplete="username"
                 required
-                error={activeError?.errors?.identifier?.[0] ?? activeError?.errors?.destination?.[0]}
+                error={activeError?.errors?.destination?.[0]}
               />
               <ErrorNote error={activeError} />
               <Button type="submit" data-testid="portal-login-send" loading={send.isPending} className="w-full" size="lg">{c.send}</Button>
             </form>
           ) : (
             <form data-testid="portal-login-code" className="space-y-4" onSubmit={(e) => { e.preventDefault(); submitCode() }}>
-              <OtpField label={c.code} value={code} onChange={(v) => { setCode(v); setRefused(false) }} onComplete={submitCode} autoFocus disabled={verify.isPending} />
+              <OtpField label={c.code} value={code} onChange={setCode} onComplete={submitCode} autoFocus disabled={verify.isPending} />
 
               {delivery !== null && !DELIVERED.has(delivery) && (
                 <p data-testid="portal-login-undelivered" role="status" className="rounded-xl bg-surface-secondary px-4 py-3 text-[13px] leading-relaxed text-text-secondary">
@@ -192,9 +180,6 @@ export function PortalLoginPage() {
               )}
               {expired && (
                 <p data-testid="portal-login-expired" role="alert" className="rounded-xl bg-[var(--warning-background)] px-4 py-3 text-[13px] leading-relaxed text-text-primary">{c.expired}</p>
-              )}
-              {refused && (
-                <p data-testid="portal-login-refused" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{c.wrong}</p>
               )}
               <ErrorNote error={activeError} always />
 

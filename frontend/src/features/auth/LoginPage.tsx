@@ -27,9 +27,9 @@ import { useAuth } from '@/stores/auth'
  *
  * ## Nothing moves after the first paint
  *
- * Google's row is drawn from the first frame at its final size, as a placeholder until the server answers. The row leaves only when the
- * server says Google cannot work, which is an unconfigured environment; a failed lookup keeps the button, and a click on it reports
- * what went wrong.
+ * Google's row is drawn from the first frame at its final size, as a placeholder until the server answers. A failed lookup keeps the
+ * button, and a click on it reports what went wrong. When the server says Google cannot work, the row carries the client portal instead
+ * and the line under the card links home: every box keeps its size, so nothing moves and no gap is left.
  *
  * **The URL grants nothing.** `portal: null` travels with every sign-in, so there is no preference for the server to honour and no
  * way for a link to request access it does not hold.
@@ -54,6 +54,8 @@ const COPY = {
     register: 'إنشاء حساب',
     or: 'أو',
     clientDoor: 'عميل لدى إحدى الوكالات؟ ادخل من بوابة العملاء',
+    clientDoorButton: 'الدخول إلى بوابة العملاء',
+    home: 'العودة إلى الصفحة الرئيسية',
     codeTitle: 'تحقق من جوالك',
     codeSentTo: 'أرسلنا رمز التحقق إلى:',
     code: 'رمز التحقق',
@@ -87,6 +89,8 @@ const COPY = {
     register: 'Create an account',
     or: 'or',
     clientDoor: 'A client of an agency? Sign in to the client portal',
+    clientDoorButton: 'Sign in to the client portal',
+    home: 'Back to the home page',
     codeTitle: 'Check your phone',
     codeSentTo: 'We sent your verification code to:',
     code: 'Verification code',
@@ -381,34 +385,36 @@ export function LoginPage() {
               </Button>
             </form>
 
-            {googleRow !== 'absent' && (
-              <div data-testid="login-methods">
-                <div className="my-5 flex items-center gap-3">
-                  <span className="h-px flex-1 bg-border" />
-                  <span className="text-[13px] text-text-secondary">{c.or}</span>
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-                {googleRow === 'reserved' ? (
-                  // The button's own box and nothing to read, so a Google that turns out unavailable never flashes a label.
-                  <Button type="button" data-testid="login-google-reserved" variant="secondary" className="w-full" size="lg" disabled aria-hidden tabIndex={-1}>
-                    <span className="invisible">{c.google}</span>
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    data-testid="login-google"
-                    variant="secondary"
-                    className="w-full"
-                    size="lg"
-                    loading={googleSignIn.isPending}
-                    onClick={() => googleSignIn.mutate()}
-                  >
-                    <span aria-hidden="true" className="font-bold">G</span>
-                    {c.google}
-                  </Button>
-                )}
+            <div data-testid="login-methods">
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-[13px] text-text-secondary">{c.or}</span>
+                <span className="h-px flex-1 bg-border" />
               </div>
-            )}
+              {googleRow === 'absent' ? (
+                <Button type="button" data-testid="login-client-door" variant="secondary" className="w-full" size="lg" onClick={() => navigate('/portal/login')}>
+                  {c.clientDoorButton}
+                </Button>
+              ) : googleRow === 'reserved' ? (
+                // The button's own box and nothing to read, so a Google that turns out unavailable never flashes a label.
+                <Button type="button" data-testid="login-google-reserved" variant="secondary" className="w-full" size="lg" disabled aria-hidden tabIndex={-1}>
+                  <span className="invisible">{c.google}</span>
+                </Button>
+                ) : (
+                <Button
+                  type="button"
+                  data-testid="login-google"
+                  variant="secondary"
+                  className="w-full"
+                  size="lg"
+                  loading={googleSignIn.isPending}
+                  onClick={() => googleSignIn.mutate()}
+                >
+                  <span aria-hidden="true" className="font-bold">G</span>
+                  {c.google}
+                </Button>
+              )}
+            </div>
           </>
         )}
 
@@ -522,8 +528,12 @@ export function LoginPage() {
       {step === 'credentials' && (
         <>
           <HelpRequestModal locale={locale} ar={ar} />
-          <p className="mt-3 text-center text-[13px]">
-            <Link to="/portal/login" data-testid="login-client-door" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.clientDoor}</Link>
+          <p data-testid="login-foot-link" className="mt-3 text-center text-[13px]">
+            {googleRow === 'absent' ? (
+              <Link to="/" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.home}</Link>
+            ) : (
+              <Link to="/portal/login" data-testid="login-client-door" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.clientDoor}</Link>
+            )}
           </p>
         </>
       )}

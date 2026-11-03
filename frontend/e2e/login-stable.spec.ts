@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test'
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
-const LANDMARKS = ['login-email', 'login-password', 'login-methods', 'login-client-door']
+const LANDMARKS = ['login-email', 'login-password', 'login-methods', 'login-foot-link']
 
 const boxes = (page: Page) => page.evaluate((ids) => Object.fromEntries(ids.map((id) => {
   const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
@@ -19,7 +19,7 @@ const boxes = (page: Page) => page.evaluate((ids) => Object.fromEntries(ids.map(
 
 for (const [width, height] of [[390, 844], [1366, 768]]) {
   for (const locale of ['ar', 'en']) {
-    for (const outcome of ['answers', 'fails'] as const) {
+    for (const outcome of ['answers', 'fails', 'says Google is unavailable'] as const) {
       test(`${width}px ${locale}: nothing moves when the lookup ${outcome}`, async ({ page }) => {
         await page.setViewportSize({ width, height })
         await page.addInitScript((l) => localStorage.setItem('campaign-hub-locale', l), locale)
@@ -29,8 +29,9 @@ for (const [width, height] of [[390, 844], [1366, 768]]) {
         await page.route('**/auth/oauth/providers', async (route) => {
           await held
           if (outcome === 'fails') return route.fulfill({ status: 500, json: { message: 'down' } })
+          const available = outcome === 'answers'
 
-          return route.fulfill({ json: { data: { providers: [{ provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'live', available: true }] } } })
+          return route.fulfill({ json: { data: { providers: [{ provider: 'google', label: { en: 'Google', ar: 'Google' }, status: available ? 'live' : 'awaiting_credentials', available }] } } })
         })
 
         await page.goto('/login')
@@ -40,7 +41,8 @@ for (const [width, height] of [[390, 844], [1366, 768]]) {
         expect(before['login-methods'], 'Google’s row is not reserved').not.toBeNull()
 
         release()
-        await expect(page.getByTestId('login-google')).toBeVisible({ timeout: 45_000 })
+        await expect(page.getByTestId('login-google-reserved')).toHaveCount(0, { timeout: 45_000 })
+        await expect(page.getByTestId(outcome === 'says Google is unavailable' ? 'login-client-door' : 'login-google')).toBeVisible()
         expect(await boxes(page)).toEqual(before)
         await expect(page.getByTestId('login-request-code')).toHaveCount(0)
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

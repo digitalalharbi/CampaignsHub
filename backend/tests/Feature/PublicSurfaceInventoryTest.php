@@ -101,7 +101,6 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/auth/email/verify',
         'POST api/v1/auth/forgot-password',
         'POST api/v1/auth/login',
-        'POST api/v1/auth/method',
         'POST api/v1/auth/oauth/{provider}/callback',
         'POST api/v1/auth/oauth/{provider}/start',
         'POST api/v1/auth/phone/start',

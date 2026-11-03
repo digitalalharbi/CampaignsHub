@@ -75,11 +75,6 @@ export async function phoneSignInVerify(verificationId: string, code: string, re
  * configured and NOTHING was sent — the page must not say «check your inbox» as though something
  * were on its way.
  */
-export async function signInMethod(identifier: string): Promise<{ method: 'password' | 'code'; channel: 'email' | 'sms' }> {
-  await ensureCsrfCookie()
-  return postData<{ method: 'password' | 'code'; channel: 'email' | 'sms' }>('/auth/method', { identifier })
-}
-
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
   const { user } = await postData<UserEnvelope>('/auth/login', input)

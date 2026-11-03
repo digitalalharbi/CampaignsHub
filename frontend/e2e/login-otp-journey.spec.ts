@@ -168,27 +168,13 @@ test.describe('what the code step does when things go wrong', () => {
     await expect(page.getByTestId('portal-login-code')).toHaveCount(0)
   })
 
-  /**
-   * An address nobody holds is answered exactly like one somebody does, and then goes nowhere.
-   *
-   * Both halves matter. Refusing at the first step would tell a stranger which addresses have
-   * accounts here; signing them in would be worse.
-   */
-  test('an unknown address gets the same step, is sent nothing, and signs nobody in', async ({ page }) => {
-    let sent = 0
-    page.on('request', (r) => { if (r.url().includes('/client/login/start')) sent += 1 })
+  /** An address nobody holds is answered exactly like one somebody does. That no message goes to it is `PortalEmailSignInTest`. */
+  test('an unknown address gets the same step, and opens no platform session', async ({ page }) => {
     await page.goto('/portal/login')
     await switchToEnglish(page)
-    await page.getByTestId('portal-login-email').fill('nobody-at-all@example.test')
-    await page.getByTestId('portal-login-send').click()
-    await expect(page.getByTestId('portal-login-code')).toBeVisible({ timeout: 20_000 })
+    await requestCode(page, 'nobody-at-all@example.test')
 
-    await page.getByTestId('login-otp-0').focus()
-    await page.keyboard.type('000000')
     await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
-
-    await expect(page.getByTestId('portal-login-refused')).toBeVisible()
-    expect(sent).toBe(0)
     expect(await whoAmI(page)).toBeNull()
   })
 
