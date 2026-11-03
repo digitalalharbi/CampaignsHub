@@ -157,7 +157,10 @@ test.describe('LOGIN-SINGLE-DOOR-001 — the destination is the server\'s', () =
     await signIn(page, 'client@campaignshub.io')
     await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20000 })
 
+    // Settled first: a response still in the air when the jar is cleared writes the session cookie straight back.
+    await page.waitForLoadState('networkidle')
     await context.clearCookies()
+    expect(await context.cookies()).toEqual([])
     await page.goto('/portal/requests')
     await expect(page).toHaveURL(/\/login\?redirect=%2Fportal%2Frequests/, { timeout: 20000 })
 
