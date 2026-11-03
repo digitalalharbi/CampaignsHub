@@ -34,15 +34,28 @@ final class AccountCampaignCeiling
             return $campaignIds;
         }
 
-        $granted = DailyMetric::query()
-            ->withoutGlobalScopes()
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
-            ->whereIn('external_account_id', $accountIds)
-            ->whereNotNull('unified_campaign_id')
-            ->distinct()
-            ->pluck('unified_campaign_id')
-            ->map(static fn ($id): string => (string) $id)
-            ->all();
+        /*
+         * PERF-RECOVERY-001 — resolved once per report build.
+         *
+         * A link over accounts resolves this for its own ceiling and again for every content list it renders, and each resolution is the
+         * same scan of `daily_metrics` (668 ms apiece on Production). What it depends on is the account list alone, so that is the key;
+         * the memo lives only inside one build, for one tenant and project (see `ReportReadMemo`).
+         */
+        $sorted = array_values(array_unique($accountIds));
+        sort($sorted);
+
+        $granted = ReportReadMemo::remember(
+            'account-campaign-ceiling|'.implode(',', $sorted),
+            fn (): array => DailyMetric::query()
+                ->withoutGlobalScopes()
+                ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+                ->whereIn('external_account_id', $accountIds)
+                ->whereNotNull('unified_campaign_id')
+                ->distinct()
+                ->pluck('unified_campaign_id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all(),
+        );
 
         $within = $campaignIds === []
             ? $granted
