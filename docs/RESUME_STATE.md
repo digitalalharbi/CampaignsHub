@@ -27,7 +27,7 @@
 ## 2026-11-03 morning — what is true now (Git + Production are the source; `ch-scripts/lander/EXECUTION_STATE.md` is the resumable list)
 
 - **Deployed:** #932 (`3a9e7b6c`: RESULT-PARITY-001 and REPORT-DATA-FRESHNESS-001 VERIFIED live), #933 docs (`b4f7b25f`), #935 (`aefce9d0`: SYNC-QUEUE-ISOLATION-001, REACH-STORM-001 VERIFIED by measurement; SYNC-RUNS-READS-001 implemented).
-- **Measured:** load 12 → 1.99, backlog 193 → 0, report build 25.2 → 9.1 s, end-to-end 15 / 9 / 9 s during a sweep. PERF-RECOVERY-001 stays PARTIAL until a clean off-sweep ×3.
+- **Measured:** load 12 → 1.99, backlog 193 → 0, report build 25.2 → 9.1 s, end-to-end 15 / 9 / 9 s during a sweep. Clean off-sweep ×3 at 07:45: 23.6 / 21.4 / 24.8 s — the quiet-minute request is NOT shorter than before #935 (19–35 s); only the sync-time spikes are gone. PERF-RECOVERY-001 stays PARTIAL; next lever is the ~13 s outside the 9.1 s build.
 - **Proven:** census run 41572121232 — UNASSIGNED = 0 for every provider (SYNC-GATE-001, SYNC-CENSUS-001 VERIFIED). Repair recurrence checks for both owners: nothing to quarantine (ACCOUNT-SCOPE-ISOLATION-003 VERIFIED).
 - **Blocked by customer credentials (BLOCKED_EXTERNAL_CREDENTIALS):** Meta «Project 1» (two accounts, session invalidated — reconnect), TikTok ReSano (no permission to operate advertiser), ChatGPT Ads Razzah and ReSano (incorrect API key). Their spend cannot be reconciled until re-authorised.
 - **Queue (one lander, serial):** #937 deny-by-default (+ campaign list) → email layout (header rework, RTL/LTR) → kpi-parity (one KPI definition + recorded «last confirmed») → #934 GA4 → integrations-centre-2 (contains #927; close #927 after) → frontend-2 → #916 → pricing/tenancy chain → #905 → type-scale → webkit evidence.
