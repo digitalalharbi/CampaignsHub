@@ -125,10 +125,6 @@ test.describe('a session the server recognises', () => {
   })
 })
 
-<<<<<<< HEAD
-// Addresses of their own: the same step for anybody, and one contact shared across these would meet the resend window, or a mail transport.
-||||||| parent of 353921b35 (fix(portal): the sign-in field asks for no form history, so the first press sends)
-=======
 // The same address twice in one browser, as somebody who signs in again does: the second press must send it.
 test('the same address asked for again still sends on the first press', async ({ page, browser }) => {
   await page.goto('/portal/login')
@@ -143,7 +139,7 @@ test('the same address asked for again still sends on the first press', async ({
   await second.context().close()
 })
 
->>>>>>> 353921b35 (fix(portal): the sign-in field asks for no form history, so the first press sends)
+// Addresses of their own: the same step for anybody, and one contact shared across these would meet the resend window, or a mail transport.
 test.describe('what the code step does when things go wrong', () => {
   test('a wrong code is refused, in the same design, and signs nobody in', async ({ page }) => {
     await page.goto('/portal/login')
