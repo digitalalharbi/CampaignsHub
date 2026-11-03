@@ -304,6 +304,8 @@ final class EntityMetricsAggregatorTest extends TestCase
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
             'project_id' => $this->project->id,
+            // An entity row is read only while the account behind it is selected.
+            'external_account_id' => $this->account(),
             'provider' => 'snapchat',
             'entity_type' => EntityDailyMetric::AD_SET,
             'entity_id' => $entityId,

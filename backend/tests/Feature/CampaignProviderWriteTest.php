@@ -312,9 +312,10 @@ final class CampaignProviderWriteTest extends TestCase
     public function test_meta_creates_an_ad_bound_to_one_of_the_project_s_creatives(): void
     {
         $this->configure('meta');
-        [, , $adSet] = $this->tree('meta', 'act_5');
+        [$account, , $adSet] = $this->tree('meta', 'act_5');
         $creative = ExternalCreative::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'provider' => 'meta',
+            'external_account_id' => $account->id,
             'external_creative_id' => '2384001', 'name' => 'Hero video', 'format' => 'video', 'status' => 'active',
         ]);
         Http::fake(['graph.facebook.com/*' => Http::response(['id' => '7700'])]);
@@ -343,7 +344,7 @@ final class CampaignProviderWriteTest extends TestCase
     public function test_a_creative_on_an_account_deselected_for_the_project_cannot_be_bound(): void
     {
         $this->configure('meta');
-        [, , $adSet] = $this->tree('meta', 'act_5');
+        [$account, , $adSet] = $this->tree('meta', 'act_5');
         $other = $this->account('meta', 'act_9');
         ProjectIntegrationBinding::query()->where('external_account_id', $other->id)->update(['is_active' => false]);
         $hidden = ExternalCreative::create([
@@ -356,7 +357,7 @@ final class CampaignProviderWriteTest extends TestCase
         Http::assertNothingSent();
 
         $visible = ExternalCreative::create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $adSet->external_account_id, 'provider' => 'meta',
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id, 'provider' => 'meta',
             'external_creative_id' => 'cr-visible', 'name' => 'Visible', 'format' => 'image', 'status' => 'active',
         ]);
         $offered = collect($this->actingAs($this->owner, 'sanctum')->getJson($this->url('provider-writes'))->assertOk()->json('data.creatives.meta'))->pluck('id')->all();

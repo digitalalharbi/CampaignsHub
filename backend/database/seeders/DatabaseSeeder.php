@@ -79,10 +79,12 @@ class DatabaseSeeder extends Seeder
         if (App::environment(['local', 'demo'])) {
             $this->call([
                 DemoAnalyticsSeeder::class,
-                DemoReportsSeeder::class,
                 // DEMO-001: the credential → connection → ad account → external campaign chain the
                 // analytics demo was missing, so the integration surfaces have real rows to show.
+                // BEFORE the reports: this is what selects the accounts, and a report generated while
+                // nothing is selected is a report of nothing under deny by default.
                 DemoIntegrationsSeeder::class,
+                DemoReportsSeeder::class,
             ]);
         }
 
