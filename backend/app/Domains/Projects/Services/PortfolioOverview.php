@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Services;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Support\SiblingRounding;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
@@ -170,6 +171,7 @@ final class PortfolioOverview
             ]);
 
         $series = [];
+        $exact = [];
         foreach ($rows as $row) {
             $currency = is_string($row->project_currency) ? $row->project_currency : '';
             if ($currency === '') {
@@ -180,9 +182,16 @@ final class PortfolioOverview
                 'date' => Carbon::parse((string) $row->metric_date)->toDateString(),
                 'spend' => round((float) $row->spend, 2),
             ];
+            $exact[$currency][] = (float) $row->spend;
         }
 
         ksort($series);
+        // MONEY-RECON-RUNGS-001 — the days add up to the headline to the cent (see SiblingRounding).
+        foreach ($series as $currency => $points) {
+            foreach (SiblingRounding::cents($exact[$currency]) as $i => $cents) {
+                $series[$currency][$i]['spend'] = $cents / 100;
+            }
+        }
 
         return [
             'by_currency' => array_values(array_map(
@@ -230,6 +239,7 @@ final class PortfolioOverview
             ]);
 
         $byCurrency = [];
+        $exact = [];
         foreach ($rows as $row) {
             $currency = is_string($row->project_currency) ? $row->project_currency : '';
             $projectId = (string) $row->project_id;
@@ -242,12 +252,17 @@ final class PortfolioOverview
                 'name' => $names[$projectId],
                 'spend' => round((float) $row->spend, 2),
             ];
+            $exact[$currency][] = (float) $row->spend;
         }
 
         ksort($byCurrency);
 
         $out = [];
         foreach ($byCurrency as $currency => $items) {
+            // MONEY-RECON-RUNGS-001 — the projects add up to the headline to the cent (see SiblingRounding).
+            foreach (SiblingRounding::cents($exact[$currency]) as $i => $cents) {
+                $items[$i]['spend'] = $cents / 100;
+            }
             usort($items, static fn (array $a, array $b): int => $b['spend'] <=> $a['spend']);
             $out[] = ['currency' => $currency, 'projects' => $items];
         }

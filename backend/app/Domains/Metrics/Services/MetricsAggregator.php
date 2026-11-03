@@ -18,6 +18,7 @@ use App\Domains\Metrics\Coverage\ContributorCoverage;
 use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Support\FinancialRatios;
+use App\Domains\Metrics\Support\SiblingRounding;
 use App\Domains\Metrics\ValueObjects\MoneyScope;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
@@ -1050,8 +1051,11 @@ final class MetricsAggregator
                 $this->base($from, $to)->where('daily_metrics.provider', $r->provider),
                 $from,
                 $to,
-            ))
+            ) + SiblingRounding::exact($r))
             ->all();
+
+        // MONEY-RECON-RUNGS-001 — the platforms add up to the project's total to the cent; see SiblingRounding.
+        $rows = SiblingRounding::apportion($rows);
 
         /*
          * AGGREGATION-TRUTH-001 — a share of nothing is not zero.
@@ -1128,7 +1132,10 @@ final class MetricsAggregator
             $this->base($from, $to)->where('daily_metrics.external_account_id', $r->account_id)->where('daily_metrics.provider', $r->provider),
             $from,
             $to,
-        ))->all();
+        ) + SiblingRounding::exact($r))->all();
+
+        // MONEY-RECON-RUNGS-001 — the accounts add up to the project's total to the cent; see SiblingRounding.
+        $rows = SiblingRounding::apportion($rows);
 
         /*
          * ENTITY-RELEVANCE-ORDERING-001 — this returned rows in NO stated order at all.
@@ -1672,8 +1679,11 @@ final class MetricsAggregator
                 $deliveries[(string) $r->campaign_id] ?? [],
                 $from,
                 $to,
-            ))
+            ) + SiblingRounding::exact($r))
             ->all();
+
+        // MONEY-RECON-RUNGS-001 — the campaigns add up to the project's total to the cent; see SiblingRounding.
+        $rows = SiblingRounding::apportion($rows);
 
         return self::orderCampaignRows($rows);
     }
