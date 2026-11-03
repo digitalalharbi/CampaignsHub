@@ -52,6 +52,8 @@ final class ProjectShowsOnlyAssignedTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected bool $selectsSeededAccounts = false;
+
     private Tenant $tenant;
 
     private User $operator;

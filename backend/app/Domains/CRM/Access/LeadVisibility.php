@@ -178,7 +178,13 @@ final class LeadVisibility
      */
     public static function boundToItsProject(Builder $query): Builder
     {
-        return BoundAccountVisibility::apply($query, $query->getModel()->getTable());
+        $table = $query->getModel()->getTable();
+
+        /*
+         * A lead typed in by a person names no account at all, and no account is not an unselected account: it was never read from an
+         * ad platform, so there is nothing to deselect. Deny-by-default applies to a row that NAMES an account without a binding.
+         */
+        return $query->where(fn (Builder $q) => BoundAccountVisibility::apply($q, $table)->orWhereNull("{$table}.external_account_id"));
     }
 
     /** Whether this one lead is visible under the selection rule — the check behind every action. */

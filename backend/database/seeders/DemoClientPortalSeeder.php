@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Support\DemoAccountSelection;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -480,6 +481,8 @@ final class DemoClientPortalSeeder extends Seeder
             [$provider, $baseImpressions, $ctr, $cpc, $cvr, $aov] = $shape[$i] ?? $shape[0];
             $externalCampaignId = (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, 'campaignshub-demo-portal:camp:'.$campaign->name);
             $externalAccountId = (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, 'campaignshub-demo-portal:acct:'.$provider);
+            // A sync only runs for a selected account, so a world with figures has selected the account that earned them.
+            DemoAccountSelection::select((string) $project->getKey(), $externalAccountId, $provider, ucfirst($provider).' Ads — بيانات تجريبية');
 
             for ($d = 0; $d < self::METRIC_DAYS; $d++) {
                 $date = $start->copy()->addDays($d);

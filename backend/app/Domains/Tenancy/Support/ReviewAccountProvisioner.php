@@ -10,6 +10,7 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Support\DemoAccountSelection;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -178,6 +179,9 @@ final class ReviewAccountProvisioner
             );
             $account = Uuid::uuid5(Uuid::NAMESPACE_URL, "salla-review:acct:{$provider}")->toString();
             $external = Uuid::uuid5(Uuid::NAMESPACE_URL, "salla-review:camp:{$name}")->toString();
+            // The review figures are read like any other: only through a selected account. Same deterministic id on every run, so running
+            // this again makes the rows an earlier run already wrote readable too. Never swept: see DemoAccountSelection.
+            DemoAccountSelection::select((string) $project->id, $account, $provider, ucfirst($provider).' Ads — Salla Review (Demo)');
 
             for ($d = 0; $d < self::DAYS; $d++) {
                 $date = $start->copy()->addDays($d);
