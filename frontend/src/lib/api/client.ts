@@ -334,8 +334,8 @@ export function toApiError(error: unknown): ApiError {
   }
 }
 
-export async function getData<T>(url: string): Promise<T> {
-  const response = await api.get<ApiEnvelope<T>>(url)
+export async function getData<T>(url: string, config?: { timeout?: number }): Promise<T> {
+  const response = await api.get<ApiEnvelope<T>>(url, config)
   return response.data.data
 }
 

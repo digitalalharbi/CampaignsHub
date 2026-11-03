@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolvePostAuthDestination } from './postAuthDestination'
 import { portalKeyFor } from './memberships'
+import { useAuth } from '@/stores/auth'
 
 vi.mock('./memberships', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -52,6 +53,42 @@ describe('resolvePostAuthDestination', () => {
     vi.mocked(fetchMemberships).mockResolvedValue(state('/app/dashboard') as never)
     const to = await resolvePostAuthDestination(new URLSearchParams('redirect=%2F%2Fevil.example'))
     expect(to).toBe('/app/dashboard')
+  })
+
+  /*
+   * WORKSPACE-SWITCH-001 — state-based, and never a loop: one second look, then a page that can explain itself.
+   */
+  const http = (status: number) => Object.assign(new Error('http'), { response: { status, data: '' }, request: {} })
+
+  it('sends an ended session to sign-in, with the way back, and stops believing it is signed in', async () => {
+    useAuth.getState().setUser({ id: 'u' } as never)
+    vi.mocked(fetchMemberships).mockRejectedValue(http(401))
+
+    expect(await resolvePostAuthDestination(new URLSearchParams())).toBe('/login?reason=session&redirect=%2Fswitch')
+    expect(useAuth.getState().status).toBe('guest')
+    expect(fetchMemberships).toHaveBeenCalledTimes(2)
+  })
+
+  it('recovers when the second look answers: a single 5xx is not a conclusion', async () => {
+    vi.mocked(fetchMemberships).mockRejectedValueOnce(http(502)).mockResolvedValueOnce(state('/agency') as never)
+    expect(await resolvePostAuthDestination(new URLSearchParams())).toBe('/agency')
+  })
+
+  it('takes a persistent 5xx to the switcher, which explains it, after exactly one retry', async () => {
+    vi.mocked(fetchMemberships).mockRejectedValue(http(503))
+    expect(await resolvePostAuthDestination(new URLSearchParams())).toBe('/switch')
+    expect(fetchMemberships).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not ask a refusal twice', async () => {
+    vi.mocked(fetchMemberships).mockRejectedValue(http(403))
+    expect(await resolvePostAuthDestination(new URLSearchParams())).toBe('/switch')
+    expect(fetchMemberships).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows the server to an applicant\'s own registration status', async () => {
+    vi.mocked(fetchMemberships).mockResolvedValue(state('/signup/status?request=r-1') as never)
+    expect(await resolvePostAuthDestination(new URLSearchParams())).toBe('/signup/status?request=r-1')
   })
 
   /** If memberships cannot be read we go to the neutral switcher, never a guessed portal. */

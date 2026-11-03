@@ -71,7 +71,10 @@ final class ResolveMembership
             return $next($request);
         }
 
-        $membership = $this->selector->selected($request, $user) ?? $this->resolver->resolve($user);
+        // The last of the three only ever carries a refusal: see `endedReviewMembership`.
+        $membership = $this->selector->selected($request, $user)
+            ?? $this->resolver->resolve($user)
+            ?? $this->resolver->endedReviewMembership($user);
 
         if ($membership !== null) {
             $this->memberships->set($membership);
