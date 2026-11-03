@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { AUTH, contentLength, untranslatedChrome, walkRail } from './helpers'
 import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 

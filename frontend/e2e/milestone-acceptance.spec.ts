@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { AUTH, API_HEADERS, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
 
 /**

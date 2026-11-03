@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * PUBLIC-REPORT-NOAUTH — `/r/<token>` works with no account, no session and no cookies. Ever.

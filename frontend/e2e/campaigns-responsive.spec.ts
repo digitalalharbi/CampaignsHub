@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { AUTH } from './helpers'
 
 /** Responsive + RTL/LTR + light/dark + console-cleanliness checks for the campaigns surface. */

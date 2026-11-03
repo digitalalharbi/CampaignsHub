@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 import { inflateRawSync } from 'node:zlib'
 import { API_HEADERS, AUTH, csrfHeaders } from './helpers'
 import { buildGeneratedClientReport } from './report-builder'

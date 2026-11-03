@@ -1,4 +1,4 @@
-import { expect, request as playwrightRequest, test } from '@playwright/test'
+import { expect, request as playwrightRequest, test } from './fixtures'
 import { AUTH, csrfHeaders } from './helpers'
 
 /**

@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from './fixtures'
 import { E2E_ORIGIN } from './env'
 import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 

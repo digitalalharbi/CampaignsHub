@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 
 /**
  * Journey routing, proved by CLICKING — not by checking that a URL returns 200.

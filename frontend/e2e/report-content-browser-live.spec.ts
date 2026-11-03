@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * REPORT-CONTENT-BROWSER-001 — the content section's table, on the link a client actually opens, at

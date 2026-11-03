@@ -319,6 +319,8 @@ jobs:
           path: |
             frontend/test-results/
             frontend/playwright-report/
+            # GATE-WK-ENGINE-FAULT-001 — the preview servers' connection logs (socket closes, idle ms).
+            frontend/e2e-logs/
             backend/storage/logs/
             # Snapshots written by this run — the only way to obtain a LINUX visual baseline.
             #

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { AUTH, seededProject, selectProject } from './helpers'
 
 const STORE_PROJECT = 'متجر تجريبي — Demo'

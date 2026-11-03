@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * LIVEREP-001 — the client's live report, driven as a client drives it.

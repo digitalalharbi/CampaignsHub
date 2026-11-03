@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * LEGAL-DELETE-001 — the three URLs every ad-platform review asks for, proven public.

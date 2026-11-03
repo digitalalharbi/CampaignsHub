@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * Auth form design contract: professional wide fields (~54px, ≥16px text, labels above, not pills),

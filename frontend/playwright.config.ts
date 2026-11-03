@@ -67,7 +67,11 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: E2E_ORIGIN,
-    trace: 'on-first-retry',
+    /*
+     * GATE-WK-ENGINE-FAULT-001 — `on-first-retry` with `retries: 0` meant NO trace was ever recorded,
+     * so a failure left a screenshot and nothing about the network. Retained only on failure.
+     */
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     locale: 'en-US',
     /*
@@ -186,7 +190,14 @@ export default defineConfig({
        * when this is worth reading.
        */
       stdout: 'pipe',
-      env: { VITE_API_TARGET: E2E_API_TARGET },
+      /*
+       * GATE-WK-ENGINE-FAULT-001 — `E2E_PREVIEW_CONN_LOG` makes `previewConnectionPolicy` record every
+       * socket close (idle ms, request count) and clientError into `e2e-logs/`, uploaded by CI on
+       * failure. The same plugin raises keepAliveTimeout/headersTimeout (65 s / 66 s) as an EXPERIMENT
+       * against the keep-alive race hypothesis — see `src/build/previewConnectionPolicy.ts`. Neither is
+       * a claimed fix; the log is what proves or refutes the hypothesis.
+       */
+      env: { VITE_API_TARGET: E2E_API_TARGET, E2E_PREVIEW_CONN_LOG: `e2e-logs/preview-${E2E_FRONTEND_PORT}.log` },
     },
     {
       /*
@@ -220,7 +231,7 @@ export default defineConfig({
        * optimizer and holds no dependency cache, so there is nothing left for the two to share.
        */
       stdout: 'pipe',
-      env: { VITE_API_TARGET: E2E_API_TARGET },
+      env: { VITE_API_TARGET: E2E_API_TARGET, E2E_PREVIEW_CONN_LOG: `e2e-logs/preview-${E2E_PRINT_PORT}.log` },
     },
   ],
 })

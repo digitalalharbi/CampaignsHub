@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * MKT-FIX-001 — the marketing homepage renders into its final geometry on a phone.

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 
 /**
  * REPORT-CREATIVE-MEDIA-001 — the report's rows say about a creative what the product knows.

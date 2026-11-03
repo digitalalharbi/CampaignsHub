@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * Visual-regression baselines for the auth surface (chromium only — cross-browser pixel diffs are noisy).

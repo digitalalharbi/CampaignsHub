@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { AUTH, openFilters } from './helpers'
 import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 

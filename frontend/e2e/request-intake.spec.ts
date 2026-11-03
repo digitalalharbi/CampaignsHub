@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 /**
  * External request intake (public, guest): from the homepage CTA through the dynamic multi-step form
