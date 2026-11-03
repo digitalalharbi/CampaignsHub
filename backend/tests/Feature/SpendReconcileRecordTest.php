@@ -7,11 +7,14 @@ namespace Tests\Feature;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Contracts\AdvertisingConnector;
+use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Models\SpendReconciliationRecord;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Projects\Context\ProjectContext;
@@ -22,7 +25,9 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -133,6 +138,35 @@ final class SpendReconcileRecordTest extends TestCase
 
         $this->assertSame([], $writes, 'the default run must not INSERT, UPDATE or DELETE anything');
         $this->assertSame(0, SpendReconciliationRecord::withoutGlobalScopes()->count());
+    }
+
+    public function test_an_unavailable_provider_records_a_failed_row_and_still_exits_zero(): void
+    {
+        $account = $this->account('snapchat', $this->project);
+        $this->storeSpend($account, 'cmp-1', self::FROM, 12.5);
+
+        $connector = Mockery::mock(AdvertisingConnector::class);
+        $connector->shouldReceive('status')->andReturn(ConnectorStatus::Connected);
+        $connector->shouldReceive('syncInsights')->andThrow(new \RuntimeException('rate limited'));
+        $registry = new AdvertisingConnectorRegistry(includeSandbox: false);
+        (new \ReflectionProperty($registry, 'connectors'))->setValue($registry, ['snapchat' => $connector]);
+        $this->app->instance(AdvertisingConnectorRegistry::class, $registry);
+
+        $code = Artisan::call('integrations:spend-reconcile', ['account' => $account->getKey(), '--from' => self::FROM, '--to' => self::TO, '--record' => true]);
+        $out = Artisan::output();
+
+        // #935's contract is kept: exit 0, the stored side shown, the marker line last.
+        $this->assertSame(0, $code);
+        $this->assertStringContainsString('PROVIDER UNAVAILABLE', $out);
+        $this->assertStringContainsString('STORED TOTAL 12.50', $out);
+        $this->assertStringContainsString('recorded as', $out);
+        $this->assertStringContainsString('[reconcile] provider_unavailable', $out);
+
+        $row = SpendReconciliationRecord::withoutGlobalScopes()->sole();
+        $this->assertSame(SpendReconciliationRecord::FAILED, $row->status);
+        $this->assertNull($row->provider_total);
+        $this->assertSame(12.5, (float) $row->stored_total);
+        $this->assertNull($row->diff_pct);
     }
 
     // ── the live link ───────────────────────────────────────────────────────────────────────────

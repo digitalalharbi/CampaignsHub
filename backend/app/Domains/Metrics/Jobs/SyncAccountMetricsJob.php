@@ -77,6 +77,8 @@ final class SyncAccountMetricsJob implements ShouldBeUnique, ShouldQueue
         public readonly string $to,
         private array $meta = [],
     ) {
+        // PERF-SYNC-ISOLATION-001 — provider syncs run on their own, serialised queue, never beside a user's request.
+        $this->onQueue('sync');
         /*
          * Stamped HERE, in the constructor, because this is the only line in the pipeline that runs
          * at dispatch time. The run row is written by the worker, so by the time anything else could

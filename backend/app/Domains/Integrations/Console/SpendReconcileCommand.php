@@ -14,6 +14,7 @@ use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\SpendReconciliation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -80,12 +81,28 @@ final class SpendReconcileCommand extends Command
             return self::FAILURE;
         }
 
-        $rows = DB::table('daily_metrics as m')
-            ->leftJoin('external_campaigns as c', 'c.id', '=', 'm.external_campaign_id')
-            ->where('m.external_account_id', $account->getKey())
-            ->where('m.metric_key', 'spend')
-            ->whereBetween('m.metric_date', [$from, $to])
-            ->get(['m.metric_date', 'm.project_id', 'm.value', 'm.original_amount', 'm.original_currency', 'm.project_currency', 'c.external_id as campaign']);
+        $unavailable = null;
+        $result = null;
+        try {
+            $result = $connector->syncInsights($account->external_id, $from, $to);
+            if (! $result->success) {
+                $unavailable = 'The provider refused: '.($result->message ?? 'no message');
+            }
+        } catch (Throwable $e) {
+            $unavailable = 'The provider call threw: '.$e->getMessage();
+        }
+
+        if ($unavailable !== null) {
+            return $this->providerUnavailable($account, $from, $to, $unavailable);
+        }
+
+        $provider = [];
+        foreach ($result->records as $r) {
+            $r = (array) $r;
+            $provider[] = ['campaign_id' => (string) ($r['campaign_id'] ?? ''), 'date' => (string) ($r['date'] ?? ''), 'spend' => $r['spend'] ?? 0];
+        }
+
+        $rows = $this->storedRows($account, $from, $to);
 
         /*
          * Like with like: the provider answers in the ACCOUNT's currency, and `original_amount` is that same figure as stored.
@@ -102,27 +119,6 @@ final class SpendReconcileCommand extends Command
             $projects[(string) $r->project_id] = ($projects[(string) $r->project_id] ?? 0) + 1;
             $converted += (float) $r->value;
             $currencies[(string) ($r->original_currency ?? '?')] = true;
-        }
-
-        try {
-            $result = $connector->syncInsights($account->external_id, $from, $to);
-        } catch (Throwable $e) {
-            $this->error('The provider call threw: '.$e->getMessage());
-            $this->recordFailure($account, $from, $to, $stored);
-
-            return self::FAILURE;
-        }
-        if (! $result->success) {
-            $this->error('The provider refused: '.($result->message ?? 'no message'));
-            $this->recordFailure($account, $from, $to, $stored);
-
-            return self::FAILURE;
-        }
-
-        $provider = [];
-        foreach ($result->records as $r) {
-            $r = (array) $r;
-            $provider[] = ['campaign_id' => (string) ($r['campaign_id'] ?? ''), 'date' => (string) ($r['date'] ?? ''), 'spend' => $r['spend'] ?? 0];
         }
 
         $cmp = SpendReconciliation::compare($provider, $stored);
@@ -153,19 +149,44 @@ final class SpendReconcileCommand extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * A failed ask is still a fact worth a row — but only under `--record`, like every other write here.
-     *
-     * @param  list<array{campaign_id: string, date: string, spend: float}>  $stored
-     */
-    private function recordFailure(ExternalAccount $account, string $from, string $to, array $stored): void
+    /** @return Collection<int, \stdClass> */
+    private function storedRows(ExternalAccount $account, string $from, string $to)
     {
-        if (! $this->option('record')) {
-            return;
+        return DB::table('daily_metrics as m')
+            ->leftJoin('external_campaigns as c', 'c.id', '=', 'm.external_campaign_id')
+            ->where('m.external_account_id', $account->getKey())
+            ->where('m.metric_key', 'spend')
+            ->whereBetween('m.metric_date', [$from, $to])
+            ->get(['m.metric_date', 'm.project_id', 'm.value', 'm.original_amount', 'm.original_currency', 'm.project_currency', 'c.external_id as campaign']);
+    }
+
+    /**
+     * The provider could not be asked or would not answer. Say so loudly, print the provider's own message and the
+     * STORED side only (clearly labelled), and exit 0 so one refusing platform never fails the whole diagnostics workflow.
+     */
+    private function providerUnavailable(ExternalAccount $account, string $from, string $to, string $message): int
+    {
+        $rows = $this->storedRows($account, $from, $to);
+        $total = 0.0;
+        $currencies = [];
+        foreach ($rows as $r) {
+            $total += $r->original_amount !== null ? (float) $r->original_amount : (float) $r->value;
+            $currencies[(string) ($r->original_currency ?? '?')] = true;
         }
 
-        $storedTotal = round(array_sum(array_column($stored, 'spend')), 2);
-        $this->record($account, $from, $to, null, $storedTotal, null, null, SpendReconciliationRecord::FAILED);
+        $this->line(str_repeat('=', 78));
+        $this->line('  SPEND RECONCILE — PROVIDER UNAVAILABLE; only the stored side is shown, nothing was compared.');
+        $this->line(sprintf('  %s [%s]  window %s → %s', substr((string) $account->getKey(), 0, 8), $account->provider, $from, $to));
+        $this->line('  '.$message);
+        $this->line(sprintf('  STORED TOTAL %.2f (account currency %s) over %d stored rows · PROVIDER TOTAL unknown', $total, implode('/', array_keys($currencies)) ?: '?', count($rows)));
+        if ($this->option('record')) {
+            // SPEND-RECONCILE-RECORD-001 — a failed ask is still a fact worth a row: stored side only, provider side null.
+            $recorded = $this->record($account, $from, $to, null, round($total, 2), null, null, SpendReconciliationRecord::FAILED);
+            $this->line(sprintf('  recorded as %s (failed) on project %s.', substr($recorded->getKey(), 0, 8), $recorded->project_id === null ? 'none (account unbound)' : substr((string) $recorded->project_id, 0, 8)));
+        }
+        $this->line('[reconcile] provider_unavailable');
+
+        return self::SUCCESS;
     }
 
     /**

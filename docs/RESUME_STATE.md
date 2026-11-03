@@ -1,5 +1,6 @@
-# CURRENT STATE — 2026-11-01 (night) — P0 isolation incident: #917 deployed, data repair waiting on the Owner's approval
+# CURRENT STATE — 2026-11-02 (evening) — P0 data accuracy & performance: repair applied, Snapchat gap closed, profiler on Production, #932 in CI
 
+- **Repair applied 2026-11-02 (Owner approved both plans):** verified backup first (#928, 996 MB dump, contents listed, restore not rehearsed). Batch `65f35749-bec1-4450-bdb9-6f7db47aac3b` and batch `42c9f3af-f1ee-4725-8e50-636a85cb5e2a` in `isolation_quarantines`; restore with `isolation-quarantine.yml restore_batch=<id>`. Live Nasel report 1,914.40 → 1,538.84, ChatGPT Ads row gone. Still open: prove no return after a sync; the Nasel link `vTvh…` now answers 404 (state to be read with `production-perf.yml tokens=`), the `6lpb…` link stays suspended; do not re-enable either.
 - **Incident:** ChatGPT Ads spend of another advertiser (Razzah Avenue) appeared in the Nasel Riwaq client report.
 - **Root cause (proved from Production, read-only):** the ChatGPT Ads connector ignored `$adAccountId` and read whatever its key answered for. A pasted key re-credentialed the single connection per (tenant, workspace, provider), so every account row on it synced the last key's data into its own project. Evidence: identical sync runs (92/14/14/70) on four accounts; the same campaigns (187.73 / 17,954 impressions) under Nasel and ReSano.
 - **Deployed:** #917 `89c630785` (Deploy Production run 41342760534). It stops the cause. It does not repair stored rows, and the Nasel report still showed the foreign 375.56 after it: stored history, not a query or cache leak.
@@ -10,6 +11,19 @@
   - after #918 is deployed the dry run is read and shown with its numbers; nothing is moved until the Owner approves the final plan;
   - decide whether one advertiser's account authorised in two tenants is intended.
 - **Do not:** enter a new ChatGPT Ads key until #917 is live in every worker (it is), and never name a quarantine owner by guess: the provider confirms.
+
+## 2026-11-02 evening — what is true now (Git + Production are the source; this is the pointer)
+
+- **Deployed today, in order:** #923 docs `e78cc6f8` · #924 notifications reach `10ada30b` · #928 DB backup workflow `5b4c42b4` · #925 sync gate + counts `88db1720` · #926 zero-trust sweep `6f996b46` · #929 coverage N+1 `71df019b` · #931 observability + reconcile `d0e6d680`. Each has a successful Deploy Production run and health 200.
+- **Isolation repair APPLIED (Owner approved):** backup first (996 MB dump, TOC listed, restore not rehearsed); quarantine batches `65f35749…` (Nasel 375.56 → 0) and `42c9f3af…`; the suspended link `6lpb…` stays off. Re-run dry runs after today's syncs: see the ACCOUNT-SCOPE-ISOLATION-003 row.
+- **Snapchat spend (report y5i0…):** −99.43 USD explained and repaired through the ordinary sync (SPEND-ACCURACY-001). Reconcile tool now compares in the account currency (the −73% SAR reading was the tool, not the data).
+- **Slow public report 7Ctk…:** measured on Production, database-bound (≈24 s of 25 s); the memo fix is in #932; not VERIFIED (PERF-RECOVERY-001).
+- **In CI / queue (one lander, in order):** #932 batch (RESULT-PARITY-001, REPORT-DATA-FRESHNESS-001, SYNC-CENSUS-001, OWNER-HOLD-GATE-001, the availability memo, the CSRF first-login fix) → #927 integrations centre → `fix/frontend-code-split` → #916 → the pricing/tenancy chain → #905.
+- **Parallel branches in progress (agents, own worktrees, not queued yet):** `feat/kpi-parity` (one KPI definition across surfaces + recorded «last confirmed against the source»), `feat/integrations-center-2` (wizard search/pagination, debounced manual sync, one control per action, unique jobs), `perf/frontend-2` (route split up to date, refetch audit, roster render).
+- **HOLD:** #930 Meta multi-app (META-MULTI-APP-001) — draft, label `hold:owner-approval-meta`, lander guard refuses it; needs the Owner's secret, Meta Developer steps and recorded approval.
+- **Next after #932 deploys:** re-measure 7Ctk… ×3; re-read y5i0… card vs detail (70 vs 1); run `scope_audit=all` for the census; add `meta-owner-approval` to the main ruleset; then the matrix rows above move from IMPLEMENTED_NOT_VERIFIED where Production shows it.
+- **Resume point:** this file + `ch-scripts/lander/lander.sh status`; last docs commit on `docs/evidence-2026-11-02`.
+
 
 # CURRENT STATE — 2026-10-31 (morning) — #897/#898/#899/#854 deployed; X joins the reconnect fix; billing lifecycle registered (gated)
 

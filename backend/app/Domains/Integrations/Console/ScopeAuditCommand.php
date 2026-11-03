@@ -185,7 +185,7 @@ final class ScopeAuditCommand extends Command
         }
         $this->line(sprintf('    inactive bindings : %d', count($inactive)));
         foreach ($inactive as $account) {
-            $this->line(sprintf('      · %s  [%s]  (deselected — its rows are still readable)', $account, $this->providerOf[$account] ?? '?'));
+            $this->line(sprintf('      · %s  [%s]  (deselected — its rows are stored, not read: reads need an ACTIVE binding)', $account, $this->providerOf[$account] ?? '?'));
         }
 
         // Structure — attributed directly, or through the campaign the row hangs off.
