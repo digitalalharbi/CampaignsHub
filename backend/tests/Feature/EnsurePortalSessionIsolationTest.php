@@ -8,12 +8,18 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Requests\Support\RequestLabels;
+use App\Domains\Taxonomy\Models\TaxonomyDefinition;
+use App\Domains\Taxonomy\Models\TaxonomyOption;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\MembershipScope;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\MembershipProvisioner;
+use App\Domains\Tenancy\Support\WorkspaceAssertion;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -327,5 +333,259 @@ final class EnsurePortalSessionIsolationTest extends TestCase
             $this->browser()->getJson('/__probe/cached/shared')->assertOk()->assertJsonPath('value', $own);
             $this->browser()->getJson('/__probe/cached/app')->assertOk()->assertJsonPath('value', $own);
         }
+    }
+
+    // ---- a route alone never moves the persistent selection (#945) ----
+
+    private function selection(): mixed
+    {
+        return session('membership_id');
+    }
+
+    public function test_no_route_of_any_portal_changes_the_persistent_selection(): void
+    {
+        $this->switchTo($this->appMembership);
+        $chosen = (string) $this->appMembership->getKey();
+        $this->assertSame($chosen, $this->selection());
+
+        foreach (['/api/v1/client-workspaces', '/__probe/cached/agency', '/__probe/cached/app', '/api/v1/projects', '/api/v1/auth/memberships?portal=agency', '/__probe/tenant-only'] as $route) {
+            $this->browser()->getJson($route)->assertOk();
+            $this->assertSame($chosen, $this->selection(), $route.' moved the session.');
+        }
+    }
+
+    public function test_a_session_with_no_selection_gets_none_from_a_route(): void
+    {
+        $this->browser()->getJson('/api/v1/client-workspaces')->assertOk();
+
+        $this->assertNull($this->selection());
+    }
+
+    public function test_only_a_membership_the_person_holds_can_be_selected_and_only_by_the_switch(): void
+    {
+        $stranger = User::create(['name' => 'S', 'email' => 'stranger@test.dev', 'password' => 'secret123']);
+        $theirs = app(MembershipProvisioner::class)->ensure($stranger, $this->tenant('Their Co', 'agency'), Portal::Agency, 'owner');
+
+        $this->switchTo($this->appMembership);
+        $this->browser()->postJson('/api/v1/auth/memberships/switch', ['membership_id' => (string) $theirs->getKey()])->assertForbidden();
+
+        $this->assertSame((string) $this->appMembership->getKey(), $this->selection());
+    }
+
+    public function test_a_request_served_for_itself_says_so_and_an_ordinary_one_does_not(): void
+    {
+        $this->switchTo($this->appMembership);
+
+        $this->browser()->getJson('/api/v1/client-workspaces')->assertOk()->assertHeader('X-Portal-Context', 'request');
+        $this->browser()->getJson('/api/v1/projects')->assertOk()->assertHeaderMissing('X-Portal-Context');
+    }
+
+    // ---- two tabs, one of them stale ----
+
+    /** The tab that was drawn for this membership, and says so on its requests. */
+    private function tab(Membership $drawnFor): self
+    {
+        return $this->browser()->withHeader(WorkspaceAssertion::HEADER, (string) $drawnFor->getKey());
+    }
+
+    private function assertRefusedAsChanged(mixed $response): void
+    {
+        $response->assertStatus(409)->assertJsonPath('code', 'workspace_changed');
+    }
+
+    public function test_a_stale_tab_reads_nothing_of_the_new_workspace(): void
+    {
+        $this->switchTo($this->appMembership);
+        $this->tab($this->appMembership)->getJson('/api/v1/projects')->assertOk();
+
+        // The other tab chooses, and this one never hears about it.
+        $this->switchTo($this->agencyMembership);
+
+        foreach (['/api/v1/projects', '/api/v1/projects/'.$this->agencyProject->getKey(), '/__probe/tenant-only', '/__probe/cached/shared'] as $route) {
+            $response = $this->tab($this->appMembership)->getJson($route);
+            $this->assertRefusedAsChanged($response);
+            $this->assertStringNotContainsString((string) $this->agency->getKey(), (string) $response->getContent());
+            $this->assertStringNotContainsString('Agency Project', (string) $response->getContent());
+        }
+    }
+
+    public function test_a_write_from_a_stale_tab_lands_nowhere(): void
+    {
+        $this->switchTo($this->appMembership);
+        $this->switchTo($this->agencyMembership);
+
+        foreach ([$this->agencyProject, $this->brandProject] as $project) {
+            $this->assertRefusedAsChanged($this->tab($this->appMembership)->patchJson('/api/v1/projects/'.$project->getKey(), ['name' => 'Stale write']));
+        }
+
+        $this->assertSame('Agency Project', $this->agencyProject->fresh()->name);
+        $this->assertSame('Brand Project', $this->brandProject->fresh()->name);
+    }
+
+    public function test_the_tab_that_chose_keeps_working_beside_the_stale_one(): void
+    {
+        $this->switchTo($this->appMembership);
+        $this->switchTo($this->agencyMembership);
+
+        foreach (range(1, 3) as $round) {
+            $this->assertRefusedAsChanged($this->tab($this->appMembership)->getJson('/api/v1/projects'));
+            $this->tab($this->agencyMembership)->patchJson('/api/v1/projects/'.$this->agencyProject->getKey(), ['name' => 'Round '.$round])->assertOk();
+        }
+
+        $this->assertSame('Round 3', $this->agencyProject->fresh()->name);
+        $this->assertSame((string) $this->agencyMembership->getKey(), $this->selection());
+    }
+
+    /** A stale tab has to be able to find out where it is, choose, and leave. */
+    public function test_a_stale_tab_can_still_read_the_list_switch_and_sign_out(): void
+    {
+        $this->switchTo($this->appMembership);
+        $this->switchTo($this->agencyMembership);
+
+        $this->tab($this->appMembership)->getJson('/api/v1/auth/memberships')->assertOk()
+            ->assertJsonPath('data.current.tenant.id', (string) $this->agency->getKey());
+        $this->tab($this->appMembership)->postJson('/api/v1/auth/memberships/switch', ['membership_id' => (string) $this->appMembership->getKey()])->assertOk();
+        $this->tab($this->appMembership)->getJson('/api/v1/projects')->assertOk();
+    }
+
+    /** It can refuse, and can do nothing else: naming a workspace does not put a request in it. */
+    public function test_the_claim_selects_nothing_and_a_forged_one_gains_nothing(): void
+    {
+        $stranger = User::create(['name' => 'S', 'email' => 'forger-target@test.dev', 'password' => 'secret123']);
+        $theirs = app(MembershipProvisioner::class)->ensure($stranger, $this->tenant('Target Co', 'agency'), Portal::Agency, 'owner');
+
+        $this->switchTo($this->appMembership);
+
+        foreach ([(string) $this->agencyMembership->getKey(), (string) $theirs->getKey(), 'not-a-uuid'] as $claim) {
+            $this->assertRefusedAsChanged($this->browser()->withHeader(WorkspaceAssertion::HEADER, $claim)->getJson('/api/v1/client-workspaces'));
+            $this->assertRefusedAsChanged($this->browser()->withHeader(WorkspaceAssertion::HEADER, $claim)->getJson('/api/v1/projects'));
+            $this->assertSame((string) $this->appMembership->getKey(), $this->selection());
+        }
+    }
+
+    /** A tab drawn for the advertiser asks the agency's route: refused like somebody not holding it, however they got there. */
+    public function test_an_advertiser_screen_cannot_fetch_the_agencys_data(): void
+    {
+        $this->switchTo($this->appMembership);
+
+        $response = $this->tab($this->appMembership)->getJson('/api/v1/client-workspaces')->assertForbidden();
+
+        $this->assertStringNotContainsString('Agency Client', (string) $response->getContent());
+        $this->tab($this->appMembership)->postJson('/api/v1/client-workspaces', ['name' => 'Wrong', 'mode' => 'managed'])->assertForbidden();
+        $this->assertSame(0, ClientWorkspace::query()->withoutGlobalScopes()->where('name', 'Wrong')->count());
+        $this->assertSame((string) $this->appMembership->getKey(), $this->selection());
+    }
+
+    // ---- role and portal scopes ----
+
+    /** Permissions are those of the tenant the request runs in, so the owner of one workspace is not the owner of the other. */
+    public function test_a_route_served_for_itself_has_the_role_of_that_tenant_not_of_the_session(): void
+    {
+        $this->user->roles()->detach(Role::query()->withoutGlobalScopes()->where('tenant_id', $this->agency->getKey())->pluck('id'));
+
+        $this->switchTo($this->appMembership);
+        $this->browser()->getJson('/api/v1/projects')->assertOk();
+        $this->browser()->getJson('/api/v1/client-workspaces')->assertForbidden();
+        $this->assertLaterRequestsRunUnder($this->brand, $this->brandProject, $this->agencyProject);
+    }
+
+    public function test_a_route_served_for_itself_keeps_that_memberships_client_ceiling(): void
+    {
+        $second = ClientWorkspace::create([
+            'tenant_id' => $this->agency->getKey(), 'name' => 'Out Of Scope', 'slug' => 'out-of-scope',
+            'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
+        ]);
+        MembershipScope::create(['membership_id' => $this->agencyMembership->getKey(), 'scope_type' => MembershipScope::TYPE_CLIENT, 'scope_id' => $this->agencyClient->getKey()]);
+
+        $this->switchTo($this->appMembership);
+
+        $ids = array_column($this->browser()->getJson('/api/v1/client-workspaces')->assertOk()->json('data'), 'id');
+        $this->assertSame([(string) $this->agencyClient->getKey()], $ids);
+        $this->browser()->getJson('/api/v1/client-workspaces/'.$second->getKey())->assertNotFound();
+    }
+
+    public function test_a_portal_nobody_holds_stays_shut_with_no_claim_and_with_one(): void
+    {
+        $this->switchTo($this->appMembership);
+
+        Route::middleware(['api', 'auth:sanctum', 'tenant', 'portal:influencers'])->get('/__probe/influencers', fn () => response()->json(['ok' => true]));
+
+        $this->browser()->getJson('/__probe/influencers')->assertForbidden();
+        $this->tab($this->appMembership)->getJson('/__probe/influencers')->assertForbidden();
+    }
+
+    // ---- client reports and exports ----
+
+    private function report(Project $project): Report
+    {
+        return Report::withoutGlobalScopes()->create([
+            'tenant_id' => $project->tenant_id, 'project_id' => $project->getKey(), 'name' => 'R-'.$project->name, 'type' => 'executive', 'status' => 'completed',
+            'currency' => 'SAR', 'campaign_objective' => 'sales', 'period_start' => '2026-07-01', 'period_end' => '2026-07-31',
+        ]);
+    }
+
+    /** A link or a download carries no claim, so the project in its URL has to hold on its own. */
+    public function test_another_tenants_report_and_its_export_stay_out_of_reach_after_the_other_portal_was_visited(): void
+    {
+        $foreign = $this->report($this->agencyProject);
+        $own = $this->report($this->brandProject);
+        $base = '/api/v1/projects/'.$this->agencyProject->getKey().'/reports';
+
+        $this->switchTo($this->appMembership);
+        $this->browser()->getJson('/api/v1/client-workspaces')->assertOk();
+
+        $this->browser()->getJson($base)->assertNotFound();
+        $this->browser()->getJson($base.'/'.$foreign->getKey())->assertNotFound();
+        $this->browser()->postJson($base.'/'.$foreign->getKey().'/export', ['format' => 'csv'])->assertNotFound();
+
+        // The other tenant's report through this tenant's project is no way in either.
+        $mine = '/api/v1/projects/'.$this->brandProject->getKey().'/reports/';
+        $this->browser()->getJson($mine.$foreign->getKey())->assertNotFound();
+        $this->browser()->getJson($mine.$own->getKey())->assertOk();
+
+        $this->assertSame(0, $foreign->exports()->count());
+    }
+
+    public function test_a_stale_tab_cannot_ask_for_an_export_of_either_tenant(): void
+    {
+        $brand = $this->report($this->brandProject);
+        $agency = $this->report($this->agencyProject);
+
+        $this->switchTo($this->appMembership);
+        $this->switchTo($this->agencyMembership);
+
+        foreach ([[$this->brandProject, $brand], [$this->agencyProject, $agency]] as [$project, $report]) {
+            $this->assertRefusedAsChanged($this->tab($this->appMembership)
+                ->postJson('/api/v1/projects/'.$project->getKey().'/reports/'.$report->getKey().'/export', ['format' => 'csv']));
+            $this->assertSame(0, $report->exports()->count());
+        }
+    }
+
+    // ---- RequestLabels' fixed cache key ----
+
+    /** A fixed key is only safe if what is under it belongs to nobody: a tenant's own option must never be read into it. */
+    public function test_request_labels_cache_holds_platform_options_and_never_a_tenants(): void
+    {
+        RequestLabels::forget();
+        $definition = TaxonomyDefinition::withoutGlobalScopes()->create([
+            'key' => 'request.priority', 'module' => 'requests', 'scope' => 'platform', 'field_type' => 'select',
+            'label_ar' => 'الأولوية', 'label_en' => 'Priority', 'tenant_id' => null,
+        ]);
+        TaxonomyOption::withoutGlobalScopes()->create([
+            'taxonomy_definition_id' => $definition->getKey(), 'key' => 'urgent', 'label_ar' => 'عاجل', 'label_en' => 'Urgent', 'tenant_id' => null,
+        ]);
+        TaxonomyOption::withoutGlobalScopes()->create([
+            'taxonomy_definition_id' => $definition->getKey(), 'key' => 'agency-secret', 'label_ar' => 'سر', 'label_en' => 'Agency secret', 'tenant_id' => $this->agency->getKey(),
+        ]);
+
+        app(TenantContext::class)->setTenantId((string) $this->agency->getKey());
+        $seenByTheOwner = RequestLabels::all();
+        app(TenantContext::class)->setTenantId((string) $this->brand->getKey());
+        $seenByAnother = RequestLabels::all();
+        app(TenantContext::class)->forget();
+
+        $this->assertSame(['urgent'], array_keys($seenByTheOwner));
+        $this->assertSame($seenByTheOwner, $seenByAnother);
+        RequestLabels::forget();
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Building2, LayoutDashboard, Loader2, Sparkles, Users } from 'lucide-react'
 import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
@@ -54,6 +54,7 @@ export function shouldRetryMembershipLoad(failureCount: number, error: unknown):
 
 export function WorkspaceSwitcherPage() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const { locale } = useUi()
   const ar = locale === 'ar'
   const Arrow = ar ? ArrowLeft : ArrowRight
@@ -175,6 +176,14 @@ export function WorkspaceSwitcherPage() {
             ? (ar ? 'اختر مساحة العمل' : 'Choose a workspace')
             : (ar ? 'مساحات العمل' : 'Workspaces')}
         </h1>
+        {/* ENSURE-PORTAL-SESSION-001 — sent here because the session moved under another tab's screen, and that tab's request did not run. */}
+        {params.get('reason') === 'workspace_changed' && (
+          <p role="status" data-testid="workspace-changed-note" className="mt-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-secondary">
+            {ar
+              ? 'تغيّرت مساحة العمل من تبويب آخر، ولم يُنفَّذ طلبك الأخير في هذا التبويب. اختر مساحة العمل التي تريد المتابعة فيها.'
+              : 'Your workspace was changed in another tab, and your last request here did not run. Choose the workspace to continue in.'}
+          </p>
+        )}
         {/* Only once the server has said so: before that, «you belong to several» is a claim about data nobody has read. */}
         {data && offered.length > 1 && (
           <p data-testid="workspace-intro" className="mt-1.5 text-[14.5px] text-text-secondary">

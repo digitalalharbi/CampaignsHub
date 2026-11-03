@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { AccessRecovery } from '@/features/auth/AccessRecovery'
-import { PortalEntryFailed } from '@/features/auth/PortalEntryFailed'
-import { useEnterPortal } from '@/features/auth/useEnterPortal'
+import { PortalEntryChoice } from '@/features/auth/PortalEntryChoice'
+import { usePortalEntry } from '@/features/auth/usePortalEntry'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -23,9 +23,9 @@ export function RequireInfluencerPortal() {
   const location = useLocation()
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
-  const entry = useEnterPortal('influencers', state.data)
+  const entry = usePortalEntry('influencers', state.data)
 
-  if (state.isLoading || entry === 'moving') {
+  if (state.isLoading || entry.kind === 'moving') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -56,7 +56,7 @@ export function RequireInfluencerPortal() {
     )
   }
 
-  if (entry === 'failed') return <PortalEntryFailed memberships={held} />
+  if (entry.kind === 'choose') return <PortalEntryChoice portal="influencers" current={entry.current} targets={entry.targets} />
 
   /*
    * A creator arriving at the portal root goes to their own side (INFL-002).

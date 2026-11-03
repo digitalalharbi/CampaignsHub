@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships, type PortalKey } from './memberships'
 import { AccessRecovery } from './AccessRecovery'
-import { PortalEntryFailed } from './PortalEntryFailed'
-import { useEnterPortal } from './useEnterPortal'
+import { PortalEntryChoice } from './PortalEntryChoice'
+import { usePortalEntry } from './usePortalEntry'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -34,9 +34,9 @@ import { useUi } from '@/stores/ui'
 export function RequirePortal({ portal }: { portal: PortalKey }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
-  const entry = useEnterPortal(portal, state.data)
+  const entry = usePortalEntry(portal, state.data)
 
-  if (state.isLoading || entry === 'moving') {
+  if (state.isLoading || entry.kind === 'moving') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -49,7 +49,7 @@ export function RequirePortal({ portal }: { portal: PortalKey }) {
   // out of a portal they legitimately hold.
   const holds = state.data ? state.data.memberships.some((m) => m.portal === portal) : true
 
-  if (entry === 'failed') return <PortalEntryFailed memberships={state.data?.memberships ?? []} />
+  if (entry.kind === 'choose') return <PortalEntryChoice portal={portal} current={entry.current} targets={entry.targets} />
 
   if (holds) return <Outlet />
 

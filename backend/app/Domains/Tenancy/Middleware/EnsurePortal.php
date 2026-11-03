@@ -10,6 +10,7 @@ use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Domains\Tenancy\Support\ReviewAccess;
+use App\Domains\Tenancy\Support\WorkspaceAssertion;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,8 +30,12 @@ use Symfony\Component\HttpFoundation\Response;
  * The tabs of a browser share one session and the client sends no workspace of its own, so the session's choice is the
  * tenant of every request from every tab. This used to write the membership it found back into the session: one call
  * from one tab re-pointed the requests of all the others, and a write from a screen naming one workspace landed in
- * another. Only somebody choosing moves the session, through `POST /auth/memberships/switch`. Opening another portal
- * by link is such a choice, and the SPA's guard (`useEnterPortal`) makes it before that portal's screens ask anything.
+ * another. Only somebody choosing moves the session, through `POST /auth/memberships/switch`. Opening another portal's
+ * page chooses nothing: the SPA's guard (`usePortalEntry`) asks, and sends none of that portal's requests until answered.
+ *
+ * A request served this way says so with `X-Portal-Context: request`. And it is only ever one that states no workspace:
+ * a tab that names the workspace it is drawn for is refused here like somebody not holding this portal, which is what
+ * keeps another tenant's rows off its screen. So this path is for token clients and plain links.
  */
 final class EnsurePortal
 {
@@ -76,7 +81,9 @@ final class EnsurePortal
             return $next($request);
         }
 
-        // Not the active portal — but the user may still hold it. Honour a membership they own.
+        abort_if(WorkspaceAssertion::claimed($request), 403, 'You do not have access to this portal.');
+
+        // Not the active portal — but the user may still hold it. Honour a membership they own, for this request.
         foreach ($allowed as $portal) {
             $held = $this->resolver->resolve($user, $portal);
             if ($held !== null && $held->portal === $portal) {
@@ -91,7 +98,14 @@ final class EnsurePortal
                  */
                 $denied = app(ReviewAccess::class)->deny($request, $user, Tenant::query()->find($held->tenant_id));
 
-                return $denied ?? $next($request);
+                if ($denied !== null) {
+                    return $denied;
+                }
+
+                $response = $next($request);
+                $response->headers->set('X-Portal-Context', 'request');
+
+                return $response;
             }
         }
 

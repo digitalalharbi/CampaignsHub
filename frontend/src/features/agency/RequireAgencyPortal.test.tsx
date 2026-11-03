@@ -67,7 +67,7 @@ describe('RequireAgencyPortal', () => {
     expect(screen.queryByText('Agency inside')).not.toBeInTheDocument()
   })
 
-  // The session is IN the agency here. In the advertiser it has to move first: `useEnterPortal.test.tsx`.
+  // The session is IN the agency here. In the advertiser the guard asks first: `usePortalEntry.test.tsx`.
   it('passes a user who holds both an advertiser and an agency membership', async () => {
     vi.mocked(fetchMemberships).mockResolvedValue({
       ...state([membership('app'), membership('agency')]),

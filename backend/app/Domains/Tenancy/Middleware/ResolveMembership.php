@@ -11,6 +11,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\MembershipSelector;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Domains\Tenancy\Support\ReviewAccess;
+use App\Domains\Tenancy\Support\WorkspaceAssertion;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -77,6 +78,11 @@ final class ResolveMembership
             ?? $this->resolver->endedReviewMembership($user);
 
         if ($membership !== null) {
+            // A tab drawn for one workspace must not be answered from another (ENSURE-PORTAL-SESSION-001).
+            if (WorkspaceAssertion::refuses($request, $membership)) {
+                return WorkspaceAssertion::refusal();
+            }
+
             $this->memberships->set($membership);
             $this->tenants->setTenantId($membership->tenant_id);
 
