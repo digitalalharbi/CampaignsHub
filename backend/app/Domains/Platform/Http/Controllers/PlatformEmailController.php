@@ -16,7 +16,6 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -80,7 +79,7 @@ final class PlatformEmailController extends Controller
         $since = now()->subDays((int) ($filters['days'] ?? 30));
         $page = max(1, (int) ($filters['page'] ?? 1));
 
-        $rows = $this->transactional($filters, $since)
+        $rows = collect($this->transactional($filters, $since))
             ->concat($this->digests($filters, $since))
             ->concat($this->subscriptions($filters, $since))
             // Filtered after the translation, because «accepted» and «delivered» share one stored word.
@@ -234,12 +233,12 @@ final class PlatformEmailController extends Controller
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return Collection<int, non-empty-array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
-    private function transactional(array $filters, Carbon $since)
+    private function transactional(array $filters, Carbon $since): array
     {
         if (($filters['source'] ?? null) === 'digest') {
-            return collect();
+            return [];
         }
 
         return DB::table('mail_deliveries as m')
@@ -269,17 +268,19 @@ final class PlatformEmailController extends Controller
                 'attempts' => (int) $r->attempts,
                 // Redacted here too: rows written before MailFailure existed still hold the transport's words.
                 'reason' => $r->error === null ? null : MailFailure::redact((string) $r->error),
-            ] + self::stage($r));
+            ] + self::stage($r))
+            ->values()
+            ->all();
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return Collection<int, non-empty-array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
-    private function digests(array $filters, Carbon $since)
+    private function digests(array $filters, Carbon $since): array
     {
         if (($filters['source'] ?? null) === 'transactional') {
-            return collect();
+            return [];
         }
 
         return DB::table('digest_sends as d')
@@ -310,7 +311,9 @@ final class PlatformEmailController extends Controller
                 'transport' => null,
                 'attempts' => (int) $r->attempts,
                 'reason' => ($r->last_error ?? $r->reason) === null ? null : MailFailure::redact((string) ($r->last_error ?? $r->reason)),
-            ] + self::stage($r));
+            ] + self::stage($r))
+            ->values()
+            ->all();
     }
 
     /**
@@ -318,12 +321,12 @@ final class PlatformEmailController extends Controller
      * could not see it, so an install could fail every renewal notice with this page showing green.
      *
      * @param  array<string, mixed>  $filters
-     * @return Collection<int, non-empty-array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
-    private function subscriptions(array $filters, Carbon $since)
+    private function subscriptions(array $filters, Carbon $since): array
     {
         if (in_array($filters['source'] ?? null, ['transactional', 'digest'], true)) {
-            return collect();
+            return [];
         }
 
         return DB::table('subscription_notifications as n')
@@ -351,7 +354,9 @@ final class PlatformEmailController extends Controller
                 'transport' => null,
                 'attempts' => (int) $r->attempts,
                 'reason' => $r->error === null ? null : MailFailure::redact((string) $r->error),
-            ] + self::stage($r));
+            ] + self::stage($r))
+            ->values()
+            ->all();
     }
 
     /**
