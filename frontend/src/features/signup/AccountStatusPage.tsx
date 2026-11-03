@@ -523,13 +523,13 @@ function CommercialNote({ reg, copy }: { reg: RegistrationStatus; copy: typeof C
   const t = reg.commercial
   if (!t) return null
 
-  const money = (amount?: string) => `${amount ?? ''} ${t.currency ?? ''}`.trim()
+  const withCurrency = (amount?: string) => `${amount ?? ''} ${t.currency ?? ''}`.trim()
   const text = t.outcome === 'approve_discount' && reg.state !== 'active'
-    ? copy.discounted(t.discount_percent ?? 0, money(t.list_amount), money(t.amount_due))
+    ? copy.discounted(t.discount_percent ?? 0, withCurrency(t.list_amount), withCurrency(t.amount_due))
     : t.outcome === 'approve_waiver' && reg.provisioned
-      ? copy.waived(t.renewal_on ?? '', money(t.renewal_amount))
+      ? copy.waived(t.renewal_on ?? '', withCurrency(t.renewal_amount))
       : t.outcome === 'approve_trial' && reg.provisioned
-        ? copy.trial(t.renewal_on ?? '', money(t.renewal_amount))
+        ? copy.trial(t.renewal_on ?? '', withCurrency(t.renewal_amount))
         : null
 
   return text === null ? null : (

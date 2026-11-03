@@ -302,7 +302,7 @@ function PreviewPanel({ preview, copy: c }: { preview: RegistrationDecisionPrevi
       <dt>{label}</dt><dd data-testid={testId}><Num>{value}</Num></dd>
     </div>
   )
-  const money = (v?: string | null) => (v == null ? null : `${v} ${t?.currency ?? ''}`)
+  const withCurrency = (v?: string | null) => (v == null ? null : `${v} ${t?.currency ?? ''}`)
   const made = [
     a.creates.tenant ? c.createdTenant : null, a.creates.membership ? c.createdMembership : null, a.creates.project ? c.createdProject : null,
   ].filter(Boolean).join(' + ')
@@ -311,11 +311,11 @@ function PreviewPanel({ preview, copy: c }: { preview: RegistrationDecisionPrevi
     <div data-testid="decision-preview-panel" className="rounded-xl bg-surface-secondary p-3 text-xs text-text-secondary">
       <p className="mb-1.5 font-semibold text-text-primary">{c.previewTitle}</p>
       <dl className="flex flex-col gap-1">
-        {line(c.listAmount, money(t?.list_amount), 'preview-list')}
-        {line(c.waived, money(t?.fee), 'preview-waived')}
-        {line(c.amountDue, money(t?.amount_due), 'preview-due')}
+        {line(c.listAmount, withCurrency(t?.list_amount), 'preview-list')}
+        {line(c.waived, withCurrency(t?.fee), 'preview-waived')}
+        {line(c.amountDue, withCurrency(t?.amount_due), 'preview-due')}
         {line(c.vat, t?.vat ? `${t.vat.tax} ${t.currency ?? ''}` : null, 'preview-vat')}
-        {line(c.renewal, money(t?.renewal_amount), 'preview-renewal')}
+        {line(c.renewal, withCurrency(t?.renewal_amount), 'preview-renewal')}
         {line(c.renewalOn, t?.renewal_on, 'preview-renewal-on')}
         <div className="flex flex-wrap justify-between gap-2"><dt>{c.creates}</dt><dd data-testid="preview-creates">{made || c.nothing}</dd></div>
         <div className="flex flex-wrap justify-between gap-2"><dt>{c.effectiveRole}</dt><dd data-testid="preview-role"><Num>{a.role}</Num></dd></div>
