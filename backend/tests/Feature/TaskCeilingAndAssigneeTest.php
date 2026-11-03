@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Projects\Access\ProjectRole;
+use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,6 +53,9 @@ final class TaskCeilingAndAssigneeTest extends TestCase
         $this->actingAs($op, 'sanctum')->postJson('/api/v1/tasks', ['title' => 'x', 'client_workspace_id' => (string) $this->clientA->id])->assertStatus(422);
         $this->assertSame(0, Task::query()->count());
 
+        // PROJECTS-RBAC-CLOSURE-001: a confined member files under a project of their client only if they belong to that
+        // project (their client ceiling alone no longer opens every project of the client). The refusals above are unchanged.
+        ProjectMembership::create(['tenant_id' => $this->agency->id, 'project_id' => $this->projectB->id, 'user_id' => $op->id, 'role' => ProjectRole::MARKETING_MANAGER, 'status' => 'active']);
         $this->actingAs($op, 'sanctum')->postJson('/api/v1/tasks', ['title' => 'ok', 'project_id' => (string) $this->projectB->id])->assertCreated();
         // A personal, client-less task stays possible: it is the creator's own.
         $this->actingAs($op, 'sanctum')->postJson('/api/v1/tasks', ['title' => 'mine'])->assertCreated();
