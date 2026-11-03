@@ -39,7 +39,7 @@ test.describe('the sign-in box offers one door', () => {
 
     await expect(page.getByTestId('login-email')).toBeVisible()
     await expect(page.getByTestId('login-password').locator('input[type="password"]')).toBeVisible()
-    await expect(page.getByTestId('login-request-code')).toBeVisible()
+    await expect(page.getByTestId('login-request-code')).toHaveCount(0)
     await expect(page.getByRole('link', { name: /Forgot/i })).toBeVisible()
 
     await expect(page.getByRole('button', { name: /Google|Apple|WhatsApp/i })).toHaveCount(0)

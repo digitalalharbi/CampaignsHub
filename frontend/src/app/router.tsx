@@ -40,6 +40,7 @@ import { DataDeletionPage } from '@/features/marketing/DataDeletionPage'
 import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
+import { PortalLoginPage } from '@/features/requests/portal/PortalLoginPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
 import { ClientNewRequestPage } from '@/features/requests/portal/ClientNewRequestPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
@@ -216,7 +217,8 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/admin/login', element: <LegacyLoginRedirect /> },
   { path: '/app/login', element: <LegacyLoginRedirect /> },
   { path: '/agency/login', element: <LegacyLoginRedirect /> },
-  { path: '/portal/login', element: <LegacyLoginRedirect /> },
+  // LOGIN-NO-EMAIL-CODE-001 — a client contact holds no password; this page, not `/login`, is their way in.
+  { path: '/portal/login', element: <PortalLoginPage /> },
   { path: '/influencers/login', element: <LegacyLoginRedirect /> },
 
   /*

@@ -6,6 +6,7 @@ import { api, getData, postData } from '@/lib/api/client'
  */
 
 export interface PortalLoginStart {
+  resend_after?: number
   verification_id: string
   delivery_status: string
   dev_code: string | null

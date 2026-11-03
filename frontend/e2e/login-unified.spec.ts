@@ -106,11 +106,11 @@ test.describe('the server picks the portal, not the URL', () => {
  */
 test.describe('the code branch of the same door', () => {
   test('a client contact is offered a code, not a password', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByTestId('login-email').fill(DEMO_CLIENT_CONTACT)
-    await page.getByTestId('login-request-code').click()
+    await page.goto('/portal/login')
+    await page.getByTestId('portal-login-email').fill(DEMO_CLIENT_CONTACT)
+    await page.getByTestId('portal-login-send').click()
 
-    await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('portal-login-code')).toBeVisible({ timeout: 20000 })
     // The card it came from is gone, password field and all — one step at a time.
     await expect(page.getByTestId('login-password')).toHaveCount(0)
     await expect(page.locator('input[type="password"]')).toHaveCount(0)
@@ -129,7 +129,7 @@ test.describe('the code branch of the same door', () => {
      * in. The claim under test is that a one-time code produces a portal session.
      */
     await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20000 })
-    await expect(page.getByTestId('login-code')).toHaveCount(0)
+    await expect(page.getByTestId('portal-login-code')).toHaveCount(0)
   })
 
   test('the code session survives a reload and a direct link', async ({ page }) => {
@@ -145,8 +145,9 @@ test.describe('the code branch of the same door', () => {
   })
 
   test('a contact who is bounced to the door comes back to where they were going', async ({ page }) => {
-    await page.goto('/portal/login?redirect=%2Fportal%2Frequests')
-    await expect(page).toHaveURL(/\/login\?redirect=/)
+    // Through `/login`, as a stale link does: it is handed on to the contact's own door with its destination.
+    await page.goto('/login?redirect=%2Fportal%2Frequests')
+    await expect(page).toHaveURL(/\/portal\/login\?redirect=/)
 
     await signInWithCode(page, DEMO_CLIENT_CONTACT)
     await expect(page).toHaveURL(/\/portal\/requests/, { timeout: 20000 })
