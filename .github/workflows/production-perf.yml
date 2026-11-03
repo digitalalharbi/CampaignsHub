@@ -54,6 +54,71 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | " -v ON_ERROR_STOP=0' <<'SQL'
+            BEGIN READ ONLY;
+            SET LOCAL statement_timeout = '20s';
+            with c as (select provider, coalesce(format,'(null)') as fmt, thumbnail_url, asset_url, video_url, preview_url, cover_path, asset_expires_at, source_type, width, height, last_synced_at, raw,
+              case when jsonb_typeof(cards)='array' then jsonb_array_length(cards) end as ncards,
+              case when jsonb_typeof(cards)='array' then exists (select 1 from jsonb_array_elements(cards) e where jsonb_typeof(e)='object' and coalesce(e->>'image_url',e->>'asset_url',e->>'video_url',e->>'thumbnail_url') is not null) end as card_media
+              from external_creatives where is_demo = false)
+            select 'Q1', provider, fmt, count(*) total,
+             count(*) filter (where thumbnail_url is not null or asset_url is not null or cover_path is not null) img,
+             count(*) filter (where cover_path is not null) cached_cover,
+             count(*) filter (where video_url is not null) vid,
+             count(*) filter (where video_url is not null and thumbnail_url is null and asset_url is null and cover_path is null) vid_no_cover,
+             count(*) filter (where coalesce(ncards,0) > 0) cards_any,
+             count(*) filter (where card_media) cards_media,
+             count(*) filter (where asset_expires_at < now()) expired,
+             count(*) filter (where asset_expires_at is null and (thumbnail_url is not null or asset_url is not null or video_url is not null)) no_expiry,
+             count(*) filter (where (thumbnail_url is null and asset_url is null and video_url is null and cover_path is null and not coalesce(card_media,false))) nothing,
+             count(*) filter (where preview_url is not null and thumbnail_url is null and asset_url is null and video_url is null) only_share,
+             count(*) filter (where source_type = 'estimated') estimated,
+             count(*) filter (where (thumbnail_url is not null and thumbnail_url not like 'https://%') or (asset_url is not null and asset_url not like 'https://%')) non_https,
+             count(*) filter (where (thumbnail_url is not null or asset_url is not null or video_url is not null) and (width is null or height is null)) no_dims,
+             count(*) filter (where last_synced_at < now() - interval '2 days') stale2d
+            from c group by 2,3 order by 2,3;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            SET LOCAL statement_timeout = '20s';
+            with c as (select provider, coalesce(format,'(null)') as fmt, thumbnail_url, asset_url, video_url, preview_url, cover_path, asset_expires_at, source_type, width, height, last_synced_at, raw,
+              case when jsonb_typeof(cards)='array' then jsonb_array_length(cards) end as ncards,
+              case when jsonb_typeof(cards)='array' then exists (select 1 from jsonb_array_elements(cards) e where jsonb_typeof(e)='object' and coalesce(e->>'image_url',e->>'asset_url',e->>'video_url',e->>'thumbnail_url') is not null) end as card_media
+              from external_creatives where is_demo = false)
+            select 'Q2', provider, fmt, coalesce(raw->>'media', '(none)') media, coalesce(raw->>'media_reason','(none stored)') reason, count(*)
+            from c where (thumbnail_url is null and asset_url is null and video_url is null and cover_path is null and not coalesce(card_media,false)) group by 2,3,4,5 order by 2,3,6 desc;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            SET LOCAL statement_timeout = '20s';
+            with c as (select provider, coalesce(format,'(null)') as fmt, thumbnail_url, asset_url, video_url, preview_url, cover_path, asset_expires_at, source_type, width, height, last_synced_at, raw,
+              case when jsonb_typeof(cards)='array' then jsonb_array_length(cards) end as ncards,
+              case when jsonb_typeof(cards)='array' then exists (select 1 from jsonb_array_elements(cards) e where jsonb_typeof(e)='object' and coalesce(e->>'image_url',e->>'asset_url',e->>'video_url',e->>'thumbnail_url') is not null) end as card_media
+              from external_creatives where is_demo = false)
+            select 'Q3', provider, case when asset_expires_at >= now() then 'live' when asset_expires_at >= now() - interval '6 hours' then 'expired<6h' when asset_expires_at >= now() - interval '24 hours' then 'expired<24h' else 'expired>24h' end b, count(*)
+            from c where asset_expires_at is not null group by 2,3 order by 2,3;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            SET LOCAL statement_timeout = '20s';
+            select 'Q4', provider, count(*) filter (where thumbnail_url ~* '[?&](access_token|accesstoken|token|auth|authorization|apikey|api_key|key|secret|bearer|oauth_token)=') thumb_cred, count(*) filter (where asset_url ~* '[?&](access_token|accesstoken|token|auth|authorization|apikey|api_key|key|secret|bearer|oauth_token)=') asset_cred, count(*) filter (where video_url ~* '[?&](access_token|accesstoken|token|auth|authorization|apikey|api_key|key|secret|bearer|oauth_token)=') video_cred
+            from external_creatives where is_demo = false group by 2 order by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            SET LOCAL statement_timeout = '20s';
+            select 'Q5', a.provider, count(*) ads, count(*) filter (where a.creative_id is null) ads_no_creative,
+             count(*) filter (where a.creative_id is not null and c.id is null) ads_dangling,
+             count(*) filter (where c.id is not null and c.thumbnail_url is null and c.asset_url is null and c.video_url is null and c.cover_path is null and not (jsonb_typeof(c.cards)='array' and jsonb_array_length(c.cards)>0)) ads_creative_nothing
+            from external_ads a left join external_creatives c on c.id = a.creative_id where a.is_demo = false group by 2 order by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            SET LOCAL statement_timeout = '20s';
+            select 'Q6', c.provider, coalesce(c.format,'(null)') fmt, count(*) cards,
+             count(*) filter (where coalesce(e->>'image_url',e->>'asset_url',e->>'video_url',e->>'thumbnail_url') is not null) cards_with_media,
+             count(*) filter (where e->>'video_url' is not null) cards_video
+            from external_creatives c, lateral jsonb_array_elements(case when jsonb_typeof(c.cards)='array' then c.cards else '[]'::jsonb end) e
+            where c.is_demo = false and jsonb_typeof(e)='object' group by 2,3 order by 2,3;
+            ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
