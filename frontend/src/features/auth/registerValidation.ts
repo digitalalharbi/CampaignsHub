@@ -71,7 +71,7 @@ export function passwordProblem(password: string, ar: boolean): string | undefin
   return undefined
 }
 
-export function validateAccountStep(form: AccountFields, ar: boolean): AccountErrors {
+export function validateAccountStep(form: AccountFields, ar: boolean, phoneRequired = true): AccountErrors {
   const c = COPY[ar ? 'ar' : 'en']
   const errors: AccountErrors = {}
 
@@ -93,7 +93,7 @@ export function validateAccountStep(form: AccountFields, ar: boolean): AccountEr
    * the applicant is already filling a form, is the only kind version of that rule.
    */
   if (form.phone.trim() === '') {
-    errors.phone = c.required
+    if (phoneRequired) errors.phone = c.required
   } else if (normalisePhone(form.phone, form.dial_code) === null) {
     errors.phone = c.phone
   }

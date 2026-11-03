@@ -244,7 +244,9 @@ final class OnboardingController extends Controller
 
     private function requireVerified(Request $request): void
     {
-        abort_if($request->user()->email_verified_at === null, 403, 'Please verify your email first.');
+        $user = $request->user();
+
+        abort_if($user->email_verified_at === null && ! $user->emailUnprovenByPolicy(), 403, 'Please verify your email first.');
     }
 
     private function makeClient(Tenant $tenant, string $name): ClientWorkspace

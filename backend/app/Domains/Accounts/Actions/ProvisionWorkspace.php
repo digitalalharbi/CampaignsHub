@@ -10,6 +10,7 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\TransitionAccountState;
+use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
@@ -57,6 +58,7 @@ final class ProvisionWorkspace
         private readonly GrantMembership $grants,
         private readonly TransitionAccountState $transitions,
         private readonly RegistrationPolicy $policy,
+        private readonly AuditLogger $audit,
     ) {}
 
     /**
@@ -65,7 +67,7 @@ final class ProvisionWorkspace
      * `paid` and never reversed. A refund or a chargeback leaves the row saying `refunded`, and an
      * application whose fee came back has not been paid for however it once looked.
      */
-    private function hasSettledPayment(RegistrationRequest $request): bool
+    public function hasSettledPayment(RegistrationRequest $request): bool
     {
         return SubscriptionPayment::query()
             ->where('registration_request_id', $request->getKey())
@@ -92,7 +94,9 @@ final class ProvisionWorkspace
             return ['tenant' => $request->tenant, 'user' => User::where('email', $request->email)->firstOrFail()];
         }
 
-        if (! $request->emailIsVerified()) {
+        $policy = $this->policy->for($request);
+
+        if ($policy['requires_email'] && ! $request->emailIsVerified()) {
             throw new RuntimeException('A workspace cannot be created before the email address is verified.');
         }
 
@@ -115,7 +119,7 @@ final class ProvisionWorkspace
          * a SETTLED charge must exist for it. A refunded one does not count, because money that came
          * back is money we do not have.
          */
-        if ($this->policy->for($request)['requires_payment'] && ! $this->hasSettledPayment($request)) {
+        if ($policy['requires_payment'] && ! $this->hasSettledPayment($request)) {
             throw new RuntimeException(
                 'A workspace cannot be created for an application that owes payment: no settled charge exists for it.'
             );
@@ -134,8 +138,8 @@ final class ProvisionWorkspace
                 /*
                  * The wizard resumes at the first question this applicant has NOT answered.
                  *
-                 * Never `verify_email`: by the time a workspace exists the address has been proven,
-                 * and re-asking would be the wizard contradicting the gate that let them in. Someone
+                 * Never `verify_email`: by the time a workspace exists the gate has been cleared, and
+                 * re-asking would be the wizard contradicting the gate that let them in. Someone
                  * who chose their path on the public site already answered the first two questions
                  * and lands on `workspace`.
                  */
@@ -161,19 +165,36 @@ final class ProvisionWorkspace
             ]);
 
             /*
-             * forceFill, because neither timestamp is mass-assignable — marking a credential proved
-             * is not something a payload may do. Both WERE proved on the gated path: the address by
-             * the email link, the number by the mobile gate (PHONE-VERIFY-001), and asking the
-             * customer to prove either again after they have paid would be absurd.
+             * forceFill, because neither timestamp is mass-assignable: marking a credential proved is not something a
+             * payload may do. Each is copied from the application, so it says exactly what happened and when. A gate
+             * that policy turned off proved nothing, so its timestamp stays null.
              *
-             * The phone timestamp is what makes the number a sign-in credential at all
-             * (AUTH-PHONE-001). A number that arrives any other way — a profile edit, an import —
-             * carries no such proof and cannot open a session until somebody confirms it.
+             * The phone timestamp is what makes the number a sign-in credential at all (AUTH-PHONE-001). This used to
+             * write now() for any number on the row, which claimed proof for an application a reviewer had excused from
+             * the mobile gate.
              */
+            $emailUnproven = ! $request->emailIsVerified();
             $user->forceFill([
                 'email_verified_at' => $request->email_verified_at,
-                'phone_verified_at' => $request->phone === null ? null : now(),
+                'phone_verified_at' => $request->phone === null ? null : $request->mobile_verified_at,
+                'email_unproven_by_policy_at' => $emailUnproven ? now() : null,
             ])->save();
+
+            $notProved = array_values(array_filter([
+                $emailUnproven ? 'email' : null,
+                $request->phone !== null && ! $request->mobileIsVerified() ? 'mobile' : null,
+            ]));
+
+            if ($notProved !== []) {
+                $this->audit->log(
+                    action: 'registration.verification_not_required_by_policy',
+                    entityType: RegistrationRequest::class,
+                    entityId: (string) $request->getKey(),
+                    after: ['channels' => $notProved, 'effective_policy' => $request->effective_policy],
+                    reason: 'verification_not_required_by_policy',
+                    tenantId: (string) $tenant->id,
+                );
+            }
 
             $ownerRole = Role::firstOrCreate(
                 ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],
@@ -229,7 +250,7 @@ final class ProvisionWorkspace
             $this->transitions->provision(
                 $tenant,
                 AccountState::Active,
-                'Provisioned from registration request '.$request->getKey().' after verification and approval.',
+                'Provisioned from registration request '.$request->getKey().' after its required gates were cleared.',
             );
 
             $request->forceFill([

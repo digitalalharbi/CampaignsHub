@@ -6,7 +6,10 @@ namespace App\Domains\Accounts\Actions;
 
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\RegistrationVerificationService;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Tenancy\Enums\Portal;
@@ -31,14 +34,25 @@ final class StartRegistration
     public function __construct(
         private readonly RegistrationVerificationService $verification,
         private readonly AuditLogger $audit,
+        private readonly RegistrationPolicy $policy,
+        private readonly RegistrationVerificationSettings $settings,
+        private readonly AdvanceRegistration $advance,
     ) {}
 
     /**
+     * @param  bool  $advanceThroughOpenGates  False when the caller proves the address itself and advances afterwards
      * @return array{request: RegistrationRequest, verification: array<string, mixed>}
      */
-    public function execute(RegisterData $data, ?string $requestedPortal = null, ?string $planCode = null, ?string $billingInterval = null): array
-    {
-        $request = DB::transaction(function () use ($data, $requestedPortal, $planCode, $billingInterval): RegistrationRequest {
+    public function execute(
+        RegisterData $data,
+        ?string $requestedPortal = null,
+        ?string $planCode = null,
+        ?string $billingInterval = null,
+        bool $advanceThroughOpenGates = true,
+    ): array {
+        $isNew = false;
+
+        $request = DB::transaction(function () use ($data, $requestedPortal, $planCode, $billingInterval, &$isNew): RegistrationRequest {
             $existing = RegistrationRequest::query()
                 ->whereRaw('lower(email) = ?', [mb_strtolower($data->email)])
                 ->whereNull('tenant_id')
@@ -73,10 +87,24 @@ final class StartRegistration
                  * `PendingApproval` walk themselves back to the start of the queue, and one who had
                  * cleared a payment gate re-enter it unpaid.
                  */
+                /*
+                 * Once the address has been proved, or policy has said nothing will ever prove it, this form proves
+                 * nothing about who is submitting it. It used to overwrite the password and the number all the same,
+                 * so knowing an address was enough to put your own credential on somebody's application. Only the
+                 * choice of plan may still move.
+                 */
+                if ($existing->emailIsVerified() || ! $this->policy->for($existing)['requires_email']) {
+                    $existing->forceFill(array_intersect_key($attributes, array_flip(['plan_code', 'billing_interval'])))->save();
+
+                    return $existing->refresh();
+                }
+
                 $existing->forceFill($attributes + ['password' => Hash::make($data->password)])->save();
 
                 return $existing->refresh();
             }
+
+            $isNew = true;
 
             $fresh = new RegistrationRequest;
             $fresh->forceFill($attributes + [
@@ -84,6 +112,8 @@ final class StartRegistration
                 'password' => Hash::make($data->password),
                 'state' => AccountState::EmailVerificationRequired->value,
                 'state_changed_at' => now(),
+                // Fixed here for this application's whole life: see `RegistrationPolicy::for`.
+                'effective_policy' => $this->settings->snapshot(),
             ])->save();
 
             return $fresh->refresh();
@@ -101,9 +131,17 @@ final class StartRegistration
             ],
         );
 
-        return [
-            'request' => $request,
-            'verification' => $this->verification->send($request, 'email'),
-        ];
+        /*
+         * With the email gate off there is no challenge to send, and an applicant left on that state would wait for a
+         * message that is never coming. So a new application moves straight to the next thing it really owes. An
+         * existing one keeps its state, for the reason given above.
+         */
+        $verification = $this->verification->send($request, 'email');
+
+        if ($isNew && $advanceThroughOpenGates && ! $this->policy->for($request)['requires_email']) {
+            $request = $this->advance->reconcile($request);
+        }
+
+        return ['request' => $request->refresh(), 'verification' => $verification];
     }
 }

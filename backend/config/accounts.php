@@ -68,6 +68,10 @@ return [
      */
     'registration_throttle' => (int) env('REGISTRATION_THROTTLE_PER_MINUTE', 6),
 
+    // SIGNUP-VERIFY-POLICY-001 — applications per hour per IP while the email gate is OFF. Not applied while it is on.
+    'unverified_registration_per_hour' => (int) env('REGISTRATION_UNVERIFIED_PER_HOUR', 20),
+    'unverified_registration_per_hour_local' => (int) env('REGISTRATION_UNVERIFIED_PER_HOUR_LOCAL', 1000),
+
     /*
      * Re-issuing a verification challenge, in PRODUCTION (SIGNUP-THROTTLE-001).
      *

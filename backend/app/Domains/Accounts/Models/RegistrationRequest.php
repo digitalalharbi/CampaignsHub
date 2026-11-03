@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Accounts\Models;
 
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Services\RegistrationPolicy;
+use App\Domains\Accounts\Services\RegistrationVerificationService;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -65,6 +67,8 @@ final class RegistrationRequest extends Model
         'provisioned_at' => 'datetime',
         'state_changed_at' => 'datetime',
         'review_concessions' => 'array',
+        'effective_policy' => 'array',
+        'approved_at' => 'datetime',
     ];
 
     /** @return BelongsTo<Tenant, $this> */
@@ -122,7 +126,11 @@ final class RegistrationRequest extends Model
             'email_verified' => $this->emailIsVerified(),
             'mobile_verified' => $this->mobileIsVerified(),
             'mobile_resend_after' => $this->mobileResendAfter(),
-            'mobile_delivery_status' => $this->mobileDeliveryStatus(),
+            'mobile_delivery_status' => $this->deliveryStatus('mobile'),
+            'email_delivery_status' => $this->deliveryStatus('email'),
+            // A fact and a requirement are different things. `email_verified: false` beside `not_required_by_policy`
+            // means nobody asked, and it never means the address was proved.
+            'verification' => $this->verificationStanding(),
             // Present only when there is something the applicant can act on, so the screen never
             // shows an empty "next step" box.
             'next_step' => $this->nextStep($ar),
@@ -149,13 +157,43 @@ final class RegistrationRequest extends Model
         return max(0, $cooldownSeconds - (int) $latest->created_at->diffInSeconds(now()));
     }
 
-    private function mobileDeliveryStatus(): ?string
+    /**
+     * The newest outcome on a channel: a refused send has no challenge row, so the send log is asked first.
+     */
+    private function deliveryStatus(string $channel): ?string
     {
+        $latest = RegistrationSendLog::query()
+            ->where('registration_request_id', $this->getKey())
+            ->where('channel', $channel)
+            ->latest('id')
+            ->value('outcome');
+
+        if (in_array($latest, [RegistrationSendLog::BLOCKED_GLOBAL, RegistrationSendLog::BLOCKED_APPLICATION], true)) {
+            return RegistrationVerificationService::BLOCKED;
+        }
+
         return RegistrationVerification::query()
             ->where('registration_request_id', $this->getKey())
-            ->where('channel', 'mobile')
+            ->where('channel', $channel)
             ->latest('created_at')
             ->value('delivery_status');
+    }
+
+    /** @return array{email: string, mobile: string} */
+    private function verificationStanding(): array
+    {
+        $policy = app(RegistrationPolicy::class)->for($this);
+
+        $standing = fn (bool $proved, bool $required): string => match (true) {
+            $proved => 'verified',
+            $required => 'required',
+            default => 'not_required_by_policy',
+        };
+
+        return [
+            'email' => $standing($this->emailIsVerified(), $policy['requires_email']),
+            'mobile' => $standing($this->mobileIsVerified(), $policy['requires_mobile']),
+        ];
     }
 
     /** The one thing this applicant should do next, or null when they are waiting on us. */

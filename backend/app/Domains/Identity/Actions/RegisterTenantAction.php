@@ -54,7 +54,7 @@ final class RegisterTenantAction
         ?string $requestedPortal = null,
         ?string $planCode = null,
     ): User {
-        $started = $this->start->execute($data, $requestedPortal, $planCode);
+        $started = $this->start->execute($data, $requestedPortal, $planCode, advanceThroughOpenGates: false);
 
         /** @var RegistrationRequest $request */
         $request = $started['request'];

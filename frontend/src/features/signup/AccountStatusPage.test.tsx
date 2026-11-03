@@ -332,4 +332,52 @@ describe('AccountStatusPage', () => {
 
     await waitFor(() => expect(vi.mocked(fetchRegistration).mock.calls.length).toBe(attempts + 1))
   })
+
+  /* SIGNUP-VERIFY-POLICY-001 */
+  describe('a gate this application does not owe', () => {
+    const open = (e: RegistrationEnvelope) => {
+      vi.mocked(fetchRegistration).mockResolvedValue(e)
+      renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1' })
+    }
+
+    it('shows no email step, and no resend button, when the email gate is off', async () => {
+      open(envelope('approved_awaiting_payment', { email_verified: false }, { requires_email: false, requires_payment: true }))
+
+      expect(await screen.findByTestId('registration-steps')).toBeInTheDocument()
+      expect(screen.queryByTestId('registration-step-email')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('registration-resend-email')).not.toBeInTheDocument()
+      expect(screen.getByTestId('registration-step-payment')).toHaveAttribute('data-done', 'false')
+    })
+
+    it('still shows the step on an older payload that does not mention it', async () => {
+      open(envelope('email_verification_required'))
+
+      expect(await screen.findByTestId('registration-step-email')).toHaveAttribute('data-done', 'false')
+    })
+
+    it('goes straight to the mobile gate with the email gate off', async () => {
+      open(envelope('mobile_verification_required', { email_verified: false }, { requires_email: false, requires_mobile: true }))
+
+      expect(await screen.findByTestId('registration-otp')).toBeInTheDocument()
+      expect(screen.queryByTestId('registration-step-email')).not.toBeInTheDocument()
+    })
+
+    it('says a sending limit stopped the message rather than that it was sent', async () => {
+      open(envelope('email_verification_required', { email_delivery_status: 'blocked_by_send_limit' }))
+
+      expect(await screen.findByTestId('registration-email-delivery')).toHaveTextContent(/sending limit/i)
+    })
+
+    it('says the link was sent only when it was', async () => {
+      open(envelope('email_verification_required', { email_delivery_status: 'sent' }))
+
+      expect(await screen.findByTestId('registration-email-delivery')).toHaveTextContent(/We sent the confirmation link/)
+    })
+
+    it('offers sign-in, with no session assumed, when a workspace appeared without one', async () => {
+      open(envelope('active', { email_verified: false, provisioned: true }, { requires_email: false }))
+
+      expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
+    })
+  })
 })

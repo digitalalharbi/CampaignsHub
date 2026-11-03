@@ -198,6 +198,13 @@ final class EmailSignInController extends Controller
             throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
         }
 
+        // A code sent to an address nobody proved is not proof of the account (SIGNUP-VERIFY-POLICY-001).
+        if ($user->emailUnprovenByPolicy()) {
+            $this->audit($request, 'auth.email_code.unproven_address', ['email' => $email], $user);
+
+            throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
+        }
+
         $this->assertMaySignIn($user);
 
         Auth::guard('web')->login($user, (bool) ($data['remember'] ?? false));

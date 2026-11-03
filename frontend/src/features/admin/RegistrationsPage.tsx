@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Clock, CreditCard, Loader2, MailQuestion, ShieldAlert, X } from 'lucide-react'
 import {
-  approveRegistration, fetchRegistration, fetchRegistrations, rejectRegistration,
+  approveRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
   requestRegistrationInfo, updateRegistrationTerms,
   type AdminRegistration,
 } from './api'
@@ -41,6 +41,8 @@ const COPY = {
     save: 'حفظ', cancel: 'إلغاء',
     infoRequested: 'بانتظار رد مقدّم الطلب',
     verifiedEmail: 'بريد مؤكد', verifiedMobile: 'جوال مؤكد',
+    notRequiredEmail: 'البريد غير مؤكد: لا تطلبه سياسة هذا الطلب', notRequiredMobile: 'الجوال غير مؤكد: لا تطلبه سياسة هذا الطلب',
+    reevaluate: 'إعادة تقييم التحقق', reevaluateHint: 'يطبق سياسة التحقق الحالية على هذا الطلب فقط. لا يغيّر الدفع أو الاعتماد ولا يؤكد شيئًا.',
     selectOne: 'اختر طلبًا لعرض تفاصيله.',
   },
   en: {
@@ -61,6 +63,8 @@ const COPY = {
     save: 'Save', cancel: 'Cancel',
     infoRequested: 'Waiting on the applicant',
     verifiedEmail: 'Email confirmed', verifiedMobile: 'Mobile confirmed',
+    notRequiredEmail: 'Email unverified: not required for this application', notRequiredMobile: 'Mobile unverified: not required for this application',
+    reevaluate: 'Re-evaluate verification', reevaluateHint: 'Applies the current verification policy to this application only. It changes no payment or approval, and proves nothing.',
     selectOne: 'Select an application to see its detail.',
   },
 } as const
@@ -194,7 +198,8 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
   const [terms, setTerms] = useState({ plan_code: '', discount_percent: '', trial_days: '', reason: '' })
-  const [open, setOpen] = useState<'reject' | 'info' | 'terms' | null>(null)
+  const [why, setWhy] = useState('')
+  const [open, setOpen] = useState<'reject' | 'info' | 'terms' | 'reevaluate' | null>(null)
 
   const detail = useQuery({ queryKey: ['admin', 'registration', id], queryFn: () => fetchRegistration(id) })
 
@@ -210,6 +215,7 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
   const approve = useMutation({ mutationFn: () => approveRegistration(id), onSuccess: after, onError: failed })
   const reject = useMutation({ mutationFn: () => rejectRegistration(id, reason), onSuccess: after, onError: failed })
   const info = useMutation({ mutationFn: () => requestRegistrationInfo(id, note), onSuccess: after, onError: failed })
+  const reevaluate = useMutation({ mutationFn: () => reevaluateRegistrationVerification(id, why), onSuccess: after, onError: failed })
   const saveTerms = useMutation({
     mutationFn: () => updateRegistrationTerms(id, {
       plan_code: terms.plan_code || undefined,
@@ -250,8 +256,12 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
-        <span data-done={r.email_verified} className={`rounded-lg px-2.5 py-1 font-semibold ${r.email_verified ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>{copy.verifiedEmail}</span>
-        <span data-done={r.mobile_verified} className={`rounded-lg px-2.5 py-1 font-semibold ${r.mobile_verified ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>{copy.verifiedMobile}</span>
+        <span data-testid="registration-standing-email" data-done={r.email_verified} data-standing={r.verification?.email} className={`rounded-lg px-2.5 py-1 font-semibold ${r.email_verified ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
+          {r.verification?.email === 'not_required_by_policy' ? copy.notRequiredEmail : copy.verifiedEmail}
+        </span>
+        <span data-testid="registration-standing-mobile" data-done={r.mobile_verified} data-standing={r.verification?.mobile} className={`rounded-lg px-2.5 py-1 font-semibold ${r.mobile_verified ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
+          {r.verification?.mobile === 'not_required_by_policy' ? copy.notRequiredMobile : copy.verifiedMobile}
+        </span>
       </div>
 
       {/* Which gates THIS application must clear — the plan's answer, or a reviewer's override of it. */}
@@ -292,7 +302,21 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
           <button data-testid="registration-terms-open" onClick={() => setOpen('terms')} className="rounded-xl border border-border px-3.5 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
             {copy.terms}
           </button>
+          <button data-testid="registration-reevaluate-open" onClick={() => setOpen('reevaluate')} className="rounded-xl border border-border px-3.5 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
+            {copy.reevaluate}
+          </button>
         </div>
+      )}
+
+      {open === 'reevaluate' && (
+        <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); if (why.trim().length >= 5) reevaluate.mutate() }}>
+          <p className="text-xs text-text-secondary">{copy.reevaluateHint}</p>
+          <TextInput id="reevaluate-reason" label={copy.termsReason} value={why} onChange={(e) => setWhy(e.target.value)} required />
+          <div className="flex gap-2">
+            <Button data-testid="registration-reevaluate-confirm" type="submit" loading={reevaluate.isPending} size="sm">{copy.save}</Button>
+            <button type="button" onClick={() => setOpen(null)} className="text-sm text-text-secondary">{copy.cancel}</button>
+          </div>
+        </form>
       )}
 
       {/* A refusal the applicant is shown needs words: a blank reason never leaves the browser. */}

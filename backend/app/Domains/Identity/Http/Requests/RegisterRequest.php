@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Http\Requests;
 
 use App\Domains\Accounts\Enums\AccountType;
+use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Services\RegistrationPolicy;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Subscriptions\Services\PlanCatalogue;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Rules\PhoneNumberRule;
@@ -97,8 +100,29 @@ final class RegisterRequest extends FormRequest
              *
              * `UniquePhoneRule` compares in E.164, so `05…`, `9665…` and `+9665…` are one number and
              * a second account cannot be opened on any of the three spellings.
+             *
+             * SIGNUP-VERIFY-POLICY-001 — required exactly when this application will owe the mobile gate. With the
+             * gate off, a number given anyway is still checked and stays unproved.
              */
-            'phone' => ['required', 'string', 'max:40', new PhoneNumberRule, new UniquePhoneRule],
+            'phone' => [
+                Rule::requiredIf(fn (): bool => $this->owesMobileGate()), 'nullable',
+                'string', 'max:40', new PhoneNumberRule, new UniquePhoneRule,
+            ],
+            // No person sees this field. Enforced only while the email gate is off, so the default path is unchanged.
+            'website' => Rule::when(! app(RegistrationVerificationSettings::class)->emailEnabled(), ['prohibited']),
         ];
+    }
+
+    /** The same answer `RegistrationPolicy` will give the application this form is about to open. */
+    private function owesMobileGate(): bool
+    {
+        $application = new RegistrationRequest;
+        $application->forceFill([
+            'plan_code' => $this->input('plan_code'),
+            'account_type' => $this->input('account_type'),
+            'effective_policy' => app(RegistrationVerificationSettings::class)->snapshot(),
+        ]);
+
+        return app(RegistrationPolicy::class)->for($application)['requires_mobile'];
     }
 }

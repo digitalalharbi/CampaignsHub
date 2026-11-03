@@ -65,6 +65,7 @@ final class AdvanceRegistration
             'reviewed_by' => $reviewerId,
             'reviewed_at' => now(),
             'review_note' => $note,
+            'approved_at' => now(),
         ])->save();
 
         /*
@@ -131,6 +132,55 @@ final class AdvanceRegistration
     }
 
     /**
+     * Ask again what this application is waiting on, with no new fact.
+     *
+     * For an application opened with a gate already off, and for an explicit re-evaluation. It can grant nothing the
+     * row does not already justify: `ProvisionWorkspace` still checks every gate.
+     */
+    public function reconcile(RegistrationRequest $request): RegistrationRequest
+    {
+        return $this->advance($request->refresh());
+    }
+
+    /**
+     * Re-fix this application to the platform's verification policy as it stands now (SIGNUP-VERIFY-POLICY-001).
+     *
+     * The authorized way to move somebody already in the queue, one application at a time, with a reason. Facts already
+     * proved stay proved, and approval and payment are not touched.
+     */
+    public function reevaluateVerification(RegistrationRequest $request, array $snapshot, string $reason, ?int $actorId): RegistrationRequest
+    {
+        $before = $request->effective_policy;
+
+        $request->forceFill(['effective_policy' => $snapshot])->save();
+
+        $this->audit->log(
+            action: 'registration.verification_reevaluated',
+            entityType: RegistrationRequest::class,
+            entityId: (string) $request->getKey(),
+            before: ['effective_policy' => $before, 'state' => $request->state->value],
+            after: ['effective_policy' => $snapshot],
+            reason: $reason,
+            userId: $actorId,
+        );
+
+        $wasAtEmailGate = $request->state === AccountState::EmailVerificationRequired;
+        $request = $this->reconcile($request);
+
+        // Sent back to a gate nobody is holding a challenge for: send one, or the applicant waits for nothing. Issued
+        // here because the normal route into this state is opening the application, which sends its own.
+        if (! $wasAtEmailGate && $request->state === AccountState::EmailVerificationRequired) {
+            try {
+                app(RegistrationVerificationService::class)->send($request, 'email');
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $request;
+    }
+
+    /**
      * Work out what this application is now waiting on, and move it there.
      *
      * The two flags are facts the CALLER has just established and that are not yet readable from the
@@ -149,7 +199,7 @@ final class AdvanceRegistration
 
         $policy = $this->policy->for($request);
 
-        if (! $request->emailIsVerified()) {
+        if ($policy['requires_email'] && ! $request->emailIsVerified()) {
             return $this->moveTo($request, AccountState::EmailVerificationRequired);
         }
 
@@ -159,13 +209,16 @@ final class AdvanceRegistration
 
         // Approval counts as outstanding until it has actually been granted — `reviewed_at` alone
         // is not enough, because a rejection also sets it.
-        $approved = $approvalGranted || $request->state === AccountState::ApprovedAwaitingPayment;
+        $approved = $approvalGranted || $request->approved_at !== null || $request->state === AccountState::ApprovedAwaitingPayment;
         if ($policy['requires_approval'] && ! $approved) {
             return $this->moveTo($request, AccountState::PendingApproval);
         }
 
-        if ($policy['requires_payment'] && ! $paymentConfirmed) {
-            return $this->moveTo($request, AccountState::ApprovedAwaitingPayment);
+        if ($policy['requires_payment'] && ! $paymentConfirmed && ! $this->provision->hasSettledPayment($request)) {
+            // A charge already opened stays in its own state: asking again says nothing about the money.
+            return $request->state === AccountState::PaymentPending
+                ? $request
+                : $this->moveTo($request, AccountState::ApprovedAwaitingPayment);
         }
 
         /*

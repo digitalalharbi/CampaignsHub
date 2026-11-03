@@ -73,6 +73,17 @@ final class PasswordResetService
             return 'ignored';
         }
 
+        /*
+         * An address nobody ever proved cannot recover the account (SIGNUP-VERIFY-POLICY-001).
+         *
+         * It was typed at signup with no check, so it may belong to a stranger, and mailing that stranger a reset link
+         * would hand them the account. It answers the same way as an unknown address, so the form stays no oracle. The
+         * way out is to prove the address from inside a session, or for a platform administrator to help.
+         */
+        if ($user->emailUnprovenByPolicy()) {
+            return 'ignored';
+        }
+
         $secret = $this->issue($email, 'password_reset', self::TTL_MINUTES);
 
         /*
@@ -226,8 +237,8 @@ final class PasswordResetService
         }
 
         $user = User::where('email', $email)->first();
-        if ($user === null) {
-            // The account went away between issuing and using. Same answer: the link cannot be used.
+        if ($user === null || $user->emailUnprovenByPolicy()) {
+            // The account went away between issuing and using, or was never proved. Same answer: the link cannot be used.
             throw $invalid;
         }
 

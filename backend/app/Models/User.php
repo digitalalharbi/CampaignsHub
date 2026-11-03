@@ -63,10 +63,23 @@ class User extends Authenticatable
         'password', 'remember_token',
     ];
 
+    /**
+     * This address was never proved, because signup policy did not ask (SIGNUP-VERIFY-POLICY-001).
+     *
+     * Holding it proves nothing about who holds the account, so it opens no recovery and no passwordless sign-in until
+     * the person proves it from inside a session. An account with neither timestamp predates the policy and keeps the
+     * treatment it has today.
+     */
+    public function emailUnprovenByPolicy(): bool
+    {
+        return $this->email_verified_at === null && $this->email_unproven_by_policy_at !== null;
+    }
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'email_unproven_by_policy_at' => 'datetime',
             'password' => 'hashed',
             'is_platform_admin' => 'bool',
             'disabled_at' => 'datetime',

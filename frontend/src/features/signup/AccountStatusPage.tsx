@@ -41,6 +41,8 @@ const COPY = {
     startOver: 'إنشاء حساب',
     awaitingProvider: 'لم يُفعَّل مزوّد الإرسال بعد (بانتظار بيانات الاعتماد)، لذلك لم تُرسل الرسالة فعليًا. استخدم زر التطوير أدناه مؤقتًا.',
     codeSent: 'أرسلنا رمز تحقق برسالة نصية إلى رقم جوالك.',
+    linkSent: 'أرسلنا رابط التأكيد إلى بريدك الإلكتروني.',
+    sendLimit: 'لم تُرسل الرسالة: بلغ الإرسال حده الحالي. حاول لاحقًا أو تواصل معنا، ولن يتأثر طلبك.',
     deliveryFailed: 'تعذّر إرسال الرمز الآن. انتظر انتهاء المهلة ثم حاول مرة أخرى.',
     devVerify: 'تأكيد الآن (تطوير)',
     devCode: 'رمز التطوير',
@@ -75,6 +77,8 @@ const COPY = {
     startOver: 'Create an account',
     awaitingProvider: 'No delivery provider is configured yet (awaiting credentials), so the message was not actually sent. Use the dev button below for now.',
     codeSent: 'We sent a verification code by SMS to your mobile number.',
+    linkSent: 'We sent the confirmation link to your email address.',
+    sendLimit: 'The message was not sent: the sending limit has been reached. Try again later or contact us. Your application is not affected.',
     deliveryFailed: 'We could not send the code right now. Wait for the cooldown, then try again.',
     devVerify: 'Verify now (dev)',
     devCode: 'Dev code',
@@ -283,6 +287,7 @@ export function AccountStatusPage() {
   const devLink = issued?.dev_link ?? null
   const devCode = issued?.dev_code ?? null
   const mobileDelivery = issued?.channel === 'mobile' ? issued.delivery_status : reg.mobile_delivery_status
+  const emailDelivery = issued?.channel === 'email' ? issued.delivery_status : reg.email_delivery_status
 
   return (
     <AuthShell portal={reg.requested_portal === 'agency' ? 'agency' : 'default'}>
@@ -321,7 +326,12 @@ export function AccountStatusPage() {
 
         {reg.state === 'email_verification_required' && (
           <div className="flex flex-col items-center gap-3">
-            <p className="text-xs text-text-muted">{c.awaitingProvider}</p>
+            <p data-testid="registration-email-delivery" className="text-xs text-text-muted">
+              {emailDelivery === 'sent' || emailDelivery === 'queued' || emailDelivery === 'pending'
+                ? c.linkSent
+                : emailDelivery === 'blocked_by_send_limit' ? c.sendLimit
+                : emailDelivery === 'failed' ? c.deliveryFailed : c.awaitingProvider}
+            </p>
             {devLink && (
               <a data-testid="registration-dev-verify" href={devLink} className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
                 <ShieldCheck size={16} /> {c.devVerify}
@@ -346,6 +356,7 @@ export function AccountStatusPage() {
             <p className="text-xs text-text-muted">
               {mobileDelivery === 'sent' || mobileDelivery === 'pending' || mobileDelivery === 'queued'
                 ? c.codeSent
+                : mobileDelivery === 'blocked_by_send_limit' ? c.sendLimit
                 : mobileDelivery === 'failed' ? c.deliveryFailed : c.awaitingProvider}
             </p>
             {devCode && (
@@ -508,14 +519,14 @@ function ActivationSteps({
   reg, policy, copy,
 }: {
   reg: { email_verified: boolean; mobile_verified: boolean; state: RegistrationState; provisioned: boolean }
-  policy?: { requires_mobile: boolean; requires_approval: boolean; requires_payment: boolean }
+  policy?: { requires_email?: boolean; requires_mobile: boolean; requires_approval: boolean; requires_payment: boolean }
   copy: typeof COPY['en'] | typeof COPY['ar']
 }) {
   const reached = (done: boolean) => (done ? 'text-[var(--positive-foreground)]' : 'text-text-muted')
 
-  const steps: Array<{ key: string; label: string; done: boolean }> = [
-    { key: 'email', label: copy.stepEmail, done: reg.email_verified },
-  ]
+  // A gate this application does not owe is no step at all. Never shown as done: nobody proved anything.
+  const steps: Array<{ key: string; label: string; done: boolean }> = []
+  if (policy?.requires_email !== false) steps.push({ key: 'email', label: copy.stepEmail, done: reg.email_verified })
   if (policy?.requires_mobile) steps.push({ key: 'mobile', label: copy.stepMobile, done: reg.mobile_verified })
   if (policy?.requires_approval) {
     steps.push({

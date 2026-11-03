@@ -21,6 +21,7 @@ use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
+use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
@@ -127,6 +128,13 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registrations.show');
         Route::patch('/registrations/{registration}', [PlatformRegistrationController::class, 'updateTerms'])
             ->name('registrations.terms');
+        Route::post('/registrations/{registration}/reevaluate-verification', [PlatformRegistrationController::class, 'reevaluateVerification'])
+            ->middleware('throttle:30,1')->name('registrations.reevaluate-verification');
+        // SIGNUP-VERIFY-POLICY-001 — the platform's two verification switches, limits and cost picture.
+        Route::get('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'show'])
+            ->name('registration-verification-policy.show');
+        Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
+            ->middleware('throttle:30,1')->name('registration-verification-policy.update');
         Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
             ->name('registrations.approve');
         Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])
