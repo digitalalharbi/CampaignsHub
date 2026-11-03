@@ -1,30 +1,20 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_CLIENT_CONTACT, switchToEnglish } from './helpers'
+import { DEMO_CLIENT_CONTACT, signIn, switchToEnglish } from './helpers'
 
 /**
- * LOGIN-E2E-001 — «الدخول بدون كلمة مرور» is authentication, not a screen that changes.
+ * LOGIN-NO-EMAIL-CODE-001 — the code left `/login` (#943); what remains of it is the client contact's own door, `/portal/login`.
  *
- * ## What these prove that a URL assertion cannot
- *
- * A sign-in flow can look finished while being hollow: a code that verifies, an address bar that
- * changes, and no session behind it. Every journey here ends by asking the SERVER a question the
- * interface cannot answer on its own — `GET /auth/me` returns the person who signed in, and an
- * endpoint inside the portal they landed in actually answers.
- *
- * ## Why the code is readable at all
- *
- * Outside production the backend returns the code it just issued (`dev_code`, hard-gated
- * server-side) and the page fills the six boxes with it. That affordance is what makes this branch
- * walkable without an inbox, and it is the same one registration and the client portal already use.
+ * A sign-in flow can look finished while being hollow, so the journeys end by asking the SERVER. Outside production the backend returns
+ * the code it just issued (`dev_code`, hard-gated server-side) and the page fills the six boxes with it.
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
 /** Ask for a code, and wait until one is actually in the field. */
 async function requestCode(page: Page, email: string): Promise<void> {
-  await page.getByTestId('login-email').fill(email)
-  await page.getByTestId('login-request-code').click()
+  await page.getByTestId('portal-login-email').fill(email)
+  await page.getByTestId('portal-login-send').click()
 
-  await expect(page.getByTestId('login-code'), `${email} was not offered a code step`).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('portal-login-code'), `${email} was not offered a code step`).toBeVisible({ timeout: 20_000 })
   await expect(
     page.getByTestId('login-otp-5'),
     'the issued code never arrived, so there is nothing to submit',
@@ -42,47 +32,7 @@ async function whoAmI(page: Page): Promise<string | null> {
   return (await res.json()).data?.user?.email ?? null
 }
 
-test.describe('the email code opens a real session', () => {
-  /**
-   * The whole journey for an advertiser: card → code → session → the portal the server chose.
-   *
-   * The destination is asserted from the URL AND from a protected endpoint, because the first alone
-   * would pass for a page that simply navigated.
-   */
-  test('an advertiser signs in with a code and lands in /app with a live session', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'advertiser@campaignshub.io')
-
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
-
-    await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
-    expect(await whoAmI(page), 'the URL changed but no session was opened').toBe('advertiser@campaignshub.io')
-
-    // …and a real page inside that portal renders for this session.
-    await page.goto('/app/dashboard')
-    await expect(page).not.toHaveURL(/\/login/)
-  })
-
-  test('an agency operator signs in with a code and lands in /agency', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'agency@campaignshub.io')
-
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
-
-    await expect(page).toHaveURL(/\/(agency|switch)/, { timeout: 20_000 })
-    expect(await whoAmI(page)).toBe('agency@campaignshub.io')
-  })
-
-  test('the platform owner signs in with a code and lands in /admin', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'admin@campaignshub.io')
-
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
-
-    await expect(page).toHaveURL(/\/admin/, { timeout: 20_000 })
-    expect(await whoAmI(page)).toBe('admin@campaignshub.io')
-  })
-
+test.describe('a session the server recognises', () => {
   /**
    * A client contact types the same field and reaches the portal instead.
    *
@@ -90,20 +40,18 @@ test.describe('the email code opens a real session', () => {
    * asked which one they are. Asserted here beside the platform journeys because the whole claim of
    * one door is that these two look identical from the outside.
    */
-  test('a client contact reaches /portal through the same button', async ({ page }) => {
-    await page.goto('/login')
+  test('a client contact reaches /portal through their own door', async ({ page }) => {
+    await page.goto('/portal/login')
     await requestCode(page, DEMO_CLIENT_CONTACT)
 
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
+    await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
 
     await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20_000 })
   })
 
   /** The URL grants nothing: an advertiser session cannot walk into the agency console. */
   test('an app session cannot reach /agency or /admin by typing the address', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'advertiser@campaignshub.io')
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
+    await signIn(page, 'advertiser@campaignshub.io')
     await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
 
     /*
@@ -162,10 +110,8 @@ test.describe('the email code opens a real session', () => {
    * so a request already in flight cannot hand the credential back (`ACCESS-EXIT-003`). The browser
    * asymmetry was timing, not behaviour — webkit simply had fewer requests in flight at the click.
    */
-  test('signing out ends the session, and a new code opens another', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'advertiser@campaignshub.io')
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
+  test('signing out ends the session, and a new sign-in opens another', async ({ page }) => {
+    await signIn(page, 'advertiser@campaignshub.io')
     await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
     expect(await whoAmI(page), 'nothing to sign out of — the session never opened').toBe('advertiser@campaignshub.io')
 
@@ -181,9 +127,9 @@ test.describe('the email code opens a real session', () => {
 
 test.describe('what the code step does when things go wrong', () => {
   test('a wrong code is refused, in the same design, and signs nobody in', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/portal/login')
     await switchToEnglish(page)
-    await requestCode(page, 'wrong-code-probe@example.test')
+    await requestCode(page, DEMO_CLIENT_CONTACT)
 
     // Clear the pre-filled code and type six digits that are not it.
     for (let i = 5; i >= 0; i--) {
@@ -193,49 +139,42 @@ test.describe('what the code step does when things go wrong', () => {
     await page.getByTestId('login-otp-0').focus()
     await page.keyboard.type('000000')
 
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
+    await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
 
     await expect(page.getByTestId('login-error')).toBeVisible({ timeout: 20_000 })
-    await expect(page).toHaveURL(/\/login/)
+    await expect(page).toHaveURL(/\/portal\/login/)
     expect(await whoAmI(page)).toBeNull()
   })
 
   /** The resend is closed while the server's own window is closed. */
   test('the resend is disabled and counts down', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'cooldown-probe@example.test')
+    await page.goto('/portal/login')
+    await requestCode(page, DEMO_CLIENT_CONTACT)
 
-    const resend = page.getByTestId('login-resend')
+    const resend = page.getByTestId('portal-login-resend')
     await expect(resend).toBeDisabled()
     await expect(resend).toHaveText(/\d+/)
   })
 
   /** A mistyped address is correctable without a reload, and the card comes back intact. */
   test('changing the address returns to the card', async ({ page }) => {
-    await page.goto('/login')
-    await requestCode(page, 'typo@demo-company.local')
+    await page.goto('/portal/login')
+    await requestCode(page, DEMO_CLIENT_CONTACT)
 
-    await page.getByTestId('login-change-identifier').click()
+    await page.getByTestId('portal-login-change').click()
 
-    await expect(page.getByTestId('login-identify')).toBeVisible()
-    await expect(page.getByTestId('login-email')).toHaveValue('typo@demo-company.local')
-    await expect(page.getByTestId('login-code')).toHaveCount(0)
+    await expect(page.getByTestId('portal-login-email-form')).toBeVisible()
+    await expect(page.getByTestId('portal-login-email')).toHaveValue(DEMO_CLIENT_CONTACT)
+    await expect(page.getByTestId('portal-login-code')).toHaveCount(0)
   })
 
-  /**
-   * An address nobody holds is answered exactly like one somebody does, and then goes nowhere.
-   *
-   * Both halves matter. Refusing at the first step would tell a stranger which addresses have
-   * accounts here; signing them in would be worse.
-   */
-  test('an unknown address gets the same step, and signs nobody in', async ({ page }) => {
-    await page.goto('/login')
+  /** An address nobody holds is answered exactly like one somebody does. That no message goes to it is `PortalEmailSignInTest`. */
+  test('an unknown address gets the same step, and opens no platform session', async ({ page }) => {
+    await page.goto('/portal/login')
     await switchToEnglish(page)
     await requestCode(page, 'nobody-at-all@example.test')
 
-    await page.getByTestId('login-code').locator('button[type="submit"]').click()
-
-    await expect(page.getByTestId('login-error')).toBeVisible({ timeout: 20_000 })
+    await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
     expect(await whoAmI(page)).toBeNull()
   })
 
@@ -247,7 +186,7 @@ test.describe('what the code step does when things go wrong', () => {
    * own, so this asserts the pair rather than the absence.
    */
   test('the page states plainly whether the code was actually sent', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/portal/login')
 
     /*
      * The claim is a BICONDITIONAL, checked against what the server actually said.
@@ -257,8 +196,8 @@ test.describe('what the code step does when things go wrong', () => {
      * anything. What must be true either way is that the page warns exactly when the delivery state
      * is not one that means «it arrived», and stays quiet exactly when it is.
      */
-    const answered = page.waitForResponse((r) => r.url().includes('/auth/email-code/start') && r.status() === 200)
-    await requestCode(page, 'delivery-probe@example.test')
+    const answered = page.waitForResponse((r) => r.url().includes('/client/login/start') && r.status() === 200)
+    await requestCode(page, DEMO_CLIENT_CONTACT)
     const state = String((await (await answered).json()).data.delivery_status)
 
     /*
@@ -268,7 +207,7 @@ test.describe('what the code step does when things go wrong', () => {
      * configured. That way wiring a provider makes this test change meaning honestly instead of
      * failing, and removing the notice while still delivering nothing fails it.
      */
-    const shown = await page.getByTestId('login-code-undelivered').count() > 0
+    const shown = await page.getByTestId('portal-login-undelivered').count() > 0
 
     expect(
       shown,
