@@ -380,4 +380,57 @@ describe('AccountStatusPage', () => {
       expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
     })
   })
+
+  /* SIGNUP-DECISION-001 — three «approved» states, told apart, and none of them claims a payment. */
+  describe('what was decided', () => {
+    const open = (e: RegistrationEnvelope) => {
+      vi.mocked(fetchRegistration).mockResolvedValue(e)
+      renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1' })
+    }
+
+    it('says a waived account is active with nothing charged, and shows no payment step', async () => {
+      open(envelope('active', {
+        provisioned: true,
+        commercial: { outcome: 'approve_waiver', waived_by_admin: true, currency: 'SAR', renewal_amount: '990.00', renewal_on: '2027-11-03' },
+      }, { requires_payment: true }))
+
+      const note = await screen.findByTestId('registration-commercial')
+      expect(note).toHaveTextContent(/Nothing was charged/)
+      expect(note).toHaveTextContent('2027-11-03')
+      expect(note).toHaveTextContent('990.00 SAR')
+      expect(screen.queryByTestId('registration-step-payment')).not.toBeInTheDocument()
+    })
+
+    it('says a discount still has a remainder to pay, and charges what it quotes', async () => {
+      open(envelope('approved_awaiting_payment', {
+        plan_code: 'solo',
+        commercial: {
+          outcome: 'approve_discount', discount_percent: 25, currency: 'SAR', list_amount: '100.00', amount_due: '75.00',
+          quote: { plan_code: 'solo', currency: 'SAR', interval: 'monthly', due_now: '75.00', due_later: null, renews_in_days: 30, trial_days: 0, trial_fee: null, regular_monthly: '100.00', commitment_months: 0, total_committed: null, remaining_committed_payments: 0, next_payment_on: '2026-12-03' },
+        },
+      }, { requires_payment: true }))
+
+      expect(await screen.findByTestId('registration-commercial')).toHaveTextContent(/25% off/)
+      expect(screen.getByTestId('registration-step-payment')).toHaveAttribute('data-done', 'false')
+      expect(screen.getByTestId('registration-payment')).toBeInTheDocument()
+    })
+
+    it('says a trial is a trial', async () => {
+      open(envelope('active', {
+        provisioned: true,
+        commercial: { outcome: 'approve_trial', currency: 'SAR', renewal_amount: '100.00', renewal_on: '2026-12-01' },
+      }, { requires_payment: true }))
+
+      expect(await screen.findByTestId('registration-commercial')).toHaveTextContent(/trial ending 2026-12-01/)
+    })
+
+    it('adds nothing for plain approval with payment owed', async () => {
+      open(envelope('approved_awaiting_payment', {
+        commercial: { outcome: 'approve_payment_required', currency: 'SAR', amount_due: '100.00' },
+      }, { requires_payment: true }))
+
+      await screen.findByTestId('registration-payment')
+      expect(screen.queryByTestId('registration-commercial')).not.toBeInTheDocument()
+    })
+  })
 })

@@ -55,6 +55,13 @@ final class RegistrationPolicy
         // Absent means required: an application opened before the switches existed owes what it always owed.
         $merged['requires_email'] = (bool) ($merged['requires_email'] ?? true) && (bool) ($switches['email'] ?? true);
         $merged['requires_mobile'] = (bool) ($merged['requires_mobile'] ?? false) && (bool) ($switches['mobile'] ?? true);
+        /*
+         * A reviewer can demand a payment here, and can no longer excuse one (SIGNUP-DECISION-001). A bare `false` carries no
+         * plan, period or amount, so what clears the money is a scoped decision: see `RegistrationCommercialGate`.
+         */
+        if (($perRequest['requires_payment'] ?? null) === false) {
+            unset($perRequest['requires_payment']);
+        }
         $merged = array_merge($merged, $perRequest);
 
         return [

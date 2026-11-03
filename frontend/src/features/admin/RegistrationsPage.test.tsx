@@ -130,6 +130,16 @@ describe('RegistrationsPage', () => {
     prompt.mockRestore()
   })
 
+  it('no longer offers payment as a gate to switch off', async () => {
+    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('registration-row'))
+    await screen.findByTestId('registration-gate-requires_approval')
+
+    expect(screen.queryByTestId('registration-gate-requires_payment')).not.toBeInTheDocument()
+    expect(screen.getByTestId('registration-decision')).toBeInTheDocument()
+  })
+
   it('carries a reason with a gate change that does go through', async () => {
     const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Paid off-platform under an annual contract.')
     vi.mocked(updateRegistrationTerms).mockResolvedValue({

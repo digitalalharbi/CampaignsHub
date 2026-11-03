@@ -135,6 +135,15 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registration-verification-policy.show');
         Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
             ->middleware('throttle:30,1')->name('registration-verification-policy.update');
+        // SIGNUP-DECISION-001 — one form, one service: commercial treatment and access scope, previewed before they are taken.
+        Route::get('/tenants/{tenant}/decision-targets', [PlatformRegistrationController::class, 'decisionTargets'])
+            ->name('tenants.decision-targets');
+        Route::post('/registrations/{registration}/decision/preview', [PlatformRegistrationController::class, 'previewDecision'])
+            ->middleware('throttle:60,1')->name('registrations.decision.preview');
+        Route::post('/registrations/{registration}/decision', [PlatformRegistrationController::class, 'decide'])
+            ->middleware('throttle:30,1')->name('registrations.decision');
+        Route::post('/registrations/{registration}/decisions/{decision}/verify-settlement', [PlatformRegistrationController::class, 'verifySettlement'])
+            ->whereUuid('decision')->middleware('throttle:30,1')->name('registrations.decision.verify-settlement');
         Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
             ->name('registrations.approve');
         Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])

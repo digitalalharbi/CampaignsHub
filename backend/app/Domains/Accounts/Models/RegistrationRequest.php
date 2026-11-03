@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Accounts\Models;
 
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Services\RegistrationDecisionService;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\RegistrationVerificationService;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
@@ -131,6 +132,8 @@ final class RegistrationRequest extends Model
             // A fact and a requirement are different things. `email_verified: false` beside `not_required_by_policy`
             // means nobody asked, and it never means the address was proved.
             'verification' => $this->verificationStanding(),
+            // The terms in force, so the screen can say «waived» or «discounted» instead of implying money moved.
+            'commercial' => app(RegistrationDecisionService::class)->standing($this),
             // Present only when there is something the applicant can act on, so the screen never
             // shows an empty "next step" box.
             'next_step' => $this->nextStep($ar),

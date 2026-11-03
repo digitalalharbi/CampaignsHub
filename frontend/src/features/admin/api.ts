@@ -501,6 +501,17 @@ export interface AdminRegistration {
   mobile_verified: boolean
   /** `not_required_by_policy` means nobody asked, never that it was proved. Absent on an older payload. */
   verification?: { email: 'verified' | 'required' | 'not_required_by_policy'; mobile: 'verified' | 'required' | 'not_required_by_policy' }
+  decisions?: Array<{
+    id: string
+    outcome: string
+    status: string
+    actor_id: number | null
+    reason: string
+    terms: (RegistrationDecisionTerms & { evidence?: Record<string, string> }) | null
+    access: Record<string, unknown> | null
+    verified_by: number | null
+    created_at: string | null
+  }>
   effective_policy?: { switches?: { email?: boolean; mobile?: boolean }; settings_version?: number; taken_at?: string } | null
   next_step: string | null
   reason: string | null
@@ -577,6 +588,84 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
   policy: RegistrationGates
 }> {
   return patchData(`/admin/registrations/${id}`, terms)
+}
+
+/*
+ * SIGNUP-DECISION-001 — the one decision. The server computes every figure; what is sent is the choice, and the amount the
+ * reviewer was shown so the server can refuse if it has moved.
+ */
+export type RegistrationDecisionOutcome =
+  | 'approve_payment_required' | 'approve_discount' | 'approve_waiver' | 'approve_trial'
+  | 'approve_external_settlement' | 'approve_join_existing'
+
+export interface RegistrationDecisionInput {
+  outcome: RegistrationDecisionOutcome | 'request_info' | 'defer' | 'reject'
+  reason: string
+  idempotency_key?: string
+  expected_decision_id?: string | null
+  discount_percent?: number
+  trial_ends_on?: string
+  confirm_waiver?: boolean
+  confirm_amount?: string | null
+  evidence?: { reference: string; amount: string; currency: string; paid_on: string; note?: string }
+  access?: {
+    mode: 'new_workspace' | 'join_existing'
+    portal?: string
+    modules?: string[]
+    tenant_id?: string
+    role?: string
+    project_ids?: string[]
+    client_ids?: string[]
+  }
+}
+
+export interface RegistrationDecisionTerms {
+  list_amount?: string
+  amount_due?: string
+  fee?: string
+  currency?: string
+  renewal_amount?: string
+  renewal_on?: string
+  discount_percent?: number
+  vat?: { treatment: string; rate: number; tax: string }
+  covered_by?: string
+}
+
+export interface RegistrationDecisionPreview {
+  outcome: string
+  terms: RegistrationDecisionTerms | null
+  access: {
+    mode: string
+    portal?: string | null
+    role: string
+    modules?: string[] | null
+    permissions: 'all_in_own_workspace' | string[]
+    projects?: string[]
+    clients?: string[]
+    creates: { tenant: number; workspace: number; membership: number; project: number }
+    who_has_access: string[]
+  }
+  payment_provider_ready: boolean
+}
+
+export function previewRegistrationDecision(id: string, input: RegistrationDecisionInput): Promise<RegistrationDecisionPreview> {
+  return postData(`/admin/registrations/${id}/decision/preview`, input)
+}
+
+export function decideRegistration(id: string, input: RegistrationDecisionInput): Promise<{ registration: AdminRegistration }> {
+  return postData(`/admin/registrations/${id}/decision`, input)
+}
+
+export function verifyRegistrationSettlement(id: string, decisionId: string, reason: string): Promise<{ registration: AdminRegistration }> {
+  return postData(`/admin/registrations/${id}/decisions/${decisionId}/verify-settlement`, { reason })
+}
+
+export function fetchTenantDecisionTargets(tenantId: string): Promise<{
+  roles: Array<{ slug: string; name: string }>
+  projects: Array<{ id: string; name: string }>
+  clients: Array<{ id: string; name: string }>
+}> {
+  return getData(`/admin/tenants/${tenantId}/decision-targets`)
 }
 
 /** SIGNUP-VERIFY-POLICY-001 — move one application to the current verification policy, with a reason. */

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Clock, CreditCard, Loader2, MailQuestion, ShieldAlert, X } from 'lucide-react'
+import { Clock, CreditCard, Loader2, MailQuestion, ShieldAlert, X } from 'lucide-react'
 import {
-  approveRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
+  decideRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
   requestRegistrationInfo, updateRegistrationTerms,
   type AdminRegistration,
 } from './api'
+import { RegistrationDecisionForm } from './RegistrationDecisionForm'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
@@ -25,45 +26,47 @@ import { Num } from '@/components/ui/Num'
 const COPY = {
   ar: {
     title: 'طلبات التسجيل',
-    subtitle: 'الطلبات التي لم تصبح مساحات عمل بعد. الاعتماد يفتح بوابة المراجعة فقط، ولا يفعّل حسابًا.',
+    subtitle: 'الطلبات التي لم تصبح مساحات عمل بعد. الاعتماد وحده لا يفعّل حسابًا: التفعيل يأتي بعد دفع مؤكد أو قرار تجاري صريح.',
     open: 'قيد المعالجة', all: 'الكل',
     search: 'بحث بالبريد أو اسم المؤسسة',
     empty: 'لا توجد طلبات مطابقة.',
     applicant: 'مقدّم الطلب', workspace: 'المؤسسة', state: 'الحالة', plan: 'الباقة', applied: 'تاريخ الطلب',
-    approve: 'اعتماد', reject: 'رفض', requestInfo: 'طلب معلومات', terms: 'تعديل الشروط',
+    reject: 'رفض', requestInfo: 'طلب معلومات', terms: 'تعديل الشروط',
     reasonLabel: 'السبب (يُعرض على مقدّم الطلب)',
     noteLabel: 'ما المطلوب من مقدّم الطلب؟',
     termsReason: 'سبب التعديل (يُحفظ في السجل)',
-    planCode: 'رمز الباقة', discount: 'خصم %', trialDays: 'أيام التجربة',
+    planCode: 'رمز الباقة',
     gates: 'البوابات المطلوبة',
-    gateMobile: 'تأكيد الجوال', gateApproval: 'مراجعة يدوية', gatePayment: 'دفع مسبق',
+    gateMobile: 'تأكيد الجوال', gateApproval: 'مراجعة يدوية',
     history: 'سجل القرارات',
     save: 'حفظ', cancel: 'إلغاء',
     infoRequested: 'بانتظار رد مقدّم الطلب',
     verifiedEmail: 'بريد مؤكد', verifiedMobile: 'جوال مؤكد',
     notRequiredEmail: 'البريد غير مؤكد: لا تطلبه سياسة هذا الطلب', notRequiredMobile: 'الجوال غير مؤكد: لا تطلبه سياسة هذا الطلب',
+    defer: 'تأجيل القرار',
     reevaluate: 'إعادة تقييم التحقق', reevaluateHint: 'يطبق سياسة التحقق الحالية على هذا الطلب فقط. لا يغيّر الدفع أو الاعتماد ولا يؤكد شيئًا.',
     selectOne: 'اختر طلبًا لعرض تفاصيله.',
   },
   en: {
     title: 'Registration requests',
-    subtitle: 'Applications that have not become workspaces. Approving clears the review gate; it does not activate an account.',
+    subtitle: 'Applications that have not become workspaces. Approval alone activates nothing: that takes a confirmed payment or an explicit commercial decision.',
     open: 'Open', all: 'All',
     search: 'Search by email or organisation',
     empty: 'No matching applications.',
     applicant: 'Applicant', workspace: 'Organisation', state: 'State', plan: 'Plan', applied: 'Applied',
-    approve: 'Approve', reject: 'Reject', requestInfo: 'Request information', terms: 'Change terms',
+    reject: 'Reject', requestInfo: 'Request information', terms: 'Change terms',
     reasonLabel: 'Reason (shown to the applicant)',
     noteLabel: 'What do you need from the applicant?',
     termsReason: 'Why (kept in the record)',
-    planCode: 'Plan code', discount: 'Discount %', trialDays: 'Trial days',
+    planCode: 'Plan code',
     gates: 'Required gates',
-    gateMobile: 'Mobile confirmation', gateApproval: 'Manual review', gatePayment: 'Payment up front',
+    gateMobile: 'Mobile confirmation', gateApproval: 'Manual review',
     history: 'Decision history',
     save: 'Save', cancel: 'Cancel',
     infoRequested: 'Waiting on the applicant',
     verifiedEmail: 'Email confirmed', verifiedMobile: 'Mobile confirmed',
     notRequiredEmail: 'Email unverified: not required for this application', notRequiredMobile: 'Mobile unverified: not required for this application',
+    defer: 'Defer',
     reevaluate: 'Re-evaluate verification', reevaluateHint: 'Applies the current verification policy to this application only. It changes no payment or approval, and proves nothing.',
     selectOne: 'Select an application to see its detail.',
   },
@@ -183,7 +186,7 @@ export function RegistrationsPage() {
         </div>
 
         {selected
-          ? <RegistrationDetail id={selected} copy={c} onChanged={() => void queryClient.invalidateQueries({ queryKey: ['admin', 'registrations'] })} />
+          ? <RegistrationDetail key={selected} id={selected} ar={ar} copy={c} onChanged={() => void queryClient.invalidateQueries({ queryKey: ['admin', 'registrations'] })} />
           : <p className="rounded-2xl border border-border bg-surface p-6 text-sm text-text-secondary">{c.selectOne}</p>}
       </div>
     </div>
@@ -192,14 +195,15 @@ export function RegistrationsPage() {
 
 type Copy = typeof COPY['en'] | typeof COPY['ar']
 
-function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; onChanged: () => void }) {
+function RegistrationDetail({ id, ar, copy, onChanged }: { id: string; ar: boolean; copy: Copy; onChanged: () => void }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
-  const [terms, setTerms] = useState({ plan_code: '', discount_percent: '', trial_days: '', reason: '' })
+  const [terms, setTerms] = useState({ plan_code: '', reason: '' })
   const [why, setWhy] = useState('')
-  const [open, setOpen] = useState<'reject' | 'info' | 'terms' | 'reevaluate' | null>(null)
+  const [deferWhy, setDeferWhy] = useState('')
+  const [open, setOpen] = useState<'reject' | 'info' | 'terms' | 'reevaluate' | 'defer' | null>(null)
 
   const detail = useQuery({ queryKey: ['admin', 'registration', id], queryFn: () => fetchRegistration(id) })
 
@@ -212,23 +216,21 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
   }
   const failed = (e: unknown) => setError(toApiError(e).message)
 
-  const approve = useMutation({ mutationFn: () => approveRegistration(id), onSuccess: after, onError: failed })
+  const defer = useMutation({ mutationFn: () => decideRegistration(id, { outcome: 'defer', reason: deferWhy }), onSuccess: after, onError: failed })
   const reject = useMutation({ mutationFn: () => rejectRegistration(id, reason), onSuccess: after, onError: failed })
   const info = useMutation({ mutationFn: () => requestRegistrationInfo(id, note), onSuccess: after, onError: failed })
   const reevaluate = useMutation({ mutationFn: () => reevaluateRegistrationVerification(id, why), onSuccess: after, onError: failed })
   const saveTerms = useMutation({
     mutationFn: () => updateRegistrationTerms(id, {
       plan_code: terms.plan_code || undefined,
-      discount_percent: terms.discount_percent === '' ? undefined : Number(terms.discount_percent),
-      trial_days: terms.trial_days === '' ? undefined : Number(terms.trial_days),
-      // A gate is waived from the detail's own toggles below; this form carries the commercial terms.
+      // Discounts, waivers and trials are a decision with exact terms: see RegistrationDecisionForm.
       reason: terms.reason,
     }),
     onSuccess: (r) => { void queryClient.invalidateQueries({ queryKey: ['admin', 'registration', id] }); onChanged(); setOpen(null); setError(null); return r },
     onError: failed,
   })
   const toggleGate = useMutation({
-    mutationFn: (change: { gate: 'requires_mobile' | 'requires_approval' | 'requires_payment'; value: boolean; why: string }) =>
+    mutationFn: (change: { gate: 'requires_mobile' | 'requires_approval'; value: boolean; why: string }) =>
       updateRegistrationTerms(id, { [change.gate]: change.value, reason: change.why }),
     onSuccess: (r) => { void queryClient.invalidateQueries({ queryKey: ['admin', 'registration', id] }); onChanged(); setError(null); return r },
     onError: failed,
@@ -244,7 +246,6 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
   const GATES = [
     { key: 'requires_mobile', label: copy.gateMobile, on: policy.requires_mobile },
     { key: 'requires_approval', label: copy.gateApproval, on: policy.requires_approval },
-    { key: 'requires_payment', label: copy.gatePayment, on: policy.requires_payment },
   ] as const
 
   return (
@@ -288,11 +289,10 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
         </div>
       </div>
 
+      {!settled && <RegistrationDecisionForm registration={r} ar={ar} onDecided={() => { void queryClient.invalidateQueries({ queryKey: ['admin', 'registration', id] }); onChanged() }} />}
+
       {!settled && (
         <div className="flex flex-wrap gap-2">
-          <Button data-testid="registration-approve" onClick={() => approve.mutate()} loading={approve.isPending} size="sm">
-            <Check size={15} /> {copy.approve}
-          </Button>
           <button data-testid="registration-reject-open" onClick={() => setOpen('reject')} className="flex items-center gap-1.5 rounded-xl border border-border px-3.5 py-2 text-sm font-semibold text-danger hover:bg-[var(--negative-background)]">
             <X size={15} /> {copy.reject}
           </button>
@@ -302,10 +302,23 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
           <button data-testid="registration-terms-open" onClick={() => setOpen('terms')} className="rounded-xl border border-border px-3.5 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
             {copy.terms}
           </button>
+          <button data-testid="registration-defer-open" onClick={() => setOpen('defer')} className="rounded-xl border border-border px-3.5 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
+            {copy.defer}
+          </button>
           <button data-testid="registration-reevaluate-open" onClick={() => setOpen('reevaluate')} className="rounded-xl border border-border px-3.5 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
             {copy.reevaluate}
           </button>
         </div>
+      )}
+
+      {open === 'defer' && (
+        <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); if (deferWhy.trim().length >= 5) defer.mutate() }}>
+          <TextInput id="defer-reason" label={copy.termsReason} value={deferWhy} onChange={(e) => setDeferWhy(e.target.value)} required />
+          <div className="flex gap-2">
+            <Button data-testid="registration-defer-confirm" type="submit" loading={defer.isPending} size="sm">{copy.save}</Button>
+            <button type="button" onClick={() => setOpen(null)} className="text-sm text-text-secondary">{copy.cancel}</button>
+          </div>
+        </form>
       )}
 
       {open === 'reevaluate' && (
@@ -343,10 +356,6 @@ function RegistrationDetail({ id, copy, onChanged }: { id: string; copy: Copy; o
       {open === 'terms' && (
         <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); if (terms.reason.trim()) saveTerms.mutate() }}>
           <TextInput id="terms-plan" label={copy.planCode} value={terms.plan_code} onChange={(e) => setTerms((t) => ({ ...t, plan_code: e.target.value }))} />
-          <div className="grid grid-cols-2 gap-2">
-            <TextInput id="terms-discount" label={copy.discount} value={terms.discount_percent} onChange={(e) => setTerms((t) => ({ ...t, discount_percent: e.target.value }))} inputMode="numeric" />
-            <TextInput id="terms-trial" label={copy.trialDays} value={terms.trial_days} onChange={(e) => setTerms((t) => ({ ...t, trial_days: e.target.value }))} inputMode="numeric" />
-          </div>
           <TextInput id="terms-reason" label={copy.termsReason} value={terms.reason} onChange={(e) => setTerms((t) => ({ ...t, reason: e.target.value }))} required />
           <div className="flex gap-2">
             <Button data-testid="registration-terms-confirm" type="submit" loading={saveTerms.isPending} size="sm">{copy.save}</Button>

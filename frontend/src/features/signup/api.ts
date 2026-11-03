@@ -44,10 +44,28 @@ export interface RegistrationStatus {
   email_delivery_status?: string | null
   /** A requirement, beside the facts above: `not_required_by_policy` means nobody asked, never that it was proved. */
   verification?: { email: VerificationStanding; mobile: VerificationStanding }
+  /** The commercial terms in force (SIGNUP-DECISION-001). Waived or trialing is never paid. */
+  commercial?: RegistrationCommercial | null
   /** The one thing this applicant can do now, or null when the application is waiting on us. */
   next_step: string | null
   reason: string | null
   provisioned: boolean
+}
+
+export interface RegistrationCommercial {
+  outcome: string
+  currency?: string
+  list_amount?: string
+  amount_due?: string
+  discount_percent?: number
+  waived_by_admin?: boolean
+  fee?: string
+  period_end?: string
+  renewal_amount?: string
+  renewal_on?: string
+  trial_ends_at?: string
+  /** The server's own quote with the discount applied, so the amount shown is the amount charged. */
+  quote?: PlanQuote | null
 }
 
 export type VerificationStanding = 'verified' | 'required' | 'not_required_by_policy'
