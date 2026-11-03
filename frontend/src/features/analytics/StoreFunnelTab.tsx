@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel } from './components'
@@ -6,6 +5,8 @@ import { compact, money, moneyExact, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
+import { RefreshNote } from '@/components/ui/RefreshNote'
+import { useSwrQuery } from '@/lib/query/swr'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Explainer } from '@/components/ui/Explainer'
@@ -153,20 +154,27 @@ const METHOD_AR: Record<string, string> = {
 export function StoreFunnelTab({ projectId, range }: { projectId: string | null; range: { from: string; to: string } }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
-  const q = useQuery({
-    queryKey: ['store-funnel', projectId, range.from, range.to],
+  // PERF-INSTANT-DATA-001 — scope = the project; the period is the only thing an old answer may bridge.
+  const q = useSwrQuery({
+    name: 'store-funnel',
+    scope: [projectId],
+    window: [range.from, range.to],
     queryFn: () => getData<FunnelPayload>(`/projects/${projectId}/commerce/funnel?from=${range.from}&to=${range.to}`),
     enabled: Boolean(projectId),
   })
 
   if (!projectId) return <EmptyState title={ar ? 'اختر مشروعًا' : 'Pick a project'} description={ar ? 'الفانل والمتجر يُقرآن على مستوى المشروع.' : 'The funnel is read per project.'} />
-  if (q.isLoading) return <Skeleton className="h-96" />
+  if (q.isLoading) return <FunnelSkeleton ar={ar} />
   if (q.isError || !q.data) {
     return <QueryFailure error={q.error} ar={ar} testId="store-funnel-failure" onRetry={() => void q.refetch()}
       fallbackTitle={ar ? 'تعذّر تحميل الفانل.' : 'The funnel could not be loaded.'} />
   }
 
   const { stages, steps, totals, derived, comparisons, coverage } = q.data
+  const note = (
+    <RefreshNote ar={ar} isRefreshing={q.isRefreshing} isShowingPrevious={q.isShowingPrevious} refreshFailed={q.refreshFailed}
+      updatedAt={q.updatedAt} shownPeriod={`${q.data.window.from} → ${q.data.window.to}`} onRetry={() => void q.refetch()} />
+  )
   // One currency for the whole page, named by the server. Falling back to SAR keeps an older payload
   // rendering, but nothing on this page decides a currency for itself any more.
   const cur = totals.reporting_currency || 'SAR'
@@ -174,7 +182,8 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
   const widest = Math.max(...stages.map((s) => s.value ?? 0), 1)
 
   return (
-    <div className="space-y-4">
+    <div data-testid="store-funnel" aria-busy={q.isShowingPrevious} className={`space-y-4 transition-opacity duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
+      <div className="flex min-h-5 items-center">{note}</div>
       {coverage.stores === 0 && (
         <p data-testid="funnel-no-store" className="flex items-start gap-2 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
           <Store size={15} className="mt-0.5 shrink-0" />
@@ -629,6 +638,19 @@ function FunnelReadingBlock({ reading, ar }: { reading: FunnelReading; ar: boole
             : `${reading.unmeasured_stages} stage(s) are unmeasured in this window and are not an end of any fall above.`}
         </p>
       )}
+    </div>
+  )
+}
+
+/** The cold open: the panel's own title and the stage rows at their final height, not one slab. */
+function FunnelSkeleton({ ar }: { ar: boolean }) {
+  return (
+    <div data-testid="store-funnel-skeleton" aria-busy="true" aria-label={ar ? 'جارٍ تحميل الفانل' : 'Loading the funnel'} className="space-y-4">
+      <Panel title={ar ? 'الفانل: من الظهور إلى الإيراد' : 'Funnel: impression to revenue'}>
+        <ol className="space-y-2">
+          {Array.from({ length: 6 }, (_, i) => <li key={i}><Skeleton className="h-[5.5rem] w-full" /></li>)}
+        </ol>
+      </Panel>
     </div>
   )
 }
