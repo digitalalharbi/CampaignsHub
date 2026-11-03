@@ -1247,7 +1247,7 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
   const ar = useAr()
   const q = useQuery({ queryKey: ['report', projectId, id], queryFn: () => getReport(projectId, id) })
   const r = q.data as ReportDetail | undefined
-  const platforms = (r?.data?.platforms ?? []).map((p) => String(p.provider))
+  const platforms = r?.scope_options?.platforms ?? (r?.data?.platforms ?? []).map((p) => String(p.provider))
   return (
     <Modal open onClose={onClose} title={r?.name ?? (ar ? 'معاينة التقرير' : 'Report preview')} size="xl">
       {q.isLoading ? (
@@ -1284,14 +1284,14 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
    */
   const detail = useQuery({ queryKey: ['report', projectId, reportId], queryFn: () => getReport(projectId, reportId) })
   const allCampaigns = useMemo(
-    () => (detail.data?.data?.campaigns ?? []).map((c) => ({
+    () => (detail.data?.scope_options?.campaigns ?? detail.data?.data?.campaigns ?? []).map((c) => ({
       id: String(c.campaign_id ?? ''),
       name: String(c.campaign_name ?? '—'),
     })).filter((c) => c.id !== ''),
     [detail.data],
   )
   const allProviders = useMemo(
-    () => [...new Set((detail.data?.data?.platforms ?? []).map((p) => String(p.provider ?? '')).filter(Boolean))],
+    () => detail.data?.scope_options?.platforms ?? [...new Set((detail.data?.data?.platforms ?? []).map((p) => String(p.provider ?? '')).filter(Boolean))],
     [detail.data],
   )
 

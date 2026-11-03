@@ -16,7 +16,6 @@ use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportSectionResolver;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ReportViews;
-use App\Domains\Reports\Sections\SectionContext;
 use App\Domains\Reports\Sections\SectionSettings;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -437,16 +436,8 @@ final class ReportSectionController extends Controller
     {
         $audience = (string) ($report->audience ?? 'client');
         $settings = $report->sectionSettings();
-        $data = is_array($report->data) && $report->data !== [] ? $report->data : null;
-
-        $resolved = $this->resolver->resolve($settings, new SectionContext(
-            audience: $audience,
-            form: (string) ($report->form ?? 'detailed'),
-            providers: array_values(array_filter((array) (($report->scope ?? [])['providers'] ?? []), 'is_string')),
-            objective: $report->campaign_objective,
-            payload: $data,
-            surface: 'preview',
-        ));
+        // REPORT-PARITY-FOUR-SURFACES-001 — the preview asks the surfaces' own resolver, not a copy of it.
+        $resolved = app(ReportSectionSurfaces::class)->resolveReport($report);
 
         return [
             'report_id' => (string) $report->getKey(),

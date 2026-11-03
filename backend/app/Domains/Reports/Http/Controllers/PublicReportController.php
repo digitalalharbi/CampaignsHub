@@ -111,9 +111,8 @@ final class PublicReportController extends Controller
         if (! $share->isLive()) {
             $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
 
-            $data = $form === 'executive_summary'
-                ? $view->executive($fresh)
-                : $view->filter($fresh);
+            // REPORT-PARITY-FOUR-SURFACES-001 — the print route and the files ask the same question of the same method.
+            $data = $view->document($fresh, $report->audience === 'executive' ? 'executive' : 'client', $form);
             $data = $this->shares->sanitize($data, $share);
             // REPORT-SECTION-SURFACES-001 — the same resolver as the live page, the print route and the export.
             $data = app(ReportSectionSurfaces::class)->apply($data, $report, $share, 'shared');
@@ -560,35 +559,15 @@ final class PublicReportController extends Controller
         $report = Report::withoutGlobalScopes()->find($share->report_id);
         abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
 
-        // ReportExporter applies the audience filter (client-safe); here we add the per-share hide flags
-        // (spend/revenue/names). replicate() keeps the audience so the exporter filters correctly.
-        $sanitized = $report->replicate();
-        $sanitized->setAttribute('id', $report->id); // replicate() drops the key; the gate needs it
-        /*
-         * The watermark the operator asked for, carried into the FILE — see ShareService::renderConfig.
-         *
-         * Every other per-share flag was already applied here: `allow_download` above, and
-         * spend/revenue/names through `sanitize()` below. This one was not, so a link with both
-         * `watermark` and `allow_download` drew the mark on the page, told the client «يحمل علامة
-         * مائية» in their own portal, and handed them a clean PDF — the artefact a watermark is FOR.
-         */
-        $sanitized->setAttribute('config', $this->shares->renderConfig((array) ($report->config ?? []), $share));
-        /*
-         * The PDF is the copy a client KEEPS, so it is the last place to print «no cover» over an
-         * ad whose picture the product can resolve — REPORT-CREATIVE-MEDIA-001.
-         */
         /*
          * ONE share-filtered document for every file this link produces — SHARED-PDF-HIDE-FLAGS-001.
          *
-         * The CSV and XLSX render from it directly. The PDF is printed by Chromium from the print
-         * route, which used to read the stored report and so printed what this link hides; the share
-         * now rides the print context and that route builds this same document.
+         * ReportExporter applies the audience filter (client-safe); the link's hide flags (spend / revenue / names), its watermark
+         * (ShareService::renderConfig) and its section set ride the replica `documentReport()` builds. The CSV and XLSX render from
+         * it directly; the PDF is printed by Chromium from the print route, which builds this same document for the share.
+         * The pictures are resolved now (REPORT-CREATIVE-MEDIA-001), the last place to print «no cover» over a resolvable ad.
          */
-        $data = $this->shares->downloadDocument($report, $share);
-
-        // The link's section set is applied by the exporter, which is handed the share for exactly
-        // that — the same resolver the page and the print route use (REPORT-SECTION-SURFACES-001).
-        $sanitized->data = $data;
+        $sanitized = $this->shares->documentReport($report, $share);
         $content = app(ReportExporter::class)->render($sanitized, $format, $share);
         $this->shares->log($share, 'download', $request, $format);
 

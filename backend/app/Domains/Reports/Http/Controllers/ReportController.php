@@ -11,6 +11,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
@@ -484,18 +485,34 @@ final class ReportController extends Controller
              * sending it would see «no cover» on the very rows the client is about to see correctly
              * — and would reasonably conclude the report was broken and not send it.
              */
-            $out['data'] = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
+            $stored = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
             /*
-             * REPORT-TABLES-OWNER-COLUMNS-001 — the saved page honours the report's own choice.
+             * REPORT-PARITY-FOUR-SURFACES-001 — the preview is the client's document, through the surfaces' own resolver.
              *
-             * The link, the print route and the files receive `report_columns` through
-             * `ReportSectionSurfaces::apply`; the operator's own page reads the stored data
-             * directly, so the choice is attached here from the same reader. Absent means every
-             * column, which is what every saved report rendered before the choice existed.
+             * It was the stored internal snapshot with `report_sections` absent, which `sectionShown()` reads as «everything»: the
+             * operator's preview drew trends the report had switched off, a main section narrowed away, a campaign roster and
+             * unapproved recommendations — none of which the link, the PDF or the file carry. The same call the print route makes
+             * answers here (`report_columns`, `report_views` and `report_sections` arrive with it).
              */
-            if (is_array($out['data']) && ($chosen = ReportColumns::forReport($r)->toArray()) !== []) {
-                $out['data']['report_columns'] = $chosen;
-            }
+            $out['data'] = $stored !== []
+                ? app(ReportSectionSurfaces::class)->previewPayload($r, $stored)
+                // A report not generated yet has no figures to resolve sections against; it still carries the columns it was saved with.
+                : (($chosen = ReportColumns::forReport($r)->toArray()) !== [] ? ['report_columns' => $chosen] : []);
+            /*
+             * What the operator's own pickers need from the report — its campaigns and platforms — served beside the body now that
+             * the body is the client's: the link builder narrows a link to campaigns that exist in THIS report, and the roster a
+             * client may not see is exactly what an operator choosing a ceiling must.
+             */
+            $out['scope_options'] = [
+                'campaigns' => array_values(array_map(
+                    static fn ($c): array => ['campaign_id' => (string) ($c['campaign_id'] ?? ''), 'campaign_name' => (string) ($c['campaign_name'] ?? '')],
+                    array_filter((array) ($stored['campaigns'] ?? []), 'is_array'),
+                )),
+                'platforms' => array_values(array_unique(array_filter(array_map(
+                    static fn ($p): string => (string) (is_array($p) ? ($p['provider'] ?? '') : ''),
+                    (array) ($stored['platforms'] ?? []),
+                )))),
+            ];
         }
 
         return $out;

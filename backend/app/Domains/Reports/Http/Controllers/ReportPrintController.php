@@ -99,11 +99,8 @@ final class ReportPrintController extends Controller
             $body = app(ShareService::class)->downloadDocument($report, $share);
         }
 
-        if ($audience === 'client') {
-            $body = app(ClientReportView::class)->filter($body);
-        } elseif ($audience === 'executive') {
-            $body = app(ClientReportView::class)->executive($body);
-        }
+        // REPORT-PARITY-FOUR-SURFACES-001 — the document is chosen by the same method as the link's page: audience AND the link's form.
+        $body = app(ClientReportView::class)->document($body, (string) $audience, $share !== null ? $share->formOr($report->form) : $report->form);
         // REPORT-SECTION-SURFACES-001 — the PDF carries exactly the sections the page does.
         $body = app(ReportSectionSurfaces::class)->apply($body, $report, $share, 'print', audience: (string) $audience);
         // REPORT-KPI-CONTRACT-001 — the PDF lists the KPIs the link shows, the same allowlist the CSV and XLSX read: nothing hidden is printed.

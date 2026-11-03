@@ -58,6 +58,11 @@ export interface ReportsIndex {
   summary: { total: number; completed: number; processing: number; failed: number }
 }
 export interface ReportDetail extends ReportRow {
+  /**
+   * REPORT-PARITY-FOUR-SURFACES-001 — what the operator's pickers choose from. The body below is the client's document and carries
+   * no campaign roster, so the link builder reads the report's campaigns and platforms from here.
+   */
+  scope_options?: { campaigns: Array<{ campaign_id: string; campaign_name: string }>; platforms: string[] }
   data: {
     period: { from: string; to: string }
     currency: string

@@ -251,6 +251,23 @@ final class ShareService
     }
 
     /**
+     * The report a link's FILES are rendered from: the stored report on a per-request replica, carrying this link's document and
+     * its render config. The download route and the parity tests both build it here, so no caller can hand the exporter the
+     * stored report in place of the link's.
+     */
+    public function documentReport(Report $report, ReportShare $share): Report
+    {
+        // replicate() keeps the audience so the exporter filters correctly, and drops the key the gate needs.
+        $replica = $report->replicate();
+        $replica->setAttribute('id', $report->id);
+        // The watermark the operator asked for travels into the FILE — see renderConfig().
+        $replica->setAttribute('config', $this->renderConfig((array) ($report->config ?? []), $share));
+        $replica->setAttribute('data', $this->downloadDocument($report, $share));
+
+        return $replica;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */

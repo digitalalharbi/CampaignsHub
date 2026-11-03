@@ -66,7 +66,7 @@ final class ReportExporter
         $this->gate->ensureReady($this->stored($report, $share));
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
         // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
-        $data = $this->withoutHiddenSections($report, $this->audienceData($report));
+        $data = $this->withoutHiddenSections($report, $this->audienceData($report, $share));
 
         // REPORT-SECTION-SURFACES-001 — the file carries the same section set as the page and the PDF,
         // narrowed by the link's own switches when a link produced it.
@@ -355,12 +355,13 @@ final class ReportExporter
      *
      * @return array<string,mixed>
      */
-    private function audienceData(Report $report): array
+    private function audienceData(Report $report, ?ReportShare $share = null): array
     {
         $data = $report->data ?? [];
         $audience = $report->audience ?? 'client';
         if (in_array($audience, ['client', 'executive'], true)) {
-            $data = $audience === 'executive' ? $this->clientView->executive($data) : $this->clientView->filter($data);
+            // REPORT-PARITY-FOUR-SURFACES-001 — the same method the link's page and the print route use; a link's own form counts.
+            $data = $this->clientView->document($data, $audience, $share !== null ? $share->formOr($report->form) : $report->form);
             $violations = $this->contentValidator->scan($data);
             abort_if(
                 $violations !== [],

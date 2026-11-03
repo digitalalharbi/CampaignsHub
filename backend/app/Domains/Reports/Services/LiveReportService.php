@@ -697,6 +697,16 @@ final class LiveReportService
             'results_label' => $page['results_label'] ?? null,
             'generated_at' => Carbon::now()->toIso8601String(),
         ];
+        /*
+         * REPORT-PARITY-FOUR-SURFACES-001 — the objective breakdown the page draws is drawn by the file too.
+         *
+         * The page showed «objective_breakdown» and the PDF and files of the same link did not: the section is judged against this
+         * payload, which carried none of its data. The SAME builder (`ObjectiveAnalyticsSection`) writes it into a snapshot and into
+         * the page, and `PrintDocument` already draws it from `objective_analytics`, so the page's own block is carried across.
+         */
+        if (is_array($page['objective_analytics'] ?? null)) {
+            $data['objective_analytics'] = $page['objective_analytics'];
+        }
         $data['checksum'] = ExportReadinessGate::checksum($data);
 
         $copy = clone $report;

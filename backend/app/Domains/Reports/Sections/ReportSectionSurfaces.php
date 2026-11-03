@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Sections;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Support\ReportColumns;
 
 /**
@@ -132,6 +133,48 @@ final class ReportSectionSurfaces
             $this->settingsFor($report, $share),
             $this->contextFor($report, $share, $surface, $audience, $form)->withPayload($payload),
         );
+    }
+
+    /**
+     * REPORT-PARITY-FOUR-SURFACES-001 — the operator's PREVIEW of a report (no link), through this same resolver.
+     *
+     * The builder's section list and the page the operator reads each made their own decision: one over the unnarrowed settings
+     * and the raw internal snapshot, the other over nothing at all — so a section the client's link, PDF and file did not carry
+     * was listed (and drawn) on the preview. This asks what a link of the report as it stands would carry: the same settings
+     * (narrowed by the report's main sections), judged against the same client-facing document the link is built from.
+     */
+    public function resolveReport(Report $report): ResolvedSections
+    {
+        $data = is_array($report->data) && $report->data !== [] ? $report->data : null;
+
+        return $this->resolve($report, null, 'preview', $data === null ? null : $this->documentOf($report, $data));
+    }
+
+    /**
+     * The operator's PREVIEW body: the document the client's link is built from, with this resolver's sections applied.
+     *
+     * Hidden means absent here too — the renderer (`InteractiveReport`) decides most of what to draw from which keys are present,
+     * so listing the section set without removing the keys would still draw them. The operator's pickers (link builder) no longer
+     * read the roster out of this body; the controller serves them separately as `scope_options`.
+     *
+     * @param  array<string, mixed>  $data  the stored snapshot
+     * @return array<string, mixed>
+     */
+    public function previewPayload(Report $report, array $data): array
+    {
+        return $this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client'));
+    }
+
+    /**
+     * The client-facing document of a stored snapshot — the one step the link, the PDF, the file and the preview share before
+     * sections are resolved.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function documentOf(Report $report, array $data): array
+    {
+        return app(ClientReportView::class)->document($data, (string) ($report->audience ?? 'client'), $report->form);
     }
 
     /**
