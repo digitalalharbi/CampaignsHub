@@ -36,6 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Fetch from the runner
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do curl -s -m 40 -o /dev/null -w "RUNNER bundle %{http_code} ttfb=%{time_starttransfer} total=%{time_total} %{size_download}b\n" -H 'Accept-Encoding: gzip' https://campaignshub.io/assets/index-CHs4P45W.js || true; done
+          for i in 1 2 3; do curl -s -m 40 -o /dev/null -w "RUNNER page %{http_code} total=%{time_total}\n" https://campaignshub.io/r/y5i0uUUyCowbZJZk49Sz5Y || true; done
       - name: Snapshot on VPS
         uses: appleboy/ssh-action@v1.2.2
         env:
@@ -54,6 +58,8 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "HOSTLOAD $(uptime)"; docker stats --no-stream --format 'HOSTSTAT {{.Name}} cpu={{.CPUPerc}} net={{.NetIO}}' | head -14; dmesg 2>/dev/null | tail -3 | sed 's/^/HOSTLOG /' || true
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
