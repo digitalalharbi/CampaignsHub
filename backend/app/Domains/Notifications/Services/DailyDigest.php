@@ -19,6 +19,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Services\ReportObservations;
 use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Models\User;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -96,7 +97,7 @@ final class DailyDigest
      * @param  list<string>  $projectIds
      * @return array<string,mixed>
      */
-    public function buildRange(User $user, string $tenantId, array $projectIds, Carbon $from, Carbon $to): array
+    public function buildRange(User $user, string $tenantId, array $projectIds, Carbon $from, Carbon $to, ?string $kind = null): array
     {
         /*
          * EMAIL-SETTINGS-DEPTH-001 — read once, here, from the recipient's own row.
@@ -135,6 +136,25 @@ final class DailyDigest
         $days = (int) max(1, $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
         $prevTo = $from->copy()->subSecond();
         $prevFrom = $from->copy()->subDays($days)->startOfDay();
+
+        /*
+         * EMAIL-CANONICAL-METRICS-001 — a weekly or monthly email compares against the window the web's
+         * weekly or monthly report compares against.
+         *
+         * «The same length immediately before» is right for a rolling span and wrong for a calendar one:
+         * November (30 days) against «the 30 days before» is 2–31 October, while the monthly report
+         * compares it with October from the 1st, so the same project and month read a different movement
+         * in the inbox and on the page. `ReportPeriod` owns that rule; it is asked here rather than
+         * restated. It applies only when the email's own window IS that kind's window (a Monday-to-Sunday
+         * week, a whole calendar month) — a rolling seven days sent on another weekday keeps the rule above.
+         */
+        if (in_array($kind, ['weekly', 'monthly'], true)) {
+            $canonical = ReportPeriod::resolve($kind, $from->copy()->startOfDay(), $to->copy()->startOfDay(), $to->copy()->addDay());
+            if ($canonical['from']->isSameDay($from) && $canonical['to']->isSameDay($to)) {
+                $prevFrom = $canonical['previous_from']->copy()->startOfDay();
+                $prevTo = $canonical['previous_to']->copy()->endOfDay();
+            }
+        }
 
         $projects = Project::query()
             ->where('tenant_id', $tenantId)
@@ -179,9 +199,23 @@ final class DailyDigest
             'to_date' => $to->toDateString(),
             'days' => $days,
             'previous_date' => $prevFrom->toDateString(),
+            // The portfolio's unit is the web overview's: `currencyBasis` over every project in scope at once.
+            'currency' => $this->unit($this->metrics->acrossProjects()->forProjects($projects->map(fn (Project $p): string => (string) $p->id)->all()), $from, $to),
             'projects' => $blocks,
             'totals' => $this->rollUp($blocks),
         ];
+    }
+
+    /**
+     * The unit the web states for these rows: the currency when every row agrees, null when they mix
+     * (no single unit is true), and the reporting default when there are no money rows to contradict it
+     * — the rule `ReportGenerator` applies to a report's stamp.
+     */
+    private function unit(MetricsAggregator $scope, Carbon $from, Carbon $to): ?string
+    {
+        $basis = $scope->currencyBasis($from, $to);
+
+        return $basis['bases'] === 0 ? ReportingCurrency::DEFAULT : $basis['currency'];
     }
 
     /**
@@ -259,6 +293,7 @@ final class DailyDigest
 
         $current = $scoped->totals($from, $to);
         $previous = $scoped->totals($prevFrom, $prevTo);
+        $unit = $this->unit($scoped, $from, $to);
         $reported = $scoped->reportedKeys($from, $to);
 
         $platforms = $scoped->byProvider($from, $to);
@@ -277,6 +312,8 @@ final class DailyDigest
         $freshness = $this->freshnessFor($projectId, $from, $to);
 
         $block = [
+            // EMAIL-CANONICAL-METRICS-001 — the unit the web states for this window; null = the rows mix.
+            'currency' => $unit,
             'objective' => $lens->value(),
             'metric_set' => $this->template->metricSet($lens->value()),
             'totals' => $current,
@@ -349,7 +386,8 @@ final class DailyDigest
          * detectors read a snapshot-shaped array, so the digest hands them one.
          */
         $block['observations'] = $this->observations->build($lens, [
-            'currency' => ReportingCurrency::DEFAULT,
+            // Observations name money in prose and need a word; where the rows mix there is no true one, so the default stands for them only.
+            'currency' => $unit ?? ReportingCurrency::DEFAULT,
             'kpis' => $current,
             'delta' => $block['change'],
             'reported' => $reported,

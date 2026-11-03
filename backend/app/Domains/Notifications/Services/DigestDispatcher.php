@@ -156,7 +156,7 @@ final class DigestDispatcher
                     }
                 }
             }
-            $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to);
+            $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to, $kind);
 
             /*
              * PROJECT-DIGEST-SCOPE-001 — say so when this is not everything.

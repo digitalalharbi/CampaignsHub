@@ -110,10 +110,12 @@ final class DailyDigestMail extends Mailable
         $from = (string) ($this->digest['date'] ?? '');
         $to = (string) ($this->digest['to_date'] ?? $from);
         $period = $from === '' ? null : ($from === $to ? $from : "{$from} → {$to}");
+        // The unit the web states for these rows; with mixed units (null) the line says so rather than naming one.
+        $unit = array_key_exists('currency', $this->digest) ? $this->digest['currency'] : ReportingCurrency::DEFAULT;
         $items = array_values(array_filter([
             [$ar ? 'آخر تحديث' : 'Last updated', now($tz)->format('Y-m-d H:i')],
             $period === null ? null : [$ar ? 'الفترة' : 'Period', $period],
-            [$ar ? 'العملة' : 'Currency', ReportingCurrency::DEFAULT],
+            [$ar ? 'العملة' : 'Currency', is_string($unit) ? $unit : ($ar ? 'عدة عملات' : 'mixed')],
             [$ar ? 'المنطقة الزمنية' : 'Time zone', $tz],
         ]));
 
@@ -135,7 +137,7 @@ final class DailyDigestMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $p = (new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1)))->forPayload($this->digest);
         $ar = $this->lang === 'ar';
         $totals = $this->digest['totals'] ?? [];
 
@@ -164,7 +166,7 @@ final class DailyDigestMail extends Mailable
 
     public function content(): Content
     {
-        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $p = (new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1)))->forPayload($this->digest);
         $ar = $this->lang === 'ar';
         $app = rtrim((string) config('brand.application_url'), '/');
         $site = Frontend::origin();
@@ -300,10 +302,11 @@ final class DailyDigestMail extends Mailable
     {
         $rows = [];
         foreach ($this->digest['projects'] ?? [] as $block) {
+            $bp = $p->forPayload($block);
             $totals = (array) ($block['totals'] ?? []);
             $reported = (array) ($block['reported'] ?? []);
             $change = (array) ($block['change'] ?? []);
-            $verdict = $p->verdict($block);
+            $verdict = $bp->verdict($block);
             $tone = (string) ($verdict['tone'] ?? 'neutral');
             $set = (array) ($block['metric_set'] ?? []);
 
@@ -316,7 +319,7 @@ final class DailyDigestMail extends Mailable
                     break;
                 }
             }
-            $follow = $this->followUp($p, $ar, $block['follow_up'] ?? null);
+            $follow = $this->followUp($bp, $ar, $block['follow_up'] ?? null);
             $attention = $follow === null ? [] : array_values(array_filter((array) ($follow['attention'] ?? []), 'is_string'));
             $followLine = $follow === null ? null : implode(' · ', array_map(
                 static fn (array $cell): string => $cell['label'].' '.$cell['value'],
@@ -333,9 +336,9 @@ final class DailyDigestMail extends Mailable
                     'status' => $this->statusLabel($tone, $ar),
                     'verdict' => $this->clientVerdict($block, $ar, $tone),
                     'spend' => null,
-                    'second' => $p->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
-                    'revenue' => $second === 'revenue' ? $p->card('revenue', $totals, $reported, $change) : null,
-                    'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                    'second' => $bp->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
+                    'revenue' => $second === 'revenue' ? $bp->card('revenue', $totals, $reported, $change) : null,
+                    'objective' => $objectiveKey === null ? null : $bp->card($objectiveKey, $totals, $reported, $change),
                     'rank' => self::TONE_RANK[$tone] ?? 2,
                     'attention' => null,
                     'follow' => null,
@@ -351,9 +354,9 @@ final class DailyDigestMail extends Mailable
                 'tone' => $tone,
                 'status' => $this->statusLabel($tone, $ar),
                 'verdict' => (string) ($verdict['text'] ?? ''),
-                'spend' => $p->card('spend', $totals, $reported, $change),
-                'second' => $p->card($second, $totals, $reported, $change),
-                'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                'spend' => $bp->card('spend', $totals, $reported, $change),
+                'second' => $bp->card($second, $totals, $reported, $change),
+                'objective' => $objectiveKey === null ? null : $bp->card($objectiveKey, $totals, $reported, $change),
                 'rank' => self::TONE_RANK[$tone] ?? 2,
                 // EXECUTIVE-DAILY-DIGEST-001 — the one follow-up line that needs a person, counts only; the table went with the analysis.
                 'attention' => $attention === [] ? null : implode(' · ', $attention),
@@ -470,10 +473,10 @@ final class DailyDigestMail extends Mailable
     /** @return array{good: int, warn: int, bad: int, neutral: int} */
     private function health(): array
     {
-        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $p = (new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1)))->forPayload($this->digest);
         $counts = ['good' => 0, 'warn' => 0, 'bad' => 0, 'neutral' => 0];
         foreach ($this->digest['projects'] ?? [] as $block) {
-            $tone = (string) ($p->verdict($block)['tone'] ?? 'neutral');
+            $tone = (string) ($p->forPayload($block)->verdict($block)['tone'] ?? 'neutral');
             $counts[array_key_exists($tone, $counts) ? $tone : 'neutral']++;
         }
 
@@ -770,13 +773,14 @@ final class DailyDigestMail extends Mailable
         $out = [];
 
         foreach ($this->digest['projects'] ?? [] as $block) {
+            $bp = $p->forPayload($block);
             $totals = $block['totals'] ?? [];
             $reported = $block['reported'] ?? [];
             $change = $block['change'] ?? [];
 
             $out[] = [
                 'name' => (string) ($block['project_name'] ?? ''),
-                'verdict' => $p->verdict($block),
+                'verdict' => $bp->verdict($block),
                 /*
                   The cards this project's money is judged on — MAIL-005, §14.6 in an inbox.
 
@@ -785,14 +789,14 @@ final class DailyDigestMail extends Mailable
                   reported: an arithmetic accident printed in bold, in a medium where nobody can
                   click through to check it.
                 */
-                'kpis' => $p->cards($block),
-                'paths' => $this->paths($p, $ar, $block['paths'] ?? []),
-                'best' => $this->named($p, $ar, $block['best_platform'] ?? null, $block['best_campaign'] ?? null),
-                'worst' => $this->named($p, $ar, $block['worst_platform'] ?? null, $block['worst_campaign'] ?? null),
+                'kpis' => $bp->cards($block),
+                'paths' => $this->paths($bp, $ar, $block['paths'] ?? []),
+                'best' => $this->named($bp, $ar, $block['best_platform'] ?? null, $block['best_campaign'] ?? null),
+                'worst' => $this->named($bp, $ar, $block['worst_platform'] ?? null, $block['worst_campaign'] ?? null),
                 'freshness' => $this->freshness($ar, $block['freshness'] ?? []),
                 // The funnel, the content and the notes — the three sections that turn a list of
                 // figures into something a reader can act on without opening the product.
-                'funnel' => $this->funnel($p, $ar, $block['funnel'] ?? []),
+                'funnel' => $this->funnel($bp, $ar, $block['funnel'] ?? []),
                 'creatives' => $this->creatives($block['creatives'] ?? null),
                 /*
                   EMAIL-SETTINGS-DEPTH-001 — passed through as the digest produced it.
@@ -818,7 +822,7 @@ final class DailyDigestMail extends Mailable
                   subscribed with, and lead PII is not mailed by default — so the email says «11
                   never contacted» and the link says who.
                 */
-                'follow_up' => $this->followUp($p, $ar, $block['follow_up'] ?? null),
+                'follow_up' => $this->followUp($bp, $ar, $block['follow_up'] ?? null),
                 'url' => $app.'/app/dashboard',
             ];
         }
