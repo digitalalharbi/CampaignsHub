@@ -8,8 +8,7 @@ import { useAuth } from '@/stores/auth'
 
 vi.mock('./api', async (orig) => ({
   ...(await orig<typeof import('./api')>()),
-  fetchOAuthProviders: vi.fn(async () => []),
-  fetchSignInMethods: vi.fn(async () => ({ email_code: { available: false } })),
+  fetchSignInOptions: vi.fn(async () => ({ providers: [], emailCode: false })),
 }))
 vi.mock('./memberships', async (orig) => ({
   ...(await orig<typeof import('./memberships')>()),

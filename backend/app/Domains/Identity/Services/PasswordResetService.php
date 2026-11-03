@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Services;
 
+use App\Domains\Identity\Actions\BackfillClientPortalIdentities;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailLinks;
+use App\Domains\Requests\Models\ExternalRequest;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +59,10 @@ final class PasswordResetService
      */
     private const SETUP_TTL_MINUTES = 4320;
 
-    public function __construct(private readonly TransactionalMailer $mailer) {}
+    public function __construct(
+        private readonly TransactionalMailer $mailer,
+        private readonly BackfillClientPortalIdentities $contacts,
+    ) {}
 
     /**
      * Issue a reset link, if there is an account to issue one for.
@@ -70,7 +75,7 @@ final class PasswordResetService
         $user = User::where('email', $email)->first();
 
         if ($user === null) {
-            return 'ignored';
+            return $this->requestContactSetup($email);
         }
 
         $secret = $this->issue($email, 'password_reset', self::TTL_MINUTES);
@@ -93,6 +98,34 @@ final class PasswordResetService
             kind: 'password_reset',
             template: 'mail.credential',
             userId: (int) $user->getKey(),
+        );
+    }
+
+    /**
+     * LOGIN-SINGLE-DOOR-001 — a client contact named on a request, who has no account yet and asks for a way in.
+     *
+     * They are mailed a link to choose a password; NOTHING is created until that link is spent, so typing somebody's address here
+     * makes no account for them and an unproved address proves nothing. The form answers everybody identically, as it always has.
+     */
+    private function requestContactSetup(string $email): string
+    {
+        $named = ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [$email])->exists();
+        if (! $named) {
+            return 'ignored';
+        }
+
+        $secret = $this->issue($email, 'contact_setup', self::TTL_MINUTES);
+
+        return $this->mailer->send(
+            recipient: $email,
+            mail: new CredentialMail(
+                purpose: CredentialMail::MEMBER_SETUP,
+                lang: 'ar',
+                url: $this->link($email, $secret),
+                expiresInMinutes: self::TTL_MINUTES,
+            ),
+            kind: 'member_setup',
+            template: 'mail.credential',
         );
     }
 
@@ -226,6 +259,10 @@ final class PasswordResetService
         }
 
         $user = User::where('email', $email)->first();
+        // LOGIN-SINGLE-DOOR-001 — the link was spent, so the address is proved: this is the moment a contact's account may exist.
+        if ($user === null && ($row->purpose ?? null) === 'contact_setup') {
+            $user = $this->contacts->forProvenAddress($email);
+        }
         if ($user === null) {
             // The account went away between issuing and using. Same answer: the link cannot be used.
             throw $invalid;

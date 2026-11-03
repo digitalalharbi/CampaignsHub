@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { signInWithCode, submitVerifiedRequest, switchToEnglish } from './helpers'
+import { signInAsContact, submitVerifiedRequest, switchToEnglish } from './helpers'
 
 /**
  * External Client Portal acceptance (mandated flow): submit a request → verify phone + email → receive a
- * request number → sign into the client portal (OTP) → see the request → open it → reply → the reply persists
+ * request number → choose a password through recovery and sign in at /login → see the request → open it → reply → the reply persists
  * across a reload. Runs on Chromium/Firefox/WebKit. No provider is wired, so delivery is honestly recorded as
  * "awaiting provider" — the portal surfaces that state rather than faking a send.
  */
@@ -57,15 +57,14 @@ test('guest submits a verified request then tracks it in the client portal', asy
   expect(reference).toMatch(/REQ-\d{4}-[A-Z0-9]{6}/)
 
   /*
-   * 2) Sign in at the contact's own door (LOGIN-NO-EMAIL-CODE-001).
+   * 2) Sign in at the one door (LOGIN-SINGLE-DOOR-001).
    *
-   * The contact is not asked which portal they want and is never shown a password field: they type
-   * the address they filed with, the server recognises it as a contact rather than an operator, and
-   * the code step renders. Outside production the issued code is returned and filled for us.
+   * They hold no account yet. «Forgot your password?» mails a link; spending it proves the address, opens their account and sets a
+   * password, and `/login` then sends them to the portal because the server says that is where they belong.
    */
-  await page.goto('/portal/login')
+  await signInAsContact(page, email)
+  await expect(page).toHaveURL(/\/portal/, { timeout: 20_000 })
   await switchToEnglish(page)
-  await signInWithCode(page, email)
 
   // 3) The dashboard lists the request. A contact named on exactly one of the agency's clients is
   //    sent straight into that space rather than shown a picker with one option (PORTAL-CLIENT-001),

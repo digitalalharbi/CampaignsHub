@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { E2E_ORIGIN } from './env'
+import { execFileSync } from 'node:child_process'
+import { E2E_BACKEND_ENV, E2E_ORIGIN } from './env'
 import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
@@ -521,33 +522,71 @@ export async function signIn(page: Page, email: string, password = 'password'): 
   await page.getByTestId('login-identify').locator('button[type="submit"]').click()
 }
 
+/** The password a contact chooses in these journeys. Theirs, set through the recovery link, as a real contact's would be. */
+export const CONTACT_PASSWORD = 'contact-chosen-password'
+
 /**
- * Sign in as a client contact — the one-time-code half of the unified door.
+ * LOGIN-SINGLE-DOOR-001 — a client contact with no password takes the real way in: recovery, then the one door.
  *
- * A contact has never had a password, so `/login` sends them down the code step instead. Outside
- * production the backend returns the code it just issued (`dev_code`, hard-gated server-side) and the
- * page fills the field with it, which is what makes this branch testable at all without an inbox.
- *
- * The wait is on the field HAVING a value rather than on the step being visible: the step renders
- * immediately, and submitting before `POST /client/login/start` has answered sends an empty code.
+ * The link is what the service would have mailed. There is no inbox here, so `e2e:reset-link` (E2E database only, never production)
+ * asks the real forgot-password service and prints a usable link; the page, the token check and the account it opens are the product's.
  */
-export async function signInWithCode(page: Page, contact: string): Promise<void> {
-  await page.goto(page.url().includes('/portal/login') ? page.url() : '/portal/login')
-  await page.getByTestId('portal-login-email').fill(contact)
-  await page.getByTestId('portal-login-send').click()
+export async function chooseContactPassword(page: Page, contact: string): Promise<void> {
+  const link = execFileSync('php', ['artisan', 'e2e:reset-link', contact], {
+    cwd: new URL('../../backend', import.meta.url).pathname,
+    env: { ...process.env, ...E2E_BACKEND_ENV },
+    encoding: 'utf-8',
+  }).trim().split('\n').at(-1) as string
 
-  const form = page.getByTestId('portal-login-code')
-  await expect(
-    form,
-    `${contact} was not offered a code step — the server says it signs in another way`,
-  ).toBeVisible({ timeout: 20_000 })
-
-  const field = form.getByTestId('login-otp-5')
-  await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
-  await form.locator('button[type="submit"]').click()
+  await page.goto(link)
+  const fields = page.locator('input[type="password"]')
+  await expect(fields, 'the recovery link did not open the form').toHaveCount(2, { timeout: 20_000 })
+  await fields.nth(0).fill(CONTACT_PASSWORD)
+  await fields.nth(1).fill(CONTACT_PASSWORD)
+  await page.locator('form button[type="submit"]').click()
+  await expect(fields, 'the recovery link was refused').toHaveCount(0, { timeout: 20_000 })
 }
 
-/** The contact seeded by `DemoAccountsSeeder` — a real client contact, with no password anywhere. */
+/** Recovery, then `/login`, carrying `redirect` when the journey was interrupted on a page. */
+export async function signInAsContact(page: Page, contact: string, redirect?: string): Promise<void> {
+  await chooseContactPassword(page, contact)
+  await page.goto(redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login')
+  await signIn(page, contact, CONTACT_PASSWORD)
+}
+
+/**
+ * The email code, ON, for this page only.
+ *
+ * The gate's server runs the default, OFF, because that is what Production runs and what the baselines must show. So the code step is
+ * walked here against answers the test states; what the engine really does when on is `PortalEmailSignInTest`.
+ */
+export async function enableEmailCode(page: Page, answers: {
+  delivery?: string
+  verify?: { status: number; json: unknown }
+  onVerify?: (body: Record<string, unknown>) => void
+} = {}): Promise<void> {
+  await page.route('**/auth/oauth/providers', (route) => route.fulfill({ json: { data: { providers: [], email_code: true } } }))
+  await page.route('**/client/login/start', (route) => route.fulfill({
+    status: 201,
+    json: { data: { verification_id: 'v1', delivery_status: answers.delivery ?? 'sent', resend_after: 60, expires_in_minutes: 10, dev_code: '424242' } },
+  }))
+  await page.route('**/client/login/verify', async (route) => {
+    answers.onVerify?.(route.request().postDataJSON() as Record<string, unknown>)
+    const { status, json } = answers.verify ?? { status: 200, json: { data: { authenticated: true, contact: 'x', dev_token: null, destination: '/portal/requests' } } }
+
+    return route.fulfill({ status, json })
+  })
+}
+
+/** Open the code step of `/login`, which only exists while the code is enabled. */
+export async function openEmailCode(page: Page, email: string): Promise<void> {
+  await page.getByTestId('login-email-code').click()
+  await page.getByTestId('email-code-address').fill(email)
+  await page.getByTestId('email-code-send').click()
+  await expect(page.getByTestId('email-code-step')).toBeVisible({ timeout: 20_000 })
+}
+
+/** The contact seeded by `DemoAccountsSeeder` — a real client contact, with no account until they prove the address. */
 export const DEMO_CLIENT_CONTACT = 'customer@demo-client.local'
 
 /**

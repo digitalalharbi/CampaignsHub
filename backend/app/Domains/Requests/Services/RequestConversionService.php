@@ -11,6 +11,10 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Tasks\Models\Task;
+use App\Domains\Tenancy\Actions\ManageMembershipScopes;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\MembershipScope;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -71,6 +75,7 @@ final class RequestConversionService
 
                 $locked->forceFill(['client_id' => $client->id, 'project_id' => $project->id, 'campaign_id' => $campaign->id, 'last_activity_at' => now()])->save();
                 $locked->events()->create(['type' => 'converted', 'actor_id' => $actor->id, 'is_client_visible' => false, 'message' => 'Converted to client/project/campaign', 'created_at' => now()]);
+                $this->carryContactIntoClient($locked, (string) $client->id);
                 $this->audit->log('request.converted', 'external_request', $locked->id, null, ['client_id' => $client->id, 'project_id' => $project->id, 'campaign_id' => $campaign->id]);
 
                 return $conversion;
@@ -81,6 +86,30 @@ final class RequestConversionService
                 'code' => class_basename($e), 'message' => Str::limit($e->getMessage(), 300),
             ]);
             throw $e;
+        }
+    }
+
+    /**
+     * LOGIN-SINGLE-DOOR-001 — a contact whose account was opened before they had a client space keeps sight of their own request.
+     *
+     * Only a client-portal membership with NO client scope qualifies: that state exists only for such a contact, and no agency chose
+     * it (`invited_by` null). A membership with any scope is untouched, so nobody's existing reach widens here.
+     */
+    private function carryContactIntoClient(ExternalRequest $request, string $clientId): void
+    {
+        if (! is_string($request->contact_email) || $request->contact_email === '') {
+            return;
+        }
+
+        $membership = Membership::query()
+            ->where('tenant_id', $request->tenant_id)
+            ->where('portal', Portal::ClientPortal->value)
+            ->whereNull('invited_by')
+            ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [mb_strtolower($request->contact_email)])->select('id'))
+            ->active()->with('scopes')->first();
+
+        if ($membership !== null && $membership->clientScopeIds() === []) {
+            app(ManageMembershipScopes::class)->add($membership, MembershipScope::TYPE_CLIENT, [$clientId]);
         }
     }
 

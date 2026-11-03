@@ -8,14 +8,14 @@ vi.mock('./api', async (orig) => {
   return {
     ...actual,
     login: vi.fn(),
-    fetchOAuthProviders: vi.fn().mockResolvedValue([
+    fetchSignInOptions: vi.fn().mockResolvedValue({ providers: [
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'live', available: true },
-    ]),
+    ], emailCode: false }),
     startOAuth: vi.fn(),
   }
 })
 
-import { fetchOAuthProviders, login, startOAuth } from './api'
+import { fetchSignInOptions, login, startOAuth } from './api'
 
 function typeEmail(value: string) {
   fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value } })
@@ -33,19 +33,19 @@ describe('LoginPage — the sign-in card', () => {
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
     await waitFor(() => expect(screen.getByTestId('login-google')).toBeEnabled())
-    expect(fetchOAuthProviders).toHaveBeenCalled()
+    expect(fetchSignInOptions).toHaveBeenCalled()
     expect(screen.getByTestId('login-google')).toHaveTextContent('Continue with Google')
     expect(startOAuth).not.toHaveBeenCalled()
   })
 
   it('does not advertise Google when the server reports it unavailable', async () => {
-    vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
-    ])
+    ], emailCode: false })
 
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await waitFor(() => expect(fetchOAuthProviders).toHaveBeenCalled())
+    await waitFor(() => expect(fetchSignInOptions).toHaveBeenCalled())
     expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
   })
   afterEach(() => { signOut(); vi.clearAllMocks() })
@@ -136,7 +136,7 @@ describe('LoginPage — the sign-in card', () => {
   })
 
   it('keeps the Google button when the lookup fails, and reports a failed click', async () => {
-    vi.mocked(fetchOAuthProviders).mockRejectedValueOnce(new Error('down'))
+    vi.mocked(fetchSignInOptions).mockRejectedValueOnce(new Error('down'))
     vi.mocked(startOAuth).mockRejectedValueOnce(new Error('down'))
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
@@ -146,9 +146,9 @@ describe('LoginPage — the sign-in card', () => {
   })
 
   it('fills Google’s row with the way home when the server says Google cannot work, leaving no gap', async () => {
-    vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
-    ])
+    ], emailCode: false })
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
@@ -157,11 +157,54 @@ describe('LoginPage — the sign-in card', () => {
     expect(screen.queryByTestId('login-google-reserved')).not.toBeInTheDocument()
   })
 
-  it('hands a link aimed at the portal to the contact’s own door, with its destination', () => {
+  it('keeps a link aimed at the portal on this page: there is no other door to hand it to', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login?redirect=%2Fportal%2Frequests', locale: 'en' })
 
-    expect(screen.queryByTestId('login-identify')).not.toBeInTheDocument()
+    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
+  })
+
+  it('offers no code by default, and keeps its line reserved and empty', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await screen.findByTestId('login-google')
+    expect(screen.getByTestId('login-email-code-row')).toBeEmptyDOMElement()
+    expect(screen.queryByTestId('login-email-code')).not.toBeInTheDocument()
+  })
+
+  it('offers the code only when the server enabled it, as a step of this page', async () => {
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [], emailCode: true })
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('login-email-code'))
+    expect(screen.getByTestId('email-code-form')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('email-code-back'))
+    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
+  })
+
+  it('hands Google the page it was interrupted on, for the server to judge, and no address that could leave', async () => {
+    vi.mocked(startOAuth).mockReturnValue(new Promise(() => undefined))
+    signOut()
+    const first = renderWithProviders(<LoginPage />, { route: '/login?redirect=%2Fapp%2Fcampaigns', locale: 'en' })
+    fireEvent.click(await screen.findByTestId('login-google'))
+    await waitFor(() => expect(startOAuth).toHaveBeenCalledWith('google', { redirect: '/app/campaigns' }))
+    first.unmount()
+    vi.mocked(startOAuth).mockClear()
+
+    renderWithProviders(<LoginPage />, { route: '/login?redirect=https%3A%2F%2Fevil.example', locale: 'en' })
+    fireEvent.click(await screen.findByTestId('login-google'))
+    await waitFor(() => expect(startOAuth).toHaveBeenCalledWith('google', { redirect: null }))
+  })
+
+  it('says what Google answered, in its own words and never the address’s', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=registration_required&message=%3Cb%3Ephish%3C%2Fb%3E', locale: 'en' })
+
+    expect(screen.getByTestId('login-oauth-note')).toHaveTextContent('No account is connected to this Google account')
+    expect(screen.getByTestId('login-oauth-note')).not.toHaveTextContent('phish')
   })
 
   it('offers no client portal link and no choice of account type, in either language', () => {
