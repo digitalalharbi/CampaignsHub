@@ -283,6 +283,28 @@ final class TeamNotificationsTest extends TestCase
     }
 
     /** What somebody receives is the same answer their own preferences screen gives them. */
+    public function test_a_message_from_another_workspace_is_not_reported_here(): void
+    {
+        $other = Tenant::create(['name' => 'B', 'slug' => 'b-team-notif-mail', 'status' => 'active']);
+        $this->prefer($this->scoped, ['digests' => ['daily' => true, 'weekly' => false, 'alerts' => false]]);
+
+        // A row of another workspace, and a reset nobody attributed: neither is this workspace's to report.
+        foreach ([(string) $other->id => 'k-other', '' => 'k-unattributed'] as $tenantId => $key) {
+            DB::table('mail_deliveries')->insert([
+                'id' => (string) Uuid::uuid4(), 'tenant_id' => $tenantId === '' ? null : $tenantId,
+                'user_id' => $this->scoped->id, 'kind' => 'password_reset', 'recipient' => 'scoped@tn.test',
+                'locale' => 'ar', 'template' => 'credential', 'status' => 'failed', 'transport' => 'log',
+                'attempts' => 1, 'dedup_key' => $key,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $row = $this->board()['scoped@tn.test'];
+
+        $this->assertSame('never_sent', $row['state']);
+        $this->assertNull($row['last_message']);
+    }
+
     public function test_the_categories_shown_are_the_ones_that_person_would_actually_receive(): void
     {
         $this->prefer($this->scoped, [

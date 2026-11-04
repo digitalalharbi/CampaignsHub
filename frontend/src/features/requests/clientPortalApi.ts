@@ -6,6 +6,8 @@ import { api, getData, postData } from '@/lib/api/client'
  */
 
 export interface PortalLoginStart {
+  resend_after?: number
+  expires_in_minutes?: number
   verification_id: string
   delivery_status: string
   dev_code: string | null
@@ -14,8 +16,8 @@ export interface PortalLoginStart {
 export const portalLoginStart = (channel: 'sms' | 'whatsapp' | 'email', destination: string) =>
   postData<PortalLoginStart>('/client/login/start', { channel, destination })
 
-export const portalLoginVerify = (verification_id: string, code: string) =>
-  postData<{ authenticated: boolean; contact: string; dev_token: string | null }>('/client/login/verify', { verification_id, code })
+export const portalLoginVerify = (verification_id: string, code: string, redirect?: string | null) =>
+  postData<{ authenticated: boolean; contact: string; dev_token: string | null; destination: string }>('/client/login/verify', { verification_id, code, redirect: redirect ?? null })
 
 export const portalSession = () => getData<{ contact_email: string | null; contact_phone: string | null }>('/client/session')
 export const portalLogout = () => postData<{ ok: boolean }>('/client/logout')

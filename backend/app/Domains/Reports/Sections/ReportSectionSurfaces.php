@@ -9,6 +9,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportReadMemo;
 
 /**
  * The one call every surface makes to apply a report's sections — REPORT-SECTION-SURFACES-001.
@@ -274,7 +275,7 @@ final class ReportSectionSurfaces
         if ($section === null) {
             return true;
         }
-        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
 
         return $report !== null && $this->operatorAllows($section, $report, $share);
     }

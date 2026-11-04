@@ -39,7 +39,9 @@ final class UnifiedCampaignController extends Controller
     {
         abort_unless($request->user()->hasPermission('campaigns.view'), 403);
 
-        $query = UnifiedCampaign::query()->withCount('externalCampaigns')->latest();
+        // ACCOUNT-SCOPE-ISOLATION-001 — a campaign of only deselected/unbound accounts is not the project's to name.
+        $query = UnifiedCampaign::query()->withCount('externalCampaigns')->latest()
+            ->tap(fn ($q) => BoundAccountVisibility::unifiedCampaigns($q));
 
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
@@ -334,7 +336,9 @@ final class UnifiedCampaignController extends Controller
     public function show(Request $request, string $project, string $campaign): JsonResponse
     {
         abort_unless($request->user()->hasPermission('campaigns.view'), 403);
-        $model = $this->find($campaign)->loadCount('externalCampaigns');
+        $model = $this->find($campaign);
+        abort_unless(BoundAccountVisibility::unifiedCampaigns(UnifiedCampaign::query()->whereKey($model->getKey()))->exists(), 404, 'Unified campaign not found.');
+        $model->loadCount('externalCampaigns');
 
         return ApiResponse::success(new UnifiedCampaignResource($model), 'Unified campaign retrieved.');
     }

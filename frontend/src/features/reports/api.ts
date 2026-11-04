@@ -458,6 +458,9 @@ export interface LiveCampaignRow {
 /** REPORT-FRESHNESS-STAMP-001 */
 export type DataStatus = 'fresh' | 'delayed' | 'stale' | 'failed' | 'unknown'
 
+/** SPEND-RECONCILE-RECORD-001 */
+export type ReconcileStatus = 'matched' | 'drifted' | 'failed' | 'never'
+
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
@@ -764,6 +767,12 @@ export interface LivePayload {
     age_minutes?: number | null
     /** null for a source that is not an ad platform. */
     data_status?: DataStatus | null
+    /** SPEND-RECONCILE-RECORD-001 — when the platform's own total was last CHECKED against the stored one (UTC ISO); never a sync time. */
+    last_reconciled_at?: string | null
+    /** `never` where no check was ever recorded for this project's bound accounts. */
+    reconcile_status?: ReconcileStatus
+    /** Stored minus provider, as a share of the provider total; carried only with the status. */
+    reconcile_diff_pct?: number | null
   }>
   freshness_summary?: {
     oldest_success_at: string | null

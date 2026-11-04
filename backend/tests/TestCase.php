@@ -6,6 +6,7 @@ use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Tests\Concerns\GrantsMemberships;
+use Tests\Support\SeededAccountBinder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -29,6 +30,13 @@ abstract class TestCase extends BaseTestCase
     protected ?string $heldTenantId = null;
 
     /**
+     * Deny by default (BoundAccountVisibility::UNBOUND_ROWS_VISIBLE = false): a row whose account holds no binding is stored, not read.
+     * A seeded world that writes figures for an account therefore selects it, as an operator does — {@see SeededAccountBinder}. A test
+     * that asserts the no-binding branch itself sets this to false and seeds its own bindings.
+     */
+    protected bool $selectsSeededAccounts = true;
+
+    /**
      * Tests run in the application's OWN default language (I18N-001).
      *
      * Symfony's `Request::create()` — which every `getJson`/`postJson` goes through — supplies
@@ -46,6 +54,10 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         $this->withServerVariables(['HTTP_ACCEPT_LANGUAGE' => '']);
+
+        if ($this->selectsSeededAccounts) {
+            SeededAccountBinder::listen();
+        }
     }
 
     /**
