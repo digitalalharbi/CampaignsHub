@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tasks\Http\Controllers;
 
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tasks\Resources\TaskResource;
@@ -47,6 +48,9 @@ final class TaskController extends Controller
             $request->user(),
             ['created_by', 'assignee_id'],
         );
+        // PROJECTS-RBAC-CLOSURE-001 — a task filed under a project is inside the reader's PROJECT reach too, not only their
+        // client ceiling: a member of one project of a client no longer lists (or counts) the client's other projects' tasks.
+        app(ProjectReach::class)->constrainRows($query, $request->user());
         foreach (['status', 'priority', 'project_id', 'client_workspace_id'] as $filter) {
             if ($value = $request->string($filter)->toString()) {
                 $query->where($filter, $value);
@@ -172,6 +176,7 @@ final class TaskController extends Controller
             $task->client_workspace_id === null ? null : (string) $task->client_workspace_id,
             (int) $task->created_by === (int) $request->user()->id || (int) $task->assignee_id === (int) $request->user()->id,
         ), 403);
+        abort_unless(app(ProjectReach::class)->canReachRow($request->user(), $task->project_id === null ? null : (string) $task->project_id), 403);
 
         $validated = $request->validate([
             'title' => ['sometimes', 'string', 'max:200'],
@@ -215,6 +220,11 @@ final class TaskController extends Controller
                 // A project with no client cannot be reached through the ceiling — only an unrestricted caller files there.
                 $this->refuseUnlessUnrestricted($user, 'project_id');
             }
+        }
+
+        if ($projectId !== null && ! app(ProjectReach::class)->canReachRow($user, (string) $projectId)) {
+            // Another project of the same client answers exactly like one that does not exist.
+            throw ValidationException::withMessages(['project_id' => 'The selected value is invalid.']);
         }
 
         if ($clientId !== null && ! $this->scopes->canReach($user, (string) $clientId)) {

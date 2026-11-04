@@ -59,9 +59,15 @@ export interface MembershipState {
  * `portal` is a preference, not a claim: the server returns a destination for a portal the user
  * actually holds, and falls back to their own when they do not hold the one asked for.
  */
-export function fetchMemberships(portal?: PortalKey, options?: { timeoutMs?: number }): Promise<MembershipState> {
+export function fetchMemberships(portal?: PortalKey, options?: { timeoutMs?: number; intended?: string }): Promise<MembershipState> {
+  const query = new URLSearchParams()
+  if (portal) query.set('portal', portal)
+  // LOGIN-SINGLE-DOOR-001 — the page a sign-in was interrupted on, for the SERVER to accept or refuse.
+  if (options?.intended) query.set('intended', options.intended)
+  const suffix = query.toString()
+
   return getData<MembershipState>(
-    portal ? `/auth/memberships?portal=${portal}` : '/auth/memberships',
+    suffix === '' ? '/auth/memberships' : `/auth/memberships?${suffix}`,
     options?.timeoutMs === undefined ? undefined : { timeout: options.timeoutMs },
   )
 }

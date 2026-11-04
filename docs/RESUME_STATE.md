@@ -1,4 +1,4 @@
-# CURRENT STATE — 2026-11-02 (evening) — P0 data accuracy & performance: repair applied, Snapchat gap closed, profiler on Production, #932 in CI
+# CURRENT STATE — 2026-11-03 (morning) — queue isolation deployed and measured; selected-only sync proven by census; data repair verified; queue: deny-by-default → email → kpi-parity → GA4 → integrations-2 → frontend → pricing chain
 
 - **Repair applied 2026-11-02 (Owner approved both plans):** verified backup first (#928, 996 MB dump, contents listed, restore not rehearsed). Batch `65f35749-bec1-4450-bdb9-6f7db47aac3b` and batch `42c9f3af-f1ee-4725-8e50-636a85cb5e2a` in `isolation_quarantines`; restore with `isolation-quarantine.yml restore_batch=<id>`. Live Nasel report 1,914.40 → 1,538.84, ChatGPT Ads row gone. Still open: prove no return after a sync; the Nasel link `vTvh…` now answers 404 (state to be read with `production-perf.yml tokens=`), the `6lpb…` link stays suspended; do not re-enable either.
 - **Incident:** ChatGPT Ads spend of another advertiser (Razzah Avenue) appeared in the Nasel Riwaq client report.
@@ -23,6 +23,17 @@
 - **HOLD:** #930 Meta multi-app (META-MULTI-APP-001) — draft, label `hold:owner-approval-meta`, lander guard refuses it; needs the Owner's secret, Meta Developer steps and recorded approval.
 - **Next after #932 deploys:** re-measure 7Ctk… ×3; re-read y5i0… card vs detail (70 vs 1); run `scope_audit=all` for the census; add `meta-owner-approval` to the main ruleset; then the matrix rows above move from IMPLEMENTED_NOT_VERIFIED where Production shows it.
 - **Resume point:** this file + `ch-scripts/lander/lander.sh status`; last docs commit on `docs/evidence-2026-11-02`.
+
+## 2026-11-03 morning — what is true now (Git + Production are the source; `ch-scripts/lander/EXECUTION_STATE.md` is the resumable list)
+
+- **Deployed:** #932 (`3a9e7b6c`: RESULT-PARITY-001 and REPORT-DATA-FRESHNESS-001 VERIFIED live), #933 docs (`b4f7b25f`), #935 (`aefce9d0`: SYNC-QUEUE-ISOLATION-001, REACH-STORM-001 VERIFIED by measurement; SYNC-RUNS-READS-001 implemented).
+- **Measured:** load 12 → 1.99, backlog 193 → 0, report build 25.2 → 9.1 s, end-to-end 15 / 9 / 9 s during a sweep. Clean off-sweep ×3 at 07:45: 23.6 / 21.4 / 24.8 s — the quiet-minute request is NOT shorter than before #935 (19–35 s); only the sync-time spikes are gone. PERF-RECOVERY-001 stays PARTIAL; next lever is the ~13 s outside the 9.1 s build.
+- **Proven:** census run 41572121232 — UNASSIGNED = 0 for every provider (SYNC-GATE-001, SYNC-CENSUS-001 VERIFIED). Repair recurrence checks for both owners: nothing to quarantine (ACCOUNT-SCOPE-ISOLATION-003 VERIFIED).
+- **Blocked by customer credentials (BLOCKED_EXTERNAL_CREDENTIALS):** Meta «Project 1» (two accounts, session invalidated — reconnect), TikTok ReSano (no permission to operate advertiser), ChatGPT Ads Razzah and ReSano (incorrect API key). Their spend cannot be reconciled until re-authorised.
+- **Queue (one lander, serial):** #937 deny-by-default (+ campaign list) → email layout (header rework, RTL/LTR) → kpi-parity (one KPI definition + recorded «last confirmed») → #934 GA4 → integrations-centre-2 (contains #927; close #927 after) → frontend-2 → #916 → pricing/tenancy chain → #905 → type-scale → webkit evidence.
+- **Read-only counts, Production 2026-11-03 (run 41669394031):** active memberships: agency 2, app 2, portal 1; nobody holds more than one (run 41683527252, which corrects an earlier count that used the wrong portal value). The one client-scoped membership with no project membership is that portal member, role client_viewer, password set, unused in 90 days, 2 projects and 5 reports in scope (run 41682651662); the project RBAC fix changes agency-portal controllers, which that membership cannot reach, so it should not change what this member sees: read from the routes, not exercised. No `salla-review` tenant. No default portal tenant, no portal domain. No contact on a request, no live portal token. No user holding two portals. No user holding a closed workspace and a live one. Registration 904ac4d5: `approved_awaiting_payment`, no tenant, no users row.
+- **Owner steps pending:** after #934 deploys, read the google-client verdict, then clear the stored GA4 client id/secret in /admin; Gmail check of the new email header (Android dark + light); the server plan (items 3–6); Meta #930 stays HOLD (secret, callback URLs, live test, recorded approval).
+
 
 
 # CURRENT STATE — 2026-10-31 (morning) — #897/#898/#899/#854 deployed; X joins the reconnect fix; billing lifecycle registered (gated)

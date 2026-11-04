@@ -6,10 +6,8 @@ import { useAuth } from '@/stores/auth'
 /**
  * Where to send someone the moment they are authenticated (ADR 0002).
  *
- * Two rules, in order:
- *
- *   1. an explicit `?redirect=` they were bounced from — the page they actually wanted;
- *   2. otherwise the destination the SERVER derives from their memberships.
+ * LOGIN-SINGLE-DOOR-001 — one rule: the SERVER names the destination. A `?redirect=` they were bounced from is passed along as
+ * a request, and comes back only if they may enter it; `safeRedirect` here just declines to send one that could never be honoured.
  *
  * The destination is never computed here from an account type or a role. That rule lives in one place,
  * on the server, where it cannot be edited by whoever is holding the browser — and where "does this
@@ -51,21 +49,13 @@ export interface PostAuthOutcome {
 
 /**
  * The full answer, for callers that need to TELL the user something rather than just move them.
- *
- * An explicit `?redirect=` still wins: it is the page they were actually going to, and honouring it
- * is not a portal claim — whatever guards that page will answer for it.
  */
 export async function resolvePostAuthOutcome(
   params: URLSearchParams,
   requestedPortal?: PortalKey | null,
 ): Promise<PostAuthOutcome> {
-  const explicit = params.get('redirect')
-  if (explicit) {
-    const target = safeRedirect(explicit, '')
-    if (target !== '') return { destination: target, requestedPortalHeld: true }
-  }
-
-  const read = () => fetchMemberships(requestedPortal ?? undefined)
+  const intended = safeRedirect(params.get('redirect'), '')
+  const read = () => fetchMemberships(requestedPortal ?? undefined, intended === '' ? undefined : { intended })
 
   try {
     const state = await read().catch(async (first: unknown) => {
