@@ -557,6 +557,20 @@ final class PublicReportController extends Controller
         $this->throttle($request);
         $share = $this->shares->resolveActive($token);
         abort_if($share === null, 404, 'Link not found.');
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — the password gates the FILES as it gates the page.
+         *
+         * Every other address of a link passes the password check; this one did not, so a protected link's CSV, XLSX and PDF were
+         * served to anyone holding the address — the whole document the password exists to keep. Same header, same query
+         * parameter, same refusal and the same access-log line as `open()`.
+         */
+        if ($share->password_hash !== null) {
+            $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
+            if (! Hash::check($provided, $share->password_hash)) {
+                $this->shares->log($share, 'denied', $request, 'bad password');
+                abort(401, 'كلمة المرور مطلوبة أو غير صحيحة.');
+            }
+        }
         abort_unless($share->allow_download, 403, 'Downloads are disabled for this link.');
         abort_unless(in_array($format, ['pdf', 'xlsx', 'csv'], true), 404);
 

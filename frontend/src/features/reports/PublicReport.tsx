@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
-import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
+import { downloadSharedFile, fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
@@ -209,7 +209,10 @@ export function PublicReport() {
                     </span>
                   )}
                   {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => (
-                    <a key={f} href={sharedDownloadUrl(token, f)} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
+                    <a key={f} href={sharedDownloadUrl(token, f)}
+                      // A protected link's file needs the password the page was opened with; a plain link cannot send it.
+                      onClick={accepted ? (e) => { e.preventDefault(); void downloadSharedFile(token, f, accepted) } : undefined}
+                      title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
                       <Download size={12} aria-hidden /> <span className="hidden sm:inline">{f.toUpperCase()}</span>
                     </a>
                   ))}

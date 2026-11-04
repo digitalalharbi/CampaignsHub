@@ -326,6 +326,43 @@ export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'cl
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 
+/**
+ * REPORT-FILTERS-FUNCTIONAL-001 — the file of a password-protected link, fetched WITH the password.
+ *
+ * The server now refuses a protected link's files without it, exactly as it refuses the page. A plain
+ * `<a href>` cannot carry the header, so for these links the file is fetched, then handed to the
+ * browser under the name the server gave it. Links with no password keep the plain link.
+ *
+ * Resolves false when the server refuses, so the caller can say so instead of saving an error page.
+ */
+export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<boolean> {
+  const res = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
+  if (!res.ok) return false
+
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const encoded = /filename\*=(?:UTF-8|utf-8)''([^;]+)/.exec(disposition)?.[1]
+  const plain = /filename="?([^";]+)"?/.exec(disposition)?.[1]
+  let name = plain ?? `report.${format}`
+  if (encoded) {
+    try {
+      name = decodeURIComponent(encoded)
+    } catch {
+      // A malformed header keeps the plain name.
+    }
+  }
+
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+
+  return true
+}
+
 export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/renew`, { expires_at: expiresAt })
 

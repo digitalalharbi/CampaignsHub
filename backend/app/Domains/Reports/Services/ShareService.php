@@ -9,9 +9,11 @@ use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
+use App\Domains\Reports\Support\ClientAccountRows;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
@@ -515,6 +517,21 @@ final class ShareService
                 ? AttentionAudience::redact($data['attention'], (bool) $share->hide_spend, (bool) $share->hide_revenue)
                 : null;
             $data = ReportStructure::refresh($data, 'recommendations');
+        }
+
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — two switches the LIVE payload honoured and a stored copy did not.
+         *
+         * «Compared with the previous period» off: the stored `previous`, `delta` and the comparison slide go (see
+         * {@see PreviousComparison}). Ad-account names not disclosed: the accounts table is named by platform and ordinal and
+         * carries no technical id (see {@see ClientAccountRows}). Applied here because the page, the print document and the files
+         * of a link all pass through this method, and the stored copy itself is never written.
+         */
+        if (! $share->sectionVisibility()->previous_comparison) {
+            $data = PreviousComparison::strip($data);
+        }
+        if (is_array($data['accounts'] ?? null) && $data['accounts'] !== []) {
+            $data['accounts'] = ClientAccountRows::for(array_values($data['accounts']), $share, Report::withoutGlobalScopes()->find($share->report_id));
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.

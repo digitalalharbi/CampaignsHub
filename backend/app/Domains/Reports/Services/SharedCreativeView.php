@@ -19,6 +19,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -93,7 +94,18 @@ final class SharedCreativeView
         $page = max((int) ($requested['page'] ?? 1), 1);
         $total = (clone $query)->count();
 
-        $creatives = $this->rows->applySort($query, (string) ($applied['sort'] ?? ''), $from, $to)
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — a list cannot be ordered by a figure the link withholds.
+         *
+         * `sort=spend` on a link that hides spend returned the creatives in order of their spend: the amounts were gone and their
+         * ranking was not. A sort the reader may not see the figure of falls back to the default order.
+         */
+        $sort = (string) ($applied['sort'] ?? '');
+        if ($visibility->hides($sort)) {
+            $sort = '';
+        }
+
+        $creatives = $this->rows->applySort($query, $sort, $from, $to)
             ->forPage($page, $perPage)
             ->get();
 
@@ -390,19 +402,71 @@ final class SharedCreativeView
             $this->rows->applyPeriodActivity($query, $window[0], $window[1]);
         }
 
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — the campaign bound is the ceiling's whenever the caller brings none, and never «no bound».
+         *
+         * `available()` builds its filter options with an empty campaign list, which read as «every campaign of the project»: a link
+         * over two campaigns offered the platforms and objectives of all of them. And a ceiling that names no campaign and no
+         * account — what a report with nothing in its period leaves behind — listed the whole project's content. Both resolve here,
+         * to the ceiling's campaigns inside its accounts, or to the impossible id.
+         */
+        $campaigns = $applied['campaign_ids'] !== []
+            ? $applied['campaign_ids']
+            : AccountCampaignCeiling::campaigns($ceiling['campaign_ids'], $ceiling['account_ids'], $ceiling['project_id']);
+
         $this->rows->applyFilters($query, [
             'providers' => $applied['providers'],
-            'campaign_ids' => $applied['campaign_ids'],
+            'campaign_ids' => $campaigns === [] ? [ReportScope::IMPOSSIBLE] : $campaigns,
+            // The account axis itself, as the live lists of the same link apply it (REPORT-SOURCE-ISOLATION-001): one link, one set.
+            'account_ids' => $ceiling['account_ids'],
             'objectives' => $applied['objectives'],
             'paths' => $applied['paths'],
             'kinds' => $applied['kinds'],
-            'search' => $applied['search'],
+            // Applied below, over what this link may show (see `searchWithin()`).
+            'search' => '',
             'creative_ids' => $ceiling['creative_ids'],
             'creative_group_ids' => $ceiling['creative_group_ids'],
             'excluded_creative_ids' => $ignoreExclusions ? [] : $ceiling['excluded_creative_ids'],
         ]);
 
+        $this->searchWithin($query, $share, (string) ($applied['search'] ?? ''));
+
         return $query;
+    }
+
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — a reader searches what the link shows them, and nothing it withholds.
+     *
+     * The library's search matched the name, the headline and the ad copy, whatever the link showed. On a link that withholds
+     * the headline or the copy, a search that finds a creative says the withheld text contains the word, one guess at a time;
+     * on a link that shows content under generic labels, the same is true of the name. Each column is searched only while the
+     * link shows it, and a search with nothing left to look in finds nothing.
+     */
+    private function searchWithin(Builder $query, ReportShare $share, string $search): void
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return;
+        }
+
+        $visibility = $share->creativeVisibility();
+        $columns = array_keys(array_filter([
+            'name' => ! GenericNames::for(null, $share)->chose('content'),
+            'headline' => $visibility->headline,
+            'body' => $visibility->adCopy,
+        ]));
+
+        if ($columns === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function ($q) use ($columns, $search): void {
+            foreach ($columns as $column) {
+                $q->orWhere('external_creatives.'.$column, 'ilike', "%{$search}%");
+            }
+        });
     }
 
     /**
@@ -598,6 +662,15 @@ final class SharedCreativeView
          * and empty tells a reader that a value exists and is being kept from them.
          */
         unset($row['campaign_name'], $row['campaign_id'], $row['ad_set_name'], $row['ad_set_id']);
+
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — which of the agency's ad accounts carried a creative is not a client's business.
+         *
+         * Every row arrived with `ad_account: {id, name}` — the operator library's column — so a link that withholds account names
+         * on its accounts table published them, with the internal id, on every content card, in the summary, in the PDF document
+         * and in the files. No client surface draws it. Removed, not nulled: there is no column to leave empty.
+         */
+        unset($row['ad_account']);
 
         foreach ($visibility->hiddenMetrics() as $metric) {
             /*

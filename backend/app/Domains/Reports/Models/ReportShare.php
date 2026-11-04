@@ -148,9 +148,21 @@ final class ReportShare extends Model
         return CreativeDisplay::fromArray((array) (($this->settings ?? [])['creative_display'] ?? []) ?: null);
     }
 
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — the link's own money switches outrank the content section's.
+     *
+     * `hide_spend` withholds spend and everything that returns it, on the whole link. The content section has a spend permission
+     * of its own, and with both set the library, the summary, the comparison and the content rows of the files stated each
+     * creative's spend, CPA and ROAS on a link whose every other figure hid them — and the creatives' spend adds up to the total.
+     * The stricter switch wins; `CreativeVisibility` then closes CPA and ROAS behind it, as it does for its own flags.
+     */
     public function creativeVisibility(): CreativeVisibility
     {
-        return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));
+        return CreativeVisibility::fromArray(array_merge(
+            (array) (($this->settings ?? [])['creatives'] ?? []),
+            $this->hide_spend ? ['spend' => false] : [],
+            $this->hide_revenue ? ['revenue' => false] : [],
+        ));
     }
 
     /**
