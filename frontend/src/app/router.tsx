@@ -125,6 +125,7 @@ const LegacyLoginRedirect = lazyPage(() => import('@/features/auth/LegacyLoginRe
 const NominationsPage = lazyPage(() => import('@/features/influencers/NominationsPage'), 'NominationsPage')
 const RosterPage = lazyPage(() => import('@/features/influencers/RosterPage'), 'RosterPage')
 const DeliverablesPage = lazyPage(() => import('@/features/influencers/DeliverablesPage'), 'DeliverablesPage')
+const ImpactPage = lazyPage(() => import('@/features/influencers/ImpactPage'), 'ImpactPage')
 const CreatorShell = lazyPage(() => import('@/layouts/CreatorShell'), 'CreatorShell')
 const CreatorWorkPage = lazyPage(() => import('@/features/influencers/creator/CreatorWorkPage'), 'CreatorWorkPage')
 const CreatorCollaborationPage = lazyPage(() => import('@/features/influencers/creator/CreatorCollaborationPage'), 'CreatorCollaborationPage')
@@ -771,6 +772,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               // what was ASKED, including the answers that were no.
               { path: 'nominations', element: <NominationsPage /> },
               { path: 'deliverables', element: <DeliverablesPage /> },
+              // INFLUENCER-IMPACT-001 — inside the tree that is unmounted while the service is withdrawn.
+              { path: 'impact', element: <ImpactPage /> },
             ],
           },
           ],
