@@ -30,6 +30,8 @@ final class LiveReportPayloadIdentityTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // `content_key` is an HMAC under the application key, and CI generates a new key every run.
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         $this->freezeWorld();
         $this->buildWorld();
     }
