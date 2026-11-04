@@ -37,7 +37,6 @@ import {
   getCurrentShareLink,
   renameReport,
   resumeShare,
-  sendReport,
   shareLogs,
 } from './api'
 import type { CreatedShare, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
@@ -134,6 +133,8 @@ export function ReportsPage() {
   const [namesId, setNamesId] = useState<string | null>(null)
   const [sectionsId, setSectionsId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
+  /* REPORT-SEND-HONEST-001 — no mail path exists here, so the row explains that instead of collecting addresses. */
+  const [sendNotice, setSendNotice] = useState<{ id: string; name: string; shareable: boolean } | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [typeFilter, setTypeFilter] = useState('')
@@ -175,10 +176,6 @@ export function ReportsPage() {
   const exp = useMutation({
     mutationFn: ({ id, format }: { id: string; format: ReportFormat }) => exportReport(currentProjectId!, id, format),
     // Straight away: the row now holds a `processing` export, which is what keeps the poll above alive.
-    onSuccess: invalidate,
-  })
-  const send = useMutation({
-    mutationFn: ({ id, emails }: { id: string; emails: string[] }) => sendReport(currentProjectId!, id, emails),
     onSuccess: invalidate,
   })
 
@@ -240,7 +237,7 @@ export function ReportsPage() {
             : (ar ? 'لم يُحدَّد مشروع' : 'No project selected')
         }
         badges={<ProvenanceBadge provenance={provenance} />}
-        purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}
+        purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والمشاركة' : 'Saved documents you can generate, export and share'}
         /*
          * ONE summary row, not two — §34.
          *
@@ -582,10 +579,7 @@ export function ReportsPage() {
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onTogglePdfDrilldown={(on) => drill.mutate({ id: r.id, on })}
-                    onSend={() => {
-                      const emails = window.prompt(ar ? 'البريد الإلكتروني للمستلمين (مفصولة بفواصل):' : 'Recipient emails (comma separated):')
-                      if (emails) send.mutate({ id: r.id, emails: emails.split(',').map((e) => e.trim()).filter(Boolean) })
-                    }}
+                    onSend={() => setSendNotice({ id: r.id, name: r.name, shareable: r.audience !== 'internal' })}
                     picked={picked.includes(r.id)}
                     onPick={(on) => setPicked((cur) => (on ? [...cur, r.id] : cur.filter((id) => id !== r.id)))}
                     onDelete={() => setConfirmDelete([{ id: r.id, name: r.name }])}
@@ -646,6 +640,36 @@ export function ReportsPage() {
         currentProjectId
           ? <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />
           : <ScopeLostDialog ar={ar} onClose={() => setLiveOpen(false)} />
+      )}
+      {sendNotice && (
+        <Modal
+          open
+          onClose={() => setSendNotice(null)}
+          title={ar ? 'لم يُرسل التقرير' : 'The report was not sent'}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setSendNotice(null)}>{ar ? 'إغلاق' : 'Close'}</Button>
+              {sendNotice.shareable && (
+                <Button
+                  type="button"
+                  data-testid="report-send-notice-share"
+                  onClick={() => {
+                    setShareId(sendNotice.id)
+                    setSendNotice(null)
+                  }}
+                >
+                  <Share2 size={15} /> {ar ? 'مشاركة رابط آمن' : 'Share a secure link'}
+                </Button>
+              )}
+            </div>
+          )}
+        >
+          <p role="status" data-testid="report-send-notice" className="text-sm text-text-secondary">
+            {ar
+              ? `لم يُرسل «${sendNotice.name}»: الإرسال بالبريد غير متاح حاليًا، ولم يصل شيء إلى أي مستلم. ${sendNotice.shareable ? 'يمكنك مشاركة رابط آمن أو تصدير الملف بدلًا من ذلك.' : 'هذا تقرير داخلي لا يُشارك برابط؛ يمكنك تصدير الملف بدلًا من ذلك.'}`
+              : `“${sendNotice.name}” was not sent: email sending is not available, and nothing reached any recipient. ${sendNotice.shareable ? 'You can share a secure link or export the file instead.' : 'This is an internal report, which cannot be shared by link; you can export the file instead.'}`}
+          </p>
+        </Modal>
       )}
       {shareId && (
         currentProjectId
@@ -790,7 +814,7 @@ function ReportRowView({
                 )
               })()}
               <IconBtn title={ar ? 'مشاركة رابط آمن' : 'Share a secure link'} onClick={onShare}><Share2 size={15} /></IconBtn>
-              <IconBtn title={ar ? 'إرسال' : 'Send'} onClick={onSend}><Send size={15} /></IconBtn>
+              <IconBtn title={ar ? 'الإرسال بالبريد غير متاح' : 'Email sending is not available'} onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
           <IconBtn title={ar ? 'إعادة تسمية' : 'Rename'} onClick={onRename}><Type size={15} /></IconBtn>

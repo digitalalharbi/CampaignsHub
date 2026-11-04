@@ -490,20 +490,23 @@ final class ReportController extends Controller
         return ApiResponse::success(['id' => $export->id, 'format' => $format, 'status' => 'processing'], 'Export queued.', status: 202);
     }
 
-    public function send(Request $request, AuditLogger $audit, string $project, string $report, ReportDeliveryAudienceGuard $guard): JsonResponse
+    /**
+     * REPORT-SEND-HONEST-001 — this hands nothing to a mail transport, so it refuses rather than claims.
+     *
+     * It used to answer «Report sent.», stamp `last_sent_at` on the report and on a new recipient row, and
+     * write a `report.sent` audit row, with no message behind any of them. Permission, validation and the
+     * audience guard still answer first, so a wrong request hears what is wrong with it. Stamps already on
+     * existing rows are left alone. A real send belongs here only with proof it reached the transport.
+     */
+    public function send(Request $request, string $project, string $report, ReportDeliveryAudienceGuard $guard): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.export'), 403);
         $model = $this->find($report);
         $emails = $request->validate(['recipients' => ['required', 'array', 'min:1'], 'recipients.*' => ['email']])['recipients'];
         // Never deliver an internal report to a client/external recipient.
         $guard->assertDeliverable($model, $emails);
-        foreach ($emails as $email) {
-            $model->recipients()->create(['email' => $email, 'last_sent_at' => now(), 'is_demo' => $model->is_demo]);
-        }
-        $model->update(['last_sent_at' => now()]);
-        $audit->log(action: 'report.sent', entityType: Report::class, entityId: (string) $model->id, after: ['recipients' => count($emails)]);
 
-        return ApiResponse::success(['sent_to' => count($emails), 'at' => $model->last_sent_at], 'Report sent.');
+        return ApiResponse::error(__('api.report_send_unavailable'), ['code' => 'report_send_unavailable'], status: 501);
     }
 
     /**
