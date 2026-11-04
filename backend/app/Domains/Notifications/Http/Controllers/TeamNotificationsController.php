@@ -259,7 +259,9 @@ final class TeamNotificationsController extends Controller
      */
     private function lastMessage(int $userId, string $email, string $tenantId): ?array
     {
+        // This workspace's only, as `deliveries()` asks: another workspace's mail is not its manager's to read.
         $delivery = DB::table('mail_deliveries')
+            ->where('tenant_id', $tenantId)
             ->where(fn ($q) => $q->where('user_id', $userId)->orWhere('recipient', $email))
             ->orderByDesc('created_at')
             ->first();
