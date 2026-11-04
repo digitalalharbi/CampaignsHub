@@ -1140,6 +1140,8 @@ export interface ReportSectionsState {
   views?: string[] | null
   /** Whether this is the multi-view detailed product (summary and standard are one composition). */
   offers_views?: boolean
+  /** REPORT-GENERIC-LABELS-001 — the names this report replaces with generic labels, on every surface and link. */
+  generic_names?: GenericNameKind[]
   effective: Record<string, boolean>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -1157,7 +1159,7 @@ export interface BusinessStreamDefinition {
   account_ids: string[]
 }
 
-export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
+export const updateReportSections = (p: string, id: string, body: { generic_names?: GenericNameKind[]; sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
   putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
@@ -1177,6 +1179,9 @@ export interface ShareSectionsState {
   views?: string[] | null
   effective_views?: string[]
   offers_views?: boolean
+  /** REPORT-GENERIC-LABELS-001 — the link's own name switches, and the ones its report already holds, which it cannot undo. */
+  generic_names?: GenericNameKind[]
+  generic_names_of_report?: GenericNameKind[]
   resolved: ResolvedSectionRow[]
   visible: string[]
   availability_judged: boolean
@@ -1206,7 +1211,36 @@ export const updateShareSections = (
   sections: Record<string, boolean>,
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
   views?: string[] | null,
-) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }) })
+  genericNames?: GenericNameKind[],
+) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }), ...(genericNames === undefined ? {} : { generic_names: genericNames }) })
+
+/** REPORT-GENERIC-LABELS-001 — a kind of name that can be replaced by a generic label. */
+export type GenericNameKind = 'campaign' | 'ad_set' | 'account' | 'content'
+
+/** REPORT-AUTO-COMPOSE-001 — what automatic mode would do, for the report or one link. Reading it changes nothing. */
+export type AutoComposeDecision = 'show' | 'hide' | 'unavailable' | 'off'
+
+export interface AutoComposeProposal {
+  level: 'report' | 'link'
+  share_id: string | null
+  objective: string
+  objective_source: 'report' | 'scope' | 'data' | 'mixed'
+  availability_judged: boolean
+  sections: Array<{ key: string; title_ar: string; title_en: string; decision: AutoComposeDecision; reason: 'objective' | 'no_data' | 'unsupported' | 'turned_off' | null }>
+  metrics: string[]
+  metrics_left_out: Array<{ key: string; reason: 'not_reported' | 'hidden_by_link' | 'hidden_by_report' }>
+  metrics_apply: boolean
+  applied: boolean
+  applied_at: string | null
+}
+
+const autoComposeUrl = (p: string, reportId: string, shareId?: string) =>
+  `${base(p)}/${reportId}/auto-compose${shareId === undefined ? '' : `?share_id=${encodeURIComponent(shareId)}`}`
+
+export const getAutoCompose = (p: string, reportId: string, shareId?: string) => getData<AutoComposeProposal>(autoComposeUrl(p, reportId, shareId))
+export const applyAutoCompose = (p: string, reportId: string, shareId?: string) => postData<AutoComposeProposal>(autoComposeUrl(p, reportId, shareId))
+export const revertAutoCompose = (p: string, reportId: string, shareId?: string) =>
+  api.delete<{ data: AutoComposeProposal }>(autoComposeUrl(p, reportId, shareId)).then((r) => r.data.data)
 
 /** RESULT-EVENTS-001 — which reported metric is a project's «Result», per platform and acquisition path. */
 export type ResultEventsMap = Record<string, Record<string, string>>

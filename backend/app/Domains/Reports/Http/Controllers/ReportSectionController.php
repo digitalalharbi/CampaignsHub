@@ -17,6 +17,7 @@ use App\Domains\Reports\Sections\ReportSectionResolver;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Sections\SectionSettings;
+use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -90,6 +91,11 @@ final class ReportSectionController extends Controller
         $views = $this->validatedViews($request, ($base ?? $before)['views'] ?? null);
 
         $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams, 'views' => $views], $this->registry)->toArray();
+        // REPORT-GENERIC-LABELS-001 — which names this report replaces with generic labels, on every surface and every link of it.
+        $namesBefore = GenericNames::ofReport($model);
+        if ($request->exists('generic_names')) {
+            $model->config = self::withGenericNames((array) ($model->config ?? []), $this->validatedGenericNames($request));
+        }
         $model->save();
 
         /*
@@ -106,8 +112,8 @@ final class ReportSectionController extends Controller
             action: 'report.sections_updated',
             entityType: Report::class,
             entityId: (string) $model->getKey(),
-            before: $before,
-            after: $model->section_settings,
+            before: $before + ['generic_names' => $namesBefore],
+            after: (array) $model->section_settings + ['generic_names' => GenericNames::ofReport($model)],
         );
 
         return ApiResponse::success($this->reportShape($model->fresh() ?? $model), 'Report sections saved.');
@@ -164,6 +170,11 @@ final class ReportSectionController extends Controller
         } else {
             $settings['views'] = $views;
         }
+        // REPORT-GENERIC-LABELS-001 — the link's own name switches; what the report hides stays hidden whatever these say.
+        $namesBefore = GenericNames::ofShare($link);
+        if ($request->exists('generic_names')) {
+            $settings = self::withGenericNames($settings, $this->validatedGenericNames($request));
+        }
         $link->settings = $settings;
 
         /*
@@ -185,8 +196,8 @@ final class ReportSectionController extends Controller
             action: 'report.shared_link_sections_updated',
             entityType: ReportShare::class,
             entityId: (string) $link->getKey(),
-            before: ['hidden' => $before, 'views' => $viewsBefore, ...$moneyBefore],
-            after: ['hidden' => $settings['section_overrides'], 'views' => $views, 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
+            before: ['hidden' => $before, 'views' => $viewsBefore, 'generic_names' => $namesBefore, ...$moneyBefore],
+            after: ['hidden' => $settings['section_overrides'], 'views' => $views, 'generic_names' => GenericNames::ofShare($link), 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
         );
 
         return ApiResponse::success($this->shareShape($model, $link->fresh() ?? $link), 'Link sections saved.');
@@ -231,6 +242,8 @@ final class ReportSectionController extends Controller
             'views' => $link->views(),
             'effective_views' => $surfaces->viewsFor($report, $link) ?? ReportViews::VIEWS,
             'offers_views' => $surfaces->offersViews($report, $link),
+            'generic_names' => GenericNames::ofShare($link),
+            'generic_names_of_report' => GenericNames::ofReport($report),
         ];
     }
 
@@ -319,6 +332,35 @@ final class ReportSectionController extends Controller
         ]);
 
         return ReportViews::normalise($request->input('views'));
+    }
+
+    /** @return list<string> */
+    private function validatedGenericNames(Request $request): array
+    {
+        $request->validate([
+            'generic_names' => ['present', 'nullable', 'array'],
+            'generic_names.*' => [Rule::in(GenericNames::KINDS)],
+        ]);
+
+        return GenericNames::normalise($request->input('generic_names'));
+    }
+
+    /**
+     * Stored only when somebody chose one, so a report or link that never did keeps exactly the settings it had.
+     *
+     * @param  array<string, mixed>  $stored
+     * @param  list<string>  $kinds
+     * @return array<string, mixed>
+     */
+    private static function withGenericNames(array $stored, array $kinds): array
+    {
+        if ($kinds === []) {
+            unset($stored['generic_names']);
+        } else {
+            $stored['generic_names'] = $kinds;
+        }
+
+        return $stored;
     }
 
     /**
@@ -447,6 +489,7 @@ final class ReportSectionController extends Controller
             // REPORT-COMPOSITION-CONTROL-001 — null is «every main section», which is what an untouched report offers.
             'views' => $settings->views(),
             'offers_views' => app(ReportSectionSurfaces::class)->offersViews($report),
+            'generic_names' => GenericNames::ofReport($report),
             'effective' => $settings->effective($this->registry, $audience),
             'resolved' => $resolved->toArray(),
             'visible' => $resolved->visible(),

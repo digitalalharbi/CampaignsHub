@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Sections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
 
 /**
@@ -204,7 +205,16 @@ final class ReportSectionSurfaces
             $payload['report_columns'] = $chosen;
         }
 
-        return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+        $payload = $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+
+        // REPORT-AUTO-COMPOSE-001 — only where somebody picked automatic mode; a stored document's own record is not rewritten.
+        $picked = ReportAutoComposer::chosenMetrics($report, $share);
+        if ($picked !== null && array_key_exists('metric_set', $payload)) {
+            $payload['metric_set'] = $picked;
+        }
+
+        // REPORT-GENERIC-LABELS-001 — last, on the one call every surface makes: a hidden name leaves every key and sentence.
+        return GenericNames::for($report, $share)->apply($payload);
     }
 
     /**

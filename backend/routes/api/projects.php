@@ -36,6 +36,7 @@ use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ProjectReportViewsController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
+use App\Domains\Reports\Http\Controllers\ReportAutoComposeController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportIdentityController;
@@ -441,6 +442,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}/sections', [ReportSectionController::class, 'show'])->middleware('project.can:reports.view')->name('reports.sections.show');
     Route::put('reports/{report}/sections', [ReportSectionController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.sections.update');
     // A link's own section switches: the same registry, off-only on top of the report.
+    // REPORT-AUTO-COMPOSE-001 — propose, pick and go back; `share_id` narrows it to one link.
+    Route::get('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.auto-compose.show');
+    Route::post('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.auto-compose.store');
+    Route::delete('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'destroy'])->middleware('project.can:reports.manage')->name('reports.auto-compose.destroy');
     Route::get('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'showShare'])->middleware('project.can:reports.view')->name('reports.shares.sections.show');
     Route::put('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.sections.update');
     /*

@@ -12,6 +12,7 @@ use App\Domains\Reports\Services\ShareAnalytics;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
@@ -25,6 +26,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 /** Manage secure client links for a report (create/list/revoke + access logs). Requires reports.share. */
 final class ReportShareController extends Controller
@@ -59,6 +61,9 @@ final class ReportShareController extends Controller
             'hide_spend' => ['boolean'],
             'hide_revenue' => ['boolean'],
             'hide_campaign_names' => ['boolean'],
+            // REPORT-GENERIC-LABELS-001 — names shown under generic labels from the link's first open.
+            'generic_names' => ['sometimes', 'array'],
+            'generic_names.*' => [Rule::in(GenericNames::KINDS)],
             'watermark' => ['boolean'],
             // LIVEREP-001 — asking for a live link.
             'live' => ['boolean'],
@@ -134,22 +139,23 @@ final class ReportShareController extends Controller
         // value object closes that combination once rather than at every surface that renders it.
         $opts['settings'] = [
             'creatives' => CreativeVisibility::fromArray($opts['creatives'] ?? [])->toArray(),
-        ] + (isset($opts['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new CreativeDisplay)->toArray()] : []) + [
-            /*
+        ] + (($generic = GenericNames::normalise($opts['generic_names'] ?? null)) !== [] ? ['generic_names' => $generic] : [])
+          + (isset($opts['creative_display']) ? ['creative_display' => (CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new CreativeDisplay)->toArray()] : []) + [
+              /*
              * Which optional sections this link may open — ATTRIB-VIS-001.
              *
              * Resolved the same way and for the same reason: an absent or malformed key becomes
              * «closed», so a link cannot acquire a section by omission.
              */
-            /*
+              /*
              * REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is OFF on a new client link
              * unless the Owner switched it on. It is the agency's own working view (it invites a question
              * about last week the client was never promised an answer to), so a link that did not ask for
              * it does not carry it. Links created before this keep what they were stored with.
              */
-            'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => false])->toArray(),
-            'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
-        ];
+              'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => false])->toArray(),
+              'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
+          ];
 
         [$share, $raw] = $this->shares->create($model, $opts, $request->user()->id);
         $audit->log(action: 'report.shared_link_created', entityType: ReportShare::class, entityId: (string) $share->id);

@@ -16,6 +16,7 @@ use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Widgets\Services\SharedWidgetData;
@@ -380,10 +381,10 @@ final class PublicReportController extends Controller
          * before this it showed revenue anyway.
          */
         return ApiResponse::success(
-            $this->shares->sanitizeAttribution(
+            GenericNames::for($report, $share)->apply($this->shares->sanitizeAttribution(
                 $transparency->build((string) $report->tenant_id, (string) $report->project_id, $from, $to),
                 $share,
-            ),
+            )),
             'Shared attribution.',
         );
     }
@@ -408,7 +409,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
-        return ApiResponse::success(['widgets' => $widgets->forShare($share, $report)], 'Shared widgets.');
+        return ApiResponse::success(GenericNames::for($report, $share)->apply(['widgets' => $widgets->forShare($share, $report)]), 'Shared widgets.');
     }
 
     public function creatives(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -424,7 +425,7 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'creatives');
 
-        return ApiResponse::success($creatives->library($share, $request->query()), 'Shared creatives.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($creatives->library($share, $request->query())), 'Shared creatives.');
     }
 
     public function creativeSummary(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -440,7 +441,7 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'creative-summary');
 
-        return ApiResponse::success($creatives->summary($share, $request->query()), 'Shared creative summary.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($creatives->summary($share, $request->query())), 'Shared creative summary.');
     }
 
     public function creative(Request $request, string $token, string $creative, SharedCreativeView $creatives): JsonResponse
@@ -458,7 +459,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('هذا المحتوى غير متاح ضمن هذا الرابط.', status: 404);
         }
 
-        return ApiResponse::success($payload, 'Shared creative.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($payload), 'Shared creative.');
     }
 
     public function creativeComparison(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -481,7 +482,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('المقارنة غير متاحة ضمن هذا الرابط.', status: 404);
         }
 
-        return ApiResponse::success($payload, 'Shared creative comparison.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($payload), 'Shared creative comparison.');
     }
 
     /**

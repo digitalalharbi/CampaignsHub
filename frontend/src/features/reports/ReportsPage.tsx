@@ -39,7 +39,7 @@ import {
   resumeShare,
   shareLogs,
 } from './api'
-import type { CreatedShare, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
+import type { CreatedShare, GenericNameKind, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
@@ -53,6 +53,7 @@ import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { SchedulesPanel } from './SchedulesPanel'
 import { LiveLinkBuilder } from './LiveLinkBuilder'
 import { ReportScopePicker } from './ReportScopePicker'
+import { GenericNameChoices } from './ReportComposeControls'
 import { ReportSectionControls } from './ReportSectionControls'
 import {
   ShareCreativeControls,
@@ -1342,6 +1343,8 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
     [detail.data],
   )
 
+  // REPORT-GENERIC-LABELS-001 — asked before the link exists as well as after.
+  const [genericNames, setGenericNames] = useState<GenericNameKind[]>([])
   const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: true, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
   const [live, setLive] = useState(false)
   /*
@@ -1377,6 +1380,7 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
         hide_spend: opts.hide_spend,
         hide_revenue: opts.hide_revenue,
         hide_campaign_names: opts.hide_campaign_names,
+        ...(genericNames.length > 0 ? { generic_names: genericNames } : {}),
         watermark: opts.watermark,
         ...(opts.password ? { password: opts.password } : {}),
         ...(opts.expires_at ? { expires_at: opts.expires_at } : {}),
@@ -1605,6 +1609,7 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
               <Toggle k="hide_revenue" label={ar ? 'إخفاء الإيرادات' : 'Hide revenue'} />
               <Toggle k="hide_campaign_names" label={ar ? 'إخفاء أسماء الحملات' : 'Hide campaign names'} />
             </div>
+            <GenericNameChoices ar={ar} chosen={genericNames} onChange={setGenericNames} testid="share-generic-names" />
             <div className="grid gap-2 sm:grid-cols-2">
               <Field label={ar ? 'كلمة مرور (اختياري)' : 'Password (optional)'}><input type="text" value={opts.password} onChange={(e) => setOpts((o) => ({ ...o, password: e.target.value }))} placeholder={ar ? '4 أحرف فأكثر' : '4 characters or more'} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
               <Field label={ar ? 'تاريخ الانتهاء (اختياري)' : 'Expiry date (optional)'}><DateField value={opts.expires_at} onChange={(v) => setOpts((o) => ({ ...o, expires_at: v }))} /></Field>

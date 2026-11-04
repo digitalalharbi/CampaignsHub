@@ -15,6 +15,7 @@ use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportPlatformDrilldowns;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -115,7 +116,8 @@ final class ReportPrintController extends Controller
          */
         $drilldowns = app(ReportPlatformDrilldowns::class)->forPrint($report, $body, $share);
         if ($drilldowns !== []) {
-            $body['platform_drilldowns'] = $drilldowns;
+            // REPORT-GENERIC-LABELS-001 — attached after the sweep, so it passes through the sweep itself.
+            $body['platform_drilldowns'] = GenericNames::for($report, $share)->apply($drilldowns);
         }
 
         /*
