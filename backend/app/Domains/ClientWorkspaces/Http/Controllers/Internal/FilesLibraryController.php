@@ -6,6 +6,7 @@ namespace App\Domains\ClientWorkspaces\Http\Controllers\Internal;
 
 use App\Domains\Drive\Models\DriveLink;
 use App\Domains\Drive\Services\DriveReach;
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Support\ApiResponse;
@@ -49,6 +50,9 @@ final class FilesLibraryController
          * reaches — possibly none. File and report names, and the roster of client names, only for those.
          */
         $reach = $this->scopes->reachableClientIds($request->user());
+        // PROJECTS-RBAC-CLOSURE-001 — report exports are a PROJECT's, so a client ceiling alone listed (and counted) the
+        // exports of the client's projects the reader is not in. `null` = no narrowing.
+        $projectReach = app(ProjectReach::class)->confinedIdsFor($request->user());
 
         $clientNames = DB::table('client_workspaces')->where('tenant_id', $tenantId)
             ->when($reach !== null, fn ($q) => $q->whereIn('id', $reach))
@@ -86,6 +90,7 @@ final class FilesLibraryController
             ->join('projects as p', 'p.id', '=', 'rp.project_id')
             ->where('p.tenant_id', $tenantId)->whereNotNull('e.path')
             ->when($reach !== null, fn ($q) => $q->whereIn('p.client_workspace_id', $reach))
+            ->when($projectReach !== null, fn ($q) => $q->whereIn('rp.project_id', $projectReach))
             ->select('e.id', 'e.format', 'e.size', 'e.created_at', 'rp.name as report_name', 'rp.audience',
                 'p.client_workspace_id as client_id')
             ->orderByDesc('e.created_at')->limit(self::CAP)
@@ -123,6 +128,7 @@ final class FilesLibraryController
             ->join('projects as p', 'p.id', '=', 'rp.project_id')
             ->where('p.tenant_id', $tenantId)->whereNotNull('e.path')
             ->when($reach !== null, fn ($q) => $q->whereIn('p.client_workspace_id', $reach))
+            ->when($projectReach !== null, fn ($q) => $q->whereIn('rp.project_id', $projectReach))
             ->count();
 
         $files = $requestFiles->concat($reportFiles)->sortByDesc('uploaded_at')->values();
