@@ -80,6 +80,8 @@ trait BuildsLiveReportWorld
     /** @param int $campaignsPerAccount unified campaigns per bound account */
     protected function buildWorld(int $campaignsPerAccount = 4): void
     {
+        $this->startWorldOnFreshTables();
+
         $this->tenant = Tenant::create(['name' => 'World', 'slug' => 'world', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $this->workspace = ClientWorkspace::withoutGlobalScopes()->create([
@@ -115,6 +117,18 @@ trait BuildsLiveReportWorld
         $this->elsewhereAccount = $this->account('meta', 'meta-act-elsewhere');
         $this->bind($this->elsewhereAccount, $this->otherProject, true);
         $this->seedAccount($this->elsewhereAccount, 'meta', 2, $this->project, 'other');
+    }
+
+    /**
+     * Physical order is insertion order here, whatever ran before.
+     *
+     * Reads with no ORDER BY walk a table physically, and in a database earlier tests have written to and autovacuum has swept, a row lands wherever space was freed. Those reads
+     * answer ties: Snapchat and TikTok both cost exactly 1574 / 60 in this world, so `objective_leaders` names whichever came second, and a full run flipped the payload baseline
+     * with no code involved. TRUNCATE is transactional in Postgres and starts each table on a new file; the test's rollback puts everything back and leaves no dead rows behind.
+     */
+    private function startWorldOnFreshTables(): void
+    {
+        DB::statement('TRUNCATE unified_campaigns, external_campaigns, daily_metrics, entity_daily_metrics, creative_daily_metrics, external_creatives, external_ad_sets, external_ads, period_reach, provider_connections, external_accounts, integration_credentials, project_integration_bindings, reports, report_shares CASCADE');
     }
 
     /** More campaigns, with their creatives and rows, under every bound account — the same shapes, further along. */

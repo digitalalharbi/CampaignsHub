@@ -136,6 +136,8 @@ export function ReportsPage() {
   const [shareId, setShareId] = useState<string | null>(null)
   /* REPORT-SEND-HONEST-001 — no mail path exists here, so the row explains that instead of collecting addresses. */
   const [sendNotice, setSendNotice] = useState<{ id: string; name: string; shareable: boolean } | null>(null)
+  // REPORT-SNAPSHOT-PROTECT-001 — replacing a stored copy is asked for; the copy stays in the report's history.
+  const [regenAsk, setRegenAsk] = useState<{ id: string; name: string } | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [typeFilter, setTypeFilter] = useState('')
@@ -577,7 +579,7 @@ export function ReportsPage() {
                       if (name) duplicate.mutate({ id: r.id, name })
                     }}
                     onSections={() => setSectionsId(r.id)}
-                    onRegenerate={() => regen.mutate(r.id)}
+                    onRegenerate={() => (r.status === 'completed' ? setRegenAsk({ id: r.id, name: r.name }) : regen.mutate(r.id))}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onTogglePdfDrilldown={(on) => drill.mutate({ id: r.id, on })}
                     onSend={() => setSendNotice({ id: r.id, name: r.name, shareable: r.audience !== 'internal' })}
@@ -641,6 +643,34 @@ export function ReportsPage() {
         currentProjectId
           ? <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />
           : <ScopeLostDialog ar={ar} onClose={() => setLiveOpen(false)} />
+      )}
+      {regenAsk && (
+        <Modal
+          open
+          onClose={() => setRegenAsk(null)}
+          title={ar ? 'إعادة إنشاء التقرير؟' : 'Rebuild this report?'}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setRegenAsk(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+              <Button
+                type="button"
+                data-testid="report-regenerate-confirm"
+                onClick={() => {
+                  regen.mutate(regenAsk.id)
+                  setRegenAsk(null)
+                }}
+              >
+                {ar ? 'إعادة الإنشاء' : 'Rebuild'}
+              </Button>
+            </div>
+          )}
+        >
+          <p data-testid="report-regenerate-ask" className="text-sm text-text-secondary">
+            {ar
+              ? `ستحل نسخة جديدة محل النسخة المحفوظة من «${regenAsk.name}»، وسيراها من يفتح رابطًا ثابتًا لهذا التقرير. تبقى النسخة الحالية في سجل التقرير ويمكن إعادتها.`
+              : `A new copy replaces the stored copy of “${regenAsk.name}”, and anyone opening a fixed link to this report will see it. The current copy stays in the report's history and can be put back.`}
+          </p>
+        </Modal>
       )}
       {sendNotice && (
         <Modal
