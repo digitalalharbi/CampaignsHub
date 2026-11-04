@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoginPage } from './LoginPage'
 import { renderWithProviders, signOut } from '@/test/utils'
 
@@ -8,50 +8,24 @@ vi.mock('./api', async (orig) => {
   return {
     ...actual,
     login: vi.fn(),
-    signInMethod: vi.fn(),
-    emailCodeStart: vi.fn(),
-    emailCodeVerify: vi.fn(),
-    fetchOAuthProviders: vi.fn().mockResolvedValue([
+    fetchSignInOptions: vi.fn().mockResolvedValue({ providers: [
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'live', available: true },
-    ]),
+    ], emailCode: false }),
     startOAuth: vi.fn(),
-    fetchSignInMethods: vi.fn().mockResolvedValue({ password: { available: true }, email_code: { available: true } }),
   }
 })
 
-vi.mock('@/features/requests/clientPortalApi', async (orig) => {
-  const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, portalLoginStart: vi.fn(), portalLoginVerify: vi.fn() }
-})
-
-import { emailCodeStart, emailCodeVerify, fetchOAuthProviders, fetchSignInMethods, login, signInMethod, startOAuth } from './api'
-import { portalLoginStart } from '@/features/requests/clientPortalApi'
-
-const mockedMethod = vi.mocked(signInMethod)
-const mockedPortalStart = vi.mocked(portalLoginStart)
-const mockedEmailStart = vi.mocked(emailCodeStart)
-
-/** What `/auth/email-code/start` answers when a code has genuinely gone out. */
-const DELIVERED = { verification_id: 'v1', delivery_status: 'queued', resend_after: 60, dev_code: null }
+import { fetchSignInOptions, login, startOAuth } from './api'
 
 function typeEmail(value: string) {
   fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value } })
 }
 
-/** Ask for a code as an ordinary platform account, and wait for the step to arrive. */
-async function reachCodeStep(identifier = 'agency@campaignshub.io', start: unknown = DELIVERED) {
-  mockedMethod.mockResolvedValue({ method: 'password', channel: 'email' })
-  mockedEmailStart.mockResolvedValue(start as never)
-  typeEmail(identifier)
-  fireEvent.click(await screen.findByTestId('login-request-code'))
-  await waitFor(() => expect(screen.getByTestId('login-code')).toBeInTheDocument())
-}
-
 /**
- * LOGIN-CARD-001 — one card, two ways in, and the server decides where you land.
+ * LOGIN-CARD-001 — one card, and the server decides where you land.
  *
  * The property under test is not the wording. It is that the visitor is never asked which portal
- * they want, that the URL cannot grant one, and that both routes out of this card end in a session
+ * they want, that the URL cannot grant one, and that every route out of this card ends in a session
  * the server chose.
  */
 describe('LoginPage — the sign-in card', () => {
@@ -59,19 +33,19 @@ describe('LoginPage — the sign-in card', () => {
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
     await waitFor(() => expect(screen.getByTestId('login-google')).toBeEnabled())
-    expect(fetchOAuthProviders).toHaveBeenCalled()
+    expect(fetchSignInOptions).toHaveBeenCalled()
     expect(screen.getByTestId('login-google')).toHaveTextContent('Continue with Google')
     expect(startOAuth).not.toHaveBeenCalled()
   })
 
   it('does not advertise Google when the server reports it unavailable', async () => {
-    vi.mocked(fetchOAuthProviders).mockResolvedValueOnce([
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
-    ])
+    ], emailCode: false })
 
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await waitFor(() => expect(fetchOAuthProviders).toHaveBeenCalled())
+    await waitFor(() => expect(fetchSignInOptions).toHaveBeenCalled())
     expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
   })
   afterEach(() => { signOut(); vi.clearAllMocks() })
@@ -123,7 +97,7 @@ describe('LoginPage — the sign-in card', () => {
 
   /** Everything the card promises is on it, in one place, before anything is clicked. */
   /** AUTH-LOGIN-UX-002 — both credentials, the ways in that can work stacked at full width, recovery and sign-up; no security card. */
-  it('carries both credentials, the available ways in stacked, recovery and sign-up — and no security card', async () => {
+  it('carries both credentials, Google, recovery and sign-up — and no security card', async () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
 
@@ -131,26 +105,117 @@ describe('LoginPage — the sign-in card', () => {
     expect(screen.getByLabelText('كلمة المرور')).toBeInTheDocument()
     expect(screen.getByRole('checkbox')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'نسيت كلمة المرور؟' })).toHaveAttribute('href', '/forgot-password')
-    expect(await screen.findByTestId('login-request-code')).toHaveTextContent('المتابعة برمز عبر البريد الإلكتروني')
     expect(screen.queryByText('حماية حسابك')).not.toBeInTheDocument()
-    expect(screen.getByText('أو اختر طريقة أخرى للدخول')).toBeInTheDocument()
-    expect(screen.getByTestId('login-methods').className).toContain('flex-col')
+    expect(await screen.findByTestId('login-google')).toBeInTheDocument()
+    expect(screen.getByText('أو')).toBeInTheDocument()
     expect(screen.getByTestId('login-column').className).toContain('max-w-[440px]')
     expect(screen.getByRole('link', { name: 'إنشاء حساب' })).toHaveAttribute('href', '/register')
   })
 
-  /** AUTH-LOGIN-UX-002 — a way in that cannot work is not shown: no email code while the server says mail cannot carry it. */
-  it('does not offer the email code while the server says it cannot work', async () => {
-    vi.mocked(fetchSignInMethods).mockResolvedValueOnce({ password: { available: true }, email_code: { available: false } })
+  /** LOGIN-NO-EMAIL-CODE-001 — no email code here, on the first frame or any later one. */
+  it('never offers an email code, before or after the server answers', async () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
 
-    await waitFor(() => expect(fetchSignInMethods).toHaveBeenCalled())
-    await waitFor(() => expect(screen.queryByTestId('login-google')).toBeInTheDocument())
     expect(screen.queryByTestId('login-request-code')).not.toBeInTheDocument()
+    expect(screen.queryByText(/برمز عبر البريد/)).not.toBeInTheDocument()
+    await screen.findByTestId('login-google')
+    expect(screen.queryByTestId('login-request-code')).not.toBeInTheDocument()
+    expect(screen.queryByText(/برمز عبر البريد/)).not.toBeInTheDocument()
   })
 
-  /** Owner 2026-10-23 — the wording of the Arabic sign-in card; nothing else about it changed. */
+  it('reserves Google’s row from the first frame, with nothing to read in it', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    const reserved = screen.getByTestId('login-google-reserved')
+    expect(reserved).toBeDisabled()
+    expect(reserved).toHaveAttribute('aria-hidden', 'true')
+    await screen.findByTestId('login-google')
+    expect(screen.queryByTestId('login-google-reserved')).not.toBeInTheDocument()
+  })
+
+  it('keeps the Google button when the lookup fails, and reports a failed click', async () => {
+    vi.mocked(fetchSignInOptions).mockRejectedValueOnce(new Error('down'))
+    vi.mocked(startOAuth).mockRejectedValueOnce(new Error('down'))
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('login-google'))
+    expect(await screen.findByTestId('login-error')).toBeInTheDocument()
+  })
+
+  it('fills Google’s row with the way home when the server says Google cannot work, leaving no gap', async () => {
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [
+      { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'awaiting_credentials', available: false },
+    ], emailCode: false })
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await waitFor(() => expect(screen.getByTestId('login-home')).toBeInTheDocument())
+    expect(screen.queryByTestId('login-google')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('login-google-reserved')).not.toBeInTheDocument()
+  })
+
+  it('keeps a link aimed at the portal on this page: there is no other door to hand it to', () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login?redirect=%2Fportal%2Frequests', locale: 'en' })
+
+    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
+  })
+
+  it('offers no code by default, and keeps its line reserved and empty', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await screen.findByTestId('login-google')
+    expect(screen.getByTestId('login-email-code-row')).toBeEmptyDOMElement()
+    expect(screen.queryByTestId('login-email-code')).not.toBeInTheDocument()
+  })
+
+  it('offers the code only when the server enabled it, as a step of this page', async () => {
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [], emailCode: true })
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('login-email-code'))
+    expect(screen.getByTestId('email-code-form')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('email-code-back'))
+    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
+  })
+
+  it('hands Google the page it was interrupted on, for the server to judge, and no address that could leave', async () => {
+    vi.mocked(startOAuth).mockReturnValue(new Promise(() => undefined))
+    signOut()
+    const first = renderWithProviders(<LoginPage />, { route: '/login?redirect=%2Fapp%2Fcampaigns', locale: 'en' })
+    fireEvent.click(await screen.findByTestId('login-google'))
+    await waitFor(() => expect(startOAuth).toHaveBeenCalledWith('google', { redirect: '/app/campaigns' }))
+    first.unmount()
+    vi.mocked(startOAuth).mockClear()
+
+    renderWithProviders(<LoginPage />, { route: '/login?redirect=https%3A%2F%2Fevil.example', locale: 'en' })
+    fireEvent.click(await screen.findByTestId('login-google'))
+    await waitFor(() => expect(startOAuth).toHaveBeenCalledWith('google', { redirect: null }))
+  })
+
+  it('says what Google answered, in its own words and never the address’s', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=registration_required&message=%3Cb%3Ephish%3C%2Fb%3E', locale: 'en' })
+
+    expect(screen.getByTestId('login-oauth-note')).toHaveTextContent('No account is connected to this Google account')
+    expect(screen.getByTestId('login-oauth-note')).not.toHaveTextContent('phish')
+  })
+
+  it('offers no client portal link and no choice of account type, in either language', () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
+
+    expect(screen.queryByTestId('login-client-door')).not.toBeInTheDocument()
+    expect(screen.queryByText(/بوابة العملاء/)).not.toBeInTheDocument()
+    expect(document.querySelector('a[href="/portal/login"]')).toBeNull()
+  })
+
   it('words the Google route in Arabic as «الدخول عبر Google»', async () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
@@ -228,176 +293,6 @@ describe('LoginPage — the sign-in card', () => {
 /**
  * «أو اختر طريقة أخرى للدخول» — the second route out of the same card.
  */
-describe('LoginPage — the code route', () => {
-  afterEach(() => { signOut(); vi.clearAllMocks() })
-
-  /** AUTH-LOGIN-UX-002 — the verification screen's words, in Arabic. */
-  it('words the verification screen as the Owner asked', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
-    mockedMethod.mockResolvedValue({ method: 'password', channel: 'email' })
-    mockedEmailStart.mockResolvedValue(DELIVERED as never)
-    fireEvent.change(screen.getByLabelText('البريد الإلكتروني'), { target: { value: 'agency@campaignshub.io' } })
-    fireEvent.click(await screen.findByTestId('login-request-code'))
-    await waitFor(() => expect(screen.getByTestId('login-code')).toBeInTheDocument())
-
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('تحقق من بريدك الإلكتروني')
-    expect(screen.getByTestId('login-code')).toHaveTextContent('رمز التحقق')
-    expect(screen.getByTestId('login-confirm-code')).toHaveTextContent('تأكيد الرمز والمتابعة')
-    expect(screen.getByTestId('login-change-identifier')).toHaveTextContent('استخدام بريد إلكتروني آخر')
-    expect(screen.getByTestId('login-resend')).toHaveTextContent(/إعادة الإرسال بعد|إعادة إرسال الرمز/)
-  })
-
-  /** AUTH-LOGIN-UX-002 — once the code's life is over the page says so, refuses it, and offers a new one. */
-  it('says when the code has expired and will not submit it', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-    const minutes = 10
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    try {
-      await reachCodeStep('agency@campaignshub.io', { ...DELIVERED, expires_in_minutes: minutes })
-      expect(screen.queryByTestId('login-code-expired')).not.toBeInTheDocument()
-      await act(async () => { vi.advanceTimersByTime(minutes * 60_000 + 1000) })
-      expect(await screen.findByTestId('login-code-expired')).toBeInTheDocument()
-      expect(screen.getByTestId('login-confirm-code')).toBeDisabled()
-      expect(screen.getByTestId('login-resend')).toBeEnabled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('sends the code through the platform engine and shows the code step', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep('agency@campaignshub.io')
-
-    expect(mockedEmailStart).toHaveBeenCalledWith('agency@campaignshub.io')
-    expect(screen.getByTestId('login-otp')).toBeInTheDocument()
-    expect(screen.getByTestId('login-code-destination')).toHaveTextContent('agency@campaignshub.io')
-  })
-
-  /** A code has to go somewhere. Asked for with an empty field, this says so instead of failing. */
-  it('asks for the address before it asks the server for anything', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    fireEvent.click(await screen.findByTestId('login-request-code'))
-
-    expect(mockedMethod).not.toHaveBeenCalled()
-    expect(screen.getByText(/Enter your email address first/i)).toBeInTheDocument()
-  })
-
-  /**
-   * A client contact reaches the SAME step through a different engine.
-   *
-   * `portalLoginStart` opens a portal session for a contact; `emailCodeStart` opens a platform
-   * session for a user. Using the portal's for a platform account would sign them into `/portal`,
-   * where they hold nothing, and the page would look like it had worked.
-   */
-  it('routes a client contact through the portal engine, not the platform one', async () => {
-    signOut()
-    mockedMethod.mockResolvedValue({ method: 'code', channel: 'email' })
-    mockedPortalStart.mockResolvedValue({ verification_id: 'v1', dev_code: null } as never)
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    typeEmail('client@example.test')
-    fireEvent.click(await screen.findByTestId('login-request-code'))
-
-    await waitFor(() => expect(screen.getByTestId('login-code')).toBeInTheDocument())
-    expect(mockedPortalStart).toHaveBeenCalledWith('email', 'client@example.test')
-    expect(mockedEmailStart).not.toHaveBeenCalled()
-  })
-
-  /**
-   * Honest about delivery.
-   *
-   * `awaiting_provider_credentials` means no mail provider is configured and NOTHING was sent.
-   * Saying «check your inbox» over that would be the product claiming a message it never made.
-   */
-  it('says plainly when no code was actually sent', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep('agency@campaignshub.io', {
-      verification_id: 'v1', delivery_status: 'awaiting_provider_credentials', resend_after: 60, dev_code: null,
-    })
-
-    expect(screen.getByTestId('login-code-undelivered')).toBeInTheDocument()
-  })
-
-  it('does not warn about delivery when the code was queued', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep()
-    expect(screen.queryByTestId('login-code-undelivered')).not.toBeInTheDocument()
-  })
-
-  /**
-   * The resend is closed while the cooldown runs.
-   *
-   * The countdown is a courtesy — the server enforces the same window — but a button that can be
-   * pressed every second while the server refuses is a control that lies about what it does.
-   */
-  it('closes the resend until the cooldown has run', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep()
-    await waitFor(() => expect(screen.getByTestId('login-resend')).toBeDisabled())
-    // Latin digits, in both languages — the platform rule, and a countdown is a number.
-    expect(screen.getByTestId('login-resend')).toHaveTextContent(/\d+/)
-  })
-
-  it('will not submit a partial code', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep()
-
-    const submit = screen.getByTestId('login-code').querySelector('button[type="submit"]')!
-    expect(submit).toBeDisabled()
-
-    fireEvent.change(screen.getByTestId('login-otp-0'), { target: { value: '123456' } })
-    await waitFor(() => expect(submit).not.toBeDisabled())
-  })
-
-  it('verifies the code it was given', async () => {
-    signOut()
-    vi.mocked(emailCodeVerify).mockResolvedValue({ id: '1', name: 'X', email: 'x@y.z' } as never)
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep('agency@campaignshub.io')
-    fireEvent.change(screen.getByTestId('login-otp-0'), { target: { value: '424242' } })
-
-    await waitFor(() => expect(emailCodeVerify).toHaveBeenCalledWith('v1', '424242', false))
-  })
-
-  /**
-   * A mistyped address must be correctable without a reload.
-   *
-   * The code step hides the field it came from, so without this the only signal of a wrong address
-   * is a code that never arrives — which sends people looking for the wrong problem entirely.
-   */
-  it('lets somebody go back and use a different address', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep('typo@demo-agency.local')
-    fireEvent.click(screen.getByTestId('login-change-identifier'))
-
-    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
-    expect(screen.queryByTestId('login-code')).not.toBeInTheDocument()
-  })
-})
-
-/**
- * LOGIN-HELP-001 — «تحتاج مساعدة في البدء؟», answered without leaving the page.
- *
- * It is a detour, not a journey: opening it must not cost the URL somebody arrived on, and it must
- * not be mistakable for a second way to sign up.
- */
 describe('LoginPage — the help route', () => {
   afterEach(() => { signOut(); vi.clearAllMocks() })
 
@@ -412,13 +307,6 @@ describe('LoginPage — the help route', () => {
     expect(screen.getByTestId('login-identify')).toBeInTheDocument()
   })
 
-  it('is not offered beside a code that is already on its way', async () => {
-    signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachCodeStep()
-    expect(screen.queryByTestId('login-help-open')).not.toBeInTheDocument()
-  })
 })
 
 /**

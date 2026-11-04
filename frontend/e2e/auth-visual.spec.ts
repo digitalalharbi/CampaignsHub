@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { DEMO_CLIENT_CONTACT, enableEmailCode, openEmailCode } from './helpers'
 
 /**
  * Visual-regression baselines for the auth surface (chromium only — cross-browser pixel diffs are noisy).
@@ -82,8 +83,11 @@ test('login: keyboard-only navigation reaches the address, the code and submit',
   await page.keyboard.type('password')
   await expect(pw).toHaveValue('password')
 
-  await page.getByTestId('login-request-code').click()
-  await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20_000 })
+  // The six boxes exist only while the server enables the code (LOGIN-SINGLE-DOOR-001), so this walk enables it for itself.
+  await expect(page.getByTestId('login-email-code')).toHaveCount(0)
+  await enableEmailCode(page)
+  await page.reload()
+  await openEmailCode(page, DEMO_CLIENT_CONTACT)
 
   /*
    * Typing into the first box fills it and moves on, which is the whole point of six boxes.

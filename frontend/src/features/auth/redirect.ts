@@ -16,6 +16,8 @@ export function safeRedirect(raw: string | null, fallback = '/app/dashboard'): s
   // Must be an in-app absolute path, and not protocol-relative (`//`) or a `/\` backslash trick.
   if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return fallback
   // Never bounce back to an auth page — avoids a login → login loop.
-  if (/^\/(login|register|forgot-password)(\/|\?|#|$)/.test(value)) return fallback
+  if (/^\/(login|register|forgot-password|reset-password)(\/|\?|#|$)/.test(value)) return fallback
+  // …and that includes the old doors, which redirect back here (LOGIN-SINGLE-DOOR-001).
+  if (/^\/[^?#]*\/login\/?([?#]|$)/.test(value)) return fallback
   return value
 }

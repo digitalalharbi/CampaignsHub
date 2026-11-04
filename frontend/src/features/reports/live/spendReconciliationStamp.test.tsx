@@ -70,13 +70,11 @@ for (const ar of [true, false]) {
   })
 }
 
-describe('FreshnessStrip mounts the stamp', () => {
-  it('shows the reconciliation beside the excluded-platform sentence', () => {
+describe('the client report does not mount the stamp (#938)', () => {
+  it('keeps the excluded-platform sentence and no reconciliation', () => {
     renderWithProviders(<FreshnessStrip freshness={[entry('matched', 0), { provider: 'meta', state: 'awaiting_credentials', reconcile_status: 'never' }]} ar />)
-    expect(screen.getByTestId('spend-reconciliation')).toBeInTheDocument()
+    expect(screen.queryByTestId('spend-reconciliation')).toBeNull()
     expect(screen.getByTestId('live-freshness')).toBeInTheDocument()
-    // An unconnected platform is excluded from the figures, so it is not listed as «not reconciled» either.
-    expect(screen.queryByTestId('spend-reconciliation-meta')).toBeNull()
   })
 
   it('renders nothing for a payload that predates the stamp', () => {

@@ -12,7 +12,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { Refusal } from '@/lib/api/errors'
 import { useNavigate } from 'react-router-dom'
-import { usePortalPath } from '@/app/portalPath'
+import { useInAdvertiserPortal, usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 
@@ -223,7 +223,12 @@ export function ConnectionWizard({
 
   const usage = useQuery({ queryKey: ['plan-usage'], queryFn: fetchPlanUsage })
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
-  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
+  /*
+   * ENSURE-PORTAL-SESSION-001 — agency-scoped, and served from the AGENCY's tenant whatever this screen is in. Asked from
+   * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
+   */
+  const inAdvertiserPortal = useInAdvertiserPortal()
+  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
 
   const adAccounts = usage.data?.ad_accounts
   const afterConfirm = (adAccounts?.used ?? 0) + selected.size

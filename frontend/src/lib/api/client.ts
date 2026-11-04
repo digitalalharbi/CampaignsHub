@@ -1,8 +1,10 @@
 import { projectIdOf, useVisibility } from '@/stores/visibility'
 import axios, { AxiosError } from 'axios'
+import type { InternalAxiosRequestConfig } from 'axios'
 import type { ApiEnvelope } from './types'
 import { describeFailure, isTimeout, Refusal } from './errors'
 import { useUi } from '@/stores/ui'
+import { claimedMembership, leaveChangedWorkspace } from './workspaceClaim'
 
 /**
  * Central Axios client for the SPA. Uses Sanctum cookie-session auth (ADR 0001):
@@ -44,8 +46,19 @@ api.interceptors.response.use((response) => {
   return response
 })
 
+api.interceptors.response.use(undefined, (error: AxiosError<{ code?: string }>) => {
+  // The session moved under this tab. Nothing ran; the screen it is drawing belongs to a workspace it is no longer in.
+  if (error.response?.status === 409 && error.response.data?.code === 'workspace_changed') leaveChangedWorkspace()
+
+  return Promise.reject(error)
+})
+
 api.interceptors.request.use((config) => {
   config.headers.set('Accept-Language', useUi.getState().locale)
+
+  // ENSURE-PORTAL-SESSION-001 — which workspace this tab's screen is drawn for. Only ever gets a request refused.
+  const claim = claimedMembership()
+  if (claim !== null) config.headers.set('X-Workspace-Membership', claim)
 
   return config
 })
@@ -238,6 +251,24 @@ async function primeCsrfCookie(): Promise<void> {
   }
 }
 
+/*
+ * CSRF-SELF-HEAL-001 — a refused token gets one fresh one, once.
+ *
+ * Requests that leave before any session exists can each open their own, and the browser may keep one session's cookie beside another's
+ * token. The sign-in POST then carried a token its session did not know: 419 «This page has expired» on a form the person had just filled
+ * correctly, on any browser the timing favoured. A 419 is refused before anything runs, so sending it again repeats nothing; the token
+ * is still proved by the server, and only a second refusal reaches the page.
+ */
+api.interceptors.response.use(undefined, async (error) => {
+  const config = error?.config as (InternalAxiosRequestConfig & { csrfRetried?: boolean }) | undefined
+  if (error?.response?.status !== 419 || !config || config.csrfRetried) throw error
+
+  config.csrfRetried = true
+  await primeCsrfCookie()
+
+  return api.request(config)
+})
+
 /** Normalized error surfaced to the UI. */
 export interface ApiError {
   message: string
@@ -334,8 +365,8 @@ export function toApiError(error: unknown): ApiError {
   }
 }
 
-export async function getData<T>(url: string): Promise<T> {
-  const response = await api.get<ApiEnvelope<T>>(url)
+export async function getData<T>(url: string, config?: { timeout?: number }): Promise<T> {
+  const response = await api.get<ApiEnvelope<T>>(url, config)
   return response.data.data
 }
 

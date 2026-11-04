@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,7 @@ use Tests\TestCase;
  */
 final class HierarchyCountsTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -429,6 +431,7 @@ final class HierarchyCountsTest extends TestCase
     public function test_the_dashboard_block_reads_through_the_tenant_scope(): void
     {
         $campaign = $this->campaign('cmp-1');
+        $this->bindSeededAccount($this->project->id, $this->account->getKey());
 
         $unified = UnifiedCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,

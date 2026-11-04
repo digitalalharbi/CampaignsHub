@@ -5,7 +5,12 @@ import type { AuthUser } from '@/lib/api/types'
  * Auth state for the SPA. Authentication itself lives in an HttpOnly session cookie (ADR 0001);
  * this store only mirrors the current user for the UI. `status` drives the initial session probe.
  */
-type Status = 'loading' | 'authenticated' | 'guest'
+/*
+ * `unreachable` (WORKSPACE-SWITCH-001): the session could not be read — the server failed or did not answer. It is not
+ * `guest`. Reading it as guest sent a signed-in person to the sign-in page during an outage, told them nothing, and
+ * invited them to retype a password that was never the problem.
+ */
+type Status = 'loading' | 'authenticated' | 'guest' | 'unreachable'
 
 interface AuthState {
   user: AuthUser | null

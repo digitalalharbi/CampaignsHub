@@ -6,17 +6,21 @@ namespace App\Domains\Ops\Console;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Models\ReportShareAccessLog;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ShareService;
 use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\Events\CacheMissed;
 use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Http\Request;
 use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
 
 /**
  * PERF-RECOVERY-001 — where a public live report spends its time. Read-only.
@@ -28,7 +32,7 @@ use Illuminate\Support\Facades\Redis;
  */
 final class ProfileLiveReportCommand extends Command
 {
-    protected $signature = 'ops:profile-live-report {--links=2 : Live links to profile} {--top=20 : Statements to print} {--explain=0 : EXPLAIN ANALYZE the N heaviest SELECTs (reads only)} {--token=* : Explain why this link answers as it does (state and recent access log); read-only}';
+    protected $signature = 'ops:profile-live-report {--links=2 : Live links to profile} {--top=20 : Statements to print} {--explain=0 : EXPLAIN ANALYZE the N heaviest SELECTs (reads only)} {--http : Also run the request through the HTTP kernel in-process and time the whole path (share token swapped inside a rolled-back transaction; no log row kept)} {--token=* : Explain why this link answers as it does (state and recent access log); read-only}';
 
     protected $description = 'Read-only: time, query count and heaviest queries of the public live report build.';
 
@@ -109,6 +113,7 @@ final class ProfileLiveReportCommand extends Command
 
             /** @var array<string, array{n: int, ms: float, max: float, bindings: array<int, mixed>}> $stats */
             $stats = $this->m['stats'];
+            $buildCounters = $this->m;
             uasort($stats, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
             $this->line(sprintf('  %-6s %-9s %-9s %-9s %-9s %s', 'runs', 'total ms', 'mean ms', 'max ms', 'finger', 'statement'));
 
@@ -117,6 +122,11 @@ final class ProfileLiveReportCommand extends Command
             }
 
             $this->explainTop($stats, max(0, (int) $this->option('explain')));
+
+            if ($this->option('http')) {
+                $this->m = $buildCounters;
+                $this->profileHttp($share);
+            }
 
             $this->newLine();
         }
@@ -178,5 +188,72 @@ final class ProfileLiveReportCommand extends Command
         foreach ($share->logs()->latest()->limit(5)->get() as $log) {
             $this->line(sprintf('    %s  %s  %s', $log->created_at?->toIso8601String(), $log->action, substr((string) $log->detail, 0, 80)));
         }
+    }
+
+    /**
+     * The same link through the whole HTTP kernel, in-process: middleware, controller, build, sanitise, JSON.
+     *
+     * Only the hash of a token is stored, so no raw token can be recovered. The share's hash is swapped for a throwaway
+     * token INSIDE a transaction that is always rolled back, so the row is never left changed. The view log row the
+     * controller would write is cancelled before it is inserted. The phase split is read from that cancelled insert:
+     * it happens right after the build and the sanitising, so everything before it is "to log", everything after is
+     * the response (JSON encode and the middleware on the way out).
+     */
+    private function profileHttp(ReportShare $share): void
+    {
+        $label = substr((string) $share->id, 0, 8);
+        $raw = Str::random(48);
+        $state = new \ArrayObject(['armed' => false, 'log' => 0.0]);
+        $event = 'eloquent.creating: '.ReportShareAccessLog::class;
+
+        DB::beginTransaction();
+
+        try {
+            DB::table('report_shares')->where('id', $share->id)->update(['token_hash' => hash('sha256', $raw)]);
+
+            // Fresh counters AFTER the swap, so the swap itself is not billed to the request.
+            $this->m = ['stats' => [], 'db' => 0.0, 'queries' => 0, 'redis' => 0.0, 'redisN' => 0, 'ext' => 0.0, 'extN' => 0, 'hit' => 0, 'miss' => 0, 'write' => 0];
+
+            // Not forgotten afterwards: the model registers its own listener on this event name (the id), and forgetting removes it too.
+            Event::listen($event, static function () use ($state): ?bool {
+                if (! $state['armed']) {
+                    return null;
+                }
+                $state['log'] = microtime(true);
+
+                return false;
+            });
+            $state['armed'] = true;
+
+            $request = Request::create('/api/v1/reports/shared/'.$raw.'/live', 'GET', server: ['HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => '127.0.0.1']);
+            $t = microtime(true);
+            $response = app(Kernel::class)->handle($request);
+            $end = microtime(true);
+
+            $bytes = strlen((string) $response->getContent());
+            $status = $response->getStatusCode();
+        } catch (\Throwable $e) {
+            $this->line(sprintf('LINK %s  HTTP FAILED — %s', $label, substr(preg_replace('/\s+/', ' ', $e->getMessage()) ?? '', 0, 160)));
+
+            return;
+        } finally {
+            $state['armed'] = false;
+            DB::rollBack();
+        }
+
+        $wall = ($end - $t) * 1000;
+        $php = max(0.0, $wall - $this->m['db'] - $this->m['redis'] - $this->m['ext']);
+        $this->line(sprintf(
+            'LINK %s  HTTP %.0f ms (status %d, %d bytes) = DB %.0f ms (%d queries) + PHP/other %.0f ms   [vs BUILD above]',
+            $label, $wall, $status, $bytes, $this->m['db'], $this->m['queries'], $php,
+        ));
+
+        $toLog = $state['log'] > 0.0 ? ($state['log'] - $t) * 1000 : null;
+        $this->line(sprintf(
+            '  HTTP PHASES to-log (middleware + share + build + sanitise) %s ms · after-log (json + response) %s ms · REDIS %.0f ms (%d cmds) · cache hit %d miss %d write %d · view log not written',
+            $toLog === null ? 'n/a' : sprintf('%.0f', $toLog),
+            $toLog === null ? 'n/a' : sprintf('%.0f', $wall - $toLog),
+            $this->m['redis'], $this->m['redisN'], $this->m['hit'], $this->m['miss'], $this->m['write'],
+        ));
     }
 }

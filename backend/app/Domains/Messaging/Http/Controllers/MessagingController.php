@@ -6,12 +6,15 @@ namespace App\Domains\Messaging\Http\Controllers;
 
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
+use App\Domains\Projects\Access\ProjectReach;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Tenant messaging: client ⇄ internal-team threads tied to a request/project. Tenant isolation comes from the
@@ -38,7 +41,9 @@ final class MessagingController extends Controller
             $request->user(),
             $thread->client_workspace_id === null ? null : (string) $thread->client_workspace_id,
             (int) $thread->created_by === (int) $request->user()?->id,
-        );
+        )
+            // PROJECTS-RBAC-CLOSURE-001 — a conversation filed under a project is also inside the reader's project reach.
+            && app(ProjectReach::class)->canReachRow($request->user(), $thread->project_id === null ? null : (string) $thread->project_id);
     }
 
     public function threads(Request $request): JsonResponse
@@ -55,6 +60,7 @@ final class MessagingController extends Controller
             $request->user(),
             ['created_by'],
         );
+        app(ProjectReach::class)->constrainRows($query, $request->user());
         if ($status = $request->string('status')->toString()) {
             if (in_array($status, ['open', 'closed'], true)) {
                 $query->where('status', $status);
@@ -106,6 +112,15 @@ final class MessagingController extends Controller
                 || $this->scopes->canReach($request->user(), (string) $data['client_workspace_id']),
             403,
         );
+
+        // The project a conversation is filed under has to be one the opener reaches (and one that exists in this tenant);
+        // anything else answers like an unknown project, so the field is no probe for ids beyond the reach.
+        if (($data['project_id'] ?? null) !== null) {
+            $exists = Project::query()->whereKey($data['project_id'])->exists();
+            if (! $exists || ! app(ProjectReach::class)->canReachRow($request->user(), (string) $data['project_id'])) {
+                throw ValidationException::withMessages(['project_id' => 'The selected value is invalid.']);
+            }
+        }
 
         $thread = $this->messaging->openThread([
             'tenant_id' => app(TenantContext::class)->tenantId(),

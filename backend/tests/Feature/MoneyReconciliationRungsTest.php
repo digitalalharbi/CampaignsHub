@@ -58,6 +58,9 @@ final class MoneyReconciliationRungsTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** This world seeds its own bindings, including the never-bound account one test asserts on. */
+    protected bool $selectsSeededAccounts = false;
+
     private const FROM = '2026-07-01';
 
     private const TO = '2026-07-07';

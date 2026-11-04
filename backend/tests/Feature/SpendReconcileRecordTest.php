@@ -21,6 +21,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ReportSpendReconciliation;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -171,7 +172,20 @@ final class SpendReconcileRecordTest extends TestCase
 
     // ── the live link ───────────────────────────────────────────────────────────────────────────
 
-    public function test_the_live_link_carries_the_latest_reconciliation_beside_the_freshness_entry(): void
+    public function test_the_client_link_carries_no_reconciliation_detail(): void
+    {
+        $account = $this->account('snapchat', $this->project);
+        $this->reconciliation($this->project, $account, 'snapchat', SpendReconciliationRecord::DRIFTED, 15.9, minutesAgo: 10);
+
+        $entry = $this->entry($this->clientLink(['snapchat']), 'snapchat');
+
+        // Owner #938: the report states one update time and a short alert; the details stay with the operators.
+        $this->assertArrayNotHasKey('reconcile_status', $entry);
+        $this->assertArrayNotHasKey('reconcile_diff_pct', $entry);
+        $this->assertArrayNotHasKey('last_reconciled_at', $entry);
+    }
+
+    public function test_the_latest_reconciliation_wins_for_a_platform(): void
     {
         $account = $this->account('snapchat', $this->project);
         $this->reconciliation($this->project, $account, 'snapchat', SpendReconciliationRecord::DRIFTED, 15.9, minutesAgo: 120);
@@ -182,7 +196,6 @@ final class SpendReconcileRecordTest extends TestCase
         $this->assertSame('matched', $entry['reconcile_status'], 'the LATEST row wins');
         $this->assertSame('2026-11-02T11:22:00Z', $entry['last_reconciled_at']);
         $this->assertSame(0.0, (float) $entry['reconcile_diff_pct']);
-        $this->assertArrayHasKey('state', $entry, 'the sync facts stay beside it, untouched');
     }
 
     public function test_a_drift_travels_with_its_percentage_and_an_unchecked_platform_says_never(): void
@@ -283,6 +296,14 @@ final class SpendReconcileRecordTest extends TestCase
 
     /** @param list<string> $providers @param list<string> $accounts */
     private function payload(array $providers, array $accounts = []): array
+    {
+        $read = app(ReportSpendReconciliation::class)->forProviders((string) $this->tenant->id, (string) $this->project->id, $providers, $accounts === [] ? null : $accounts);
+
+        return ['freshness' => array_map(fn (string $provider): array => ['provider' => $provider] + $read[$provider], $providers)];
+    }
+
+    /** @param list<string> $providers @param list<string> $accounts */
+    private function clientLink(array $providers, array $accounts = []): array
     {
         $this->holdingTenant((string) $this->tenant->id);
         $campaign = UnifiedCampaign::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Camp '.uniqid(), 'status' => 'active']);
