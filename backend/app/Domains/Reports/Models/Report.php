@@ -36,6 +36,12 @@ final class Report extends Model
         'is_demo' => 'boolean',
     ];
 
+    /** A generated document is stored, whatever the row's status says while it is being rebuilt. */
+    public function hasStoredCopy(): bool
+    {
+        return $this->generated_at !== null && ! empty($this->data);
+    }
+
     /** The operator's saved section choices; null in the column resolves to the audience defaults. */
     public function sectionSettings(): SectionSettings
     {

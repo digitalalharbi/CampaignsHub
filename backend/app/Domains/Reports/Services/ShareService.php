@@ -10,12 +10,14 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -80,6 +82,8 @@ final class ShareService
             'tenant_id' => $report->tenant_id,
             'report_id' => $report->id,
             'token_hash' => $this->hashToken($raw),
+            // REPORT-LIFECYCLE-MENU-001 — lets an owner copy this same link later; never serialised (hidden on the model).
+            'token_encrypted' => Crypt::encryptString($raw),
             'password_hash' => ! empty($opts['password']) ? Hash::make($opts['password']) : null,
             'allow_download' => $opts['allow_download'] ?? true,
             'hide_spend' => $opts['hide_spend'] ?? false,
@@ -251,6 +255,23 @@ final class ShareService
     }
 
     /**
+     * The report a link's FILES are rendered from: the stored report on a per-request replica, carrying this link's document and
+     * its render config. The download route and the parity tests both build it here, so no caller can hand the exporter the
+     * stored report in place of the link's.
+     */
+    public function documentReport(Report $report, ReportShare $share): Report
+    {
+        // replicate() keeps the audience so the exporter filters correctly, and drops the key the gate needs.
+        $replica = $report->replicate();
+        $replica->setAttribute('id', $report->id);
+        // The watermark the operator asked for travels into the FILE — see renderConfig().
+        $replica->setAttribute('config', $this->renderConfig((array) ($report->config ?? []), $share));
+        $replica->setAttribute('data', $this->downloadDocument($report, $share));
+
+        return $replica;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
@@ -290,6 +311,10 @@ final class ShareService
 
     public function sanitize(array $data, ReportShare $share): array
     {
+        $names = GenericNames::for(null, $share);
+        // Before the older switch rewrites a row: the names it overwrites are the ones to find in the sentences.
+        $names->learn($data);
+
         /*
          * CLIENT-REPORT-MONEY-REDACTION-001 — both paths read ONE list, and its companions.
          *
@@ -345,8 +370,8 @@ final class ShareService
                         if (! empty($row['movement']) && is_array($row['movement'])) {
                             $stripMoney($row['movement']);
                         }
-                        if ($share->hide_campaign_names && array_key_exists('campaign_name', $row)) {
-                            $row['campaign_name'] = 'حملة';
+                        if ($names->usesOlderCampaignWord() && array_key_exists('campaign_name', $row)) {
+                            $row['campaign_name'] = GenericNames::olderCampaignWord();
                         }
                     }
                 }
@@ -407,7 +432,7 @@ final class ShareService
          * making the walk recursive, for the same reason the section list is enumerated: a blind walk
          * would also rewrite keys nobody has thought about.
          */
-        $stripGroup = function ($group) use ($stripMoney, $share) {
+        $stripGroup = function ($group) use ($stripMoney, $names) {
             if (! is_array($group)) {
                 return $group;
             }
@@ -415,8 +440,8 @@ final class ShareService
                 foreach ($group['ads'] as &$ad) {
                     if (is_array($ad)) {
                         $stripMoney($ad);
-                        if ($share->hide_campaign_names && array_key_exists('campaign_name', $ad)) {
-                            $ad['campaign_name'] = 'حملة';
+                        if ($names->usesOlderCampaignWord() && array_key_exists('campaign_name', $ad)) {
+                            $ad['campaign_name'] = GenericNames::olderCampaignWord();
                         }
                     }
                 }
@@ -470,7 +495,8 @@ final class ShareService
             ));
         }
 
-        if ($share->hide_campaign_names && ! empty($data['observations'])) {
+        /* REPORT-GENERIC-LABELS-001 — a link that chose the campaign label keeps the note, under that label. */
+        if ($names->usesOlderCampaignWord() && ! empty($data['observations'])) {
             $data['observations'] = array_values(array_filter(
                 $data['observations'],
                 // A note ABOUT one campaign is nothing once the campaign cannot be named.
@@ -491,7 +517,8 @@ final class ShareService
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
-        return HiddenMoney::redact($data, (bool) $share->hide_spend, (bool) $share->hide_revenue);
+        // REPORT-GENERIC-LABELS-001 — and the names this link hides, by key and by value.
+        return $names->apply(HiddenMoney::redact($data, (bool) $share->hide_spend, (bool) $share->hide_revenue));
     }
 
     /**
@@ -604,21 +631,24 @@ final class ShareService
      */
     public function sanitizeLive(array $payload, ReportShare $share): array
     {
-        if (! $share->hide_spend && ! $share->hide_revenue && ! $share->hide_campaign_names) {
+        $names = GenericNames::for(null, $share);
+        if (! $share->hide_spend && ! $share->hide_revenue && ! $names->isActive()) {
             return $payload;
         }
+        // Before the older switch rewrites a row: the names it overwrites are the ones to find in the sentences.
+        $names->learn($payload);
 
         /* The same one list the snapshot path reads — see `sanitize()` and the constant itself. */
         $money = HiddenMoney::keys((bool) $share->hide_spend, (bool) $share->hide_revenue);
 
-        $strip = function (array $row) use ($money, $share): array {
+        $strip = function (array $row) use ($money, $names): array {
             foreach ($money as $key) {
                 if (array_key_exists($key, $row)) {
                     $row[$key] = null;
                 }
             }
-            if ($share->hide_campaign_names && array_key_exists('campaign_name', $row)) {
-                $row['campaign_name'] = 'حملة';
+            if ($names->usesOlderCampaignWord() && array_key_exists('campaign_name', $row)) {
+                $row['campaign_name'] = GenericNames::olderCampaignWord();
             }
 
             return $row;
@@ -775,15 +805,16 @@ final class ShareService
          * the reader simply looks up instead of down. This is the kind of gap a per-section sanitizer
          * leaves behind, and the reason this method enumerates its sections rather than walking blind.
          */
-        if ($share->hide_campaign_names && ! empty($payload['available']['campaigns'])) {
+        if ($names->usesOlderCampaignWord() && ! empty($payload['available']['campaigns'])) {
             $payload['available']['campaigns'] = array_values(array_map(
-                fn (array $c, int $i): array => ['id' => $c['id'], 'name' => 'حملة '.($i + 1)],
+                fn (array $c, int $i): array => ['id' => $c['id'], 'name' => GenericNames::olderCampaignOption($i + 1)],
                 $payload['available']['campaigns'],
                 array_keys($payload['available']['campaigns']),
             ));
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
-        return HiddenMoney::redact($payload, (bool) $share->hide_spend, (bool) $share->hide_revenue);
+        // REPORT-GENERIC-LABELS-001 — and the names this link hides, by key and by value.
+        return $names->apply(HiddenMoney::redact($payload, (bool) $share->hide_spend, (bool) $share->hide_revenue));
     }
 }

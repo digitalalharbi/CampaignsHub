@@ -705,6 +705,38 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertStringContainsString('identity_type=AUTHORIZED_BC', $asked[0]);
     }
 
+    /** CONTENT-PREVIEW-COVERAGE-001 — one post shared by two ads: the ad that names the identity decides, whatever its order. */
+    public function test_a_spark_post_shared_by_ads_is_asked_with_the_identity_of_the_ad_that_has_one(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'identity/video/info/')) {
+                $asked[] = $url;
+
+                return Http::response(['code' => 0, 'data' => ['video_detail' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/p.jpg', 'url' => 'https://v16.tiktokcdn.com/p.mp4?x-expires=1790000000', 'width' => 576, 'height' => 1024, 'duration' => 12.5]]]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'first', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'No identity', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001'],
+                ['ad_id' => 'second', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Numeric identity', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001', 'identity_type' => 'TT_USER', 'identity_id' => 123456],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertCount(1, $asked);
+        $this->assertStringContainsString('identity_id=123456', $asked[0]);
+        foreach (['first', 'second'] as $id) {
+            $this->assertSame('https://p16.tiktokcdn.com/p.jpg', $ads[$id]['creative']['thumbnail_url']);
+            $this->assertArrayNotHasKey('media_reason', $ads[$id]['creative']['raw']);
+        }
+        $this->assertSame(576, $ads['second']['creative']['width']);
+        $this->assertSame(1024, $ads['second']['creative']['height']);
+        $this->assertSame(1790000000, Carbon::parse($ads['second']['creative']['asset_expires_at'])->getTimestamp(), 'the post link states its expiry');
+    }
+
     /**
      * TIKTOK-SPARK-COVER-001 — a `BC_AUTH_TT` identity is asked with its Business Center (live: code 40000 without it).
      */

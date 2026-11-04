@@ -31,6 +31,7 @@ use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
@@ -409,7 +410,7 @@ final class LiveReportService
             $name = trim((string) (($row['client_display_name'] ?? '') ?: ($row['campaign_name'] ?? '')));
             $measuredNothing = ! $noRows && (float) ($row['spend'] ?? 0) == 0.0 && (int) ($row['impressions'] ?? 0) === 0 && (int) ($row['clicks'] ?? 0) === 0;
             $out[] = [
-                'name' => $share->hide_campaign_names || $name === '' ? AdPlatforms::name($provider).' — '.($i + 1) : $name,
+                'name' => $share->hide_campaign_names || $name === '' ? GenericNames::olderCampaignRow($provider, $i + 1) : $name,
                 'platform' => $provider,
                 'status' => $row['status'] ?? null,
                 'objective' => $row['objective'] ?? null,
@@ -723,6 +724,16 @@ final class LiveReportService
             'results_label' => $page['results_label'] ?? null,
             'generated_at' => Carbon::now()->toIso8601String(),
         ];
+        /*
+         * REPORT-PARITY-FOUR-SURFACES-001 — the objective breakdown the page draws is drawn by the file too.
+         *
+         * The page showed «objective_breakdown» and the PDF and files of the same link did not: the section is judged against this
+         * payload, which carried none of its data. The SAME builder (`ObjectiveAnalyticsSection`) writes it into a snapshot and into
+         * the page, and `PrintDocument` already draws it from `objective_analytics`, so the page's own block is carried across.
+         */
+        if (is_array($page['objective_analytics'] ?? null)) {
+            $data['objective_analytics'] = $page['objective_analytics'];
+        }
         $data['checksum'] = ExportReadinessGate::checksum($data);
 
         $copy = clone $report;
@@ -1419,7 +1430,8 @@ final class LiveReportService
      */
     private function clientAccountRows(array $rows, ReportShare $share): array
     {
-        if ($share->sectionVisibility()->account_names) {
+        // REPORT-GENERIC-LABELS-001 — a name switch on the link or the report outranks the disclosure.
+        if ($share->sectionVisibility()->account_names && ! GenericNames::for($this->reportOf($share), $share)->chose('account')) {
             return $rows;
         }
 
@@ -1427,8 +1439,8 @@ final class LiveReportService
         foreach ($rows as $i => $row) {
             $provider = (string) ($row['provider'] ?? '');
             $ordinal[$provider] = ($ordinal[$provider] ?? 0) + 1;
-            $rows[$i]['account_name'] = 'حساب '.AdPlatforms::name($provider, 'ar').' '.$ordinal[$provider];
-            $rows[$i]['account_name_en'] = AdPlatforms::name($provider, 'en').' account '.$ordinal[$provider];
+            $rows[$i]['account_name'] = GenericNames::accountRow($provider, $ordinal[$provider], 'ar');
+            $rows[$i]['account_name_en'] = GenericNames::accountRow($provider, $ordinal[$provider], 'en');
             $rows[$i]['external_account_id'] = null;
             $rows[$i]['account_name_withheld'] = true;
         }

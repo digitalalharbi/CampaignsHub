@@ -163,7 +163,7 @@ final class ReportTemplateEngine
          * funnel is the smaller and more durable list: an objective added later gets one by default
          * rather than being forgotten.
          */
-        if (! $summary && ! in_array($objective, ['awareness', 'video'], true)) {
+        if (! $summary && ! self::hasNoFunnel($objective)) {
             $slides[] = ['id' => 'funnel', 'type' => 'funnel', 'order' => $order++, 'visible' => true];
         }
         $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
@@ -382,6 +382,12 @@ final class ReportTemplateEngine
         ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
         ['spend', 'impressions', 'leads', 'cpl'],
     ];
+
+    /** The two objectives that bought no click → arrival → result path. See the note where the deck's funnel slide is added. */
+    public static function hasNoFunnel(string $objective): bool
+    {
+        return in_array($objective, ['awareness', 'video'], true);
+    }
 
     /** Whether a stored set is one this engine produced, rather than one an Owner customised. */
     public function isPreset(array $set): bool
