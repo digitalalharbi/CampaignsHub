@@ -16,6 +16,8 @@ Then read, in this order — they are the project's own record and they outrank 
 
 - @docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md — the Owner's permanent, cumulative requirements index and completion gate: READ FIRST
 - @docs/RESUME_STATE.md — the live state, under **START HERE**
+- @docs/PROJECT_STATE.md — the recovery checkpoint: last verified commit, open pull requests, the
+  commands that verify, the safe next action
 - @docs/REQUIREMENTS_TRACEABILITY_MATRIX.md — every requirement, its status, its commit, its tests
 - @docs/MASTER_EXECUTION_CONTRACT.md — the standing contract for how work is accepted
 - @HANDOFF_MANIFEST.md — the map: architecture, portals, setup, integration readiness
@@ -26,6 +28,18 @@ Then read, in this order — they are the project's own record and they outrank 
 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
+
+## The owner's global policy, and what this repository overrides
+
+`~/.claude/CLAUDE.md` carries the owner's operating policy for every project. **This file outranks it
+on anything it addresses** — it fills gaps, it never overrides a decision made here. Two differences
+are deliberate and binding:
+
+- The global policy prefers a Claude Code cloud/remote session for long unattended work. **Not
+  here.** The execution policy above is the decision: GitHub never invokes Claude or Anthropic for
+  development, so the long-running path in this repository is the container plus CI/CD.
+- The global policy asks for durable progress in `docs/PROJECT_STATE.md`. Here that file is the
+  mechanical checkpoint only, and it sits *below* the matrix and `RESUME_STATE` in the order above.
 
 ## Execution policy — owner decision, 2026-08-20
 
