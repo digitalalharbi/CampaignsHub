@@ -77,6 +77,8 @@ final class ShareService
     /** @return array{0: ReportShare, 1: string} the share + the raw token (show once) */
     public function create(Report $report, array $opts, ?int $userId): array
     {
+        // REPORT-DUPLICATE-001 — every door that makes a link comes through here, and none of them opens for a draft.
+        abort_if($report->isDraft(), 409, __('api.report_is_draft'));
         $raw = Str::random(self::TOKEN_LENGTH);
         $share = ReportShare::create([
             'tenant_id' => $report->tenant_id,
