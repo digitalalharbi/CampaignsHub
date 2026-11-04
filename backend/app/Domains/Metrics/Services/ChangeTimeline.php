@@ -66,8 +66,22 @@ final class ChangeTimeline
      */
     public function build(Carbon $from, Carbon $to, array $metrics = ['spend', 'conversions', 'clicks']): array
     {
-        $series = $this->metrics->timeseries($from, $to);
+        return $this->fromSeries($this->metrics->timeseries($from, $to), $metrics);
+    }
 
+    /**
+     * The same judgement over a series already read — for a sweep that reads every campaign's days in one statement.
+     *
+     * @param  list<array<string, mixed>>  $series
+     * @param  list<string>  $metrics
+     * @return array{
+     *     points: list<array{date: string, metric: string, value: float, baseline: float, deviation: float, direction: string}>,
+     *     reason: ?string,
+     *     days: int
+     * }
+     */
+    public function fromSeries(array $series, array $metrics = ['spend', 'conversions', 'clicks']): array
+    {
         if (count($series) < self::BASELINE_MIN + 1) {
             return ['points' => [], 'reason' => 'window_too_short_to_have_a_baseline', 'days' => count($series)];
         }
