@@ -459,8 +459,9 @@ final class CreativeFormatIntelligence
         /*
          * Largest first — the objective most of this scope's creatives were bought for is the one a
          * reader came to ask about, and a four-creative traffic cut should not lead a sales account.
+         * A tie goes by name: the rows arrive in no stated order, so two reads of one report could swap them.
          */
-        usort($out, static fn (array $a, array $b): int => count($b['comparison']['formats'] ?? []) <=> count($a['comparison']['formats'] ?? []));
+        usort($out, static fn (array $a, array $b): int => [count($b['comparison']['formats'] ?? []), $a['family']] <=> [count($a['comparison']['formats'] ?? []), $b['family']]);
 
         return $out;
     }
