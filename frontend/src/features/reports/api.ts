@@ -165,6 +165,41 @@ export const resumeShare = (p: string, reportId: string, shareId: string) =>
 export const revokeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
 
+// ---- REPORT-LIFECYCLE-MENU-001 / REPORT-DUPLICATE-001 / REPORT-LIVE-SNAPSHOT-CONVERT-001 ----------
+
+export const renameReport = (p: string, id: string, name: string) => patchData<ReportRow>(`${base(p)}/${id}`, { name })
+
+export interface DuplicatedReport extends ReportRow {
+  link: { id: string; mode: 'live' | 'snapshot'; url: string; path: string; token: string; password_protected: boolean } | null
+}
+/** An independent copy: a new report and (for someone who may share) a new link; the original is never touched. */
+export const duplicateReport = (p: string, id: string, body: { name?: string; share_id?: string; with_link?: boolean } = {}) =>
+  postData<DuplicatedReport>(`${base(p)}/${id}/duplicate`, body)
+
+export interface ShareConversion {
+  changed: boolean
+  requires_confirmation: boolean
+  from: 'live' | 'snapshot'
+  to: 'live' | 'snapshot'
+  notice: { ar: string; en: string }
+  link: ShareRow
+}
+/** Without `confirm` nothing is written and the notice says what will happen; with it the same URL changes mode. */
+export const convertShare = (p: string, reportId: string, shareId: string, to: 'live' | 'snapshot', confirm: boolean) =>
+  postData<ShareConversion>(`${base(p)}/${reportId}/shares/${shareId}/convert`, { to, confirm })
+
+export interface CurrentShareLink {
+  available: boolean
+  reason: 'revoked' | 'created_before_copy_support' | null
+  url: string | null
+  path: string | null
+  mode: 'live' | 'snapshot'
+  active: boolean
+}
+/** The existing link, to copy: creates nothing and never changes the link's type. */
+export const getCurrentShareLink = (p: string, reportId: string, shareId: string) =>
+  getData<CurrentShareLink>(`${base(p)}/${reportId}/shares/${shareId}/link`)
+
 // ---- LIVEREP-002: build a live link from a choice, not from a document ---------------------------
 
 export interface LiveBuilderOptions {

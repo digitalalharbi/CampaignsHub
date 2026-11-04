@@ -175,6 +175,7 @@ final class ReportPrintController extends Controller
 
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null, 404);
+        $this->assertShareStillOpen($ctx, $report);
 
         $file = $branding->logoFor($report, (string) $report->tenant_id, $role);
         abort_unless($file !== null, 404);
@@ -192,11 +193,29 @@ final class ReportPrintController extends Controller
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null, 404);
+        $this->assertShareStillOpen($ctx, $report);
 
         $row = $appendix->forReport($report)->first(fn (PlatformEvidence $e): bool => (string) $e->getKey() === $evidence);
         abort_if($row === null || ! in_array($row->mime, ReportEvidence::IMAGE_MIMES, true), 404);
 
         return Storage::disk($row->disk)->response($row->path, null, ['Content-Type' => $row->mime, 'Cache-Control' => 'private, no-store']);
+    }
+
+    /**
+     * REPORT-LINK-PAUSE-001 — a print token minted for a shared link is only as alive as the link.
+     *
+     * `data()` already re-checks it; the logo and the evidence image of the same token did not, so pausing (or revoking)
+     * a link left its in-flight print context serving files for up to the token's lifetime.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private function assertShareStillOpen(array $ctx, Report $report): void
+    {
+        if (($ctx['share_id'] ?? null) === null) {
+            return;
+        }
+        $share = ReportShare::withoutGlobalScopes()->find($ctx['share_id']);
+        abort_if($share === null || ! $share->isActive() || (string) $share->report_id !== (string) $report->id, 404);
     }
 
     private function key(string $token): string

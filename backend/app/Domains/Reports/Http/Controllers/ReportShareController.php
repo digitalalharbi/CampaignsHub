@@ -22,6 +22,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -202,6 +203,104 @@ final class ReportShareController extends Controller
         }
 
         return ApiResponse::success($this->shape($model), 'Link resumed.');
+    }
+
+    /**
+     * POST …/shares/{share}/convert — REPORT-LIVE-SNAPSHOT-CONVERT-001: Live to Snapshot and back, on the SAME link.
+     *
+     * A deliberate two-step act. Without `confirm` nothing is written and the answer states, in words, what the link will
+     * do afterwards; with it the mode changes and the change is audited (before, after, who, when). What stays protected:
+     * the stored document is never written here, so a Snapshot is never overwritten, and its generation date is stated in
+     * the notice; the ceiling a link already has is kept as it is, so converting never widens the campaigns, platforms or
+     * dates it can reach (a snapshot with no ceiling is given one bounded by the report's own scope); the password,
+     * expiry, hide switches and history are untouched. A revoked link is not converted: revoking is permanent.
+     */
+    public function convert(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $model = $this->findReport($report);
+        $link = $this->findShare($model, $share);
+        abort_if($link->revoked_at !== null, 409, 'A revoked link cannot be converted.');
+        $data = $request->validate(['to' => ['required', 'in:live,snapshot'], 'confirm' => ['nullable', 'boolean']]);
+
+        $from = $link->isLive() ? 'live' : 'snapshot';
+        $to = (string) $data['to'];
+        $asOf = $model->generated_at?->toDateString();
+        $notice = $to === 'snapshot'
+            ? [
+                'ar' => 'سيصبح هذا الرابط نسخة ثابتة: يعرض التقرير كما أُنشئ'.($asOf ? " بتاريخ {$asOf}" : '').' ولا يتحدّث بعد ذلك. الرابط نفسه والكلمة السرية والانتهاء والإخفاء كما هي.',
+                'en' => 'This link becomes a fixed Snapshot: it shows the report as generated'.($asOf ? " on {$asOf}" : '').' and no longer updates. The URL, password, expiry and hidden figures stay as they are.',
+            ]
+            : [
+                'ar' => 'سيصبح هذا الرابط حيًّا: يعرض بيانات متجددة داخل نطاق الرابط نفسه دون توسيعه. النسخة الثابتة المحفوظة'.($asOf ? " ({$asOf})" : '').' لا تُمسّ ولا يُكتب فوقها.',
+                'en' => 'This link becomes Live: it shows refreshed figures inside the same scope, never wider. The stored Snapshot'.($asOf ? " ({$asOf})" : '').' is kept and not overwritten.',
+            ];
+
+        if ($from === $to) {
+            return ApiResponse::success(['changed' => false, 'requires_confirmation' => false, 'from' => $from, 'to' => $to, 'notice' => $notice, 'link' => $this->shape($link)], 'The link is already '.$to.'.');
+        }
+        if (empty($data['confirm'])) {
+            return ApiResponse::success(['changed' => false, 'requires_confirmation' => true, 'from' => $from, 'to' => $to, 'notice' => $notice, 'link' => $this->shape($link)], 'Confirm to convert this link.');
+        }
+        abort_unless($model->status === 'completed', 409, 'Generate the report before converting its link.');
+
+        $fill = ['mode' => $to];
+        if ($to === 'live' && (! is_array($link->scope) || $link->scope === [])) {
+            $fill['scope'] = $this->scopeFor($model, ['mode' => 'live']);
+        }
+        $settings = (array) ($link->settings ?? []);
+        $settings['conversion'] = ['from' => $from, 'to' => $to, 'at' => Carbon::now()->toIso8601String(), 'by' => $request->user()->id, 'document_generated_at' => $model->generated_at?->toIso8601String()];
+        $fill['settings'] = $settings;
+
+        $link->fill($fill)->save();
+        $audit->log(
+            action: 'report.shared_link_converted',
+            entityType: ReportShare::class,
+            entityId: (string) $link->getKey(),
+            before: ['mode' => $from],
+            after: ['mode' => $to, 'document_generated_at' => $model->generated_at?->toIso8601String()],
+        );
+
+        return ApiResponse::success(['changed' => true, 'requires_confirmation' => false, 'from' => $from, 'to' => $to, 'notice' => $notice, 'link' => $this->shape($link->fresh())], 'Link converted — the same URL now behaves as '.$to.'.');
+    }
+
+    /**
+     * GET …/shares/{share}/link — copy the CURRENT link of an existing report; nothing is created and the type never changes.
+     *
+     * Available when the link kept its token (every link made since REPORT-LIFECYCLE-MENU-001). An older link or a revoked
+     * one says so and returns no URL; this never mints a replacement.
+     */
+    public function link(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.share'), 403);
+        $link = $this->findShare($this->findReport($report), $share);
+
+        $reason = null;
+        $raw = null;
+        if ($link->revoked_at !== null) {
+            $reason = 'revoked';
+        } elseif ($link->token_encrypted === null) {
+            $reason = 'created_before_copy_support';
+        } else {
+            try {
+                $raw = Crypt::decryptString((string) $link->token_encrypted);
+            } catch (\Throwable) {
+                $reason = 'created_before_copy_support';
+            }
+        }
+
+        if ($raw !== null) {
+            $audit->log(action: 'report.shared_link_copied', entityType: ReportShare::class, entityId: (string) $link->getKey());
+        }
+
+        return ApiResponse::success([
+            'available' => $raw !== null,
+            'reason' => $reason,
+            'url' => $raw === null ? null : ShareService::urlFor($raw),
+            'path' => $raw === null ? null : ShareService::pathFor($raw),
+            'mode' => $link->isLive() ? 'live' : 'snapshot',
+            'active' => $link->isActive(),
+        ], 'Link.');
     }
 
     /**

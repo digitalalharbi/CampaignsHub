@@ -16,6 +16,7 @@ use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -80,6 +81,8 @@ final class ShareService
             'tenant_id' => $report->tenant_id,
             'report_id' => $report->id,
             'token_hash' => $this->hashToken($raw),
+            // REPORT-LIFECYCLE-MENU-001 — lets an owner copy this same link later; never serialised (hidden on the model).
+            'token_encrypted' => Crypt::encryptString($raw),
             'password_hash' => ! empty($opts['password']) ? Hash::make($opts['password']) : null,
             'allow_download' => $opts['allow_download'] ?? true,
             'hide_spend' => $opts['hide_spend'] ?? false,
