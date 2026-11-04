@@ -57,6 +57,9 @@ final class PasswordResetService
      */
     private const SETUP_TTL_MINUTES = 4320;
 
+    /** A link a Super Admin took for an account whose address nobody proved. The only token `reset()` accepts for one. */
+    private const OPERATOR_PURPOSE = 'operator_reset';
+
     public function __construct(private readonly TransactionalMailer $mailer) {}
 
     /**
@@ -114,6 +117,9 @@ final class PasswordResetService
      * created the account: Production's mail transport can be failing (MAIL-HEALTH-001), and a test login nobody can reach blocks
      * the test. It is the same single-use, expiring token as a reset; it is never logged, stored in plain text or shown again.
      *
+     * AUTH-CODE-SWITCHES-001 — this is the last resort for an address nobody proved, which has no self-service way back. That address
+     * may belong to a stranger, so nothing is mailed to it: the operator hands the link over after checking who is asking.
+     *
      * @return array{link: string, delivery: string}|null null when no account matches
      */
     public function issueForOperator(string $email): ?array
@@ -122,6 +128,12 @@ final class PasswordResetService
         $user = User::where('email', $email)->first();
         if ($user === null) {
             return null;
+        }
+
+        if ($user->emailUnprovenByPolicy()) {
+            $secret = $this->issue($email, self::OPERATOR_PURPOSE, self::TTL_MINUTES);
+
+            return ['link' => $this->link($email, $secret), 'delivery' => 'withheld_unproven_address'];
         }
 
         $secret = $this->issue($email, 'password_reset', self::TTL_MINUTES);
@@ -237,7 +249,8 @@ final class PasswordResetService
         }
 
         $user = User::where('email', $email)->first();
-        if ($user === null || $user->emailUnprovenByPolicy()) {
+        $unproven = $user?->emailUnprovenByPolicy() === true;
+        if ($user === null || ($unproven && $row->purpose !== self::OPERATOR_PURPOSE)) {
             // The account went away between issuing and using, or was never proved. Same answer: the link cannot be used.
             throw $invalid;
         }
@@ -264,20 +277,22 @@ final class PasswordResetService
          *
          * If the reset was theirs this is a receipt. If it was not, it is the only message that will
          * ever reach them about it — and it arrives at the address the attacker just used, which is
-         * the one place they cannot suppress it from.
+         * the one place they cannot suppress it from. Not to an address nobody proved: that may be a stranger's inbox.
          */
-        $this->mailer->send(
-            recipient: $email,
-            mail: new SecurityAlertMail(
-                event: SecurityAlertMail::PASSWORD_CHANGED,
-                lang: 'ar',
-                recipientName: (string) $user->name,
-                at: Carbon::now()->format('Y-m-d H:i'),
-            ),
-            kind: 'security_alert',
-            template: 'mail.security',
-            userId: (int) $user->getKey(),
-        );
+        if (! $unproven) {
+            $this->mailer->send(
+                recipient: $email,
+                mail: new SecurityAlertMail(
+                    event: SecurityAlertMail::PASSWORD_CHANGED,
+                    lang: 'ar',
+                    recipientName: (string) $user->name,
+                    at: Carbon::now()->format('Y-m-d H:i'),
+                ),
+                kind: 'security_alert',
+                template: 'mail.security',
+                userId: (int) $user->getKey(),
+            );
+        }
 
         return $user;
     }

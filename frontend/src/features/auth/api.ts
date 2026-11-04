@@ -190,7 +190,7 @@ export interface OAuthProvider {
 }
 
 /** AUTH-LOGIN-UX-002 — which ways in the page may offer right now (a way that cannot work is not shown). */
-export interface SignInMethods { password: { available: boolean }; email_code: { available: boolean } }
+export interface SignInMethods { password: { available: boolean }; email_code: { available: boolean }; sms_code?: { available: boolean } }
 export const fetchSignInMethods = (): Promise<SignInMethods> => getData<SignInMethods>('/auth/methods')
 
 export async function fetchOAuthProviders(): Promise<OAuthProvider[]> {

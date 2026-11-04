@@ -88,6 +88,15 @@ describe('AUTH-PHONE-001 — the mobile number in Account security', () => {
     expect(screen.getByTestId('phone-send-code')).toBeEnabled()
   })
 
+  /** AUTH-CODE-SWITCHES-001 — off by decision: nothing to press, and withdrawing a proved number still works. */
+  it('offers no send when the platform turned the code off, and keeps the way to withdraw a number', async () => {
+    await mount(credential({ code_available: false, confirmed: true }))
+
+    expect(screen.getByTestId('phone-code-off')).toBeInTheDocument()
+    expect(screen.queryByTestId('phone-send-code')).not.toBeInTheDocument()
+    expect(screen.getByTestId('phone-revoke')).toBeInTheDocument()
+  })
+
   /** With a working channel present, the warning has nothing to say. */
   it('says nothing about missing providers once one channel works', async () => {
     await mount(credential({ channels: { sms: true, whatsapp: false } }))

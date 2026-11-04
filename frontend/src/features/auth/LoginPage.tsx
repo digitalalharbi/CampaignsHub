@@ -248,6 +248,8 @@ export function LoginPage() {
       // Dev-only: the backend returns `dev_code` ONLY outside production (hard-gated server-side).
       if (r.dev_code) setCode(r.dev_code)
     },
+    // AUTH-CODE-SWITCHES-001 — the platform turned this code off. Back to the card, where the password and the reset link are.
+    onError: (e) => { if (toApiError(e).status === 403) setStep('credentials') },
   })
 
   /**

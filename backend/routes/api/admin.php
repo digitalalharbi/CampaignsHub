@@ -20,6 +20,7 @@ use App\Domains\Platform\Http\Controllers\PlatformMembershipController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
+use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
@@ -135,6 +136,10 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registration-verification-policy.show');
         Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
             ->middleware('throttle:30,1')->name('registration-verification-policy.update');
+        // AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not on it.
+        Route::get('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'show'])->name('auth-code-switches.show');
+        Route::put('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'update'])
+            ->middleware('throttle:30,1')->name('auth-code-switches.update');
         // SIGNUP-DECISION-001 — one form, one service: commercial treatment and access scope, previewed before they are taken.
         Route::get('/tenants/{tenant}/decision-targets', [PlatformRegistrationController::class, 'decisionTargets'])
             ->name('tenants.decision-targets');

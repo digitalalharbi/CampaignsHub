@@ -161,7 +161,9 @@ export function RegistrationPolicyTab() {
       setError(null)
     },
     onError: (e: unknown) => {
-      setError(toApiError(e).message)
+      const failure = toApiError(e)
+      // AUTH-CODE-SWITCHES-001 — a refused combination says why in its own field, and that sentence is the point of it.
+      setError(failure.errors?.email_enabled?.[0] ?? failure.message)
       // A refused save may be somebody else's newer decision; show it rather than the stale one.
       void queryClient.invalidateQueries({ queryKey: ['admin', 'registration-verification-policy'] })
     },

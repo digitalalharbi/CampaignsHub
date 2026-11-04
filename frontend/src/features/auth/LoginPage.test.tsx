@@ -55,6 +55,32 @@ async function reachCodeStep(identifier = 'agency@campaignshub.io', start: unkno
  * the server chose.
  */
 describe('LoginPage — the sign-in card', () => {
+  it('hides the code button when the server says the code is off, and keeps the password and the reset link', async () => {
+    vi.mocked(fetchSignInMethods).mockResolvedValueOnce({ password: { available: true }, email_code: { available: false } })
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await waitFor(() => expect(fetchSignInMethods).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByTestId('login-google')).toBeInTheDocument())
+    expect(screen.queryByTestId('login-request-code')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /forgot/i })).toBeInTheDocument()
+  })
+
+  it('returns to the card with the reason when the platform has turned the code off', async () => {
+    mockedMethod.mockResolvedValue({ method: 'password', channel: 'email' })
+    mockedEmailStart.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 403, data: { message: 'Signing in with a code on this channel is turned off.' } },
+    })
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    typeEmail('agency@campaignshub.io')
+    fireEvent.click(await screen.findByTestId('login-request-code'))
+
+    expect(await screen.findByText(/turned off/)).toBeInTheDocument()
+    expect(screen.queryByTestId('login-code')).not.toBeInTheDocument()
+  })
+
   it('renders Google sign-in only as an available server-reported capability', async () => {
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 

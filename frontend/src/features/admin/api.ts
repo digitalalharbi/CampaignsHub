@@ -730,6 +730,47 @@ export function saveRegistrationVerificationPolicy(
   return putData('/admin/registration-verification-policy', policy)
 }
 
+/* AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not among them. */
+
+export type AuthCodeSwitchKey = 'sign_in_email_code' | 'sign_in_sms_code' | 'portal_email_code' | 'portal_sms_code' | 'recovery_sms_code'
+
+export interface AuthCodeChannel {
+  enabled: boolean
+  provider: 'configured' | 'not_configured' | 'failing'
+  last_24h: { issued: number; sent: number }
+  sent_30d: number
+  unit_cost: string | null
+  currency: string | null
+  estimated_cost_30d: string | null
+  cost_known: boolean
+}
+
+export interface AuthCodeSwitchesOverview {
+  switches: Record<AuthCodeSwitchKey, boolean> & { version: number }
+  channels: Record<AuthCodeSwitchKey, AuthCodeChannel>
+  recovery_link: { available: boolean; switchable: boolean; open_question: string }
+  limits: { code_ttl_minutes: number; max_attempts: number; resend_cooldown_seconds: number }
+  lockout: { stranded_contacts: number; accounts_only_sms_back: number }
+  counted_since: string | null
+  changes: Array<{
+    at: string | null
+    user_id: number | null
+    reason: string | null
+    before: Partial<Record<AuthCodeSwitchKey, boolean>> | null
+    after: Partial<Record<AuthCodeSwitchKey, boolean>> | null
+  }>
+}
+
+export function fetchAuthCodeSwitches(): Promise<AuthCodeSwitchesOverview> {
+  return getData('/admin/auth-code-switches')
+}
+
+export function saveAuthCodeSwitches(
+  body: Record<AuthCodeSwitchKey, boolean> & { reason: string; expected_version: number; confirm_risk: boolean },
+): Promise<AuthCodeSwitchesOverview> {
+  return putData('/admin/auth-code-switches', body)
+}
+
 /*
  * The payment gateways, from the console (PAYSET-001, PAY-GATEWAY-CONSOLE-001).
  *

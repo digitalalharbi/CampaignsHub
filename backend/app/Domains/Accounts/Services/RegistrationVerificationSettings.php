@@ -9,12 +9,14 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Models\RegistrationSendLog;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Legal\Models\PlatformSetting;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -101,6 +103,11 @@ final class RegistrationVerificationSettings
             // Saving what is already there is not a decision, so it leaves no record and no new version.
             if ($after === $before) {
                 return $before;
+            }
+
+            // AUTH-CODE-SWITCHES-001 — an address nobody proved has only SMS to come back by, so both cannot be off at once.
+            if ($before['email_enabled'] && ! $after['email_enabled'] && ! app(AuthCodeSwitches::class)->current()['sign_in_sms_code']) {
+                throw ValidationException::withMessages(['email_enabled' => [__('auth.code_switch_signup_unproven')]]);
             }
 
             $after['version'] = (int) $before['version'] + 1;

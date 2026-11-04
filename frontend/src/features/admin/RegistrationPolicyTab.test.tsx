@@ -58,6 +58,21 @@ describe('RegistrationPolicyTab', () => {
     expect(screen.getByTestId('policy-switch-mobile')).toBeChecked()
   })
 
+  it('shows why the server refused to turn the email gate off', async () => {
+    vi.mocked(saveRegistrationVerificationPolicy).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 422, data: { message: 'Invalid', errors: { email_enabled: ['Refused: the two cannot both be off.'] } } },
+    })
+    renderWithProviders(<RegistrationPolicyTab />)
+
+    fireEvent.click(await screen.findByTestId('policy-switch-email'))
+    fireEvent.click(screen.getByTestId('policy-confirm'))
+    fireEvent.change(screen.getByTestId('policy-reason'), { target: { value: 'Cost control' } })
+    fireEvent.click(screen.getByTestId('policy-save'))
+
+    expect(await screen.findByTestId('policy-save-error')).toHaveTextContent('cannot both be off')
+  })
+
   it('says when a channel is at its cap and shows only a cost it can compute', async () => {
     vi.mocked(fetchRegistrationVerificationPolicy).mockResolvedValue(overview({
       channels: {

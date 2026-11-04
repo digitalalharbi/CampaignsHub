@@ -3,6 +3,7 @@ import { Activity, Clock, FileText, Globe, Layers, MailCheck, MessageSquareQuote
 import { PublicPagesSettingsPage } from '@/features/settings/PublicPagesSettingsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
+import { AuthCodeSwitchesPanel } from './AuthCodeSwitchesPanel'
 import { RegistrationPolicyTab } from './RegistrationPolicyTab'
 import { IntegrationsTab, PermissionsTab, ScheduledWorkTab, StatusTab } from './PlatformOpsTabs'
 import { useUi } from '@/stores/ui'
@@ -83,7 +84,7 @@ export function SystemSettingsPage() {
       </div>
 
       <div role="tabpanel">
-        {tab === 'registration' && <RegistrationPolicyTab />}
+        {tab === 'registration' && <><RegistrationPolicyTab /><AuthCodeSwitchesPanel /></>}
         {tab === 'public-site' && <PublicPagesSettingsPage />}
         {tab === 'portals' && (
           <SettingsPage
