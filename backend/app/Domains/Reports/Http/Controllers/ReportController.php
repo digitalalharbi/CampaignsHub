@@ -451,10 +451,21 @@ final class ReportController extends Controller
         return ApiResponse::success($shape, 'Report duplicated.', status: 201);
     }
 
-    public function regenerate(Request $request, string $project, string $report): JsonResponse
+    /** REPORT-SNAPSHOT-PROTECT-001 — replacing a stored copy is asked for, attributed, and the copy is kept by the job. */
+    public function regenerate(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $model = $this->find($report);
+        $confirmed = (bool) ($request->validate(['confirm' => ['nullable', 'boolean']])['confirm'] ?? false);
+        if ($model->status === 'completed' && $model->hasStoredCopy() && ! $confirmed) {
+            return ApiResponse::error(__('api.report_regenerate_needs_confirmation'), ['code' => 'report_regenerate_needs_confirmation'], status: 409);
+        }
+        $audit->log(
+            action: 'report.regenerated',
+            entityType: Report::class,
+            entityId: (string) $model->getKey(),
+            before: ['generated_at' => $model->generated_at?->toIso8601String()],
+        );
         $model->update(['status' => 'processing', 'error' => null]);
         GenerateReportJob::dispatch((string) $model->id);
 

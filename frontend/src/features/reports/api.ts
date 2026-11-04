@@ -105,7 +105,7 @@ export interface ReportSectionChoice {
 
 export const listReportSections = (p: string) =>
   getData<{ sections: ReportSectionChoice[] }>(`${base(p)}/sections`)
-export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`)
+export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`, { confirm: true })
 export const exportReport = (p: string, id: string, format: ReportFormat) =>
   postData<{ id: string; format: string; status: string }>(`${base(p)}/${id}/export`, { format })
 /** REPORT-DRILLDOWN-001 — switch a report's optional PDF drill-down section on or off (reports.manage). */

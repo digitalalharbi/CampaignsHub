@@ -56,7 +56,8 @@ final class PublicReportController extends Controller
         }
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        if (! $report || $report->status !== 'completed') {
+        // REPORT-SNAPSHOT-PROTECT-001 — while a stored copy is rebuilt, that copy keeps answering.
+        if (! $report || ($report->status !== 'completed' && ! ($report->status === 'processing' && $report->hasStoredCopy()))) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
