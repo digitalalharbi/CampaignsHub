@@ -89,6 +89,7 @@ issue / change request → branch → implementation → tests → PR → CI gre
 - **`git fetch origin` first, always**, and branch from the freshest `origin/main`. A local checkout
   that disagrees with GitHub is stale, not authoritative.
 - After every merge, fetch again and take that as the state for the next piece of work.
+- **Merges go through the Lander, one at a time; do not merge a PR yourself.** Every branch must be up to date with `main`, so a merge outside the queue sends the PR in progress through about an hour of CI again. Add the branch with `~/Developer/ch-scripts/lander/lander.sh add <branch> "<title>"`; `lander.sh status` shows the queue. `ch-scripts/` lives beside the repository and is not tracked in it. If you cannot reach it, ask the owner instead of merging.
 - **No direct push to `main`.** The branch is protected. An emergency override is possible for the
   owner and must be documented afterwards in `docs/CHANGE_MANAGEMENT.md` §Emergency.
 - A PR fills in the template honestly: root cause, scope, tests, security, tenant isolation,
