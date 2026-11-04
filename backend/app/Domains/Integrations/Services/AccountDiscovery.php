@@ -9,6 +9,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderErrorText;
+use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -102,6 +103,9 @@ final class AccountDiscovery
                 'discovery_blocked_reason' => $this->classify($e),
                 'last_error' => ProviderErrorText::forStorage($e->getMessage()),
             ])->save();
+
+            // META-SESSION-190-001 — the same refusal on the discovery read marks the connection for reconnecting.
+            app(ProviderSessionInvalidation::class)->record($connection, $e->getMessage());
 
             throw $e;
         }

@@ -6,15 +6,18 @@ namespace App\Domains\Integrations\Sync;
 
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
 use App\Domains\Campaigns\Actions\ImportExternalStructure;
+use App\Domains\Campaigns\Actions\RenewExpiredCreativeMedia;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\MetaConnector;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\MetaGraphRefusal;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
@@ -65,6 +68,8 @@ final class AccountStructureSyncer
             'provider_connection_id' => $account->provider_connection_id,
             'type' => 'structure',
             'status' => SyncRunStatus::Running->value,
+            // Which ad account this run read: one authorisation holds many, and a refusal belongs to the one refused.
+            'meta' => ['external_account_id' => (string) $account->external_id],
             'started_at' => Carbon::now(),
         ])->save();
 
@@ -121,8 +126,9 @@ final class AccountStructureSyncer
         $importedCampaigns = $campaigns === null ? 0 : $this->importCampaigns->execute($account, $campaigns, $projectId);
 
         // ── 2 & 3. Ad sets and ads, together, because an ad is placed by its ad set ────────────
-        $adSets = $this->attempt(fn () => $connector->syncAdSets($accountId), $problems, 'ad sets');
-        $ads = $this->attempt(fn () => $connector->syncAds($accountId), $problems, 'ads');
+        // META-RESILIENCE-001 — a dead token or a throttle answers the next read the same way, and each read is a call.
+        $adSets = $this->toldToStop($account, $problems) ? null : $this->attempt(fn () => $connector->syncAdSets($accountId), $problems, 'ad sets');
+        $ads = $this->toldToStop($account, $problems) ? null : $this->attempt(fn () => $connector->syncAds($accountId), $problems, 'ads');
 
         $counts = $this->importStructure->execute(
             $account,
@@ -168,12 +174,41 @@ final class AccountStructureSyncer
             ]])->save();
         }
 
+        /*
+         * META-RESILIENCE-001 — what the media reads did, and how close Meta says the app is to its ceiling.
+         * EXPIRED-MEDIA-RENEWAL — then the links this pass did not refresh, only when the reads were not stopped.
+         */
+        if ($connector instanceof MetaConnector) {
+            $outcome = $connector->lastMediaOutcome();
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'media' => $outcome,
+                'usage' => $connector->lastUsage(),
+            ]])->save();
+
+            if ($ads !== null && $outcome['stopped_by'] === null) {
+                $renewal = app(RenewExpiredCreativeMedia::class)->execute($account, $connector);
+
+                if ($renewal !== null) {
+                    $run->forceFill(['meta' => [...(array) $run->meta, 'media_renewal' => $renewal, 'usage' => $connector->lastUsage()]])->save();
+                }
+            }
+        }
+
         // META-SESSION-190-001 — the same refusal on the structure read marks the connection for reconnecting.
         if ($problems !== [] && isset($connection)) {
             app(ProviderSessionInvalidation::class)->record($connection, implode(' ', $problems));
         }
 
         return $this->finish($run, $status, $records, $problems === [] ? null : implode(' ', $problems));
+    }
+
+    /** @param list<string> $problems */
+    private function toldToStop(ExternalAccount $account, array $problems): bool
+    {
+        return $account->provider === 'meta'
+            && $problems !== []
+            && MetaGraphRefusal::read((string) end($problems))?->stopsFurtherCalls() === true;
     }
 
     /**
