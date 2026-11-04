@@ -64,6 +64,7 @@ import {
 import { ProvenanceBadge, type Provenance } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
+import { KeptCopyNote, ReportVersionHistory } from './ReportVersionHistory'
 import { AttentionDecisionsPanel } from './AttentionDecisionsPanel'
 import { useProject } from '@/stores/project'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
@@ -824,6 +825,8 @@ function ReportRowView({
       <td className="p-3 text-text-muted"><span className="tnum">{report.created_at ? fmtDate(report.created_at) : '—'}</span></td>
       <td className="p-3">
         <div className="flex items-center justify-end gap-1">
+          {/* REPORT-SNAPSHOT-PROTECT-001 — the copies a rebuild replaced, and putting one back. Self-contained: this line is the whole mount. */}
+          <ReportVersionHistory report={report} />
           {report.status === 'completed' && (
             <>
               <ExportChips report={report} ar={ar} onExport={onExport} />
@@ -973,6 +976,7 @@ function ScopeEditor({
               ? 'الحفظ يعيد توليد هذا التقرير نفسه — الرابط المُرسَل للعميل يبقى كما هو ويعرض النطاق الجديد.'
               : 'Saving regenerates this same report — a link already sent to the client keeps working and shows the new scope.'}
           </p>
+          <KeptCopyNote />
         </div>
       )}
     </Modal>

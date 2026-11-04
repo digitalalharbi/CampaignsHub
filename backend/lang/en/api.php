@@ -18,6 +18,7 @@ return [
     'report_send_unavailable' => 'The report was not sent: email sending is not available, and nothing reached any recipient. Use a secure link or export the file instead.',
     'report_regenerate_needs_confirmation' => 'This replaces the stored copy of the report. Confirm to keep the current copy in the report\'s history and build a new one.',
     'report_restore_needs_confirmation' => 'This puts the older copy back in place of the current one. Confirm to keep the current copy in the report\'s history.',
+    'report_is_rebuilding' => 'This report is being rebuilt right now. Wait for it to finish, then restore the copy.',
     'too_many_requests' => 'Too many requests. Please try again shortly.',
     'server_error' => 'Something went wrong. Please try again.',
 

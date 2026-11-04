@@ -57,7 +57,7 @@ final class PublicReportController extends Controller
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
         // REPORT-SNAPSHOT-PROTECT-001 — while a stored copy is rebuilt, that copy keeps answering.
-        if (! $report || ($report->status !== 'completed' && ! ($report->status === 'processing' && $report->hasStoredCopy()))) {
+        if (! $report || ! $report->servesStoredCopy()) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
@@ -363,7 +363,8 @@ final class PublicReportController extends Controller
         }
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        if (! $report || $report->status !== 'completed') {
+        // REPORT-SNAPSHOT-PROTECT-001 — the same answer as the page: the stored copy while it is rebuilt, nothing where there is none.
+        if (! $report || ! $report->servesStoredCopy()) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
@@ -406,7 +407,8 @@ final class PublicReportController extends Controller
         }
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        if (! $report || $report->status !== 'completed') {
+        // REPORT-SNAPSHOT-PROTECT-001 — the same answer as the page: the stored copy while it is rebuilt, nothing where there is none.
+        if (! $report || ! $report->servesStoredCopy()) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
@@ -559,7 +561,8 @@ final class PublicReportController extends Controller
         abort_unless(in_array($format, ['pdf', 'xlsx', 'csv'], true), 404);
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
+        // REPORT-SNAPSHOT-PROTECT-001 — the file is made from the stored copy while that copy is rebuilt, as the page is.
+        abort_if($report === null || ! $report->servesStoredCopy(), 404, 'Report not available.');
 
         /*
          * ONE share-filtered document for every file this link produces — SHARED-PDF-HIDE-FLAGS-001.
