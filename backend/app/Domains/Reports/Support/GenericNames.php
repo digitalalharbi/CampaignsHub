@@ -179,7 +179,7 @@ final class GenericNames
             return self::$ofLink[$share];
         }
 
-        $found = self::build($report ?? ($share === null ? null : Report::withoutGlobalScopes()->find($share->report_id)), $share);
+        $found = self::build($report ?? ($share?->report_id === null ? null : Report::withoutGlobalScopes()->find($share->report_id)), $share);
         if ($share !== null) {
             self::$ofLink[$share] = $found;
         }
