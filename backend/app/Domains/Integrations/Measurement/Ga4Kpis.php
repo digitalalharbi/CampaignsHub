@@ -27,11 +27,13 @@ final class Ga4Kpis
         'sessions' => ['Sessions started on the site.', ['sessions'], 'count', false],
         'users_daily_sum' => ['Total users per day, added across the days (a person on two days counts twice).', ['totalUsers'], 'count', false],
         'new_users' => ['Users who visited for the first time.', ['newUsers'], 'count', false],
+        'active_users' => ['Active users per day, added across the days (a person on two days counts twice).', ['activeUsers'], 'count', false],
         'engaged_sessions' => ['Sessions longer than 10 seconds, or with a key event, or with 2+ screen views.', ['engagedSessions'], 'count', false],
         'engagement_rate' => ['Engaged sessions divided by sessions, weighted by each day\'s sessions.', ['engagementRate', 'sessions'], 'rate', false],
         'bounce_rate' => ['Sessions that were not engaged divided by sessions (GA4 bounceRate), weighted by each day\'s sessions.', ['bounceRate', 'sessions'], 'rate', false],
         'avg_engagement_seconds' => ['Total engagement time divided by the daily active users added across the days: seconds per active user-day.', ['userEngagementDuration', 'activeUsers'], 'seconds', false],
         'page_views' => ['Screen / page views.', ['screenPageViews'], 'count', false],
+        'product_views' => ['Units viewed in view_item events. Needs the view_item event on the site, otherwise absent.', ['itemsViewed'], 'count', false],
         'key_events' => ['Key events (formerly conversions).', ['keyEvents'], 'count', false],
         'transactions' => ['Purchase transactions with revenue.', ['transactions'], 'count', false],
         'revenue' => ['Purchase revenue GA4 measured on the site, in the property currency. Not store or ad-platform revenue.', ['purchaseRevenue'], 'money', true],
@@ -89,6 +91,7 @@ final class Ga4Kpis
                 'source' => ['kind' => 'ga4', 'metrics' => $metrics],
                 'blended_with_other_sources' => false,
                 'freshness' => $freshness,
+                'trend' => $this->trend($key, $win['current']),
             ];
         }
 
@@ -97,6 +100,27 @@ final class Ga4Kpis
             'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
             'kpi_freshness' => $freshness,
         ];
+    }
+
+    /**
+     * The KPI day by day, each day derived on its own. A day that cannot state it is left out rather
+     * than drawn as zero.
+     *
+     * @param  array<string, array<string, float>>  $byDay
+     * @return list<array{date: string, value: float}>
+     */
+    private function trend(string $key, array $byDay): array
+    {
+        ksort($byDay);
+        $out = [];
+        foreach ($byDay as $date => $values) {
+            $value = $this->value($key, [$date => $values]);
+            if ($value !== null) {
+                $out[] = ['date' => $date, 'value' => $value];
+            }
+        }
+
+        return $out;
     }
 
     /** @param array<string, array<string, float>> $byDay */
@@ -139,7 +163,7 @@ final class Ga4Kpis
         }
 
         return match ($key) {
-            'sessions', 'new_users', 'engaged_sessions', 'page_views', 'key_events', 'transactions', 'revenue' => $this->sum($byDay, $key),
+            'sessions', 'new_users', 'active_users', 'engaged_sessions', 'page_views', 'product_views', 'key_events', 'transactions', 'revenue' => $this->sum($byDay, $key),
             'users_daily_sum' => $this->sum($byDay, 'users'),
             'engagement_rate' => $this->weighted($byDay, 'engagement_rate'),
             'bounce_rate' => $this->weighted($byDay, 'bounce_rate'),

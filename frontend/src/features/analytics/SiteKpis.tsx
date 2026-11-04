@@ -1,6 +1,7 @@
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { formatFixed } from '@/lib/numerals'
 import { money, num, percent } from './format'
+import { KpiSparkline } from './charts'
 
 /**
  * GA4-BOUNCE-AOV-KPIS-001 — the site KPIs with the previous period, the change, and where each came from.
@@ -21,11 +22,17 @@ export interface SiteKpi {
   source: { kind: 'ga4'; metrics: string[] }
   blended_with_other_sources: boolean
   freshness: { last_synced_at: string | null; newest_day: string | null; days_with_data: number; days_in_window: number }
+  /** Day by day; a day that cannot state the KPI is left out. Older payloads have none. */
+  trend?: Array<{ date: string; value: number }>
 }
 
-const SHOWN = ['bounce_rate', 'avg_engagement_seconds', 'aov', 'items_per_order', 'revenue_per_user', 'revenue_per_session'] as const
+const SHOWN = ['active_users', 'new_users', 'page_views', 'product_views', 'bounce_rate', 'avg_engagement_seconds', 'aov', 'items_per_order', 'revenue_per_user', 'revenue_per_session'] as const
 
 const NAME: Record<string, { ar: string; en: string }> = {
+  active_users: { ar: 'المستخدمون النشطون', en: 'Active users' },
+  new_users: { ar: 'المستخدمون الجدد', en: 'New users' },
+  page_views: { ar: 'مشاهدات الصفحات', en: 'Page views' },
+  product_views: { ar: 'مشاهدات المنتجات', en: 'Product views' },
   bounce_rate: { ar: 'معدل الارتداد', en: 'Bounce rate' },
   avg_engagement_seconds: { ar: 'متوسط مدة التفاعل', en: 'Avg. engagement time' },
   aov: { ar: 'متوسط قيمة الطلب', en: 'Average order value' },
@@ -51,7 +58,7 @@ export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { 
   if (rows.length === 0) return null
   return (
     <section data-testid="site-kpis" aria-label={ar ? 'مؤشرات GA4' : 'GA4 KPIs'} className="space-y-2">
-      <StatGrid columns="grid-cols-2 lg:grid-cols-3">
+      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         {rows.map((k) => {
           const name = NAME[k.key]?.[ar ? 'ar' : 'en'] ?? k.key
           const prev = k.previous === null ? (ar ? 'لا بيانات للفترة السابقة' : 'No data for the previous period') : `${ar ? 'السابقة' : 'Previous'}: ${kpiValue(k, k.previous)}`
@@ -59,7 +66,8 @@ export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { 
           return (
             <StatCard key={k.key} testid={`site-kpi-${k.key}`} tone="neutral" label={name}
               value={<span dir="ltr">{kpiValue(k, k.current)}</span>}
-              hint={k.current === null ? (ar ? 'لم تُرجع الخاصية هذا المؤشر' : 'The property did not report this') : `${prev}${change}`} />
+              hint={k.current === null ? (ar ? 'لم تُرجع الخاصية هذا المؤشر' : 'The property did not report this') : `${prev}${change}`}
+              spark={(k.trend?.length ?? 0) >= 2 ? <span data-testid={`site-kpi-trend-${k.key}`} className="block"><KpiSparkline points={(k.trend ?? []).map((p) => p.value)} /></span> : undefined} />
           )
         })}
       </StatGrid>

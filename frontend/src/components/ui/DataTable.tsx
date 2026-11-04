@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Columns3, Search } from 'lucide-react'
 import { Input } from './Input'
 import { EmptyState, ErrorState, Skeleton } from './States'
 
@@ -17,6 +17,10 @@ export interface Column<T> {
    * demand: tap the cell to open it, hover for the title. The value is never lost, only folded.
    */
   truncate?: number
+  /** The reader may hide this column (`columnPicker` on the table offers it). A key column stays. */
+  hideable?: boolean
+  /** Starts hidden until the reader asks for it. */
+  defaultHidden?: boolean
 }
 
 /** TABLE-SERVER-PAGING-001 — the state a server-paged table reports back to its owner. */
@@ -48,9 +52,12 @@ export interface TableLabels {
   showFull: string
   hideFull: string
   page: string
+  columns: string
+  expandRow: string
+  collapseRow: string
 }
 
-const EN: TableLabels = { search: 'Search…', rowsPerPage: 'Rows per page', previous: 'Previous', next: 'Next', total: 'total', showFull: 'Show full value', hideFull: 'Fold value', page: 'Page' }
+const EN: TableLabels = { search: 'Search…', rowsPerPage: 'Rows per page', previous: 'Previous', next: 'Next', total: 'total', showFull: 'Show full value', hideFull: 'Fold value', page: 'Page', columns: 'Columns', expandRow: 'Show details', collapseRow: 'Hide details' }
 
 export const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
 
@@ -82,6 +89,16 @@ function writeSaved(key: string | undefined, state: TableState): void {
     window.sessionStorage.setItem(`table:${key}`, JSON.stringify(state))
   } catch {
     /* storage blocked: the table works, it just does not remember */
+  }
+}
+
+function readColumns(key: string | undefined): Record<string, boolean> {
+  if (!key) return {}
+  try {
+    const raw = window.sessionStorage.getItem(`table-columns:${key}`)
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+  } catch {
+    return {}
   }
 }
 
@@ -122,6 +139,10 @@ interface DataTableProps<T> {
   labels?: Partial<TableLabels>
   /** Scroll inside the table with a sticky header once it is taller than this (CSS length). */
   maxHeight?: string
+  /** Offers the `hideable` columns to show or hide; the choice is kept for the session under `stateKey`. */
+  columnPicker?: boolean
+  /** More about one row, opened in place on demand rather than widening the table. */
+  expandRow?: (row: T) => ReactNode
 }
 
 export function DataTable<T>({
@@ -139,6 +160,8 @@ export function DataTable<T>({
   stateKey,
   labels: given,
   maxHeight,
+  columnPicker,
+  expandRow,
 }: DataTableProps<T>) {
   const labels = { ...EN, ...given }
   const saved = useRef(readSaved(stateKey)).current
@@ -146,6 +169,22 @@ export function DataTable<T>({
   const [localSort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(saved?.sort ?? null)
   const [localPage, setPage] = useState(saved?.page ?? 1)
   const [localSize, setSize] = useState(saved?.pageSize && pageSizeOptions.includes(saved.pageSize) ? saved.pageSize : initialSize)
+
+  const [columnChoice, setColumnChoice] = useState<Record<string, boolean>>(() => readColumns(stateKey))
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const shownColumns = columns.filter((c) => !c.hideable || (columnChoice[c.key] ?? !c.defaultHidden))
+  const toggleColumn = (key: string, on: boolean) => {
+    const next = { ...columnChoice, [key]: on }
+    setColumnChoice(next)
+    if (stateKey) {
+      try {
+        window.sessionStorage.setItem(`table-columns:${stateKey}`, JSON.stringify(next))
+      } catch {
+        /* storage blocked: the choice lasts for this view */
+      }
+    }
+  }
 
   const query = server ? server.state.query : localQuery
   const sort = server ? server.state.sort : localSort
@@ -211,16 +250,48 @@ export function DataTable<T>({
 
   return (
     <div className="min-w-0 max-w-full space-y-3">
-      {searchable && (
-        <div className="relative max-w-xs">
-          <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-          <Input
-            value={query}
-            onChange={(e) => apply({ query: e.target.value, page: 1 })}
-            placeholder={labels.search}
-            aria-label={labels.search}
-            className="ps-9"
-          />
+      {(searchable || columnPicker) && (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          {searchable && (
+            <div className="relative min-w-0 max-w-xs flex-1">
+              <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+              <Input
+                value={query}
+                onChange={(e) => apply({ query: e.target.value, page: 1 })}
+                placeholder={labels.search}
+                aria-label={labels.search}
+                className="ps-9"
+              />
+            </div>
+          )}
+          {columnPicker && columns.some((c) => c.hideable) && (
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="table-columns"
+                aria-expanded={pickerOpen}
+                onClick={() => setPickerOpen((o) => !o)}
+                className="inline-flex items-center gap-1.5 rounded-[8px] border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary"
+              >
+                <Columns3 size={14} />
+                {labels.columns}
+              </button>
+              {pickerOpen && (
+                <div className="absolute end-0 z-[2] mt-1 w-56 max-w-[80vw] space-y-1 rounded-[10px] border border-border bg-surface p-2 shadow-[var(--shadow-small)]">
+                  {columns.filter((c) => c.hideable).map((c) => (
+                    <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-text-primary hover:bg-surface-secondary">
+                      <input
+                        type="checkbox"
+                        checked={columnChoice[c.key] ?? !c.defaultHidden}
+                        onChange={(e) => toggleColumn(c.key, e.target.checked)}
+                      />
+                      <span className="min-w-0 truncate">{c.header}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -231,7 +302,8 @@ export function DataTable<T>({
         <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead className="sticky top-0 z-[1]">
             <tr className="border-b border-border bg-surface-secondary">
-              {columns.map((c) => (
+              {expandRow && <th aria-hidden className="w-8 px-1" />}
+              {shownColumns.map((c) => (
                 <th
                   key={c.key}
                   aria-sort={sort?.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -265,7 +337,8 @@ export function DataTable<T>({
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-border">
-                  {columns.map((c) => (
+                  {expandRow && <td className="w-8 px-1" />}
+                  {shownColumns.map((c) => (
                     <td key={c.key} className="px-3.5 py-3">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -281,17 +354,39 @@ export function DataTable<T>({
                   duplicates) needs a way to find it. Without this the only route was to re-render
                   the whole table from outside, which is a lot of machinery to answer «which one».
                 */
-                <tr
-                  key={rowKey(row)}
-                  data-row-key={rowKey(row)}
-                  className="border-b border-border last:border-0 hover:bg-surface-secondary target:bg-brand-500/10"
-                >
-                  {columns.map((c) => (
-                    <td key={c.key} className={`px-3.5 py-3 text-text-primary ${alignClass(c.align)}`}>
-                      {c.render ? c.render(row) : c.truncate ? <FoldedCell text={String(raw(c, row))} max={c.truncate} labels={labels} /> : String(raw(c, row))}
-                    </td>
-                  ))}
-                </tr>
+                <Fragment key={rowKey(row)}>
+                  <tr
+                    data-row-key={rowKey(row)}
+                    className="border-b border-border last:border-0 hover:bg-surface-secondary target:bg-brand-500/10"
+                  >
+                    {expandRow && (
+                      <td className="w-8 px-1 text-center">
+                        <button
+                          type="button"
+                          data-testid="table-expand"
+                          aria-expanded={expanded === rowKey(row)}
+                          aria-label={expanded === rowKey(row) ? labels.collapseRow : labels.expandRow}
+                          onClick={() => setExpanded((open) => (open === rowKey(row) ? null : rowKey(row)))}
+                          className="rounded p-1 text-text-muted hover:text-text-primary"
+                        >
+                          <ChevronDown size={14} className={`transition-transform duration-[var(--motion-control)] ${expanded === rowKey(row) ? 'rotate-180' : ''}`} />
+                        </button>
+                      </td>
+                    )}
+                    {shownColumns.map((c) => (
+                      <td key={c.key} className={`px-3.5 py-3 text-text-primary ${alignClass(c.align)}`}>
+                        {c.render ? c.render(row) : c.truncate ? <FoldedCell text={String(raw(c, row))} max={c.truncate} labels={labels} /> : String(raw(c, row))}
+                      </td>
+                    ))}
+                  </tr>
+                  {expandRow && expanded === rowKey(row) && (
+                    <tr data-testid="table-row-detail" className="border-b border-border bg-surface-secondary/50">
+                      <td colSpan={shownColumns.length + 1} className="px-3.5 py-3 text-xs text-text-secondary">
+                        {expandRow(row)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))
             )}
           </tbody>

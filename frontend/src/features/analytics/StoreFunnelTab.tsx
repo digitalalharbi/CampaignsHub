@@ -10,6 +10,9 @@ import { useSwrQuery } from '@/lib/query/swr'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Explainer } from '@/components/ui/Explainer'
+import { OrderSourcesPanel } from './OrderSourcesPanel'
+import { StoreDepthPanel } from './StoreDepthPanel'
+import { ThreeSourcesPanel } from './ThreeSourcesPanel'
 
 /**
  * FUNNEL-001 — «الفانل والمتجر»: impression to riyal, with the source of every number on the row.
@@ -33,7 +36,7 @@ interface Stage {
   label_en: string
   value: number | null
   state: 'measured' | 'partial' | 'unavailable'
-  source: { kind: 'stores' | 'ad_platforms' | 'none'; ar: string; en: string }
+  source: { kind: 'stores' | 'ad_platforms' | 'ga4' | 'none'; ar: string; en: string }
   note_ar?: string | null
   note_en?: string | null
 }
@@ -127,6 +130,7 @@ interface FunnelPayload {
 const SOURCE_LABEL: Record<Stage['source']['kind'], { ar: string; en: string; tone: 'success' | 'info' | 'neutral' }> = {
   stores: { ar: 'المتجر', en: 'Store', tone: 'success' },
   ad_platforms: { ar: 'بكسل المنصات', en: 'Platform pixel', tone: 'info' },
+  ga4: { ar: 'ما قاسه الموقع (GA4)', en: 'Site-measured (GA4)', tone: 'info' },
   none: { ar: 'لا يوجد مصدر', en: 'No source', tone: 'neutral' },
 }
 
@@ -423,6 +427,11 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           />
         </Panel>
       )}
+
+      {/* STORE-ANALYTICS-DEPTH-001 — the store's own reading, each order's source by evidence, and the three sources side by side. */}
+      <StoreDepthPanel projectId={projectId} range={range} ar={ar} />
+      <OrderSourcesPanel projectId={projectId} range={range} ar={ar} />
+      <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />
 
       {/* The footer that says what this page could NOT see. */}
       <p data-testid="funnel-coverage" className="rounded-xl bg-surface-hover px-4 py-3 text-[11px] text-text-secondary">

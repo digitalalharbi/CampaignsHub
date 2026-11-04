@@ -15,6 +15,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Sections\BusinessStreams;
@@ -464,6 +465,10 @@ final class ReportGenerator
             'business_streams' => $this->businessStreams($report, $agg, $scope, $from, $to, $totals),
             'business_streams_cover_total' => $report->sectionSettings()->streams() !== []
                 && app(BusinessStreams::class)->coversTotal($agg, $report->sectionSettings()->streams(), $from, $to),
+            // STORE-ANALYTICS-DEPTH-001 §3.1 — frozen with the snapshot, and only when the operator switched the category on.
+            'store_analytics' => $report->sectionSettings()->enabled(app(ReportSectionRegistry::class)->get('store_analytics'), (string) ($report->audience ?? 'client'))
+                ? app(StoreAnalyticsSection::class)->build((string) $report->tenant_id, (string) $report->project_id, $from, $to, false, $scope->accountIds === [] && $scope->resolvedCampaignIds() === [])
+                : null,
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.

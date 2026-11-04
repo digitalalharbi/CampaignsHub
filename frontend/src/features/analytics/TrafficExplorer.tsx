@@ -15,14 +15,16 @@ import { ChartCard } from './charts'
  * breakdowns: channel → source / medium → campaign → landing page. CSV and XLSX download EVERY row
  * in scope for the current view and filter, whatever page is on screen.
  */
-interface TrafficRow { dimension_1: string; dimension_2: string | null; sessions: number | null; engaged_sessions: number | null; purchases: number | null; revenue: number | null; engagement_rate: number | null; conversion_rate: number | null }
+interface TrafficRow { dimension_1: string; dimension_2: string | null; sessions: number | null; engaged_sessions: number | null; key_events?: number | null; add_to_carts?: number | null; checkouts?: number | null; purchases: number | null; revenue: number | null; engagement_rate: number | null; conversion_rate: number | null }
 interface TrafficPage { state: 'not_connected' | 'not_selected' | 'ready'; rows: TrafficRow[]; total: number; page: number; per_page: number; currency: string | null }
 
-type View = 'drill' | 'source_medium' | 'first_user_source_medium' | 'utm_content' | 'utm_term' | 'landing_page' | 'campaign_landing'
+type View = 'drill' | 'traffic_class' | 'referrals' | 'source_medium' | 'first_user_source_medium' | 'utm_content' | 'utm_term' | 'landing_page' | 'campaign_landing'
 interface Chain { channel?: string; sourceMedium?: string; campaign?: string }
 
 const VIEWS: Array<{ id: View; ar: string; en: string }> = [
   { id: 'drill', ar: 'مسار التعمّق: القناة ← المصدر ← الحملة ← الصفحة', en: 'Drill-down: channel → source → campaign → page' },
+  { id: 'traffic_class', ar: 'مدفوع / عضوي / مباشر', en: 'Paid / organic / direct' },
+  { id: 'referrals', ar: 'المواقع المحيلة', en: 'Referrals' },
   { id: 'source_medium', ar: 'المصدر / الوسيط (الجلسة)', en: 'Source / medium (session)' },
   { id: 'first_user_source_medium', ar: 'المصدر / الوسيط (أول مستخدم)', en: 'Source / medium (first user)' },
   { id: 'utm_content', ar: 'utm_content', en: 'utm_content' },
@@ -30,6 +32,15 @@ const VIEWS: Array<{ id: View; ar: string; en: string }> = [
   { id: 'landing_page', ar: 'صفحات الهبوط', en: 'Landing pages' },
   { id: 'campaign_landing', ar: 'الحملة ← صفحة الهبوط', en: 'Campaign → landing page' },
 ]
+
+/** GA4's channel groups folded by the server; the name is translated here. */
+const TRAFFIC_CLASS: Record<string, { ar: string; en: string }> = {
+  paid: { ar: 'مدفوع', en: 'Paid' },
+  organic: { ar: 'عضوي', en: 'Organic' },
+  direct: { ar: 'مباشر', en: 'Direct' },
+  referral: { ar: 'إحالة', en: 'Referral' },
+  other: { ar: 'أخرى', en: 'Other' },
+}
 
 /** What the drill chain asks the server for at its current depth. */
 export function drillRequest(chain: Chain): { breakdown: string; where_d1?: string; where_d2?: string; depth: 0 | 1 | 2 | 3 } {
@@ -83,11 +94,11 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
   const go = (c: Chain) => { setChain(c); reset() }
 
   const labels: Partial<TableLabels> = ar
-    ? { search: 'ابحث…', rowsPerPage: 'صفوف في الصفحة', previous: 'السابق', next: 'التالي', total: 'إجمالي', showFull: 'عرض القيمة كاملة', hideFull: 'طيّ القيمة', page: 'صفحة' }
+    ? { search: 'ابحث…', rowsPerPage: 'صفوف في الصفحة', previous: 'السابق', next: 'التالي', total: 'إجمالي', showFull: 'عرض القيمة كاملة', hideFull: 'طيّ القيمة', page: 'صفحة', columns: 'الأعمدة', expandRow: 'عرض التفاصيل', collapseRow: 'إخفاء التفاصيل' }
     : {}
   const cur = q.data?.currency ?? ''
   // The level's name column: the channel and landing views name by dimension_1 except where dimension_2 is the thing drilled to.
-  const nameOf = (r: TrafficRow): string => (drill?.depth === 1 ? (r.dimension_2 ?? r.dimension_1) : drill?.depth === 3 ? (r.dimension_2 ?? r.dimension_1) : r.dimension_1)
+  const nameOf = (r: TrafficRow): string => view === 'traffic_class' ? (TRAFFIC_CLASS[r.dimension_1]?.[ar ? 'ar' : 'en'] ?? r.dimension_1) : (drill?.depth === 1 ? (r.dimension_2 ?? r.dimension_1) : drill?.depth === 3 ? (r.dimension_2 ?? r.dimension_1) : r.dimension_1)
   const nameKey = drill?.depth === 1 || drill?.depth === 3 ? 'dimension_2' : 'dimension_1'
   const sub = (r: TrafficRow): string | null => (drill ? null : r.dimension_2)
 
@@ -116,9 +127,11 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
       },
     },
     { key: 'sessions', header: ar ? 'الجلسات' : 'Sessions', sortable: true, align: 'end', value: (r) => r.sessions ?? -1, render: (r) => <span dir="ltr" className="tnum">{num(r.sessions)}</span> },
-    { key: 'engagement_rate', header: ar ? 'التفاعل' : 'Engagement', sortable: true, align: 'end', value: (r) => r.engagement_rate ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.engagement_rate != null ? percent(r.engagement_rate, 0) : '—'}</span> },
+    { key: 'engagement_rate', header: ar ? 'التفاعل' : 'Engagement', sortable: true, align: 'end', hideable: true, value: (r) => r.engagement_rate ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.engagement_rate != null ? percent(r.engagement_rate, 0) : '—'}</span> },
     { key: 'purchases', header: ar ? 'المشتريات' : 'Purchases', sortable: true, align: 'end', value: (r) => r.purchases ?? -1, render: (r) => <span dir="ltr" className="tnum">{num(r.purchases)}</span> },
-    { key: 'conversion_rate', header: ar ? 'التحويل' : 'Conversion', sortable: true, align: 'end', value: (r) => r.conversion_rate ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.conversion_rate != null ? percent(r.conversion_rate, 2) : '—'}</span> },
+    { key: 'add_to_carts', header: ar ? 'إضافات للسلة' : 'Add to carts', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{num(r.add_to_carts ?? null)}</span> },
+    { key: 'checkouts', header: ar ? 'بدء الدفع' : 'Checkouts', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{num(r.checkouts ?? null)}</span> },
+    { key: 'conversion_rate', header: ar ? 'التحويل' : 'Conversion', sortable: true, align: 'end', hideable: true, value: (r) => r.conversion_rate ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.conversion_rate != null ? percent(r.conversion_rate, 2) : '—'}</span> },
     { key: 'revenue', header: ar ? 'الإيراد' : 'Revenue', sortable: true, align: 'end', value: (r) => r.revenue ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.revenue != null ? money(r.revenue, cur) : '—'}</span> },
   ]
 
@@ -165,7 +178,14 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
           <DataTable<TrafficRow>
             columns={columns} rows={q.data?.rows ?? []} loading={q.isLoading}
             rowKey={(r) => `${r.dimension_1}\u001f${r.dimension_2 ?? ''}`}
-            stateKey={undefined} labels={labels} emptyTitle={ar ? 'لا زيارات مطابقة' : 'No matching traffic'}
+            stateKey={`traffic-columns:${projectId}`} columnPicker labels={labels} emptyTitle={ar ? 'لا زيارات مطابقة' : 'No matching traffic'}
+            expandRow={(r) => (
+              <dl data-testid="traffic-row-detail" className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                {([[ar ? 'جلسات متفاعلة' : 'Engaged sessions', r.engaged_sessions], [ar ? 'أحداث رئيسية' : 'Key events', r.key_events], [ar ? 'إضافات للسلة' : 'Add to carts', r.add_to_carts], [ar ? 'بدء الدفع' : 'Checkouts', r.checkouts]] as Array<[string, number | null | undefined]>).map(([k, v]) => (
+                  <div key={k}><dt className="text-text-muted">{k}</dt><dd className="tnum font-semibold" dir="ltr">{num(v ?? null)}</dd></div>
+                ))}
+              </dl>
+            )}
             server={{ total: q.data?.total ?? 0, state: table, onChange: setTable }} maxHeight="32rem"
           />
         )}

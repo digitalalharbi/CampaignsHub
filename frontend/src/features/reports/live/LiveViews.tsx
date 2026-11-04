@@ -30,6 +30,7 @@ import {
   TrendAndDistribution,
   useSpendCharting,
 } from './LiveSections'
+import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
@@ -348,6 +349,7 @@ export function DashboardView({
         client-facing link; `sectionOn` is what the operator's choice flows through.
       */}
       {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
+      {sectionOn(payload, 'store_analytics') && payload.store_analytics && <StoreAnalyticsBlock data={payload.store_analytics} ar={ar} />}
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
   )

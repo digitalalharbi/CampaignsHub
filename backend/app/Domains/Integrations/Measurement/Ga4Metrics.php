@@ -52,6 +52,8 @@ final class Ga4Metrics
         'bounceRate' => 'bounce_rate',
         'userEngagementDuration' => 'engagement_seconds',
         'itemsPurchased' => 'items_purchased',
+        // STORE-ANALYTICS-DEPTH-001 — units viewed in `view_item` events: the product-view step of the funnel.
+        'itemsViewed' => 'product_views',
     ];
 
     /**

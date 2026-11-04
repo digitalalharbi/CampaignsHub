@@ -139,6 +139,35 @@ final class Ga4SiteAnalytics
         return $out;
     }
 
+    /**
+     * STORE-ANALYTICS-DEPTH-001 — the site's own count of the funnel steps a store cannot see. Null when
+     * no property is selected; a step the property did not report is null inside it, never 0.
+     *
+     * @return array{sessions: ?float, product_views: ?float, checkouts: ?float}|null
+     */
+    public function funnelFigures(string $tenantId, string $projectId, string $fromDate, string $toDate): ?array
+    {
+        $property = $this->property($tenantId, $projectId);
+        if ($property === null) {
+            return null;
+        }
+        $daily = DB::table('measurement_daily_metrics')
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('external_account_id', $property->getKey())
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->whereIn('metric_key', ['sessions', 'product_views'])
+            ->groupBy('metric_key')->selectRaw('metric_key, SUM(value) AS total')->pluck('total', 'metric_key');
+        $checkouts = DB::table('measurement_dimension_rows')
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('external_account_id', $property->getKey())
+            ->where('breakdown', 'source_medium')->whereBetween('metric_date', [$fromDate, $toDate])
+            ->selectRaw("SUM(NULLIF(metrics->>'checkouts','')::float8) AS total")->value('total');
+
+        return [
+            'sessions' => isset($daily['sessions']) ? (float) $daily['sessions'] : null,
+            'product_views' => isset($daily['product_views']) ? (float) $daily['product_views'] : null,
+            'checkouts' => $checkouts === null ? null : (float) $checkouts,
+        ];
+    }
+
     public function platformOf(string $source, string $medium): ?string
     {
         if (preg_match(self::PAID_MEDIUM, trim($medium)) !== 1) {

@@ -247,6 +247,101 @@ final class Ga4KpisAndTrafficTableTest extends TestCase
         $this->assertCount(1 + 2, array_filter(explode("\n", trim($filtered))), 'the export keeps the filter: src12 and src120');
     }
 
+    public function test_the_daily_figures_are_asked_in_requests_of_at_most_ten_metrics_and_merged_by_day(): void
+    {
+        $property = $this->property($this->project);
+        $seen = [];
+        Http::fake([
+            '*analyticsadmin.googleapis.com*' => Http::response(['displayName' => 'Store', 'timeZone' => 'Asia/Riyadh', 'currencyCode' => 'SAR']),
+            '*analyticsdata.googleapis.com*' => function (Request $r) use (&$seen) {
+                $metrics = array_column($r['metrics'], 'name');
+                if (array_column($r['dimensions'], 'name') !== ['date']) {
+                    return Http::response(['metricHeaders' => [], 'rows' => []]);
+                }
+                $seen[] = $metrics;
+
+                return Http::response([
+                    'metricHeaders' => array_map(static fn (string $m): array => ['name' => $m], $metrics),
+                    'rows' => [['dimensionValues' => [['value' => '20261005']], 'metricValues' => array_map(static fn (): array => ['value' => '7'], $metrics)]],
+                ]);
+            },
+        ]);
+
+        app(Ga4PropertySync::class)->sync($property, 1);
+
+        $this->assertNotEmpty($seen);
+        foreach ($seen as $metrics) {
+            $this->assertLessThanOrEqual(10, count($metrics), 'GA4 caps a report at ten metrics; a wider request fails the whole daily sync');
+        }
+        $asked = array_merge(...$seen);
+        sort($asked);
+        $expected = array_keys(Ga4Metrics::MAP);
+        sort($expected);
+        $this->assertSame($expected, $asked, 'every metric asked exactly once across the requests');
+        $stored = DB::table('measurement_daily_metrics')->where('external_account_id', $property->id)->where('metric_date', '2026-10-05')->pluck('value', 'metric_key');
+        foreach (Ga4Metrics::MAP as $key) {
+            $this->assertEquals(7.0, $stored[$key] ?? null, "$key from whichever request carried it lands on the one day");
+        }
+    }
+
+    public function test_product_views_active_and_new_users_are_kpis_and_every_kpi_carries_its_daily_trend(): void
+    {
+        $this->assertContains('itemsViewed', array_keys(Ga4Metrics::MAP), 'a documented Data API metric');
+        $property = $this->property($this->project);
+        $this->daily($property, '2026-10-02', ['sessions' => 100, 'product_views' => 40, 'active_users' => 5, 'new_users' => 2, 'page_views' => 300, 'revenue' => 50, 'transactions' => 2]);
+        $this->daily($property, '2026-10-04', ['sessions' => 50, 'product_views' => 10, 'active_users' => 7, 'new_users' => 1, 'page_views' => 100, 'revenue' => 90, 'transactions' => 3]);
+
+        $k = collect($this->analytics('from=2026-10-01&to=2026-10-10')['kpis'])->keyBy('key');
+        $this->assertEquals(50.0, $k['product_views']['current']);
+        $this->assertEquals(12.0, $k['active_users']['current']);
+        $this->assertEquals(3.0, $k['new_users']['current']);
+        $this->assertEquals([['date' => '2026-10-02', 'value' => 40.0], ['date' => '2026-10-04', 'value' => 10.0]], $k['product_views']['trend'], 'a day with no measurement is left out, not drawn as zero');
+        $this->assertEquals(25.0, $k['aov']['trend'][0]['value'], 'a derived KPI is derived per day');
+        $this->assertSame([], collect($this->analytics('from=2026-09-01&to=2026-09-03')['kpis'] ?? [])->keyBy('key')['aov']['trend'] ?? []);
+    }
+
+    public function test_referrals_and_the_paid_organic_direct_split_are_views_of_stored_rows(): void
+    {
+        $property = $this->property($this->project);
+        $this->dimRows($property, $this->project, 'source_medium', [
+            ['blog.example.org', 'referral', ['sessions' => 30, 'purchases' => 1]],
+            ['google', 'cpc', ['sessions' => 90]],
+        ]);
+        $this->dimRows($property, $this->project, 'default_channel_group', [
+            ['Paid Search', '', ['sessions' => 40, 'purchases' => 2, 'revenue' => 100]],
+            ['Paid Social', '', ['sessions' => 60, 'purchases' => 3, 'revenue' => 200]],
+            ['Organic Search', '', ['sessions' => 20]],
+            ['Direct', '', ['sessions' => 10]],
+            ['Referral', '', ['sessions' => 5]],
+            ['Email', '', ['sessions' => 4]],
+        ]);
+
+        $referrals = $this->table('breakdown=referrals&from=2026-10-01&to=2026-10-10');
+        $this->assertSame(1, $referrals['total']);
+        $this->assertSame('blog.example.org', $referrals['rows'][0]['dimension_1']);
+
+        $split = collect($this->table('breakdown=traffic_class&from=2026-10-01&to=2026-10-10')['rows'])->keyBy('dimension_1');
+        $this->assertEquals(100.0, $split['paid']['sessions']);
+        $this->assertEquals(300.0, $split['paid']['revenue']);
+        $this->assertEquals(20.0, $split['organic']['sessions']);
+        $this->assertEquals(10.0, $split['direct']['sessions']);
+        $this->assertEquals(5.0, $split['referral']['sessions']);
+        $this->assertEquals(4.0, $split['other']['sessions']);
+        $this->assertNull($split['organic']['purchases'], 'absent stays absent');
+    }
+
+    public function test_both_new_views_stay_inside_their_project(): void
+    {
+        $other = Project::create(['client_workspace_id' => $this->project->client_workspace_id, 'name' => 'Q', 'status' => 'active']);
+        $theirs = $this->property($other, '222');
+        $this->property($this->project);
+        $this->dimRows($theirs, $other, 'source_medium', [['leak.example', 'referral', ['sessions' => 9]]]);
+        $this->dimRows($theirs, $other, 'default_channel_group', [['Direct', '', ['sessions' => 9]]]);
+
+        $this->assertSame(0, $this->table('breakdown=referrals&from=2026-10-01&to=2026-10-10')['total']);
+        $this->assertSame(0, $this->table('breakdown=traffic_class&from=2026-10-01&to=2026-10-10')['total']);
+    }
+
     /** @return array<string, mixed> */
     private function analytics(string $query): array
     {

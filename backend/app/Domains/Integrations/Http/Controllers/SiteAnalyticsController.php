@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Integrations\Measurement\Ga4SiteAnalytics;
 use App\Domains\Integrations\Measurement\Ga4TrafficTable;
+use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -28,6 +29,15 @@ final class SiteAnalyticsController extends Controller
         [$tenantId, $projectId] = $this->scope();
 
         return ApiResponse::success($site->build($tenantId, $projectId, $from, $to), 'Site analytics.');
+    }
+
+    /** GA4-PLATFORM-COMPARE-001 — platform-reported, store-confirmed and GA4-measured, each in its own cell. */
+    public function compare(Request $request, AttributionTransparency $transparency): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+        [$tenantId, $projectId] = $this->scope();
+
+        return ApiResponse::success($transparency->threeSources($tenantId, $projectId, $from, $to), 'Three sources.');
     }
 
     /** TABLE-SERVER-PAGING-001 — one page of one breakdown; paging, sort and filter run in the query. */

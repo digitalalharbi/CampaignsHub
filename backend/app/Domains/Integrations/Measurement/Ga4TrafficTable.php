@@ -31,7 +31,17 @@ final class Ga4TrafficTable
     public const BREAKDOWNS = [
         'source_medium', 'first_user_source_medium', 'default_channel_group', 'channel_source',
         'campaign', 'utm_content', 'utm_term', 'landing_page', 'campaign_landing',
+        // Two views of stored rows, not breakdowns of their own: nothing extra is asked of GA4.
+        'referrals', 'traffic_class',
     ];
+
+    /** GA4's own default channel groups, folded into the split the Owner reads. Anything else is `other`. */
+    private const TRAFFIC_CLASS_SQL = "CASE
+        WHEN dimension_1 IN ('Paid Search', 'Paid Social', 'Paid Video', 'Paid Shopping', 'Paid Other', 'Display', 'Cross-network', 'Audio') THEN 'paid'
+        WHEN dimension_1 IN ('Organic Search', 'Organic Social', 'Organic Video', 'Organic Shopping') THEN 'organic'
+        WHEN dimension_1 = 'Direct' THEN 'direct'
+        WHEN dimension_1 = 'Referral' THEN 'referral'
+        ELSE 'other' END";
 
     /** sort key => SQL on the aggregated subquery (whitelist; never user text). */
     private const SORTS = [
@@ -75,8 +85,15 @@ final class Ga4TrafficTable
         $q = DB::table('measurement_dimension_rows')
             ->where('tenant_id', $tenantId)->where('project_id', $projectId)
             ->where('external_account_id', $property->getKey())
-            ->where('breakdown', $breakdown)
+            ->where('breakdown', match ($breakdown) {
+                'referrals' => 'source_medium',
+                'traffic_class' => 'default_channel_group',
+                default => $breakdown,
+            })
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+        if ($breakdown === 'referrals') {
+            $q->whereRaw('lower(dimension_2) = ?', ['referral']);
+        }
         if (isset($o['where_d1']) && $o['where_d1'] !== '') {
             $q->where('dimension_1', $o['where_d1']);
         }
@@ -89,12 +106,14 @@ final class Ga4TrafficTable
             $q->where(fn ($w) => $w->where('dimension_1', 'ilike', $like)->orWhere('dimension_2', 'ilike', $like));
         }
 
-        $select = ['dimension_1', 'dimension_2'];
+        $split = $breakdown === 'traffic_class';
+        $select = $split ? [DB::raw(self::TRAFFIC_CLASS_SQL.' AS dimension_1'), DB::raw("'' AS dimension_2")] : ['dimension_1', 'dimension_2'];
         foreach (self::SUMS as $k) {
             $select[] = DB::raw("SUM(NULLIF(metrics->>'$k','')::float8) AS $k");
         }
         $select[] = DB::raw('MAX(currency) AS currency');
-        $grouped = $q->select($select)->groupBy('dimension_1', 'dimension_2');
+        $grouped = $q->select($select);
+        $split ? $grouped->groupByRaw(self::TRAFFIC_CLASS_SQL) : $grouped->groupBy('dimension_1', 'dimension_2');
 
         $outer = DB::query()->fromSub($grouped, 'g')->select([
             'g.*',

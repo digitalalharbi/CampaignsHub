@@ -15,6 +15,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { usePortalBase } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { SiteKpis, type SiteKpi } from './SiteKpis'
+import { ThreeSourcesPanel } from './ThreeSourcesPanel'
 import { TrafficExplorer } from './TrafficExplorer'
 
 /**
@@ -175,6 +176,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
       )}
 
       {projectId && <TrafficExplorer projectId={projectId} range={range} ar={ar} />}
+      {projectId && <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <BreakdownCard testId="site-country" title={ar ? 'الدول' : 'Countries'} table={d.breakdowns?.country ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />

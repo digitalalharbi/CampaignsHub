@@ -75,4 +75,51 @@ describe('DataTable paging', () => {
     expect(onChange).toHaveBeenLastCalledWith({ page: 1, pageSize: 10, sort: null, query: 'zzz' })
     expect(document.querySelectorAll('tbody tr')).toHaveLength(10)
   })
+
+  describe('column show and hide', () => {
+    const three: Column<Row>[] = [...columns, { key: 'extra', header: 'Extra', value: () => 'e', hideable: true, defaultHidden: true }]
+
+    it('offers only the columns that may hide, and hiding one leaves the rows intact', () => {
+      render(<DataTable columns={three} rows={rows} rowKey={(r) => r.id} columnPicker />)
+      expect(screen.queryByRole('columnheader', { name: 'Extra' })).toBeNull()
+      fireEvent.click(screen.getByTestId('table-columns'))
+      expect(screen.queryByRole('checkbox', { name: 'N' })).toBeNull()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Extra' }))
+      expect(screen.getByRole('columnheader', { name: 'Extra' })).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Extra' }))
+      expect(screen.queryByRole('columnheader', { name: 'Extra' })).toBeNull()
+      expect(document.querySelectorAll('tbody tr')).toHaveLength(10)
+    })
+
+    it('remembers the choice for the session under its state key', () => {
+      window.sessionStorage.clear()
+      const { unmount } = render(<DataTable columns={three} rows={rows} rowKey={(r) => r.id} columnPicker stateKey="cols" />)
+      fireEvent.click(screen.getByTestId('table-columns'))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Extra' }))
+      unmount()
+      render(<DataTable columns={three} rows={rows} rowKey={(r) => r.id} columnPicker stateKey="cols" />)
+      expect(screen.getByRole('columnheader', { name: 'Extra' })).toBeInTheDocument()
+    })
+  })
+
+  describe('row expansion', () => {
+    it('opens one row in place on demand, spanning the shown columns', () => {
+      render(<DataTable columns={columns} rows={rows} rowKey={(r) => r.id} expandRow={(r) => <p>detail of {r.id}</p>} />)
+      expect(screen.queryByText('detail of r1')).toBeNull()
+      const first = screen.getAllByTestId('table-expand')[0]
+      expect(first).toHaveAttribute('aria-expanded', 'false')
+      fireEvent.click(first)
+      expect(first).toHaveAttribute('aria-expanded', 'true')
+      const cell = screen.getByText('detail of r1').closest('td')
+      expect(cell).toHaveAttribute('colspan', '3')
+      fireEvent.click(first)
+      expect(screen.queryByText('detail of r1')).toBeNull()
+    })
+
+    it('adds no column when no expansion is asked for', () => {
+      render(<DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />)
+      expect(screen.queryByTestId('table-expand')).toBeNull()
+      expect(screen.getAllByRole('columnheader')).toHaveLength(2)
+    })
+  })
 })

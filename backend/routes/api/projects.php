@@ -12,6 +12,7 @@ use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
+use App\Domains\Commerce\Http\Controllers\StoreAnalyticsController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
@@ -241,6 +242,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * `daily_metrics` and has no notion of an order.
      */
     Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->middleware('project.can:analytics.view')->name('commerce.funnel');
+    // STORE-ANALYTICS-DEPTH-001 — the store's own reading, and each order tied to its source by evidence. No customer identity.
+    Route::get('commerce/depth', [StoreAnalyticsController::class, 'depth'])->middleware('project.can:analytics.view')->name('commerce.depth');
+    Route::get('commerce/orders', [StoreAnalyticsController::class, 'orders'])->middleware('project.can:analytics.view')->name('commerce.orders');
+    Route::get('commerce/orders/export', [StoreAnalyticsController::class, 'exportOrders'])->middleware('project.can:analytics.view')->name('commerce.orders.export');
+    Route::get('commerce/orders/sources', [StoreAnalyticsController::class, 'sources'])->middleware('project.can:analytics.view')->name('commerce.orders.sources');
+    Route::get('commerce/orders/sources/export', [StoreAnalyticsController::class, 'exportSources'])->middleware('project.can:analytics.view')->name('commerce.orders.sources.export');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
     /*
@@ -302,6 +309,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('attribution-settings', [AttributionSettingsController::class, 'show'])->middleware(['module:attribution_intelligence', 'project.can:analytics.view'])->name('attribution-settings.show');
     Route::put('attribution-settings', [AttributionSettingsController::class, 'update'])->middleware(['module:attribution_intelligence', 'project.can:reports.manage'])->name('attribution-settings.update');
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
+    // GA4-PLATFORM-COMPARE-001 — the three sources side by side, never added.
+    Route::get('measurement/compare', [SiteAnalyticsController::class, 'compare'])->middleware('project.can:analytics.view')->name('measurement.compare');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
     Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
     Route::get('measurement/analytics/table/export', [SiteAnalyticsController::class, 'export'])->middleware('project.can:analytics.view')->name('measurement.analytics.table.export');

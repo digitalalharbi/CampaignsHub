@@ -18,6 +18,7 @@ export type ReportSectionKey =
   | 'funnel'
   | 'content_performance'
   | 'site_measurement'
+  | 'store_analytics'
   | 'recommendations'
   | 'detailed_tables'
   | 'daily_records'
@@ -47,6 +48,22 @@ export function withStreamsSlide<S extends { id: string; type: string; order: nu
 ): S[] {
   if (sectionShown(data, 'advanced_segmentation') && (data.business_streams?.length ?? 0) > 0) {
     slides.push({ id: '__streams', type: '__streams', order: 9998, visible: true } as S)
+  }
+
+  return slides
+}
+
+/**
+ * STORE-ANALYTICS-DEPTH-001 §3.1 — the snapshot's page for «تحليلات المتجر والزيارات», only where the server named it.
+ * Stricter than `sectionShown`: a snapshot resolved before the section existed never gains a page.
+ */
+export function withStoreAnalyticsSlide<S extends { id: string; type: string; order: number; visible: boolean }>(
+  slides: S[],
+  data: WithReportSections & { store_analytics?: unknown },
+): S[] {
+  const list = data.report_sections
+  if (Array.isArray(list) && (list as string[]).includes('store_analytics') && data.store_analytics != null) {
+    slides.push({ id: '__store_analytics', type: '__store_analytics', order: 9997, visible: true } as S)
   }
 
   return slides
