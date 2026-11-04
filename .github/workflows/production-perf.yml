@@ -56,18 +56,18 @@ jobs:
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
             echo "── read-only counts"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T db psql -U campaignshub -d campaignshub -At <<'SQL'
-BEGIN READ ONLY;
-select 'schedules_total', count(*) from report_schedules;
-select 'active', count(*) from report_schedules where active;
-select 'overdue_all', count(*) from report_schedules where active and next_run_at is not null and next_run_at <= now();
-select 'overdue_not_demo', count(*) from report_schedules where active and not is_demo and next_run_at is not null and next_run_at <= now();
-select 'overdue_with_recipients', count(*) from report_schedules where active and next_run_at <= now() and jsonb_array_length(coalesce(nullif(recipients,'null'::jsonb),'[]'::jsonb))>0;
-select 'overdue_by_frequency', frequency, count(*) from report_schedules where active and next_run_at <= now() group by 2;
-select 'oldest_overdue_days', coalesce(extract(day from now()-min(next_run_at))::int,0) from report_schedules where active and next_run_at <= now();
-select 'tenants_overdue', count(distinct tenant_id) from report_schedules where active and next_run_at <= now();
-select 'deliveries_by_status', status, count(*) from report_deliveries group by 2;
-ROLLBACK;
-SQL
+            BEGIN READ ONLY;
+            select 'schedules_total', count(*) from report_schedules;
+            select 'active', count(*) from report_schedules where active;
+            select 'overdue_all', count(*) from report_schedules where active and next_run_at is not null and next_run_at <= now();
+            select 'overdue_not_demo', count(*) from report_schedules where active and not is_demo and next_run_at is not null and next_run_at <= now();
+            select 'overdue_with_recipients', count(*) from report_schedules where active and next_run_at <= now() and jsonb_array_length(coalesce(nullif(recipients,'null'::jsonb),'[]'::jsonb))>0;
+            select 'overdue_by_frequency', frequency, count(*) from report_schedules where active and next_run_at <= now() group by 2;
+            select 'oldest_overdue_days', coalesce(extract(day from now()-min(next_run_at))::int,0) from report_schedules where active and next_run_at <= now();
+            select 'tenants_overdue', count(distinct tenant_id) from report_schedules where active and next_run_at <= now();
+            select 'deliveries_by_status', status, count(*) from report_deliveries group by 2;
+            ROLLBACK;
+            SQL
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
