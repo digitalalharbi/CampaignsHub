@@ -54,6 +54,46 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── read-only counts"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T db psql -U campaignshub -d campaignshub -At <<'SQL'
+            BEGIN READ ONLY;
+            select 'cdm_columns', string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_name='creative_daily_metrics';
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'other_account', left(a.id::text,8), a.provider, left(a.tenant_id::text,8), a.created_at::date from external_accounts a where a.id::text like '8e164fe6%';
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'other_account_bindings', left(b.project_id::text,8), left(b.client_workspace_id::text,8), b.is_active, b.provider from project_integration_bindings b where b.external_account_id::text like '8e164fe6%';
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'report_project_bindings', left(b.external_account_id::text,8), b.provider, b.is_active from project_integration_bindings b where b.project_id::text like 'e63c1e5b%';
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'scoped_account_creatives', count(*) from external_creatives x join external_campaigns c on c.id=x.external_campaign_id where c.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962';
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'other_account_creatives_by_project', left(x.project_id::text,8), count(*) from external_creatives x join external_campaigns c on c.id=x.external_campaign_id where c.external_account_id::text like '8e164fe6%' group by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'scoped_account_campaigns_by_project', left(c.project_id::text,8), count(*) from external_campaigns c where c.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'other_account_campaigns_by_project', left(c.project_id::text,8), count(*) from external_campaigns c where c.external_account_id::text like '8e164fe6%' group by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'daily_metrics_scoped_by_project', left(m.project_id::text,8), count(*), min(m.metric_date), max(m.metric_date) from daily_metrics m where m.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'daily_metrics_other_by_project', left(m.project_id::text,8), count(*), min(m.metric_date), max(m.metric_date) from daily_metrics m where m.external_account_id::text like '8e164fe6%' group by 2;
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'snapshot_links_scoped_to_accounts', count(*) from report_shares s join reports r on r.id=s.report_id where s.revoked_at is null and r.scope ? 'account_ids';
+            ROLLBACK;
+            BEGIN READ ONLY;
+            select 'reports_scoped_to_accounts_with_creatives_on', count(*) from reports r where r.scope ? 'account_ids' and r.status='completed';
+            ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
