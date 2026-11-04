@@ -56,6 +56,7 @@ use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Domains\Tenancy\Services\PortalResolver;
 use App\Models\User;
 use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
@@ -118,6 +119,8 @@ final class ClientPortalController
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
     public function loginStart(Request $request): JsonResponse
     {
+        abort_unless((bool) config('requests.verification.portal_code_on_login', false), 404);
+
         $data = $request->validate([
             'channel' => ['required', Rule::in(['sms', 'whatsapp', 'email'])],
             'destination' => ['required', 'string', 'max:190'],
@@ -237,9 +240,12 @@ final class ClientPortalController
     /** POST /client/login/verify — verify the OTP and open a portal session (httpOnly cookie). */
     public function loginVerify(Request $request): JsonResponse
     {
+        abort_unless((bool) config('requests.verification.portal_code_on_login', false), 404);
+
         $data = $request->validate([
             'verification_id' => ['required', 'string'],
             'code' => ['required', 'string', 'size:6'],
+            'redirect' => ['sometimes', 'nullable', 'string', 'max:2048'],
         ]);
         $v = $this->verification->verify(
             $data['verification_id'],
@@ -308,7 +314,7 @@ final class ClientPortalController
         $devToken = ContactVerificationService::exposeDevSecrets() ? $plain : null;
 
         // Secure only in production (over HTTPS); http://localhost dev + tests must keep the cookie.
-        return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken]])
+        return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken, 'destination' => PortalResolver::contactDestination($data['redirect'] ?? null)]])
             ->cookie(self::COOKIE, $plain, $minutes, '/', null, app()->environment('production'), true, false, 'lax');
     }
 

@@ -70,9 +70,8 @@ final class MembershipController extends Controller
             'memberships' => $memberships->map(fn (Membership $m) => $this->present($m, $active))->all(),
             'current' => $active !== null ? $this->present($active, $active) : null,
             // Where the frontend should land this user right now.
-            'destination' => $pending !== null
-                ? '/signup/status?request='.$pending->getKey()
-                : $this->resolver->landingPathFor($user, $requested),
+            // LOGIN-SINGLE-DOOR-001 — `intended` is the page the sign-in was interrupted on: a request, never a claim.
+            'destination' => $this->resolver->postAuthDestination($user, $requested, is_string($request->query('intended')) ? $request->query('intended') : null),
             'needs_switcher' => $this->resolver->needsSwitcher($user),
             /*
              * What the visitor ASKED for, and whether they have it (LOGIN-001).

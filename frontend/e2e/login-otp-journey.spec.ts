@@ -1,25 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_CLIENT_CONTACT, signIn, switchToEnglish } from './helpers'
+import { enableEmailCode, openEmailCode, signIn, signInAsContact, switchToEnglish, DEMO_CLIENT_CONTACT } from './helpers'
 
 /**
- * LOGIN-NO-EMAIL-CODE-001 — the code left `/login` (#943); what remains of it is the client contact's own door, `/portal/login`.
- *
- * A sign-in flow can look finished while being hollow, so the journeys end by asking the SERVER. Outside production the backend returns
- * the code it just issued (`dev_code`, hard-gated server-side) and the page fills the six boxes with it.
+ * LOGIN-SINGLE-DOOR-001 — sign-in journeys that end by asking the SERVER, since a flow can look finished while being hollow; and the
+ * code step, which the server keeps off by default. The gate's server runs that default, so the step is walked against stated answers;
+ * what the engine itself does when on (delivery, single use, a disabled account, enumeration, audit) is `PortalEmailSignInTest`.
  */
 test.use({ storageState: { cookies: [], origins: [] } })
-
-/** Ask for a code, and wait until one is actually in the field. */
-async function requestCode(page: Page, email: string): Promise<void> {
-  await page.getByTestId('portal-login-email').fill(email)
-  await page.getByTestId('portal-login-send').click()
-
-  await expect(page.getByTestId('portal-login-code'), `${email} was not offered a code step`).toBeVisible({ timeout: 20_000 })
-  await expect(
-    page.getByTestId('login-otp-5'),
-    'the issued code never arrived, so there is nothing to submit',
-  ).not.toHaveValue('', { timeout: 20_000 })
-}
 
 /** The session, as the SERVER sees it. `null` when there is none. */
 async function whoAmI(page: Page): Promise<string | null> {
@@ -33,20 +20,12 @@ async function whoAmI(page: Page): Promise<string | null> {
 }
 
 test.describe('a session the server recognises', () => {
-  /**
-   * A client contact types the same field and reaches the portal instead.
-   *
-   * The engine differs — the portal's own, ending in a portal session — and the person is never
-   * asked which one they are. Asserted here beside the platform journeys because the whole claim of
-   * one door is that these two look identical from the outside.
-   */
-  test('a client contact reaches /portal through their own door', async ({ page }) => {
-    await page.goto('/portal/login')
-    await requestCode(page, DEMO_CLIENT_CONTACT)
-
-    await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
+  /** A client contact types the same two fields as everybody else, and the server sends them to the portal. */
+  test('a client contact reaches /portal through the one door, and the server knows them', async ({ page }) => {
+    await signInAsContact(page, DEMO_CLIENT_CONTACT)
 
     await expect(page).toHaveURL(/\/portal(\/(?!login)|$)/, { timeout: 20_000 })
+    expect(await whoAmI(page)).toBe(DEMO_CLIENT_CONTACT)
   })
 
   /** The URL grants nothing: an advertiser session cannot walk into the agency console. */
@@ -127,106 +106,79 @@ test.describe('a session the server recognises', () => {
 
 // The same address twice in one browser, as somebody who signs in again does: the second press must send it.
 test('the same address asked for again still sends on the first press', async ({ page, browser }) => {
-  await page.goto('/portal/login')
-  await requestCode(page, 'twice-probe@example.test')
+  await enableEmailCode(page)
+  await page.goto('/login')
+  await openEmailCode(page, 'twice-probe@example.test')
 
   const second = await (await browser.newContext({ storageState: { cookies: [], origins: [] } })).newPage()
-  await second.goto('/portal/login')
+  await enableEmailCode(second)
+  await second.goto('/login')
+  await second.getByTestId('login-email-code').click()
   const sent = second.waitForRequest((r) => r.url().includes('/client/login/start'), { timeout: 10_000 })
-  await second.getByTestId('portal-login-email').fill('twice-probe@example.test')
-  await second.getByTestId('portal-login-send').click()
+  await second.getByTestId('email-code-address').fill('twice-probe@example.test')
+  await second.getByTestId('email-code-send').click()
   await sent
   await second.context().close()
 })
 
-// Addresses of their own: the same step for anybody, and one contact shared across these would meet the resend window, or a mail transport.
 test.describe('what the code step does when things go wrong', () => {
   test('a wrong code is refused, in the same design, and signs nobody in', async ({ page }) => {
-    await page.goto('/portal/login')
+    await enableEmailCode(page, { verify: { status: 422, json: { message: 'The code is not correct.', errors: { code: ['The code is not correct.'] } } } })
+    await page.goto('/login')
     await switchToEnglish(page)
-    await requestCode(page, 'wrong-code-probe@example.test')
+    await openEmailCode(page, 'wrong-code-probe@example.test')
 
-    // Clear the pre-filled code and type six digits that are not it.
-    for (let i = 5; i >= 0; i--) {
-      await page.getByTestId(`login-otp-${i}`).focus()
-      await page.keyboard.press('Backspace')
-    }
-    await page.getByTestId('login-otp-0').focus()
-    await page.keyboard.type('000000')
-
-    await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
+    await page.getByTestId('email-code-step').locator('button[type="submit"]').click()
 
     await expect(page.getByTestId('login-error')).toBeVisible({ timeout: 20_000 })
-    await expect(page).toHaveURL(/\/portal\/login/)
+    await expect(page).toHaveURL(/\/login/)
     expect(await whoAmI(page)).toBeNull()
   })
 
   /** The resend is closed while the server's own window is closed. */
   test('the resend is disabled and counts down', async ({ page }) => {
-    await page.goto('/portal/login')
-    await requestCode(page, 'cooldown-probe@example.test')
+    await enableEmailCode(page)
+    await page.goto('/login')
+    await openEmailCode(page, 'cooldown-probe@example.test')
 
-    const resend = page.getByTestId('portal-login-resend')
+    const resend = page.getByTestId('email-code-resend')
     await expect(resend).toBeDisabled()
     await expect(resend).toHaveText(/\d+/)
   })
 
   /** A mistyped address is correctable without a reload, and the card comes back intact. */
   test('changing the address returns to the card', async ({ page }) => {
-    await page.goto('/portal/login')
-    await requestCode(page, 'typo@example.test')
+    await enableEmailCode(page)
+    await page.goto('/login')
+    await openEmailCode(page, 'typo@example.test')
 
-    await page.getByTestId('portal-login-change').click()
+    await page.getByTestId('email-code-change').click()
 
-    await expect(page.getByTestId('portal-login-email-form')).toBeVisible()
-    await expect(page.getByTestId('portal-login-email')).toHaveValue('typo@example.test')
-    await expect(page.getByTestId('portal-login-code')).toHaveCount(0)
+    await expect(page.getByTestId('email-code-form')).toBeVisible()
+    await expect(page.getByTestId('email-code-address')).toHaveValue('typo@example.test')
+    await expect(page.getByTestId('email-code-step')).toHaveCount(0)
   })
 
-  /** An address nobody holds is answered exactly like one somebody does. That no message goes to it is `PortalEmailSignInTest`. */
-  test('an unknown address gets the same step, and opens no platform session', async ({ page }) => {
-    await page.goto('/portal/login')
-    await switchToEnglish(page)
-    await requestCode(page, 'nobody-at-all@example.test')
+  /** Warned exactly when the delivery state is not one that means «it arrived», and quiet exactly when it is. */
+  for (const [state, warns] of [['awaiting_credentials', true], ['failed', true], ['sandbox', true], ['sent', false]] as const) {
+    test(`with delivery «${state}» the page ${warns ? 'says nothing arrived' : 'says nothing about delivery'}`, async ({ page }) => {
+      await enableEmailCode(page, { delivery: state })
+      await page.goto('/login')
+      await openEmailCode(page, 'delivery-probe@example.test')
 
-    await page.getByTestId('portal-login-code').locator('button[type="submit"]').click()
-    expect(await whoAmI(page)).toBeNull()
+      await expect(page.getByTestId('email-code-undelivered')).toHaveCount(warns ? 1 : 0)
+    })
+  }
+})
+
+// Off is what the gate's real server runs: the code's addresses answer nothing, and the page never offers it.
+test('with the code off, its routes answer 404 and /login offers nothing', async ({ page }) => {
+  await page.goto('/login')
+  await expect(page.getByTestId('login-email-code')).toHaveCount(0)
+
+  const res = await page.request.post('/api/v1/client/login/start', {
+    headers: { Accept: 'application/json', Origin: new URL(page.url()).origin },
+    data: { channel: 'email', destination: 'probe@example.test' },
   })
-
-  /**
-   * No mail provider is configured on this environment, so the page says so.
-   *
-   * This is READY_FOR_CREDENTIALS made visible: the flow works end to end, and the product does not
-   * claim a message reached anybody. If a provider is ever wired here the notice disappears on its
-   * own, so this asserts the pair rather than the absence.
-   */
-  test('the page states plainly whether the code was actually sent', async ({ page }) => {
-    await page.goto('/portal/login')
-
-    /*
-     * The claim is a BICONDITIONAL, checked against what the server actually said.
-     *
-     * «The notice is visible» on its own only holds while this environment has no mail provider, and
-     * would have to be edited the day one is wired — which is how a test quietly stops meaning
-     * anything. What must be true either way is that the page warns exactly when the delivery state
-     * is not one that means «it arrived», and stays quiet exactly when it is.
-     */
-    const answered = page.waitForResponse((r) => r.url().includes('/client/login/start') && r.status() === 201)
-    await requestCode(page, 'delivery-probe@example.test')
-    const state = String((await (await answered).json()).data.delivery_status)
-
-    /*
-     * No mail provider is configured on this environment, so the notice is expected here — and it is
-     * asserted as a PAIR rather than as a bare presence: either the product says nothing arrived, or
-     * it says nothing at all about delivery, and the second is only allowed when something really is
-     * configured. That way wiring a provider makes this test change meaning honestly instead of
-     * failing, and removing the notice while still delivering nothing fails it.
-     */
-    const shown = await page.getByTestId('portal-login-undelivered').count() > 0
-
-    expect(
-      shown,
-      `the page ${shown ? 'warned about' : 'said nothing about'} delivery while the server reported «${state}»`,
-    ).toBe(!['sent', 'queued', 'delivered'].includes(state))
-  })
+  expect([404, 419]).toContain(res.status())
 })

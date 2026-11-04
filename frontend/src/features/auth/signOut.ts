@@ -45,9 +45,9 @@ const OWNED_PREFIXES = ['chub:draft:', 'ch-requests-', 'chub:']
 /**
  * Sign out and clear everything this browser holds about the person.
  *
- * `destination` defaults to `/login`, which since LOGIN-UNIFIED-001 is the only sign-in page there
- * is: a client contact typing their address there reaches the one-time-code step, so there is no
- * longer a second door for callers on the portal side to send them to.
+ * `destination` defaults to `/login`, which since LOGIN-SINGLE-DOOR-001 is the only sign-in page there
+ * is, for a client contact as for anybody, so there is no second door for callers on the portal side
+ * to send them to.
  */
 export async function signOutCompletely(
   queryClient?: QueryClient,

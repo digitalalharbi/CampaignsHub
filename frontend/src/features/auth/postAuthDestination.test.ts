@@ -13,8 +13,7 @@ import { fetchMemberships } from './memberships'
 /**
  * ADR 0002 — where a user lands after authenticating.
  *
- * The rule under test is that the browser does NOT decide. It either honours a safe explicit
- * redirect, or it uses the destination the server derived from the user's memberships.
+ * The rule under test is that the browser does NOT decide: every destination is the one the server answered.
  */
 describe('resolvePostAuthDestination', () => {
   afterEach(() => vi.clearAllMocks())
@@ -31,15 +30,23 @@ describe('resolvePostAuthDestination', () => {
   it('passes the requested portal through as a preference', async () => {
     vi.mocked(fetchMemberships).mockResolvedValue(state('/influencers') as never)
     await resolvePostAuthDestination(new URLSearchParams(), 'influencers')
-    expect(fetchMemberships).toHaveBeenCalledWith('influencers')
+    expect(fetchMemberships).toHaveBeenCalledWith('influencers', undefined)
   })
 
-  it('honours a safe explicit redirect over the derived destination', async () => {
-    vi.mocked(fetchMemberships).mockResolvedValue(state('/agency') as never)
-    const to = await resolvePostAuthDestination(new URLSearchParams('redirect=%2Fapp%2Freports'))
-    expect(to).toBe('/app/reports')
-    // The server is not even asked — the user already told us where they were going.
-    expect(fetchMemberships).not.toHaveBeenCalled()
+  /** LOGIN-SINGLE-DOOR-001 — the redirect is asked of the server, and what comes back is what is followed. */
+  it('asks the server about the redirect and goes where it answers, even when that is elsewhere', async () => {
+    vi.mocked(fetchMemberships).mockResolvedValue(state('/app/dashboard') as never)
+    const to = await resolvePostAuthDestination(new URLSearchParams('redirect=%2Fagency%2Fclients'))
+    expect(fetchMemberships).toHaveBeenCalledWith(undefined, { intended: '/agency/clients' })
+    expect(to).toBe('/app/dashboard')
+  })
+
+  it('does not ask about an address that could never be honoured', async () => {
+    vi.mocked(fetchMemberships).mockResolvedValue(state('/app/dashboard') as never)
+    for (const bad of ['https%3A%2F%2Fevil.example', '%2F%2Fevil.example', '%2Fportal%2Flogin', '%2Flogin']) {
+      await resolvePostAuthDestination(new URLSearchParams(`redirect=${bad}`))
+      expect(fetchMemberships).toHaveBeenLastCalledWith(undefined, undefined)
+    }
   })
 
   /** An off-site redirect must never win; it falls through to the membership-derived destination. */
