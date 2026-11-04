@@ -33,7 +33,7 @@ export interface DeliverySummary {
   latest: DeliveryRow | null
 }
 
-const BLOCKED = new Set(['awaiting_provider_credentials', 'awaiting_credentials', 'suppressed', 'sandbox', 'unsubscribed', 'limit_reached', 'refused_scope'])
+const BLOCKED = new Set(['awaiting_provider_credentials', 'awaiting_credentials', 'suppressed', 'sandbox', 'unsubscribed', 'limit_reached', 'repeat_limit', 'refused_scope'])
 
 export function summariseDeliveries(rows: DeliveryRow[]): DeliverySummary {
   const sent = rows.filter((r) => r.status === 'sent').length

@@ -260,6 +260,17 @@ class AppServiceProvider extends ServiceProvider
          * is exactly where that happens). Off-production the allowance is large for the same reason
          * `auth-login`'s is: the acceptance suite submits back to back from one address.
          */
+        /*
+         * EMAIL-TEST-SEND-001 — named, because an unnamed `throttle:3,1` shares its counter with every
+         * other route written the same way. Strict in every environment: it can only ever be a person
+         * reviewing templates, and it spends the provider's sending reputation.
+         */
+        RateLimiter::for('mail-test-send', static function (Request $request): array {
+            $who = (string) $request->user()?->getAuthIdentifier();
+
+            return [Limit::perMinute(3)->by('m:'.$who), Limit::perDay(20)->by('d:'.$who)];
+        });
+
         RateLimiter::for('public-form', function (Request $request): Limit {
             $perMinute = $this->app->environment('production') ? 40 : 600;
 

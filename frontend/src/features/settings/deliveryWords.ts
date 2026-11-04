@@ -27,6 +27,7 @@ export const SUPPRESSION_WORDS: Record<string, { ar: string; en: string }> = {
   preference: { ar: 'أوقف المستلم هذا النوع من إعداداته.', en: 'The recipient switched this type off.' },
   unsubscribed: { ar: 'ألغى المستلم اشتراكه في هذا النوع من رابط الرسالة.', en: 'The recipient unsubscribed from this type through the link in a message.' },
   daily_limit: { ar: 'بلغت مساحة العمل حدّها اليومي للرسائل، فلم تُرسل هذه الرسالة.', en: 'The workspace reached its daily message limit, so this one was not sent.' },
+  repeat_limit: { ar: 'وصل هذا التنبيه إلى المستلم بالعدد الأقصى خلال 24 ساعة، فلم يُرسل مرة أخرى. ما زال ظاهرًا في المنصة.', en: 'This alert already reached the recipient the most times allowed in 24 hours, so it was not sent again. It is still shown in the product.' },
   outside_scope: { ar: 'المستلم خارج نطاق هذه الرسالة في مساحة العمل أو المشروع، فلم تُرسل.', en: 'The recipient is outside this message\'s workspace or project, so it was not sent.' },
 }
 

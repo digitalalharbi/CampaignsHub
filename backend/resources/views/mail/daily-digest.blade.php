@@ -111,13 +111,13 @@
         @if ($movement['best'])
             <div data-block="highlight-best" style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }}; border-{{ $startSide }}:3px solid {{ $tone['good'] }};">
                 <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['best']['name'] }} — {{ $t['best_move'] }}</div>
-                <div style="font-size:12px; color:{{ $tone['good'] }};" dir="ltr">{{ $movement['best']['text'] }}</div>
+                <div style="font-size:12px; color:{{ $tone['good'] }};" dir="{{ $dir }}">{{ $movement['best']['text'] }}</div>
             </div>
         @endif
         @if ($movement['worst'])
             <div data-block="highlight-worst" style="margin-bottom:16px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['bad'] }}; border-{{ $startSide }}:3px solid {{ $tone['bad'] }};">
                 <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['worst']['name'] }} — {{ $t['worst_move'] }}</div>
-                <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="ltr">{{ $movement['worst']['text'] }}</div>
+                <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="{{ $dir }}">{{ $movement['worst']['text'] }}</div>
             </div>
         @endif
     @endif

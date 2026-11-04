@@ -953,6 +953,8 @@ export interface EmailDelivery {
   id: string
   /** `transactional` (mail_deliveries) or `digest` (digest_sends) — two ledgers, one question. */
   source: 'transactional' | 'digest' | 'subscription'
+  /** EMAIL-TEST-SEND-001 — a platform admin's own test: masked, and left out of `by_state`. */
+  is_test?: boolean
   at: string
   kind: string
   template: string
@@ -980,6 +982,7 @@ export interface EmailLedger {
   page: number
   per_page: number
   by_state: Record<string, number>
+  test_sends?: number
   transport: {
     state: 'awaiting_credentials' | 'sandbox' | 'live'
     provider_configured: boolean
@@ -1009,15 +1012,45 @@ export function fetchEmailLedger(params: {
   return getData<EmailLedger>(`/admin/email/deliveries${q.size > 0 ? `?${q}` : ''}`)
 }
 
-/** One message to the signed-in operator, recorded in the ledger whatever the transport can do. */
-export const sendTestEmail = (lang: 'ar' | 'en', key?: string) =>
-  postData<{ state: string; delivery_state: string; recipient: string }>('/admin/email/test', { lang, key })
+/** What the transport answered. `delivery_state: accepted` is the mail server taking it, not an inbox receiving it. */
+export interface TestSendResult {
+  state: string
+  delivery_state: string
+  recipient: string
+  delivery_id?: string | null
+  transport?: string | null
+  suppression_reason?: string | null
+  failure_code?: string | null
+  provider_message_id?: string | null
+}
 
-export function fetchEmailPreviews(): Promise<{ keys: string[]; locales: string[] }> {
+/** EMAIL-TEST-SEND-001 — one fixture message to the signed-in admin's own proven address. No address is ever sent from here. */
+export const sendTestEmail = (lang: 'ar' | 'en', key?: string) =>
+  postData<TestSendResult>('/admin/email/test', { lang, key })
+
+export interface EmailPreviewList {
+  keys: string[]
+  locales: string[]
+  /** Where a test would go, and whether that address was ever proved. */
+  test_send?: { recipient: string; address_proven: boolean }
+}
+
+export function fetchEmailPreviews(): Promise<EmailPreviewList> {
   return getData('/admin/email/previews')
 }
 
-export function fetchEmailPreview(key: string, locale: string): Promise<{ key: string; locale: string; html: string }> {
+export interface EmailPreview {
+  key: string
+  locale: string
+  html: string
+  subject?: string
+  test_subject?: string
+  text?: string
+  /** A security or account message: nobody can switch it off. */
+  mandatory?: boolean
+}
+
+export function fetchEmailPreview(key: string, locale: string): Promise<EmailPreview> {
   return getData(`/admin/email/previews/${key}?locale=${locale}`)
 }
 

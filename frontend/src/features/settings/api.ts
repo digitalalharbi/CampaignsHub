@@ -364,10 +364,6 @@ export function useDeliveryLog() {
   })
 }
 
-/** §17.4.5 — one message to the signed-in person's own address. The answer is the ledger's stage. */
-export const sendMyTestEmail = (lang: 'ar' | 'en', key?: string) =>
-  postData<{ state: string; delivery_state: string; recipient: string }>('/settings/notifications/test', { lang, key })
-
 export const fetchMailPreviews = () => getData<{ keys: string[]; locales: string[] }>('/settings/notifications/previews')
 
 export const fetchMailPreview = (key: string, locale: string) =>

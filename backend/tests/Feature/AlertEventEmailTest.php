@@ -12,6 +12,7 @@ use App\Domains\Alerts\Services\AlertEventMailer;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\MessageProvider;
+use App\Domains\Notifications\Support\MailDeliveryState;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -165,6 +166,69 @@ final class AlertEventEmailTest extends TestCase
         $counts = app(AlertEvaluator::class)->evaluateAll() > 0 ? 'raised' : 'none';
         $this->assertSame('raised', $counts);
         Mail::assertSent(AlertBundleMail::class, 2);
+    }
+
+    /**
+     * EMAIL-TEST-SEND-001 (§17.4.5) — a rule's cooldown can be five minutes, so one open problem could
+     * otherwise mail one person all day. Past the ceiling it is held and recorded, its recovery still goes,
+     * and a new day starts again.
+     */
+    public function test_one_alert_reaches_one_person_a_limited_number_of_times_a_day(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        config(['mail.alert_repeats_per_day' => 3]);
+        $mailer = app(AlertEventMailer::class);
+        $tenant = (string) $this->tenant->id;
+        $item = fn (string $severity, Carbon $at, string $event = 'event-one'): array => [
+            'event_id' => $event, 'notification_type' => 'sync_failed', 'severity' => $severity, 'title' => 'T', 'detail' => 'D',
+            'project_id' => (string) $this->project->id, 'project_name' => 'P', 'triggered_at' => $at->toIso8601String(),
+        ];
+        $start = Carbon::parse('2026-11-04 06:00:00');
+
+        for ($i = 0; $i < 5; $i++) {
+            $at = $start->copy()->addMinutes($i * 10);
+            $counts = $mailer->sweep($tenant, [$item('warning', $at)], $at);
+        }
+
+        Mail::assertSent(AlertBundleMail::class, 3);
+        $this->assertSame(1, $counts['repeat_limit']);
+        $this->assertSame(3, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'sent')->count());
+        $this->assertSame(2, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'repeat_limit')->count());
+        $this->assertSame('repeat_limit', MailDeliveryState::suppressionReason('repeat_limit'));
+
+        // Another alert has its own count, and being told it is over is never held.
+        $later = $start->copy()->addHours(2);
+        $mailer->sweep($tenant, [$item('warning', $later, 'event-two')], $later);
+        Mail::assertSent(AlertBundleMail::class, 4);
+        $recovered = $start->copy()->addHours(3);
+        $mailer->sweep($tenant, [$item('info', $recovered)], $recovered);
+        Mail::assertSent(AlertBundleMail::class, 5);
+
+        // A rolling 24 hours later the same alert may be said again.
+        $tomorrow = $start->copy()->addHours(25);
+        $mailer->sweep($tenant, [$item('warning', $tomorrow)], $tomorrow);
+        Mail::assertSent(AlertBundleMail::class, 6);
+    }
+
+    /** `0` is the documented way off, and is also what the behaviour was before the ceiling. */
+    public function test_a_zero_ceiling_holds_nothing(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        config(['mail.alert_repeats_per_day' => 0]);
+        $mailer = app(AlertEventMailer::class);
+        $start = Carbon::parse('2026-11-04 06:00:00');
+
+        for ($i = 0; $i < 5; $i++) {
+            $at = $start->copy()->addMinutes($i * 10);
+            $mailer->sweep((string) $this->tenant->id, [[
+                'event_id' => 'event-one', 'notification_type' => 'sync_failed', 'severity' => 'warning', 'title' => 'T', 'detail' => 'D',
+                'project_id' => (string) $this->project->id, 'project_name' => 'P', 'triggered_at' => $at->toIso8601String(),
+            ]], $at);
+        }
+
+        Mail::assertSent(AlertBundleMail::class, 5);
     }
 
     public function test_quiet_hours_hold_the_bundle(): void

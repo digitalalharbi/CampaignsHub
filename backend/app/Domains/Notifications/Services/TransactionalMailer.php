@@ -71,6 +71,13 @@ use Throwable;
  * waits in the queue does not receive it. A refusal is a row with a status and a reason. A retry is not
  * charged to the allowance again, because it is the same message.
  *
+ * ## A test message — EMAIL-TEST-SEND-001
+ *
+ * `TEST_KIND` belongs to no tenant, by construction: this class refuses one attributed to a tenant, so it
+ * cannot reach a workspace's log, its daily allowance or its unsubscribes, and refuses to queue one, since
+ * the person who asked is waiting for the transport's answer. Readers that a customer sees, or that decide
+ * something for them, leave `TEST_KIND` rows out by name.
+ *
  * ## Where the outcome also lands
  *
  * `report_deliveries` and `client_notifications` are what a screen reads. Rows there carrying this
@@ -79,6 +86,9 @@ use Throwable;
  */
 final class TransactionalMailer
 {
+    /** The ledger's name for a platform admin's test message. See the class docblock. */
+    public const TEST_KIND = 'test';
+
     /** One try and two retries; the backoff is what separates them. */
     public const MAX_ATTEMPTS = 3;
 
@@ -112,6 +122,10 @@ final class TransactionalMailer
         ?int $userId = null,
         ?string $dedupKey = null,
     ): string {
+        if ($kind === self::TEST_KIND && $tenantId !== null) {
+            throw new InvalidArgumentException('A test message belongs to no tenant.');
+        }
+
         $id = (string) Uuid::uuid4();
         $transport = MailTransportState::current();
 
@@ -214,6 +228,10 @@ final class TransactionalMailer
     ): ?string {
         if (MessageCatalogue::carriesSecret($kind)) {
             throw new InvalidArgumentException("«{$kind}» carries a secret and may not be queued; use send().");
+        }
+
+        if ($kind === self::TEST_KIND) {
+            throw new InvalidArgumentException('A test message is one attempt whose answer goes back to the person waiting; use send().');
         }
 
         $id = (string) Uuid::uuid4();
@@ -368,7 +386,9 @@ final class TransactionalMailer
     /** The transport's Message-ID, when it gave one. A fake or a mock returns nothing, and that is fine. */
     public static function messageId(mixed $sent): ?string
     {
-        if (! is_object($sent) || ! method_exists($sent, 'getMessageId')) {
+        // `is_callable`, not `method_exists`: Laravel's SentMessage forwards this through `__call`, so the
+        // older check answered no for every real send and the ledger never held a Message-ID.
+        if (! is_object($sent) || ! is_callable([$sent, 'getMessageId'])) {
             return null;
         }
 

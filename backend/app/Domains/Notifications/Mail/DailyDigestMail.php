@@ -762,12 +762,15 @@ final class DailyDigestMail extends Mailable
 
         usort($moved, static fn (array $a, array $b): int => $b['delta'] <=> $a['delta']);
 
-        $say = static fn (array $row): array => [
-            'name' => $row['name'],
-            'text' => ($ar ? 'النتائج ' : 'Results ')
-                .($row['delta'] >= 0 ? '▲ ' : '▼ ')
-                .number_format(abs($row['delta']) * 100, 1).'%',
-        ];
+        $say = static function (array $row) use ($ar): array {
+            $figure = ($row['delta'] >= 0 ? '▲ ' : '▼ ').number_format(abs($row['delta']) * 100, 1).'%';
+
+            return [
+                'name' => $row['name'],
+                // An isolate around the figure, so the percent sign stays with its number in a right-to-left line.
+                'text' => $ar ? "النتائج \u{2066}{$figure}\u{2069}" : "Results {$figure}",
+            ];
+        };
 
         $best = $moved[0];
         $worst = $moved[count($moved) - 1];

@@ -152,4 +152,17 @@ final class EmailLayoutRtlTest extends TestCase
         $this->assertStringContainsString('عضو', $unknownAr);
         $this->assertStringNotContainsString('campaign_ops', $unknownAr);
     }
+
+    /**
+     * EMAIL-TEST-SEND-001 — seen in the rendered image: an Arabic label inside `dir="ltr"` put the percent
+     * sign before the word («%النتائج ▼ 12.0»). The line follows the reader; only the figure is left to right.
+     */
+    public function test_the_movement_line_reads_in_the_readers_direction(): void
+    {
+        $html = (string) MailGallery::render('digest-daily', 'ar');
+
+        $this->assertDoesNotMatchRegularExpression('/dir="ltr">\s*النتائج/u', $html);
+        $this->assertStringContainsString("النتائج \u{2066}▼ 12.0%\u{2069}", $html);
+        $this->assertStringContainsString('Results ▼ 12.0%', (string) MailGallery::render('digest-daily', 'en'));
+    }
 }

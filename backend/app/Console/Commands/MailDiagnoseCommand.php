@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Domains\Notifications\Charts\MailChart;
+use App\Domains\Notifications\Support\MailAddress;
 use App\Domains\Notifications\Support\MailFailure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -48,8 +49,7 @@ final class MailDiagnoseCommand extends Command
 
         $this->line('recent deliveries: '.$rows->count());
         foreach ($rows as $r) {
-            $at = (string) $r->recipient;
-            $masked = str_contains($at, '@') ? mb_substr($at, 0, 1).'***@'.substr($at, (int) strrpos($at, '@') + 1) : '***';
+            $masked = MailAddress::mask((string) $r->recipient);
             $error = $r->error === null ? '' : ' — '.mb_substr(MailFailure::redact((string) $r->error), 0, 240);
             $this->line("  {$r->created_at}  {$r->kind}  {$masked}  {$r->status}{$error}");
         }

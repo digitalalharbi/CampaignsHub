@@ -128,7 +128,7 @@ describe('the mail settings card', () => {
         last_success_at: null, last_failure: { at: '2026-10-17T08:00:00Z', kind: 'password_reset', error: 'refused' },
       },
     })
-    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'awaiting_credentials', delivery_state: 'suppressed', recipient: 'owner@campaignshub.io' })
+    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'awaiting_credentials', delivery_state: 'suppressed', suppression_reason: 'no_provider', recipient: 'owner@campaignshub.io' })
 
     const card = await screen.findByTestId('mail-settings')
     expect(card).toHaveTextContent('no-reply@campaignshub.io')
@@ -139,5 +139,83 @@ describe('the mail settings card', () => {
     const result = await screen.findByTestId('mail-test-result')
     expect(result).toHaveTextContent('owner@campaignshub.io')
     expect(result).toHaveTextContent('لم يغادر شيء')
+  })
+
+  /** «ولا تعتبر الرسائل مرسلة دون دليل» — the word for acceptance never appears without saying what it is not. */
+  it('says that accepted is not delivered, in both buttons, and shows the transport\'s Message-ID', async () => {
+    open()
+    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'sent', delivery_state: 'accepted', recipient: 'owner@campaignshub.io', provider_message_id: 'abc@mail.test' })
+
+    fireEvent.click(await screen.findByTestId('mail-test-send'))
+    const plain = await screen.findByTestId('mail-test-result')
+    expect(plain).toHaveTextContent('قبلها خادم البريد')
+    expect(plain).toHaveTextContent('هذا قبول خادم البريد وليس وصولها')
+    expect(plain).toHaveTextContent('abc@mail.test')
+    expect(plain).not.toHaveTextContent('تأكّد استلامها —')
+
+    await waitFor(() => expect(screen.getByTestId('gallery-test-send')).not.toBeDisabled())
+    fireEvent.click(screen.getByTestId('gallery-test-send'))
+    expect(await screen.findByTestId('gallery-test-result')).toHaveTextContent('هذا قبول خادم البريد وليس وصولها')
+    expect(sendTestEmail).toHaveBeenLastCalledWith('ar', 'alerts-bundle')
+  })
+
+  it('names why a test failed, and why it never left', async () => {
+    open()
+    vi.mocked(sendTestEmail).mockResolvedValue({ state: 'failed', delivery_state: 'failed', failure_code: 'auth_failed', recipient: 'o@x.test' })
+
+    fireEvent.click(await screen.findByTestId('mail-test-send'))
+    expect(await screen.findByTestId('mail-test-result')).toHaveTextContent('رفض خادم البريد تسجيل الدخول')
+  })
+
+  /** The server refuses too; the page says so first, and sends no address either way. */
+  it('holds both buttons back when the admin\'s own address was never proved', async () => {
+    open()
+    vi.mocked(fetchEmailPreviews).mockResolvedValue({ keys: ['alerts-bundle'], locales: ['ar', 'en'], test_send: { recipient: 'o@x.test', address_proven: false } })
+
+    expect((await screen.findAllByTestId('mail-test-unproven')).length).toBeGreaterThan(0)
+    expect(screen.getByTestId('mail-test-send')).toBeDisabled()
+    expect(screen.getByTestId('gallery-test-send')).toBeDisabled()
+  })
+
+  it('says the limit in words when the server stops a test', async () => {
+    open()
+    vi.mocked(sendTestEmail).mockRejectedValue({ isAxiosError: true, response: { status: 429, data: {} } })
+
+    fireEvent.click(await screen.findByTestId('mail-test-send'))
+    expect(await screen.findByTestId('mail-test-result-error')).toHaveTextContent('3 في الدقيقة و20 في اليوم')
+  })
+})
+
+describe('reviewing a template', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('names it in words and shows the subject, the test subject, the text part and whether it can be stopped', async () => {
+    vi.mocked(fetchEmailLedger).mockResolvedValue(ledger())
+    vi.mocked(fetchEmailPreviews).mockResolvedValue({ keys: ['account-password-reset'], locales: ['ar', 'en'], test_send: { recipient: 'o@x.test', address_proven: true } })
+    vi.mocked(fetchEmailPreview).mockResolvedValue({
+      key: 'account-password-reset', locale: 'ar', html: '<p>x</p>', subject: 'CampaignsHub — إعادة تعيين كلمة المرور',
+      test_subject: 'CampaignsHub — [اختبار] إعادة تعيين كلمة المرور', text: 'CampaignsHub النص', mandatory: true,
+    })
+    renderWithProviders(<EmailOperationsPage />, { locale: 'ar' })
+
+    const review = await screen.findByTestId('gallery-review')
+    expect(review).toHaveTextContent('CampaignsHub — إعادة تعيين كلمة المرور')
+    expect(review).toHaveTextContent('[اختبار]')
+    expect(review).toHaveTextContent('رسالة حساب وأمان تصل دائمًا')
+    expect(screen.getByRole('option', { name: 'استعادة كلمة المرور' })).toBeInTheDocument()
+    expect(screen.getByTestId('gallery-text-part')).toHaveTextContent('CampaignsHub النص')
+  })
+
+  it('shows a test in the ledger as a test, and counts it apart', async () => {
+    vi.mocked(fetchEmailPreviews).mockResolvedValue({ keys: [], locales: ['ar', 'en'] })
+    vi.mocked(fetchEmailLedger).mockResolvedValue(ledger({
+      by_state: {}, test_sends: 1,
+      deliveries: [{ ...ledger().deliveries[0], kind: 'test', recipient: 'o***@x.test', is_test: true }],
+    }))
+    renderWithProviders(<EmailOperationsPage />, { locale: 'ar' })
+
+    expect(await screen.findByText('رسالة اختبار')).toBeInTheDocument()
+    expect(screen.getByTestId('mail-test-count')).toHaveTextContent('لا تُحسب')
+    expect(screen.getByText('o***@x.test')).toBeInTheDocument()
   })
 })

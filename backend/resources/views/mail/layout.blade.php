@@ -105,6 +105,15 @@
                         </td>
                     </tr>
 
+                    {{-- EMAIL-TEST-SEND-001 — only ever set by `TestSendMark`; a message to a customer has no such row. --}}
+                    @if (! empty($testSendNotice ?? null))
+                        <tr>
+                            <td class="ch-pad" data-test-send-notice="1" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#fffbeb" style="padding:12px 24px; background-color:#fffbeb; border-bottom:2px solid #b45309; text-align:{{ $align }}; direction:{{ $dir }}; font-family:{!! $font !!}; font-size:13px; line-height:1.7; color:#0b1a16;">
+                                <strong>{{ $testSendNotice['title'] }}</strong> {{ $testSendNotice['detail'] }}
+                            </td>
+                        </tr>
+                    @endif
+
                     <tr>
                         <td class="ch-pad" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#ffffff" style="padding:28px 24px; background-color:#ffffff; text-align:{{ $align }}; direction:{{ $dir }}; font-family:{!! $font !!}; font-size:14px; line-height:1.8; color:#0b1a16;">
                             {!! $slot !!}

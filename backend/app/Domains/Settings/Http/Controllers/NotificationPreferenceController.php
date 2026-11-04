@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Settings\Http\Controllers;
 
-use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Services\NotificationChoices;
-use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\DigestSchedule;
-use App\Domains\Notifications\Support\MailDeliveryState;
 use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
@@ -163,51 +160,6 @@ final class NotificationPreferenceController extends Controller
             ['key' => 'sms', 'available' => $this->providers->isConfigured('sms')],
             ['key' => 'whatsapp', 'available' => $this->providers->isConfigured('whatsapp')],
         ];
-    }
-
-    /**
-     * POST /settings/notifications/test — one message to the signed-in person, and to nobody else.
-     *
-     * Any address in the request is ignored: this is a way to check your own inbox, not a way to mail
-     * somebody. A plain test needs no permission; naming a gallery template needs `settings.manage`. The
-     * answer is the ledger's outcome, so `accepted` is never presented as received. Gallery fixtures carry
-     * placeholder text and tokens that open nothing, so no customer's data can leave through this.
-     */
-    public function test(Request $request, TransactionalMailer $mailer): JsonResponse
-    {
-        $user = $request->user();
-        $data = $request->validate(['lang' => ['nullable', 'in:ar,en'], 'key' => ['nullable', 'string', 'max:60']]);
-        $lang = (string) ($data['lang'] ?? 'ar');
-        $key = $data['key'] ?? null;
-
-        if ($key !== null) {
-            abort_unless($user->hasPermission('settings.manage'), 403);
-            abort_unless(MailGallery::has($key), 422, 'There is no such message.');
-        }
-
-        $mail = $key !== null ? MailGallery::messages($lang)[$key] : new OperationalMail(
-            kind: 'message', severity: 'info',
-            title: $lang === 'ar' ? 'رسالة اختبار' : 'A test message',
-            detail: $lang === 'ar' ? 'وصلتك هذه الرسالة لأنك طلبت اختبار البريد من إعدادات الإشعارات.' : 'You received this because you asked to test email from your notification settings.',
-            context: 'CampaignsHub', lang: $lang, recipientName: (string) $user->name, path: '/app/settings',
-        );
-
-        $state = $mailer->send(
-            recipient: (string) $user->email,
-            mail: $mail,
-            kind: 'test',
-            template: $key !== null ? "gallery.{$key}" : 'mail.operational',
-            locale: $lang,
-            tenantId: (string) $this->tenants->tenantId(),
-            userId: (int) $user->id,
-            dedupKey: 'test:'.$user->id.':'.($key ?? 'plain').':'.now()->format('YmdHi'),
-        );
-
-        return ApiResponse::success([
-            'state' => $state,
-            'delivery_state' => MailDeliveryState::of($state),
-            'recipient' => (string) $user->email,
-        ], 'Test message recorded.');
     }
 
     /** GET /settings/notifications/previews — the messages a manager may review. Fixtures, never a customer's mail. */

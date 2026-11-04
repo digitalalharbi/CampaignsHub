@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Http\Controllers;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailDeliveryState;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
@@ -222,6 +223,7 @@ final class TeamNotificationsController extends Controller
          */
         $transactional = DB::table('mail_deliveries')
             ->where('tenant_id', $tenantId)
+            ->where('kind', '!=', TransactionalMailer::TEST_KIND)
             ->orderByDesc('created_at')
             ->limit(self::LOG_LIMIT)
             ->get()
@@ -266,6 +268,8 @@ final class TeamNotificationsController extends Controller
     private function lastMessage(int $userId, string $email, string $tenantId): ?array
     {
         $delivery = DB::table('mail_deliveries')
+            // EMAIL-TEST-SEND-001 — keyed by person, so a platform admin who is also a member would show their own test here.
+            ->where('kind', '!=', TransactionalMailer::TEST_KIND)
             ->where(fn ($q) => $q->where('user_id', $userId)->orWhere('recipient', $email))
             ->orderByDesc('created_at')
             ->first();

@@ -60,6 +60,7 @@ final class MailDeliveryState
             'suppressed' => 'preference',
             'unsubscribed' => 'unsubscribed',
             'limit_reached' => 'daily_limit',
+            'repeat_limit' => 'repeat_limit',
             'refused_scope' => 'outside_scope',
             default => null,
         };

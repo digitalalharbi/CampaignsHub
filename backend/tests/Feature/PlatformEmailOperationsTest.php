@@ -47,7 +47,7 @@ final class PlatformEmailOperationsTest extends TestCase
         ]);
         // `is_platform_admin` is guarded on the model — deliberately, so no mass-assign can mint an
         // owner. Force-filled here exactly as `PlatformConsoleTest` does.
-        $this->owner->forceFill(['is_platform_admin' => true])->save();
+        $this->owner->forceFill(['is_platform_admin' => true, 'email_verified_at' => now()])->save();
     }
 
     /** EMAIL-DELIVERY-LEDGER-001 — the page reads stages, and acceptance is never called delivery. */

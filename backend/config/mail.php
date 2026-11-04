@@ -117,6 +117,14 @@ return [
     */
     'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
 
+    /*
+    | EMAIL-TEST-SEND-001 (§17.4.5) — how many times one alert may reach one person in 24 hours. A rule's
+    | cooldown can be as short as five minutes, and a problem that stays open would otherwise mail each
+    | time it passes. Its recovery is never held. 0 switches the limit off. A held message is written to the
+    | ledger as `repeat_limit`; the alert itself stays open in the product.
+    */
+    'alert_repeats_per_day' => (int) env('MAIL_ALERT_REPEATS_PER_DAY', 3),
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

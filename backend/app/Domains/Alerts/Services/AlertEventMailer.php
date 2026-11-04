@@ -34,7 +34,9 @@ use Throwable;
  * not re-raised inside it); one email per person per sweep, however many events the sweep produced;
  * a ledger row per (person, event, trigger moment) so a re-run of the same sweep sends nothing twice;
  * the person's own choices — switched off, held for the digest, held by quiet hours — exactly as the
- * findings sweep honours them.
+ * findings sweep honours them; and a ceiling on how often one alert reaches one person in 24 hours
+ * (`mail.alert_repeats_per_day`), since a rule's cooldown may be as short as five minutes. A recovery is
+ * never held: being told it is over is not the nuisance.
  *
  * Delivery is honest: without a configured email provider every bundle is recorded
  * `awaiting_credentials`, never «sent».
@@ -110,6 +112,12 @@ final class AlertEventMailer
 
                     continue;
                 }
+                if ($this->repeatedTooOften($user, $item, $now)) {
+                    $this->holdRepeat($tenantId, $user, $item, $now);
+                    $counts['repeat_limit'] = ($counts['repeat_limit'] ?? 0) + 1;
+
+                    continue;
+                }
                 $eligible[] = $item + ['period_key' => $this->periodKey($item)];
             }
 
@@ -127,7 +135,7 @@ final class AlertEventMailer
         $counts = [];
         $claimed = [];
         foreach ($eligible as $item) {
-            if ($this->claim($tenantId, $user, $item['period_key'], $now)) {
+            if ($this->claim($tenantId, $user, $item['period_key'], $now, (string) $item['event_id'])) {
                 $claimed[] = $item;
             } else {
                 $counts['already_sent'] = ($counts['already_sent'] ?? 0) + 1;
@@ -197,7 +205,39 @@ final class AlertEventMailer
         return substr(hash('sha256', (string) $item['event_id'].'|'.(string) $item['triggered_at']), 0, 24);
     }
 
-    private function claim(string $tenantId, User $user, string $periodKey, Carbon $now): bool
+    /** @param  array<string,mixed>  $item */
+    private function repeatedTooOften(User $user, array $item, Carbon $now): bool
+    {
+        $limit = (int) config('mail.alert_repeats_per_day', 3);
+
+        if ($limit <= 0 || $item['severity'] === 'info') {
+            return false;
+        }
+
+        return DB::table('digest_sends')
+            ->where('user_id', $user->getKey())->where('kind', self::KIND)
+            ->where('alert_event_id', (string) $item['event_id'])
+            ->where('status', 'sent')
+            ->where('created_at', '>', $now->copy()->subDay())
+            ->count() >= $limit;
+    }
+
+    /**
+     * Held, and said so. Nothing is dropped silently, and because the row names this trigger a later sweep
+     * finds it and does not reconsider.
+     *
+     * @param  array<string,mixed>  $item
+     */
+    private function holdRepeat(string $tenantId, User $user, array $item, Carbon $now): void
+    {
+        DB::table('digest_sends')->insertOrIgnore([
+            'id' => (string) Str::uuid(), 'tenant_id' => $tenantId, 'user_id' => $user->getKey(), 'kind' => self::KIND,
+            'period_key' => $this->periodKey($item), 'alert_event_id' => (string) $item['event_id'],
+            'status' => 'repeat_limit', 'reason' => 'repeat_limit', 'attempts' => 0, 'created_at' => $now, 'updated_at' => $now,
+        ]);
+    }
+
+    private function claim(string $tenantId, User $user, string $periodKey, Carbon $now, string $eventId = ''): bool
     {
         $existing = DB::table('digest_sends')
             ->where('user_id', $user->getKey())->where('kind', self::KIND)->where('period_key', $periodKey)->first();
@@ -214,7 +254,7 @@ final class AlertEventMailer
         // `insertOrIgnore`, because a plain insert threw a unique violation at the loser of a race and took the whole sweep with it.
         return DB::table('digest_sends')->insertOrIgnore([
             'id' => (string) Str::uuid(), 'tenant_id' => $tenantId, 'user_id' => $user->getKey(), 'kind' => self::KIND,
-            'period_key' => $periodKey, 'status' => 'claimed', 'attempts' => 1, 'attempted_at' => $now, 'created_at' => $now, 'updated_at' => $now,
+            'period_key' => $periodKey, 'alert_event_id' => $eventId === '' ? null : $eventId, 'status' => 'claimed', 'attempts' => 1, 'attempted_at' => $now, 'created_at' => $now, 'updated_at' => $now,
         ]) > 0;
     }
 

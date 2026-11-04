@@ -56,6 +56,33 @@ final class MailGallery
         return isset($messages[$key]) ? $messages[$key]->render() : null;
     }
 
+    /**
+     * A template as a test message, or the plain mail check when no key is given. Null when nothing goes
+     * by that name. Fixtures only: there is no other source of data in this class, and
+     * `MailTestSendTest` proves that none of these asks the database for anything.
+     */
+    public static function testMessage(?string $key, string $locale): ?Mailable
+    {
+        $mail = $key === null ? self::plainCheck($locale) : (self::messages($locale)[$key] ?? null);
+
+        return $mail === null ? null : TestSendMark::apply($mail, $locale);
+    }
+
+    private static function plainCheck(string $locale): OperationalMail
+    {
+        $ar = $locale === 'ar';
+
+        return new OperationalMail(
+            kind: 'message', severity: 'info',
+            title: $ar ? 'فحص إرسال البريد' : 'Mail sending check',
+            detail: $ar ? 'وصلتك هذه الرسالة لأن مشرف المنصة طلب فحص إرسال البريد.' : 'You received this because a platform admin asked to check outgoing mail.',
+            context: 'CampaignsHub',
+            lang: $locale,
+            // «You follow this project» would be false here, and this message is about the mail itself.
+            why: $ar ? 'لا تحتاج هذه الرسالة إلى أي إجراء منك.' : 'This message needs nothing from you.',
+        );
+    }
+
     /** @return array<string, Mailable> */
     public static function messages(string $locale): array
     {

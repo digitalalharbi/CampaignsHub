@@ -6,9 +6,6 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
-use App\Domains\Notifications\Mail\AlertBundleMail;
-use App\Domains\Notifications\Mail\OperationalMail;
-use App\Domains\Notifications\Providers\LaravelMailProvider;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Support\MailGallery;
@@ -173,42 +170,21 @@ final class NotificationControlsTest extends TestCase
         $this->assertSame([(string) $this->alpha->id], $scope->projectIdsFor($this->scoped, $tenant));
     }
 
-    public function test_a_person_can_test_their_own_mail_and_nobody_elses(): void
+    /** A manager reviews the templates. Sending one is the platform admin's alone: `MailTestSendTest`. */
+    public function test_a_preview_needs_the_manager_permission_and_sends_nothing(): void
     {
-        config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.provider.test', 'mail.mailers.smtp.username' => 'u', 'providers.channels.email' => LaravelMailProvider::class]);
-        Mail::fake();
-
-        $res = $this->actingAs($this->scoped, 'sanctum')->withHeader('X-Tenant-Id', (string) $this->tenant->id)
-            ->postJson('/api/v1/settings/notifications/test', ['lang' => 'en', 'to' => 'victim@example.test'])->assertOk();
-
-        $this->assertSame('scoped@controls.test', $res->json('data.recipient'));
-        $this->assertSame('sent', $res->json('data.state'));
-        $this->assertSame('accepted', $res->json('data.delivery_state'));
-        Mail::assertSent(OperationalMail::class, fn ($m) => $m->hasTo('scoped@controls.test') && ! $m->hasTo('victim@example.test'));
-        $row = DB::table('mail_deliveries')->where('kind', 'test')->first();
-        $this->assertSame((string) $this->tenant->id, (string) $row->tenant_id);
-    }
-
-    public function test_a_template_test_and_a_preview_need_the_manager_permission(): void
-    {
-        config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.provider.test', 'mail.mailers.smtp.username' => 'u', 'providers.channels.email' => LaravelMailProvider::class]);
         Mail::fake();
         $tenant = (string) $this->tenant->id;
 
         $this->actingAs($this->scoped, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->getJson('/api/v1/settings/notifications/previews')->assertStatus(403);
         $this->actingAs($this->scoped, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->getJson('/api/v1/settings/notifications/previews/alerts-one')->assertStatus(403);
-        $this->actingAs($this->scoped, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->postJson('/api/v1/settings/notifications/test', ['key' => 'alerts-one'])->assertStatus(403);
-        Mail::assertNothingSent();
 
         $keys = $this->actingAs($this->manager, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->getJson('/api/v1/settings/notifications/previews')->assertOk()->json('data.keys');
         $this->assertSame(MailGallery::keys(), $keys);
         $html = $this->actingAs($this->manager, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->getJson('/api/v1/settings/notifications/previews/alerts-one?locale=en')->assertOk()->json('data.html');
         $this->assertStringContainsString('ch-wrap', $html);
 
-        $this->actingAs($this->manager, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->postJson('/api/v1/settings/notifications/test', ['key' => 'alerts-one', 'lang' => 'en'])->assertOk();
-        Mail::assertSent(AlertBundleMail::class, fn ($m) => $m->hasTo('manager@controls.test'));
-
-        $this->actingAs($this->manager, 'sanctum')->withHeader('X-Tenant-Id', $tenant)->postJson('/api/v1/settings/notifications/test', ['key' => 'no-such'])->assertStatus(422);
+        Mail::assertNothingSent();
     }
 
     /** A team's log shows this tenant's rows and says which stage each reached. */
@@ -216,7 +192,7 @@ final class NotificationControlsTest extends TestCase
     {
         foreach ([[$this->tenant->id, 'mine@example.test', 'sent'], [$this->otherTenant->id, 'theirs@example.test', 'failed']] as [$tenant, $to, $status]) {
             DB::table('mail_deliveries')->insert([
-                'id' => (string) Uuid::uuid4(), 'tenant_id' => $tenant, 'kind' => 'test', 'recipient' => $to, 'locale' => 'ar',
+                'id' => (string) Uuid::uuid4(), 'tenant_id' => $tenant, 'kind' => 'report_ready', 'recipient' => $to, 'locale' => 'ar',
                 'template' => 'mail.operational', 'status' => $status, 'transport' => 'live', 'attempts' => 1, 'failure_code' => null,
                 'created_at' => now(), 'updated_at' => now(),
             ]);
