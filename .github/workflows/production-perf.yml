@@ -54,6 +54,23 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── read-only counts"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T db psql -U campaignshub -d campaignshub -At <<'SQL'
+            BEGIN READ ONLY;
+            select 'share', left(s.id::text,8), s.mode, s.revoked_at is not null as revoked, s.created_at::date, left(s.report_id::text,8), coalesce(s.scope::text,'null') from report_shares s where s.token_hash='8e1f1c2faab81cdce5f39d479cc07830640daf47d90f72c99fc4b8cdda2f50a3';
+            select 'report', left(r.id::text,8), left(r.project_id::text,8), left(r.tenant_id::text,8), r.type, r.form, r.mode, r.status, r.period_start, r.period_end, r.generated_at, r.created_at, coalesce(r.scope::text,'null'), coalesce((r.config - 'branding')::text,'null') from reports r join report_shares s on s.report_id=r.id where s.token_hash='8e1f1c2faab81cdce5f39d479cc07830640daf47d90f72c99fc4b8cdda2f50a3';
+            select 'report_project_bindings', left(b.project_id::text,8), left(b.external_account_id::text,8), b.status, b.provider from project_integration_bindings b join reports r on r.project_id=b.project_id join report_shares s on s.report_id=r.id where s.token_hash='8e1f1c2faab81cdce5f39d479cc07830640daf47d90f72c99fc4b8cdda2f50a3';
+            select 'account_bindings', left(b.project_id::text,8), b.status, b.provider, b.created_at::date from project_integration_bindings b where b.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962';
+            select 'account_campaigns_by_project', left(c.project_id::text,8), count(*) from external_campaigns c where c.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 1;
+            select 'account_unified_by_project', left(u.project_id::text,8), count(*) from unified_campaigns u where u.id in (select unified_campaign_id from external_campaigns where external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962') group by 1;
+            select 'account_creatives_by_campaign_project', left(c.project_id::text,8), count(*) from external_creatives x join external_campaigns c on c.id=x.external_campaign_id where c.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 1;
+            select 'creatives_by_own_project', left(x.project_id::text,8), count(*) from external_creatives x join external_campaigns c on c.id=x.external_campaign_id where c.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 1;
+            select 'ad_rows', left(x.id::text,8), left(x.project_id::text,8), left(c.project_id::text,8) as campaign_project, left(c.external_account_id::text,8) from external_creatives x left join external_campaigns c on c.id=x.external_campaign_id where x.id in ('952928f9-948c-46fc-ad7c-746bf1e15043','67ffcf3b-857b-46d9-9f30-8d2bbf5692c2','92615695-c7d2-4ee9-8441-902486e6ab09','b5caf190-c185-4c4b-824f-70cc400c0a1a','8ccd0ef9-6c3d-48e0-9c96-7ec6b4ee81ea');
+            select 'daily_metrics_by_project', left(m.project_id::text,8), count(*), min(m.metric_date), max(m.metric_date) from daily_metrics m where m.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 1;
+            select 'creative_daily_by_project', left(m.project_id::text,8), count(*) from creative_daily_metrics m where m.external_account_id='a50a065f-31b2-4541-8054-a10cd2b73962' group by 1;
+            ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
