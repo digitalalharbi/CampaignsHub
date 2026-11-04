@@ -86,7 +86,6 @@ final class NewSignInAlert
         }
 
         $locale = in_array($user->locale, ['ar', 'en'], true) ? (string) $user->locale : 'ar';
-        $tenantId = $user->tenant_id === null ? null : (string) $user->tenant_id;
 
         $this->mailer->queue(
             recipient: (string) $user->email,
@@ -101,7 +100,6 @@ final class NewSignInAlert
             kind: 'security_alert',
             template: 'mail.security',
             locale: $locale,
-            tenantId: $tenantId,
             userId: (int) $user->getKey(),
             dedupKey: 'new-sign-in:'.$user->getKey().':'.substr($fingerprint, 0, 32),
         );

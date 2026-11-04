@@ -27,6 +27,16 @@ final class SendQueuedMail implements ShouldQueue
     /** Above the ledger's own ceiling, so the ledger stops the retries and records why. */
     public int $tries = 5;
 
+    /**
+     * For a try that dies without reaching `handle()`'s own release: the same waits as the ledger's.
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return array_map(static fn (int $minutes): int => $minutes * 60, TransactionalMailer::BACKOFF_MINUTES);
+    }
+
     public function __construct(
         public readonly string $deliveryId,
         public readonly Mailable $mail,
