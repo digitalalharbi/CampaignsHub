@@ -54,6 +54,16 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── read-only counts"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T db psql -U campaignshub -d campaignshub -At <<'SQL'
+            BEGIN READ ONLY;
+            select 'reports_with_last_sent', count(*) from reports where last_sent_at is not null;
+            select 'reports_total', count(*) from reports;
+            select 'tenants_with_last_sent', count(distinct t) from (select p.tenant_id t from reports r join projects p on p.id=r.project_id where r.last_sent_at is not null) x;
+            select 'recent_last_sent', max(last_sent_at)::date, min(last_sent_at)::date from reports where last_sent_at is not null;
+            ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
