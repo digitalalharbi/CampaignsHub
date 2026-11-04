@@ -89,6 +89,7 @@ final class ProfileLiveReportCommand extends Command
                 continue;
             }
 
+            $blocksBefore = $this->databaseBlocks();
             $this->m = ['stats' => [], 'db' => 0.0, 'queries' => 0, 'redis' => 0.0, 'redisN' => 0, 'ext' => 0.0, 'extN' => 0, 'hit' => 0, 'miss' => 0, 'write' => 0];
 
             $t = microtime(true);
@@ -114,6 +115,7 @@ final class ProfileLiveReportCommand extends Command
             /** @var array<string, array{n: int, ms: float, max: float, bindings: array<int, mixed>}> $stats */
             $stats = $this->m['stats'];
             $buildCounters = $this->m;
+            $this->blocksLine($blocksBefore, $this->databaseBlocks());
             uasort($stats, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
             $this->line(sprintf('  %-6s %-9s %-9s %-9s %-9s %s', 'runs', 'total ms', 'mean ms', 'max ms', 'finger', 'statement'));
 
@@ -132,6 +134,47 @@ final class ProfileLiveReportCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Blocks the whole database read from disk or the OS cache against blocks found in shared_buffers.
+     *
+     * The first link of a run, on a new connection, after a quiet gap, is the cold read: if it reads thousands of blocks that the same
+     * link does not read a minute later, the slow first read is the storage. Database-wide, so a sync running at that moment adds to it.
+     *
+     * @return array{read: int, hit: int}|null
+     */
+    private function databaseBlocks(): ?array
+    {
+        try {
+            DB::select('select pg_stat_force_next_flush()');
+            DB::select('select pg_stat_clear_snapshot()');
+            $row = DB::selectOne('select blks_read, blks_hit from pg_stat_database where datname = current_database()');
+
+            return ['read' => (int) $row->blks_read, 'hit' => (int) $row->blks_hit];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param  array{read: int, hit: int}|null  $before
+     * @param  array{read: int, hit: int}|null  $after
+     */
+    private function blocksLine(?array $before, ?array $after): void
+    {
+        if ($before === null || $after === null) {
+            $this->line('  DB BLOCKS not available');
+
+            return;
+        }
+
+        $this->line(sprintf(
+            '  DB BLOCKS during build (whole database) read %d · hit %d · jit %s',
+            $after['read'] - $before['read'],
+            $after['hit'] - $before['hit'],
+            (string) (DB::selectOne('show jit')->jit ?? '?'),
+        ));
     }
 
     /**
@@ -244,7 +287,7 @@ final class ProfileLiveReportCommand extends Command
         $wall = ($end - $t) * 1000;
         $php = max(0.0, $wall - $this->m['db'] - $this->m['redis'] - $this->m['ext']);
         $this->line(sprintf(
-            'LINK %s  HTTP %.0f ms (status %d, %d bytes) = DB %.0f ms (%d queries) + PHP/other %.0f ms   [vs BUILD above]',
+            'LINK %s  HTTP %.0f ms (status %d, %d bytes) = DB %.0f ms (%d queries) + PHP/other %.0f ms   [same process and connection as BUILD above, so warmer than a real request]',
             $label, $wall, $status, $bytes, $this->m['db'], $this->m['queries'], $php,
         ));
 

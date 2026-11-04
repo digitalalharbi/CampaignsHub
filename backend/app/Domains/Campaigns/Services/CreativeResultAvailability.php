@@ -205,9 +205,9 @@ final class CreativeResultAvailability
                  * Filtering `is_demo` here instead would leave the demo library unable to confirm
                  * any of its own zeros, which is a different kind of lie.
                  */
-                ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign(
+                ->tap(fn ($q) => BoundAccountVisibility::applyThroughJoinedCampaign(
                     $q,
-                    'external_creatives.external_campaign_id',
+                    'external_campaigns',
                     'creative_daily_metrics.project_id',
                 ))
                 ->groupBy('external_campaigns.external_account_id'),

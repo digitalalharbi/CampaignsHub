@@ -470,22 +470,33 @@ final class ContributorCoverage
          * account is still bound to the project the run was made for — the same rule the figures obey.
          */
         /*
-         * PERF — the newest run per provider, chosen by Postgres. This used to fetch EVERY matching run
-         * (1,875 rows per call on Production, five calls per report build) ordered by window_end and keep the
-         * first per provider in PHP. DISTINCT ON keeps one row per provider with the very same ordering, so the
-         * selection is identical and the wire carries at most one row per provider.
+         * PERF — the newest run per provider, one index walk per provider.
+         *
+         * This was a DISTINCT ON over every run of the project: Production's plan fetched 12,176 rows and sorted them
+         * to keep 7 (97 ms in one report build, and 5,520 runs at about 320 ms each from the console in 24 hours), so
+         * `metric_sync_runs_latest_per_provider_idx` could not stop early. Asking per provider lets it: the first
+         * visible row in that index's order is the answer. Same filters, same ordering, so the same row.
          */
+        $providers = array_values(array_unique($providers));
+
         $rows = ReportReadMemo::remember(
             'coverage-runs|'.self::scopeKey($tenantId, $projectIds, $providers),
-            fn () => DB::table('metric_sync_runs')
-                ->selectRaw('distinct on ("metric_sync_runs"."provider") "metric_sync_runs"."provider", "metric_sync_runs"."status", "metric_sync_runs"."window_end", "metric_sync_runs"."error"')
-                ->where('tenant_id', $tenantId)
-                ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
-                ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
-                ->whereIn('provider', $providers)
-                ->orderBy('provider')
-                ->orderByDesc('window_end')
-                ->orderByDesc('created_at')
+            fn () => DB::query()
+                ->fromRaw('(values '.implode(', ', array_fill(0, count($providers), '(?::text)')).') as wanted(provider)', $providers)
+                ->joinLateral(
+                    DB::table('metric_sync_runs')
+                        ->select('metric_sync_runs.provider', 'metric_sync_runs.status', 'metric_sync_runs.window_end', 'metric_sync_runs.error')
+                        ->where('tenant_id', $tenantId)
+                        ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
+                        ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
+                        ->whereColumn('metric_sync_runs.provider', 'wanted.provider')
+                        ->orderByDesc('window_end')
+                        ->orderByDesc('created_at')
+                        ->limit(1),
+                    'run',
+                )
+                ->select('run.*')
+                ->orderBy('run.provider')
                 ->get(),
         );
 
