@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Http\Controllers;
 
+use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
@@ -21,12 +22,16 @@ use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Notifications\Mail\CredentialMail;
+use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -42,13 +47,16 @@ use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
 use App\Domains\Requests\Services\RequestUploadAttacher;
+use App\Domains\Requests\Support\PortalIdShape;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Domains\Tenancy\Services\PortalResolver;
 use App\Models\User;
 use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
@@ -61,6 +69,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -103,17 +112,22 @@ final class ClientPortalController
         private readonly PaidServiceCatalog $paidServices,
         private readonly ClientPortalIdentity $identity,
         private readonly ClientPortalUsers $portalUsers,
+        private readonly TransactionalMailer $mailer,
+        private readonly ProviderRegistry $notificationProviders,
     ) {}
 
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
     public function loginStart(Request $request): JsonResponse
     {
+        abort_unless((bool) config('requests.verification.portal_code_on_login', false), 404);
+
         $data = $request->validate([
             'channel' => ['required', Rule::in(['sms', 'whatsapp', 'email'])],
             'destination' => ['required', 'string', 'max:190'],
         ]);
         $destination = $this->normalize($data['channel'], $data['destination']);
         $tenant = $this->portal->resolve($request);
+        $ttl = (int) config('requests.verification.code_ttl_minutes', 10);
         $result = $this->verification->start(
             $data['channel'],
             $destination,
@@ -121,23 +135,117 @@ final class ClientPortalController
             $tenant ? (string) $tenant->id : null,
             cooldownSeconds: self::RESEND_COOLDOWN,
             invalidatePrevious: true,
+            deliver: $data['channel'] === 'email' ? $this->portalCodeMail($destination, $ttl) : null,
             ownerKey: $this->verificationOwnerKey($request),
         );
+
+        $this->auditPortalLogin($request, 'auth.portal_code.requested', ['channel' => $data['channel'], 'destination' => $destination]);
 
         return response()->json(['data' => [
             'verification_id' => $result['id'],
             'delivery_status' => $result['delivery_status'],
             'resend_after' => self::RESEND_COOLDOWN,
+            'expires_in_minutes' => $ttl,
             'dev_code' => $result['dev_code'],
         ]], 201);
+    }
+
+    /**
+     * LOGIN-NO-EMAIL-CODE-001 — the email that carries a portal code, sent only to somebody the portal knows.
+     *
+     * This endpoint minted a code and sent nothing: no `deliver` was ever passed, so a contact's code reached no inbox. An address the
+     * portal does not know follows the identical path, row and cooldown included, and answers the state a real send would report, so
+     * this neither mails a stranger nor tells them they are one.
+     *
+     * @return \Closure(string, string): string
+     */
+    private function portalCodeMail(string $destination, int $ttl): \Closure
+    {
+        return function (string $code, string $id) use ($destination, $ttl): string {
+            if (! $this->isPortalContact($destination)) {
+                return $this->notificationProviders->isConfigured('email') ? 'sent' : 'awaiting_credentials';
+            }
+
+            $locale = app()->getLocale() === 'en' ? 'en' : 'ar';
+
+            return $this->mailer->send(
+                recipient: $destination,
+                mail: new CredentialMail(purpose: CredentialMail::SIGN_IN_CODE, lang: $locale, code: $code, expiresInMinutes: $ttl),
+                kind: CredentialMail::SIGN_IN_CODE,
+                template: 'credential.sign_in_code',
+                locale: $locale,
+                dedupKey: $id,
+            );
+        };
+    }
+
+    /** Named on a request, or holding a client-portal membership. Asked across tenants on purpose: nothing about the tenant is returned. */
+    private function isPortalContact(string $email): bool
+    {
+        return ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [Str::lower($email)])->exists()
+            || Membership::query()->withoutGlobalScopes()
+                ->where('portal', Portal::ClientPortal->value)
+                ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [Str::lower($email)])->select('id'))
+                ->active()->exists();
+    }
+
+    /**
+     * The agency a contact's session opens in, proven by the code they just spent.
+     *
+     * An agency's own portal domain decides. On the shared domain the default portal would open an empty session for a contact of any
+     * other agency, and with no default a contact could not sign in at all, so the agency that actually holds their record answers. A
+     * contact of several agencies gets their most recent; an address nobody holds gets what the resolver says.
+     */
+    private function portalTenantFor(Request $request, string $email): ?Tenant
+    {
+        $resolved = $this->portal->resolve($request);
+        if ($resolved !== null && Str::lower((string) $resolved->portal_domain) === Str::lower($request->getHost())) {
+            return $resolved;
+        }
+
+        $address = Str::lower($email);
+        $held = Membership::query()->withoutGlobalScopes()
+            ->where('portal', Portal::ClientPortal->value)
+            ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [$address])->select('id'))
+            ->active()->pluck('tenant_id')
+            ->merge(ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [$address])->latest('created_at')->pluck('tenant_id'))
+            ->map(static fn ($id): string => (string) $id)->unique()->values();
+
+        if ($held->isEmpty() || ($resolved !== null && $held->contains((string) $resolved->id))) {
+            return $resolved;
+        }
+
+        return Tenant::query()->whereKey($held->first())->first();
+    }
+
+    /**
+     * The security trail: the address and the outcome, never the code and never its hash.
+     *
+     * @param  array<string, mixed>  $after
+     */
+    private function auditPortalLogin(Request $request, string $action, array $after, ?User $user = null): void
+    {
+        AuditLog::create([
+            'tenant_id' => null,
+            'user_id' => $user?->id,
+            'action' => $action,
+            'entity_type' => User::class,
+            'entity_id' => $user?->id === null ? null : (string) $user->id,
+            'after' => $after,
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+        ]);
     }
 
     /** POST /client/login/verify — verify the OTP and open a portal session (httpOnly cookie). */
     public function loginVerify(Request $request): JsonResponse
     {
+        abort_unless((bool) config('requests.verification.portal_code_on_login', false), 404);
+
         $data = $request->validate([
             'verification_id' => ['required', 'string'],
             'code' => ['required', 'string', 'size:6'],
+            'redirect' => ['sometimes', 'nullable', 'string', 'max:2048'],
         ]);
         $v = $this->verification->verify(
             $data['verification_id'],
@@ -146,7 +254,33 @@ final class ClientPortalController
         );
         abort_unless($v->purpose === 'portal_login', 422);
 
-        $tenant = $this->portal->resolve($request);
+        // Spent before it can buy a second session: `verify()` leaves a challenge usable, which is wrong for a credential.
+        if ($v->consumed_at !== null) {
+            $this->auditPortalLogin($request, 'auth.portal_code.replayed', ['destination' => (string) $v->destination]);
+
+            throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
+        }
+        $v->forceFill(['consumed_at' => Carbon::now()])->save();
+
+        // The same rule the password path applies: a second credential with a laxer opinion about suspension is a way around it.
+        $account = $v->channel === 'email' ? User::query()->whereRaw('lower(email) = ?', [Str::lower((string) $v->destination)])->first() : null;
+
+        /*
+         * A code sent to an address nobody proved is not proof of the account (SIGNUP-VERIFY-POLICY-001). That address was typed at signup
+         * with no check, so its inbox may be a stranger's. The token is refused too, not only the session: `ClientPortalIdentity` resolves
+         * a token's address to that account's client-portal membership. Same answer as a wrong code, so this is no oracle.
+         */
+        if ($account?->emailUnprovenByPolicy() === true) {
+            $this->auditPortalLogin($request, 'auth.portal_code.unproven_address', ['destination' => (string) $v->destination], $account);
+
+            throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
+        }
+
+        abort_if($account !== null && ($account->disabled_at !== null || (! $account->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($account))), 403, __('auth.unavailable'));
+
+        $tenant = $v->channel === 'email'
+            ? $this->portalTenantFor($request, (string) $v->destination)
+            : $this->portal->resolve($request);
         abort_if($tenant === null, 404);
 
         $plain = Str::random(48);
@@ -182,6 +316,8 @@ final class ClientPortalController
             }
         }
 
+        $this->auditPortalLogin($request, 'auth.portal_code.signed_in', ['destination' => (string) $v->destination], $account);
+
         $minutes = (int) config('requests.verification.portal_session_days', 14) * 24 * 60;
 
         // The browser uses the httpOnly cookie (auto-sent, never in JS/localStorage). Non-production ONLY also
@@ -190,7 +326,7 @@ final class ClientPortalController
         $devToken = ContactVerificationService::exposeDevSecrets() ? $plain : null;
 
         // Secure only in production (over HTTPS); http://localhost dev + tests must keep the cookie.
-        return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken]])
+        return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken, 'destination' => PortalResolver::contactDestination($data['redirect'] ?? null)]])
             ->cookie(self::COOKIE, $plain, $minutes, '/', null, app()->environment('production'), true, false, 'lax');
     }
 
@@ -1226,7 +1362,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Quote|null $quote */
-        $quote = $ids === [] ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $quote = $ids === [] || ! PortalIdShape::number($id) ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($quote === null, 404);
 
         return $quote;
@@ -1236,7 +1372,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
-        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
+        $invoice = $ids === [] || ! PortalIdShape::number($id) ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
         abort_if($invoice === null, 404);
 
         return $invoice;
@@ -1246,7 +1382,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         /** @var MessageThread|null $thread */
-        $thread = $ids === [] ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $thread = $ids === [] || ! PortalIdShape::uuid($id) ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($thread === null, 404);
 
         return $thread;
@@ -1560,7 +1696,13 @@ final class ClientPortalController
      */
     private function selectedSpaceId(ClientPortalToken $token): ?string
     {
-        $slug = trim((string) (request()->header('X-Client-Space') ?? request()->query('space', '')));
+        $raw = request()->header('X-Client-Space') ?? request()->query('space', '');
+
+        // `?space[]=a&space[]=b` is an array. It is no slug of this contact's, and casting it would be a 500 («Array to string»), which is a
+        // different answer from the 404 every other slug that is not theirs gets.
+        abort_unless(is_string($raw), 404);
+
+        $slug = trim($raw);
 
         if ($slug === '') {
             return null;

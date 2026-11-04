@@ -19,6 +19,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -31,6 +32,7 @@ use Tests\TestCase;
  */
 final class BudgetPacingCoverageTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -58,6 +60,7 @@ final class BudgetPacingCoverageTest extends TestCase
         $connection = ProviderConnection::create(['credential_id' => $credential->id, 'provider' => 'meta', 'connection_name' => 'meta', 'scope' => 'project_only', 'status' => 'connected']);
         $account = ExternalAccount::create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => 'meta', 'account_type' => 'ad_account', 'external_id' => 'act_1', 'name' => 'Ad account', 'status' => 'active']);
         $this->accountId = (string) $account->id;
+        $this->bindSeededAccount($this->project->id, $this->accountId);
         ExternalCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'client_workspace_id' => $client->id,
             'unified_campaign_id' => $this->campaign->id, 'external_account_id' => $this->accountId, 'provider' => 'meta',

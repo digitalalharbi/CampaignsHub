@@ -24,11 +24,14 @@ const COPY = {
     intro: 'تعطيل قناة هنا يوقف إنشاء الرمز واستدعاء مزوّد الإرسال فعليًا، ويبطل أي رمز صادر لم يُستخدم. الدخول بالبريد وكلمة المرور وGoogle ورابط استعادة كلمة المرور لا تتأثر بها.',
     groups: { accounts: 'حسابات المنصة', contacts: 'جهات اتصال العملاء (بلا كلمة مرور)', recovery: 'استعادة الوصول' },
     switches: {
-      sign_in_email_code: ['رمز عبر البريد', 'يدخل صاحب الحساب برمز يصل إلى بريده.', 'لا يُرسل رمز. يبقى الدخول بكلمة المرور وGoogle.'],
-      sign_in_sms_code: ['رمز SMS', 'يدخل صاحب الرقم الموثّق برمز SMS.', 'لا يُرسل رمز. يبقى الدخول بكلمة المرور وGoogle.'],
+      sign_in_sms_code: ['رمز SMS', 'يدخل صاحب الرقم الموثّق برمز SMS عبر واجهة /auth/phone. صفحة /login لا تعرض هذا الخيار حاليًا.', 'لا يُرسل رمز. يبقى الدخول بكلمة المرور وGoogle.'],
       portal_email_code: ['رمز عبر البريد', 'تدخل جهة الاتصال برمز يصل إلى بريدها.', 'لا يُرسل رمز لجهات الاتصال.'],
       portal_sms_code: ['رمز SMS', 'تدخل جهة الاتصال برمز يصل إلى جوالها.', 'لا يُرسل رمز لجهات الاتصال.'],
       recovery_sms_code: ['إثبات الجوال برمز SMS', 'يثبت المستخدم رقمه من إعدادات الحساب ليصبح وسيلة عودة.', 'لا يُرسل رمز. تبقى الأرقام الموثقة كما هي.'],
+    },
+    door: {
+      open: 'الدخول برمز لجهات الاتصال مفتوح من إعدادات الخادم (PORTAL_CODE_ON_LOGIN)، ولا يتغير من هنا. يسري هذان المفتاحان على /login وعلى /client/login وعلى طلب الرمز من واجهة الطلبات.',
+      closed: 'الدخول برمز لجهات الاتصال مغلق من إعدادات الخادم (PORTAL_CODE_ON_LOGIN)، ولا يُفتح من هنا. يسري هذان المفتاحان الآن على طلب الرمز من واجهة الطلبات فقط، وتستعيد جهات الاتصال الوصول برابط.',
     },
     link: 'رابط استعادة كلمة المرور',
     linkFixed: 'يعمل دائمًا ولا يُعطَّل من هنا. يبقى رابطًا إلى أن يحسم المالك: رابط أم رمز.',
@@ -56,11 +59,14 @@ const COPY = {
     intro: 'Turning a channel off here stops the code being created and the provider being called, and voids any code not yet used. Email and password, Google and the password reset link are not affected.',
     groups: { accounts: 'Platform accounts', contacts: 'Client contacts (no password)', recovery: 'Account recovery' },
     switches: {
-      sign_in_email_code: ['Email code', 'The account holder signs in with a code sent to their email.', 'No code is sent. Password and Google remain.'],
-      sign_in_sms_code: ['SMS code', 'The holder of a confirmed number signs in with an SMS code.', 'No code is sent. Password and Google remain.'],
+      sign_in_sms_code: ['SMS code', 'The holder of a confirmed number signs in with an SMS code through /auth/phone. The /login page does not offer this at present.', 'No code is sent. Password and Google remain.'],
       portal_email_code: ['Email code', 'A contact signs in with a code sent to their email.', 'No code is sent to contacts.'],
       portal_sms_code: ['SMS code', 'A contact signs in with a code sent to their phone.', 'No code is sent to contacts.'],
       recovery_sms_code: ['Prove a number by SMS', 'A user proves their number from account settings, making it a way back.', 'No code is sent. Numbers already confirmed stay confirmed.'],
+    },
+    door: {
+      open: 'Contact sign-in by code is open in the server settings (PORTAL_CODE_ON_LOGIN) and does not change here. These two switches apply to /login, /client/login and code requests from the request API.',
+      closed: 'Contact sign-in by code is closed in the server settings (PORTAL_CODE_ON_LOGIN) and does not open here. For now these two switches apply only to code requests from the request API, and contacts recover by link.',
     },
     link: 'Password reset link',
     linkFixed: 'Always works and cannot be turned off here. It stays a link until the Owner decides between a link and a code.',
@@ -86,7 +92,7 @@ const COPY = {
 } as const
 
 const GROUPS: { key: 'accounts' | 'contacts' | 'recovery'; switches: AuthCodeSwitchKey[] }[] = [
-  { key: 'accounts', switches: ['sign_in_email_code', 'sign_in_sms_code'] },
+  { key: 'accounts', switches: ['sign_in_sms_code'] },
   { key: 'contacts', switches: ['portal_email_code', 'portal_sms_code'] },
   { key: 'recovery', switches: ['recovery_sms_code'] },
 ]
@@ -137,7 +143,7 @@ export function AuthCodeSwitchesPanel() {
     return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-brand-600" /></div>
   }
 
-  const { channels, limits, lockout, changes } = overview.data
+  const { channels, limits, lockout, changes, portal_code_on_login: doorOpen } = overview.data
   const turningOff = ALL_SWITCHES.some((name) => saved[name] && !draft[name])
   const changed = ALL_SWITCHES.some((name) => saved[name] !== draft[name])
   const blocked = !changed || reason.trim().length < 5 || (turningOff && !confirmed)
@@ -158,6 +164,9 @@ export function AuthCodeSwitchesPanel() {
       {GROUPS.map((group) => (
         <section key={group.key} data-testid={`code-group-${group.key}`} className="flex flex-col gap-3">
           <h3 className="font-semibold text-text-primary">{c.groups[group.key]}</h3>
+          {group.key === 'contacts' && (
+            <p data-testid="code-portal-door" data-open={doorOpen} className="max-w-3xl text-sm text-text-secondary">{doorOpen ? c.door.open : c.door.closed}</p>
+          )}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {group.switches.map((name) => (
               <SwitchCard

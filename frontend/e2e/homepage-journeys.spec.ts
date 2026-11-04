@@ -121,7 +121,7 @@ test.describe('homepage journeys route somewhere real', () => {
   /**
    * «متابعة طلباتي» leads to the one door there is (LOGIN-UNIFIED-001).
    *
-   * It used to point at `/portal/login`, which still answers — as a redirect. The link itself now
+   * It used to point at `/portal/login`, which answers only as a redirect. The link itself now
    * names `/login` directly, because a marketing link that bounces through a retired address is
    * exactly the drift the unification removed.
    */

@@ -41,16 +41,26 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  * today, so there is no recovery email switch: a switch that controlled nothing would only look like a decision.
  *
  * A switch only ever narrows. It cannot open a door some other gate holds shut, and it never records anything as proved.
+ *
+ * ## What each switch governs
+ *
+ * - `sign_in_sms_code`: `/auth/phone/start` and `/verify`. The public endpoints are live; production `/login` draws no SMS control.
+ * - `portal_email_code`, `portal_sms_code`: purpose `portal_login`, so `/requests/verify/start` today and `/client/login/*` once
+ *   `PORTAL_CODE_ON_LOGIN` opens that door. The flag is read here and never set.
+ * - `recovery_sms_code`: proving a number from Account security.
+ *
+ * There is no switch for a platform account's email code. Its route left with LOGIN-SINGLE-DOOR-001 (#948) and nothing mints that
+ * purpose any more, so such a switch would control nothing. The email code left on `/login` is the contact's, which `portal_email_code`
+ * already governs.
  */
 final class AuthCodeSwitches
 {
     public const AUDIT_ACTION = 'auth.code_switches_changed';
 
-    public const SWITCHES = ['sign_in_email_code', 'sign_in_sms_code', 'portal_email_code', 'portal_sms_code', 'recovery_sms_code'];
+    public const SWITCHES = ['sign_in_sms_code', 'portal_email_code', 'portal_sms_code', 'recovery_sms_code'];
 
     /** purpose → channel → switch. A purpose not named here is not a sign-in or recovery code, and no switch governs it. */
     private const GATES = [
-        'email_sign_in' => ['email' => 'sign_in_email_code'],
         'phone_sign_in' => ['sms' => 'sign_in_sms_code', 'whatsapp' => 'sign_in_sms_code'],
         'portal_login' => ['email' => 'portal_email_code', 'sms' => 'portal_sms_code', 'whatsapp' => 'portal_sms_code'],
         // Proving a number from Account security is what makes it a way back. Numbers already proved stay proved.
@@ -70,6 +80,12 @@ final class AuthCodeSwitches
         $switch = self::GATES[$purpose][$channel] ?? null;
 
         return $switch === null || (bool) $this->current()[$switch];
+    }
+
+    /** What `/login` may offer: the door must be open on the server and the switch on. A switch never opens that door by itself. */
+    public function emailCodeOffered(): bool
+    {
+        return $this->portalCodeIsOpen() && $this->allows('portal_login', 'email');
     }
 
     /** The same answer for every address, so a closed door is not an oracle for who holds an account. */
@@ -180,12 +196,12 @@ final class AuthCodeSwitches
     /**
      * Whether a contact can sign in by code at all.
      *
-     * `PORTAL_CODE_ON_LOGIN` shuts `/client/login/*` once LOGIN-SINGLE-DOOR-001 lands beside this, and those contacts recover by link,
-     * so these switches strand nobody. Read here, never set: an absent key means the door is open, which is what it is without that flag.
+     * `PORTAL_CODE_ON_LOGIN` shuts `/client/login/*` (LOGIN-SINGLE-DOOR-001) and those contacts recover by link, so with it off these
+     * switches strand nobody. Read here, never set, and off when absent, as in `config/requests.php`.
      */
     private function portalCodeIsOpen(): bool
     {
-        return (bool) config('requests.verification.portal_code_on_login', true);
+        return (bool) config('requests.verification.portal_code_on_login', false);
     }
 
     /**
@@ -266,6 +282,8 @@ final class AuthCodeSwitches
         return [
             'switches' => $current,
             'channels' => $channels,
+            // The panel states this beside the contact switches: with it off, no contact signs in by code whatever they say.
+            'portal_code_on_login' => $this->portalCodeIsOpen(),
             'recovery_link' => ['available' => true, 'switchable' => false, 'open_question' => 'LOGIN-CLIENT-CODE-UNIFIED-001'],
             'limits' => [
                 'code_ttl_minutes' => (int) config('requests.verification.code_ttl_minutes', 10),

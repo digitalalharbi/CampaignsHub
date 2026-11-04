@@ -193,10 +193,10 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/f/:slug', element: <PublicFormPage /> },
   { path: '/services', element: <PublicServicesPage /> },
   { path: '/services/:category', element: <PublicServicesPage /> },
-  // ADR 0002: the request-tracking portal lives at /portal/*. It still runs its own OTP cookie
+  // ADR 0002: the request-tracking portal lives at /portal/*. It can still hold the older code cookie
   // session (see PORTAL-AUTH-001 — the auth engines are not merged yet); what moved is the URL
   // space, so all four portals are addressed the same way. Each page guards itself: a 401 from the
-  // portal endpoints returns to the portal login. The section nav lives in PortalShell.
+  // portal endpoints returns to `/login` with the page kept. The section nav lives in PortalShell.
   /*
    * LOGIN-UNIFIED-001 — every sign-in door is `/login`, and only `/login`.
    *
@@ -216,6 +216,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/admin/login', element: <LegacyLoginRedirect /> },
   { path: '/app/login', element: <LegacyLoginRedirect /> },
   { path: '/agency/login', element: <LegacyLoginRedirect /> },
+  // LOGIN-SINGLE-DOOR-001 — reverses #943's separate contact page: the Owner's order is one door for everybody.
   { path: '/portal/login', element: <LegacyLoginRedirect /> },
   { path: '/influencers/login', element: <LegacyLoginRedirect /> },
 

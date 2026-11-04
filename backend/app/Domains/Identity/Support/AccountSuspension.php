@@ -40,6 +40,12 @@ final class AccountSuspension
         return $reachable === 0;
     }
 
+    /** Whether a workspace in this operational status is closed to its members (WORKSPACE-SWITCH-001). */
+    public static function isBlockedStatus(?string $status): bool
+    {
+        return in_array($status, self::BLOCKED, true);
+    }
+
     /** Whether one specific workspace is suspended — used when a membership is already in hand. */
     public static function isWorkspaceSuspended(?string $tenantId): bool
     {

@@ -46,6 +46,8 @@ final class AutomationAgentToolsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Noon in Riyadh: seeded days are "today" and back, and one test travels five minutes, which failed it when the suite reached 23:59.
+        $this->travelTo(Carbon::parse('2026-11-03 09:00:00', 'UTC'));
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-'.uniqid(), 'status' => 'active']);
         $this->holdingTenant((string) $this->tenant->id);

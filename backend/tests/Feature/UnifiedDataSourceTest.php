@@ -30,6 +30,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -46,6 +47,7 @@ use Tests\TestCase;
  */
 final class UnifiedDataSourceTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -79,6 +81,7 @@ final class UnifiedDataSourceTest extends TestCase
         $this->project = Project::create(['client_workspace_id' => $workspace->id, 'name' => 'P', 'status' => 'active']);
 
         $this->adAccount = $this->account('snapchat', 'ad_account');
+        $this->bindSeededAccount((string) $this->project->id, $this->adAccount->getKey());
 
         $this->campaign = UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
@@ -455,6 +458,7 @@ final class UnifiedDataSourceTest extends TestCase
 
         $store = $this->account('salla', 'store');
         $store->forceFill(['last_synced_at' => $lastSyncedAt ?? Carbon::now()])->save();
+        $this->bindSeededAccount((string) $this->project->id, $store->getKey());
 
         CommerceOrder::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,

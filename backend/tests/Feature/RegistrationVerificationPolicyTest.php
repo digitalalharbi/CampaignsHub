@@ -16,7 +16,9 @@ use App\Domains\Identity\Actions\OAuthOutcome;
 use App\Domains\Identity\Actions\ResolveOAuthIdentity;
 use App\Domains\Identity\Services\InvitationService;
 use App\Domains\Identity\Services\PasswordResetService;
+use App\Domains\Requests\Models\ClientPortalToken;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -745,14 +747,31 @@ final class RegistrationVerificationPolicyTest extends TestCase
     public function test_an_unproved_address_cannot_sign_in_by_email_code(): void
     {
         $user = $this->unprovedUser();
+        $tenant = Tenant::query()->firstOrFail();
+        // A client-portal membership is what a token for this address would resolve to, so it is the case that must hold.
+        Membership::query()->create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'portal' => Portal::ClientPortal->value, 'status' => 'active']);
 
-        $start = $this->withHeaders($this->spaOrigin)->postJson('/api/v1/auth/email-code/start', ['email' => $user->email])->assertOk();
+        $start = $this->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => $user->email])->assertCreated();
 
-        $this->withHeaders($this->spaOrigin)->postJson('/api/v1/auth/email-code/verify', [
-            'verification_id' => $start->json('data.verification_id'), 'code' => $start->json('data.dev_code'),
-        ])->assertStatus(422);
+        $wrong = $this->postJson('/api/v1/client/login/verify', ['verification_id' => $start->json('data.verification_id'), 'code' => $start->json('data.dev_code')])
+            ->assertStatus(422);
 
+        $this->assertSame(__('auth.failed'), $wrong->json('errors.code.0'), 'The same answer a spent code gets, so this is no oracle.');
         $this->assertGuest('web');
+        $this->assertSame(0, ClientPortalToken::query()->withoutGlobalScopes()->count(), 'A token for this address would reach the membership.');
+        $this->assertSame(1, AuditLog::query()->where('action', 'auth.portal_code.unproven_address')->count());
+    }
+
+    public function test_a_contact_setup_link_cannot_open_an_account_whose_address_is_unproved(): void
+    {
+        $user = $this->unprovedUser();
+        DB::table('password_reset_tokens')->insert([
+            'email' => $user->email, 'token' => hash('sha256', 'setup'), 'purpose' => 'contact_setup',
+            'created_at' => now(), 'expires_at' => now()->addHour(),
+        ]);
+
+        $this->expectException(ValidationException::class);
+        app(PasswordResetService::class)->reset((string) $user->email, 'setup', 'newsecret123');
     }
 
     public function test_an_unproved_address_cannot_accept_an_invitation_meant_for_it(): void

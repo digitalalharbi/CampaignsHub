@@ -34,6 +34,16 @@ export function usePortalBase(): string {
 }
 
 /**
+ * Is this screen really under `/app`? Not `usePortalBase() === '/app'`, which also answers yes for a path under no portal.
+ *
+ * ENSURE-PORTAL-SESSION-001 — asked by the shared screens before they request anything agency-scoped.
+ */
+export function useInAdvertiserPortal(): boolean {
+  const { pathname } = useLocation()
+  return pathname === '/app' || pathname.startsWith('/app/')
+}
+
+/**
  * Resolve a section path inside the current portal: `to('/clients')` → `/agency/clients`.
  * Absolute paths that already name a portal are returned untouched, so a deliberate cross-portal
  * link (rare, and always explicit) is still possible.

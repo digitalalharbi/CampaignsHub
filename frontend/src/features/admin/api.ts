@@ -732,7 +732,7 @@ export function saveRegistrationVerificationPolicy(
 
 /* AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not among them. */
 
-export type AuthCodeSwitchKey = 'sign_in_email_code' | 'sign_in_sms_code' | 'portal_email_code' | 'portal_sms_code' | 'recovery_sms_code'
+export type AuthCodeSwitchKey = 'sign_in_sms_code' | 'portal_email_code' | 'portal_sms_code' | 'recovery_sms_code'
 
 export interface AuthCodeChannel {
   enabled: boolean
@@ -748,6 +748,8 @@ export interface AuthCodeChannel {
 export interface AuthCodeSwitchesOverview {
   switches: Record<AuthCodeSwitchKey, boolean> & { version: number }
   channels: Record<AuthCodeSwitchKey, AuthCodeChannel>
+  /** `PORTAL_CODE_ON_LOGIN`, read-only: whether a contact can sign in by code at all. */
+  portal_code_on_login: boolean
   recovery_link: { available: boolean; switchable: boolean; open_question: string }
   limits: { code_ttl_minutes: number; max_attempts: number; resend_cooldown_seconds: number }
   lockout: { stranded_contacts: number; accounts_only_sms_back: number }

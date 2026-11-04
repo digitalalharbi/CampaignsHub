@@ -8,7 +8,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Copy, CopyPlus, Download, FileText, Layers, LayoutGrid, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Rows3, Send, Share2, SlidersHorizontal, Trash2, Type } from 'lucide-react'
 import { productName } from '@/lib/brand'
 import { ShareAnalyticsStrip } from './ShareAnalyticsStrip'
 import { ShareEditDialog } from './ShareEditDialog'
@@ -32,11 +32,14 @@ import {
   renewShare,
   revokeShare,
   pauseShare,
+  convertShare,
+  duplicateReport,
+  getCurrentShareLink,
+  renameReport,
   resumeShare,
-  sendReport,
   shareLogs,
 } from './api'
-import type { CreatedShare, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
+import type { CreatedShare, GenericNameKind, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
@@ -50,6 +53,7 @@ import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { SchedulesPanel } from './SchedulesPanel'
 import { LiveLinkBuilder } from './LiveLinkBuilder'
 import { ReportScopePicker } from './ReportScopePicker'
+import { GenericNameChoices } from './ReportComposeControls'
 import { ReportSectionControls } from './ReportSectionControls'
 import {
   ShareCreativeControls,
@@ -130,6 +134,8 @@ export function ReportsPage() {
   const [namesId, setNamesId] = useState<string | null>(null)
   const [sectionsId, setSectionsId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
+  /* REPORT-SEND-HONEST-001 — no mail path exists here, so the row explains that instead of collecting addresses. */
+  const [sendNotice, setSendNotice] = useState<{ id: string; name: string; shareable: boolean } | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [typeFilter, setTypeFilter] = useState('')
@@ -163,15 +169,14 @@ export function ReportsPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['reports', currentProjectId] })
   const regen = useMutation({ mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
+  /* REPORT-LIFECYCLE-MENU-001 — rename in place; duplicate to an independent report. Neither touches the original's link. */
+  const rename = useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => renameReport(currentProjectId!, id, name), onSuccess: invalidate })
+  const duplicate = useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => duplicateReport(currentProjectId!, id, { name }), onSuccess: invalidate })
   const del = useMutation({ mutationFn: (id: string) => deleteReport(currentProjectId!, id), onSuccess: invalidate })
   const drill = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => setReportPdfBreakdowns(currentProjectId!, id, { platform_drilldown: on }), onSuccess: invalidate })
   const exp = useMutation({
     mutationFn: ({ id, format }: { id: string; format: ReportFormat }) => exportReport(currentProjectId!, id, format),
     // Straight away: the row now holds a `processing` export, which is what keeps the poll above alive.
-    onSuccess: invalidate,
-  })
-  const send = useMutation({
-    mutationFn: ({ id, emails }: { id: string; emails: string[] }) => sendReport(currentProjectId!, id, emails),
     onSuccess: invalidate,
   })
 
@@ -233,7 +238,7 @@ export function ReportsPage() {
             : (ar ? 'لم يُحدَّد مشروع' : 'No project selected')
         }
         badges={<ProvenanceBadge provenance={provenance} />}
-        purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}
+        purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والمشاركة' : 'Saved documents you can generate, export and share'}
         /*
          * ONE summary row, not two — §34.
          *
@@ -563,14 +568,19 @@ export function ReportsPage() {
                     onShare={() => setShareId(r.id)}
                     onScope={() => setScopeId(r.id)}
                     onNames={() => setNamesId(r.id)}
+                    onRename={() => {
+                      const name = window.prompt(ar ? 'اسم التقرير:' : 'Report name:', r.name)?.trim()
+                      if (name && name !== r.name) rename.mutate({ id: r.id, name })
+                    }}
+                    onDuplicate={() => {
+                      const name = window.prompt(ar ? 'اسم النسخة (تقرير ورابط جديدان، والأصل لا يتغير):' : 'Name of the copy (a new report and link; the original does not change):', `${r.name} ${ar ? '(نسخة)' : '(copy)'}`)?.trim()
+                      if (name) duplicate.mutate({ id: r.id, name })
+                    }}
                     onSections={() => setSectionsId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onTogglePdfDrilldown={(on) => drill.mutate({ id: r.id, on })}
-                    onSend={() => {
-                      const emails = window.prompt(ar ? 'البريد الإلكتروني للمستلمين (مفصولة بفواصل):' : 'Recipient emails (comma separated):')
-                      if (emails) send.mutate({ id: r.id, emails: emails.split(',').map((e) => e.trim()).filter(Boolean) })
-                    }}
+                    onSend={() => setSendNotice({ id: r.id, name: r.name, shareable: r.audience !== 'internal' })}
                     picked={picked.includes(r.id)}
                     onPick={(on) => setPicked((cur) => (on ? [...cur, r.id] : cur.filter((id) => id !== r.id)))}
                     onDelete={() => setConfirmDelete([{ id: r.id, name: r.name }])}
@@ -632,6 +642,36 @@ export function ReportsPage() {
           ? <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />
           : <ScopeLostDialog ar={ar} onClose={() => setLiveOpen(false)} />
       )}
+      {sendNotice && (
+        <Modal
+          open
+          onClose={() => setSendNotice(null)}
+          title={ar ? 'لم يُرسل التقرير' : 'The report was not sent'}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setSendNotice(null)}>{ar ? 'إغلاق' : 'Close'}</Button>
+              {sendNotice.shareable && (
+                <Button
+                  type="button"
+                  data-testid="report-send-notice-share"
+                  onClick={() => {
+                    setShareId(sendNotice.id)
+                    setSendNotice(null)
+                  }}
+                >
+                  <Share2 size={15} /> {ar ? 'مشاركة رابط آمن' : 'Share a secure link'}
+                </Button>
+              )}
+            </div>
+          )}
+        >
+          <p role="status" data-testid="report-send-notice" className="text-sm text-text-secondary">
+            {ar
+              ? `لم يُرسل «${sendNotice.name}»: الإرسال بالبريد غير متاح حاليًا، ولم يصل شيء إلى أي مستلم. ${sendNotice.shareable ? 'يمكنك مشاركة رابط آمن أو تصدير الملف بدلًا من ذلك.' : 'هذا تقرير داخلي لا يُشارك برابط؛ يمكنك تصدير الملف بدلًا من ذلك.'}`
+              : `“${sendNotice.name}” was not sent: email sending is not available, and nothing reached any recipient. ${sendNotice.shareable ? 'You can share a secure link or export the file instead.' : 'This is an internal report, which cannot be shared by link; you can export the file instead.'}`}
+          </p>
+        </Modal>
+      )}
       {shareId && (
         currentProjectId
           ? <ShareManager projectId={currentProjectId} reportId={shareId} onClose={() => setShareId(null)} />
@@ -675,6 +715,8 @@ function ReportRowView({
   onShare,
   onScope,
   onNames,
+  onRename,
+  onDuplicate,
   onSections,
   onRegenerate,
   onExport,
@@ -693,6 +735,10 @@ function ReportRowView({
   onScope: () => void
   /** REPORT-IDENTITY-NAMES-001 — «prepared for / by» of an existing report. */
   onNames: () => void
+  /** REPORT-LIFECYCLE-MENU-001 — rename; every actual change is audited server-side. */
+  onRename: () => void
+  /** REPORT-DUPLICATE-001 — an independent copy. */
+  onDuplicate: () => void
   onSections: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
@@ -769,9 +815,11 @@ function ReportRowView({
                 )
               })()}
               <IconBtn title={ar ? 'مشاركة رابط آمن' : 'Share a secure link'} onClick={onShare}><Share2 size={15} /></IconBtn>
-              <IconBtn title={ar ? 'إرسال' : 'Send'} onClick={onSend}><Send size={15} /></IconBtn>
+              <IconBtn title={ar ? 'الإرسال بالبريد غير متاح' : 'Email sending is not available'} onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
+          <IconBtn title={ar ? 'إعادة تسمية' : 'Rename'} onClick={onRename}><Type size={15} /></IconBtn>
+          <IconBtn title={ar ? 'نسخ التقرير (تقرير ورابط جديدان)' : 'Duplicate (new report and link)'} onClick={onDuplicate}><CopyPlus size={15} /></IconBtn>
           <IconBtn title={ar ? 'أسماء الهوية (مقدم إلى / من)' : 'Identity names (prepared for / by)'} onClick={onNames}><Pencil size={15} /></IconBtn>
           <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
           <IconBtn title={ar ? 'أقسام التقرير' : 'Report sections'} onClick={onSections}><ListChecks size={15} /></IconBtn>
@@ -1247,7 +1295,7 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
   const ar = useAr()
   const q = useQuery({ queryKey: ['report', projectId, id], queryFn: () => getReport(projectId, id) })
   const r = q.data as ReportDetail | undefined
-  const platforms = (r?.data?.platforms ?? []).map((p) => String(p.provider))
+  const platforms = r?.scope_options?.platforms ?? (r?.data?.platforms ?? []).map((p) => String(p.provider))
   return (
     <Modal open onClose={onClose} title={r?.name ?? (ar ? 'معاينة التقرير' : 'Report preview')} size="xl">
       {q.isLoading ? (
@@ -1284,17 +1332,19 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
    */
   const detail = useQuery({ queryKey: ['report', projectId, reportId], queryFn: () => getReport(projectId, reportId) })
   const allCampaigns = useMemo(
-    () => (detail.data?.data?.campaigns ?? []).map((c) => ({
+    () => (detail.data?.scope_options?.campaigns ?? detail.data?.data?.campaigns ?? []).map((c) => ({
       id: String(c.campaign_id ?? ''),
       name: String(c.campaign_name ?? '—'),
     })).filter((c) => c.id !== ''),
     [detail.data],
   )
   const allProviders = useMemo(
-    () => [...new Set((detail.data?.data?.platforms ?? []).map((p) => String(p.provider ?? '')).filter(Boolean))],
+    () => detail.data?.scope_options?.platforms ?? [...new Set((detail.data?.data?.platforms ?? []).map((p) => String(p.provider ?? '')).filter(Boolean))],
     [detail.data],
   )
 
+  // REPORT-GENERIC-LABELS-001 — asked before the link exists as well as after.
+  const [genericNames, setGenericNames] = useState<GenericNameKind[]>([])
   const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: true, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
   const [live, setLive] = useState(false)
   /*
@@ -1330,6 +1380,7 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
         hide_spend: opts.hide_spend,
         hide_revenue: opts.hide_revenue,
         hide_campaign_names: opts.hide_campaign_names,
+        ...(genericNames.length > 0 ? { generic_names: genericNames } : {}),
         watermark: opts.watermark,
         ...(opts.password ? { password: opts.password } : {}),
         ...(opts.expires_at ? { expires_at: opts.expires_at } : {}),
@@ -1369,6 +1420,33 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
   const pause = useMutation({
     mutationFn: ({ id, on }: { id: string; on: boolean }) => (on ? pauseShare : resumeShare)(projectId, reportId, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
+  })
+  /* The CURRENT link, copied: nothing is created and the type does not change. An older link (token never kept) says so. */
+  const [copyNote, setCopyNote] = useState<{ id: string; text: string } | null>(null)
+  const copyCurrent = useMutation({
+    mutationFn: (id: string) => getCurrentShareLink(projectId, reportId, id),
+    onSuccess: async (r, id) => {
+      if (r.available && r.url) {
+        await navigator.clipboard.writeText(r.url)
+        setCopyNote({ id, text: ar ? 'نُسخ الرابط الحالي — لم يُنشأ رابط جديد.' : 'Current link copied — no new link was made.' })
+      } else {
+        setCopyNote({ id, text: r.reason === 'revoked'
+          ? (ar ? 'الرابط ملغى نهائيًا.' : 'This link is permanently revoked.')
+          : (ar ? 'أُنشئ هذا الرابط قبل دعم النسخ ولا يمكن استرجاع عنوانه؛ استخدم العنوان الذي أُرسل سابقًا.' : 'This link predates copy support, so its address cannot be recovered; use the address you sent earlier.') })
+      }
+    },
+  })
+  /* Live <-> Snapshot on the same URL: ask first (nothing is written), show what will happen, then confirm. */
+  const [pendingConvert, setPendingConvert] = useState<{ id: string; to: 'live' | 'snapshot'; notice: string } | null>(null)
+  const convert = useMutation({
+    mutationFn: ({ id, to, confirm }: { id: string; to: 'live' | 'snapshot'; confirm: boolean }) => convertShare(projectId, reportId, id, to, confirm),
+    onSuccess: (r, v) => {
+      if (r.requires_confirmation) setPendingConvert({ id: v.id, to: v.to, notice: ar ? r.notice.ar : r.notice.en })
+      else {
+        setPendingConvert(null)
+        qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] })
+      }
+    },
   })
   const renew = useMutation({
     mutationFn: ({ id, until }: { id: string; until: string }) => renewShare(projectId, reportId, id, until),
@@ -1531,6 +1609,7 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
               <Toggle k="hide_revenue" label={ar ? 'إخفاء الإيرادات' : 'Hide revenue'} />
               <Toggle k="hide_campaign_names" label={ar ? 'إخفاء أسماء الحملات' : 'Hide campaign names'} />
             </div>
+            <GenericNameChoices ar={ar} chosen={genericNames} onChange={setGenericNames} testid="share-generic-names" />
             <div className="grid gap-2 sm:grid-cols-2">
               <Field label={ar ? 'كلمة مرور (اختياري)' : 'Password (optional)'}><input type="text" value={opts.password} onChange={(e) => setOpts((o) => ({ ...o, password: e.target.value }))} placeholder={ar ? '4 أحرف فأكثر' : '4 characters or more'} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
               <Field label={ar ? 'تاريخ الانتهاء (اختياري)' : 'Expiry date (optional)'}><DateField value={opts.expires_at} onChange={(v) => setOpts((o) => ({ ...o, expires_at: v }))} /></Field>
@@ -1561,6 +1640,19 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
                     {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {fmtDate(s.expires_at)}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    <button type="button" data-testid={`share-copy-${s.id}`} onClick={() => copyCurrent.mutate(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
+                      {ar ? 'نسخ الرابط الحالي' : 'Copy current link'}
+                    </button>
+                    {(s.active || s.paused_at) && (
+                      <button
+                        type="button"
+                        data-testid={`share-convert-${s.id}`}
+                        onClick={() => convert.mutate({ id: s.id, to: s.mode === 'live' ? 'snapshot' : 'live', confirm: false })}
+                        className="text-xs font-semibold text-text-secondary hover:underline"
+                      >
+                        {s.mode === 'live' ? (ar ? 'تحويل إلى ثابت' : 'Convert to Snapshot') : (ar ? 'تحويل إلى لحظي' : 'Convert to Live')}
+                      </button>
+                    )}
                     <button onClick={() => setLogsFor(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
                       {ar ? 'سجل الفتح' : 'Access history'}
                     </button>
@@ -1603,6 +1695,16 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
           )}
         </div>
 
+        {copyNote && <p role="status" data-testid="share-copy-note" className="text-xs text-text-secondary">{copyNote.text}</p>}
+        {pendingConvert && (
+          <div role="alertdialog" aria-label={ar ? 'تأكيد التحويل' : 'Confirm conversion'} data-testid="share-convert-confirm" className="rounded-xl border border-warning p-3 text-sm">
+            <p className="mb-2">{pendingConvert.notice}</p>
+            <div className="flex gap-2">
+              <Button size="sm" loading={convert.isPending} onClick={() => convert.mutate({ id: pendingConvert.id, to: pendingConvert.to, confirm: true })} data-testid="share-convert-go">{ar ? 'تأكيد التحويل' : 'Confirm'}</Button>
+              <Button size="sm" variant="secondary" onClick={() => setPendingConvert(null)}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+            </div>
+          </div>
+        )}
         {logsFor && <ShareAccessHistory projectId={projectId} reportId={reportId} shareId={logsFor} onClose={() => setLogsFor(null)} />}
         {editing && (
           <ShareEditDialog

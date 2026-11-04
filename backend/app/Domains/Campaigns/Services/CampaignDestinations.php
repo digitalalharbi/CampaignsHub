@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Reports\Support\ReportReadMemo;
 
 /**
  * LEAD-DESTINATION-001 — the destination of each unified campaign, from its ad sets.
@@ -26,10 +27,24 @@ final class CampaignDestinations
             return [];
         }
 
+        $ids = array_values(array_unique($unifiedCampaignIds));
+        $sorted = $ids;
+        sort($sorted);
+
+        // PERF-RECOVERY-001 — the campaign table and the configured result of one report build ask for the same destinations.
+        return ReportReadMemo::remember('campaign-destinations|'.md5(implode(',', $sorted)), fn (): array => $this->read($ids));
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array<string, LeadDestination>
+     */
+    private function read(array $ids): array
+    {
         $seen = [];
 
         ExternalAdSet::withoutGlobalScopes()
-            ->whereIn('unified_campaign_id', array_values(array_unique($unifiedCampaignIds)))
+            ->whereIn('unified_campaign_id', $ids)
             ->whereNotNull('destination_type')
             ->get(['unified_campaign_id', 'destination_type'])
             ->each(function (ExternalAdSet $set) use (&$seen): void {

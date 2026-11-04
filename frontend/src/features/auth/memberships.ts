@@ -1,4 +1,4 @@
-import { getData, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
 
 /**
  * The portal/workspace membership layer on the client (ADR 0002).
@@ -46,18 +46,35 @@ export interface MembershipState {
    */
   requested_portal: PortalKey | null
   requested_portal_held: boolean | null
+  /**
+   * WORKSPACE-SWITCH-001 — this person's OWN application that has not become a workspace yet.
+   *
+   * Null for most accounts with no membership: an invited person who was removed has no application at all, so
+   * «no membership» is never taken to mean «has a registration». When present, `destination` already points at it.
+   */
+  pending_registration?: { id: string; state: string } | null
 }
 
 /**
  * `portal` is a preference, not a claim: the server returns a destination for a portal the user
  * actually holds, and falls back to their own when they do not hold the one asked for.
  */
-export function fetchMemberships(portal?: PortalKey): Promise<MembershipState> {
-  return getData<MembershipState>(portal ? `/auth/memberships?portal=${portal}` : '/auth/memberships')
+export function fetchMemberships(portal?: PortalKey, options?: { timeoutMs?: number; intended?: string }): Promise<MembershipState> {
+  const query = new URLSearchParams()
+  if (portal) query.set('portal', portal)
+  // LOGIN-SINGLE-DOOR-001 — the page a sign-in was interrupted on, for the SERVER to accept or refuse.
+  if (options?.intended) query.set('intended', options.intended)
+  const suffix = query.toString()
+
+  return getData<MembershipState>(
+    suffix === '' ? '/auth/memberships' : `/auth/memberships?${suffix}`,
+    options?.timeoutMs === undefined ? undefined : { timeout: options.timeoutMs },
+  )
 }
 
 /** Switch the active workspace. The server refuses ids the caller does not own, with 403. */
-export function switchMembership(membershipId: string): Promise<{ current: Membership; destination: string }> {
+export async function switchMembership(membershipId: string): Promise<{ current: Membership; destination: string }> {
+  await ensureCsrfCookie()
   return postData('/auth/memberships/switch', { membership_id: membershipId })
 }
 

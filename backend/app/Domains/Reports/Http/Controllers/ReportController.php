@@ -11,11 +11,13 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportColumns;
@@ -274,8 +276,14 @@ final class ReportController extends Controller
         return ApiResponse::success($engine->defaultConfig($objective, array_values($platforms)), 'Template retrieved.');
     }
 
-    /** Save builder edits (name / slide config / notes / mode / objective). Does not re-generate. */
-    public function update(Request $request, string $project, string $report): JsonResponse
+    /**
+     * Save builder edits (name / description / slide config / names). Does not re-generate.
+     *
+     * REPORT-LIFECYCLE-MENU-001 — every ACTUAL change is audited (who, when, before, after); a save that changes nothing
+     * writes nothing. `mode` is not an edit: Live and Snapshot is a deliberate, confirmed act on a link
+     * ({@see ReportShareController::convert()}), so naming a different mode here is refused rather than applied silently.
+     */
+    public function update(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $model = $this->find($report);
@@ -298,9 +306,149 @@ final class ReportController extends Controller
             $base = array_key_exists('config', $data) ? (array) $data['config'] : (array) ($model->config ?? []);
             $data['config'] = self::withPreparedNames($base, $names);
         }
+        if (array_key_exists('mode', $data)) {
+            abort_if($data['mode'] !== $model->mode, 422, 'Changing between Live and Snapshot is a separate, confirmed action on the link.');
+            unset($data['mode']);
+        }
+
+        $original = $model->only(['name', 'description', 'config']);
         $model->update($data);
 
+        $before = [];
+        $after = [];
+        foreach (array_intersect_key($data, $original) as $key => $value) {
+            if ($key === 'config') {
+                // Top-level keys only: enough to say WHAT moved without storing a whole configuration twice.
+                foreach (array_unique(array_merge(array_keys((array) $original['config']), array_keys((array) $model->config))) as $k) {
+                    $was = ((array) $original['config'])[$k] ?? null;
+                    $now = ((array) $model->config)[$k] ?? null;
+                    if ($was !== $now) {
+                        $before['config.'.$k] = $was;
+                        $after['config.'.$k] = $now;
+                    }
+                }
+
+                continue;
+            }
+            if ($original[$key] !== $model->{$key}) {
+                $before[$key] = $original[$key];
+                $after[$key] = $model->{$key};
+            }
+        }
+        if ($after !== []) {
+            $audit->log(action: 'report.updated', entityType: Report::class, entityId: (string) $model->getKey(), before: $before, after: $after);
+        }
+
         return ApiResponse::success($this->shape($model->fresh(), withData: true), 'Report updated.');
+    }
+
+    /**
+     * POST …/reports/{report}/duplicate — REPORT-DUPLICATE-001: an independent copy with its own report row and link.
+     *
+     * Copied: the indicators and settings (`config`, which carries the identity choice), the sections, the period and the
+     * stored document. Not shared with the original: the id, the token, the access history, the exports and the schedules.
+     * The original, its link and its history are never written. The scope is re-verified for the PROJECT it is saved in
+     * (a foreign account is refused, 422) and re-pinned to it, so a copy can name nothing the original could not. A link is
+     * made only for someone who may share; it starts from the chosen source link's own restrictions (never more open than
+     * that link) or, with none chosen, closed: spend, revenue and campaign names hidden.
+     */
+    public function duplicate(Request $request, AuditLogger $audit, ShareService $shares, string $project, string $report): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.create'), 403);
+        $source = $this->find($report);
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:160'],
+            'share_id' => ['nullable', 'uuid'],
+            'with_link' => ['nullable', 'boolean'],
+        ]);
+
+        $sourceLink = null;
+        if (! empty($data['share_id'])) {
+            $sourceLink = ReportShare::query()->where('report_id', $source->getKey())->findOrFail($data['share_id']);
+        }
+
+        $scope = null;
+        if (is_array($source->scope) && $source->scope !== []) {
+            $verified = ReportScope::fromReport(self::pinnedToProject($project, ReportScopeHierarchy::verifyFlat($project, $source->scope)));
+            $scope = $verified->isUnbounded() ? null : $verified->toArray();
+        }
+
+        $wantsLink = (bool) ($data['with_link'] ?? true) && $request->user()->hasPermission('reports.share')
+            && $source->status === 'completed' && ($source->audience ?? 'client') !== 'internal';
+
+        $result = DB::transaction(function () use ($source, $data, $scope, $request, $sourceLink, $wantsLink, $shares): array {
+            $copy = Report::create([
+                'name' => trim((string) ($data['name'] ?? '')) !== '' ? trim((string) $data['name']) : mb_substr($source->name, 0, 150).' (نسخة)',
+                'description' => $source->description,
+                'type' => $source->type,
+                'form' => $source->form,
+                'audience' => $source->audience,
+                'mode' => $source->mode,
+                'campaign_id' => $source->campaign_id,
+                'campaign_objective' => $source->campaign_objective,
+                'status' => $source->status,
+                'period_start' => $source->period_start,
+                'period_end' => $source->period_end,
+                'currency' => $source->currency,
+                'timezone' => $source->timezone,
+                'attribution_window' => $source->attribution_window,
+                'data_source' => $source->data_source,
+                'config' => $source->config,
+                'scope' => $scope,
+                'section_settings' => $source->section_settings,
+                'data' => $source->data,
+                'generated_at' => $source->generated_at,
+                'created_by' => $request->user()->id,
+                'is_demo' => $source->is_demo,
+            ]);
+
+            $link = null;
+            $raw = null;
+            if ($wantsLink) {
+                $opts = $sourceLink === null
+                    ? ['hide_spend' => true, 'hide_revenue' => true, 'hide_campaign_names' => true, 'allow_download' => true, 'watermark' => false, 'settings' => ['sections' => ['previous_comparison' => false]], 'mode' => 'snapshot']
+                    : [
+                        'hide_spend' => (bool) $sourceLink->getRawOriginal('hide_spend'),
+                        'hide_revenue' => (bool) $sourceLink->hide_revenue,
+                        'hide_campaign_names' => (bool) $sourceLink->hide_campaign_names,
+                        'allow_download' => (bool) $sourceLink->allow_download,
+                        'watermark' => (bool) $sourceLink->watermark,
+                        'form' => $sourceLink->form,
+                        'settings' => $sourceLink->settings,
+                        'scope' => $sourceLink->scope,
+                        'mode' => $sourceLink->mode,
+                        'expires_at' => $sourceLink->expires_at,
+                    ];
+                [$link, $raw] = $shares->create($copy, $opts, $request->user()->id);
+                if ($sourceLink?->password_hash !== null) {
+                    // Same password, no raw value needed: a copy is never more open than the link it came from.
+                    $link->forceFill(['password_hash' => $sourceLink->password_hash])->save();
+                }
+            }
+
+            return [$copy, $link, $raw];
+        });
+        [$copy, $link, $raw] = $result;
+
+        $audit->log(
+            action: 'report.duplicated',
+            entityType: Report::class,
+            entityId: (string) $copy->getKey(),
+            before: ['source_report_id' => (string) $source->getKey(), 'source_share_id' => $sourceLink === null ? null : (string) $sourceLink->getKey()],
+            after: ['report_id' => (string) $copy->getKey(), 'share_id' => $link === null ? null : (string) $link->getKey()],
+        );
+
+        $shape = $this->shape($copy);
+        $shape['link'] = $link === null ? null : [
+            'id' => (string) $link->getKey(),
+            'mode' => $link->isLive() ? 'live' : 'snapshot',
+            'url' => ShareService::urlFor((string) $raw),
+            'path' => ShareService::pathFor((string) $raw),
+            'token' => $raw,
+            'password_protected' => $link->password_hash !== null,
+        ];
+
+        return ApiResponse::success($shape, 'Report duplicated.', status: 201);
     }
 
     public function regenerate(Request $request, string $project, string $report): JsonResponse
@@ -342,20 +490,23 @@ final class ReportController extends Controller
         return ApiResponse::success(['id' => $export->id, 'format' => $format, 'status' => 'processing'], 'Export queued.', status: 202);
     }
 
-    public function send(Request $request, AuditLogger $audit, string $project, string $report, ReportDeliveryAudienceGuard $guard): JsonResponse
+    /**
+     * REPORT-SEND-HONEST-001 — this hands nothing to a mail transport, so it refuses rather than claims.
+     *
+     * It used to answer «Report sent.», stamp `last_sent_at` on the report and on a new recipient row, and
+     * write a `report.sent` audit row, with no message behind any of them. Permission, validation and the
+     * audience guard still answer first, so a wrong request hears what is wrong with it. Stamps already on
+     * existing rows are left alone. A real send belongs here only with proof it reached the transport.
+     */
+    public function send(Request $request, string $project, string $report, ReportDeliveryAudienceGuard $guard): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.export'), 403);
         $model = $this->find($report);
         $emails = $request->validate(['recipients' => ['required', 'array', 'min:1'], 'recipients.*' => ['email']])['recipients'];
         // Never deliver an internal report to a client/external recipient.
         $guard->assertDeliverable($model, $emails);
-        foreach ($emails as $email) {
-            $model->recipients()->create(['email' => $email, 'last_sent_at' => now(), 'is_demo' => $model->is_demo]);
-        }
-        $model->update(['last_sent_at' => now()]);
-        $audit->log(action: 'report.sent', entityType: Report::class, entityId: (string) $model->id, after: ['recipients' => count($emails)]);
 
-        return ApiResponse::success(['sent_to' => count($emails), 'at' => $model->last_sent_at], 'Report sent.');
+        return ApiResponse::error(__('api.report_send_unavailable'), ['code' => 'report_send_unavailable'], status: 501);
     }
 
     /**
@@ -484,18 +635,34 @@ final class ReportController extends Controller
              * sending it would see «no cover» on the very rows the client is about to see correctly
              * — and would reasonably conclude the report was broken and not send it.
              */
-            $out['data'] = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
+            $stored = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
             /*
-             * REPORT-TABLES-OWNER-COLUMNS-001 — the saved page honours the report's own choice.
+             * REPORT-PARITY-FOUR-SURFACES-001 — the preview is the client's document, through the surfaces' own resolver.
              *
-             * The link, the print route and the files receive `report_columns` through
-             * `ReportSectionSurfaces::apply`; the operator's own page reads the stored data
-             * directly, so the choice is attached here from the same reader. Absent means every
-             * column, which is what every saved report rendered before the choice existed.
+             * It was the stored internal snapshot with `report_sections` absent, which `sectionShown()` reads as «everything»: the
+             * operator's preview drew trends the report had switched off, a main section narrowed away, a campaign roster and
+             * unapproved recommendations — none of which the link, the PDF or the file carry. The same call the print route makes
+             * answers here (`report_columns`, `report_views` and `report_sections` arrive with it).
              */
-            if (is_array($out['data']) && ($chosen = ReportColumns::forReport($r)->toArray()) !== []) {
-                $out['data']['report_columns'] = $chosen;
-            }
+            $out['data'] = $stored !== []
+                ? app(ReportSectionSurfaces::class)->previewPayload($r, $stored)
+                // A report not generated yet has no figures to resolve sections against; it still carries the columns it was saved with.
+                : (($chosen = ReportColumns::forReport($r)->toArray()) !== [] ? ['report_columns' => $chosen] : []);
+            /*
+             * What the operator's own pickers need from the report — its campaigns and platforms — served beside the body now that
+             * the body is the client's: the link builder narrows a link to campaigns that exist in THIS report, and the roster a
+             * client may not see is exactly what an operator choosing a ceiling must.
+             */
+            $out['scope_options'] = [
+                'campaigns' => array_values(array_map(
+                    static fn ($c): array => ['campaign_id' => (string) ($c['campaign_id'] ?? ''), 'campaign_name' => (string) ($c['campaign_name'] ?? '')],
+                    array_filter((array) ($stored['campaigns'] ?? []), 'is_array'),
+                )),
+                'platforms' => array_values(array_unique(array_filter(array_map(
+                    static fn ($p): string => (string) (is_array($p) ? ($p['provider'] ?? '') : ''),
+                    (array) ($stored['platforms'] ?? []),
+                )))),
+            ];
         }
 
         return $out;

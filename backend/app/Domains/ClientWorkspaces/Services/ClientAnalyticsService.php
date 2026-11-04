@@ -53,7 +53,7 @@ final class ClientAnalyticsService
         $currencyMode = count($currencies) > 1 ? 'mixed' : (count($currencies) === 1 ? 'single' : 'none');
         $currency = count($currencies) === 1 ? $currencies[0] : null;
 
-        $objectiveMix = $this->objectiveMix($tenantId, (string) $client->id);
+        $objectiveMix = $this->objectiveMix($tenantId, (string) $client->id, $onlyProjectIds === null ? null : $ids);
         $roasPrimary = $this->roasIsPrimary($objectiveMix);
 
         $agg = $this->metrics->forProjects($ids);
@@ -122,10 +122,12 @@ final class ClientAnalyticsService
     }
 
     /** @return list<array{objective:string,count:int}> */
-    private function objectiveMix(string $tenantId, string $clientId): array
+    /** @param  list<string>|null  $onlyProjectIds  the campaigns of these projects only (a reader confined to some of the client's projects) */
+    private function objectiveMix(string $tenantId, string $clientId, ?array $onlyProjectIds = null): array
     {
         return DB::table('unified_campaigns')
             ->where('tenant_id', $tenantId)->where('client_workspace_id', $clientId)->whereNull('deleted_at')
+            ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('project_id', $onlyProjectIds))
             ->groupBy('objective')->select('objective', DB::raw('count(*) as count'))
             ->get()->map(fn ($r) => ['objective' => (string) $r->objective, 'count' => (int) $r->count])->all();
     }

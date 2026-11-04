@@ -10,6 +10,7 @@ use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\PasswordResetService;
 use App\Domains\Legal\Models\PlatformSetting;
+use App\Domains\Requests\Models\ClientPortalToken;
 use App\Domains\Requests\Models\ContactVerification;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
@@ -71,7 +72,6 @@ final class AuthCodeSwitchesTest extends TestCase
     private function body(array $over = []): array
     {
         return array_merge([
-            'sign_in_email_code' => true,
             'sign_in_sms_code' => true,
             'portal_email_code' => true,
             'portal_sms_code' => true,
@@ -136,21 +136,20 @@ final class AuthCodeSwitchesTest extends TestCase
         $this->twilioOn();
         $this->assertNull(PlatformSetting::current()->auth_code_switches, 'The migration must write nothing.');
 
-        $this->withHeaders($this->spa)->postJson('/api/v1/auth/email-code/start', ['email' => 'a@x.test'])->assertOk();
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/start', ['phone' => '+966501234567'])->assertOk();
         $this->withHeaders($this->spa)->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'b@x.test'])->assertCreated();
         $this->withHeaders($this->spa)->postJson('/api/v1/client/login/start', ['channel' => 'sms', 'destination' => '+966501234568'])->assertCreated();
         $this->actingAs($this->user('c@x.test'), 'sanctum')->postJson('/api/v1/me/phone/start', ['phone' => '+966501234569'])->assertOk();
 
-        $this->assertSame(5, ContactVerification::query()->count());
-        $this->getJson('/api/v1/auth/methods')->assertOk()->assertJsonPath('data.email_code.available', true);
+        $this->assertSame(4, ContactVerification::query()->count());
+        $this->getJson('/api/v1/auth/oauth/providers')->assertOk()->assertJsonPath('data.email_code', true)->assertJsonPath('data.sms_code', true);
         $this->assertSame(0, AuditLog::query()->where('action', AuthCodeSwitches::AUDIT_ACTION)->count());
     }
 
     public function test_every_switch_reads_on_until_somebody_changes_it(): void
     {
         $this->actingAs($this->admin(), 'sanctum')->getJson(self::URL)->assertOk()
-            ->assertJsonPath('data.switches.sign_in_email_code', true)
+            ->assertJsonMissingPath('data.switches.sign_in_email_code')
             ->assertJsonPath('data.switches.sign_in_sms_code', true)
             ->assertJsonPath('data.switches.portal_email_code', true)
             ->assertJsonPath('data.switches.portal_sms_code', true)
@@ -176,12 +175,14 @@ final class AuthCodeSwitchesTest extends TestCase
     {
         Mail::fake();
         $this->twilioOn();
-        $this->set(['sign_in_email_code' => $email, 'sign_in_sms_code' => $sms]);
+        $this->set(['portal_email_code' => $email, 'sign_in_sms_code' => $sms]);
+        // Named after the switch moved, so with the channel on a real message is attempted and with it off none can be.
+        $this->contact('a@x.test');
 
-        $this->withHeaders($this->spa)->postJson('/api/v1/auth/email-code/start', ['email' => 'a@x.test'])->assertStatus($email ? 200 : 403);
+        $this->withHeaders($this->spa)->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'a@x.test'])->assertStatus($email ? 201 : 403);
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/phone/start', ['phone' => '+966501234567'])->assertStatus($sms ? 200 : 403);
 
-        $this->assertSame($email ? 1 : 0, ContactVerification::query()->where('purpose', 'email_sign_in')->count(), 'No row when off.');
+        $this->assertSame($email ? 1 : 0, ContactVerification::query()->where('purpose', 'portal_login')->count(), 'No row when off.');
         $this->assertSame($sms ? 1 : 0, ContactVerification::query()->where('purpose', 'phone_sign_in')->count(), 'No row when off.');
 
         $sent = collect(Http::recorded())->filter(fn ($pair) => str_contains($pair[0]->url(), 'verify.twilio.com'))->count();
@@ -213,7 +214,7 @@ final class AuthCodeSwitchesTest extends TestCase
         $this->admin();
         $this->user('member@x.test');
         $this->set([
-            'sign_in_email_code' => $email, 'sign_in_sms_code' => $sms,
+            'sign_in_sms_code' => $sms,
             'portal_email_code' => $email, 'portal_sms_code' => $sms,
             'recovery_sms_code' => $sms,
         ]);
@@ -230,19 +231,44 @@ final class AuthCodeSwitchesTest extends TestCase
     #[DataProvider('matrix')]
     public function test_the_sign_in_page_is_told_only_what_can_work(bool $email, bool $sms): void
     {
-        $this->set(['sign_in_email_code' => $email, 'portal_email_code' => $email, 'sign_in_sms_code' => $sms]);
+        $this->set(['portal_email_code' => $email, 'sign_in_sms_code' => $sms]);
 
-        $this->getJson('/api/v1/auth/methods')->assertOk()
-            ->assertJsonPath('data.password.available', true)
-            ->assertJsonPath('data.email_code.available', $email)
-            ->assertJsonPath('data.sms_code.available', $sms);
+        $this->getJson('/api/v1/auth/oauth/providers')->assertOk()
+            ->assertJsonStructure(['data' => ['providers']])
+            ->assertJsonPath('data.email_code', $email)
+            ->assertJsonPath('data.sms_code', $sms);
     }
 
-    public function test_a_contact_keeps_the_email_code_button_when_only_the_platform_code_is_off(): void
+    public function test_a_contact_keeps_the_email_code_control_when_only_the_platform_code_is_off(): void
     {
-        $this->set(['sign_in_email_code' => false]);
+        $this->set(['sign_in_sms_code' => false]);
 
-        $this->getJson('/api/v1/auth/methods')->assertOk()->assertJsonPath('data.email_code.available', true);
+        $this->getJson('/api/v1/auth/oauth/providers')->assertOk()->assertJsonPath('data.email_code', true);
+    }
+
+    public function test_a_switch_that_is_on_never_opens_the_door_the_server_holds_shut(): void
+    {
+        Mail::fake();
+        config(['requests.verification.portal_code_on_login' => false]);
+
+        $this->assertTrue(app(AuthCodeSwitches::class)->allows('portal_login', 'email'));
+        $this->getJson('/api/v1/auth/oauth/providers')->assertOk()->assertJsonPath('data.email_code', false);
+        $this->withHeaders($this->spa)->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'a@x.test'])->assertNotFound();
+        $this->assertSame(0, ContactVerification::query()->count());
+
+        $this->actingAs($this->admin(), 'sanctum')->getJson(self::URL)->assertOk()->assertJsonPath('data.portal_code_on_login', false);
+    }
+
+    public function test_the_platform_email_code_is_no_switch_because_nothing_is_left_for_it_to_govern(): void
+    {
+        $this->actingAs($this->admin(), 'sanctum')->putJson(self::URL, $this->body(['sign_in_email_code' => false]))->assertOk()
+            ->assertJsonMissingPath('data.switches.sign_in_email_code')
+            ->assertJsonMissingPath('data.channels.sign_in_email_code')
+            ->assertJsonPath('data.switches.version', 0);
+
+        $this->assertArrayNotHasKey('sign_in_email_code', app(AuthCodeSwitches::class)->current());
+        $this->assertSame(0, AuditLog::query()->where('action', AuthCodeSwitches::AUDIT_ACTION)->count());
+        $this->postJson('/api/v1/auth/email-code/start', ['email' => 'a@x.test'])->assertNotFound();
     }
 
     public function test_recovery_sms_off_stops_proving_a_number_and_keeps_numbers_already_proved(): void
@@ -277,7 +303,7 @@ final class AuthCodeSwitchesTest extends TestCase
 
     public function test_the_intake_contact_check_is_not_a_sign_in_and_is_not_switched(): void
     {
-        $this->set(['portal_email_code' => false, 'sign_in_email_code' => false]);
+        $this->set(['portal_email_code' => false, 'portal_sms_code' => false]);
 
         $this->withHeaders($this->spa)->postJson('/api/v1/requests/verify/start', ['channel' => 'email', 'destination' => 'a@x.test'])->assertCreated();
     }
@@ -287,24 +313,25 @@ final class AuthCodeSwitchesTest extends TestCase
         Mail::fake();
         $this->user('member@x.test');
 
-        $start = $this->withHeaders($this->spa)->postJson('/api/v1/auth/email-code/start', ['email' => 'member@x.test'])->assertOk();
-        $this->set(['sign_in_email_code' => false]);
+        $start = $this->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'member@x.test'])->assertCreated();
+        $this->set(['portal_email_code' => false]);
 
-        $this->withHeaders($this->spa)->postJson('/api/v1/auth/email-code/verify', [
+        $this->postJson('/api/v1/client/login/verify', [
             'verification_id' => $start->json('data.verification_id'), 'code' => $start->json('data.dev_code'),
         ])->assertForbidden();
 
         $this->assertGuest('web');
+        $this->assertSame(0, ClientPortalToken::query()->withoutGlobalScopes()->count());
     }
 
     public function test_a_switch_off_answers_a_registered_address_and_a_stranger_identically(): void
     {
         Mail::fake();
         $this->user('member@x.test');
-        $this->set(['sign_in_email_code' => false]);
+        $this->set(['portal_email_code' => false]);
 
-        $known = $this->withHeaders($this->spa)->postJson('/api/v1/auth/email-code/start', ['email' => 'member@x.test']);
-        $unknown = $this->withHeaders($this->spa)->postJson('/api/v1/auth/email-code/start', ['email' => 'nobody@x.test']);
+        $known = $this->withHeaders($this->spa)->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'member@x.test']);
+        $unknown = $this->withHeaders($this->spa)->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'nobody@x.test']);
 
         $this->assertSame($known->status(), $unknown->status());
         $this->assertSame($known->json('message'), $unknown->json('message'));
@@ -312,10 +339,10 @@ final class AuthCodeSwitchesTest extends TestCase
 
     public function test_the_off_answer_points_at_a_way_that_still_works_in_arabic_and_english(): void
     {
-        $this->set(['sign_in_email_code' => false]);
+        $this->set(['portal_email_code' => false]);
 
-        $ar = $this->withHeaders($this->spa + ['Accept-Language' => 'ar'])->postJson('/api/v1/auth/email-code/start', ['email' => 'a@x.test']);
-        $en = $this->withHeaders($this->spa + ['Accept-Language' => 'en'])->postJson('/api/v1/auth/email-code/start', ['email' => 'a@x.test']);
+        $ar = $this->withHeaders($this->spa + ['Accept-Language' => 'ar'])->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'a@x.test']);
+        $en = $this->withHeaders($this->spa + ['Accept-Language' => 'en'])->postJson('/api/v1/client/login/start', ['channel' => 'email', 'destination' => 'a@x.test']);
 
         $this->assertStringContainsString('كلمة المرور', (string) $ar->json('message'));
         $this->assertStringContainsString('password', (string) $en->json('message'));
@@ -326,13 +353,13 @@ final class AuthCodeSwitchesTest extends TestCase
     public function test_only_a_super_admin_reaches_the_switches(): void
     {
         $this->getJson(self::URL)->assertUnauthorized();
-        $this->putJson(self::URL, $this->body(['sign_in_email_code' => false]))->assertUnauthorized();
+        $this->putJson(self::URL, $this->body(['portal_email_code' => false]))->assertUnauthorized();
 
         $member = $this->user('member@x.test');
         $this->actingAs($member, 'sanctum')->getJson(self::URL)->assertForbidden();
-        $this->actingAs($member, 'sanctum')->putJson(self::URL, $this->body(['sign_in_email_code' => false]))->assertForbidden();
+        $this->actingAs($member, 'sanctum')->putJson(self::URL, $this->body(['portal_email_code' => false]))->assertForbidden();
 
-        $this->assertTrue(app(AuthCodeSwitches::class)->current()['sign_in_email_code']);
+        $this->assertTrue(app(AuthCodeSwitches::class)->current()['portal_email_code']);
         $this->assertNull(PlatformSetting::current()->auth_code_switches);
         $this->assertSame(0, AuditLog::query()->where('action', AuthCodeSwitches::AUDIT_ACTION)->count());
     }
@@ -341,16 +368,16 @@ final class AuthCodeSwitchesTest extends TestCase
     {
         $admin = $this->admin();
 
-        $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['sign_in_email_code' => false]))->assertOk()
-            ->assertJsonPath('data.switches.sign_in_email_code', false)
+        $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['portal_email_code' => false]))->assertOk()
+            ->assertJsonPath('data.switches.portal_email_code', false)
             ->assertJsonPath('data.switches.version', 1)
             ->assertJsonCount(1, 'data.changes');
 
         $log = AuditLog::query()->where('action', AuthCodeSwitches::AUDIT_ACTION)->firstOrFail();
         $this->assertSame((int) $admin->getKey(), (int) $log->user_id);
         $this->assertSame('Cost control decision', $log->reason);
-        $this->assertTrue($log->before['sign_in_email_code']);
-        $this->assertFalse($log->after['sign_in_email_code']);
+        $this->assertTrue($log->before['portal_email_code']);
+        $this->assertFalse($log->after['portal_email_code']);
         $this->assertNotNull($log->created_at);
     }
 
@@ -370,19 +397,19 @@ final class AuthCodeSwitchesTest extends TestCase
     {
         $admin = $this->admin();
 
-        $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['sign_in_email_code' => false, 'confirm_risk' => false]))->assertStatus(422);
-        $this->actingAs($admin, 'sanctum')->putJson(self::URL, array_diff_key($this->body(['sign_in_email_code' => false]), ['reason' => 1]))->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['portal_email_code' => false, 'confirm_risk' => false]))->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->putJson(self::URL, array_diff_key($this->body(['portal_email_code' => false]), ['reason' => 1]))->assertStatus(422);
 
-        $this->assertTrue(app(AuthCodeSwitches::class)->current()['sign_in_email_code']);
+        $this->assertTrue(app(AuthCodeSwitches::class)->current()['portal_email_code']);
     }
 
     public function test_a_stale_decision_is_refused(): void
     {
         $admin = $this->admin();
-        $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['sign_in_email_code' => false]))->assertOk();
+        $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['portal_email_code' => false]))->assertOk();
 
         $this->actingAs($admin, 'sanctum')->putJson(self::URL, $this->body(['expected_version' => 0]))->assertStatus(409);
-        $this->assertFalse(app(AuthCodeSwitches::class)->current()['sign_in_email_code']);
+        $this->assertFalse(app(AuthCodeSwitches::class)->current()['portal_email_code']);
     }
 
     public function test_the_reset_link_cannot_be_switched_through_the_endpoint(): void
@@ -499,7 +526,7 @@ final class AuthCodeSwitchesTest extends TestCase
 
     public function test_with_the_portal_code_closed_at_the_door_the_switch_strands_nobody(): void
     {
-        // What `PORTAL_CODE_ON_LOGIN=false` means once this lands beside it: these contacts recover by link, not by this code.
+        // What `PORTAL_CODE_ON_LOGIN=false` means: these contacts recover by link, not by this code.
         config(['requests.verification.portal_code_on_login' => false]);
         $this->contact('client@x.test');
 
