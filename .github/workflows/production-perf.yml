@@ -54,6 +54,17 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "── read-only counts"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T db psql -U campaignshub -d campaignshub -At <<'SQL'
+            BEGIN READ ONLY;
+            select 'versions_table', to_regclass('public.report_versions') is not null;
+            select 'versions_rows', count(*) from report_versions;
+            select 'reports_completed_with_copy', count(*) from reports where status='completed' and generated_at is not null and data is not null;
+            select 'reports_failed_with_copy', count(*) from reports where status='failed' and generated_at is not null and data is not null;
+            select 'share_modes', mode, count(*) from report_shares where revoked_at is null group by 2;
+            ROLLBACK;
+            SQL
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
