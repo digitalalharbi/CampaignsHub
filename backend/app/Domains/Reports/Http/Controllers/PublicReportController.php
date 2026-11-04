@@ -14,6 +14,7 @@ use App\Domains\Reports\Services\LiveDrilldown;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
+use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\GenericNames;
@@ -111,7 +112,8 @@ final class PublicReportController extends Controller
          */
         $data = [];
         if (! $share->isLive()) {
-            $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
+            // REPORT-SOURCE-ISOLATION-001 — a copy stored before the content section was bounded by the report's accounts is served inside them.
+            $fresh = app(ReportCreativeMedia::class)->refresh(app(ReportSourceContainment::class)->apply($report->data ?? [], $report));
 
             // REPORT-PARITY-FOUR-SURFACES-001 — the print route and the files ask the same question of the same method.
             $data = $view->document($fresh, $report->audience === 'executive' ? 'executive' : 'client', $form);

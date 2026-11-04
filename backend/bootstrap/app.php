@@ -62,6 +62,7 @@ use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\RenderAcceptanceExportCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
+use App\Domains\Reports\Console\ReportSourceIsolationAuditCommand;
 use App\Domains\Reports\Console\ShareCardCheckCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
@@ -112,6 +113,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PdfFactsCommand::class,
         RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
+        ReportSourceIsolationAuditCommand::class,
         DispatchScheduledReports::class,
         PruneUploadSessions::class,
         EvaluateSla::class,

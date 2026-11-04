@@ -123,11 +123,11 @@ final class LiveReportMemoIsolationTest extends TestCase
         $this->buildWorld(campaignsPerAccount: 2);
         $account = (string) $this->boundAccounts[0]->id;
 
-        $first = AccountCampaignCeiling::campaigns([], [$account]);
+        $first = AccountCampaignCeiling::campaigns([], [$account], (string) $this->project->id);
 
         $this->growWorld(extra: 1, alreadyHave: 2);
 
-        $this->assertGreaterThan(count($first), count(AccountCampaignCeiling::campaigns([], [$account])), 'a ceiling read outside any build was remembered');
+        $this->assertGreaterThan(count($first), count(AccountCampaignCeiling::campaigns([], [$account], (string) $this->project->id)), 'a ceiling read outside any build was remembered');
     }
 
     public function test_the_memo_answers_once_inside_a_build_and_never_across_tenants_projects_or_builds(): void
