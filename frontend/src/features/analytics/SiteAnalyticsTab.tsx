@@ -14,6 +14,8 @@ import { money, num, percent } from './format'
 import { providerLabel } from '@/features/campaigns/labels'
 import { usePortalBase } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
+import { SiteKpis, type SiteKpi } from './SiteKpis'
+import { TrafficExplorer } from './TrafficExplorer'
 
 /**
  * GA4-ANALYTICS-PRODUCT-001 — what the SITE measured, from the project's own GA4 property.
@@ -35,6 +37,8 @@ interface SitePayload {
   last_synced_at?: string | null
   currency?: string | null
   totals?: Record<string, number | null>
+  kpis?: SiteKpi[]
+  previous_period?: { from: string; to: string }
   trend?: Array<{ date: string; sessions: number; engaged_sessions: number; purchases: number; revenue: number }>
   funnel?: Array<{ stage: string; count: number | null; step_rate: number | null; exceeds_previous: boolean }>
   paid?: { available: boolean; sessions?: number; purchases?: number; revenue?: number; session_share?: number | null; purchase_share?: number | null; revenue_share?: number | null; platforms?: Array<{ platform: string; sessions: number; purchases: number; revenue: number }> }
@@ -124,6 +128,8 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
         <StatCard testid="site-kpi-revenue" tone="neutral" label={ar ? 'الإيراد' : 'Revenue'} value={<span dir="ltr">{t.revenue != null ? money(t.revenue, cur) : '—'}</span>} hint={paid.available && paid.revenue_share != null ? (ar ? `${percent(paid.revenue_share, 0)} من زيارات مدفوعة` : `${percent(paid.revenue_share, 0)} from paid visits`) : undefined} />
       </StatGrid>
 
+      {d.kpis && d.previous_period && <SiteKpis kpis={d.kpis} previous={d.previous_period} ar={ar} />}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والمشتريات يوميًا' : 'Sessions and purchases by day'} subtitle={ar ? 'يوم بلا قياس لا يُرسم صفرًا.' : 'A day with no measurement is not drawn as zero.'}>
           <div data-testid="site-trend">
@@ -168,11 +174,9 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
         </ChartCard>
       )}
 
+      {projectId && <TrafficExplorer projectId={projectId} range={range} ar={ar} />}
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <BreakdownCard testId="site-source-medium" title={ar ? 'المصدر / الوسيط' : 'Source / medium'} table={d.breakdowns?.source_medium ?? null} ar={ar} cur={cur} name={(r) => `${r.dimension_1} / ${r.dimension_2 ?? ''}`} />
-        <BreakdownCard testId="site-campaign" title={ar ? 'الحملات (UTM)' : 'Campaigns (UTM)'} table={d.breakdowns?.campaign ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
-        <BreakdownCard testId="site-landing-page" title={ar ? 'صفحات الهبوط' : 'Landing pages'} table={d.breakdowns?.landing_page ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
-        <BreakdownCard testId="site-campaign-landing" title={ar ? 'الحملة ← صفحة الهبوط ← الشراء' : 'Campaign → landing page → purchase'} table={d.breakdowns?.campaign_landing ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
         <BreakdownCard testId="site-country" title={ar ? 'الدول' : 'Countries'} table={d.breakdowns?.country ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
         <BreakdownCard testId="site-device" title={ar ? 'الأجهزة' : 'Devices'} table={d.breakdowns?.device ?? null} ar={ar} cur={cur} name={(r) => label(DEVICE, r.dimension_1)} />
         <BreakdownCard testId="site-user-type" title={ar ? 'جديد مقابل عائد' : 'New vs returning'} table={d.breakdowns?.user_type ?? null} ar={ar} cur={cur} name={(r) => label(USER_TYPE, r.dimension_1)} />

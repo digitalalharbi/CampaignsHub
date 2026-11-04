@@ -69,7 +69,10 @@ final class Ga4SiteAnalytics
             'last_synced_at' => $property->last_synced_at?->toIso8601String(),
         ];
 
-        if ($rows === []) {
+        $kpis = (new Ga4Kpis)->build($tenantId, $projectId, (string) $property->getKey(), $from, $to, $property->last_synced_at, $property->currency);
+
+        // Empty only when neither the breakdowns nor the daily figures hold anything for the window.
+        if ($rows === [] && collect($kpis['kpis'])->every(static fn (array $k): bool => $k['current'] === null)) {
             return ['state' => 'empty'] + $base;
         }
 
@@ -83,7 +86,7 @@ final class Ga4SiteAnalytics
         $totals['engagement_rate'] = ($totals['sessions'] ?? 0) > 0 ? round(($totals['engaged_sessions'] ?? 0) / $totals['sessions'], 4) : null;
         $totals['users_daily_sum'] = $this->dailyUsers($tenantId, $projectId, (string) $property->getKey(), $from, $to);
 
-        return ['state' => 'ready'] + $base + [
+        return ['state' => 'ready'] + $base + $kpis + [
             'currency' => $currency,
             'totals' => $totals,
             'trend' => $this->trend($totalsSource),

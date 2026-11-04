@@ -303,6 +303,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::put('attribution-settings', [AttributionSettingsController::class, 'update'])->middleware(['module:attribution_intelligence', 'project.can:reports.manage'])->name('attribution-settings.update');
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
+    Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
+    Route::get('measurement/analytics/table/export', [SiteAnalyticsController::class, 'export'])->middleware('project.can:analytics.view')->name('measurement.analytics.table.export');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
     /*

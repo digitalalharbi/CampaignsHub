@@ -43,6 +43,15 @@ final class Ga4Metrics
         'transactions' => 'transactions',
         'purchaseRevenue' => 'revenue',
         'engagementRate' => 'engagement_rate',
+        // GA4-BOUNCE-AOV-KPIS-001 — every name below is in Google's Data API schema (api-schema):
+        // bounceRate, userEngagementDuration (seconds), activeUsers, engagedSessions, itemsPurchased.
+        // AOV, items per order and revenue per user/session are DERIVED from these sums, never taken
+        // from `averagePurchaseRevenue` (an average of averages across days is not an average).
+        'engagedSessions' => 'engaged_sessions',
+        'activeUsers' => 'active_users',
+        'bounceRate' => 'bounce_rate',
+        'userEngagementDuration' => 'engagement_seconds',
+        'itemsPurchased' => 'items_purchased',
     ];
 
     /**
@@ -63,7 +72,7 @@ final class Ga4Metrics
      *
      * @var list<string>
      */
-    public const RATES = ['engagement_rate'];
+    public const RATES = ['engagement_rate', 'bounce_rate'];
 
     /** @return list<string> the Data API names, for the request body */
     public static function requested(): array

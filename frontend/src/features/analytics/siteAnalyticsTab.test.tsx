@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { SiteAnalyticsTab } from './SiteAnalyticsTab'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
@@ -38,13 +38,95 @@ describe('the site analytics tab', () => {
     expect(screen.getByTestId('site-kpi-revenue')).toHaveTextContent('62% from paid visits')
     const paid = screen.getByTestId('site-paid')
     expect(within(paid).getAllByText('Meta').length).toBeGreaterThan(0)
-    expect(screen.getByTestId('site-source-medium')).toHaveTextContent('facebook / paid_social')
-    expect(screen.getByTestId('site-landing-page-absent')).toBeInTheDocument()
-    // GA4-CAMPAIGN-LANDING-PATH-001 — the campaign and the page it landed on, then what those sessions bought.
-    const path = screen.getByTestId('site-campaign-landing')
-    expect(path).toHaveTextContent('national_day_sale')
-    expect(path).toHaveTextContent('/sale/national-day')
-    expect(path).toHaveTextContent('1.7K SAR')
+    // TRAFFIC-DRILLDOWN-001 — source / medium, campaign and landing page moved into the paged explorer (tests below).
     expect(screen.getByTestId('site-events')).toHaveTextContent('purchase')
+  })
+
+  const ready = {
+    state: 'ready', period: range, property: { id: '111', name: 'Store', timezone: 'Asia/Riyadh' }, last_synced_at: null, currency: 'SAR',
+    totals: { sessions: 1000 }, trend: [], funnel: [], paid: { available: false }, breakdowns: {}, events: null,
+  }
+  const kpi = (key: string, kind: string, current: number | null, previous: number | null, metrics: string[]) => ({
+    key, kind, current, previous, change: current !== null && previous !== null ? current - previous : null,
+    change_pct: current !== null && previous ? (current - previous) / Math.abs(previous) : null, currency: kind === 'money' ? 'SAR' : null,
+    definition: `def ${key}`, source: { kind: 'ga4', metrics }, blended_with_other_sources: false,
+    freshness: { last_synced_at: null, newest_day: '2026-10-09', days_with_data: 8, days_in_window: 10 },
+  })
+
+  it('shows the new GA4 KPIs with previous period, change, definition and source, and an absent KPI as a dash, not zero', async () => {
+    vi.mocked(getData).mockImplementation(async (url: string) => (url.includes('/table?')
+      ? { state: 'ready', rows: [], total: 0, page: 1, per_page: 10, currency: 'SAR' }
+      : {
+        ...ready, previous_period: { from: '2026-09-21', to: '2026-09-30' },
+        kpis: [
+          kpi('bounce_rate', 'rate', 0.3, 0.6, ['bounceRate', 'sessions']),
+          kpi('aov', 'money', 200, 100, ['purchaseRevenue', 'transactions']),
+          kpi('items_per_order', 'ratio', null, null, ['itemsPurchased', 'transactions']),
+        ],
+      }))
+    renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
+
+    const bounce = await screen.findByTestId('site-kpi-bounce_rate')
+    expect(bounce).toHaveTextContent('30.0%')
+    expect(bounce).toHaveTextContent('Previous: 60.0%')
+    expect(bounce).toHaveTextContent('−50.0%')
+    expect(screen.getByTestId('site-kpi-aov')).toHaveTextContent('200 SAR')
+    const absent = screen.getByTestId('site-kpi-items_per_order')
+    expect(absent).toHaveTextContent('—')
+    expect(absent).not.toHaveTextContent('0.00')
+    expect(absent).toHaveTextContent('The property did not report this')
+    expect(screen.getByTestId('site-kpi-def-bounce_rate')).toHaveTextContent('[GA4: bounceRate, sessions]')
+    expect(screen.getByTestId('site-kpi-def-bounce_rate')).toHaveTextContent('8/10 days')
+  })
+
+  it('pages the traffic table on the server: page size, page, sort and drill-down are requests, never client slicing', async () => {
+    const calls: string[] = []
+    const rowsFor = (n: number) => Array.from({ length: n }, (_, i) => ({ dimension_1: `Channel ${i + 1}`, dimension_2: null, sessions: 100 - i, engaged_sessions: 50, purchases: 2, revenue: 400, engagement_rate: 0.5, conversion_rate: 0.02 }))
+    vi.mocked(getData).mockImplementation(async (url: string) => {
+      if (!url.includes('/table?')) return ready
+      calls.push(url)
+      return { state: 'ready', rows: rowsFor(10), total: 87, page: 1, per_page: 10, currency: 'SAR' }
+    })
+    renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
+
+    const box = await screen.findByTestId('site-traffic')
+    await waitFor(() => expect(within(box).getByTestId('table-total')).toHaveTextContent('1–10 / 87 total'))
+    expect(calls[0]).toContain('breakdown=default_channel_group')
+    expect(calls[0]).toContain('per_page=10')
+    // a server page holds 10 rows even though the property has 87: nothing is sliced here
+    expect(box.querySelectorAll('tbody tr')).toHaveLength(10)
+
+    fireEvent.change(within(box).getByTestId('table-page-size'), { target: { value: '25' } })
+    await waitFor(() => expect(calls.some((c) => c.includes('per_page=25'))).toBe(true))
+    fireEvent.click(within(box).getByRole('button', { name: 'Page 2' }))
+    await waitFor(() => expect(calls.some((c) => c.includes('page=2'))).toBe(true))
+    fireEvent.click(within(box).getByRole('button', { name: 'Sessions' }))
+    await waitFor(() => expect(calls.some((c) => c.includes('sort=sessions') && c.includes('dir=asc'))).toBe(true))
+
+    // drill from a channel into its source / medium: the next request is the chained breakdown, filtered by that channel
+    fireEvent.click(within(box).getAllByTestId('traffic-drill')[0])
+    await waitFor(() => expect(calls.some((c) => c.includes('breakdown=channel_source') && c.includes('where_d1=Channel+1'))).toBe(true))
+    expect(within(box).getByTestId('traffic-crumbs')).toHaveTextContent('Channel 1')
+  })
+
+  it('keeps the traffic table state when the reader leaves and returns', async () => {
+    window.sessionStorage.clear()
+    const calls: string[] = []
+    vi.mocked(getData).mockImplementation(async (url: string) => {
+      if (!url.includes('/table?')) return ready
+      calls.push(url)
+      return { state: 'ready', rows: [], total: 87, page: 1, per_page: 10, currency: 'SAR' }
+    })
+    const first = renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
+    const box = await screen.findByTestId('site-traffic')
+    await waitFor(() => expect(within(box).getByTestId('table-pager')).toBeInTheDocument())
+    fireEvent.click(within(box).getByRole('button', { name: 'Page 2' }))
+    await waitFor(() => expect(calls.some((c) => c.includes('page=2'))).toBe(true))
+    first.unmount()
+    calls.length = 0
+    renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
+    await screen.findByTestId('site-traffic')
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0))
+    expect(calls[0]).toContain('page=2')
   })
 })
