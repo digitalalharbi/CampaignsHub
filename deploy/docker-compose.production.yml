@@ -35,6 +35,11 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend.production.env
+    environment:
+      # PERF-RECOVERY-001 — no JIT on the web tier's connections. The visibility predicate's per-row subplans inflate the planner's cost past
+      # jit_above_cost, so 60 ms statements spent 41 ms compiling (Production EXPLAIN, run 41776460809). libpq reads this variable; it is not an
+      # application setting, so it does not belong in backend.production.env.
+      PGOPTIONS: "-c jit=off"
     volumes:
       - campaignshub_storage:/var/www/html/storage/app
     depends_on:
