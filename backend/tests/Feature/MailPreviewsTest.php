@@ -71,7 +71,7 @@ final class MailPreviewsTest extends TestCase
         }
 
         // 22 messages (the owner invitation joined in EMAIL-RTL-001) × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
-        $this->assertCount(52, $files); // EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder.
+        $this->assertCount(60, $files); // EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder; EMAIL-GAPS added two scheduled-report and two client-request messages.
     }
 
     /**

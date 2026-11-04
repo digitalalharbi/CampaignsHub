@@ -19,7 +19,8 @@ namespace App\Domains\Notifications\Support;
  * - `delivered` — a recorded piece of evidence says a person or a provider confirmed it. Only
  *   `mail:confirm-delivery` writes that; no job and no transport can.
  * - `failed` — it did not leave, with a named reason.
- * - `suppressed` — deliberately not sent: no provider, a sandbox driver, a preference, nothing to report.
+ * - `suppressed` — deliberately not sent: no provider, a sandbox driver, a preference, nothing to report,
+ *   an unsubscribe, the workspace's daily limit, or a recipient outside the message's tenant and project.
  */
 final class MailDeliveryState
 {
@@ -57,6 +58,9 @@ final class MailDeliveryState
             'sandbox' => 'sandbox_transport',
             'skipped' => 'nothing_to_report',
             'suppressed' => 'preference',
+            'unsubscribed' => 'unsubscribed',
+            'limit_reached' => 'daily_limit',
+            'refused_scope' => 'outside_scope',
             default => null,
         };
     }

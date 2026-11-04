@@ -10,6 +10,7 @@ use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
 use App\Support\Frontend;
 use Illuminate\Mail\Mailable;
@@ -33,6 +34,9 @@ use Illuminate\Mail\Mailable;
  */
 final class MailGallery
 {
+    /** Opens nothing: it has no valid signature. Only so a preview shows the footer as an optional message carries it. */
+    private const SAMPLE_UNSUBSCRIBE = 'https://api.campaignshub.io/mail/unsubscribe/sample.0000000000';
+
     /** @return list<string> the keys, in the order the gallery should show them */
     public static function keys(): array
     {
@@ -184,6 +188,57 @@ final class MailGallery
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/conversations', action: $ar ? 'فتح المحادثة' : 'Open the conversation',
             ),
+
+            // EMAIL-GAPS — a scheduled report as a decision report: results and content names, no spend, no campaign.
+            'report-scheduled' => (new ScheduledReportMail(
+                reportTitle: $ar ? 'تقرير الأداء الأسبوعي' : 'Weekly performance report',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                period: '2026-10-25 → 2026-10-31',
+                cards: [
+                    ['label' => $ar ? 'النتائج' : 'Results', 'value' => '263', 'unit' => null, 'up' => '+12%'],
+                    ['label' => $ar ? 'الإيرادات' : 'Revenue', 'value' => '96,500', 'unit' => 'SAR', 'up' => '+5%'],
+                    ['label' => $ar ? 'الوصول' : 'Reach', 'value' => '240,000', 'unit' => null, 'up' => null],
+                    ['label' => $ar ? 'النقرات' : 'Clicks', 'value' => '15,619', 'unit' => null, 'up' => '+8.5%'],
+                ],
+                bestContent: $ar ? 'كاروسيل الباقة' : 'Bundle Carousel',
+                improveContent: $ar ? 'عرض ثابت' : 'Static Offer',
+                url: MailLinks::to('/app/reports'),
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
+            // EMAIL-GAPS — the same message when no platform reported anything: no empty cells, only the way to the report.
+            'report-scheduled-sparse' => new ScheduledReportMail(
+                reportTitle: $ar ? 'تقرير الأداء الأسبوعي' : 'Weekly performance report',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                period: '2026-10-25 → 2026-10-31',
+                cards: [], bestContent: null, improveContent: null,
+                url: MailLinks::to('/app/reports'),
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+            ),
+
+            // EMAIL-GAPS — a client request, to the team who can reach it.
+            'request-to-team' => (new OperationalMail(
+                kind: 'client_request', severity: 'info',
+                title: $ar ? 'طلب جديد من عميل' : 'A new request from a client',
+                detail: $ar
+                    ? 'وصل طلب جديد برقم REQ-2026-0142 من بوابة العملاء، وينتظر مراجعة فريقك.'
+                    : 'Request REQ-2026-0142 has arrived from the client portal and is waiting for your team.',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+                path: '/agency/requests/01J9Z0PY8QF3T4V6', action: $ar ? 'مراجعة الطلب' : 'Review the request',
+                why: $ar ? 'وصلتك هذه الرسالة لأن هذا الطلب ضمن نطاق عملك.' : 'You are receiving this because this request is within your access.',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
+            // EMAIL-GAPS — a client request, back to the person who filed it.
+            'request-to-client' => (new OperationalMail(
+                kind: 'client_request', severity: 'warning',
+                title: $ar ? 'طلبك يحتاج معلومات منك' : 'Your request needs information from you',
+                detail: $ar ? 'طلب الفريق معلومات إضافية لإكمال طلبك.' : 'The team has asked for more information to complete your request.',
+                context: 'REQ-2026-0142',
+                lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah',
+                path: '/client/requests/REQ-2026-0142', action: $ar ? 'فتح الطلب' : 'Open the request',
+                why: $ar ? 'وصلتك هذه الرسالة لأنك صاحب هذا الطلب في كامبينز هب.' : 'You are receiving this because you filed this request in CampaignsHub.',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
 
             // EMAIL-TRANSACTIONAL-SET-001 — the two messages a member is owed about their own access.
             'member-welcome' => new OperationalMail(

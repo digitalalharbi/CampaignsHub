@@ -14,6 +14,7 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Identity\Services\NewSignInAlert;
 use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
@@ -223,6 +224,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ScheduledTaskSkipped::class, [RecordScheduledRun::class, 'skipped']);
 
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
+        // EMAIL-GAPS — recognises a new device. Queues its mail and swallows its own failures: see the class.
+        Event::listen(Login::class, [NewSignInAlert::class, 'handle']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
         /*

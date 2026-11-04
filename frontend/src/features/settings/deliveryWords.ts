@@ -25,6 +25,9 @@ export const SUPPRESSION_WORDS: Record<string, { ar: string; en: string }> = {
   sandbox_transport: { ar: 'وضع الاختبار: كُتبت في السجل ولا تصل إلى أحد.', en: 'Sandbox: written to the log, and it reaches nobody.' },
   nothing_to_report: { ar: 'لا يوجد ما يُرسل في هذه الفترة.', en: 'There was nothing to send for that period.' },
   preference: { ar: 'أوقف المستلم هذا النوع من إعداداته.', en: 'The recipient switched this type off.' },
+  unsubscribed: { ar: 'ألغى المستلم اشتراكه في هذا النوع من رابط الرسالة.', en: 'The recipient unsubscribed from this type through the link in a message.' },
+  daily_limit: { ar: 'بلغت مساحة العمل حدّها اليومي للرسائل، فلم تُرسل هذه الرسالة.', en: 'The workspace reached its daily message limit, so this one was not sent.' },
+  outside_scope: { ar: 'المستلم خارج نطاق هذه الرسالة في مساحة العمل أو المشروع، فلم تُرسل.', en: 'The recipient is outside this message\'s workspace or project, so it was not sent.' },
 }
 
 /** The true operational reason and the step that fixes it. No transport text, so nothing secret can be in it. */

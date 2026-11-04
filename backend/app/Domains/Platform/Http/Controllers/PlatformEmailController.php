@@ -60,7 +60,7 @@ final class PlatformEmailController extends Controller
      * options reading «بانتظار بيانات الاعتماد», one of which matched nothing. Found by opening the
      * page.
      */
-    private const STATES = ['failed', 'awaiting_credentials', 'sandbox', 'skipped', 'claimed', 'sent', 'queued', 'suppressed'];
+    private const STATES = ['failed', 'awaiting_credentials', 'sandbox', 'skipped', 'claimed', 'sent', 'queued', 'suppressed', 'unsubscribed', 'limit_reached', 'refused_scope'];
 
     public function __construct(private readonly ProviderRegistry $providers) {}
 

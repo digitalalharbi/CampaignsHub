@@ -7,6 +7,7 @@ namespace App\Domains\Settings\Http\Controllers;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
+use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\DigestSchedule;
@@ -84,6 +85,7 @@ final class NotificationPreferenceController extends Controller
         private readonly DigestScope $scope,
         private readonly TenantContext $tenants,
         private readonly ProviderRegistry $providers,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -338,8 +340,36 @@ final class NotificationPreferenceController extends Controller
         // The resolver memoises per request; without this the response would describe the row as it
         // was before this write.
         $this->choices->forget();
+        $this->restoreWhatWasTurnedBackOn((int) $userId, $tenantId, $data);
 
         return $this->show($request);
+    }
+
+    /**
+     * EMAIL-GAPS — a person who switches a message back on has overruled their old unsubscribe click.
+     *
+     * Only an explicit `true` does. An unsubscribe also switched the preference off, so reading the
+     * document back and saving it unchanged sends `false` for that type and leaves the row alone.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function restoreWhatWasTurnedBackOn(int $userId, string $tenantId, array $data): void
+    {
+        foreach ((array) ($data['types'] ?? []) as $type => $choice) {
+            if (((array) $choice)['email'] ?? false) {
+                $this->unsubscribes->restore($userId, $tenantId, (string) $type);
+            }
+        }
+
+        foreach (MessageCatalogue::DIGEST_SWITCH as $type => $digest) {
+            if (($data['digests'][$digest] ?? false) === true) {
+                $this->unsubscribes->restore($userId, $tenantId, $type);
+            }
+        }
+
+        if (($data['digests']['alerts'] ?? false) === true) {
+            $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::ALERTS);
+        }
     }
 
     /**

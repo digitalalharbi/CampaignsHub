@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Mail;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Notifications\Charts\MailChart;
+use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
@@ -38,6 +39,7 @@ use Illuminate\Queue\SerializesModels;
  */
 final class DailyDigestMail extends Mailable
 {
+    use OffersUnsubscribe;
     use Queueable;
     use SerializesModels;
 
@@ -205,6 +207,7 @@ final class DailyDigestMail extends Mailable
                 // MAIL-DS-001 — one stack per language, Arabic faces first when the mail is Arabic.
                 'font' => MailDesign::font($ar),
                 'numericFont' => MailDesign::numericFont(),
+                'unsubscribeUrl' => $this->unsubscribeUrl,
                 'locale' => $this->lang,
                 'dir' => $ar ? 'rtl' : 'ltr',
                 // Padding and alignment follow the reader's direction; `end` is right in LTR and left

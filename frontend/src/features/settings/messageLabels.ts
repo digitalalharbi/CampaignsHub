@@ -100,11 +100,13 @@ export const TYPE_LABELS: Record<string, Words> = {
   monthly_digest: { ar: 'الملخص الشهري', en: 'Monthly summary' },
   report_ready: { ar: 'تقرير جاهز', en: 'A report is ready' },
   report_failed: { ar: 'تعذّر إنشاء تقرير', en: 'A report could not be built' },
+  scheduled_report: { ar: 'التقرير المجدول', en: 'A scheduled report' },
   // التشغيل
   message: { ar: 'رسالة جديدة', en: 'A new message' },
   request: { ar: 'طلب جديد أو تحديث عليه', en: 'A request, new or updated' },
   journey_transition: { ar: 'انتقال طلب إلى مرحلة جديدة', en: 'A request moved to a new stage' },
   client_needs_attention: { ar: 'عميل يحتاج انتباهًا', en: 'A client needs attention' },
+  client_request: { ar: 'طلب عميل جديد أو تحديث عليه', en: 'A client request, new or updated' },
   // المالية
   subscription: { ar: 'الاشتراك والفواتير', en: 'Subscription and invoices' },
   // الحساب

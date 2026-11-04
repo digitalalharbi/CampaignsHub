@@ -105,6 +105,7 @@ final class MailShell
         return $ar
             ? [
                 'manage_preferences' => 'إدارة إشعاراتك',
+                'unsubscribe' => 'إلغاء الاشتراك في هذا النوع',
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
@@ -114,6 +115,7 @@ final class MailShell
             ]
             : [
                 'manage_preferences' => 'Manage your notifications',
+                'unsubscribe' => 'Unsubscribe from this type',
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',

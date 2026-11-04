@@ -7,6 +7,8 @@ namespace App\Domains\Alerts\Services;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
+use App\Domains\Notifications\Services\MailSendGate;
+use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\AlertFigures;
@@ -45,6 +47,8 @@ final class AlertEventMailer
         private readonly DigestScope $scope,
         private readonly ProviderRegistry $providers,
         private readonly NotificationChoices $choices,
+        private readonly MailSendGate $gate,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     /**
@@ -140,9 +144,18 @@ final class AlertEventMailer
             return $counts;
         }
 
+        // EMAIL-GAPS — one bundle is one message against the allowance, however many findings it carries.
+        $refusal = $this->gate->refusal($tenantId, (string) $user->email, MailUnsubscribes::ALERTS);
+
+        if ($refusal !== null) {
+            $counts[$refusal] = $this->finishAll($user, $keys, $refusal, $refusal, $now);
+
+            return $counts;
+        }
+
         $ar = $locale === 'ar';
         try {
-            $sent = Mail::to($user->email)->send(new AlertBundleMail(
+            $sent = Mail::to($user->email)->send((new AlertBundleMail(
                 items: array_map(static fn (array $i): array => [
                     'severity' => (string) $i['severity'],
                     'title' => (string) (($ar ? ($i['title_ar'] ?? null) : null) ?? $i['title']),
@@ -156,7 +169,7 @@ final class AlertEventMailer
                 ], $claimed),
                 lang: $locale,
                 recipientName: (string) $user->name,
-            ));
+            ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, MailUnsubscribes::ALERTS, (int) $user->getKey())));
             $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, $now, $now, messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
             $failure = MailFailure::from($e);

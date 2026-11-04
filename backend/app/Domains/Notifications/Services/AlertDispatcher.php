@@ -64,6 +64,8 @@ final class AlertDispatcher
         private readonly ProviderRegistry $providers,
         private readonly TenantContext $tenants,
         private readonly NotificationChoices $choices,
+        private readonly MailSendGate $gate,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     /*
@@ -262,8 +264,17 @@ final class AlertDispatcher
             return $counts;
         }
 
+        // EMAIL-GAPS — one bundle is one message against the allowance, however many findings it carries.
+        $refusal = $this->gate->refusal($tenantId, (string) $user->email, MailUnsubscribes::ALERTS);
+
+        if ($refusal !== null) {
+            $counts[$refusal] = $this->finishAll($user, $keys, $refusal, $refusal);
+
+            return $counts;
+        }
+
         try {
-            $sent = Mail::to($user->email)->send(new AlertBundleMail(
+            $sent = Mail::to($user->email)->send((new AlertBundleMail(
                 items: array_map(
                     static fn (array $item): array => [
                         'severity' => $item['severity'],
@@ -275,7 +286,7 @@ final class AlertDispatcher
                 ),
                 lang: $locale,
                 recipientName: (string) $user->name,
-            ));
+            ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, MailUnsubscribes::ALERTS, (int) $user->getKey())));
 
             $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {

@@ -64,6 +64,18 @@ use Throwable;
  * The catalogue says which a kind is. An optional kind honours the person's switches and is recorded
  * `suppressed`; a mandatory kind never asks, so no preference, channel switch or verification-channel
  * setting can silence it.
+ *
+ * ## Unsubscribes and the daily limit — EMAIL-GAPS
+ *
+ * `MailSendGate` is asked at the last moment on both paths, so a recipient who leaves while a message
+ * waits in the queue does not receive it. A refusal is a row with a status and a reason. A retry is not
+ * charged to the allowance again, because it is the same message.
+ *
+ * ## Where the outcome also lands
+ *
+ * `report_deliveries` and `client_notifications` are what a screen reads. Rows there carrying this
+ * row's dedup key in `mail_dedup_key` get every final state written back, so they never sit at `queued`
+ * after the mail has been decided.
  */
 final class TransactionalMailer
 {
@@ -73,9 +85,14 @@ final class TransactionalMailer
     /** Minutes to wait after the first and second failure. */
     public const BACKOFF_MINUTES = [1, 15];
 
+    /** The tables whose `status` follows this ledger through `mail_dedup_key`. */
+    private const FOLLOWERS = ['report_deliveries', 'client_notifications'];
+
     public function __construct(
         private readonly ProviderRegistry $providers,
         private readonly NotificationChoices $choices,
+        private readonly MailSendGate $gate,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     /**
@@ -117,6 +134,15 @@ final class TransactionalMailer
             return $this->finish($id, 'awaiting_credentials');
         }
 
+        $scope = MailUnsubscribes::scopeOf($kind);
+        $refusal = $this->gate->refusal($tenantId, $recipient, $scope);
+
+        if ($refusal !== null) {
+            return $this->finish($id, $refusal);
+        }
+
+        $this->offerTheWayOut($mail, $tenantId, $recipient, $scope, $userId);
+
         DB::table('mail_deliveries')->where('id', $id)->update(['attempted_at' => Carbon::now()]);
 
         try {
@@ -153,7 +179,18 @@ final class TransactionalMailer
         $status = (string) DB::table('mail_deliveries')->where('id', $id)->value('status');
 
         if ($status === 'queued') {
-            SendQueuedMail::dispatch($id, $mail)->afterCommit();
+            $this->offerTheWayOut($mail, $tenantId, $recipient, MailUnsubscribes::scopeOf($kind), $userId);
+
+            /*
+             * A queue that cannot be reached is this message failing, not the caller's work failing:
+             * the role change or the sign-in that asked for it has already happened.
+             */
+            try {
+                SendQueuedMail::dispatch($id, $mail)->afterCommit();
+            } catch (Throwable $e) {
+                $this->abandon($id, $e);
+            }
+
             $status = (string) DB::table('mail_deliveries')->where('id', $id)->value('status');
         }
 
@@ -189,6 +226,8 @@ final class TransactionalMailer
             $this->finish($id, 'suppressed');
         } elseif (! $this->providers->isConfigured('email')) {
             $this->finish($id, 'awaiting_credentials');
+        } elseif (($refusal = $this->gate->refusal($tenantId, $recipient, MailUnsubscribes::scopeOf($kind), charge: false)) !== null) {
+            $this->finish($id, $refusal);
         }
 
         return $id;
@@ -217,6 +256,17 @@ final class TransactionalMailer
         }
 
         $row = DB::table('mail_deliveries')->where('id', $id)->first();
+
+        $refusal = $this->gate->refusal(
+            $row->tenant_id === null ? null : (string) $row->tenant_id,
+            (string) $row->recipient,
+            MailUnsubscribes::scopeOf((string) $row->kind),
+            charge: (int) $row->attempts === 1,
+        );
+
+        if ($refusal !== null) {
+            return $this->finish($id, $refusal);
+        }
 
         try {
             $sent = Mail::to((string) $row->recipient)->send($mail);
@@ -254,6 +304,45 @@ final class TransactionalMailer
             'next_attempt_at' => null,
             'updated_at' => Carbon::now(),
         ]);
+
+        $this->tellFollowers($id, 'failed', $failure['safe']);
+    }
+
+    /**
+     * Record that a message was refused before it was composed, with the reason as its status.
+     *
+     * @return string the status, or `already_sent` when this exact message was already recorded
+     */
+    public function refuse(string $recipient, string $status, string $kind, string $template, string $locale, ?string $tenantId, ?int $userId, ?string $dedupKey): string
+    {
+        $id = (string) Uuid::uuid4();
+
+        if (! $this->claim($id, $recipient, $kind, $template, $locale, MailTransportState::current(), $tenantId, $userId, $dedupKey, $status, 0)) {
+            return 'already_sent';
+        }
+
+        return $this->finish($id, $status);
+    }
+
+    private function offerTheWayOut(Mailable $mail, ?string $tenantId, string $recipient, ?string $scope, ?int $userId): void
+    {
+        if (method_exists($mail, 'offerUnsubscribe')) {
+            $mail->offerUnsubscribe($this->unsubscribes->url($tenantId, $recipient, $scope, $userId));
+        }
+    }
+
+    /** @see self::FOLLOWERS */
+    private function tellFollowers(string $id, string $status, ?string $error): void
+    {
+        $key = DB::table('mail_deliveries')->where('id', $id)->value('dedup_key');
+
+        if ($key === null) {
+            return;
+        }
+
+        foreach (self::FOLLOWERS as $table) {
+            DB::table($table)->where('mail_dedup_key', $key)->update(['status' => self::asDeliveryStatus($status), 'error' => $error]);
+        }
     }
 
     /** Has the person this is for switched this kind off? A mandatory or unknown kind never has. */
@@ -370,6 +459,8 @@ final class TransactionalMailer
             'next_attempt_at' => null,
             'updated_at' => Carbon::now(),
         ]);
+
+        $this->tellFollowers($id, $status, $error);
 
         return $status;
     }

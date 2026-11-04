@@ -123,6 +123,21 @@ final class AlertEventEmailTest extends TestCase
         Mail::assertSent(AlertBundleMail::class, 1);
     }
 
+    /** EMAIL-GAPS — this sender goes around `TransactionalMailer` too. Same gate, same recorded refusal. */
+    public function test_an_unsubscribed_person_gets_no_event_mail_and_the_ledger_says_why(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        DB::table('mail_unsubscribes')->insert(['id' => (string) Str::uuid(), 'tenant_id' => (string) $this->tenant->id, 'recipient_hash' => hash('sha256', (string) $this->user->email), 'scope' => 'alerts']);
+        $this->rule('sync_failure');
+        $this->syncRun((string) Str::uuid(), 'failed', now()->subMinutes(10));
+
+        app(AlertEvaluator::class)->evaluateAll();
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseHas('digest_sends', ['user_id' => $this->user->id, 'kind' => AlertEventMailer::KIND, 'status' => 'unsubscribed', 'reason' => 'unsubscribed']);
+    }
+
     public function test_a_recovery_is_mailed_as_an_info_item_and_the_person_s_choices_are_honoured(): void
     {
         Mail::fake();

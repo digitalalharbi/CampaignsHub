@@ -41,6 +41,7 @@ use App\Domains\Requests\Services\ClientRequestCreator;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
+use App\Domains\Requests\Services\RequestMailer;
 use App\Domains\Requests\Services\RequestUploadAttacher;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
@@ -309,6 +310,9 @@ final class ClientPortalController
             // The same answer for «not yours» and «does not exist».
             abort(404);
         }
+
+        // EMAIL-GAPS — the team is told. Off by default, and it cannot change this answer.
+        app(RequestMailer::class)->newRequestToTeam($created);
 
         return response()->json(['data' => [
             'reference' => $created->reference,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
+use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
 use App\Support\Frontend;
@@ -33,7 +34,7 @@ use Illuminate\Queue\SerializesModels;
  */
 final class OperationalMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use OffersUnsubscribe, Queueable, SerializesModels;
 
     public function __construct(
         /** `alert` · `report_ready` · `billing` · `approval` · `request` · `message`. */
@@ -93,6 +94,7 @@ final class OperationalMail extends Mailable
         }
 
         return new Content(view: 'mail.layout', with: $body + [
+            'unsubscribeUrl' => $this->unsubscribeUrl,
             'slot' => view('mail.operational', $body)->render(),
         ]);
     }

@@ -88,4 +88,14 @@ return [
         // often, and a crawler's own cache is usually longer than ours anyway.
         'http_max_age' => (int) env('REPORTS_OG_MAX_AGE', 86400),
     ],
+
+    /*
+    | EMAIL-GAPS — scheduled report mail. Both OFF until the Owner decides, because each one mails real
+    | people. `enabled` reaches internal members only. `outside_recipients` is the Owner's open question:
+    | automatic reports to people outside the workspace, sent with a new link to each report.
+    */
+    'schedule_mail' => [
+        'enabled' => (bool) env('REPORT_SCHEDULE_MAIL_ENABLED', false),
+        'outside_recipients' => (bool) env('REPORT_SCHEDULE_MAIL_OUTSIDE_RECIPIENTS', false),
+    ],
 ];

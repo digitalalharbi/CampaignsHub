@@ -8,6 +8,7 @@ use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -62,6 +63,8 @@ final class DigestDispatcher
         private readonly SharedLinkBranding $branding,
         // MEMBER-VISIBILITY-001 — the one authorisation engine, asked per recipient whether the money may be shown.
         private readonly ProjectAbilities $abilities,
+        private readonly MailSendGate $gate,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     /**
@@ -256,14 +259,22 @@ final class DigestDispatcher
              */
             $identity = $this->branding->forReport(null, $tenantId, static fn (): string => '');
 
-            $sent = Mail::to($user->email)->send(new DailyDigestMail(
+            // EMAIL-GAPS — asked here, at the send: a click after the sweep picked this person still counts.
+            $scope = array_flip(MessageCatalogue::DIGEST_SWITCH)[$kind] ?? null;
+            $refusal = $this->gate->refusal($tenantId, (string) $user->email, $scope);
+
+            if ($refusal !== null) {
+                return $this->finish($user, $kind, $periodKey, $refusal, $refusal);
+            }
+
+            $sent = Mail::to($user->email)->send((new DailyDigestMail(
                 $digest,
                 $locale,
                 (string) $user->name,
                 $kind,
                 is_string($identity['name'] ?? null) ? $identity['name'] : null,
                 $audience,
-            ));
+            ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
 
             return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {

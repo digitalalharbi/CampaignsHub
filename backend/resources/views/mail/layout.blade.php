@@ -130,6 +130,10 @@
                                 @if (($showPreferences ?? true) === true)
                                     <a href="{{ $urls['preferences'] }}" style="color:#0d8a6f; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
                                     &nbsp;·&nbsp;
+                                    @if (! empty($unsubscribeUrl ?? null))
+                                        <a href="{{ $unsubscribeUrl }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['unsubscribe'] }}</a>
+                                        &nbsp;·&nbsp;
+                                    @endif
                                 @endif
                                 <a href="{{ $urls['privacy'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['privacy'] }}</a>
                                 &nbsp;·&nbsp;

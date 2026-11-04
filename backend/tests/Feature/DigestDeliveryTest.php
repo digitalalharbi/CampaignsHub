@@ -161,6 +161,40 @@ final class DigestDeliveryTest extends TestCase
         $this->assertSame(1, DB::table('digest_sends')->where('user_id', $this->user->id)->count());
     }
 
+    /** EMAIL-GAPS — the digest goes around `TransactionalMailer`, so it asks the gate itself, at the send. */
+    public function test_an_unsubscribed_person_is_recorded_not_mailed_and_a_sent_digest_carries_the_way_out(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $dispatcher = app(DigestDispatcher::class);
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+        Mail::assertSent(DailyDigestMail::class, fn (DailyDigestMail $m): bool => str_contains((string) $m->unsubscribeUrl, '/mail/unsubscribe/'));
+
+        DB::table('mail_unsubscribes')->insert(['id' => (string) Uuid::uuid4(), 'tenant_id' => (string) $this->tenant->id, 'recipient_hash' => hash('sha256', 'ops@digest.test'), 'scope' => 'daily_digest']);
+
+        $this->assertSame('unsubscribed', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()));
+        Mail::assertSentCount(1);
+        $this->assertSame('unsubscribed', DB::table('digest_sends')->where('status', 'unsubscribed')->value('reason'));
+
+        // Leaving the daily says nothing about the weekly.
+        $this->assertSame('sent', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+    }
+
+    public function test_past_the_workspace_limit_a_digest_is_recorded_as_refused(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        config(['mail.daily_limit_per_tenant' => 1]);
+        $dispatcher = app(DigestDispatcher::class);
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+        $this->assertSame('limit_reached', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+
+        Mail::assertSentCount(1);
+        $this->assertSame('limit_reached', DB::table('digest_sends')->where('kind', 'weekly')->value('reason'));
+    }
+
     /**
      * With no mail provider wired, nothing is sent and nothing claims to have been.
      *

@@ -110,6 +110,13 @@ return [
     |
     */
 
+    /*
+    | EMAIL-GAPS — how many optional messages one workspace may send in a day (UTC). Per tenant, so one
+    | workspace cannot spend another's allowance. Account and security mail and billing notices are never
+    | counted or refused. 0 switches the limit off. A refusal is written to the ledger as `limit_reached`.
+    */
+    'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

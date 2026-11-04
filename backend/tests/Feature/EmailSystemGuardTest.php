@@ -146,6 +146,24 @@ final class EmailSystemGuardTest extends TestCase
         $this->assertSame([], $offenders);
     }
 
+    /** EMAIL-GAPS — an account message never offers a way out; the new optional ones show it in the footer. */
+    public function test_the_unsubscribe_link_is_on_optional_messages_and_never_on_account_messages(): void
+    {
+        foreach (['ar', 'en'] as $locale) {
+            foreach (MailGallery::messages($locale) as $key => $mail) {
+                $html = $mail->render();
+
+                if (str_starts_with($key, 'account-')) {
+                    $this->assertStringNotContainsString('/mail/unsubscribe/', $html, "{$key}.{$locale}");
+                }
+            }
+
+            foreach (['report-scheduled', 'request-to-team', 'request-to-client'] as $key) {
+                $this->assertStringContainsString('/mail/unsubscribe/', MailGallery::messages($locale)[$key]->render(), "{$key}.{$locale}");
+            }
+        }
+    }
+
     /** The named set: what the spec lists has to exist in the gallery, in the words it asked for. */
     public function test_the_subjects_read_as_the_owner_asked(): void
     {
