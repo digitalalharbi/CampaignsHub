@@ -192,6 +192,12 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:meta-candidate
+            # META-DIAGNOSIS-001 — each Meta connection and account from what the sync recorded. Same rules:
+            # calls no provider, writes nothing, prints codes and ids and no name, token or secret.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:meta-diagnose
 
   # ── The probe ────────────────────────────────────────────────────────────────────────────────────
   #

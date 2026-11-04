@@ -35,6 +35,8 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Metrics/Actions/UpsertDailyMetrics.php' => 'writer',
         'Domains/Campaigns/Actions/UpsertCreativeDailyMetrics.php' => 'writer, scoped to the syncing account through its campaigns',
         'Domains/Campaigns/Actions/ImportExternalStructure.php' => 'writer',
+        // META-MEDIA-RENEWAL-001 — runs only inside a structure sync, which has already proved the assignment. Rewrites links; returns no figure, for no viewer.
+        'Domains/Campaigns/Actions/RenewExpiredCreativeMedia.php' => 'writer, scoped to the syncing account through its campaigns; reads and rewrites media links, never a figure',
         // Client-facing creative lists: every one starts a bare creative query and hands it to
         // `CreativeRows::applyFilters()`, which applies the rule — `BoundAccountVisibilityTest` proves
         // the live link and the snapshot agree with the dashboard about a deselected account.

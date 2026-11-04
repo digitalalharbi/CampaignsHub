@@ -647,11 +647,12 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 $lastKind = null;
             } catch (\RuntimeException $e) {
                 $refusal = $this->noteMediaRefusal($e, "Meta {$what} could not be read; kept what the listing gave.", ['id' => $id]);
-                $inARow = $refusal?->kind === $lastKind ? $inARow + 1 : 1;
-                $lastKind = $refusal?->kind;
+                $kind = $refusal === null ? MetaGraphRefusal::UNCLASSIFIED : $refusal->kind;
+                $inARow = $kind === $lastKind ? $inARow + 1 : 1;
+                $lastKind = $kind;
 
                 if ($refusal?->stopsFurtherCalls() === true || $inARow >= self::MAX_CONSECUTIVE_REFUSALS) {
-                    $this->mediaStoppedBy = $refusal?->kind ?? MetaGraphRefusal::UNCLASSIFIED;
+                    $this->mediaStoppedBy = $kind;
                 }
             }
         }

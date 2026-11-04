@@ -140,6 +140,8 @@ final readonly class MetaGraphRefusal
                 $code === 190, $code === 102 => self::SESSION_INVALID,
                 $code === 3, $code === 10, $code >= 200 && $code <= 299 => self::PERMISSION_MISSING,
                 $code === 100 && $subcode === 33 => self::ACCOUNT_UNREACHABLE,
+                // Code 100 is Meta's general parameter refusal, and it also says «(#100) Missing Permission» on a grant.
+                $code === 100 && stripos($message, 'permission') !== false => self::PERMISSION_MISSING,
                 in_array($code, self::RATE_LIMIT_CODES, true), $code >= 80000 && $code <= 80014 => self::RATE_LIMITED,
                 $code === 1, $code === 2 => self::TRANSIENT,
                 $code === 368 => self::POLICY_BLOCK,

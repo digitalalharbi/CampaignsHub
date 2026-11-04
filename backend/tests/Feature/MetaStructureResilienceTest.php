@@ -10,12 +10,12 @@ use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Sync\AccountStructureSyncer;
 use App\Domains\Projects\Models\Project;
@@ -406,7 +406,7 @@ final class MetaStructureResilienceTest extends TestCase
             ? Http::response(['data' => [['id' => 'act_1', 'name' => 'A', 'account_status' => 1]]])
             : Http::response(self::THROTTLED, 400));
 
-        $connector = app(\App\Domains\Integrations\Registry\AdvertisingConnectorRegistry::class)->get('meta')->withConnection($connection);
+        $connector = app(AdvertisingConnectorRegistry::class)->get('meta')->withConnection($connection);
         $connector->listAdAccounts();
         $warnings = $connector->lastDiscoveryWarnings();
 

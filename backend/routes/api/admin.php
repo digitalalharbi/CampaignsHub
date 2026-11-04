@@ -8,6 +8,7 @@ use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
 use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
+use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
@@ -237,6 +238,8 @@ Route::middleware(['auth:sanctum', 'platform'])
         // `/dev/status` runs rather than a second implementation.
         Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
         Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
+        // META-DIAGNOSIS-001 — each Meta connection from what the sync recorded. Reads only; calls nothing.
+        Route::get('/integrations/meta/diagnosis', MetaDiagnosisController::class)->name('integrations.meta.diagnosis');
         Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
 
         /*

@@ -35,6 +35,7 @@ final class MetaGraphRefusalTest extends TestCase
             'unknown' => ['An unknown error has occurred · code 1', MetaGraphRefusal::TRANSIENT, 'nobody'],
             'service' => ['Service temporarily unavailable · code 2', MetaGraphRefusal::TRANSIENT, 'nobody'],
             'too much data' => ["Please reduce the amount of data you're asking for, then retry your request · code 1", MetaGraphRefusal::DATA_VOLUME, 'nobody'],
+            'code 100 naming a permission' => ['(#100) Missing Permission · code 100', MetaGraphRefusal::PERMISSION_MISSING, 'customer'],
             'budget sharing' => ['Invalid parameter · code 100 · subcode 4834011', MetaGraphRefusal::REQUEST_REJECTED, 'product'],
             'policy block' => ['Temporarily blocked for policy violations · code 368', MetaGraphRefusal::POLICY_BLOCK, 'customer'],
             'timeout' => ['cURL error 28: Operation timed out', MetaGraphRefusal::TRANSIENT, 'nobody'],
