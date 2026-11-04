@@ -21,6 +21,7 @@ use App\Domains\Metrics\Support\FinancialRatios;
 use App\Domains\Metrics\ValueObjects\MoneyScope;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
@@ -261,15 +262,19 @@ final class MetricsAggregator
     /** @return list<array{account: string, campaign: string|null}> */
     private function delivery(mixed $group): array
     {
-        return $group
+        $query = $group
             ->select('daily_metrics.external_account_id', 'daily_metrics.external_campaign_id')
-            ->distinct()
+            ->distinct();
+
+        // PERF-RECOVERY-001 — the whole-scope delivery is asked for the headline totals and again for the reported keys of the same window.
+        // The key IS the statement and its bindings, so nothing the read depends on (scope, window, demo policy, tenant) can be left out of it.
+        return ReportReadMemo::remember('delivery|'.md5($query->toSql().'|'.json_encode($query->getBindings())), fn (): array => $query
             ->get()
             ->map(static fn ($r): array => [
                 'account' => (string) $r->external_account_id,
                 'campaign' => $r->external_campaign_id === null ? null : (string) $r->external_campaign_id,
             ])
-            ->all();
+            ->all());
     }
 
     private const MONEY_TRUTH = [
@@ -873,7 +878,7 @@ final class MetricsAggregator
      *
      * @return array<string, array<string,bool>> campaign id → metric key → was it ever sent
      */
-    public function reportedKeysByCampaign(Carbon $from, Carbon $to): array
+    public function reportedKeysByCampaign(Carbon $from, Carbon $to, ?array $deliveries = null): array
     {
         $rows = $this->base($from, $to)
             ->select('unified_campaign_id', 'metric_key')
@@ -893,7 +898,131 @@ final class MetricsAggregator
             foreach (array_keys(self::PIVOT) as $key) {
                 $out[$campaign][$key] = $present[$key] ?? false;
             }
-            $out[$campaign] = $this->withReachReported($out[$campaign], $this->base($from, $to)->where('daily_metrics.unified_campaign_id', $campaign), $from, $to);
+        }
+
+        return $this->withReachReportedPerCampaign($out, $from, $to, $deliveries);
+    }
+
+    /**
+     * The (account, external campaign) pairs each platform's rows came from, in ONE read.
+     *
+     * @param  list<string>  $providers
+     * @return array<string, list<array{account: string, campaign: string|null}>>
+     */
+    private function deliveriesByProvider(Carbon $from, Carbon $to, array $providers): array
+    {
+        $out = [];
+        foreach ($this->base($from, $to)
+            ->whereIn('daily_metrics.provider', $providers)
+            ->select('daily_metrics.provider', 'daily_metrics.external_account_id', 'daily_metrics.external_campaign_id')
+            ->distinct()
+            ->get() as $d) {
+            $out[(string) $d->provider][] = [
+                'account' => (string) $d->external_account_id,
+                'campaign' => $d->external_campaign_id === null ? null : (string) $d->external_campaign_id,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The (account, external campaign) pairs of each (account, platform) row, in ONE read.
+     *
+     * @param  list<string>  $accounts
+     * @return array<string, list<array{account: string, campaign: string|null}>> keyed «account id|provider»
+     */
+    private function deliveriesByAccount(Carbon $from, Carbon $to, array $accounts): array
+    {
+        $out = [];
+        foreach ($this->base($from, $to)
+            ->whereIn('daily_metrics.external_account_id', $accounts)
+            ->select('daily_metrics.external_account_id', 'daily_metrics.provider', 'daily_metrics.external_campaign_id')
+            ->distinct()
+            ->get() as $d) {
+            $out[$d->external_account_id.'|'.$d->provider][] = [
+                'account' => (string) $d->external_account_id,
+                'campaign' => $d->external_campaign_id === null ? null : (string) $d->external_campaign_id,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * `withReachReported()` for every campaign at once — PERF-RECOVERY-001.
+     *
+     * It ran inside the loop above: one reach aggregate per campaign, and for each campaign whose reach is not one provider grain, one
+     * delivery list on top (80 and 62 runs on Production for a single link). The aggregate is a function of the campaign's own rows, so
+     * one `GROUP BY` returns the same row for each; the delivery list is the (account, campaign) pairs of the same rows, one read for all.
+     * Each campaign then asks exactly what it asked before, of the same inputs, through the same rule.
+     *
+     * @param  array<string, array<string,bool>>  $reported  campaign id → metric key → was it ever sent
+     * @param  array<string, list<array{account: string, campaign: string|null}>>|null  $deliveries  campaign id → delivery, when the caller already holds it
+     * @return array<string, array<string,bool>>
+     */
+    private function withReachReportedPerCampaign(array $reported, Carbon $from, Carbon $to, ?array $deliveries): array
+    {
+        $wanted = array_keys(array_filter($reported, static fn (array $map): bool => ($map['reach'] ?? false) === true));
+
+        if ($wanted === []) {
+            return $reported;
+        }
+
+        $stats = [];
+        foreach ($this->base($from, $to)
+            ->whereIn('daily_metrics.unified_campaign_id', $wanted)
+            ->groupBy('daily_metrics.unified_campaign_id')
+            ->selectRaw('daily_metrics.unified_campaign_id AS campaign_id')
+            ->selectRaw(implode(', ', array_map(
+                static fn ($e, $a) => "{$e} AS {$a}",
+                [...self::REACH_TRUTH, 'impressions' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'impressions'), 0)"],
+                [...array_keys(self::REACH_TRUTH), 'impressions'],
+            )))
+            ->get() as $row) {
+            $stats[(string) $row->campaign_id] = (array) $row;
+        }
+
+        $needDelivery = array_values(array_filter($wanted, fn (string $campaign): bool => ! self::reachIsProviderDeduplicated($stats[(string) $campaign] ?? [])));
+
+        if ($needDelivery !== [] && $deliveries === null) {
+            $deliveries = $this->deliveriesByCampaign($from, $to, $needDelivery);
+        }
+
+        foreach ($wanted as $campaign) {
+            $campaign = (string) $campaign;
+            $row = $stats[$campaign] ?? [];
+
+            $reported[$campaign]['reach'] = self::reachIsProviderDeduplicated($row)
+                // REACH-PERIOD-001 — or the provider answered for exactly this window.
+                || app(PeriodReachReader::class)->forScope($deliveries[$campaign] ?? [], (float) ($row['impressions'] ?? 0), $from, $to) !== null;
+        }
+
+        return $reported;
+    }
+
+    /**
+     * The (account, external campaign) pairs each unified campaign's rows came from, in ONE read.
+     *
+     * @param  list<string>|null  $campaigns  only these campaigns; null = every campaign in the scope
+     * @return array<string, list<array{account: string, campaign: string|null}>>
+     */
+    private function deliveriesByCampaign(Carbon $from, Carbon $to, ?array $campaigns = null): array
+    {
+        $query = $this->base($from, $to)
+            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.external_account_id', 'daily_metrics.external_campaign_id')
+            ->distinct();
+
+        if ($campaigns !== null) {
+            $query->whereIn('daily_metrics.unified_campaign_id', $campaigns);
+        }
+
+        $out = [];
+        foreach ($query->get() as $d) {
+            $out[(string) $d->unified_campaign_id][] = [
+                'account' => (string) $d->external_account_id,
+                'campaign' => $d->external_campaign_id === null ? null : (string) $d->external_campaign_id,
+            ];
         }
 
         return $out;
@@ -1044,10 +1173,26 @@ final class MetricsAggregator
                 array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH)),
             )))
             ->groupBy('provider')
-            ->get()
-            ->map(fn ($r) => ['provider' => $r->provider] + $this->withPeriodReach(
-                $this->withDerived((array) $r),
-                $this->base($from, $to)->where('daily_metrics.provider', $r->provider),
+            ->get();
+
+        /*
+         * PERF-RECOVERY-001 — the delivery of every platform that needs one, read once.
+         *
+         * `withPeriodReach()` read it per platform row, and this method runs for the window and again for the one before it.
+         */
+        $derived = $rows->map(fn ($r): array => $this->withDerived((array) $r))->all();
+        $needing = [];
+        foreach ($rows as $i => $r) {
+            if (($derived[$i]['reach'] ?? null) === null) {
+                $needing[] = (string) $r->provider;
+            }
+        }
+        $deliveries = $needing === [] ? [] : $this->deliveriesByProvider($from, $to, $needing);
+
+        $rows = $rows
+            ->map(fn ($r, $i) => ['provider' => $r->provider] + $this->withPeriodReachFor(
+                $derived[$i],
+                $deliveries[(string) $r->provider] ?? [],
                 $from,
                 $to,
             ))
@@ -1114,7 +1259,19 @@ final class MetricsAggregator
             ->whereIn('id', $rows->pluck('account_id')->filter()->all())
             ->pluck('name', 'id');
 
-        $rows = $rows->map(fn ($r): array => [
+        /*
+         * PERF-RECOVERY-001 — the delivery of every account row that needs one, in one read rather than one per row.
+         */
+        $derived = $rows->map(fn ($r): array => $this->withDerived((array) $r))->all();
+        $needing = [];
+        foreach ($rows as $i => $r) {
+            if (($derived[$i]['reach'] ?? null) === null && $r->account_id !== null) {
+                $needing[] = (string) $r->account_id;
+            }
+        }
+        $deliveries = $needing === [] ? [] : $this->deliveriesByAccount($from, $to, array_values(array_unique($needing)));
+
+        $rows = $rows->map(fn ($r, $i): array => [
             'account_id' => $r->account_id === null ? null : (string) $r->account_id,
             'provider' => $r->provider,
             /*
@@ -1123,12 +1280,10 @@ final class MetricsAggregator
              * still real and still has to be shown somewhere.
              */
             'account_name' => $r->account_id === null ? null : ($names[$r->account_id] ?? null),
-        ] + $this->withPeriodReach(
-            $this->withDerived((array) $r),
-            $this->base($from, $to)->where('daily_metrics.external_account_id', $r->account_id)->where('daily_metrics.provider', $r->provider),
-            $from,
-            $to,
-        ))->all();
+        ] + (($derived[$i]['reach'] ?? null) === null && $r->account_id === null
+            // An unattributed row has no account to batch on; it keeps the per-row read it always had.
+            ? $this->withPeriodReach($derived[$i], $this->base($from, $to)->where('daily_metrics.external_account_id', $r->account_id)->where('daily_metrics.provider', $r->provider), $from, $to)
+            : $this->withPeriodReachFor($derived[$i], $deliveries[$r->account_id.'|'.$r->provider] ?? [], $from, $to)))->all();
 
         /*
          * ENTITY-RELEVANCE-ORDERING-001 — this returned rows in NO stated order at all.
@@ -1510,7 +1665,6 @@ final class MetricsAggregator
 
     public function byCampaign(Carbon $from, Carbon $to, ?Carbon $prevFrom = null, ?Carbon $prevTo = null): array
     {
-        $reported = $this->reportedKeysByCampaign($from, $to);
         $outcomes = $this->outcomesByCampaign();
 
         /*
@@ -1532,13 +1686,10 @@ final class MetricsAggregator
          * query instead of one query per row, which made a fifteen-campaign list cost five queries a
          * campaign on every load.
          */
-        $deliveries = [];
-        foreach ($this->base($from, $to)->select('daily_metrics.unified_campaign_id', 'daily_metrics.external_account_id', 'daily_metrics.external_campaign_id')->distinct()->get() as $d) {
-            $deliveries[(string) $d->unified_campaign_id][] = [
-                'account' => (string) $d->external_account_id,
-                'campaign' => $d->external_campaign_id === null ? null : (string) $d->external_campaign_id,
-            ];
-        }
+        $deliveries = $this->deliveriesByCampaign($from, $to);
+
+        // PERF-RECOVERY-001 — handed the delivery just read, so the reach rule asks for it once and not again per campaign.
+        $reported = $this->reportedKeysByCampaign($from, $to, $deliveries);
 
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')

@@ -442,4 +442,22 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
 
         $this->assertSame($before, [DB::table('report_shares')->count(), DB::table('daily_metrics')->count()]);
     }
+
+    /** The --http option runs the whole request path in-process, answers 200, and leaves the link and its log untouched. */
+    public function test_the_live_report_profiler_can_time_the_whole_http_path_without_writing(): void
+    {
+        $this->campaign($this->account, 'Host', 10.0);
+        $token = $this->createLink(['creatives' => ['creatives' => true]])->assertCreated()->json('data.token');
+
+        $hash = DB::table('report_shares')->value('token_hash');
+        $before = [DB::table('report_shares')->count(), DB::table('report_share_access_logs')->count(), DB::table('report_shares')->value('view_count')];
+        $this->artisan('ops:profile-live-report', ['--links' => 1, '--top' => 3, '--http' => true])
+            ->expectsOutputToContain('(status 200,')
+            ->expectsOutputToContain('view log not written')
+            ->assertSuccessful();
+
+        $this->assertSame($before, [DB::table('report_shares')->count(), DB::table('report_share_access_logs')->count(), DB::table('report_shares')->value('view_count')]);
+        $this->assertSame($hash, DB::table('report_shares')->value('token_hash'));
+        $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
+    }
 }
