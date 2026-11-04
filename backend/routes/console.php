@@ -64,7 +64,9 @@ Schedule::call(function (): void {
 })->everyMinute()->name('ops-heartbeat')->withoutOverlapping();
 
 // Evaluate alert rules (budget risk, no results, ROAS drop, sync failure, token expiry) every 15 minutes.
-Schedule::command('alerts:evaluate')->everyFifteenMinutes();
+// PERF-RECOVERY-001 — a sweep never stacks on itself, which could have raised one breach twice. The lock's default life is a day, so a killed run (a deploy, the OOM killer)
+// would silence every alert for a day; 14 minutes means the next tick after a killed run still fires. A run that outlives it can overlap the next, as every run could before.
+Schedule::command('alerts:evaluate')->everyFifteenMinutes()->withoutOverlapping(14);
 
 /*
  * The ad-platform sweep (INTEG-SYNC-001).
