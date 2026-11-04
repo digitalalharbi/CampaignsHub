@@ -33,11 +33,12 @@ final class ImpactController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $data = $this->read($request, all: true);
+        $format = (string) $request->validate(['format' => ['required', 'string', 'in:csv,xlsx']])['format'];
         $head = ['Creator', 'Handle', 'Links', 'Codes', 'Clicks (since issued)', 'Store orders by coupon', 'Confirmed', 'Overlap with ads', 'Net revenue', 'Currency', 'Cost', 'Cost currency', 'CPA', 'ROAS', 'ROI'];
         $keys = ['name', 'handle', 'links', 'codes', 'clicks', 'orders', 'confirmed', 'overlap_orders', 'net_revenue', 'currency', 'cost', 'cost_currency', 'cpa', 'roas', 'roi'];
         $lines = array_map(static fn (array $r): array => array_map(static fn (string $k): mixed => $r[$k] ?? null, $keys), $data['rows']);
 
-        return TabularDownload::stream('creator-impact-'.$data['period']['from'].'_'.$data['period']['to'], $head, $lines, (string) $request->query('format', 'csv'));
+        return TabularDownload::stream('creator-impact-'.$data['period']['from'].'_'.$data['period']['to'], $head, $lines, $format);
     }
 
     /** @return array<string, mixed> */

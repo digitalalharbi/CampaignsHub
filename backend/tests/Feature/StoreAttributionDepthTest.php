@@ -213,6 +213,9 @@ final class StoreAttributionDepthTest extends TestCase
         $orders = $this->download('commerce/orders/export?from=2026-10-01&to=2026-10-31&format=csv');
         $this->assertSame(13, substr_count($orders, "\n"));
         $this->assertStringContainsString('Method', $orders);
+
+        $this->actingAs($this->owner, 'sanctum')->getJson($this->url('commerce/orders/export?format=exe'))->assertStatus(422);
+        $this->actingAs($this->owner, 'sanctum')->getJson($this->url('commerce/orders/sources/export'))->assertStatus(422);
     }
 
     // ── Isolation ──────────────────────────────────────────────────────────────────────────────

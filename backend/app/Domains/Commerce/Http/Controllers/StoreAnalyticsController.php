@@ -51,17 +51,19 @@ final class StoreAnalyticsController extends Controller
     /** Every order in scope for the same filter and sort; the page and page size are ignored on purpose. */
     public function exportOrders(Request $request): StreamedResponse
     {
+        $format = $this->format($request);
         [$from, $to] = $this->window($request);
         $data = $this->sources->orders($this->tenantId(), $this->projectId(), $from, $to, $this->orderOptions($request), all: true);
         $keys = ['reference', 'placed_at', 'status', 'original_total', 'original_currency', 'net', 'method', 'source', 'medium', 'campaign', 'content', 'term', 'coupon', 'landing_path'];
         $head = ['Order', 'Placed at', 'Status', 'Original total', 'Original currency', 'Net ('.($data['currency'] ?? '').')', 'Method', 'Source', 'Medium', 'UTM campaign', 'UTM content', 'UTM term', 'Coupon', 'Landing page'];
 
-        return TabularDownload::stream('store-orders-'.$data['period']['from'].'_'.$data['period']['to'], $head, $this->lines($data['rows'], $keys), (string) $request->query('format', 'csv'));
+        return TabularDownload::stream('store-orders-'.$data['period']['from'].'_'.$data['period']['to'], $head, $this->lines($data['rows'], $keys), $format);
     }
 
     /** Every source in scope for the same group, filter and sort. */
     public function exportSources(Request $request): StreamedResponse
     {
+        $format = $this->format($request);
         [$from, $to] = $this->window($request);
         $data = $this->sources->sources($this->tenantId(), $this->projectId(), $from, $to, $this->sourceOptions($request), all: true);
         $keys = ['dimension_1', 'dimension_2', 'orders', 'confirmed', 'net_revenue', 'ga4_sessions', 'ga4_add_to_carts', 'ga4_purchases', 'ga4_revenue', 'confirmed_per_session'];
@@ -73,7 +75,7 @@ final class StoreAnalyticsController extends Controller
             return $line;
         }, $data['rows']);
 
-        return TabularDownload::stream('order-sources-'.$data['group'].'-'.$data['period']['from'].'_'.$data['period']['to'], $head, $lines, (string) $request->query('format', 'csv'));
+        return TabularDownload::stream('order-sources-'.$data['group'].'-'.$data['period']['from'].'_'.$data['period']['to'], $head, $lines, $format);
     }
 
     /**
@@ -84,6 +86,11 @@ final class StoreAnalyticsController extends Controller
     private function lines(array $rows, array $keys): array
     {
         return array_map(static fn (array $row): array => array_map(static fn (string $k): mixed => $row[$k] ?? null, $keys), $rows);
+    }
+
+    private function format(Request $request): string
+    {
+        return (string) $request->validate(['format' => ['required', 'string', 'in:csv,xlsx']])['format'];
     }
 
     /** @return array<string, mixed> */
