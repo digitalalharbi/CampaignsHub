@@ -28,6 +28,7 @@ use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
@@ -71,6 +72,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(PerformanceRecorder::class);
         // CAMPAIGN-INTELLIGENCE-HUB — the reach reader memoises per (account, window) for one request.
         $this->app->scoped(PeriodReachReader::class);
+        // PERF-RECOVERY-001 — a read repeated inside one report build is answered once; discarded when the build ends.
+        $this->app->scoped(ReportReadMemo::class);
         $this->app->scoped(PresentationAudience::class);
         $this->app->scoped(RefusedCreativeAccess::class);
 

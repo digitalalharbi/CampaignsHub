@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
-import { fetchOAuthProviders, login, phoneSignInStart, phoneSignInVerify, startOAuth } from './api'
+import { fetchSignInOptions, login, phoneSignInStart, phoneSignInVerify, startOAuth } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
+import { safeRedirect } from './redirect'
 import { AuthShell } from './AuthShell'
+import { EmailCodeSignIn } from './EmailCodeSignIn'
 import { OtpField } from './OtpField'
 import { HelpRequestModal } from './HelpRequestModal'
 import { ErrorNote, IconField } from './loginFields'
@@ -21,16 +23,17 @@ import { useAuth } from '@/stores/auth'
  * The credentials sit in a single card: address, password, «تذكرني», «نسيت كلمة المرور؟», and one primary button. Below a hairline,
  * Google where the server reports it can work.
  *
- * ## LOGIN-NO-EMAIL-CODE-001 (Owner, 2026-11-03, #943)
+ * ## LOGIN-SINGLE-DOOR-001 (Owner, 2026-11-03)
  *
- * The email code is no longer a way in here. It also carried a client contact, who holds no password, into the request portal; that
- * door is now its own page, `/portal/login`, and a link aimed at the portal is sent there rather than to a form it cannot pass.
+ * This is the only sign-in page, for every kind of account. The email code is not on it unless the server says it is enabled
+ * (`email_code`, off by default). A client contact with no password chooses one through «نسيت كلمة المرور؟»: the address they prove
+ * by spending that link is what opens their account, and the server then sends them to the portal like anybody else.
  *
  * ## Nothing moves after the first paint
  *
  * Google's row is drawn from the first frame at its final size, as a placeholder until the server answers. A failed lookup keeps the
- * button, and a click on it reports what went wrong. When the server says Google cannot work, the row carries the client portal instead
- * and the line under the card links home: every box keeps its size, so nothing moves and no gap is left.
+ * button, and a click on it reports what went wrong. When the server says Google cannot work, the row links home instead: its box keeps
+ * its size, so nothing moves and no gap is left.
  *
  * **The URL grants nothing.** `portal: null` travels with every sign-in, so there is no preference for the server to honour and no
  * way for a link to request access it does not hold.
@@ -54,9 +57,8 @@ const COPY = {
     noAccount: 'ليس لديك حساب؟',
     register: 'إنشاء حساب',
     or: 'أو',
-    clientDoor: 'عميل لدى إحدى الوكالات؟ ادخل من بوابة العملاء',
-    clientDoorButton: 'الدخول إلى بوابة العملاء',
     home: 'العودة إلى الصفحة الرئيسية',
+    emailCode: 'الدخول برمز عبر البريد بدلًا من كلمة المرور',
     codeTitle: 'تحقق من جوالك',
     codeSentTo: 'أرسلنا رمز التحقق إلى:',
     code: 'رمز التحقق',
@@ -89,9 +91,8 @@ const COPY = {
     noAccount: "Don't have an account?",
     register: 'Create an account',
     or: 'or',
-    clientDoor: 'A client of an agency? Sign in to the client portal',
-    clientDoorButton: 'Sign in to the client portal',
     home: 'Back to the home page',
+    emailCode: 'Sign in with an email code instead',
     codeTitle: 'Check your phone',
     codeSentTo: 'We sent your verification code to:',
     code: 'Verification code',
@@ -125,6 +126,27 @@ const DELIVERED = new Set(['sent', 'queued', 'delivered'])
 
 type Step = 'credentials' | 'code'
 
+/**
+ * Where Google sent them back with no session. The page used to say nothing at all: the visitor pressed Google and returned to an
+ * empty form. `link_required` and `registration_required` name the way forward without saying whose address is whose.
+ */
+const OAUTH_NOTES: Record<'ar' | 'en', Record<string, string>> = {
+  ar: {
+    cancelled: 'أُلغي تسجيل الدخول عبر Google.',
+    failed: 'تعذّر إكمال تسجيل الدخول عبر Google. حاول مرة أخرى.',
+    unavailable: 'هذا الحساب غير متاح حاليًا.',
+    link_required: 'لم يُربط حساب Google هذا بعد. سجّل الدخول بكلمة المرور ثم اربطه من إعدادات حسابك. إن لم تكن لديك كلمة مرور فاستخدم «نسيت كلمة المرور؟».',
+    registration_required: 'لا يوجد حساب مرتبط بحساب Google هذا. إن كان بريدك مسجّلًا لدينا فاستخدم «نسيت كلمة المرور؟»، وإلا فأنشئ حسابًا.',
+  },
+  en: {
+    cancelled: 'Google sign-in was cancelled.',
+    failed: 'Google sign-in could not be completed. Please try again.',
+    unavailable: 'This account is not available at the moment.',
+    link_required: 'This Google account is not connected yet. Sign in with your password, then connect it from your account settings. If you have no password, use «Forgot your password?».',
+    registration_required: 'No account is connected to this Google account. If we have your email on file, use «Forgot your password?»; otherwise create an account.',
+  },
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -132,12 +154,13 @@ export function LoginPage() {
   const status = useAuth((s) => s.status)
   const { locale } = useUi()
   const c = COPY[locale]
-  const oauthProviders = useQuery({ queryKey: ['oauth', 'providers'], queryFn: fetchOAuthProviders })
-  const google = oauthProviders.data?.find((provider) => provider.provider === 'google')
+  const oauthProviders = useQuery({ queryKey: ['oauth', 'sign-in-options'], queryFn: fetchSignInOptions })
+  const google = oauthProviders.data?.providers.find((provider) => provider.provider === 'google')
   // Reserved until the server has answered; a failed lookup keeps the button, because nothing says Google cannot work.
   const googleRow = oauthProviders.isPending ? 'reserved' : oauthProviders.isError || google?.available === true ? 'button' : 'absent'
   const googleSignIn = useMutation({
-    mutationFn: () => startOAuth('google', { redirect: null }),
+    // The page they were interrupted on, for the server to accept or refuse when Google answers: the browser decides nothing here.
+    mutationFn: () => startOAuth('google', { redirect: safeRedirect(params.get('redirect'), '') || null }),
     onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
   })
   const ar = locale === 'ar'
@@ -154,6 +177,7 @@ export function LoginPage() {
 
   const [registrationId] = useState(recallRegistration)
   const [step, setStep] = useState<Step>('credentials')
+  const [emailCodeOpen, setEmailCodeOpen] = useState(false)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -297,11 +321,21 @@ export function LoginPage() {
     if (verificationId && value.length === 6 && !verifyCode.isPending && !expired) verifyCode.mutate(value)
   }, [verificationId, code, verifyCode, expired])
 
-  // A link aimed at the request portal belongs to a client contact, who has no password to type here.
-  const wanted = params.get('redirect') ?? ''
-  if (/^\/(portal|client)(\/|\?|$)/.test(wanted) && !wanted.startsWith('//')) {
-    return <Navigate to={`/portal/login?redirect=${encodeURIComponent(wanted)}`} replace />
+  // LOGIN-SINGLE-DOOR-001 — only reachable when the server enabled it; the destination comes back from the server.
+  if (emailCodeOpen && oauthProviders.data?.emailCode === true) {
+    return (
+      <AuthShell portal="default">
+        <EmailCodeSignIn
+          redirect={safeRedirect(params.get('redirect'), '') || null}
+          onBack={() => setEmailCodeOpen(false)}
+          onSignedIn={(destination) => navigate(destination, { replace: true })}
+        />
+      </AuthShell>
+    )
   }
+
+  const oauthReason = params.get('oauth')
+  const oauthNote = oauthReason !== null ? (OAUTH_NOTES[locale][oauthReason] ?? OAUTH_NOTES[locale].failed) : null
 
   return (
     <AuthShell portal="default">
@@ -312,6 +346,10 @@ export function LoginPage() {
         <p data-testid="login-session-ended" role="status" className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-secondary">
           {locale === 'ar' ? 'انتهت جلستك. سجّل الدخول مرة أخرى وستعود إلى حيث كنت.' : 'Your session has ended. Sign in again and you will return to where you were.'}
         </p>
+      )}
+      {/* What Google's answer was. Fixed sentences only: nothing from the address is echoed onto the page. */}
+      {oauthNote !== null && (
+        <p data-testid="login-oauth-note" role="alert" className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-secondary">{oauthNote}</p>
       )}
       {/*
         An applicant has no account until the workspace exists, so this form cannot admit them. This browser kept the
@@ -419,8 +457,8 @@ export function LoginPage() {
                 <span className="h-px flex-1 bg-border" />
               </div>
               {googleRow === 'absent' ? (
-                <Button type="button" data-testid="login-client-door" variant="secondary" className="w-full" size="lg" onClick={() => navigate('/portal/login')}>
-                  {c.clientDoorButton}
+                <Button type="button" data-testid="login-home" variant="secondary" className="w-full" size="lg" onClick={() => navigate('/')}>
+                  {c.home}
                 </Button>
               ) : googleRow === 'reserved' ? (
                 // The button's own box and nothing to read, so a Google that turns out unavailable never flashes a label.
@@ -555,11 +593,15 @@ export function LoginPage() {
       {step === 'credentials' && (
         <>
           <HelpRequestModal locale={locale} ar={ar} />
-          <p data-testid="login-foot-link" className="mt-3 text-center text-[13px]">
-            {googleRow === 'absent' ? (
-              <Link to="/" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.home}</Link>
-            ) : (
-              <Link to="/portal/login" data-testid="login-client-door" className="font-semibold text-text-secondary hover:text-text-primary hover:underline">{c.clientDoor}</Link>
+          {/*
+            Reserved always, at its final height, so the page holds still whichever way the lookup answers (`login-stable.spec.ts`).
+            Empty unless the server enabled the code: there is nothing here that appears and then goes.
+          */}
+          <p data-testid="login-email-code-row" className="mt-2 min-h-6 text-center text-[13px]">
+            {oauthProviders.data?.emailCode === true && !phoneCompat && (
+              <button type="button" data-testid="login-email-code" onClick={() => setEmailCodeOpen(true)} className="font-semibold text-text-secondary hover:text-text-primary hover:underline">
+                {c.emailCode}
+              </button>
             )}
           </p>
         </>

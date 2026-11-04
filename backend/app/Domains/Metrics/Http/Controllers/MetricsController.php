@@ -643,8 +643,17 @@ final class MetricsController extends Controller
          */
         $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
 
+        /*
+         * KPI-PARITY-001 — the platform filter the summary beside it applies.
+         *
+         * `summary` narrows to `provider=meta`; this split did not read the parameter at all, so a
+         * page filtered to one platform headlined that platform's spend over an objective split of
+         * every platform — 800 beside 2,000 on the parity world. Same filter, read the same way.
+         */
+        $providers = $this->providerFilter($request);
+
         return ApiResponse::success(
-            (new ObjectivePerformance(campaignIds: $campaigns === [] ? null : $campaigns))->build($from, $to),
+            (new ObjectivePerformance(campaignIds: $campaigns === [] ? null : $campaigns, providers: $providers === [] ? null : $providers))->build($from, $to),
             'Performance by objective.',
             meta: $this->meta($from, $to),
         );

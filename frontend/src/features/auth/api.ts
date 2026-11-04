@@ -188,9 +188,16 @@ export interface OAuthProvider {
 
 /** AUTH-LOGIN-UX-002 — which ways in the page may offer right now (a way that cannot work is not shown). */
 
-export async function fetchOAuthProviders(): Promise<OAuthProvider[]> {
-  const { providers } = await getData<{ providers: OAuthProvider[] }>('/auth/oauth/providers')
-  return providers
+/** What `/login` may offer. One answer for both, so the page waits on one lookup and reserves its rows once. */
+export interface SignInOptions {
+  providers: OAuthProvider[]
+  emailCode: boolean
+}
+
+export async function fetchSignInOptions(): Promise<SignInOptions> {
+  const { providers, email_code } = await getData<{ providers: OAuthProvider[]; email_code?: boolean }>('/auth/oauth/providers')
+
+  return { providers, emailCode: email_code === true }
 }
 
 /**

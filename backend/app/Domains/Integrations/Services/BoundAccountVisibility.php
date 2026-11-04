@@ -126,6 +126,30 @@ final class BoundAccountVisibility
     }
 
     /**
+     * {@see applyThroughCampaign()} for a query that has already INNER-joined `external_campaigns`.
+     *
+     * The same rule over the same row: the join means the account is the joined campaign's own, and a row hanging off no campaign
+     * cannot reach this predicate. Reading the column directly lets Postgres plan a semi-join. The correlated lookup it replaces
+     * ran once per row of the whole metrics table (Production: 19,384 loops, 97 k buffers, to answer for 327 rows).
+     *
+     * @template T of BuilderContract
+     *
+     * @param  T  $query
+     * @param  string  $campaignTable  the alias `external_campaigns` was inner-joined under
+     * @param  string  $projectColumn  the row's own project column, e.g. `t.project_id`
+     * @return T
+     */
+    public static function applyThroughJoinedCampaign(BuilderContract $query, string $campaignTable, string $projectColumn): BuilderContract
+    {
+        return $query->where(function ($q) use ($campaignTable, $projectColumn): void {
+            $account = "{$campaignTable}.external_account_id";
+
+            $q->whereExists(fn (Builder $b) => self::activeBinding($b, $account, $projectColumn))
+                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhere(fn ($u) => $u->whereNotExists(fn (Builder $b) => self::anyBinding($b, $account))->whereNotExists(fn (Builder $b) => self::superseded($b, $account))));
+        });
+    }
+
+    /**
      * Narrow a query on `unified_campaigns` to the campaigns this project may NAME.
      *
      * A unified campaign has no account of its own: it is the roll-up of external campaigns (and of metric rows) that do. It is

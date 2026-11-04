@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Services;
 
+use App\Domains\Accounts\Services\OwnPendingRegistration;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
@@ -24,6 +25,8 @@ use Illuminate\Support\Collection;
  */
 final class PortalResolver
 {
+    public function __construct(private readonly OwnPendingRegistration $pendingRegistration) {}
+
     /**
      * @return Collection<int, Membership>
      *
@@ -187,6 +190,11 @@ final class PortalResolver
          * one ready?» means anything, and picking one on somebody's behalf is the decision the
          * switcher exists to leave with them.
          */
+        // LOGIN-SINGLE-DOOR-001 — a client of an agency has no wizard to finish: the agency's own setup is not their step.
+        if ($membership->portal === Portal::ClientPortal) {
+            return $membership->portal->landingPath();
+        }
+
         $tenant = Tenant::query()->withoutGlobalScopes()->find($membership->tenant_id);
 
         /*
@@ -204,6 +212,81 @@ final class PortalResolver
         }
 
         return $membership->portal->landingPath();
+    }
+
+    /**
+     * LOGIN-SINGLE-DOOR-001 — the one answer to «where now?», for every way of signing in.
+     *
+     * In order: their own application still on its way (no workspace yet); the page they were heading for, only if the
+     * server agrees they may enter it; otherwise the landing the memberships decide. A page in a portal they hold but are
+     * not working in is honoured, and the portal's guard asks before moving the session (#945): nothing here moves it.
+     */
+    public function postAuthDestination(User $user, ?Portal $requested = null, ?string $intended = null): string
+    {
+        $pending = $this->membershipsFor($user)->isEmpty() ? $this->pendingRegistration->for($user) : null;
+        if ($pending !== null) {
+            return '/signup/status?request='.$pending->getKey();
+        }
+
+        return $intended !== null && $this->mayEnter($user, $intended)
+            ? $intended
+            : $this->landingPathFor($user, $requested);
+    }
+
+    /** Is this an in-app address, and if it lies inside a portal, one this person holds? */
+    public function mayEnter(User $user, string $intended): bool
+    {
+        if (self::safeInAppPath($intended) === null) {
+            return false;
+        }
+
+        $portal = self::portalOfPath($intended);
+
+        return $portal === null || $this->holds($user, $portal);
+    }
+
+    /**
+     * Where a code sign-in lands: inside the client portal or at its front door. It opens nothing else, so it may name nothing else.
+     */
+    public static function contactDestination(?string $intended): string
+    {
+        $safe = $intended === null ? null : self::safeInAppPath($intended);
+
+        return $safe !== null && self::portalOfPath($safe) === Portal::ClientPortal ? $safe : Portal::ClientPortal->path();
+    }
+
+    /**
+     * The value itself when it can only ever stay inside this application and is not a sign-in page; null otherwise.
+     *
+     * Checked as sent and once decoded, because the browser decodes it again: `%2F%2Fevil.example` must fail here too. A sign-in
+     * page is refused so a chain of redirects cannot end where it began.
+     */
+    public static function safeInAppPath(string $raw): ?string
+    {
+        if ($raw === '' || strlen($raw) > 2048) {
+            return null;
+        }
+
+        foreach ([$raw, rawurldecode($raw)] as $value) {
+            if (! str_starts_with($value, '/') || str_starts_with($value, '//') || str_contains($value, '\\') || preg_match('/[\x00-\x1f\x7f]/', $value) === 1) {
+                return null;
+            }
+
+            $path = strtolower((string) preg_replace('/[?#].*$/s', '', $value));
+            if (preg_match('#^/(register|forgot-password|reset-password)(/|$)#', $path) === 1 || preg_match('#(^|/)login/?$#', $path) === 1) {
+                return null;
+            }
+        }
+
+        return $raw;
+    }
+
+    /** The portal whose route tree this address lies in, or null when it lies in none. `/client` is the portal's older address. */
+    private static function portalOfPath(string $path): ?Portal
+    {
+        $first = explode('/', ltrim((string) preg_replace('/[?#].*$/s', '', rawurldecode($path)), '/'))[0];
+
+        return $first === 'client' ? Portal::ClientPortal : Portal::tryFrom(strtolower($first));
     }
 
     /** Records which membership was last used, so the switcher can lead with it next time. */

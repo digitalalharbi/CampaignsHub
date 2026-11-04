@@ -42,6 +42,8 @@ export interface ReportRow {
   name: string
   type: string
   status: ReportStatus
+  /** Sent by the list payload; an `internal` report cannot be shared by link. */
+  audience?: string | null
   period: { from: string | null; to: string | null }
   currency: string
   is_demo: boolean
@@ -58,6 +60,11 @@ export interface ReportsIndex {
   summary: { total: number; completed: number; processing: number; failed: number }
 }
 export interface ReportDetail extends ReportRow {
+  /**
+   * REPORT-PARITY-FOUR-SURFACES-001 — what the operator's pickers choose from. The body below is the client's document and carries
+   * no campaign roster, so the link builder reads the report's campaigns and platforms from here.
+   */
+  scope_options?: { campaigns: Array<{ campaign_id: string; campaign_name: string }>; platforms: string[] }
   data: {
     period: { from: string; to: string }
     currency: string
@@ -98,14 +105,12 @@ export interface ReportSectionChoice {
 
 export const listReportSections = (p: string) =>
   getData<{ sections: ReportSectionChoice[] }>(`${base(p)}/sections`)
-export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`)
+export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`, { confirm: true })
 export const exportReport = (p: string, id: string, format: ReportFormat) =>
   postData<{ id: string; format: string; status: string }>(`${base(p)}/${id}/export`, { format })
 /** REPORT-DRILLDOWN-001 — switch a report's optional PDF drill-down section on or off (reports.manage). */
 export const setReportPdfBreakdowns = (p: string, id: string, pdf: { platform_drilldown: boolean }) =>
   putData<{ pdf: { platform_drilldown: boolean; content_drilldown: boolean } }>(`${base(p)}/${id}/breakdowns`, { pdf })
-export const sendReport = (p: string, id: string, recipients: string[]) =>
-  postData<{ sent_to: number }>(`${base(p)}/${id}/send`, { recipients })
 export const deleteReport = (p: string, id: string) => api.delete(`${base(p)}/${id}`)
 
 /** Public, signed, expiring download link for a finished export. */
@@ -159,6 +164,41 @@ export const resumeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/resume`)
 export const revokeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
+
+// ---- REPORT-LIFECYCLE-MENU-001 / REPORT-DUPLICATE-001 / REPORT-LIVE-SNAPSHOT-CONVERT-001 ----------
+
+export const renameReport = (p: string, id: string, name: string) => patchData<ReportRow>(`${base(p)}/${id}`, { name })
+
+export interface DuplicatedReport extends ReportRow {
+  link: { id: string; mode: 'live' | 'snapshot'; url: string; path: string; token: string; password_protected: boolean } | null
+}
+/** An independent copy: a new report and (for someone who may share) a new link; the original is never touched. */
+export const duplicateReport = (p: string, id: string, body: { name?: string; share_id?: string; with_link?: boolean } = {}) =>
+  postData<DuplicatedReport>(`${base(p)}/${id}/duplicate`, body)
+
+export interface ShareConversion {
+  changed: boolean
+  requires_confirmation: boolean
+  from: 'live' | 'snapshot'
+  to: 'live' | 'snapshot'
+  notice: { ar: string; en: string }
+  link: ShareRow
+}
+/** Without `confirm` nothing is written and the notice says what will happen; with it the same URL changes mode. */
+export const convertShare = (p: string, reportId: string, shareId: string, to: 'live' | 'snapshot', confirm: boolean) =>
+  postData<ShareConversion>(`${base(p)}/${reportId}/shares/${shareId}/convert`, { to, confirm })
+
+export interface CurrentShareLink {
+  available: boolean
+  reason: 'revoked' | 'created_before_copy_support' | null
+  url: string | null
+  path: string | null
+  mode: 'live' | 'snapshot'
+  active: boolean
+}
+/** The existing link, to copy: creates nothing and never changes the link's type. */
+export const getCurrentShareLink = (p: string, reportId: string, shareId: string) =>
+  getData<CurrentShareLink>(`${base(p)}/${reportId}/shares/${shareId}/link`)
 
 // ---- LIVEREP-002: build a live link from a choice, not from a document ---------------------------
 
@@ -417,6 +457,9 @@ export interface LiveCampaignRow {
 
 /** REPORT-FRESHNESS-STAMP-001 */
 export type DataStatus = 'fresh' | 'delayed' | 'stale' | 'failed' | 'unknown'
+
+/** SPEND-RECONCILE-RECORD-001 */
+export type ReconcileStatus = 'matched' | 'drifted' | 'failed' | 'never'
 
 export interface LivePayload {
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
@@ -724,6 +767,12 @@ export interface LivePayload {
     age_minutes?: number | null
     /** null for a source that is not an ad platform. */
     data_status?: DataStatus | null
+    /** SPEND-RECONCILE-RECORD-001 — when the platform's own total was last CHECKED against the stored one (UTC ISO); never a sync time. */
+    last_reconciled_at?: string | null
+    /** `never` where no check was ever recorded for this project's bound accounts. */
+    reconcile_status?: ReconcileStatus
+    /** Stored minus provider, as a share of the provider total; carried only with the status. */
+    reconcile_diff_pct?: number | null
   }>
   freshness_summary?: {
     oldest_success_at: string | null
@@ -1100,6 +1149,8 @@ export interface ReportSectionsState {
   views?: string[] | null
   /** Whether this is the multi-view detailed product (summary and standard are one composition). */
   offers_views?: boolean
+  /** REPORT-GENERIC-LABELS-001 — the names this report replaces with generic labels, on every surface and link. */
+  generic_names?: GenericNameKind[]
   effective: Record<string, boolean>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -1117,7 +1168,7 @@ export interface BusinessStreamDefinition {
   account_ids: string[]
 }
 
-export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
+export const updateReportSections = (p: string, id: string, body: { generic_names?: GenericNameKind[]; sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
   putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
@@ -1137,6 +1188,9 @@ export interface ShareSectionsState {
   views?: string[] | null
   effective_views?: string[]
   offers_views?: boolean
+  /** REPORT-GENERIC-LABELS-001 — the link's own name switches, and the ones its report already holds, which it cannot undo. */
+  generic_names?: GenericNameKind[]
+  generic_names_of_report?: GenericNameKind[]
   resolved: ResolvedSectionRow[]
   visible: string[]
   availability_judged: boolean
@@ -1166,7 +1220,36 @@ export const updateShareSections = (
   sections: Record<string, boolean>,
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
   views?: string[] | null,
-) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }) })
+  genericNames?: GenericNameKind[],
+) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }), ...(genericNames === undefined ? {} : { generic_names: genericNames }) })
+
+/** REPORT-GENERIC-LABELS-001 — a kind of name that can be replaced by a generic label. */
+export type GenericNameKind = 'campaign' | 'ad_set' | 'account' | 'content'
+
+/** REPORT-AUTO-COMPOSE-001 — what automatic mode would do, for the report or one link. Reading it changes nothing. */
+export type AutoComposeDecision = 'show' | 'hide' | 'unavailable' | 'off'
+
+export interface AutoComposeProposal {
+  level: 'report' | 'link'
+  share_id: string | null
+  objective: string
+  objective_source: 'report' | 'scope' | 'data' | 'mixed'
+  availability_judged: boolean
+  sections: Array<{ key: string; title_ar: string; title_en: string; decision: AutoComposeDecision; reason: 'objective' | 'no_data' | 'unsupported' | 'turned_off' | null }>
+  metrics: string[]
+  metrics_left_out: Array<{ key: string; reason: 'not_reported' | 'hidden_by_link' | 'hidden_by_report' }>
+  metrics_apply: boolean
+  applied: boolean
+  applied_at: string | null
+}
+
+const autoComposeUrl = (p: string, reportId: string, shareId?: string) =>
+  `${base(p)}/${reportId}/auto-compose${shareId === undefined ? '' : `?share_id=${encodeURIComponent(shareId)}`}`
+
+export const getAutoCompose = (p: string, reportId: string, shareId?: string) => getData<AutoComposeProposal>(autoComposeUrl(p, reportId, shareId))
+export const applyAutoCompose = (p: string, reportId: string, shareId?: string) => postData<AutoComposeProposal>(autoComposeUrl(p, reportId, shareId))
+export const revertAutoCompose = (p: string, reportId: string, shareId?: string) =>
+  api.delete<{ data: AutoComposeProposal }>(autoComposeUrl(p, reportId, shareId)).then((r) => r.data.data)
 
 /** RESULT-EVENTS-001 — which reported metric is a project's «Result», per platform and acquisition path. */
 export type ResultEventsMap = Record<string, Record<string, string>>
