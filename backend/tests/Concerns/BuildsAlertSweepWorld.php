@@ -64,12 +64,8 @@ trait BuildsAlertSweepWorld
 
     protected function buildAlertWorld(int $campaignsPerAccount = 4): void
     {
-        /*
-         * The sweep reads these with no ORDER BY, so it walks them in physical order, and in a database earlier tests have written to and autovacuum has swept, a row lands wherever
-         * space was freed: the same inserts come back in another order, and with them every id written after. TRUNCATE is transactional in Postgres and starts each table on a new file,
-         * so physical order is insertion order here whatever ran before, and the rollback puts everything back.
-         */
-        DB::statement('TRUNCATE unified_campaigns, external_campaigns, daily_metrics, alert_rules, alert_events, metric_sync_runs, integration_sync_runs, provider_connections, external_accounts, integration_credentials, project_integration_bindings, spend_limits, spend_limit_events, leads, lead_forms, launch_plans, notification_preferences, app_notifications, notification_deliveries, tasks, digest_sends CASCADE');
+        // The sweep also reads these with no ORDER BY; see startWorldOnFreshTables().
+        DB::statement('TRUNCATE alert_rules, alert_events, metric_sync_runs, integration_sync_runs, spend_limits, spend_limit_events, leads, lead_forms, launch_plans, notification_preferences, app_notifications, notification_deliveries, tasks, digest_sends CASCADE');
 
         $this->seed(PermissionSeeder::class);
         $this->buildWorld($campaignsPerAccount);
