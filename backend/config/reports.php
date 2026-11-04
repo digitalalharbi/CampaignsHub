@@ -88,4 +88,35 @@ return [
         // often, and a crawler's own cache is usually longer than ours anyway.
         'http_max_age' => (int) env('REPORTS_OG_MAX_AGE', 86400),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PERF-RECOVERY-001 — a public live link answers from its last confirmed build
+    |--------------------------------------------------------------------------
+    | OFF by default: with it off the live endpoint builds on every read, exactly as before.
+    |
+    | On, a read is answered from the last build of THAT link (same share, same settings, same
+    | bindings, same query, same day, same language) and a newer one is prepared in the background
+    | on the `live-refresh` queue. The payload keeps its real build time; nothing is re-stamped.
+    |
+    |   fresh_seconds    a build younger than this is served with no refresh at all.
+    |   max_age_seconds  THE BOUND. A build older than this is never served: the read builds
+    |                    synchronously instead. 15 minutes is half the 30-minute sync sweep, so a
+    |                    client never reads figures more than one half-cycle behind what a fresh
+    |                    build would show, and it is far inside the 90 minutes after which the
+    |                    freshness footer calls a platform late.
+    |   max_bytes        a compressed build larger than this is not kept (a 600 KB payload
+    |                    compresses to well under 100 KB).
+    |   max_variants     distinct cached answers kept per link (filters, days, languages).
+    */
+    'live_cache' => [
+        'enabled' => (bool) env('REPORTS_LIVE_CACHE_ENABLED', false),
+        'fresh_seconds' => (int) env('REPORTS_LIVE_CACHE_FRESH_SECONDS', 120),
+        'max_age_seconds' => (int) env('REPORTS_LIVE_CACHE_MAX_AGE_SECONDS', 900),
+        'max_bytes' => 1_000_000,
+        'max_variants' => 8,
+        'queue' => 'live-refresh',
+        // How long a cold read waits for another reader's build of the same key before building itself.
+        'wait_seconds' => 20,
+    ],
 ];

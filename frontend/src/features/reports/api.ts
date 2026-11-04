@@ -461,7 +461,19 @@ export type DataStatus = 'fresh' | 'delayed' | 'stale' | 'failed' | 'unknown'
 /** SPEND-RECONCILE-RECORD-001 */
 export type ReconcileStatus = 'matched' | 'drifted' | 'failed' | 'never'
 
+/**
+ * PERF-RECOVERY-001 — how this answer was obtained, present only when the server's last-build store is on.
+ * `last_confirmed` is a complete earlier build of THIS link, never older than `max_age_seconds`; `built_at` is when it ran.
+ */
+export interface LiveDelivery {
+  source: 'fresh' | 'last_confirmed'
+  built_at: string | null
+  refreshing: boolean
+  max_age_seconds: number
+}
+
 export interface LivePayload {
+  delivery?: LiveDelivery
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
   /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */

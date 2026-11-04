@@ -11,6 +11,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\LiveDrilldown;
+use App\Domains\Reports\Services\LiveReportCache;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
@@ -267,7 +268,18 @@ final class PublicReportController extends Controller
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
-        $payload = $live->build($share, $request->query(), (string) $report->currency);
+        /*
+         * PERF-RECOVERY-001 — every gate above has already run on THIS request: throttle, active
+         * (revoked, paused, expired), password and live mode. Only then may a stored build answer,
+         * and the access log below is written for it like any other read. Off by default.
+         */
+        $delivery = null;
+        if (LiveReportCache::enabled()) {
+            [$payload, $delivery] = app(LiveReportCache::class)->answer($share, $report, $request->query(), (string) $report->currency);
+            $request->attributes->set('perf_variant', $delivery['source']);
+        } else {
+            $payload = $live->build($share, $request->query(), (string) $report->currency);
+        }
 
         /*
          * No refresh here — REPORT-CREATIVE-MEDIA-001.
@@ -286,7 +298,8 @@ final class PublicReportController extends Controller
         $this->shares->log($share, 'view', $request, 'live');
 
         return ApiResponse::success(
-            $payload + ['is_demo' => $report->is_demo, 'form' => $report->form],
+            // `delivery` says whether this is a fresh build or the last confirmed one, and when it ran.
+            $payload + ['is_demo' => $report->is_demo, 'form' => $report->form] + ($delivery === null ? [] : ['delivery' => $delivery]),
             'Live figures.',
         );
     }

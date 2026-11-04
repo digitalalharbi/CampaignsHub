@@ -280,7 +280,10 @@ return [
             ],
             'supervisor-sync' => [
                 'connection' => 'redis',
-                'queue' => ['sync'],
+                // PERF-RECOVERY-001 — `live-refresh` rides the niced sync worker: a refresh of a public
+                // live link yields the CPU to the web tier like a sync does, and is taken BEFORE the next
+                // sync job (it is seconds, a sync is minutes), never beside one.
+                'queue' => ['live-refresh', 'sync'],
                 'balance' => false,
                 'maxProcesses' => 1,
                 'maxTime' => 0,
@@ -295,7 +298,7 @@ return [
         'local' => [
             // Local: one supervisor watches every queue (including `sync`) so nothing sits unprocessed.
             'supervisor-1' => [
-                'queue' => ['reports', 'default', 'sync'],
+                'queue' => ['reports', 'default', 'sync', 'live-refresh'],
                 'maxProcesses' => 3,
             ],
         ],

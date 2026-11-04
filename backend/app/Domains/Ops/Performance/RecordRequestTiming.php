@@ -21,6 +21,11 @@ final class RecordRequestTiming
 
         $route = $request->route();
         $pattern = is_object($route) ? $route->uri() : 'unmatched';
+        // PERF-RECOVERY-001 — a live read answered from its last build is timed apart from one that built.
+        $variant = $request->attributes->get('perf_variant');
+        if (is_string($variant) && $variant !== '') {
+            $pattern .= ' ['.$variant.']';
+        }
         $this->recorder->noteRequest($request->method().' '.$pattern, (hrtime(true) - $started) / 1e6);
 
         return $response;
