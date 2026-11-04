@@ -17,7 +17,8 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
-import { fetchResultEvents, type ResultEventsMap } from './api'
+import { fetchResultEvents, type GenericNameKind, type ResultEventsMap } from './api'
+import { GenericNameChoices } from './ReportComposeControls'
 import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
@@ -234,6 +235,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const hideSpend = hideSpendChoice ?? !metrics.includes('spend')
   // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign: name, platform, status, objective and the primary KPIs; no ids.
   const [campaignBreakdown, setCampaignBreakdown] = useState(true)
+  // REPORT-GENERIC-LABELS-001 — names shown under generic labels from the link's first open; nothing is hidden unless ticked.
+  const [genericNames, setGenericNames] = useState<GenericNameKind[]>([])
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
   /*
@@ -297,6 +300,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         detail_level: level,
         hide_spend: hideSpend,
         campaign_breakdown: campaignBreakdown,
+        ...(genericNames.length > 0 ? { generic_names: genericNames } : {}),
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
         sections: Object.fromEntries((registry.data?.sections ?? []).map((c) => [c.key, form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(c.key) ? false : sectionOn(c.key, c.default_client)])),
@@ -867,6 +871,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <span>{ar ? 'عرض تفصيل الحملات للعميل' : 'Show the campaign breakdown to the client'}</span>
             <input type="checkbox" data-testid="live-link-campaign-breakdown" checked={campaignBreakdown} onChange={(e) => setCampaignBreakdown(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
+
+          <GenericNameChoices ar={ar} chosen={genericNames} onChange={setGenericNames} testid="live-link-generic-names" />
 
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
             <span>{ar ? 'إخفاء الإيراد عن العميل' : 'Hide revenue from the client'}</span>

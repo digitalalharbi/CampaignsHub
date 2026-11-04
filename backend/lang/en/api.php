@@ -15,6 +15,7 @@ return [
     'not_found' => 'The requested resource was not found.',
     'workspace_changed' => 'Your workspace was changed in another tab. Nothing was done here. Choose the workspace to continue in.',
     'portal_unavailable' => 'This service is not available yet. We will announce it when it opens.',
+    'report_send_unavailable' => 'The report was not sent: email sending is not available, and nothing reached any recipient. Use a secure link or export the file instead.',
     'too_many_requests' => 'Too many requests. Please try again shortly.',
     'server_error' => 'Something went wrong. Please try again.',
 

@@ -36,6 +36,7 @@ use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ProjectReportViewsController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
+use App\Domains\Reports\Http\Controllers\ReportAutoComposeController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportIdentityController;
@@ -441,6 +442,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}/sections', [ReportSectionController::class, 'show'])->middleware('project.can:reports.view')->name('reports.sections.show');
     Route::put('reports/{report}/sections', [ReportSectionController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.sections.update');
     // A link's own section switches: the same registry, off-only on top of the report.
+    // REPORT-AUTO-COMPOSE-001 — propose, pick and go back; `share_id` narrows it to one link.
+    Route::get('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.auto-compose.show');
+    Route::post('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.auto-compose.store');
+    Route::delete('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'destroy'])->middleware('project.can:reports.manage')->name('reports.auto-compose.destroy');
     Route::get('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'showShare'])->middleware('project.can:reports.view')->name('reports.shares.sections.show');
     Route::put('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.sections.update');
     /*
@@ -451,6 +456,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('project.can:reports.view')->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.update');
+    // REPORT-DUPLICATE-001 — an independent copy; the controller adds reports.share for the link it makes.
+    Route::post('reports/{report}/duplicate', [ReportController::class, 'duplicate'])->middleware(['project.can:reports.manage', EnsureWithinPlanLimit::class.':reports_per_month'])->name('reports.duplicate');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
     // REPORT-DRILLDOWN-001 — the optional drill-down sections a report's PDF carries (off by default).
     Route::put('reports/{report}/breakdowns', [ReportBreakdownController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.breakdowns.update')->whereUuid('report');
@@ -473,6 +480,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
     Route::post('reports/{report}/shares/{share}/pause', [ReportShareController::class, 'pause'])->middleware('project.can:reports.manage')->name('reports.shares.pause');
     Route::post('reports/{report}/shares/{share}/resume', [ReportShareController::class, 'resume'])->middleware('project.can:reports.manage')->name('reports.shares.resume');
+    // REPORT-LIVE-SNAPSHOT-CONVERT-001 / REPORT-LIFECYCLE-MENU-001 — convert a link's mode on the same URL; copy the current link.
+    Route::post('reports/{report}/shares/{share}/convert', [ReportShareController::class, 'convert'])->middleware('project.can:reports.manage')->name('reports.shares.convert');
+    Route::get('reports/{report}/shares/{share}/link', [ReportShareController::class, 'link'])->middleware('project.can:reports.view')->name('reports.shares.link');
     Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
     Route::patch('reports/{report}/shares/{share}', [ReportShareController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.shares.update');
     Route::get('reports/{report}/shares/{share}/analytics', [ReportShareController::class, 'analytics'])->middleware('project.can:reports.view')->name('reports.shares.analytics');
