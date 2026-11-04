@@ -25,8 +25,10 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -52,9 +54,31 @@ final class AdPlatformStructureSyncTest extends TestCase
 
     private Project $project;
 
+    /** @var list<string> */
+    private array $strayRequests = [];
+
+    protected function assertPostConditions(): void
+    {
+        $this->assertSame([], $this->strayRequests, 'A test in this class asked for a URL its Http::fake does not answer.');
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        /*
+         * Hermetic by construction. `Http::fake([...])` lets an unmatched URL through to the real network,
+         * and a Meta per-node read (`v25.0/420?fields=thumbnail_url`) reached graph.facebook.com in a local
+         * run: a DNS stall then failed the suite on cURL 28. `MetaConnector::readEach()` catches what a
+         * refused node throws, so a stray request would be swallowed, and tearDown fails on the log line.
+         */
+        Http::preventStrayRequests();
+        $this->strayRequests = [];
+        Log::listen(function (MessageLogged $log): void {
+            if (str_contains(json_encode($log->context) ?: '', 'without a matching fake')) {
+                $this->strayRequests[] = (string) json_encode($log->context);
+            }
+        });
 
         $this->tenant = Tenant::create(['name' => 'Struct', 'slug' => 'struct-'.uniqid(), 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
@@ -78,6 +102,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/420?*' => Http::response(['id' => '420']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES', 'daily_budget' => '15000'],
             ]]),
@@ -375,6 +400,8 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/9001?*' => Http::response(['id' => '9001']),
+            'graph.facebook.com/*/402?*' => Http::response(['id' => '402']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
             ]]),
@@ -489,6 +516,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/404?*' => Http::response(['id' => '404']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
             ]]),
@@ -522,6 +550,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/405?*' => Http::response(['id' => '405']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'R', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
             ]]),
@@ -720,6 +749,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('tiktok');
 
         Http::fake([
+            'business-api.tiktok.com/*/file/video/ad/info/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => []]]),
             'business-api.tiktok.com/*/campaign/get/*' => Http::response(['code' => 0, 'data' => ['list' => [
                 ['campaign_id' => 'c1', 'campaign_name' => 'TT', 'operation_status' => 'ENABLE'],
             ]]]),
