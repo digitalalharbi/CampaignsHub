@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test'
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
-const LANDMARKS = ['login-email', 'login-password', 'login-methods', 'login-foot-link']
+const LANDMARKS = ['login-email', 'login-password', 'login-methods', 'login-help-open', 'login-email-code-row']
 
 const boxes = (page: Page) => page.evaluate((ids) => Object.fromEntries(ids.map((id) => {
   const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
@@ -19,7 +19,7 @@ const boxes = (page: Page) => page.evaluate((ids) => Object.fromEntries(ids.map(
 
 for (const [width, height] of [[390, 844], [1366, 768]]) {
   for (const locale of ['ar', 'en']) {
-    for (const outcome of ['answers', 'fails', 'says Google is unavailable'] as const) {
+    for (const outcome of ['answers', 'fails', 'says Google is unavailable', 'enables the email code'] as const) {
       test(`${width}px ${locale}: nothing moves when the lookup ${outcome}`, async ({ page }) => {
         await page.setViewportSize({ width, height })
         await page.addInitScript((l) => localStorage.setItem('campaign-hub-locale', l), locale)
@@ -29,21 +29,25 @@ for (const [width, height] of [[390, 844], [1366, 768]]) {
         await page.route('**/auth/oauth/providers', async (route) => {
           await held
           if (outcome === 'fails') return route.fulfill({ status: 500, json: { message: 'down' } })
-          const available = outcome === 'answers'
+          const available = outcome !== 'says Google is unavailable'
 
-          return route.fulfill({ json: { data: { providers: [{ provider: 'google', label: { en: 'Google', ar: 'Google' }, status: available ? 'live' : 'awaiting_credentials', available }] } } })
+          return route.fulfill({ json: { data: { email_code: outcome === 'enables the email code', providers: [{ provider: 'google', label: { en: 'Google', ar: 'Google' }, status: available ? 'live' : 'awaiting_credentials', available }] } } })
         })
 
         await page.goto('/login')
         await expect(page.getByTestId('login-google-reserved')).toBeVisible()
         await expect(page.getByTestId('login-request-code')).toHaveCount(0)
+        // The webfont swap narrows a centred link by a few pixels whatever the lookup does; this measures the lookup.
+        await page.evaluate(() => document.fonts.ready)
         const before = await boxes(page)
         expect(before['login-methods'], 'Google’s row is not reserved').not.toBeNull()
 
         release()
         await expect(page.getByTestId('login-google-reserved')).toHaveCount(0, { timeout: 45_000 })
-        await expect(page.getByTestId(outcome === 'says Google is unavailable' ? 'login-client-door' : 'login-google')).toBeVisible()
+        await expect(page.getByTestId(outcome === 'says Google is unavailable' ? 'login-home' : 'login-google')).toBeVisible()
         expect(await boxes(page)).toEqual(before)
+        // Off unless the server says so: by default the reserved line stays empty, so nothing appears and then goes.
+        await expect(page.getByTestId('login-email-code')).toHaveCount(outcome === 'enables the email code' ? 1 : 0)
         await expect(page.getByTestId('login-request-code')).toHaveCount(0)
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       })

@@ -69,6 +69,36 @@ final class BackfillClientPortalIdentities
     }
 
     /**
+     * LOGIN-SINGLE-DOOR-001 — the account of one contact who has just PROVED they hold the address (a spent recovery link).
+     *
+     * The same rule as the backfill, asked of one address, in every agency that holds a request naming it. One difference, and only
+     * here: a contact whose requests have no client space yet still gets a membership, with no client scope. Such a membership
+     * reaches no client (`ClientPortalIdentity::reach`) and shows only their own unconverted requests, which is what their code
+     * session showed; the bulk backfill goes on refusing it, because nobody there has proved anything.
+     *
+     * @return User|null null when no request names this address, or no account could be resolved for it
+     */
+    public function forProvenAddress(string $email): ?User
+    {
+        $address = Str::lower(trim($email));
+        $rows = ExternalRequest::query()->withoutGlobalScopes()
+            ->whereRaw('lower(contact_email) = ?', [$address])
+            ->latest('created_at')
+            ->get(['tenant_id', 'contact_phone', 'client_id']);
+
+        foreach ($rows->groupBy('tenant_id') as $tenantId => $held) {
+            $this->one([
+                'email' => $address,
+                'phone' => $held->pluck('contact_phone')->filter()->first(),
+                'tenant_id' => (string) $tenantId,
+                'client_ids' => $held->pluck('client_id')->filter()->map(static fn ($id): string => (string) $id)->unique()->values()->all(),
+            ], false, allowNoSpace: true);
+        }
+
+        return User::query()->where('email', $address)->first();
+    }
+
+    /**
      * Log a refusal as a row a human resolves.
      *
      * A skip with no trace leaves someone stranded: their portal keeps working on the old engine, and
@@ -148,9 +178,9 @@ final class BackfillClientPortalIdentities
      * @param  array{email: ?string, phone: ?string, tenant_id: string, client_ids: list<string>}  $contact
      * @return array{outcome: string}
      */
-    private function one(array $contact, bool $dryRun): array
+    private function one(array $contact, bool $dryRun, bool $allowNoSpace = false): array
     {
-        if ($contact['client_ids'] === []) {
+        if ($contact['client_ids'] === [] && ! $allowNoSpace) {
             // Cannot happen given the query, but an empty scope would be a membership that reaches
             // NOTHING — and creating one silently is worse than not creating it.
             return ['outcome' => 'no_client_space'];

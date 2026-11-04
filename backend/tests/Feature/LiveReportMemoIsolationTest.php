@@ -27,6 +27,9 @@ final class LiveReportMemoIsolationTest extends TestCase
     use BuildsLiveReportWorld;
     use RefreshDatabase;
 
+    /** This world seeds its own bindings: the unbound account is the one this file asserts on, so the base must not select it. */
+    protected bool $selectsSeededAccounts = false;
+
     protected function setUp(): void
     {
         parent::setUp();

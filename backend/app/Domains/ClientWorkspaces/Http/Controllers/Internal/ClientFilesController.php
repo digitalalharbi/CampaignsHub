@@ -7,6 +7,7 @@ namespace App\Domains\ClientWorkspaces\Http\Controllers\Internal;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,7 +56,7 @@ final class ClientFilesController
             ]);
 
         // Report exports (linked through the client's projects → reports).
-        $projectIds = DB::table('projects')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)->pluck('id')->all();
+        $projectIds = $this->reachableProjects($request->user(), $tenantId, $c);
         $reportFiles = $projectIds === [] ? collect() : DB::table('report_exports as e')
             ->join('reports as rp', 'rp.id', '=', 'e.report_id')
             ->whereIn('rp.project_id', $projectIds)->whereNotNull('e.path')
@@ -88,13 +89,27 @@ final class ClientFilesController
 
         [$disk, $path, $name] = match ($source) {
             'request' => $this->resolveRequestFile($tenantId, $c, $id),
-            'report' => $this->resolveReportFile($tenantId, $c, $id),
+            'report' => $this->resolveReportFile($request->user(), $tenantId, $c, $id),
             default => abort(404),
         };
 
         abort_unless(Storage::disk($disk)->exists($path), 404);
 
         return Storage::disk($disk)->download($path, $name);
+    }
+
+    /**
+     * The client's projects the reader reaches (PROJECTS-RBAC-CLOSURE-001): a report export of a project they are not in is
+     * neither listed nor downloadable, and answers like a file that does not exist.
+     *
+     * @return list<string>
+     */
+    private function reachableProjects(User $user, string $tenantId, ClientWorkspace $c): array
+    {
+        $all = DB::table('projects')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)->pluck('id')->map(fn ($v) => (string) $v)->all();
+        $reach = $this->access->reachableProjectIds($user, $c);
+
+        return $reach === null ? $all : array_values(array_intersect($all, $reach));
     }
 
     /** @return array{0:string,1:string,2:string} */
@@ -110,9 +125,9 @@ final class ClientFilesController
     }
 
     /** @return array{0:string,1:string,2:string} */
-    private function resolveReportFile(string $tenantId, ClientWorkspace $c, string $id): array
+    private function resolveReportFile(User $user, string $tenantId, ClientWorkspace $c, string $id): array
     {
-        $projectIds = DB::table('projects')->where('tenant_id', $tenantId)->where('client_workspace_id', $c->id)->pluck('id')->all();
+        $projectIds = $this->reachableProjects($user, $tenantId, $c);
         $e = $projectIds === [] ? null : DB::table('report_exports as e')
             ->join('reports as rp', 'rp.id', '=', 'e.report_id')
             ->whereIn('rp.project_id', $projectIds)->where('e.id', $id)->whereNotNull('e.path')

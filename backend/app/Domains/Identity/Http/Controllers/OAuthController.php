@@ -53,7 +53,11 @@ final class OAuthController extends Controller
     /** GET /auth/oauth/providers — public; no secrets, only whether each provider can be used. */
     public function providers(): JsonResponse
     {
-        return ApiResponse::success(['providers' => $this->registry->forClient()], __('accounts.oauth_providers'));
+        // `email_code` travels here because /login already waits on this answer: one lookup, one reserved row, no second request.
+        return ApiResponse::success([
+            'providers' => $this->registry->forClient(),
+            'email_code' => (bool) config('requests.verification.portal_code_on_login', false),
+        ], __('accounts.oauth_providers'));
     }
 
     /** POST /auth/oauth/{provider}/start */
@@ -167,11 +171,8 @@ final class OAuthController extends Controller
             Auth::guard('web')->login($user, true);
             $request->session()->regenerate();
 
-            $target = is_string($pending['redirect']) && $this->isSafeFrontendPath($pending['redirect'])
-                ? $pending['redirect']
-                : $this->portals->landingPathFor($user, $requested);
-
-            return redirect()->away(Frontend::url($target));
+            // LOGIN-SINGLE-DOOR-001 — the same answer the password path gets, by the same method.
+            return redirect()->away(Frontend::url($this->portals->postAuthDestination($user, $requested, is_string($pending['redirect']) ? $pending['redirect'] : null)));
         } catch (OAuthOutcome $outcome) {
             return $this->back($outcome->reason, ['message' => $outcome->getMessage()]);
         } catch (Throwable) {
@@ -238,13 +239,5 @@ final class OAuthController extends Controller
             'oauth_link' => $outcome,
             'provider' => $provider,
         ])));
-    }
-
-    private function isSafeFrontendPath(string $path): bool
-    {
-        return str_starts_with($path, '/')
-            && ! str_starts_with($path, '//')
-            && ! str_contains($path, '\\')
-            && ! preg_match('/[\r\n]/', $path);
     }
 }
