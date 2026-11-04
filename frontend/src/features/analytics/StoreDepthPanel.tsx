@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
@@ -116,10 +117,10 @@ export function StoreDepthPanel({ projectId, range, ar }: { projectId: string; r
         <ProductList title={ar ? 'المنتجات الأضعف' : 'Weakest products'} rows={products.weak} ar={ar} cur={cur} testid="store-weak" metric="revenue" />
         <ChartCard title={ar ? 'العملاء' : 'Customers'}>
           <dl data-testid="store-customers" className="grid grid-cols-2 gap-3 text-sm">
-            <div><dt className="text-xs text-text-muted">{ar ? 'جدد' : 'New'}</dt><dd className="tnum font-bold" dir="ltr">{num(customers.new)}</dd></div>
-            <div><dt className="text-xs text-text-muted">{ar ? 'عائدون' : 'Returning'}</dt><dd className="tnum font-bold" dir="ltr">{num(customers.returning)}</dd></div>
-            <div><dt className="text-xs text-text-muted">{ar ? 'تكرار الشراء' : 'Repeat purchase'}</dt><dd className="tnum font-bold" dir="ltr">{customers.repeat_rate === null ? '—' : percent(customers.repeat_rate, 1)}</dd></div>
-            <div><dt className="text-xs text-text-muted">{ar ? 'قيمة العميل' : 'Customer value'}</dt><dd className="tnum font-bold" dir="ltr">{m(customers.lifetime_value)}</dd></div>
+            <div><dt className="text-xs text-text-muted">{ar ? 'جدد' : 'New'}</dt><dd className="font-bold"><Num className="tnum">{num(customers.new)}</Num></dd></div>
+            <div><dt className="text-xs text-text-muted">{ar ? 'عائدون' : 'Returning'}</dt><dd className="font-bold"><Num className="tnum">{num(customers.returning)}</Num></dd></div>
+            <div><dt className="text-xs text-text-muted">{ar ? 'تكرار الشراء' : 'Repeat purchase'}</dt><dd className="font-bold"><Num className="tnum">{customers.repeat_rate === null ? '—' : percent(customers.repeat_rate, 1)}</Num></dd></div>
+            <div><dt className="text-xs text-text-muted">{ar ? 'قيمة العميل' : 'Customer value'}</dt><dd className="font-bold"><Num className="tnum">{m(customers.lifetime_value)}</Num></dd></div>
           </dl>
           <p data-testid="store-ltv-note" className="mt-2 text-[11px] text-text-muted">
             {customers.lifetime_value_reason ? LTV_REASON[customers.lifetime_value_reason]?.[ar ? 'ar' : 'en'] : customers.lifetime_value_basis[ar ? 'ar' : 'en']}

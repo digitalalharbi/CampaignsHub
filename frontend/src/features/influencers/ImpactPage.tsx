@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { api, getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { DataTable, type Column, type TableLabels, type TableState } from '@/components/ui/DataTable'
+import { Num } from '@/components/ui/Num'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { ChartCard, RankingBarChart } from '@/features/analytics/charts'
@@ -115,7 +117,7 @@ export function ImpactPage() {
 
   return (
     <div data-testid="creator-impact" className="min-w-0 space-y-4">
-      <h1 className="text-xl font-bold text-text-primary">{ar ? 'أثر المؤثرين' : 'Creator impact'}</h1>
+      <PageIntro title={ar ? 'أثر المؤثرين' : 'Creator impact'} purpose={ar ? 'ما فعله كل مؤثر بأرقام تحمل دليلها.' : 'What each creator did, in figures that carry their evidence.'} />
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <StatCard testid="impact-creators" tone="brand" label={ar ? 'المؤثرون' : 'Creators'} value={<span dir="ltr">{num(d?.summary.influencers ?? null)}</span>} />
         <StatCard testid="impact-clicks" tone="info" label={ar ? 'النقرات منذ الإصدار' : 'Clicks since issued'} value={<span dir="ltr">{num(d?.summary.clicks ?? null)}</span>} />
@@ -136,7 +138,7 @@ export function ImpactPage() {
               <div data-testid="impact-funnel" className="space-y-1">
                 <p dir="auto">{ar ? 'المسار:' : 'Path:'} {ar ? 'نقرات' : 'clicks'} <span dir="ltr" className="tnum">{num(r.clicks)}</span> ← {ar ? 'زيارات' : 'visits'} — ← {ar ? 'إضافة للسلة' : 'add to cart'} — ← {ar ? 'طلبات' : 'orders'} <span dir="ltr" className="tnum">{r.orders === null ? '—' : num(r.orders)}</span> ← {ar ? 'مؤكدة' : 'confirmed'} <span dir="ltr" className="tnum">{r.confirmed === null ? '—' : num(r.confirmed)}</span></p>
                 <p>{ar ? `${num(r.links)} رابط · ${num(r.codes)} كود · ${num(r.collaborations)} تعاون` : `${num(r.links)} link(s) · ${num(r.codes)} code(s) · ${num(r.collaborations)} collaboration(s)`}</p>
-                {Object.keys(r.revenue_by_currency).length > 1 && <p dir="ltr">{Object.entries(r.revenue_by_currency).map(([c, v]) => moneyExact(v, c)).join(' · ')}</p>}
+                {Object.keys(r.revenue_by_currency).length > 1 && <p><Num className="tnum">{Object.entries(r.revenue_by_currency).map(([c, v]) => moneyExact(v, c)).join(' · ')}</Num></p>}
               </div>
             )}
             server={{ total: d?.total ?? 0, state: table, onChange: setTable }} maxHeight="32rem"

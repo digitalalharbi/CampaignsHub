@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
@@ -45,7 +46,7 @@ export function ThreeSourcesPanel({ projectId, range, ar }: { projectId: string;
             <div key={s.key} data-testid={`three-sources-${s.key}`} className="min-w-0 rounded-xl border border-border p-3">
               <Badge tone={s.key === 'store_confirmed' ? 'success' : s.key === 'ga4_measured' ? 'info' : 'neutral'}>{ar ? s.label_ar : s.label_en}</Badge>
               {d.available?.[s.key]
-                ? <p className="tnum mt-1 text-xl font-bold" dir="ltr">{cell(s.orders)}</p>
+                ? <p className="mt-1 text-xl font-bold"><Num className="tnum">{cell(s.orders)}</Num></p>
                 : <p className="mt-1 text-sm text-text-muted">{ar ? 'لا بيانات من هذا المصدر' : 'No data from this source'}</p>}
               <p className="mt-1 text-[11px] text-text-muted">{ar ? s.note_ar : s.note_en}</p>
             </div>

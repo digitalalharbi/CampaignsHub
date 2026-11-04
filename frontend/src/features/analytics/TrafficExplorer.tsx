@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { useEffect, useState } from 'react'
 import { api, getData } from '@/lib/api/client'
 import { DataTable, type Column, type TableLabels, type TableState } from '@/components/ui/DataTable'
@@ -182,7 +183,7 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
             expandRow={(r) => (
               <dl data-testid="traffic-row-detail" className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
                 {([[ar ? 'جلسات متفاعلة' : 'Engaged sessions', r.engaged_sessions], [ar ? 'أحداث رئيسية' : 'Key events', r.key_events], [ar ? 'إضافات للسلة' : 'Add to carts', r.add_to_carts], [ar ? 'بدء الدفع' : 'Checkouts', r.checkouts]] as Array<[string, number | null | undefined]>).map(([k, v]) => (
-                  <div key={k}><dt className="text-text-muted">{k}</dt><dd className="tnum font-semibold" dir="ltr">{num(v ?? null)}</dd></div>
+                  <div key={k}><dt className="text-text-muted">{k}</dt><dd className="font-semibold"><Num className="tnum">{num(v ?? null)}</Num></dd></div>
                 ))}
               </dl>
             )}
