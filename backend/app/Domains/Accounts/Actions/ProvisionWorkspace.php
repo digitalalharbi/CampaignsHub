@@ -7,12 +7,17 @@ namespace App\Domains\Accounts\Actions;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Services\RegistrationCommercialGate;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\TransitionAccountState;
+use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Models\Project;
-use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Projects\Models\ProjectMembership;
+use App\Domains\Subscriptions\Services\SubscriptionLifecycle;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -57,28 +62,27 @@ final class ProvisionWorkspace
         private readonly GrantMembership $grants,
         private readonly TransitionAccountState $transitions,
         private readonly RegistrationPolicy $policy,
+        private readonly AuditLogger $audit,
+        private readonly RegistrationCommercialGate $gate,
     ) {}
-
-    /**
-     * Has this application actually been paid for?
-     *
-     * `paid` and never reversed. A refund or a chargeback leaves the row saying `refunded`, and an
-     * application whose fee came back has not been paid for however it once looked.
-     */
-    private function hasSettledPayment(RegistrationRequest $request): bool
-    {
-        return SubscriptionPayment::query()
-            ->where('registration_request_id', $request->getKey())
-            ->where('status', 'paid')
-            ->whereNull('refunded_at')
-            ->exists();
-    }
 
     /**
      * @return array{tenant: Tenant, user: User}
      */
     public function execute(RegistrationRequest $request): array
     {
+        // Under the row lock, so a webhook and a reviewer arriving together make one workspace, and the loser reads it.
+        return DB::transaction(fn (): array => $this->provision($request));
+    }
+
+    /**
+     * @return array{tenant: Tenant, user: User}
+     */
+    private function provision(RegistrationRequest $request): array
+    {
+        RegistrationRequest::query()->lockForUpdate()->whereKey($request->getKey())->first();
+        $request->refresh();
+
         /*
          * The gate, stated once.
          *
@@ -92,7 +96,9 @@ final class ProvisionWorkspace
             return ['tenant' => $request->tenant, 'user' => User::where('email', $request->email)->firstOrFail()];
         }
 
-        if (! $request->emailIsVerified()) {
+        $policy = $this->policy->for($request);
+
+        if ($policy['requires_email'] && ! $request->emailIsVerified()) {
             throw new RuntimeException('A workspace cannot be created before the email address is verified.');
         }
 
@@ -113,134 +119,228 @@ final class ProvisionWorkspace
          *
          * So the ledger is consulted directly: when the policy for this application requires payment,
          * a SETTLED charge must exist for it. A refunded one does not count, because money that came
-         * back is money we do not have.
+         * back is money we do not have. The one other answer is a scoped decision the gate has checked
+         * (SIGNUP-DECISION-001): a waiver for this plan and period, a live trial, a confirmed settlement.
          */
-        if ($this->policy->for($request)['requires_payment'] && ! $this->hasSettledPayment($request)) {
+        $basis = $this->gate->clearedBy($request);
+
+        if ($policy['requires_payment'] && $basis === null) {
             throw new RuntimeException(
                 'A workspace cannot be created for an application that owes payment: no settled charge exists for it.'
             );
         }
 
-        return DB::transaction(function () use ($request): array {
-            $tenant = Tenant::create([
-                'name' => $request->tenant_name,
-                'slug' => $this->uniqueSlug($request->tenant_name),
-                // Created inactive. `provision()` below moves it to Active with a reason, so the
-                // audit trail records the crossing rather than a workspace that was simply born
-                // switched on.
-                'status' => 'inactive',
-                'account_type' => $request->account_type,
-                'subscription_plan' => $request->plan_code ?? 'trial',
-                /*
-                 * The wizard resumes at the first question this applicant has NOT answered.
-                 *
-                 * Never `verify_email`: by the time a workspace exists the address has been proven,
-                 * and re-asking would be the wizard contradicting the gate that let them in. Someone
-                 * who chose their path on the public site already answered the first two questions
-                 * and lands on `workspace`.
-                 */
-                'onboarding_step' => $this->firstUnansweredStep($request),
-                'enabled_modules' => self::SERVICE_MODULES[$request->service] ?? null,
-            ]);
+        $decision = $this->gate->inForce($request);
+        $access = (array) ($decision->access ?? []);
 
-            $this->context->setTenantId((string) $tenant->id);
+        if (($access['mode'] ?? null) === 'join_existing') {
+            return $this->joinExisting($request, $access, $decision);
+        }
 
-            Workspace::create([
-                'tenant_id' => $tenant->id,
-                'name' => 'Default Workspace',
-                'slug' => 'default',
-            ]);
-
-            // The password was captured at application time and hashed then — this is the same
-            // credential the applicant chose, not a new one they have to be told about.
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => $request->password,
-                'phone' => $request->phone,
-            ]);
-
+        $tenant = Tenant::create([
+            'name' => $request->tenant_name,
+            'slug' => $this->uniqueSlug($request->tenant_name),
+            // Created inactive. `provision()` below moves it to Active with a reason, so the
+            // audit trail records the crossing rather than a workspace that was simply born
+            // switched on.
+            'status' => 'inactive',
+            'account_type' => $request->account_type,
+            'subscription_plan' => $request->plan_code ?? 'trial',
             /*
-             * forceFill, because neither timestamp is mass-assignable — marking a credential proved
-             * is not something a payload may do. Both WERE proved on the gated path: the address by
-             * the email link, the number by the mobile gate (PHONE-VERIFY-001), and asking the
-             * customer to prove either again after they have paid would be absurd.
+             * The wizard resumes at the first question this applicant has NOT answered.
              *
-             * The phone timestamp is what makes the number a sign-in credential at all
-             * (AUTH-PHONE-001). A number that arrives any other way — a profile edit, an import —
-             * carries no such proof and cannot open a session until somebody confirms it.
+             * Never `verify_email`: by the time a workspace exists the gate has been cleared, and
+             * re-asking would be the wizard contradicting the gate that let them in. Someone
+             * who chose their path on the public site already answered the first two questions
+             * and lands on `workspace`.
              */
-            $user->forceFill([
-                'email_verified_at' => $request->email_verified_at,
-                'phone_verified_at' => $request->phone === null ? null : now(),
-            ])->save();
+            'onboarding_step' => $this->firstUnansweredStep($request),
+            // A reviewer's narrower answer, when they gave one. It restricts the modules; the applicant stays the owner.
+            'enabled_modules' => $access['modules'] ?? (self::SERVICE_MODULES[$request->service] ?? null),
+        ]);
 
-            $ownerRole = Role::firstOrCreate(
-                ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],
-                ['name' => 'Tenant Owner', 'is_system' => true],
+        $this->context->setTenantId((string) $tenant->id);
+
+        Workspace::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Default Workspace',
+            'slug' => 'default',
+        ]);
+
+        // The password was captured at application time and hashed then — this is the same
+        // credential the applicant chose, not a new one they have to be told about.
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => $request->password,
+            'phone' => $request->phone,
+        ]);
+
+        /*
+         * forceFill, because neither timestamp is mass-assignable: marking a credential proved is not something a
+         * payload may do. Each is copied from the application, so it says exactly what happened and when. A gate
+         * that policy turned off proved nothing, so its timestamp stays null.
+         *
+         * The phone timestamp is what makes the number a sign-in credential at all (AUTH-PHONE-001). This used to
+         * write now() for any number on the row, which claimed proof for an application a reviewer had excused from
+         * the mobile gate.
+         */
+        $this->recordFacts($user, $request, (string) $tenant->id);
+
+        $ownerRole = Role::firstOrCreate(
+            ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],
+            ['name' => 'Tenant Owner', 'is_system' => true],
+        );
+        $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
+        $user->assignRole($ownerRole);
+
+        /*
+         * The membership — the thing that did NOT exist while the application was pending.
+         *
+         * The portal comes from what the applicant asked for, honoured only because they have
+         * now been approved for it. `forAccountType` is the fallback for an application that
+         * named no portal.
+         */
+        $portal = Portal::tryFrom((string) ($access['portal'] ?? $request->requested_portal))
+            ?? Portal::forAccountType($request->account_type);
+
+        $this->grants->execute(new MembershipGrant(
+            user: $user, tenant: $tenant, portal: $portal, role: 'owner',
+        ));
+
+        /*
+         * The first project, so the workspace is not an empty room (PLAN-PAID-001).
+         *
+         * The brief spells the chain out — account → subscription → workspace → FIRST PROJECT →
+         * membership → role → permissions → portal — and until now the project appeared only if
+         * the customer walked the onboarding wizard to its fourth question. Somebody who paid and
+         * then closed the tab came back to a workspace with nowhere to put a campaign.
+         *
+         * It is created in `setup`, not `active`: it is a place to start, and calling it live
+         * would claim the customer had configured something they have not yet seen. The wizard
+         * still asks for a project name and still creates one — this is the floor, not a
+         * replacement for the question.
+         */
+        $client = ClientWorkspace::create([
+            'tenant_id' => $tenant->id,
+            'name' => $tenant->name,
+            'slug' => Str::slug($tenant->name.'-'.Str::random(4)),
+            'mode' => 'managed',
+            'status' => 'active',
+            'client_status' => 'onboarding',
+            'owner_id' => $user->id,
+        ]);
+
+        Project::create([
+            'tenant_id' => $tenant->id,
+            'client_workspace_id' => $client->id,
+            'name' => $tenant->name,
+            'status' => 'setup',
+        ]);
+
+        $this->transitions->provision(
+            $tenant,
+            AccountState::Active,
+            'Provisioned from registration request '.$request->getKey().' after its required gates were cleared.',
+        );
+
+        $request->forceFill([
+            'tenant_id' => $tenant->id,
+            'provisioned_at' => now(),
+            'state' => AccountState::Active->value,
+            'state_changed_at' => now(),
+        ])->save();
+
+        // Only a decision makes a subscription here. A paid one begins from the webhook that proved the money.
+        if ($decision !== null && in_array($basis, [
+            RegistrationDecision::BASIS_WAIVED, RegistrationDecision::BASIS_TRIAL, RegistrationDecision::BASIS_EXTERNAL,
+        ], true)) {
+            app(SubscriptionLifecycle::class)->beginFromDecision($tenant->refresh(), $request, $decision, (string) $basis);
+        }
+
+        return ['tenant' => $tenant->refresh(), 'user' => $user];
+    }
+
+    /**
+     * Into a workspace that already exists, with the role and scopes a reviewer chose (SIGNUP-DECISION-001).
+     *
+     * No tenant, no project and no subscription: this person is covered by that workspace's own. The account is created
+     * with nothing but what is granted here, and `is_platform_admin` is not writable by any of it.
+     *
+     * @param  array<string, mixed>  $access
+     * @return array{tenant: Tenant, user: User}
+     */
+    private function joinExisting(RegistrationRequest $request, array $access, RegistrationDecision $decision): array
+    {
+        /** @var Tenant $tenant */
+        $tenant = Tenant::query()->withoutGlobalScopes()->findOrFail((string) $access['tenant_id']);
+        $this->context->setTenantId((string) $tenant->id);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => $request->password,
+            'phone' => $request->phone,
+        ]);
+        $this->recordFacts($user, $request, (string) $tenant->id);
+
+        /** @var Role $role */
+        $role = Role::query()->where('tenant_id', $tenant->id)->where('slug', (string) $access['role'])->firstOrFail();
+        $user->assignRole($role);
+
+        $projectIds = (array) ($access['project_ids'] ?? []);
+        foreach ($projectIds as $projectId) {
+            ProjectMembership::create([
+                'tenant_id' => $tenant->id, 'project_id' => $projectId, 'user_id' => $user->id,
+                'role' => ProjectRole::VIEWER, 'status' => 'active',
+            ]);
+        }
+
+        $this->grants->execute(new MembershipGrant(
+            user: $user,
+            tenant: $tenant,
+            portal: Portal::from((string) $access['portal']),
+            role: $role->slug,
+            clientScopeIds: (array) ($access['client_ids'] ?? []),
+            projectScopeIds: $projectIds,
+            grantedBy: $decision->actor,
+        ));
+
+        $request->forceFill([
+            'tenant_id' => $tenant->id,
+            'provisioned_at' => now(),
+            'state' => AccountState::Active->value,
+            'state_changed_at' => now(),
+        ])->save();
+
+        return ['tenant' => $tenant, 'user' => $user];
+    }
+
+    /** What was really proved, copied across, and a trace of what policy did not ask for. */
+    private function recordFacts(User $user, RegistrationRequest $request, string $tenantId): void
+    {
+        $emailUnproven = ! $request->emailIsVerified();
+        $user->forceFill([
+            'email_verified_at' => $request->email_verified_at,
+            'phone_verified_at' => $request->phone === null ? null : $request->mobile_verified_at,
+            'email_unproven_by_policy_at' => $emailUnproven ? now() : null,
+        ])->save();
+
+        $notProved = array_values(array_filter([
+            $emailUnproven ? 'email' : null,
+            $request->phone !== null && ! $request->mobileIsVerified() ? 'mobile' : null,
+        ]));
+
+        if ($notProved !== []) {
+            $this->audit->log(
+                action: 'registration.verification_not_required_by_policy',
+                entityType: RegistrationRequest::class,
+                entityId: (string) $request->getKey(),
+                after: ['channels' => $notProved, 'effective_policy' => $request->effective_policy],
+                reason: 'verification_not_required_by_policy',
+                tenantId: $tenantId,
             );
-            $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
-            $user->assignRole($ownerRole);
-
-            /*
-             * The membership — the thing that did NOT exist while the application was pending.
-             *
-             * The portal comes from what the applicant asked for, honoured only because they have
-             * now been approved for it. `forAccountType` is the fallback for an application that
-             * named no portal.
-             */
-            $portal = Portal::tryFrom((string) $request->requested_portal)
-                ?? Portal::forAccountType($request->account_type);
-
-            $this->grants->execute(new MembershipGrant(
-                user: $user, tenant: $tenant, portal: $portal, role: 'owner',
-            ));
-
-            /*
-             * The first project, so the workspace is not an empty room (PLAN-PAID-001).
-             *
-             * The brief spells the chain out — account → subscription → workspace → FIRST PROJECT →
-             * membership → role → permissions → portal — and until now the project appeared only if
-             * the customer walked the onboarding wizard to its fourth question. Somebody who paid and
-             * then closed the tab came back to a workspace with nowhere to put a campaign.
-             *
-             * It is created in `setup`, not `active`: it is a place to start, and calling it live
-             * would claim the customer had configured something they have not yet seen. The wizard
-             * still asks for a project name and still creates one — this is the floor, not a
-             * replacement for the question.
-             */
-            $client = ClientWorkspace::create([
-                'tenant_id' => $tenant->id,
-                'name' => $tenant->name,
-                'slug' => Str::slug($tenant->name.'-'.Str::random(4)),
-                'mode' => 'managed',
-                'status' => 'active',
-                'client_status' => 'onboarding',
-                'owner_id' => $user->id,
-            ]);
-
-            Project::create([
-                'tenant_id' => $tenant->id,
-                'client_workspace_id' => $client->id,
-                'name' => $tenant->name,
-                'status' => 'setup',
-            ]);
-
-            $this->transitions->provision(
-                $tenant,
-                AccountState::Active,
-                'Provisioned from registration request '.$request->getKey().' after verification and approval.',
-            );
-
-            $request->forceFill([
-                'tenant_id' => $tenant->id,
-                'provisioned_at' => now(),
-                'state' => AccountState::Active->value,
-                'state_changed_at' => now(),
-            ])->save();
-
-            return ['tenant' => $tenant->refresh(), 'user' => $user];
-        });
+        }
     }
 
     /** The first onboarding question this application has not already answered. */

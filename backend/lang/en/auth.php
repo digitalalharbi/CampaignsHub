@@ -30,4 +30,9 @@ return [
     'unavailable' => 'Your account is not available. Please contact support.',
 
     'portal_mismatch' => 'This account is not authorised for that portal.',
+    'code_channel_off' => 'Signing in with a code on this channel is turned off. Use your password or «Forgot password?».',
+    'code_proof_off' => 'Proving a mobile number by code is turned off by the platform administrator. A number already confirmed stays confirmed.',
+    'code_switch_sms_only' => 'Refused: :count account(s) have an unproved address and no self-service way back except an SMS code. Have them prove the address, or help them with a set-password link, first.',
+    'code_switch_signup_unproven' => 'Refused: signup is not proving addresses, and an SMS code is the only self-service way back for those accounts. The two cannot both be off.',
+    'code_switch_contacts' => 'Refused: :count client contact(s) would have no way in. They hold no password and no other channel that reaches them.',
 ];

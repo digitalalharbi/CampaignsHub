@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Services;
 
+use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\TwilioVerifyException;
 use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Requests\Models\ContactVerification;
@@ -19,7 +20,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class ContactVerificationService
 {
-    public function __construct(private readonly TwilioVerifyService $twilio) {}
+    public function __construct(
+        private readonly TwilioVerifyService $twilio,
+        private readonly AuthCodeSwitches $switches,
+    ) {}
 
     /**
      * Start a challenge. Returns the verification id and, in non-prod only, the dev code.
@@ -58,6 +62,9 @@ final class ContactVerificationService
         ?\Closure $deliver = null,
         ?string $ownerKey = null,
     ): array {
+        // AUTH-CODE-SWITCHES-001 — before any row or send: a channel the platform turned off costs nothing and mints nothing.
+        $this->switches->assertOpen($purpose, $channel);
+
         $ownerKeyHash = $ownerKey === null ? null : hash('sha256', $ownerKey);
 
         if ($cooldownSeconds > 0) {
@@ -210,6 +217,10 @@ final class ContactVerificationService
         if ($v === null || $v->isExpired()) {
             throw ValidationException::withMessages(['code' => __('auth.code_expired')]);
         }
+
+        // A code issued before the switch went off stops working with it, before the provider is asked.
+        $this->switches->assertOpen((string) $v->purpose, (string) $v->channel);
+
         if ($v->attempts >= (int) config('requests.verification.max_attempts', 5)) {
             throw ValidationException::withMessages(['code' => __('auth.code_attempts')]);
         }

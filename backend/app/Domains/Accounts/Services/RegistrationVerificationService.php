@@ -36,18 +36,35 @@ final class RegistrationVerificationService
     /** Six digits is 10^6 guesses; this is what keeps that from being enough time to try them. */
     private const MAX_ATTEMPTS = 5;
 
+    /** A channel this application is not asked to prove. Not a delivery state: nothing was attempted. */
+    public const NOT_REQUIRED = 'not_required_by_policy';
+
+    /** A send limit refused the message before any provider was called. */
+    public const BLOCKED = 'blocked_by_send_limit';
+
     public function __construct(
         private readonly AdvanceRegistration $advance,
         private readonly TwilioVerifyService $twilio,
+        private readonly RegistrationPolicy $policy,
+        private readonly RegistrationSendGuard $guard,
     ) {}
 
     /**
      * Issue a fresh challenge, invalidating any earlier one on the same channel.
      *
-     * @return array{channel: string, delivery_status: string, dev_link: ?string, dev_code: ?string, expires_at: string}
+     * Answers without sending when this application's policy does not ask for the channel, and when a send limit refuses
+     * it. Neither is a delivery, and neither is reported as one.
+     *
+     * @return array{channel: string, delivery_status: string, dev_link: ?string, dev_code: ?string, expires_at: ?string, resend_after: int}
      */
     public function send(RegistrationRequest $request, string $channel): array
     {
+        $policy = $this->policy->for($request);
+
+        if (! $policy[$channel === 'mobile' ? 'requires_mobile' : 'requires_email']) {
+            return $this->notSent($channel, self::NOT_REQUIRED);
+        }
+
         if ($channel === 'mobile') {
             $cooldownSeconds = $this->mobileResendCooldownSeconds();
             $recent = RegistrationVerification::query()
@@ -63,6 +80,13 @@ final class RegistrationVerificationService
                     'channel' => [__('auth.resend_cooldown', ['seconds' => max(1, $remaining)])],
                 ]);
             }
+        }
+
+        $reservation = $this->guard->reserve($request, $channel);
+
+        // Checked before the earlier challenge is deleted, so a refused resend leaves the applicant the code they hold.
+        if (! $reservation['allowed']) {
+            return $this->notSent($channel, self::BLOCKED);
         }
 
         // One live challenge per channel: leaving the previous one usable would mean a resend widens
@@ -92,6 +116,7 @@ final class RegistrationVerificationService
         $dev = ContactVerificationService::exposeDevSecrets();
         $path = '/signup/status?request='.$request->getKey().'&token='.$secret;
         $status = $this->deliver($request, $channel, $path, $verification);
+        $this->guard->settle($reservation['log'], $status);
 
         return [
             'channel' => $channel,
@@ -108,6 +133,19 @@ final class RegistrationVerificationService
             'dev_code' => $dev && $channel === 'mobile' && ! $usingTwilio ? $secret : null,
             'expires_at' => $expiresAt->toIso8601String(),
             'resend_after' => $channel === 'mobile' ? $this->mobileResendCooldownSeconds() : 0,
+        ];
+    }
+
+    /** @return array{channel: string, delivery_status: string, dev_link: null, dev_code: null, expires_at: null, resend_after: int} */
+    private function notSent(string $channel, string $status): array
+    {
+        return [
+            'channel' => $channel,
+            'delivery_status' => $status,
+            'dev_link' => null,
+            'dev_code' => null,
+            'expires_at' => null,
+            'resend_after' => 0,
         ];
     }
 
