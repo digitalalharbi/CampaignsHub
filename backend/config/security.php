@@ -15,6 +15,13 @@ return [
     'relax_rate_limits' => env('E2E_RELAX_RATE_LIMITS', false),
 
     /*
+    | EMAIL-GAPS — the «new sign-in» email. OFF until the Owner approves it, because switching it on mails
+    | real people. Devices are recorded either way, so the day it is switched on nobody is told that a
+    | device they have used all along is new.
+    */
+    'new_sign_in_alert' => (bool) env('NEW_SIGN_IN_ALERT_ENABLED', false),
+
+    /*
     |---------------------------------------------------------------------------
     | Data-subject requests per minute (LEGAL-THROTTLE-001)
     |---------------------------------------------------------------------------

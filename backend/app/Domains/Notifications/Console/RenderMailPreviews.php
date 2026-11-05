@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Support\MailGallery;
+use App\Domains\Notifications\Support\TestSendMark;
 use Illuminate\Console\Command;
 
 /**
@@ -30,7 +31,8 @@ final class RenderMailPreviews extends Command
 {
     protected $signature = 'notifications:preview
         {--out=storage/app/mail-previews : Where to write the files}
-        {--locale= : One language only — `ar` or `en`. Both by default}';
+        {--locale= : One language only — `ar` or `en`. Both by default}
+        {--as-test : As a test message would look (EMAIL-TEST-SEND-001). It renders; nothing here sends}';
 
     protected $description = 'Render every email type to HTML, in both languages, for visual review.';
 
@@ -49,6 +51,9 @@ final class RenderMailPreviews extends Command
         foreach ($locales as $locale) {
             foreach (MailGallery::messages($locale) as $name => $mailable) {
                 $path = sprintf('%s/%s.%s.html', rtrim($dir, '/'), $name, $locale);
+                if ($this->option('as-test')) {
+                    TestSendMark::apply($mailable, $locale);
+                }
                 file_put_contents($path, $mailable->render());
                 $this->line($path);
                 $written++;

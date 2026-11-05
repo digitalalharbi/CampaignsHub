@@ -327,18 +327,6 @@ parameters:
 			path: app/Domains/Platform/Http/Controllers/PlatformAccessController.php
 
 		-
-			message: '#^Method App\\Domains\\Platform\\Http\\Controllers\\PlatformEmailController\:\:digests\(\) should return Illuminate\\Support\\Collection\<int, array\<string, mixed\>\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, source\: string, at\: string, kind\: string, template\: string, recipient\: mixed, tenant_name\: mixed, locale\: null, \.\.\.\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Domains/Platform/Http/Controllers/PlatformEmailController.php
-
-		-
-			message: '#^Method App\\Domains\\Platform\\Http\\Controllers\\PlatformEmailController\:\:transactional\(\) should return Illuminate\\Support\\Collection\<int, array\<string, mixed\>\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, source\: string, at\: string, kind\: string, template\: string, recipient\: string, tenant_name\: mixed, locale\: string, \.\.\.\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Domains/Platform/Http/Controllers/PlatformEmailController.php
-
-		-
 			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
 			identifier: notIdentical.alwaysTrue
 			count: 1

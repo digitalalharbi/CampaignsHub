@@ -15,6 +15,9 @@ export interface DeliveryRow {
   kind: string
   recipient: string | null
   status: string
+  /** The stage as a reader should hear it. Absent only on a row from an older server. */
+  state?: string
+  failure_code?: string | null
   reason: string | null
   attempts: number
   at: string
@@ -23,14 +26,14 @@ export interface DeliveryRow {
 export interface DeliverySummary {
   sent: number
   failed: number
-  /** Waiting on the email provider — neither a success nor a failure, and not to be counted as one. */
+  /** Waiting on the email provider, or deliberately not sent — neither a success nor a failure, and not to be counted as one. */
   blocked: number
   /** False when nothing has ever been attempted, which is not the same as nothing having failed. */
   everSent: boolean
   latest: DeliveryRow | null
 }
 
-const BLOCKED = new Set(['awaiting_provider_credentials', 'awaiting_credentials', 'suppressed', 'sandbox'])
+const BLOCKED = new Set(['awaiting_provider_credentials', 'awaiting_credentials', 'suppressed', 'sandbox', 'unsubscribed', 'limit_reached', 'repeat_limit', 'refused_scope'])
 
 export function summariseDeliveries(rows: DeliveryRow[]): DeliverySummary {
   const sent = rows.filter((r) => r.status === 'sent').length
