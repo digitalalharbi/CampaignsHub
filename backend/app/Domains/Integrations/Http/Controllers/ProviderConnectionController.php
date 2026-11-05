@@ -10,7 +10,9 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\ConnectionRemoval;
 use App\Domains\Integrations\Services\ConnectionWizardState;
+use App\Domains\Integrations\Services\IntegrationStatusResolver;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -37,7 +39,12 @@ final class ProviderConnectionController extends Controller
          */
         $state = app(ConnectionWizardState::class);
 
-        $connections = ProviderConnection::withCount('externalAccounts')->whereNull('removed_at')->latest()->get()
+        $models = ProviderConnection::withCount('externalAccounts')->whereNull('removed_at')->latest()->get();
+
+        // INTEG-STATUS-MODEL-001 — five independent statuses per connection, resolved in one batch (never per row).
+        $resolved = app(IntegrationStatusResolver::class)->forConnections($models, (string) app(TenantContext::class)->tenantId());
+
+        $connections = $models
             ->map(fn (ProviderConnection $c) => [
                 'id' => $c->id,
                 'name' => $c->connection_name,
@@ -53,6 +60,8 @@ final class ProviderConnectionController extends Controller
                 'ever_discovered' => $c->external_accounts_count,
                 'discovery_blocked_reason' => $c->discovery_blocked_reason,
                 'last_health_check_at' => optional($c->last_health_check_at)->toIso8601String(),
+                'statuses' => $resolved[(string) $c->getKey()]['statuses'] ?? null,
+                'status_profile' => $resolved[(string) $c->getKey()]['profile'] ?? null,
             ]);
 
         return ApiResponse::success($connections, 'Connections retrieved.');
