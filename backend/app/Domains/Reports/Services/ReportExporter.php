@@ -1012,7 +1012,17 @@ final class ReportExporter
 
         $fresh = Report::withoutGlobalScopes()->find($report->getKey());
 
-        return $fresh === null ? $report : app(LiveReportService::class)->materialise($fresh, $share);
+        if ($fresh === null) {
+            return $report;
+        }
+        $stored = app(LiveReportService::class)->materialise($fresh, $share);
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's file is made from the stored copy while that copy is rebuilt. The gate still
+        // validates the document; only the row's «being rebuilt» is not held against the finished copy it carries. In memory only.
+        if ($stored->status === 'processing' && $stored->hasStoredCopy()) {
+            $stored->setAttribute('status', 'completed');
+        }
+
+        return $stored;
     }
 
     private function pdf(Report $report, array $data, ?ReportShare $share = null): string

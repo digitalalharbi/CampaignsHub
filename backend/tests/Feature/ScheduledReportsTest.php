@@ -11,6 +11,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
+use App\Domains\Reports\Models\ReportVersion;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Tenancy\Actions\GrantMembership;
@@ -26,11 +27,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Concerns\KeepsStoredCopies;
 use Tests\TestCase;
 
 /** Scheduled reports: due schedules generate a snapshot + honest delivery ledger; internal never to client. */
 final class ScheduledReportsTest extends TestCase
 {
+    use KeepsStoredCopies;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -277,5 +280,25 @@ final class ScheduledReportsTest extends TestCase
         $this->assertSame('2026-08-02', $local->toDateString());
 
         Carbon::setTestNow();
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — a system path: a schedule builds a report of its own, waits on no confirmation and replaces nobody's stored copy. */
+    public function test_a_scheduled_run_builds_its_own_report_and_leaves_every_stored_copy_alone(): void
+    {
+        $existing = Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Sent to the client', 'type' => 'executive',
+            'audience' => 'client', 'mode' => 'snapshot', 'status' => 'draft', 'period_start' => '2026-08-01', 'period_end' => '2026-08-31', 'currency' => 'SAR',
+        ]);
+        $original = $this->storeCopy((string) $existing->getKey());
+        $this->schedule();
+
+        $this->assertSame(1, app(ScheduledReportDispatcher::class)->dispatchDue());
+
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        Queue::assertPushed(GenerateReportJob::class, fn (GenerateReportJob $job): bool => $job->reportId !== (string) $existing->getKey());
+        $kept = Report::withoutGlobalScopes()->findOrFail($existing->getKey());
+        $this->assertSame('completed', $kept->status);
+        $this->assertEquals($original, $kept->data);
+        $this->assertSame(0, ReportVersion::withoutGlobalScopes()->count());
     }
 }

@@ -68,7 +68,10 @@ final class ReportPrintController extends Controller
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
 
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
-        abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's PDF prints the stored copy while it is rebuilt, as the link's page shows it; the
+        // link itself is re-checked below. An operator's own export still waits for the rebuild.
+        $forLink = ($ctx['share_id'] ?? null) !== null;
+        abort_if($report === null || ! ($forLink ? $report->servesStoredCopy() : $report->status === 'completed'), 404, 'Report not available.');
         /*
          * LIVE-FILE-PARITY-001 — a live report prints the page's payload. A link's own file is materialised through THAT link,
          * after it is re-checked below (`downloadDocument`); an operator's export reads through the report's definition link.

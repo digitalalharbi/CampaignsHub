@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, EyeOff, XCircle } from 'lucide-react'
 import { listAnnotations, setAnnotationStatus, type ReportAnnotation } from './api'
 import { Skeleton } from '@/components/ui/States'
+import { KeptCopyNote } from './ReportVersionHistory'
 import { platformColor } from '@/features/analytics/components'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -30,7 +31,9 @@ export function AnnotationsPanel({ projectId, reportId }: { projectId: string; r
   return (
     <div className="rounded-2xl border border-border bg-surface-secondary p-4">
       <h4 className="mb-1 text-sm font-bold text-text-primary">اعتماد التوصيات (لا تظهر للعميل إلا المعتمدة)</h4>
-      <p className="mb-3 text-xs text-text-muted">التوصيات الآلية تبدأ «مسودة» — اعتمدها ليراها العميل.</p>
+      <p className="mb-1 text-xs text-text-muted">التوصيات الآلية تبدأ «مسودة» — اعتمدها ليراها العميل.</p>
+      {/* Every decision here rebuilds the client copy, with no second question because the decision is the edit. */}
+      <KeptCopyNote className="mb-3" />
       <div className="space-y-2">
         {recs.map((a: ReportAnnotation) => {
           const s = STATUS_LABEL[a.status] ?? STATUS_LABEL.draft

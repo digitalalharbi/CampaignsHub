@@ -98,6 +98,18 @@ final class Report extends Model
         return $this->generated_at !== null && ! empty($this->data);
     }
 
+    /**
+     * REPORT-SNAPSHOT-PROTECT-001 — is there a finished document a reader may be given right now?
+     *
+     * A completed report, or one whose stored copy is being rebuilt: the row says `processing` and still holds the last
+     * finished copy, because a rebuild replaces `data` only when it commits. A report being built for the first time has
+     * nothing finished, and a failed one never did.
+     */
+    public function servesStoredCopy(): bool
+    {
+        return $this->status === 'completed' || ($this->status === 'processing' && $this->hasStoredCopy());
+    }
+
     /** The operator's saved section choices; null in the column resolves to the audience defaults. */
     public function sectionSettings(): SectionSettings
     {
