@@ -11,7 +11,7 @@ in `CLAUDE.md` stands: Git outranks
 [`docs/RESUME_STATE.md`](RESUME_STATE.md), which outranks this file. Where this file and Git
 disagree, **Git is right and this file is stale.**
 
-Updated 2026-11-04.
+Updated 2026-11-05. The per-item record is the section `Cumulative execution record 2026-11-05` of the matrix; `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md` governs priority.
 
 ## Last verified commit
 
@@ -19,9 +19,9 @@ Updated 2026-11-04.
 |---|---|
 | Repository | `digitalalharbi/CampaignsHub` |
 | Branch | `main` |
-| Commit | `30d0bdad5` — docs: the Owner's 2026-11-03 requirements file, every sub-item tied to a matrix row (#951) |
-| Full sha | `30d0bdad580ed148b3ae682ee6ea5de36f19489e` |
-| Committed | 2026-11-04 09:10:28 +0300 |
+| Commit | `cc27831c1` — fix(money): a currency is never assumed (#966) |
+| Full sha | `cc27831c19b1ffbc9f824b75aecd95a0135366c2` |
+| Deployed | Deploy Production run 42039534931, success |
 
 Verify, do not trust:
 
@@ -33,13 +33,23 @@ git fetch origin && git log --oneline -10 origin/main && git status
 
 | PR | Branch | Title |
 |---|---|---|
-| [#952](https://github.com/digitalalharbi/CampaignsHub/pull/952) | `fix/money-recon-rungs` | fix(money): one KPI definition, recorded «last confirmed», and rungs that add up to the cent (contains #936) |
-| [#936](https://github.com/digitalalharbi/CampaignsHub/pull/936) | `feat/kpi-parity` | fix(metrics): one KPI definition across dashboard/analytics/live report (3 real discrepancies), labelled Results basis, recorded reconciliation stamp |
-| [#934](https://github.com/digitalalharbi/CampaignsHub/pull/934) | `fix/ga4-platform-google-client` | config(ga4): one Google client for sign-in, Ads and GA4 (GA4_* still wins when set) |
-| [#930](https://github.com/digitalalharbi/CampaignsHub/pull/930) | `feat/meta-multi-app` | feat(meta): multi-app credentials, verified issuing app, atomic reconnect (HOLD — Owner approval required, not for Lander) |
-| [#927](https://github.com/digitalalharbi/CampaignsHub/pull/927) | `feat/integrations-center-clean` | feat(integrations): one connect entry, selected accounts only, discovery inside the wizard |
-| [#916](https://github.com/digitalalharbi/CampaignsHub/pull/916) | `feat/pricing-addons` | feat(pricing): add-ons marketplace — capacity the API enforces, feature packs «coming soon» |
-| [#905](https://github.com/digitalalharbi/CampaignsHub/pull/905) | `docs/gateways-superadmin` | docs: payment console, workspace creation, access recovery; support access designed |
+| [#965](https://github.com/digitalalharbi/CampaignsHub/pull/965) | `fix/openai-account-currency` | fix(money): a ChatGPT Ads account billed in riyals is converted, not read as dollars (Owner P0 2026-11-05, head of the queue) |
+| [#963](https://github.com/digitalalharbi/CampaignsHub/pull/963) | `sec/shared-download-password` | fix(security): a password-protected report link hands over no file without the password |
+| [#964](https://github.com/digitalalharbi/CampaignsHub/pull/964) | `fix/shared-download-password-gate` | the same defect as #963, opened by a side session; redundant, to be closed once #963 lands |
+| [#934](https://github.com/digitalalharbi/CampaignsHub/pull/934) | `fix/ga4-platform-google-client` | config(ga4): one Google client for sign-in, Ads and GA4 |
+| [#930](https://github.com/digitalalharbi/CampaignsHub/pull/930) | `feat/meta-multi-app` | HOLD — Owner approval required |
+| [#927](https://github.com/digitalalharbi/CampaignsHub/pull/927) | `feat/integrations-center-clean` | superseded by `feat/integrations-center-2` in the queue |
+| [#916](https://github.com/digitalalharbi/CampaignsHub/pull/916) | `feat/pricing-addons` | feat(pricing): add-ons marketplace |
+| [#905](https://github.com/digitalalharbi/CampaignsHub/pull/905) | `docs/gateways-superadmin` | docs: payment console, workspace creation, access recovery |
+
+Pushed branches waiting their turn (no PR until the Lander reaches them): `fix/report-filters-functional`,
+`fix/report-duplicate-draft`, `feat/report-version-history`, `perf/live-last-confirmed`,
+`perf/sync-isolation-2`, `feat/meta-diagnostics`, `feat/store-attribution-depth`,
+`feat/registration-and-switches`, `feat/email-test-send`, `feat/integrations-center-2`, the pricing
+chain, `ux/type-scale-migration`, `ci/webkit-engine-evidence`.
+
+Throwaway branches on origin used for read-only Production reads, never to be merged:
+`tmp/iso-audit`, `tmp/gpt-fx-facts`, `tmp/gpt-fx-facts2`, `tmp/gpt-fx-facts3`.
 
 The queue order is a product decision and lives in `docs/RESUME_STATE.md`, not here. CI on each PR
 is the authority:
