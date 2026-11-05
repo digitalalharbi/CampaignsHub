@@ -26,6 +26,7 @@ const COPY = {
     outcomes: {
       approve_payment_required: 'اعتماد مع طلب الدفع', approve_discount: 'اعتماد بخصم', approve_waiver: 'اعتماد بإعفاء من رسوم فترة واحدة وتفعيل فوري',
       approve_trial: 'اعتماد بفترة تجربة مؤرخة', approve_external_settlement: 'اعتماد بسداد خارجي موثّق', approve_join_existing: 'ضمّ إلى مساحة عمل قائمة',
+      approve_complimentary: 'دخول مباشر دون دفع (بلا تاريخ انتهاء)',
     },
     hints: {
       approve_payment_required: 'لا تُفعَّل مساحة العمل قبل تأكيد الدفع من المزوّد.',
@@ -34,6 +35,7 @@ const COPY = {
       approve_trial: 'نشط كتجربة حتى التاريخ المحدد، ثم يصبح الدفع مستحقًا. لا خصم تلقائي.',
       approve_external_settlement: 'يحتاج دليلًا على عملية سداد حقيقية وتأكيد مسؤول آخر. لا يفعّل شيئًا قبل التأكيد.',
       approve_join_existing: 'لا تُنشأ مساحة عمل ولا اشتراك: يدخل الشخص بالدور والنطاق المحددين، ويبقى مالك المساحة مسؤولًا عنها.',
+      approve_complimentary: 'دخول مباشر دون دفع: تُفعَّل مساحة العمل الآن بلا تاريخ انتهاء، ولا يُسجل دفع ولا فاتورة ولا عملية لدى مزوّد، ولا يتطلب بوابة دفع. لا يُطلب أي مبلغ عند التجديد ما دام ساريًا، ويمكنك لاحقًا إنهاؤه أو تحويله إلى مدفوع أو خصم من صفحة المستأجرين.',
     },
     discount: 'نسبة الخصم %', trialEnds: 'تاريخ انتهاء التجربة',
     reference: 'مرجع العملية', amount: 'المبلغ', currency: 'العملة', paidOn: 'تاريخ السداد', evidenceNote: 'ملاحظة',
@@ -50,12 +52,19 @@ const COPY = {
     confirmWaiver: (fee: string) => `أؤكد الإعفاء من ${fee} لفترة واحدة فقط، وهذا ليس دفعًا.`,
     awaiting: 'سداد خارجي بانتظار تأكيد مسؤول آخر', verify: 'تأكيد السداد', verifyReason: 'كيف تحققت من العملية؟',
     inForce: 'القرار الساري',
+    openEnded: 'تاريخ الانتهاء', noEnd: 'بلا تاريخ انتهاء',
+    confirmComplimentary: 'أؤكد منح دخول مباشر دون دفع وبلا تاريخ انتهاء. هذا ليس دفعًا ولا تُصدر له فاتورة.',
+    strandedTitle: 'هذا الطلب معتمد بالفعل، والمتبقي هو الدفع.',
+    strandedBody: 'لذلك لا يغيّر زر «اعتماد مع طلب الدفع» شيئًا هنا: الطلب معتمد مسبقًا ولا يوجد ما يُعتمد مرة أخرى. لإدخاله الآن دون دفع، أو بخصم أو بإعفاء، اختر قرارًا آخر.',
+    strandedAction: 'دخول مباشر دون دفع',
+    noChange: 'لم يتغير شيء: هذا الطلب معتمد مسبقًا والمتبقي هو الدفع. لم يُضف سطر جديد إلى السجل.',
   },
   en: {
     title: 'Decision',
     outcomes: {
       approve_payment_required: 'Approve, payment required', approve_discount: 'Approve with a discount', approve_waiver: 'Approve with one period waived and activate now',
       approve_trial: 'Approve with a dated trial', approve_external_settlement: 'Approve on an evidenced external settlement', approve_join_existing: 'Add to an existing workspace',
+      approve_complimentary: 'Direct entry with no payment (no end date)',
     },
     hints: {
       approve_payment_required: 'The workspace stays closed until the provider confirms the payment.',
@@ -64,6 +73,7 @@ const COPY = {
       approve_trial: 'Active as a trial until the date set, then payment is due. Nothing is charged automatically.',
       approve_external_settlement: 'Needs evidence of a real settlement and a second administrator. Activates nothing before that.',
       approve_join_existing: 'No workspace or subscription is created: the person joins with this role and scope, and the workspace owner stays accountable.',
+      approve_complimentary: 'Direct entry with no payment: the workspace opens now with no end date. No payment, invoice or provider transaction is recorded, and no payment gateway is needed. Renewal asks for nothing while it stands; you can end it or convert it to paid or a discount later from Tenants.',
     },
     discount: 'Discount %', trialEnds: 'Trial ends on',
     reference: 'Transaction reference', amount: 'Amount', currency: 'Currency', paidOn: 'Paid on', evidenceNote: 'Note',
@@ -80,11 +90,17 @@ const COPY = {
     confirmWaiver: (fee: string) => `I confirm waiving ${fee} for one period only, and that this is not a payment.`,
     awaiting: 'External settlement waiting on a second administrator', verify: 'Confirm settlement', verifyReason: 'How did you check the transaction?',
     inForce: 'Decision in force',
+    openEnded: 'End date', noEnd: 'No end date',
+    confirmComplimentary: 'I confirm direct entry with no payment and no end date. This is not a payment and no invoice is issued.',
+    strandedTitle: 'This application is already approved. What is outstanding is the payment.',
+    strandedBody: 'That is why «Approve, payment required» changes nothing here: it is already approved, so there is nothing to approve again. To let them in now with no payment, a discount or a waiver, choose another decision.',
+    strandedAction: 'Direct entry with no payment',
+    noChange: 'Nothing changed: this application is already approved and what is outstanding is the payment. No new line was added to the record.',
   },
 } as const
 
 const OUTCOMES: RegistrationDecisionOutcome[] = [
-  'approve_payment_required', 'approve_discount', 'approve_waiver', 'approve_trial', 'approve_external_settlement', 'approve_join_existing',
+  'approve_payment_required', 'approve_complimentary', 'approve_discount', 'approve_waiver', 'approve_trial', 'approve_external_settlement', 'approve_join_existing',
 ]
 
 export function RegistrationDecisionForm({ registration, ar, onDecided }: {
@@ -107,6 +123,7 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
   const [preview, setPreview] = useState<RegistrationDecisionPreview | null>(null)
   const [confirmed, setConfirmed] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [noChange, setNoChange] = useState(false)
 
   const joining = outcome === 'approve_join_existing'
   const tenants = useQuery({ queryKey: ['admin', 'tenants', 'decision'], queryFn: () => fetchTenants({ status: 'active' }), enabled: joining })
@@ -117,6 +134,8 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
   })
 
   const current = registration.decisions?.find((d) => d.status === 'in_force') ?? null
+  // Approved, and the one thing left is money: approving again cannot move it, and the form has to say why.
+  const awaitingMoney = ['approved_awaiting_payment', 'payment_pending'].includes(registration.state)
 
   const input = useMemo<RegistrationDecisionInput>(() => ({
     outcome,
@@ -138,27 +157,35 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
     setPreview(null)
     setConfirmed(false)
     setError(null)
+    setNoChange(false)
   }, [shape])
 
   const failed = (e: unknown) => setError(toApiError(e).message)
+  // A click that changed nothing says so, instead of refreshing a screen that looks the same.
+  const settled = (r: { no_change?: boolean }) => {
+    if (r.no_change) { setNoChange(true); setError(null); return }
+    setNoChange(false)
+    onDecided()
+  }
 
   const previewing = useMutation({
     mutationFn: () => previewRegistrationDecision(registration.id, { ...input, reason: reason || 'Preview only' }),
     onSuccess: (p) => { setPreview(p); setError(null) },
     onError: failed,
   })
-  const approving = useMutation({ mutationFn: () => approveRegistration(registration.id), onSuccess: onDecided, onError: failed })
+  const approving = useMutation({ mutationFn: () => approveRegistration(registration.id), onSuccess: settled, onError: failed })
   const deciding = useMutation({
     mutationFn: () => decideRegistration(registration.id, {
       ...input,
       idempotency_key: key.current,
       ...(outcome === 'approve_waiver' ? { confirm_waiver: confirmed, confirm_amount: preview?.terms?.fee ?? null } : {}),
+      ...(outcome === 'approve_complimentary' ? { confirm_complimentary: confirmed } : {}),
     }),
-    onSuccess: onDecided,
+    onSuccess: settled,
     onError: failed,
   })
 
-  const needsConfirmation = outcome === 'approve_waiver'
+  const needsConfirmation = outcome === 'approve_waiver' || outcome === 'approve_complimentary'
   const ready = preview !== null && reason.trim().length >= 5 && (!needsConfirmation || confirmed)
   const inputClass = 'h-10 w-full min-w-0 rounded-xl border border-border bg-surface px-3 text-sm text-text-primary'
   const labelClass = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-text-secondary'
@@ -170,6 +197,14 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
       <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{c.title}</p>
 
       {current && <p data-testid="registration-decision-current" className="text-xs text-text-secondary">{c.inForce}: {c.outcomes[current.outcome as keyof typeof c.outcomes] ?? current.outcome}</p>}
+
+      {awaitingMoney && outcome === 'approve_payment_required' && (
+        <div data-testid="decision-stranded" className="flex flex-col gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-text-primary">
+          <p className="font-semibold">{c.strandedTitle}</p>
+          <p className="text-xs text-text-secondary">{c.strandedBody}</p>
+          <div><Button data-testid="decision-stranded-complimentary" size="sm" variant="secondary" onClick={() => setOutcome('approve_complimentary')}>{c.strandedAction}</Button></div>
+        </div>
+      )}
 
       <fieldset className="flex flex-col gap-1.5">
         {OUTCOMES.map((o) => (
@@ -283,6 +318,15 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
         </label>
       )}
 
+      {preview?.terms?.complimentary && (
+        <label className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm font-semibold text-text-primary">
+          <input type="checkbox" data-testid="decision-confirm-complimentary" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5" />
+          <span className="min-w-0">{c.confirmComplimentary}</span>
+        </label>
+      )}
+
+      {noChange && <p role="status" data-testid="decision-no-change" className="rounded-xl bg-surface-secondary px-3.5 py-2.5 text-sm font-semibold text-text-primary">{c.noChange}</p>}
+
       {error && <p data-testid="decision-error" className="rounded-xl bg-[var(--negative-background)] px-3.5 py-2.5 text-sm text-danger">{error}</p>}
 
       {registration.decisions?.filter((d) => d.status === 'awaiting_finance').map((d) => (
@@ -317,6 +361,7 @@ function PreviewPanel({ preview, copy: c }: { preview: RegistrationDecisionPrevi
         {line(c.vat, t?.vat ? `${t.vat.tax} ${t.currency ?? ''}` : null, 'preview-vat')}
         {line(c.renewal, withCurrency(t?.renewal_amount), 'preview-renewal')}
         {line(c.renewalOn, t?.renewal_on, 'preview-renewal-on')}
+        {t?.complimentary && <div className="flex flex-wrap justify-between gap-2"><dt>{c.openEnded}</dt><dd data-testid="preview-open-ended">{c.noEnd}</dd></div>}
         <div className="flex flex-wrap justify-between gap-2"><dt>{c.creates}</dt><dd data-testid="preview-creates">{made || c.nothing}</dd></div>
         <div className="flex flex-wrap justify-between gap-2"><dt>{c.effectiveRole}</dt><dd data-testid="preview-role"><Num>{a.role}</Num></dd></div>
         <div className="flex flex-wrap justify-between gap-2">

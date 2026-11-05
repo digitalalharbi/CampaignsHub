@@ -31,6 +31,9 @@ final class RegistrationDecision extends Model
 
     public const JOIN_EXISTING = 'approve_join_existing';
 
+    /** «دخول مباشر دون دفع»: open-ended, with no end date, until the platform owner ends or converts it (ADMIN-FULL-CONTROL-001). */
+    public const COMPLIMENTARY = 'approve_complimentary';
+
     public const REQUEST_INFO = 'request_info';
 
     public const DEFER = 'defer';
@@ -38,7 +41,7 @@ final class RegistrationDecision extends Model
     public const REJECT = 'reject';
 
     public const APPROVALS = [
-        self::PAYMENT_REQUIRED, self::DISCOUNT, self::WAIVER, self::TRIAL, self::EXTERNAL_SETTLEMENT, self::JOIN_EXISTING,
+        self::PAYMENT_REQUIRED, self::DISCOUNT, self::WAIVER, self::TRIAL, self::EXTERNAL_SETTLEMENT, self::JOIN_EXISTING, self::COMPLIMENTARY,
     ];
 
     public const IN_FORCE = 'in_force';
@@ -57,6 +60,8 @@ final class RegistrationDecision extends Model
     public const BASIS_TRIAL = 'admin_trial';
 
     public const BASIS_EXTERNAL = 'external_settlement';
+
+    public const BASIS_COMPLIMENTARY = 'complimentary';
 
     protected $table = 'registration_decisions';
 
