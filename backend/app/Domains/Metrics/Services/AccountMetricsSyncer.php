@@ -722,7 +722,7 @@ final class AccountMetricsSyncer
         // INTEG-UNIFIED-BOUNDARIES-001 — each grain's write re-proves the binding, like the campaign write.
         $unlinked = false;
         $upsertGrain = function (string $type, array $rows, array $known) use ($account, $run, &$unlinked): array {
-            $result = ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0];
+            $result = ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0];
             $held = $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$result, $account, $type, $rows, $known, $run): void {
                 $result = app(UpsertEntityDailyMetrics::class)->execute($account, $type, $rows, $known, (string) $run->getKey());
             });
@@ -775,7 +775,7 @@ final class AccountMetricsSyncer
         $knownAds = $this->filedUnder($knownAds, (string) $run->project_id);
 
         $adResult = $unlinked
-            ? ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0]
+            ? ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0]
             : $upsertGrain(EntityDailyMetric::AD, $adRows, $knownAds);
         $adFailure = $unlinked
             ? self::UNLINKED_MID_RUN
