@@ -552,24 +552,19 @@ final class PublicReportController extends Controller
         ];
     }
 
-    public function download(Request $request, string $token, string $format): StreamedResponse
+    public function download(Request $request, string $token, string $format): StreamedResponse|JsonResponse
     {
-        $this->throttle($request);
-        $share = $this->shares->resolveActive($token);
-        abort_if($share === null, 404, 'Link not found.');
         /*
-         * REPORT-FILTERS-FUNCTIONAL-001 — the password gates the FILES as it gates the page.
+         * SHARED-DOWNLOAD-PASSWORD-001 — the file passes the gate the page passes.
          *
-         * Every other address of a link passes the password check; this one did not, so a protected link's CSV, XLSX and PDF were
-         * served to anyone holding the address — the whole document the password exists to keep. Same header, same query
-         * parameter, same refusal and the same access-log line as `open()`.
+         * This resolved the token itself and never asked for the password, so a protected link gave
+         * the whole report as a file to anyone holding the address while the page was still showing
+         * a prompt. `open()` is the one gate: throttle, token, password — and a refusal is logged
+         * as a refusal, not as a download.
          */
-        if ($share->password_hash !== null) {
-            $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
-            if (! Hash::check($provided, $share->password_hash)) {
-                $this->shares->log($share, 'denied', $request, 'bad password');
-                abort(401, 'كلمة المرور مطلوبة أو غير صحيحة.');
-            }
+        [$share, $denied] = $this->open($request, $token);
+        if ($denied !== null) {
+            return $denied;
         }
         abort_unless($share->allow_download, 403, 'Downloads are disabled for this link.');
         abort_unless(in_array($format, ['pdf', 'xlsx', 'csv'], true), 404);

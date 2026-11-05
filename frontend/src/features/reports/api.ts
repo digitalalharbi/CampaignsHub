@@ -327,40 +327,27 @@ export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 
 /**
- * REPORT-FILTERS-FUNCTIONAL-001 — the file of a password-protected link, fetched WITH the password.
+ * SHARED-DOWNLOAD-PASSWORD-001 — the file of a password-protected link, taken with the password.
  *
- * The server now refuses a protected link's files without it, exactly as it refuses the page. A plain
- * `<a href>` cannot carry the header, so for these links the file is fetched, then handed to the
- * browser under the name the server gave it. Links with no password keep the plain link.
- *
- * Resolves false when the server refuses, so the caller can say so instead of saving an error page.
+ * A plain address cannot carry a header, and the password does not belong in an address (history,
+ * referrers, server logs). So a protected link fetches the file with the header the page already
+ * uses and hands the bytes to the browser under the name the server gave it.
  */
-export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<boolean> {
-  const res = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
-  if (!res.ok) return false
-
-  const disposition = res.headers.get('Content-Disposition') ?? ''
-  const encoded = /filename\*=(?:UTF-8|utf-8)''([^;]+)/.exec(disposition)?.[1]
-  const plain = /filename="?([^";]+)"?/.exec(disposition)?.[1]
-  let name = plain ?? `report.${format}`
-  if (encoded) {
-    try {
-      name = decodeURIComponent(encoded)
-    } catch {
-      // A malformed header keeps the plain name.
-    }
-  }
-
-  const url = URL.createObjectURL(await res.blob())
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
+export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<void> {
+  const response = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
+  if (!response.ok) throw new Error(`download_failed_${response.status}`)
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const starred = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)
+  const name = starred ? decodeURIComponent(starred[1]) : plain ? plain[1] : `report.${format}`
+  const url = URL.createObjectURL(await response.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
   URL.revokeObjectURL(url)
-
-  return true
 }
 
 export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
