@@ -343,6 +343,7 @@ final class SharedCreativeView
             'campaign_ids' => AccountCampaignCeiling::campaigns(
                 $this->narrow($requested['campaign_ids'] ?? null, $ceiling['campaign_ids']),
                 $ceiling['account_ids'],
+                $ceiling['project_id'],
             ),
             'objectives' => $this->narrow($requested['objectives'] ?? null, $ceiling['objectives']),
             'paths' => $this->narrow($requested['paths'] ?? null, $ceiling['paths']),

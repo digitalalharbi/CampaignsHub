@@ -167,6 +167,17 @@ final class AccountDiscovery
                 continue;
             }
 
+            /*
+             * MONEY-CURRENCY-NEVER-ASSUMED-001 — an answer that omits the currency does not erase a recorded one.
+             *
+             * `fill()` below wrote whatever this refresh returned, so a listing that came back without
+             * the currency (TikTok's when `advertiser/info/` is refused, a manager reached but not its
+             * client, any provider on a bad day) set a known currency back to NULL — and the next sync's
+             * money was then of an unknown unit. A currency the provider STATES still replaces the stored
+             * one; silence never does.
+             */
+            $fields['currency'] ??= $row->currency;
+
             if ($row->parent_name === null && ($account['parent_name'] ?? null) !== null) {
                 // Counted so the interface can say «12 organisation names filled in» rather than
                 // «refreshed», which tells somebody staring at UUIDs nothing about whether it worked.

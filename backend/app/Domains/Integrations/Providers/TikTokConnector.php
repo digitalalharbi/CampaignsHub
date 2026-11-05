@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -503,6 +504,16 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         return $out;
     }
 
+    /** An identifier TikTok may send as a string or as a number, as a non-empty string — or null. */
+    private function scalarId(mixed $value): ?string
+    {
+        if (is_int($value) || is_float($value)) {
+            $value = (string) $value;
+        }
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
     private function withMedia(OAuthTokens $tokens, string $adAccountId, array $ads): array
     {
         $videoIds = [];
@@ -528,12 +539,27 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         foreach ($ads as $ad) {
             $creative = (array) ($ad['creative'] ?? []);
             $raw = (array) ($ad['raw'] ?? []);
-            if (($creative['raw']['media'] ?? null) === 'spark' && ! isset($sparks[(string) $creative['external_id']])) {
-                $sparks[(string) $creative['external_id']] = array_filter([
-                    'identity_type' => $raw['identity_type'] ?? null,
-                    'identity_id' => $raw['identity_id'] ?? null,
-                    'identity_authorized_bc_id' => $raw['identity_authorized_bc_id'] ?? null,
-                ], static fn ($v) => is_string($v) && $v !== '');
+            if (($creative['raw']['media'] ?? null) === 'spark') {
+                /*
+                 * CONTENT-PREVIEW-COVERAGE-001 — ONE POST, MANY ADS: the identity comes from an ad that HAS one.
+                 *
+                 * A creative here is the organic post, so several ads share it, and the map was keyed by the post
+                 * with `! isset(...)`: the FIRST ad seen decided, and an ad with no identity wrote an empty entry
+                 * that every later ad — one that did carry the identity — was then refused. The post was recorded
+                 * as «identity unknown» (`spark_identity_unknown`, 154 live creatives) although TikTok had named
+                 * the identity on a sibling ad. An id TikTok sends as a number was dropped the same way, by a
+                 * string-only filter. A usable identity now replaces an unusable one; a usable one is never replaced.
+                 */
+                $postId = (string) $creative['external_id'];
+                $identity = array_filter([
+                    'identity_type' => $this->scalarId($raw['identity_type'] ?? null),
+                    'identity_id' => $this->scalarId($raw['identity_id'] ?? null),
+                    'identity_authorized_bc_id' => $this->scalarId($raw['identity_authorized_bc_id'] ?? null),
+                ], static fn ($v) => $v !== null);
+                $complete = static fn (array $i): bool => isset($i['identity_type'], $i['identity_id']);
+                if (! isset($sparks[$postId]) || (! $complete($sparks[$postId]) && $complete($identity))) {
+                    $sparks[$postId] = $identity;
+                }
             }
         }
 
@@ -640,9 +666,23 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 // Measured 2026-10-18: video_info carries bit_rate, duration, format, height, poster_url, signature, size, url, width.
                 $poster = collect(['poster_url', 'cover_image_url', 'cover_url', 'video_cover_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
                 $file = collect(['preview_url', 'url', 'video_url', 'play_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
+                /*
+                 * CONTENT-PREVIEW-COVERAGE-001 — the post's own frame size, length and link expiry are kept too.
+                 *
+                 * `video_info` states `width`, `height` and `duration` (measured 2026-10-18, above), and this arm
+                 * stored the two links only: every Spark creative reached the card with no shape, so a 9:16 post
+                 * was drawn in whatever frame the surface defaulted to. Its signed links carry their expiry in the
+                 * URL, which `AssetExpiry` reads; without it the row never turned `expired`, so a dead link was
+                 * served as `available` and drew a broken image. The earlier of the two links decides.
+                 */
+                $expiries = array_filter([AssetExpiry::fromUrl($file), AssetExpiry::fromUrl($poster)]);
                 $creative += array_filter([
                     'thumbnail_url' => $poster,
                     'video_url' => $file,
+                    'width' => is_numeric($v['width'] ?? null) ? (int) $v['width'] : null,
+                    'height' => is_numeric($v['height'] ?? null) ? (int) $v['height'] : null,
+                    'duration_seconds' => is_numeric($v['duration'] ?? null) ? (float) $v['duration'] : null,
+                    'asset_expires_at' => $expiries === [] ? null : min($expiries)->toIso8601String(),
                 ], static fn ($x) => $x !== null);
             } elseif (isset($images[$id])) {
                 $url = is_string($images[$id]['image_url'] ?? null) ? $images[$id]['image_url'] : null;
@@ -662,7 +702,7 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 $reason = match ($media) {
                     'video' => 'video_info_missing',
                     'image' => 'image_info_missing',
-                    'spark' => isset($ad['raw']['identity_type'], $ad['raw']['identity_id']) ? 'spark_post_info_missing' : 'spark_identity_unknown',
+                    'spark' => isset($sparks[$id]['identity_type'], $sparks[$id]['identity_id']) ? 'spark_post_info_missing' : 'spark_identity_unknown',
                     default => 'no_asset_declared',
                 };
                 $creative['raw'] = ((array) ($creative['raw'] ?? [])) + ['media_reason' => $reason];
