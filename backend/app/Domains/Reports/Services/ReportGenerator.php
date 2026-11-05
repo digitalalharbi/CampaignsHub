@@ -23,6 +23,7 @@ use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
+use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
@@ -250,10 +251,23 @@ final class ReportGenerator
          */
         $links = $this->reportLinks->forWindow((string) $report->project_id, $from, $to);
 
+        /*
+         * REPORT-SOURCE-ISOLATION-001 — and bounded by the ACCOUNTS the report's sources name.
+         *
+         * The Owner's stored report (2026-11-04) was scoped to one ad account; its KPIs, platforms and account rows honoured
+         * that, and its ads section listed the creatives of a second account of the same project, because this call passed
+         * project, providers and campaigns and never the account axis — with a scope naming accounts and no campaigns,
+         * `resolvedCampaignIds()` is null and the section was bounded by the project alone. The live link resolves the
+         * account ceiling to campaigns through `AccountCampaignCeiling` and the snapshot never did: one report, two answers.
+         *
+         * Both bounds travel now: the campaigns the chosen accounts spent on, inside this project, and the account axis
+         * itself, which `CreativeRows` applies to the creative's own account and refuses when none can be resolved.
+         */
         $ads = $this->reportAds->for($objective, $from, $to, [
             'project_ids' => $scope->projectIds !== [] ? $scope->projectIds : [(string) $report->project_id],
             'providers' => $scope->providers,
-            'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+            'campaign_ids' => AccountCampaignCeiling::campaigns($scope->resolvedCampaignIds() ?? [], $scope->accountIds, (string) $report->project_id),
+            'account_ids' => $scope->accountIds,
             'creative_ids' => $scope->creativeIds,
         ], (string) $report->form);
 

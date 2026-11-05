@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Models;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
@@ -146,9 +148,21 @@ final class ReportShare extends Model
         return CreativeDisplay::fromArray((array) (($this->settings ?? [])['creative_display'] ?? []) ?: null);
     }
 
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — the link's own money switches outrank the content section's.
+     *
+     * `hide_spend` withholds spend and everything that returns it, on the whole link. The content section has a spend permission
+     * of its own, and with both set the library, the summary, the comparison and the content rows of the files stated each
+     * creative's spend, CPA and ROAS on a link whose every other figure hid them — and the creatives' spend adds up to the total.
+     * The stricter switch wins; `CreativeVisibility` then closes CPA and ROAS behind it, as it does for its own flags.
+     */
     public function creativeVisibility(): CreativeVisibility
     {
-        return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));
+        return CreativeVisibility::fromArray(array_merge(
+            (array) (($this->settings ?? [])['creatives'] ?? []),
+            $this->hide_spend ? ['spend' => false] : [],
+            $this->hide_revenue ? ['revenue' => false] : [],
+        ));
     }
 
     /**
@@ -196,7 +210,39 @@ final class ReportShare extends Model
     {
         $scope = (array) ($this->scope ?? []);
 
-        return (array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== [];
+        if ((array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== []) {
+            return true;
+        }
+
+        return $this->reportIsNarrower ??= $this->reportNarrowerThanItsProject();
+    }
+
+    /** Memo for {@see narrowerThanItsProject()} — the report's own sources are read once per link. */
+    private ?bool $reportIsNarrower = null;
+
+    /**
+     * REPORT-SOURCE-ISOLATION-001 — a link is as narrow as the REPORT it serves, whatever the link itself names.
+     *
+     * A stored copy's link may carry no scope of its own (a duplicate's default link, a link made before links had one). The
+     * rule above then read «not narrower» for a report made for one ad account, and the sections that answer for a whole
+     * project — attribution against the store's orders, the widgets — were served beside figures that cover part of it. The
+     * report is narrower when it names campaigns, ad sets, ads or platforms, or when its accounts leave out an account the
+     * project actively selects.
+     */
+    private function reportNarrowerThanItsProject(): bool
+    {
+        $report = Report::withoutGlobalScopes()->whereKey($this->report_id)->first(['id', 'project_id', 'scope']);
+        if ($report === null || ! is_array($report->scope) || $report->scope === []) {
+            return false;
+        }
+
+        $sources = ReportScope::fromReport($report->scope, (string) $report->project_id);
+        if ($sources->campaignIds !== [] || $sources->adSetIds !== [] || $sources->adIds !== [] || $sources->providers !== []) {
+            return true;
+        }
+
+        return $sources->accountIds !== []
+            && array_diff(BoundAccountVisibility::activeAccountIds((string) $report->project_id), $sources->accountIds) !== [];
     }
 
     /**

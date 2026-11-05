@@ -28,6 +28,7 @@ use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 
 /**
  * Read-side aggregation over daily_metrics for the ACTIVE project (BelongsToProject scope applies).
@@ -353,7 +354,8 @@ final class MetricsAggregator
     public function forCampaigns(array $campaignIds): self
     {
         $clone = clone $this;
-        $clone->campaignIds = array_values(array_unique(array_filter($campaignIds)));
+        $clone->campaignIds = array_values(array_unique(array_filter(array_map('strval', $campaignIds))));
+        $clone->demoOnlyCampaigns = null;
 
         return $clone;
     }
@@ -701,6 +703,109 @@ final class MetricsAggregator
 
         return $out;
     }
+
+    /**
+     * PERF-RECOVERY-001 — `totals()` for every campaign of a {@see forCampaigns()} set, in one statement.
+     *
+     * For a caller that walks campaigns and reads their figures, which `totals()` costs about seven statements each (the demo check, the sums, the
+     * delivery, and three coverage reads of the whole tenant). The sums and every derived KPI are the same ones through the same `PIVOT`, `MONEY_TRUTH` and
+     * `withDerived()`, and a campaign with no row in the window gets what `totals()` says about it: zeros and null ratios, not a missing key.
+     *
+     * Two things are deliberately absent. `coverage` is not per campaign (see {@see coverageOfWindow()}). Reach is null, because reach is the one figure here
+     * that reads a stored provider answer and, on a miss, queues a fetch to the provider: a caller of this method has no reader for it.
+     *
+     * The scope is `scoped()`, so tenant, account visibility and every other bound are the ones each single read had. An unset set throws rather than reading
+     * every campaign.
+     *
+     * @return array<string, array<string, mixed>> campaign id => figures, for every id in the set
+     */
+    public function figuresByCampaign(Carbon $from, Carbon $to): array
+    {
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+
+        $rows = $this->campaignSetBase($from, $to)
+            ->select('daily_metrics.unified_campaign_id')
+            ->selectRaw(implode(', ', array_map(static fn ($e, $a) => "{$e} AS {$a}", $select, array_keys($select))))
+            ->groupBy('daily_metrics.unified_campaign_id')
+            ->get()
+            ->keyBy(static fn ($r): string => (string) $r->unified_campaign_id);
+
+        $out = [];
+        foreach ((array) $this->campaignIds as $id) {
+            $row = $rows->get($id);
+            $out[$id] = $this->withDerived($row === null ? [] : (array) $row);
+        }
+
+        return $out;
+    }
+
+    /**
+     * PERF-RECOVERY-001 — `timeseries()` for every campaign of a {@see forCampaigns()} set, in one statement: each campaign's days in date order, and no entry for
+     * a campaign with none. The per-day contributor annotations and reach are absent, for the reasons on {@see figuresByCampaign()}.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public function timeseriesByCampaign(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->campaignSetBase($from, $to)
+            ->select('daily_metrics.unified_campaign_id', 'metric_date')
+            ->selectRaw(implode(', ', array_map(static fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->groupBy('daily_metrics.unified_campaign_id', 'metric_date')
+            ->orderBy('metric_date')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(string) $r->unified_campaign_id][] = ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Who owed this window figures: the block `totals()` carries as `coverage`.
+     *
+     * Public for a caller reading many campaigns, because the answer is about the scope's PROJECTS and never about a campaign: every `totals()` of a campaign in one
+     * `acrossProjects()` read carries the same block for the same window. One read, not one per campaign.
+     *
+     * @return array<string, mixed>
+     */
+    public function coverageOfWindow(Carbon $from, Carbon $to): array
+    {
+        return $this->coverage($from, $to);
+    }
+
+    /**
+     * The window's rows for a campaign set, under the demo policy each campaign would get on its own.
+     *
+     * {@see excludesDemo()} decides per SCOPE, and a single-campaign read's scope is that campaign: a campaign holding any visible live row has its demo rows left out,
+     * and one holding only demo rows is exactly those rows. Deciding once for the whole set would drop a demo-only campaign the moment a live one sat beside it.
+     */
+    private function campaignSetBase(Carbon $from, Carbon $to): Builder
+    {
+        if ($this->campaignIds === null) {
+            throw new LogicException('A per-campaign read needs forCampaigns(); it does not mean every campaign.');
+        }
+
+        // Date-independent, like excludesDemo(), so asked once per aggregator however many windows it reads. forCampaigns() resets it.
+        $demoOnly = $this->demoOnlyCampaigns ??= array_values(array_diff(
+            $this->campaignIds,
+            $this->scoped(DailyMetric::query())
+                ->where('daily_metrics.is_demo', false)
+                ->distinct()
+                ->pluck('daily_metrics.unified_campaign_id')
+                ->map(static fn (mixed $id): string => (string) $id)
+                ->all(),
+        ));
+
+        return $this->baseIncludingDemo($from, $to)
+            ->where(static fn ($q) => $q->where('daily_metrics.is_demo', false)
+                ->when($demoOnly !== [], static fn ($w) => $w->orWhereIn('daily_metrics.unified_campaign_id', $demoOnly)))
+            ->toBase();
+    }
+
+    /** @var list<string>|null memo for {@see campaignSetBase()} */
+    private ?array $demoOnlyCampaigns = null;
 
     /**
      * Who owed this window figures, and what state each of them is actually in.

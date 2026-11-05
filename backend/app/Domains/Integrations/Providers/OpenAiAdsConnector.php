@@ -92,7 +92,14 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
         return [[
             'external_id' => $id,
             'name' => (string) ($account['name'] ?? $id),
-            'currency' => $this->stringOrNull($account, 'currency'),
+            /*
+             * OPENAI-ADS-CURRENCY-001 — the Ad Account object names its currency `currency_code`
+             * (developers.openai.com/ads/api-reference/ad-account). This read `currency`, which the API
+             * never sends, so every account was stored with none, and `InsightRowNormaliser` then took
+             * the reporting currency as the row's own: a riyal account's spend was added to the dollar
+             * total as dollars. `currency` stays as a fallback for a shape that ever sends it.
+             */
+            'currency' => $this->stringOrNull($account, 'currency_code') ?? $this->stringOrNull($account, 'currency'),
             'timezone' => $this->stringOrNull($account, 'timezone'),
             'status' => strtolower((string) ($account['status'] ?? 'active')),
             /*
