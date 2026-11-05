@@ -70,7 +70,9 @@ describe('where the copy history is mounted, and what the editors say where they
   it('the scope editor says the current copy is kept, beside its save', async () => {
     vi.mocked(getReportScope).mockResolvedValue({ scope: { account_ids: ['a1'] }, audience: 'client' } as never)
     renderWithProviders(<ReportsPage />, { locale: 'ar' })
-    fireEvent.click(await screen.findByRole('button', { name: 'نطاق التقرير' }))
+    // The scope is one of the edits «تعديل الأصل» names; it opens the same editor the row's own button used to.
+    fireEvent.click(await screen.findByTestId('report-edit-original-r1'))
+    fireEvent.click(await screen.findByTestId('edit-original-scope'))
 
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByTestId('kept-copy-note')).toHaveTextContent('تبقى النسخة الحالية في «سجل النسخ»')
