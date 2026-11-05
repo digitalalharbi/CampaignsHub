@@ -553,7 +553,19 @@ export function ConnectionWizard({
                    * the click.
                    */
                   const boundHere = managing && a.assigned_project_id === manageProjectId
+                  /*
+                   * INTEG-PROJECT-LINK-001 — already linked to THE PROJECT THIS JOURNEY IS FOR. Shown as
+                   * linked and not offered again: there is nothing to add, and no second binding to make.
+                   */
+                  const linkedToDestination = !managing && destinationProjectId !== null && a.assigned && a.assigned_project_id === destinationProjectId
                   const lockedElsewhere = a.assigned && !boundHere
+                  /*
+                   * One ad account feeds ONE project (the engine's rule, kept). An account another project
+                   * holds is named with that project when this reader can see it, and is never offered.
+                   */
+                  const holder = lockedElsewhere && !linkedToDestination
+                    ? (projects.data ?? []).find((p) => p.id === a.assigned_project_id)?.name ?? null
+                    : null
 
                   return (
                     <li key={a.id}>
@@ -586,9 +598,11 @@ export function ConnectionWizard({
                         */}
                         {a.assigned && (
                           <span className={`shrink-0 text-xs ${accountHealthTone(a.health)}`}>
-                            {lockedElsewhere
-                              ? (ar ? 'مربوط بمشروع آخر' : 'Connected to another project')
-                              : accountHealthLabel(a.health, ar)}
+                            {linkedToDestination
+                              ? <span data-testid={`wizard-linked-here-${a.id}`}>{ar ? 'مربوط بهذا المشروع' : 'Linked to this project'}</span>
+                              : lockedElsewhere
+                                ? <span data-testid={`wizard-linked-elsewhere-${a.id}`}>{holder === null ? (ar ? 'مربوط بمشروع آخر' : 'Connected to another project') : (ar ? `مربوط بـ ${holder}` : `Linked to ${holder}`)}</span>
+                                : accountHealthLabel(a.health, ar)}
                           </span>
                         )}
                       </label>

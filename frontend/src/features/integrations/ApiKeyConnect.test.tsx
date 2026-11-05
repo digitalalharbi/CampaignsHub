@@ -151,8 +151,8 @@ describe('connecting a provider that issues the advertiser a key', () => {
 
     const connect = await screen.findByTestId('flow-connect-key')
     expect(connect).toBeDisabled()
-
-    fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
+    // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
+    expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('flow-connect-key')).toBeDisabled())
 
     fireEvent.change(screen.getByTestId('flow-api-key'), { target: { value: 'sk-ads-live-0000beef' } })
@@ -162,8 +162,8 @@ describe('connecting a provider that issues the advertiser a key', () => {
   /** Nothing leaves. The answer is the outcome, and the next question opens in the same dialog. */
   it('continues into the account step without a round trip to the provider', async () => {
     await openTheFlow()
-
-    fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
+    // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
+    expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     fireEvent.change(screen.getByTestId('flow-api-key'), { target: { value: 'sk-ads-live-0000beef' } })
     fireEvent.click(await screen.findByTestId('flow-connect-key'))
 
@@ -181,8 +181,8 @@ describe('connecting a provider that issues the advertiser a key', () => {
     keyed.fail = 'The key was accepted, but it lists no ad account.'
 
     await openTheFlow()
-
-    fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
+    // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
+    expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     fireEvent.change(screen.getByTestId('flow-api-key'), { target: { value: 'sk-ads-live-0000beef' } })
     fireEvent.click(await screen.findByTestId('flow-connect-key'))
 

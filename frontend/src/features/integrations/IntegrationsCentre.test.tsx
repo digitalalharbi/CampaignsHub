@@ -431,7 +431,8 @@ describe('the Integrations Centre: Project-First', () => {
     // And the journey starts from that row, with the project already decided.
     fireEvent.click(screen.getByTestId('estate-link-p-new'))
     fireEvent.click(screen.getByTestId('estate-link-p-new-meta'))
-    await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-new'))
+    expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Brand New Client')
+    expect(screen.queryByTestId('flow-destination')).toBeNull()
     expect(screen.queryByTestId('provider-picker')).toBeNull()
   })
 
@@ -470,7 +471,9 @@ describe('the Integrations Centre: Project-First', () => {
     expect(screen.getByTestId('provider-pick-meta')).toBeEnabled()
     fireEvent.click(screen.getByTestId('provider-pick-meta'))
 
-    await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-2'))
+    // From here the project is fixed: stated in the flow, with no picker to change it.
+    expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Nasel')
+    expect(screen.queryByTestId('flow-destination')).toBeNull()
     fireEvent.click(screen.getByTestId('flow-authorise'))
     await waitFor(() => expect(calls.started).toEqual([{ provider: 'meta', projectId: 'p-2' }]))
   })

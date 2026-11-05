@@ -226,8 +226,13 @@ describe('the Connection Hub', () => {
     fireEvent.click(await screen.findByTestId('estate-link-p-1'))
     fireEvent.click(await screen.findByTestId('estate-link-p-1-meta'))
 
+    // A working Meta authorisation exists, so the journey asks whose account to use — and names it.
+    fireEvent.click(await screen.findByTestId('link-new-authorisation'))
+    fireEvent.click(screen.getByTestId('link-next'))
+
     expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Connect')
-    await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-1'))
+    expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razah')
+    expect(screen.queryByTestId('flow-destination')).toBeNull()
     fireEvent.click(screen.getByTestId('flow-authorise'))
 
     await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
@@ -361,11 +366,10 @@ describe('the connection flow', () => {
     await waitFor(() => expect(screen.getByTestId('picker-project')).toHaveValue('p-1'))
     fireEvent.click(screen.getByTestId('provider-pick-meta'))
 
-    await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-1'))
+    // The project is stated, not asked: there is no project picker inside the flow.
+    expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razah')
+    expect(screen.queryByTestId('flow-destination')).toBeNull()
     await waitFor(() => expect(screen.getByTestId('flow-authorise')).toBeEnabled())
-
-    fireEvent.change(screen.getByTestId('flow-destination'), { target: { value: '' } })
-    await waitFor(() => expect(screen.getByTestId('flow-authorise')).toBeDisabled())
   })
 
   /** The destination rides the OAuth state, which is why it is asked before the provider. */
@@ -374,7 +378,8 @@ describe('the connection flow', () => {
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
     fireEvent.click(await screen.findByTestId('provider-pick-meta'))
-    fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
+    // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
+    expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('flow-authorise'))
 
     await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
@@ -387,7 +392,8 @@ describe('the connection flow', () => {
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
     fireEvent.click(await screen.findByTestId('provider-pick-meta'))
-    fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
+    // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
+    expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     expect(await screen.findByTestId('flow-meta-app-live')).toBeChecked()
     fireEvent.click(screen.getByTestId('flow-meta-app-saas'))
     fireEvent.click(screen.getByTestId('flow-authorise'))
