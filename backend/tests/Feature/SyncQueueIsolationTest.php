@@ -71,7 +71,7 @@ final class SyncQueueIsolationTest extends TestCase
     {
         $merged = array_replace_recursive(config('horizon.defaults.supervisor-1'), config('horizon.environments.local.supervisor-1'));
 
-        $this->assertEqualsCanonicalizing(['reports', 'default', 'sync'], $merged['queue']);
+        $this->assertEqualsCanonicalizing(['reports', 'default', 'sync', 'live-refresh'], $merged['queue']);
     }
 
     public function test_the_queue_timeout_contract_still_holds_with_the_new_supervisors(): void
