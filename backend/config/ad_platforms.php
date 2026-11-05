@@ -140,7 +140,8 @@ return [
              * sunset date. Every Google Ads call this platform made was refused, for every customer.
              */
             'api_base' => 'https://googleads.googleapis.com/v25',
-            'scopes' => ['https://www.googleapis.com/auth/adwords'],
+            // `openid email` (non-sensitive) let the connection record WHICH Google login granted it — INTEG-PROVIDER-IDENTITY-001.
+            'scopes' => ['https://www.googleapis.com/auth/adwords', 'openid', 'email'],
             'client_id' => env('GOOGLE_ADS_CLIENT_ID'),
             'client_secret' => env('GOOGLE_ADS_CLIENT_SECRET'),
             /*

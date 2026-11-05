@@ -694,6 +694,15 @@ export interface HubConnection {
   connection_name: string
   /** The CampaignsHub user who authorised it. Null is «nobody recorded it», never an invented email. */
   authorised_by: { name: string; email: string } | null
+  /**
+   * INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with (Google / Meta / Snapchat…),
+   * as the provider reported it at connect time. Null is «not recorded»; the workspace email is never a substitute.
+   */
+  provider_account?: { label: string | null; email: string | null; fetched_at: string | null } | null
+  /** INTEG-SOURCE-REMOVAL-001 — set once the source was removed; only listed under «show removed». */
+  removed_at?: string | null
+  /** Started in the wizard more than a day ago and never finished: the row offers «إلغاء/إزالة». */
+  abandoned?: boolean
   authorised_at: string | null
   /** Chosen of reachable — «1 of 17 accounts», which is ACCOUNT-SCOPE-ISOLATION-001 in four words. */
   selected_accounts: number
@@ -736,4 +745,24 @@ export interface ConnectionHub {
 
 export function fetchConnectionHub(): Promise<ConnectionHub> {
   return getData<ConnectionHub>('/integrations/hub')
+}
+
+/** The same board with removed and revoked sources listed (the hub's «show removed» toggle). */
+export function fetchConnectionHubWithRemoved(): Promise<ConnectionHub> {
+  return getData<ConnectionHub>('/integrations/hub?include_removed=1')
+}
+
+/**
+ * INTEG-SOURCE-REMOVAL-001 — take a source out of the hub.
+ *
+ * The server disables every binding, stops its syncs, clears the stored credential and hides the row. It
+ * keeps every stored figure, report row and audit entry. `unconfirmedOnly` is the wizard's «إلغاء»: the
+ * server removes the connection only if nothing was ever selected or synced on it.
+ */
+export async function removeConnection(
+  connectionId: string,
+  options: { unconfirmedOnly?: boolean } = {},
+): Promise<{ removed: boolean; disabled_bindings: number }> {
+  await ensureCsrfCookie()
+  return postData(`/connections/${connectionId}/remove`, options.unconfirmedOnly ? { unconfirmed_only: true } : {})
 }

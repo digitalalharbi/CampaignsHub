@@ -102,4 +102,10 @@ return [
          */
         'account_sync_seconds' => (int) env('INTEGRATIONS_ACCOUNT_LOCK_SECONDS', 900),
     ],
+
+    /*
+     * INTEG-SOURCE-REMOVAL-001 — whether the daily sweep may HIDE connections that were started and never finished.
+     * Off unless an operator sets INTEGRATIONS_ABANDONED_SWEEP_ENABLED=true after reading the command's preview.
+     */
+    'abandoned_sweep_enabled' => (bool) env('INTEGRATIONS_ABANDONED_SWEEP_ENABLED', false),
 ];

@@ -124,6 +124,15 @@ Schedule::command('creatives:refresh-covers')->dailyAt('03:30')->withoutOverlapp
 Schedule::command('integrations:close-abandoned-runs --apply')->hourlyAt(10)->withoutOverlapping();
 
 /*
+ * INTEG-SOURCE-REMOVAL-001 — hide authorisations that were started in the wizard and never finished.
+ *
+ * Scheduled daily but inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED=true: without it the command only
+ * reports. It hides (never deletes) a connection older than a day with no selection, no sync and not one
+ * binding, metric, run or mapping row referencing it.
+ */
+Schedule::command('integrations:sweep-abandoned --apply')->dailyAt('04:20')->withoutOverlapping();
+
+/*
  * Refresh tokens BEFORE a sync needs them.
  *
  * The vault refreshes on use too, but discovering a revoked authorisation from a queue worker at 3am
